@@ -7,13 +7,13 @@ from .media_identity import DeviceMediaStore
 _INSTALLED = False
 
 
-def _decorate_member(store: DeviceMediaStore, project_id: str, item: dict[str, Any]) -> None:
+def _decorate_member(store: DeviceMediaStore, snapshot: dict[str, Any], item: dict[str, Any]) -> None:
     source_path = str(item.get("source_media_path", "") or item.get("media_path", "") or "")
     if source_path:
         item["source_media_path"] = source_path
     lookup = dict(item)
     lookup["media_path"] = source_path
-    resolved = store.resolve(project_id, lookup)
+    resolved = store.resolve_from_snapshot(snapshot, lookup)
     item["resolved_media_path"] = resolved
     item["local_exists"] = bool(resolved)
     item["media_path"] = resolved or source_path
@@ -21,15 +21,16 @@ def _decorate_member(store: DeviceMediaStore, project_id: str, item: dict[str, A
 
 
 def _apply_project(store: DeviceMediaStore, project: Any) -> None:
+    snapshot = store.project_snapshot(project.project_id)
     for clip in project.index.get("clips", []):
         if isinstance(clip, dict):
-            _decorate_member(store, project.project_id, clip)
+            _decorate_member(store, snapshot, clip)
     for group in project.index.get("groups", []):
         if not isinstance(group, dict):
             continue
         for member in group.get("members", []):
             if isinstance(member, dict):
-                _decorate_member(store, project.project_id, member)
+                _decorate_member(store, snapshot, member)
     project.clips = {
         item.get("clip_id"): item
         for item in project.index.get("clips", [])
@@ -60,9 +61,6 @@ def install_device_media_runtime() -> None:
 
     def workspace_project_with_local_media(service: Any, project_id: str) -> Any:
         project = original_workspace_project(service, project_id)
-        # The binding file is device-local and can change while shared analysis
-        # files remain byte-identical. Refresh on every API access so media GET,
-        # groups and project metadata all see a just-completed scan immediately.
         _apply_project(store, project)
         return project
 
