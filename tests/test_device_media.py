@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from fractions import Fraction
 from pathlib import Path
 
 from script_organizer.media_identity import DeviceMediaStore, media_id_for_path, provisional_media_id
+from script_organizer.models import Clip
+from script_organizer.transcript import TranscriptStore, transcript_fingerprint
 
 
 def test_same_media_bytes_have_same_media_id_across_paths(tmp_path: Path) -> None:
@@ -67,3 +70,27 @@ def test_legacy_project_can_relink_unique_filename_before_reanalysis(tmp_path: P
     assert key.startswith("MP_")
     assert summary["resolved"] == 1
     assert store.resolve("beef", index["clips"][0]) == str(local)
+
+
+def test_new_transcript_cache_uses_media_id_not_absolute_path(tmp_path: Path) -> None:
+    local = tmp_path / "disk" / "A001.mov"
+    local.parent.mkdir()
+    local.write_bytes(b"portable-transcript-source" * 1000)
+    media_id = media_id_for_path(local)
+    clip = Clip(
+        clip_id="C_transcript",
+        name="A001",
+        camera="A",
+        media_path=str(local),
+        timeline_start=Fraction(0),
+        timeline_end=Fraction(1),
+        duration=Fraction(1),
+        exists=True,
+        media_id=media_id,
+    )
+    store = TranscriptStore(tmp_path / "transcripts")
+    target = store.write(clip, "测试对白", [{"start": 0, "end": 1, "text": "测试对白"}])
+
+    assert transcript_fingerprint(clip) == media_id
+    assert target.name == f"{media_id}.json"
+    assert store.load(clip)?.text == "测试对白"
