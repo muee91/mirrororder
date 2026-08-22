@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from .automation_store import AutomationStore
+from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
+from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 
 _INSTALLED = False
 _SCRIPT_SUFFIXES = {".docx", ".txt", ".md", ".markdown"}
@@ -64,6 +66,35 @@ def _replace_project_script(config_path: Path, raw_script: object) -> Path:
         if os.path.exists(temporary):
             os.unlink(temporary)
     return script
+
+
+def _directory_bytes(path: Path) -> int:
+    total = 0
+    try:
+        for item in path.rglob("*"):
+            if item.is_file():
+                try:
+                    total += item.stat().st_size
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
+
+def _runtime_payload() -> dict[str, Any]:
+    settings = load_runtime_settings()
+    runtime = LocalVisionRuntime(
+        LocalVisionRuntimeConfig.from_env(str(settings.get("local_vision_model", "") or ""))
+    )
+    root = application_support_root() / "models"
+    return {
+        "local_vision_enabled": bool(settings.get("local_vision_enabled")),
+        "local_vision_model": str(settings.get("local_vision_model", "") or ""),
+        "vision": runtime.public(),
+        "mlx_cache_bytes": _directory_bytes(root / "huggingface"),
+        "model_root": str(root),
+    }
 
 
 def install_automation_runtime() -> None:
@@ -137,8 +168,43 @@ def install_automation_runtime() -> None:
         BaseHandler = original_make_handler(service, web_root)
 
         class Handler(BaseHandler):
+            def _app_get(self, parsed):
+                parts = web_server._parts(parsed.path)
+                if parts == ["api", "v1", "local-runtime"]:
+                    self._local_only()
+                    self._send_json(_runtime_payload())
+                    return
+                return super()._app_get(parsed)
+
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
+                if parts == ["api", "v1", "local-runtime"]:
+                    self._local_only()
+                    payload = web_server._body(self)
+                    action = str(payload.get("action", "set") or "set")
+                    if action == "set":
+                        settings = save_runtime_settings(payload)
+                        if not settings.get("local_vision_enabled"):
+                            LocalVisionRuntime.stop()
+                    elif action == "prepare":
+                        settings = save_runtime_settings({
+                            "local_vision_enabled": True,
+                            **({"local_vision_model": payload["local_vision_model"]} if payload.get("local_vision_model") else {}),
+                        })
+                        runtime = LocalVisionRuntime(
+                            LocalVisionRuntimeConfig.from_env(str(settings.get("local_vision_model", "") or ""))
+                        )
+                        if not runtime.prepare_async():
+                            raise web_server.ApiError(
+                                web_server.HTTPStatus.SERVICE_UNAVAILABLE,
+                                runtime.public().get("last_error") or "本地视觉运行时不可用",
+                            )
+                    elif action == "stop":
+                        LocalVisionRuntime.stop()
+                    else:
+                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知本机运行时操作")
+                    self._send_json(_runtime_payload(), web_server.HTTPStatus.ACCEPTED)
+                    return
                 if (
                     len(parts) == 5
                     and parts[:3] == ["api", "v1", "projects"]
