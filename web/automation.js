@@ -121,6 +121,39 @@
     }, true);
   }
 
+  async function replaceProjectScript() {
+    if (!HOST_LOCAL || !state.projectId) return;
+    const picked = await fetchJson('/api/v1/path-picker', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({kind: 'file'}),
+    });
+    if (!picked.path) return;
+    const result = await fetchJson(projectApi('/script'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({script: picked.path}),
+    });
+    const fileName = String(result.script || picked.path).split(/[\\/]/).pop();
+    showToast(`剧本已更换为 ${fileName}，正在重新分析和归集`);
+    await refreshTasks();
+  }
+
+  function installProjectInputActions() {
+    if (!HOST_LOCAL) return;
+    const topActions = document.querySelector('.top-actions');
+    const create = document.querySelector('#create-project');
+    if (!topActions || !create || document.querySelector('#replace-project-script')) return;
+    const button = document.createElement('button');
+    button.id = 'replace-project-script';
+    button.className = 'text-button';
+    button.type = 'button';
+    button.textContent = '更换剧本';
+    button.title = state.project?.script_path ? `当前剧本：${state.project.script_path}` : '更换当前项目剧本';
+    button.addEventListener('click', () => replaceProjectScript().catch((error) => showToast(error.message)));
+    create.insertAdjacentElement('afterend', button);
+  }
+
   function enhanceProjectAndTaskUI() {
     const mediaOption = document.querySelector('#new-project-kind option[value="media-directory"]');
     const fcpxmlOption = document.querySelector('#new-project-kind option[value="fcpxml"]');
@@ -139,6 +172,7 @@
         : '选择 Host 本机可访问的原始素材与剧本；项目由 Host 创建并自动同步、ASR、剧本归集。';
     }
     installProjectCreationBoundary();
+    installProjectInputActions();
     if (!HOST_LOCAL && triggerLabel()) {
       triggerLabel().title = '请在 Host 本机或镜序 App 创建项目';
     }
@@ -253,6 +287,8 @@
   const baseReloadAnalysis = reloadAnalysis;
   reloadAnalysis = async function automationReloadAnalysis(...args) {
     const result = await baseReloadAnalysis(...args);
+    const replace = document.querySelector('#replace-project-script');
+    if (replace) replace.title = state.project?.script_path ? `当前剧本：${state.project.script_path}` : '更换当前项目剧本';
     renderSummary();
     requestAnimationFrame(decorateRows);
     return result;
