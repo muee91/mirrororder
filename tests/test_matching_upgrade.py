@@ -149,10 +149,8 @@ def test_known_text_alignment_reuses_loaded_model_and_persistent_result(monkeypa
     assert calls == {"loads": 1, "aligns": 2}
 
 
-def test_ambiguous_take_transcribes_one_extra_camera_and_uses_it_for_alignment(monkeypatch, tmp_path):
-    from script_organizer import material_index
-    from script_organizer.fcpxml_reader import read_fcpxml
-    from script_organizer.transcript import TranscriptStore
+def _two_camera_fixture(tmp_path):
+    from script_organizer.fcpxml_reader import build_multicam_groups, read_fcpxml
 
     media_b = tmp_path / "B001.mov"
     media_c = tmp_path / "C001.mov"
@@ -174,6 +172,15 @@ def test_ambiguous_take_transcribes_one_extra_camera_and_uses_it_for_alignment(m
         encoding="utf-8",
     )
     clips = read_fcpxml(fcpxml)
+    groups = build_multicam_groups(clips, 0.5, 1.8)
+    return fcpxml, script, clips, groups
+
+
+def test_ambiguous_take_transcribes_one_extra_camera_and_uses_it_for_alignment(monkeypatch, tmp_path):
+    from script_organizer import material_index
+    from script_organizer.transcript import TranscriptStore
+
+    fcpxml, script, clips, _groups = _two_camera_fixture(tmp_path)
     b_clip = next(clip for clip in clips if clip.name == "B001")
     TranscriptStore(tmp_path / "cache").write(
         b_clip,
@@ -225,3 +232,53 @@ def test_ambiguous_take_transcribes_one_extra_camera_and_uses_it_for_alignment(m
     top = group_rows[0]["candidates"][0]
     assert top["transcript_clip_id"] == next(clip.clip_id for clip in clips if clip.name == "C001")
     assert aligned_paths and aligned_paths[0].endswith("C001.mov")
+
+
+def test_reviewed_take_never_triggers_extra_camera_asr(monkeypatch, tmp_path):
+    from script_organizer import material_index
+    from script_organizer.review_store import ReviewStore
+    from script_organizer.transcript import TranscriptStore
+
+    fcpxml, script, clips, groups = _two_camera_fixture(tmp_path)
+    b_clip = next(clip for clip in clips if clip.name == "B001")
+    TranscriptStore(tmp_path / "cache").write(
+        b_clip,
+        "王总你来了",
+        [{"start": 1.0, "end": 2.0, "text": "王总你来了"}],
+        backend="test",
+    )
+    ReviewStore(tmp_path / "out" / "review.json").save(
+        {
+            "version": 2,
+            "groups": {groups[0].group_id: {"state": "keep", "method": "manual"}},
+            "assignments": {},
+            "clips": {},
+            "placements": {},
+        }
+    )
+
+    class FakeWhisperModel:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transcribe(self, path, **kwargs):
+            raise AssertionError(f"reviewed Take must not trigger rescue ASR: {path}")
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    config = replace(
+        _config(tmp_path),
+        fcpxml=fcpxml,
+        script=script,
+        transcript_dir=tmp_path / "cache",
+        asr_backend="faster-whisper",
+        asr_camera_priority=("B", "C", "A"),
+        asr_ensure_preferred_camera=True,
+        asr_escalate_ambiguous=True,
+        asr_max_extra_cameras=1,
+    )
+    result = material_index.analyze(config)
+
+    stats = result["index"]["stats"]
+    assert stats["asr_escalation_attempted_groups"] == 0
+    assert stats["asr_escalation_attempted_clips"] == 0
+    assert stats["asr_escalation_skipped_reviewed_groups"] >= 1
