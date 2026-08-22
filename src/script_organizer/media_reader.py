@@ -7,10 +7,8 @@ from fractions import Fraction
 from pathlib import Path
 
 from .fcpxml_reader import stable_clip_id
+from .media_identity import MEDIA_SUFFIXES, media_identity
 from .models import Clip
-
-
-MEDIA_SUFFIXES = {".mp4", ".mov", ".m4v", ".mxf", ".mts", ".avi", ".mkv"}
 
 
 def _probe(path: Path) -> tuple[float, float | None]:
@@ -100,6 +98,7 @@ def read_media_directory(
                 source_asset_id="media-directory",
                 source_start=Fraction(0),
                 source_end=duration_fraction,
+                media_id=media_identity(path),
             )
         )
     return clips
