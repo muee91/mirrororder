@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from .config import ProjectConfig
 
@@ -46,6 +47,7 @@ def project_id_for(value: str) -> str:
 @dataclass(frozen=True)
 class WorkspaceConfig:
     config_path: Path
+    workspace_id: str
     name: str
     registry_path: Path
     web_dir: Path
@@ -57,16 +59,65 @@ class WorkspaceConfig:
             raw = tomllib.load(handle)
         workspace = raw.get("workspace", {})
         base = config_path.parent
+        workspace_id = str(workspace.get("id", workspace.get("workspace_id", "")) or "").strip()
         registry_value = str(workspace.get("registry", "./projects/registry.json"))
         web_value = str(workspace.get("web_directory", "./web"))
         registry_path = (base / registry_value).resolve() if not Path(registry_value).is_absolute() else Path(registry_value)
         web_dir = (base / web_value).resolve() if not Path(web_value).is_absolute() else Path(web_value)
         return cls(
             config_path=config_path,
+            workspace_id=workspace_id,
             name=str(workspace.get("name", "视频素材工作台")),
             registry_path=registry_path,
             web_dir=web_dir,
         )
+
+    @property
+    def has_stable_id(self) -> bool:
+        return bool(self.workspace_id)
+
+    def with_workspace_id(self, workspace_id: str) -> "WorkspaceConfig":
+        return WorkspaceConfig(
+            config_path=self.config_path,
+            workspace_id=workspace_id,
+            name=self.name,
+            registry_path=self.registry_path,
+            web_dir=self.web_dir,
+        )
+
+
+def new_workspace_id() -> str:
+    return "ws_" + uuid4().hex
+
+
+def ensure_workspace_id(path: str | Path) -> WorkspaceConfig:
+    """Materialize a stable ID in workspace.toml without touching project data."""
+    config_path = Path(path).expanduser().resolve()
+    config = WorkspaceConfig.from_file(config_path)
+    if config.workspace_id:
+        return config
+    workspace_id = new_workspace_id()
+    text = config_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    inserted = False
+    for index, line in enumerate(lines):
+        if line.strip() == "[workspace]":
+            lines.insert(index + 1, f'id = "{workspace_id}"')
+            inserted = True
+            break
+    if not inserted:
+        lines = [f'id = "{workspace_id}"', *lines]
+    fd, temporary = tempfile.mkstemp(prefix=config_path.name + ".", suffix=".tmp", dir=config_path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, config_path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return WorkspaceConfig.from_file(config_path)
 
 
 class WorkspaceRegistry:

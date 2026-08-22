@@ -5,9 +5,12 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import socket
 import subprocess
 import tempfile
+import threading
+import time
 import unicodedata
 import urllib.parse
 from http import HTTPStatus
@@ -419,7 +422,12 @@ class WorkspaceService:
                         "error": str(error),
                     }
                 )
-        return {"workspace": self.workspace.name, "api_version": "v1", "projects": projects}
+        return {
+            "workspace_id": self.workspace.workspace_id,
+            "workspace": self.workspace.name,
+            "api_version": "v1",
+            "projects": projects,
+        }
 
     def frontend_settings(self) -> dict[str, Any]:
         return _load_frontend_settings(self.workspace)
@@ -447,6 +455,141 @@ class WorkspaceService:
             ],
             "projects": [item for item in self.workspace_payload()["projects"] if item.get("project_id") in agent.get("project_ids", [])],
         }
+
+
+class GatewaySecurity:
+    """Small in-memory LAN pairing boundary for the local gateway."""
+
+    def __init__(
+        self,
+        require_pairing: bool = True,
+        pairing_code: str | None = None,
+        session_ttl_seconds: int = 12 * 60 * 60,
+    ):
+        self.require_pairing = require_pairing
+        self.pairing_code = pairing_code or secrets.token_urlsafe(6)
+        self.session_ttl_seconds = max(60, session_ttl_seconds)
+        self._sessions: dict[str, float] = {}
+        self._lock = threading.RLock()
+
+    def _purge_expired(self) -> None:
+        now = time.monotonic()
+        self._sessions = {
+            token: expires_at
+            for token, expires_at in self._sessions.items()
+            if expires_at > now
+        }
+
+    def public(self, local: bool = False) -> dict[str, Any]:
+        with self._lock:
+            self._purge_expired()
+        return {
+            "required": self.require_pairing,
+            "paired": bool(self._sessions),
+            "session_ttl_seconds": self.session_ttl_seconds,
+            "pairing_code": self.pairing_code if local else "",
+        }
+
+    def exchange(self, code: str) -> str:
+        if not self.require_pairing:
+            return ""
+        if not secrets.compare_digest(str(code or ""), self.pairing_code):
+            raise ApiError(HTTPStatus.UNAUTHORIZED, "局域网配对码无效")
+        token = "mos_" + secrets.token_urlsafe(24)
+        with self._lock:
+            self._purge_expired()
+            self._sessions[token] = time.monotonic() + self.session_ttl_seconds
+        return token
+
+    def allow(self, client_host: str, session: str) -> bool:
+        if client_host in {"127.0.0.1", "::1"} or not self.require_pairing:
+            return True
+        with self._lock:
+            self._purge_expired()
+            return session in self._sessions
+
+
+class WorkspaceGateway:
+    """Routes one LAN listener to several independently configured workspaces."""
+
+    def __init__(
+        self,
+        workspaces: list[WorkspaceConfig],
+        *,
+        require_pairing: bool = True,
+        pairing_code: str | None = None,
+    ):
+        if not workspaces:
+            raise ValueError("网关至少需要一个工作区")
+        self.services = {item.workspace_id: WorkspaceService(item) for item in workspaces if item.workspace_id}
+        if len(self.services) != len(workspaces):
+            raise ValueError("所有工作区必须先拥有稳定 workspace_id")
+        self.security = GatewaySecurity(require_pairing, pairing_code)
+        self._local = threading.local()
+
+    def select(self, workspace_id: str) -> WorkspaceService:
+        try:
+            service = self.services[workspace_id]
+        except KeyError as error:
+            raise ApiError(HTTPStatus.NOT_FOUND, "工作区不存在") from error
+        self._local.service = service
+        return service
+
+    @property
+    def current(self) -> WorkspaceService:
+        service = getattr(self._local, "service", None)
+        if service is None:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "请求缺少 workspace_id")
+        return service
+
+    @property
+    def registry(self) -> WorkspaceRegistry:
+        return self.current.registry
+
+    @property
+    def tasks(self) -> TaskManager:
+        return self.current.tasks
+
+    @property
+    def tokens(self) -> AgentTokenStore:
+        return self.current.tokens
+
+    def project(self, project_id: str) -> ProjectService:
+        return self.current.project(project_id)
+
+    def project_config(self, project_id: str) -> ProjectConfig:
+        return self.current.project_config(project_id)
+
+    def frontend_settings(self) -> dict[str, Any]:
+        return self.current.frontend_settings()
+
+    def save_frontend_settings(self, payload: object) -> dict[str, Any]:
+        return self.current.save_frontend_settings(payload)
+
+    def capabilities(self, agent: dict[str, Any]) -> dict[str, Any]:
+        return self.current.capabilities(agent)
+
+    def workspace_payload(self) -> dict[str, Any]:
+        return self.current.workspace_payload()
+
+    def all_payload(self) -> dict[str, Any]:
+        workspaces = []
+        for service in self.services.values():
+            payload = service.workspace_payload()
+            workspaces.append(
+                {
+                    "workspace_id": service.workspace.workspace_id,
+                    "workspace": service.workspace.name,
+                    "projects": payload["projects"],
+                }
+            )
+        return {
+            "api_version": "v1",
+            "workspaces": workspaces,
+        }
+
+    def workspace_payload_for(self, workspace_id: str) -> dict[str, Any]:
+        return self.select(workspace_id).workspace_payload()
 
 
 def _parts(path: str) -> list[str]:
@@ -807,10 +950,165 @@ def make_handler(service: WorkspaceService, web_root: Path):
     return Handler
 
 
+def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
+    """Expose workspace-scoped routes while reusing the project handlers."""
+    BaseHandler = make_handler(gateway, web_root)
+
+    class Handler(BaseHandler):
+        def _session(self) -> str:
+            return self.headers.get("X-MirrorOrder-Session", "")
+
+        def _authorize_app(self) -> None:
+            if not gateway.security.allow(self.client_address[0], self._session()):
+                raise ApiError(HTTPStatus.UNAUTHORIZED, "需要先完成局域网配对")
+
+        def _rewrite(self, parsed: urllib.parse.ParseResult, path: str) -> None:
+            self.path = urllib.parse.urlunparse(("", "", path, "", parsed.query, ""))
+
+        def _select_workspace(self, workspace_id: str) -> None:
+            gateway.select(urllib.parse.unquote(workspace_id))
+
+        def _prepare_app(self, parsed: urllib.parse.ParseResult) -> tuple[str, str]:
+            parts = _parts(parsed.path)
+            self._authorize_app()
+            if parts == ["api", "v1", "workspaces"]:
+                return "", "workspace-list"
+            if len(parts) < 4 or parts[:3] != ["api", "v1", "workspaces"]:
+                raise ApiError(HTTPStatus.NOT_FOUND, "not found")
+            workspace_id = parts[3]
+            self._select_workspace(workspace_id)
+            rest = parts[4:]
+            if not rest:
+                return workspace_id, "workspace"
+            if rest == ["projects"]:
+                self._rewrite(parsed, "/api/v1/workspace")
+                return workspace_id, ""
+            if rest[0] == "projects":
+                self._rewrite(parsed, "/api/v1/projects/" + "/".join(rest[1:]))
+                return workspace_id, ""
+            self._rewrite(parsed, "/api/v1/" + "/".join(rest))
+            return workspace_id, ""
+
+        def _prepare_agent(self, parsed: urllib.parse.ParseResult) -> tuple[str, bool]:
+            parts = _parts(parsed.path)
+            if len(parts) < 5 or parts[:4] != ["api", "agent", "v1", "workspaces"]:
+                raise ApiError(HTTPStatus.NOT_FOUND, "not found")
+            workspace_id = parts[4]
+            self._select_workspace(workspace_id)
+            rest = parts[5:]
+            if rest == ["capabilities"]:
+                self._rewrite(parsed, "/api/agent/v1/capabilities")
+            elif rest == ["projects"]:
+                self._rewrite(parsed, "/api/agent/v1/projects")
+            elif rest and rest[0] == "projects":
+                self._rewrite(parsed, "/api/agent/v1/projects/" + "/".join(rest[1:]))
+            else:
+                raise ApiError(HTTPStatus.NOT_FOUND, "not found")
+            return workspace_id, False
+
+        def do_GET(self) -> None:
+            parsed = urllib.parse.urlparse(self.path)
+            try:
+                if parsed.path == "/api/v1/pairing":
+                    local = self.client_address[0] in {"127.0.0.1", "::1"}
+                    self._send_json(gateway.security.public(local))
+                    return
+                if parsed.path.startswith("/api/v1/"):
+                    workspace_id, special = self._prepare_app(parsed)
+                    if special == "workspace-list":
+                        self._send_json(gateway.all_payload())
+                        return
+                    if special == "workspace":
+                        if workspace_id:
+                            self._send_json(gateway.workspace_payload_for(workspace_id))
+                        else:
+                            raise ApiError(HTTPStatus.NOT_FOUND, "not found")
+                        return
+                elif parsed.path.startswith("/api/agent/v1/"):
+                    self._prepare_agent(parsed)
+                super().do_GET()
+            except ApiError as error:
+                self._send_json({"error": str(error)}, error.status)
+
+        def do_HEAD(self) -> None:
+            parsed = urllib.parse.urlparse(self.path)
+            try:
+                if parsed.path.startswith("/api/v1/"):
+                    self._prepare_app(parsed)
+                elif parsed.path.startswith("/api/agent/v1/"):
+                    self._prepare_agent(parsed)
+                super().do_HEAD()
+            except ApiError as error:
+                self._send_json({"error": str(error)}, error.status)
+
+        def do_POST(self) -> None:
+            parsed = urllib.parse.urlparse(self.path)
+            try:
+                if parsed.path == "/api/v1/pairing":
+                    payload = _body(self)
+                    token = gateway.security.exchange(str(payload.get("code", "")))
+                    self._send_json({"session": token})
+                    return
+                if parsed.path.startswith("/api/v1/"):
+                    parts = _parts(parsed.path)
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "workspaces"] and parts[4] == "projects":
+                        self._authorize_app()
+                        self._select_workspace(parts[3])
+                        self._rewrite(parsed, "/api/v1/projects")
+                    else:
+                        self._prepare_app(parsed)
+                elif parsed.path.startswith("/api/agent/v1/"):
+                    self._prepare_agent(parsed)
+                else:
+                    raise ApiError(HTTPStatus.NOT_FOUND, "not found")
+                super().do_POST()
+            except ApiError as error:
+                self._send_json({"error": str(error)}, error.status)
+
+    return Handler
+
+
 def serve(workspace: WorkspaceConfig, host: str = "0.0.0.0", port: int = 8765) -> None:
     service = WorkspaceService(workspace)
     server = ThreadingHTTPServer((host, port), make_handler(service, workspace.web_dir))
     print(f"Video Material Platform: http://{host}:{port}/")
+    if host in {"0.0.0.0", "::"}:
+        addresses = set()
+        try:
+            for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+                address = info[4][0]
+                if not address.startswith("127."):
+                    addresses.add(address)
+        except OSError:
+            pass
+        for address in sorted(addresses):
+            print(f"LAN: http://{address}:{port}/")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+def serve_gateway(
+    workspaces: list[WorkspaceConfig],
+    host: str = "0.0.0.0",
+    port: int = 8766,
+    *,
+    require_pairing: bool = True,
+    pairing_code: str | None = None,
+) -> None:
+    gateway = WorkspaceGateway(
+        workspaces,
+        require_pairing=require_pairing,
+        pairing_code=pairing_code,
+    )
+    web_root = workspaces[0].web_dir
+    server = ThreadingHTTPServer((host, port), make_gateway_handler(gateway, web_root))
+    print(f"MirrorOrder Workspace Gateway: http://{host}:{port}/")
+    if require_pairing:
+        print(f"PAIRING_CODE={gateway.security.pairing_code}")
     if host in {"0.0.0.0", "::"}:
         addresses = set()
         try:

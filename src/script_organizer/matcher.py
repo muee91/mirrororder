@@ -651,6 +651,46 @@ def _dedupe_candidates(candidates: list[Candidate]) -> list[Candidate]:
     return sorted(best.values(), key=lambda candidate: (candidate.total_score, len(candidate.script_segment_ids), candidate.margin), reverse=True)
 
 
+def _prefer_coherent_ranges(
+    candidates: list[Candidate],
+    script_segments: list[ScriptSegment],
+    continuity_tolerance: float = 0.08,
+) -> list[Candidate]:
+    """Rank multi-camera dialogue ranges above near-equal subrange hits."""
+    positions = {segment.segment_id: index for index, segment in enumerate(script_segments)}
+
+    def ids(candidate: Candidate) -> tuple[str, ...]:
+        return candidate.script_segment_ids or ((candidate.script_segment_id,) if candidate.script_segment_id else ())
+
+    def is_coherent_multicam_range(candidate: Candidate) -> bool:
+        range_ids = ids(candidate)
+        if (
+            len(range_ids) < 2
+            or candidate.method != "dialogue_sequence"
+            or len(set(candidate.alignment.get("cameras", ()))) < 2
+        ):
+            return False
+        return any(
+            other is not candidate
+            and set(other_ids := ids(other)) < set(range_ids)
+            and candidate.total_score + continuity_tolerance >= other.total_score
+            and positions.get(range_ids[0], 10**9) <= positions.get(other_ids[0], -1)
+            and positions.get(range_ids[-1], -1) >= positions.get(other_ids[-1], 10**9)
+            for other in candidates
+        )
+
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            is_coherent_multicam_range(candidate),
+            candidate.total_score,
+            len(ids(candidate)),
+            candidate.margin,
+        ),
+        reverse=True,
+    )
+
+
 def match_group(
     group: MulticamGroup,
     transcripts: dict[str, Transcript],
@@ -702,7 +742,10 @@ def match_group(
         script_window_index,
         priority,
     )
-    candidates = _dedupe_candidates([*window_candidates, *line_candidates])
+    candidates = _prefer_coherent_ranges(
+        _dedupe_candidates([*window_candidates, *line_candidates]),
+        script_segments,
+    )
 
     positions = {segment.segment_id: index for index, segment in enumerate(script_segments)}
     segment_by_id = {segment.segment_id: segment for segment in script_segments}

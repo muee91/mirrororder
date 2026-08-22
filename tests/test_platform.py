@@ -20,7 +20,13 @@ from script_organizer.mcp_server import GatewayClient, _tool_call
 from script_organizer.review_store import ReviewStore
 from script_organizer.script_parser import parse_script
 from script_organizer.tasks import TaskManager
-from script_organizer.web_server import WorkspaceService, make_handler
+from script_organizer.web_server import (
+    GatewaySecurity,
+    WorkspaceGateway,
+    WorkspaceService,
+    make_gateway_handler,
+    make_handler,
+)
 from script_organizer.workspace import WorkspaceConfig, WorkspaceRegistry
 
 
@@ -397,3 +403,110 @@ def test_mcp_lists_only_gateway_mapped_tools(tmp_path):
         "submit_task",
         "submit_proposal",
     }
+
+
+def test_workspace_gateway_isolates_same_project_ids_and_pairing(tmp_path):
+    left_root = tmp_path / "left"
+    right_root = tmp_path / "right"
+    left_root.mkdir()
+    right_root.mkdir()
+    left = _workspace(left_root)
+    right = _workspace(right_root)
+    _register_demo(left, left_root, "shared")
+    _register_demo(right, right_root, "shared")
+    left = left.with_workspace_id("ws_left")
+    right = right.with_workspace_id("ws_right")
+    left.config_path.write_text(
+        left.config_path.read_text(encoding="utf-8").replace("[workspace]\n", '[workspace]\nid = "ws_left"\n'),
+        encoding="utf-8",
+    )
+    right.config_path.write_text(
+        right.config_path.read_text(encoding="utf-8").replace("[workspace]\n", '[workspace]\nid = "ws_right"\n'),
+        encoding="utf-8",
+    )
+    left = WorkspaceConfig.from_file(left.config_path)
+    right = WorkspaceConfig.from_file(right.config_path)
+    gateway = WorkspaceGateway([left, right], pairing_code="123456")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_gateway_handler(gateway, left.web_dir))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        status, payload = _request(base, "/api/v1/workspaces")
+        assert status == 200
+        assert {item["workspace_id"] for item in payload["workspaces"]} == {"ws_left", "ws_right"}
+
+        status, payload = _request(base, "/api/v1/workspaces/ws_left/projects/shared")
+        assert status == 200
+        assert payload["project_id"] == "shared"
+
+        status, payload = _request(base, "/api/v1/workspaces/unknown/projects/shared")
+        assert status == 404
+        assert "工作区" in payload["error"]
+
+        status, payload = _request(
+            base,
+            "/api/v1/workspaces/ws_right/projects/shared/review",
+            method="POST",
+            payload={"action": "set_group", "group_id": "right-only", "state": "keep", "actor": "tester"},
+        )
+        assert status == 200
+        right_review = json.loads((right.registry_path.parent / "shared" / "output" / "review.json").read_text(encoding="utf-8"))
+        left_review_path = left.registry_path.parent / "shared" / "output" / "review.json"
+        left_review = json.loads(left_review_path.read_text(encoding="utf-8")) if left_review_path.exists() else {"groups": {}}
+        assert "right-only" in right_review["groups"]
+        assert "right-only" not in left_review["groups"]
+
+        status, _payload = _request(base, "/api/v1/workspaces/ws_left/projects/shared")
+        assert status == 200
+        assert _request(base, "/api/v1/pairing", method="POST", payload={"code": "wrong"})[0] == 401
+        status, payload = _request(base, "/api/v1/pairing", method="POST", payload={"code": "123456"})
+        assert status == 200 and payload["session"].startswith("mos_")
+
+        left_service = gateway.select("ws_left")
+        _record, token = left_service.tokens.create("gateway-agent", ["shared"], ["read"], 1)
+        status, payload = _request(
+            base,
+            "/api/agent/v1/workspaces/ws_left/projects/shared/context",
+            token,
+        )
+        assert status == 200 and payload["project"]["project_id"] == "shared"
+        status, _payload = _request(
+            base,
+            "/api/agent/v1/workspaces/ws_right/projects/shared/context",
+            token,
+        )
+        assert status == 401
+
+        previous_url = os.environ.get("SCRIPT_ORGANIZER_URL")
+        previous_token = os.environ.get("SCRIPT_ORGANIZER_AGENT_TOKEN")
+        previous_workspace = os.environ.get("SCRIPT_ORGANIZER_WORKSPACE_ID")
+        os.environ["SCRIPT_ORGANIZER_URL"] = base
+        os.environ["SCRIPT_ORGANIZER_AGENT_TOKEN"] = token
+        os.environ["SCRIPT_ORGANIZER_WORKSPACE_ID"] = "ws_left"
+        try:
+            mcp_result = _tool_call(GatewayClient(), "project_context", {"project_id": "shared"})
+        finally:
+            for key, value in {
+                "SCRIPT_ORGANIZER_URL": previous_url,
+                "SCRIPT_ORGANIZER_AGENT_TOKEN": previous_token,
+                "SCRIPT_ORGANIZER_WORKSPACE_ID": previous_workspace,
+            }.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+        assert json.loads(mcp_result["content"][0]["text"])["project"]["project_id"] == "shared"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_gateway_pairing_restricts_non_local_clients():
+    security = GatewaySecurity(require_pairing=True, pairing_code="code")
+    assert security.public()["session_ttl_seconds"] == 12 * 60 * 60
+    assert security.allow("192.168.1.10", "") is False
+    session = security.exchange("code")
+    assert security.allow("192.168.1.10", session) is True
+    assert GatewaySecurity(require_pairing=False).allow("192.168.1.10", "") is True

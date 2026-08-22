@@ -65,7 +65,24 @@ open "镜序.app"
 4. `时间线` 可以预览当前项目或加载本地 FCPXML / XML，并和素材页双向关联；
 5. 工作区、本机素材绑定、服务状态和日志都在右上角 `设置`。
 
-App 内嵌工作台只连接 `127.0.0.1:8765`，不会自动开放公网。
+App 管理的是一个多工作区 gateway，默认使用可配置的 `8766` 端口；它可以同时加载多个带稳定 `workspace_id` 的工作区，不接管已有的 `8765` 实例。
+
+局域网入口使用：
+
+```text
+http://局域网地址:8766/?workspace_id=<workspace_id>&project_id=<project_id>
+```
+
+默认首次访问需要输入 App 显示的一次性配对码；也可以在 App 中切换为可信局域网免登录。工作区 ID 是稳定路由标识，不是安全凭据。
+
+浏览器和智能体使用工作区前缀 API：
+
+```text
+/api/v1/workspaces/{workspace_id}/projects/{project_id}/...
+/api/agent/v1/workspaces/{workspace_id}/projects/{project_id}/...
+```
+
+一个工作区可以注册多个项目；同一局域网服务不需要为每个项目增加端口。多个浏览器窗口可以分别固定不同的工作区和项目。
 
 ## 第二台电脑使用自己的素材副本
 
@@ -76,7 +93,7 @@ App 内嵌工作台只连接 `127.0.0.1:8765`，不会自动开放公网。
 2. 安装 / 构建相同版本的 镜序.app
 3. 打开 App
 4. 设置 → 这台 Mac 的素材副本
-5. 点击“选择素材目录并扫描”
+5. 点击“为当前项目绑定素材目录”
 6. 选择这台 Mac 上保存素材的根目录
 7. 镜序通过 media_id / 内容指纹建立本机映射
 8. 工作台刷新后，播放器和原生拖拽使用这台 Mac 自己的文件
@@ -91,7 +108,7 @@ App 扫描不会改写共享 `material_index.json`、`matches.json` 或 `review.
 ./script-organizer media-status workspace.toml beef
 ```
 
-如果一个素材根目录里包含多个项目：
+如果一个素材根目录里包含多个项目，或需要一次重建本机全部项目映射：
 
 ```bash
 ./script-organizer media-scan-all workspace.toml "/Volumes/T9/短剧素材"
@@ -219,7 +236,7 @@ PID
 - GUI 可创建 FCPXML 或媒体目录项目，剧本支持 DOCX、TXT、Markdown。
 - 媒体目录不伪造多机位同步；只有已登记的 FCPXML 才保留其原始同步关系。
 - 后台任务仅支持 `incremental_analyze`、`transcribe`、`evidence_extract`；任务只写 ASR 缓存和派生产物。
-- 智能体 Gateway 位于 `/api/agent/v1`，使用单独 Bearer 令牌、项目白名单、`read/analyze/propose` 范围、有效期、速率限制和审计日志。
+- 智能体 Gateway 位于 `/api/agent/v1/workspaces/{workspace_id}`，使用单独 Bearer 令牌、项目白名单、`read/analyze/propose` 范围、有效期、速率限制和审计日志。
 - 智能体只能提交带有效片内范围和证据的归集提案。GUI 人工确认后才会原子写入 `review.json`；revision 变化会拒绝应用旧提案。
 
 创建智能体令牌：
@@ -231,7 +248,8 @@ PID
 本机 stdio MCP：
 
 ```bash
-export SCRIPT_ORGANIZER_URL=http://127.0.0.1:8765
+export SCRIPT_ORGANIZER_URL=http://127.0.0.1:8766
+export SCRIPT_ORGANIZER_WORKSPACE_ID=ws_9b9a4e7f2c1d4aa6b80c3f8b7e2d1a90
 export SCRIPT_ORGANIZER_AGENT_TOKEN='创建时显示的令牌'
 PYTHONPATH=src python3 -m script_organizer.mcp_server
 ```

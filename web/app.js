@@ -1,5 +1,8 @@
 const state = {
+  workspaces: [],
   workspace: {projects: []},
+  workspaceId: '',
+  session: '',
   frontendSettings: {
     version: 1,
     theme: 'system',
@@ -49,8 +52,13 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
 const cameraOrder = {A: 0, B: 1, C: 2};
 
 function projectApi(path = '') {
-  if (!state.projectId) throw new Error('尚未选择项目');
-  return `/api/v1/projects/${encodeURIComponent(state.projectId)}${path}`;
+  if (!state.workspaceId || !state.projectId) throw new Error('尚未选择工作区或项目');
+  return `/api/v1/workspaces/${encodeURIComponent(state.workspaceId)}/projects/${encodeURIComponent(state.projectId)}${path}`;
+}
+
+function workspaceApi(path = '') {
+  if (!state.workspaceId) throw new Error('尚未选择工作区');
+  return `/api/v1/workspaces/${encodeURIComponent(state.workspaceId)}${path}`;
 }
 
 function applyFrontendSettings(settings) {
@@ -79,7 +87,11 @@ function applyWorkbenchDefaults() {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, {cache: 'no-store', ...options});
+  const headers = {
+    ...(state.session ? {'X-MirrorOrder-Session': state.session} : {}),
+    ...(options.headers || {}),
+  };
+  const response = await fetch(url, {cache: 'no-store', ...options, headers});
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload.error || `请求失败 (${response.status})`);
@@ -920,6 +932,21 @@ function renderProjectSelector() {
   target.value = state.projectId;
 }
 
+function renderWorkspaceSelector() {
+  const target = $('#workspace-select');
+  target.innerHTML = state.workspaces.map((workspace) => (
+    `<option value="${esc(workspace.workspace_id)}">${esc(workspace.workspace || workspace.workspace_id)}</option>`
+  )).join('');
+  target.value = state.workspaceId;
+}
+
+function updateLocation() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('workspace_id', state.workspaceId);
+  url.searchParams.set('project_id', state.projectId);
+  history.replaceState({}, '', url);
+}
+
 function resetProjectView() {
   state.project = null;
   state.script = {segments: []};
@@ -943,16 +970,34 @@ function resetProjectView() {
 }
 
 async function loadWorkspace() {
-  state.workspace = await fetchJson('/api/v1/workspace');
+  const payload = await fetchJson('/api/v1/workspaces');
+  state.workspaces = payload.workspaces || [];
+  const query = new URLSearchParams(window.location.search);
+  const requestedWorkspaceId = query.get('workspace_id') || '';
+  const savedWorkspaceId = (() => {
+    try { return localStorage.getItem('script-organizer-workspace-id') || ''; } catch (_error) { return ''; }
+  })();
+  state.workspaceId = state.workspaces.some((item) => item.workspace_id === requestedWorkspaceId)
+    ? requestedWorkspaceId
+    : state.workspaces.some((item) => item.workspace_id === savedWorkspaceId)
+      ? savedWorkspaceId
+      : state.workspaces[0]?.workspace_id || '';
+  if (!state.workspaceId) throw new Error('网关没有可用工作区');
+  state.workspace = await fetchJson(workspaceApi());
   const projects = state.workspace.projects || [];
   if (!projects.length) throw new Error('工作区没有可用项目');
+  const requestedProjectId = query.get('project_id') || '';
   const savedProjectId = (() => {
     try { return localStorage.getItem('script-organizer-project-id') || ''; } catch (_error) { return ''; }
   })();
-  state.projectId = projects.some((item) => item.project_id === savedProjectId)
-    ? savedProjectId
-    : projects[0].project_id;
+  state.projectId = projects.some((item) => item.project_id === requestedProjectId)
+    ? requestedProjectId
+    : projects.some((item) => item.project_id === savedProjectId)
+      ? savedProjectId : projects[0].project_id;
+  try { localStorage.setItem('script-organizer-workspace-id', state.workspaceId); } catch (_error) {}
+  renderWorkspaceSelector();
   renderProjectSelector();
+  updateLocation();
 }
 
 async function switchProject(projectId) {
@@ -961,6 +1006,7 @@ async function switchProject(projectId) {
   try { localStorage.setItem('script-organizer-project-id', projectId); } catch (_error) {}
   resetProjectView();
   renderProjectSelector();
+  updateLocation();
   $('#analysis-status').textContent = '读取项目';
   await reloadAnalysis(false);
   const review = await fetchJson(projectApi('/review'));
@@ -968,6 +1014,22 @@ async function switchProject(projectId) {
   state.reviewRevision = Number(review.revision || 0);
   applyWorkbenchDefaults();
   renderContent({scriptTop: 0, candidateTop: 0});
+}
+
+async function switchWorkspace(workspaceId) {
+  if (!workspaceId || workspaceId === state.workspaceId) return;
+  state.workspaceId = workspaceId;
+  try { localStorage.setItem('script-organizer-workspace-id', workspaceId); } catch (_error) {}
+  state.workspace = await fetchJson(workspaceApi());
+  const projects = state.workspace.projects || [];
+  if (!projects.length) throw new Error('工作区没有可用项目');
+  state.projectId = projects[0].project_id;
+  resetProjectView();
+  renderWorkspaceSelector();
+  renderProjectSelector();
+  updateLocation();
+  $('#analysis-status').textContent = '读取项目';
+  await switchProject(state.projectId);
 }
 
 function parseCameraPatterns(value) {
@@ -980,7 +1042,7 @@ function parseCameraPatterns(value) {
 }
 
 async function pickProjectPath(button) {
-  const path = await fetchJson('/api/v1/path-picker', {
+  const path = await fetchJson(workspaceApi('/path-picker'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({kind: button.dataset.pickKind}),
@@ -1008,13 +1070,13 @@ async function createProject() {
     transcript_dir: $('#new-project-transcript').value,
     camera_patterns: parseCameraPatterns($('#new-project-camera-patterns').value),
   };
-  const created = await fetchJson('/api/v1/projects', {
+  const created = await fetchJson(workspaceApi('/projects'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),
   });
   $('#project-dialog').close();
-  state.workspace = await fetchJson('/api/v1/workspace');
+  state.workspace = await fetchJson(workspaceApi());
   await switchProject(created.project_id);
   showToast(`已创建项目：${created.name}`);
 }
@@ -1195,8 +1257,8 @@ function ignoreKeyboard(event) {
 
 async function boot() {
   loadActor();
-  applyFrontendSettings(await fetchJson('/api/v1/settings'));
   await loadWorkspace();
+  applyFrontendSettings(await fetchJson(workspaceApi('/settings')));
   await switchProject(state.projectId);
   setCollabStatus('协作已连接', true);
   if (!state.actor) {
@@ -1232,6 +1294,22 @@ $('#show-unknown').addEventListener('click', () => {
 $('#refresh').addEventListener('click', () => location.reload());
 $('#project-select').addEventListener('change', (event) => {
   switchProject(event.target.value).catch((error) => showToast(error.message));
+});
+$('#workspace-select').addEventListener('change', (event) => {
+  switchWorkspace(event.target.value).catch((error) => showToast(error.message));
+});
+$('#pairing-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  fetchJson('/api/v1/pairing', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({code: $('#pairing-code').value.trim()}),
+  }).then(async (payload) => {
+    state.session = payload.session || '';
+    try { sessionStorage.setItem('mirrororder-session', state.session); } catch (_error) {}
+    $('#pairing-dialog').close();
+    await boot();
+  }).catch((error) => showToast(error.message));
 });
 $('#create-project').addEventListener('click', () => {
   $('#project-form').reset();
@@ -1325,7 +1403,12 @@ document.addEventListener('keydown', async (event) => {
   else await setDecision(state.segmentId, candidate.group_id, decision);
 });
 
+try { state.session = sessionStorage.getItem('mirrororder-session') || ''; } catch (_error) {}
 boot().catch((error) => {
+  if (String(error.message || '').includes('需要先完成局域网配对')) {
+    $('#pairing-dialog').showModal();
+    return;
+  }
   $('#analysis-status').textContent = '读取失败';
   $('#candidate-list').innerHTML = `<div class="empty-state error-text">${esc(error.message)}</div>`;
 });

@@ -15,8 +15,8 @@ from .fcpxml_exporter import export
 from .local_vision_runtime import LocalVisionRuntime
 from .media_identity import DeviceMediaStore
 from .tasks import TaskManager
-from .web_server import serve
-from .workspace import WorkspaceConfig, WorkspaceRegistry
+from .web_server import serve, serve_gateway
+from .workspace import WorkspaceConfig, WorkspaceRegistry, ensure_workspace_id
 
 
 def _workspace(value: str) -> WorkspaceConfig:
@@ -81,6 +81,14 @@ def main(argv: list[str] | None = None) -> int:
         serve_parser.add_argument("--port", default=8765, type=int)
         serve_parser.add_argument("--local-only", action="store_true", help="仅允许本机访问")
 
+    gateway_parser = subparsers.add_parser("gateway", help="启动多工作区局域网网关")
+    gateway_parser.add_argument("workspace", nargs="+", help="一个或多个 workspace.toml 或工作区目录")
+    gateway_parser.add_argument("--host", default="0.0.0.0")
+    gateway_parser.add_argument("--port", default=8766, type=int)
+    gateway_parser.add_argument("--local-only", action="store_true", help="仅允许本机访问")
+    gateway_parser.add_argument("--trusted-lan", action="store_true", help="可信局域网免配对")
+    gateway_parser.add_argument("--pairing-code", default="", help="指定局域网首次配对码")
+
     scan_parser = subparsers.add_parser("media-scan", help="为当前设备扫描并绑定本地素材副本")
     scan_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
     scan_parser.add_argument("project_id", help="项目 ID")
@@ -106,6 +114,29 @@ def main(argv: list[str] | None = None) -> int:
     context_parser.add_argument("project_id", help="项目 ID")
 
     args = parser.parse_args(argv)
+    if args.command == "gateway":
+        workspaces = [ensure_workspace_id(_workspace(value).config_path) for value in args.workspace]
+        install_device_media_runtime()
+        install_automation_runtime()
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+        def stop_gateway(_signum, _frame) -> None:
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGTERM, stop_gateway)
+        try:
+            serve_gateway(
+                workspaces,
+                "127.0.0.1" if args.local_only else args.host,
+                args.port,
+                require_pairing=not args.trusted_lan,
+                pairing_code=args.pairing_code or None,
+            )
+        finally:
+            LocalVisionRuntime.stop()
+            signal.signal(signal.SIGTERM, previous_sigterm)
+        return 0
+
     workspace = _workspace(args.workspace)
 
     if args.command in {"serve", "run"}:

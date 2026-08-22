@@ -23,6 +23,18 @@ def test_macos_build_uses_drag_capable_desktop_shell():
     assert 'NSFilenamesPboardType' in source
 
 
+def test_desktop_service_start_script_saves_pid_after_background_launch():
+    source = read("macos-app/MirrorOrderDesktopApp.swift")
+
+    assert "nohup" in source
+    assert "pid=$!" in source
+    assert 'echo "$pid"' in source
+    assert "& &&" not in source
+    assert '@Published var port = "8766"' in source
+    assert "gateway" in source
+    assert "--pairing-code" in source
+
+
 def test_web_loader_uses_review_aware_timeline_v3_only():
     loader = read("web/timeline.js")
     timeline = read("web/timeline_v3.js")
@@ -59,6 +71,9 @@ def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     runtime = read("src/script_organizer/device_media_runtime.py")
 
     assert "这台 Mac 的素材副本" in source
+    assert "为当前项目绑定素材目录" in source
+    assert 'scanAll ? "media-scan-all" : "media-scan"' in source
+    assert "workspacePaths" in source
     assert "media-scan-all" in source
     assert 'subparsers.add_parser("media-scan-all"' in cli
     assert '"Application Support" / "MirrorOrder"' in identity

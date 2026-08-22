@@ -8,6 +8,13 @@
 
 ## 1. 必须在设备间同步的数据
 
+### 工作区身份
+
+- `workspace.toml` 中的稳定 `workspace.id` / `workspace_id`
+- `projects/registry.json` 中的项目 `project_id`
+
+一个 gateway 可以同时加载多个工作区。工作区 ID 是路由身份，不是访问凭据；局域网首次访问由 App 配对码换取会话。
+
 这些数据共同定义“大家正在剪同一个项目”，应该由同一个项目空间保存或同步：
 
 ### 项目定义
@@ -166,9 +173,9 @@ C_331
 ```text
 1. 获取/同步同一个 MirrorOrder workspace
 2. 安装并打开 镜序.app
-3. App 启动本机 127.0.0.1 服务
-4. 设置 → 这台 Mac 的素材副本
-5. 选择本机素材根目录
+3. App 启动本机或局域网 gateway
+4. 设置 → 工作区 → 添加或选择对应工作区
+5. 选择当前项目 → 这台 Mac 的素材副本 → 为当前项目绑定素材目录
 6. 镜序扫描本机文件并计算 media_id
 7. media_id 与共享 material_index 对应
 8. 写入本机 Application Support/media-bindings.json
@@ -177,6 +184,8 @@ C_331
 ```
 
 不会修改共享 `material_index.json` 中的项目来源路径。
+
+局域网用户打开 App 显示的 gateway 地址；默认先输入一次性配对码。多个浏览器窗口可以分别使用 `workspace_id` 与 `project_id` 固定不同工作区和项目。
 
 ## 7. 数据流
 

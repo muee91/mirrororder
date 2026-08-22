@@ -19,6 +19,10 @@
     </div>
     <div class="top-actions">
       <label class="project-switch">
+        <span>工作区</span>
+        <select id="workspace-select" aria-label="切换工作区"></select>
+      </label>
+      <label class="project-switch">
         <span>项目</span>
         <select id="project-select" aria-label="切换项目"></select>
       </label>
@@ -110,6 +114,20 @@
       </label>
       <div class="modal-actions">
         <button class="primary-button" value="save" type="submit">保存昵称</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pairing-dialog" class="modal identity-modal">
+    <form id="pairing-form" method="dialog">
+      <h2>连接局域网工作台</h2>
+      <p>请输入镜序 App 显示的一次性配对码。</p>
+      <label>
+        配对码
+        <input id="pairing-code" required autocomplete="one-time-code">
+      </label>
+      <div class="modal-actions">
+        <button class="primary-button" value="pair" type="submit">连接工作台</button>
       </div>
     </form>
   </dialog>

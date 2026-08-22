@@ -23,8 +23,14 @@ AGENT_TASK_TYPES = [
 
 class GatewayClient:
     def __init__(self) -> None:
-        self.base_url = os.environ.get("SCRIPT_ORGANIZER_URL", "http://127.0.0.1:8765").rstrip("/")
+        self.base_url = os.environ.get("SCRIPT_ORGANIZER_URL", "http://127.0.0.1:8766").rstrip("/")
         self.token = os.environ.get("SCRIPT_ORGANIZER_AGENT_TOKEN", "")
+        self.workspace_id = os.environ.get("SCRIPT_ORGANIZER_WORKSPACE_ID", "").strip()
+
+    def scoped_path(self, path: str) -> str:
+        if not self.workspace_id:
+            return path
+        return "/api/agent/v1/workspaces/" + urllib.parse.quote(self.workspace_id, safe="") + path.removeprefix("/api/agent/v1")
 
     def request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> object:
         if not self.token:
@@ -146,27 +152,27 @@ def _result(payload: object) -> dict[str, Any]:
 def _tool_call(client: GatewayClient, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     project_id = urllib.parse.quote(str(arguments.get("project_id", "")), safe="")
     if name == "capabilities":
-        return _result(client.request("GET", "/api/agent/v1/capabilities"))
+        return _result(client.request("GET", client.scoped_path("/api/agent/v1/capabilities")))
     if name == "list_projects":
-        return _result(client.request("GET", "/api/agent/v1/projects"))
+        return _result(client.request("GET", client.scoped_path("/api/agent/v1/projects")))
     if name == "project_context":
-        return _result(client.request("GET", f"/api/agent/v1/projects/{project_id}/context"))
+        return _result(client.request("GET", client.scoped_path(f"/api/agent/v1/projects/{project_id}/context")))
     if name == "search":
         query = urllib.parse.urlencode({"q": str(arguments.get("query", ""))})
-        return _result(client.request("GET", f"/api/agent/v1/projects/{project_id}/search?{query}"))
+        return _result(client.request("GET", client.scoped_path(f"/api/agent/v1/projects/{project_id}/search?{query}")))
     if name == "get_evidence":
         group_id = urllib.parse.quote(str(arguments.get("group_id", "")), safe="")
-        return _result(client.request("GET", f"/api/agent/v1/projects/{project_id}/evidence/{group_id}"))
+        return _result(client.request("GET", client.scoped_path(f"/api/agent/v1/projects/{project_id}/evidence/{group_id}")))
     if name == "submit_task":
         payload = {
             "type": arguments.get("type"),
             "targets": arguments.get("targets", {}),
             "idempotency_key": arguments.get("idempotency_key", ""),
         }
-        return _result(client.request("POST", f"/api/agent/v1/projects/{project_id}/tasks", payload))
+        return _result(client.request("POST", client.scoped_path(f"/api/agent/v1/projects/{project_id}/tasks"), payload))
     if name == "submit_proposal":
         payload = {key: value for key, value in arguments.items() if key != "project_id"}
-        return _result(client.request("POST", f"/api/agent/v1/projects/{project_id}/proposals", payload))
+        return _result(client.request("POST", client.scoped_path(f"/api/agent/v1/projects/{project_id}/proposals"), payload))
     raise RuntimeError("未知工具")
 
 

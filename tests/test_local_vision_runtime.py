@@ -68,15 +68,22 @@ def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     desktop = (root / "macos-app" / "MirrorOrderDesktopApp.swift").read_text(encoding="utf-8")
     panel = (root / "macos-app" / "LocalRuntimeSettingsView.swift").read_text(encoding="utf-8")
     assert "MIRRORORDER_LLAMA_SERVER" in build
-    assert 'cp "$LLAMA_SERVER_SOURCE" "$RUNTIME/bin/llama-server"' in build
+    assert 'cp "$LLAMA_SERVER_SOURCE" "$RUNTIME_BIN"' in build
+    assert 'install_name_tool -id "@rpath/$name"' in build
+    assert 'RUNTIME_LIB_SOURCES=(' in build
+    assert 'codesign --force --sign - "$RUNTIME/bin/llama-server"' in build
+    assert 'codesign --force --deep --sign - "$APP"' in build
     assert '"$SOURCE" "$LOCAL_RUNTIME_SOURCE"' in build
     assert "build must NEVER download or embed model weights" in build
     assert "huggingface.co" not in build
     assert "curl " not in build
     assert "wget " not in build
-    assert "LocalRuntimeSettingsSection()" in desktop
+    assert "LocalRuntimeSettingsSection(" in desktop
+    assert "workspaceID: controller.selectedWorkspaceID" in desktop
+    assert '@Published var port = "8766"' in desktop
+    assert 'appendingPathComponent("local-runtime")' in panel
     assert "首次下载并准备模型" in panel
-    assert "/api/v1/local-runtime" in panel
+    assert 'appendingPathComponent("api/v1/workspaces")' in panel
 
 
 def test_local_runtime_control_api_is_host_local() -> None:
