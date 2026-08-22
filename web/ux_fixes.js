@@ -183,4 +183,11 @@
     rows.forEach((row, index) => row.classList.toggle('active', index === next));
     rows[next]?.scrollIntoView({block: 'nearest'});
   });
+
+  // Timeline and native file-drag features live in a separate extension so the
+  // core review UI remains small and deterministic.
+  const timelineScript = document.createElement('script');
+  timelineScript.src = '/timeline.js';
+  timelineScript.defer = true;
+  document.body.appendChild(timelineScript);
 })();
