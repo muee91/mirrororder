@@ -60,6 +60,10 @@ def main(argv: list[str] | None = None) -> int:
     scan_parser.add_argument("project_id", help="项目 ID")
     scan_parser.add_argument("root", nargs="+", help="一个或多个本机素材目录")
 
+    scan_all_parser = subparsers.add_parser("media-scan-all", help="用同一素材目录扫描当前工作区所有项目")
+    scan_all_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
+    scan_all_parser.add_argument("root", nargs="+", help="一个或多个本机素材目录")
+
     media_status_parser = subparsers.add_parser("media-status", help="查看当前设备的本地素材绑定状态")
     media_status_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
     media_status_parser.add_argument("project_id", help="项目 ID")
@@ -89,6 +93,22 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("项目还没有 material_index.json；请先在有源素材的机器完成 analyze")
         summary = DeviceMediaStore().scan(args.project_id, index, args.root)
         print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "media-scan-all":
+        store = DeviceMediaStore()
+        summaries = {}
+        registry = WorkspaceRegistry(workspace)
+        for entry in registry.list():
+            project_id = str(entry.get("project_id", "") or "")
+            if not project_id:
+                continue
+            index = _project_index(workspace, project_id)
+            if not index:
+                summaries[project_id] = {"error": "项目还没有 material_index.json"}
+                continue
+            summaries[project_id] = store.scan(project_id, index, args.root)
+        print(json.dumps({"projects": summaries}, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "media-status":
