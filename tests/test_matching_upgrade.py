@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from fractions import Fraction
 from types import SimpleNamespace
 
@@ -145,3 +146,81 @@ def test_known_text_alignment_reuses_loaded_model(monkeypatch, tmp_path):
     assert first["status"] == "success"
     assert second["status"] == "success"
     assert calls == {"loads": 1, "aligns": 2}
+
+
+def test_ambiguous_take_transcribes_one_extra_camera_and_uses_it_for_alignment(monkeypatch, tmp_path):
+    from script_organizer import material_index
+    from script_organizer.fcpxml_reader import read_fcpxml
+    from script_organizer.transcript import TranscriptStore
+
+    media_b = tmp_path / "B001.mov"
+    media_c = tmp_path / "C001.mov"
+    media_b.write_bytes(b"b")
+    media_c.write_bytes(b"c")
+    fcpxml = tmp_path / "input.fcpxml"
+    fcpxml.write_text(
+        f'''<?xml version="1.0"?><fcpxml version="1.8"><resources>
+        <asset id="b" src="file://{media_b}"/><asset id="c" src="file://{media_c}"/>
+        </resources><library><event><project><sequence><spine>
+        <asset-clip name="B001" ref="b" lane="1" offset="0s" duration="20s"/>
+        <asset-clip name="C001" ref="c" lane="2" offset="0s" duration="20s"/>
+        </spine></sequence></project></event></library></fcpxml>''',
+        encoding="utf-8",
+    )
+    script = tmp_path / "script.txt"
+    script.write_text(
+        "第19集\n19-03 饭店 内 日\n李梦：王总，你怎么来了？\n王总：听说这里的牛肉三百八一斤？\n",
+        encoding="utf-8",
+    )
+    clips = read_fcpxml(fcpxml)
+    b_clip = next(clip for clip in clips if clip.name == "B001")
+    TranscriptStore(tmp_path / "cache").write(
+        b_clip,
+        "王总你来了",
+        [{"start": 1.0, "end": 2.0, "text": "王总你来了"}],
+        backend="test",
+    )
+
+    class FakeWhisperModel:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transcribe(self, path, **kwargs):
+            assert str(path).endswith("C001.mov")
+            segment = SimpleNamespace(
+                start=2.0,
+                end=7.0,
+                text="王总你怎么来了听说这里的牛肉三百八一斤",
+                words=[],
+            )
+            return [segment], SimpleNamespace()
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    aligned_paths = []
+
+    def fake_align(path, text, model_name):
+        aligned_paths.append(str(path))
+        return {"method": "stable-ts", "status": "success", "segments": []}
+
+    monkeypatch.setattr(material_index, "align_known_text", fake_align)
+    config = replace(
+        _config(tmp_path),
+        fcpxml=fcpxml,
+        script=script,
+        transcript_dir=tmp_path / "cache",
+        asr_backend="faster-whisper",
+        asr_camera_priority=("B", "C", "A"),
+        asr_ensure_preferred_camera=True,
+        asr_escalate_ambiguous=True,
+        asr_max_extra_cameras=1,
+        enable_known_text_alignment=True,
+    )
+    result = material_index.analyze(config)
+
+    assert result["index"]["stats"]["asr_escalated_groups"] == 1
+    assert result["index"]["stats"]["asr_escalated_clips"] == 1
+    group_rows = list(result["matches"]["groups"].values())
+    assert group_rows and group_rows[0]["candidates"]
+    top = group_rows[0]["candidates"][0]
+    assert top["transcript_clip_id"] == next(clip.clip_id for clip in clips if clip.name == "C001")
+    assert aligned_paths and aligned_paths[0].endswith("C001.mov")
