@@ -3,6 +3,7 @@
   window.__mirrorOrderAutomationInstalled = true;
 
   const COMPLETED = new Set(['auto_confirmed', 'ai_confirmed', 'human_override']);
+  const NEEDS_ATTENTION = new Set(['needs_review', 'unresolved']);
 
   function automationFor(group) {
     return group?.automation && typeof group.automation === 'object' ? group.automation : null;
@@ -14,13 +15,47 @@
     return Boolean(segmentId) && ids.includes(segmentId);
   }
 
+  // Mapping and editorial review are independent axes. Automatic script
+  // mapping must never impersonate a human Best/Keep decision in the UI.
   const baseAssignmentState = assignmentState;
   assignmentState = function automationAssignmentState(segmentId, group) {
     const manual = baseAssignmentState(segmentId, group);
     if (manual !== 'unreviewed') return manual;
-    const entry = automationFor(group);
-    if (appliesToSegment(entry, segmentId)) return entry.state === 'best' ? 'best' : 'keep';
-    return manual;
+    const editorial = String(automationFor(group)?.editorial_state || 'unreviewed');
+    return ['best', 'keep', 'reject'].includes(editorial) ? editorial : 'unreviewed';
+  };
+
+  function segmentHasPendingMapping(segmentId) {
+    const candidates = candidateForSegment(segmentId);
+    if (!candidates.length) return true;
+    let sawAutomation = false;
+    for (const candidate of candidates) {
+      const group = state.groupMap.get(candidate.group_id);
+      const entry = automationFor(group);
+      if (!entry) return true;
+      sawAutomation = true;
+      if (NEEDS_ATTENTION.has(entry.status)) return true;
+      if (!COMPLETED.has(entry.status)) return true;
+    }
+    return !sawAutomation;
+  }
+
+  // Base `unknownOnly` was historically editorial-review based. Preserve the
+  // old implementation, then narrow it to mapping exceptions so auto-mapped
+  // Takes disappear from the exception queue without becoming Keep.
+  const baseVisibleSegments = visibleSegments;
+  visibleSegments = function automationVisibleSegments() {
+    const rows = baseVisibleSegments();
+    if (!state.unknownOnly) return rows;
+    return rows.filter((segment) => {
+      if (segment.type !== 'scene_heading') return segmentHasPendingMapping(segment.segment_id);
+      return allSegments().some((line) => (
+        line.type !== 'scene_heading'
+        && line.episode === segment.episode
+        && line.scene_id === segment.scene_id
+        && segmentHasPendingMapping(line.segment_id)
+      ));
+    });
   };
 
   const baseConfidencePresentation = confidencePresentation;
@@ -32,16 +67,16 @@
     const sameRange = entry?.script_segment_ids?.length
       && candidateIds.some((id) => entry.script_segment_ids.includes(id));
     if (entry?.status === 'auto_confirmed' && sameRange) {
-      return {className: 'exact', title: '自动', detail: '规则确认', percent: `${Math.round(Number(entry.confidence || 0) * 100)}%`};
+      return {className: 'exact', title: '自动', detail: '剧本归集', percent: `${Math.round(Number(entry.confidence || 0) * 100)}%`};
     }
     if (entry?.status === 'ai_confirmed' && sameRange) {
-      return {className: 'ai', title: 'AI', detail: '二审确认', percent: `${Math.round(Number(entry.confidence || 0) * 100)}%`};
+      return {className: 'ai', title: 'AI', detail: '剧本归集', percent: `${Math.round(Number(entry.confidence || 0) * 100)}%`};
     }
     if (entry?.status === 'needs_review') {
-      return {className: 'review', title: '待审', detail: '存在冲突', percent: ''};
+      return {className: 'review', title: '待处理', detail: '归集冲突', percent: ''};
     }
     if (entry?.status === 'unresolved') {
-      return {className: 'review', title: '异常', detail: '证据不足', percent: ''};
+      return {className: 'review', title: '异常', detail: '归集证据不足', percent: ''};
     }
     return baseConfidencePresentation(candidate, group);
   };
@@ -52,10 +87,12 @@
     if (manual !== '尚未人工修改') return manual;
     const entry = automationFor(group);
     if (appliesToSegment(entry, segmentId)) {
-      return entry.status === 'ai_confirmed' ? 'AI 二审自动确认 · 可人工覆盖' : '系统自动确认 · 可人工覆盖';
+      return entry.status === 'ai_confirmed'
+        ? 'AI 已完成剧本归集 · 剪辑判断仍未审核'
+        : '系统已完成剧本归集 · 剪辑判断仍未审核';
     }
-    if (entry?.status === 'needs_review') return '需要人工确认';
-    if (entry?.status === 'unresolved') return '异常素材 · 证据不足';
+    if (entry?.status === 'needs_review') return '剧本归集需要人工确认';
+    if (entry?.status === 'unresolved') return '异常素材 · 归集证据不足';
     return manual;
   };
 
@@ -71,7 +108,7 @@
       const prepare = document.createElement('button');
       prepare.type = 'button'; prepare.dataset.taskType = 'prepare_project'; prepare.textContent = '重新自动整理当前项目';
       const resolve = document.createElement('button');
-      resolve.type = 'button'; resolve.dataset.taskType = 'auto_resolve'; resolve.textContent = '重跑自动确认 / AI救援';
+      resolve.type = 'button'; resolve.dataset.taskType = 'auto_resolve'; resolve.textContent = '重跑自动归集 / AI救援';
       actions.prepend(resolve); actions.prepend(prepare);
       for (const button of [prepare, resolve]) {
         button.addEventListener('click', () => submitTask(button.dataset.taskType).catch((error) => showToast(error.message)));
@@ -81,7 +118,7 @@
 
   const baseTaskLabel = taskLabel;
   taskLabel = function automationTaskLabel(task) {
-    return ({prepare_project:'自动整理', multicam_sync:'多机位同步', auto_resolve:'自动确认/AI救援'})[task.type]
+    return ({prepare_project:'自动整理', multicam_sync:'多机位同步', auto_resolve:'自动归集/AI救援'})[task.type]
       || baseTaskLabel(task);
   };
 
@@ -132,7 +169,7 @@
     const ai = Number(row.ai_confirmed || 0);
     const human = Number(row.human_override || 0);
     const review = Number(row.needs_review || 0) + Number(row.unresolved || 0);
-    target.innerHTML = `<span>自动 <strong>${auto}</strong></span><span>AI <strong>${ai}</strong></span><span>人工 <strong>${human}</strong></span><button id="automation-review" class="automation-review-button ${review ? 'attention' : ''}" type="button">待处理 ${review}</button>`;
+    target.innerHTML = `<span>自动归集 <strong>${auto}</strong></span><span>AI归集 <strong>${ai}</strong></span><span>人工归集 <strong>${human}</strong></span><button id="automation-review" class="automation-review-button ${review ? 'attention' : ''}" type="button">待处理 ${review}</button>`;
     target.querySelector('#automation-review')?.addEventListener('click', () => {
       state.unknownOnly = true;
       state.mode = 'script';
@@ -145,14 +182,14 @@
     document.querySelectorAll('.take-row[data-take-group]').forEach((row) => {
       const group = state.groupMap.get(row.dataset.takeGroup);
       const entry = automationFor(group);
-      row.classList.toggle('automation-needs-review', ['needs_review', 'unresolved'].includes(entry?.status));
+      row.classList.toggle('automation-needs-review', NEEDS_ATTENTION.has(entry?.status));
       row.querySelector('.automation-badge')?.remove();
       if (!entry?.status) return;
       const labels = {
-        auto_confirmed: '系统已确认',
-        ai_confirmed: 'AI 二审通过',
-        human_override: '人工覆盖',
-        needs_review: '需要人工',
+        auto_confirmed: '已自动归集',
+        ai_confirmed: 'AI 已归集',
+        human_override: '人工归集',
+        needs_review: '归集待确认',
         unresolved: '异常待处理',
       };
       const badge = document.createElement('span');
