@@ -534,11 +534,22 @@ def _has_decisive_dialogue(candidates: list[Candidate], config: ProjectConfig) -
     )
 
 
+def _reviewed_group_ids(review: dict[str, Any]) -> set[str]:
+    reviewed = {str(group_id) for group_id in review.get("groups", {})}
+    reviewed.update(str(group_id) for group_id in review.get("placements", {}))
+    for assignments in review.get("assignments", {}).values():
+        if isinstance(assignments, dict):
+            reviewed.update(str(group_id) for group_id in assignments)
+    return reviewed
+
+
 def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -> dict[str, Any]:
     config.ensure_output()
     previous_index = _read_json(config.output_dir / "material_index.json", {})
     previous_script = _read_json(config.output_dir / "script.json", {})
     previous_matches = _read_json(config.output_dir / "matches.json", {})
+    review = ReviewStore(config.output_dir / "review.json").load()
+    reviewed_group_ids = _reviewed_group_ids(review)
     if config.is_fcpxml:
         if config.fcpxml is None:
             raise ValueError("FCPXML 项目缺少 input.fcpxml")
@@ -633,6 +644,7 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     asr_escalation_attempted_clips = 0
     asr_escalated_groups = 0
     asr_escalated_clips = 0
+    asr_escalation_skipped_reviewed_groups = 0
     overrides = _load_overrides(config)
     group_overrides = overrides.get("groups", {}) if isinstance(overrides.get("groups", {}), dict) else {}
     previous_group_rows = previous_matches.get("groups", {}) if isinstance(previous_matches, dict) and isinstance(previous_matches.get("groups", {}), dict) else {}
@@ -708,6 +720,9 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
                 if asr_escalation_attempted_groups >= config.asr_max_escalated_groups:
                     break
                 if affected_group_ids is not None and group.group_id not in affected_group_ids:
+                    continue
+                if group.group_id in reviewed_group_ids or (group.parent_group_id and group.parent_group_id in reviewed_group_ids):
+                    asr_escalation_skipped_reviewed_groups += 1
                     continue
                 if _has_decisive_dialogue(local_matches.get(group.group_id, []), config):
                     continue
@@ -814,7 +829,6 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
         for group_id, candidates in matches.items()
         if group_id not in matched_group_ids and any(candidate.confidence == "context_only" for candidate in candidates)
     }
-    review = ReviewStore(config.output_dir / "review.json").load()
     manual_group_ids = set(review.get("groups", {}))
     manual_group_ids.update(review.get("placements", {}))
     for assignments in review.get("assignments", {}).values():
@@ -870,6 +884,7 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
             "asr_escalation_attempted_clips": asr_escalation_attempted_clips,
             "asr_escalated_groups": asr_escalated_groups,
             "asr_escalated_clips": asr_escalated_clips,
+            "asr_escalation_skipped_reviewed_groups": asr_escalation_skipped_reviewed_groups,
         },
     }
     matches_payload = {
@@ -907,6 +922,7 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
             "asr_escalation_attempted_clips": asr_escalation_attempted_clips,
             "asr_escalated_groups": asr_escalated_groups,
             "asr_escalated_clips": asr_escalated_clips,
+            "asr_escalation_skipped_reviewed_groups": asr_escalation_skipped_reviewed_groups,
             "affected_group_ids": sorted(affected_group_ids) if affected_group_ids is not None else [],
         },
     }
