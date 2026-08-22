@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 import time
 from pathlib import Path
@@ -11,6 +12,7 @@ from .analysis_runtime import analyze
 from .automation_runtime import install_automation_runtime
 from .device_media_runtime import install_device_media_runtime
 from .fcpxml_exporter import export
+from .local_vision_runtime import LocalVisionRuntime
 from .media_identity import DeviceMediaStore
 from .tasks import TaskManager
 from .web_server import serve
@@ -109,7 +111,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {"serve", "run"}:
         install_device_media_runtime()
         install_automation_runtime()
-        serve(workspace, "127.0.0.1" if args.local_only else args.host, args.port)
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+        def stop_host(_signum, _frame) -> None:
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGTERM, stop_host)
+        try:
+            serve(workspace, "127.0.0.1" if args.local_only else args.host, args.port)
+        finally:
+            LocalVisionRuntime.stop()
+            signal.signal(signal.SIGTERM, previous_sigterm)
         return 0
 
     if args.command == "prepare":
