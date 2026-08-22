@@ -11,14 +11,23 @@ from threading import RLock, Thread
 from typing import Any, Callable
 from uuid import uuid4
 
+from .auto_resolver import resolve_project
 from .config import ProjectConfig
 from .material_index import analyze
 from .media_identity import DeviceMediaStore
 from .models import Clip
+from .multicam_sync_engine import run_multicam_sync
 from .transcript import TranscriptStore, transcribe_with_faster_whisper
 
 
-TASK_TYPES = {"incremental_analyze", "transcribe", "evidence_extract"}
+TASK_TYPES = {
+    "prepare_project",
+    "multicam_sync",
+    "incremental_analyze",
+    "auto_resolve",
+    "transcribe",
+    "evidence_extract",
+}
 
 
 def _now() -> str:
@@ -80,7 +89,11 @@ def _analysis_inputs_available(config: ProjectConfig) -> bool:
 
 
 class TaskManager:
-    """Persistent, per-project derived jobs. No task can write a review or source file."""
+    """Persistent project jobs.
+
+    Tasks may write derived analysis/cache files and generated synchronized XML,
+    but never mutate original media, original user FCPXML, or review.json.
+    """
 
     def __init__(self, project_loader: Callable[[str], ProjectConfig]):
         self.project_loader = project_loader
@@ -157,7 +170,7 @@ class TaskManager:
                 task["logs"].append("任务在启动前取消")
             elif task["status"] == "running":
                 task["cancel_requested"] = True
-                task["logs"].append("已请求取消；当前转写片段结束后停止")
+                task["logs"].append("已请求取消；当前阶段结束后停止")
             self._save(config, payload)
             return task
 
@@ -169,10 +182,19 @@ class TaskManager:
             if task.get("cancel_requested"):
                 self._update(config, task_id, status="cancelled", message="任务已取消")
                 return
-            if task["type"] == "incremental_analyze":
+
+            if task["type"] == "prepare_project":
+                result = self._prepare_project(project_id, config, task)
+            elif task["type"] == "multicam_sync":
+                result = run_multicam_sync(config, lambda text: self._update(config, task_id, message=text))
+            elif task["type"] == "incremental_analyze":
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
                 result = analyze(config, affected or None)["index"]["stats"]
                 result["affected_group_ids"] = sorted(affected)
+                result["automation"] = resolve_project(config)["summary"]
+            elif task["type"] == "auto_resolve":
+                automation = resolve_project(config)
+                result = {"automation": automation["summary"], "model": automation.get("model", {})}
             elif task["type"] == "transcribe":
                 result = self._transcribe(config, task)
                 if result.get("cancelled"):
@@ -182,6 +204,7 @@ class TaskManager:
                     affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
                     if _analysis_inputs_available(config):
                         result["analysis"] = analyze(config, affected or None)["index"]["stats"]
+                        result["automation"] = resolve_project(config)["summary"]
                     else:
                         result["analysis_deferred"] = True
                         result["analysis_deferred_reason"] = "当前设备缺少项目源 FCPXML/剧本或媒体根目录；转写缓存已成功写入，可由分析主机后续合并"
@@ -190,6 +213,26 @@ class TaskManager:
             self._update(config, task_id, status="completed", result=result, message="任务完成")
         except Exception as error:
             self._update(config, task_id, status="failed", error=str(error), message="任务失败")
+
+    def _prepare_project(self, project_id: str, config: ProjectConfig, task: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        if config.is_media_directory:
+            self._update(config, task["task_id"], message="开始多机位音频同步")
+            result["sync"] = run_multicam_sync(
+                config,
+                lambda text: self._update(config, task["task_id"], message=text),
+            )
+            config = self.project_loader(project_id)
+        if not _analysis_inputs_available(config):
+            raise ValueError("项目源输入不完整，无法执行自动准备")
+        self._update(config, task["task_id"], message="开始 ASR / 剧本匹配分析")
+        analysis = analyze(config)
+        result["analysis"] = analysis["index"]["stats"]
+        self._update(config, task["task_id"], message="自动确认高置信度结果并处理疑难 Take")
+        automation = resolve_project(config)
+        result["automation"] = automation["summary"]
+        result["model"] = automation.get("model", {})
+        return result
 
     def _transcribe(self, config: ProjectConfig, task: dict[str, Any]) -> dict[str, Any]:
         clip_ids = task.get("targets", {}).get("clip_ids", [])
