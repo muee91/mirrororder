@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import platform
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,24 @@ _MLX_MODEL_ALIASES = {
 
 def _is_apple_silicon() -> bool:
     return platform.system() == "Darwin" and platform.machine().lower() in {"arm64", "aarch64"}
+
+
+def _application_support_root() -> Path:
+    override = os.environ.get("MIRRORORDER_DATA_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path.home() / "Library" / "Application Support" / "MirrorOrder"
+
+
+def _configure_model_cache() -> Path:
+    """Keep downloaded MLX/Hugging Face weights in MirrorOrder device state."""
+    root = _application_support_root() / "models" / "huggingface"
+    root.mkdir(parents=True, exist_ok=True)
+    # Respect an explicit operator cache. Otherwise prevent project/workspace
+    # paths or a developer checkout from becoming an accidental model store.
+    if not any(os.environ.get(key, "").strip() for key in ("HF_HOME", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE")):
+        os.environ["HF_HOME"] = str(root)
+    return root
 
 
 def script_asr_prompt(script_path: str | Path, max_speakers: int = 80) -> str:
@@ -74,8 +93,6 @@ class ASRRuntime:
                 fallback_allowed=requested == "auto",
             )
         if requested in {"mlx", "mlx-whisper"}:
-            # Explicit MLX on a non-Apple host should fail clearly instead of
-            # silently changing the user's requested inference backend.
             return cls("mlx-whisper", _MLX_MODEL_ALIASES.get(config.asr_model, config.asr_model), config.asr_language, config.asr_device)
         return cls("faster-whisper", config.asr_model, config.asr_language, config.asr_device)
 
@@ -93,6 +110,7 @@ class ASRRuntime:
             "model": self.model,
             "language": self.language,
             "apple_silicon": _is_apple_silicon(),
+            "model_cache": str(_application_support_root() / "models"),
         }
 
     def transcribe(self, clip: Clip, store: TranscriptStore, initial_prompt: str = "") -> Transcript:
@@ -111,6 +129,7 @@ class ASRRuntime:
         return self._transcribe_faster(clip, store, initial_prompt)
 
     def _transcribe_mlx(self, clip: Clip, store: TranscriptStore, initial_prompt: str) -> Transcript:
+        _configure_model_cache()
         import mlx_whisper  # type: ignore
 
         result = mlx_whisper.transcribe(
