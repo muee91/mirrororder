@@ -4,8 +4,8 @@ import hashlib
 import json
 import os
 import tempfile
-from fractions import Fraction
 from datetime import datetime, timezone
+from fractions import Fraction
 from pathlib import Path
 from threading import RLock, Thread
 from typing import Any, Callable
@@ -67,6 +67,16 @@ def _clip_from_index(item: dict[str, Any], media_path: str) -> Clip:
         source_end=source_end,
         media_id=str(item.get("media_id", "") or ""),
     )
+
+
+def _analysis_inputs_available(config: ProjectConfig) -> bool:
+    if not config.script.exists():
+        return False
+    if config.is_fcpxml:
+        return bool(config.fcpxml and config.fcpxml.exists())
+    if config.is_media_directory:
+        return bool(config.media_root and config.media_root.exists())
+    return False
 
 
 class TaskManager:
@@ -170,7 +180,11 @@ class TaskManager:
                     return
                 if result.get("transcribed"):
                     affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
-                    result["analysis"] = analyze(config, affected or None)["index"]["stats"]
+                    if _analysis_inputs_available(config):
+                        result["analysis"] = analyze(config, affected or None)["index"]["stats"]
+                    else:
+                        result["analysis_deferred"] = True
+                        result["analysis_deferred_reason"] = "当前设备缺少项目源 FCPXML/剧本或媒体根目录；转写缓存已成功写入，可由分析主机后续合并"
             else:
                 result = self._extract_evidence(config, task)
             self._update(config, task_id, status="completed", result=result, message="任务完成")
