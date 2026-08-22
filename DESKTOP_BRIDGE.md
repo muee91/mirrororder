@@ -70,7 +70,7 @@ XML 时间线是只读预览，不修改原始 FCPXML，不改变项目分析结
 
 ```text
 media_id / 项目 clip_id
-→ 真实 media_path
+→ 项目来源路径 + 当前设备解析路径
 → source_start 最接近的 occurrence
 → duration 轻量辅助
 → 文件/clip 名称 fallback（仅兼容旧项目）
@@ -97,20 +97,18 @@ media_id / 项目 clip_id
 ## 4. 文件位置
 
 ```text
-macos-app/MirrorOrderDesktopApp.swift       # 当前原生App：工作台壳 + 本机素材扫描 + 原生文件拖拽
-macos-app/build_app.sh                      # 当前实际构建入口
-src/script_organizer/media_identity.py      # media_id + 每台设备本地绑定
-src/script_organizer/device_media_runtime.py# 服务运行时本机路径解析
-web/timeline.js                             # loader
-aweb/device_media.js                        # 本机/服务端素材覆盖状态
-web/timeline_v3.js                          # FCPXML预览 / 双向关联 / native drag JS bridge
-web/timeline.css                            # 时间线UI
-web/ux_fixes.js                             # 从现有审核工作台装载扩展
-tests/test_device_media.py                  # 多设备媒体身份与绑定回归
-tests/test_desktop_bridge.py                # 桥接层静态回归约束
+macos-app/MirrorOrderDesktopApp.swift        # 当前原生App：工作台壳 + 本机素材扫描 + 原生文件拖拽
+macos-app/build_app.sh                       # 当前实际构建入口
+src/script_organizer/media_identity.py       # media_id + 每台设备本地绑定
+src/script_organizer/device_media_runtime.py # 服务运行时本机路径解析
+web/timeline.js                              # loader
+web/device_media.js                          # 本机/服务端素材覆盖状态
+web/timeline_v3.js                           # FCPXML预览 / 双向关联 / native drag JS bridge
+web/timeline.css                             # 时间线UI
+web/ux_fixes.js                              # 从现有审核工作台装载扩展
+tests/test_device_media.py                   # 多设备媒体身份与绑定回归
+tests/test_desktop_bridge.py                 # 桥接层静态回归约束
 ```
-
-注：上面 `aweb/device_media.js` 表示仓库中的 `web/device_media.js`，后续整理文档时可以直接修正为标准路径；代码实际文件位于 `web/device_media.js`。
 
 旧 `macos-app/MaterialWorkspaceApp.swift` 与 `macos-app/MirrorOrderApp.swift` 不是当前构建入口，只保留做历史参考。
 
@@ -145,11 +143,12 @@ open "镜序.app"
 12. 点击 `时间线 → 当前项目`，A/B/C 时间块位置合理。
 13. 加载 FCP 导出的 1.9+ FCPXML，`media-rep` 文件能建立关联。
 14. 加载主 spine 未写 `offset` 的 XML，片段按顺序排列而不是全部叠在 0 秒。
-15. 点击时间线已关联素材能定位素材卡和播放器。
-16. 人工归集过的 Take 从时间线进入时遵守人工剧本范围，而不是旧自动匹配。
-17. 点击素材卡能反向高亮时间线。
-18. `ref-clip` / `mc-clip` 如果只知道多个底层角度，不提供任意单文件拖拽。
-19. 原始 FCPXML 与原始媒体不发生写入。
+15. 第二台 Mac 即使素材目录不同，加载第一台 Mac 导出的 XML 仍能通过项目来源路径 / media identity 关联到本机素材。
+16. 点击时间线已关联素材能定位素材卡和播放器。
+17. 人工归集过的 Take 从时间线进入时遵守人工剧本范围，而不是旧自动匹配。
+18. 点击素材卡能反向高亮时间线。
+19. `ref-clip` / `mc-clip` 如果只知道多个底层角度，不提供任意单文件拖拽。
+20. 原始 FCPXML 与原始媒体不发生写入。
 
 ## 6. 后续不要误改
 
