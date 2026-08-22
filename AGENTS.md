@@ -3,7 +3,7 @@
 ## 写代码前
 
 - 理解现有实现、调用链和状态流。
-- 先读 `README.md`、`项目介绍.md`。
+- 先读 `README.md`、`项目介绍.md`、`DESKTOP_BRIDGE.md`。
 - 检查运行服务、项目配置、当前输出和 `review.json`。
 - 不确定时先给出证据和不确定点，禁止猜测式修改。
 
@@ -27,6 +27,18 @@
 - `organized.fcpxml` 默认必须与输入文件字节完全一致。
 - 长素材按有效片内范围复用，禁止复制原始媒体。
 - A/B/C展示顺序不得打乱。
+- XML时间线预览只能读取和关联，不得直接修改用户加载的XML DOM或覆盖原XML。
+- FCPXML预览至少兼容1.8 `asset src`、1.9+ `media-rep src`、主spine隐式顺序和multicam/media资源引用。
+
+## Desktop Bridge
+
+- 当前macOS构建入口是 `macos-app/MirrorOrderDesktopApp.swift`；旧App源码只作历史参考。
+- 外部文件拖拽必须继续由 AppKit `NSDraggingSession` / `NSDraggingItem` 完成。
+- 禁止用HTML5 `dataTransfer` 假装网页能向FCP/Premiere/Resolve提供本机文件。
+- 拖出的对象是原始源文件URL，语义与Finder拖文件一致；不得自动生成代理、临时切片或复制媒体。
+- 时间线和素材页必须保持双向关联：时间线点击定位Take/机位，素材点击反向高亮时间线。
+- XML块无法可靠关联当前项目素材时必须显示“未关联”，禁止强猜。
+- 改Desktop Bridge前先读 `DESKTOP_BRIDGE.md` 并保留其真机验收标准。
 
 ## 匹配原则
 
@@ -48,6 +60,7 @@
 - 待归集模式不显示空白剧本栏。
 - 不向页面添加算法宣传、冗余说明或“牛皮癣”文字。
 - 切集、协作刷新和审核后保持各区域滚动位置。
+- 时间线是辅助看片层，不得抢占剧本→候选Take的主工作流。
 
 ## 审核与协作
 
@@ -75,6 +88,16 @@ python3 -m pytest -q
 - 长素材跳到片内起点并在终点暂停。
 - 剧本、素材和播放器滚动互不影响。
 - 浏览器控制台无错误。
+- 时间线当前项目模式能显示真实拍摄位置。
+- 加载FCPXML后未关联块有明确状态。
+- 时间线与素材卡片双向定位有效。
+
+涉及macOS App时还要真机验证：
+
+- `zsh macos-app/build_app.sh` 可以完成编译和codesign。
+- 从素材卡拖到Finder得到真实源文件。
+- 从素材卡拖到Final Cut Pro至少完成普通文件接收测试。
+- 普通点击素材仍然只执行播放/选择，不被拖拽桥接误伤。
 
 涉及导出时还要验证：
 
