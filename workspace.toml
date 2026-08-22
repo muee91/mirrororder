@@ -1,0 +1,4 @@
+[workspace]
+name = "视频素材工作台"
+registry = "./projects/registry.json"
+web_directory = "./web"

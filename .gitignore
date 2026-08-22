@@ -1,0 +1,15 @@
+.DS_Store
+.build/
+.playwright-cli/
+.pytest_cache/
+.workspace/
+__pycache__/
+*.py[cod]
+
+# Generated desktop applications and browser QA artifacts.
+*.app/
+output/
+
+# Local project data can contain ASR, analysis output, review decisions, and locks.
+projects/*/cache/
+projects/*/output/

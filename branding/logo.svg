@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">镜序 logo</title>
+  <desc id="desc">Three camera tracks converging into a verification mark</desc>
+  <rect width="512" height="512" rx="112" fill="#101827"/>
+  <path d="M126 108v194M214 108v194M302 108v194" stroke="#7DD3FC" stroke-width="34" stroke-linecap="round"/>
+  <path d="M126 130h0M126 186h0M126 242h0M214 130h0M214 186h0M214 242h0M302 130h0M302 186h0M302 242h0" stroke="#101827" stroke-width="24" stroke-linecap="round"/>
+  <path d="M102 322 202 414 414 190" fill="none" stroke="#F8FAFC" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="126" cy="108" r="16" fill="#F59E0B"/>
+  <circle cx="214" cy="108" r="16" fill="#34D399"/>
+  <circle cx="302" cy="108" r="16" fill="#F472B6"/>
+</svg>
