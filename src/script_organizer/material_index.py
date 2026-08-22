@@ -97,6 +97,7 @@ def _script_analysis_key(script_segments: list, config: ProjectConfig) -> str:
             "camera_priority": config.asr_camera_priority,
             "escalate_ambiguous": config.asr_escalate_ambiguous,
             "max_extra_cameras": config.asr_max_extra_cameras,
+            "max_escalated_groups": config.asr_max_escalated_groups,
         },
     }
     return hashlib.sha1(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
@@ -747,13 +748,17 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
         local_matches[group.group_id] = auto[: config.max_candidates]
         matches[group.group_id] = list(local_matches[group.group_id])
 
-    # Only ambiguous Takes pay for extra ASR.  This happens before global
-    # sequence alignment so the extra camera contributes real local dialogue
-    # evidence rather than merely changing a contextual decision.
-    if config.asr_escalate_ambiguous and config.asr_max_extra_cameras > 0 and config.asr_backend != "cache":
+    if (
+        config.asr_escalate_ambiguous
+        and config.asr_max_extra_cameras > 0
+        and config.asr_max_escalated_groups > 0
+        and config.asr_backend != "cache"
+    ):
         model = ensure_asr_model()
         if model is not None:
             for group in groups:
+                if asr_escalated_groups >= config.asr_max_escalated_groups:
+                    break
                 if affected_group_ids is not None and group.group_id not in affected_group_ids:
                     continue
                 if _has_decisive_dialogue(local_matches.get(group.group_id, []), config):
