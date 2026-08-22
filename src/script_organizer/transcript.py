@@ -10,6 +10,7 @@ from .models import Clip, Transcript, TranscriptSegment
 
 
 def media_fingerprint(path: str | Path) -> str:
+    """Legacy path-aware fingerprint kept for backwards-compatible cache reads."""
     target = Path(path)
     try:
         stat = target.stat()
@@ -17,6 +18,11 @@ def media_fingerprint(path: str | Path) -> str:
     except OSError:
         raw = f"{target.resolve()}|missing".encode("utf-8")
     return hashlib.sha1(raw).hexdigest()
+
+
+def transcript_fingerprint(clip: Clip) -> str:
+    """Portable transcript identity for new caches; falls back for legacy clips."""
+    return str(clip.media_id or media_fingerprint(clip.media_path))
 
 
 def _segments(raw: object) -> tuple[TranscriptSegment, ...]:
@@ -91,11 +97,16 @@ class TranscriptStore:
         self.directory.mkdir(parents=True, exist_ok=True)
 
     def paths_for(self, clip: Clip) -> list[Path]:
-        fingerprint = media_fingerprint(clip.media_path)
-        return [self.directory / f"{fingerprint}.json", self.directory / f"{clip.name}.json"]
+        portable = transcript_fingerprint(clip)
+        legacy = media_fingerprint(clip.media_path)
+        candidates = [self.directory / f"{portable}.json"]
+        if legacy != portable:
+            candidates.append(self.directory / f"{legacy}.json")
+        candidates.append(self.directory / f"{clip.name}.json")
+        return list(dict.fromkeys(candidates))
 
     def load(self, clip: Clip) -> Transcript | None:
-        fingerprint = media_fingerprint(clip.media_path)
+        fingerprint = transcript_fingerprint(clip)
         for path in self.paths_for(clip):
             if not path.exists():
                 continue
@@ -122,11 +133,13 @@ class TranscriptStore:
         return None
 
     def write(self, clip: Clip, text: str, segments: list[dict], backend: str = "cache", error: str = "") -> Path:
-        target = self.directory / f"{media_fingerprint(clip.media_path)}.json"
+        fingerprint = transcript_fingerprint(clip)
+        target = self.directory / f"{fingerprint}.json"
         payload = {
             "clip_id": clip.clip_id,
+            "media_id": clip.media_id,
             "source_clip": clip.name,
-            "fingerprint": media_fingerprint(clip.media_path),
+            "fingerprint": fingerprint,
             "text": text,
             "segments": segments,
             "backend": backend,
@@ -173,7 +186,7 @@ def transcribe_with_faster_whisper(clip: Clip, store: TranscriptStore, model: ob
     return Transcript(
         clip_id=clip.clip_id,
         source_clip=clip.name,
-        fingerprint=media_fingerprint(clip.media_path),
+        fingerprint=transcript_fingerprint(clip),
         text=text,
         segments=_segments(segments),
         backend="faster-whisper",
