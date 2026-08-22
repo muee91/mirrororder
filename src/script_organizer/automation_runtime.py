@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import os
+import re
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from .automation_store import AutomationStore
 
 _INSTALLED = False
+_SCRIPT_SUFFIXES = {".docx", ".txt", ".md", ".markdown"}
 
 
 def _apply(project: Any) -> dict[str, Any]:
@@ -26,6 +31,41 @@ def _apply(project: Any) -> dict[str, Any]:
     return automation
 
 
+def _replace_project_script(config_path: Path, raw_script: object) -> Path:
+    script = Path(str(raw_script or "")).expanduser().resolve()
+    if not script.is_file() or script.suffix.lower() not in _SCRIPT_SUFFIXES:
+        raise ValueError("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
+    text = config_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    in_input = False
+    replaced = False
+    escaped = str(script).replace("\\", "\\\\").replace('"', '\\"')
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_input = stripped == "[input]"
+            continue
+        if in_input and re.match(r"^\s*script\s*=", line):
+            indent = line[: len(line) - len(line.lstrip())]
+            lines[index] = f'{indent}script = "{escaped}"'
+            replaced = True
+            break
+    if not replaced:
+        raise ValueError("项目配置缺少 [input].script")
+
+    fd, temporary = tempfile.mkstemp(prefix=config_path.name + ".", suffix=".tmp", dir=config_path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, config_path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return script
+
+
 def install_automation_runtime() -> None:
     """Attach auto-decision state without making it human review authority."""
     global _INSTALLED
@@ -40,12 +80,10 @@ def install_automation_runtime() -> None:
     original_state = web_server.ProjectService.state
     original_capabilities = web_server.WorkspaceService.capabilities
     original_create = WorkspaceRegistry.create
+    original_make_handler = web_server.make_handler
 
     def workspace_project(service: Any, project_id: str) -> Any:
         project = original_workspace_project(service, project_id)
-        # multicam_sync promotes a media-directory project.toml to its generated
-        # FCPXML. WorkspaceService historically cached only by config path, so
-        # explicitly refresh when those effective inputs change.
         fresh = service.registry.project_config(project_id)
         if (
             fresh.input_kind != project.config.input_kind
@@ -61,6 +99,7 @@ def install_automation_runtime() -> None:
     def project_payload(project: Any) -> dict[str, Any]:
         payload = original_project_payload(project)
         automation = _apply(project)
+        payload["script_path"] = str(project.config.script)
         payload["automation"] = {
             "updated_at": automation.get("updated_at", ""),
             "analysis_revision": automation.get("analysis_revision", ""),
@@ -94,9 +133,58 @@ def install_automation_runtime() -> None:
         result["prepare_task_id"] = task.get("task_id", "")
         return result
 
+    def make_handler_with_project_inputs(service: Any, web_root: Path):
+        BaseHandler = original_make_handler(service, web_root)
+
+        class Handler(BaseHandler):
+            def _app_post(self, parsed):
+                parts = web_server._parts(parsed.path)
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "script"
+                ):
+                    self._local_only()
+                    project_id = parts[3]
+                    service.registry.get(project_id)
+                    active = [
+                        task for task in service.tasks.list(project_id)
+                        if task.get("status") in {"queued", "running"}
+                    ]
+                    if active:
+                        raise web_server.ApiError(
+                            web_server.HTTPStatus.CONFLICT,
+                            "当前项目仍有后台任务运行，请结束后再更换剧本",
+                        )
+                    payload = web_server._body(self)
+                    config = service.registry.project_config(project_id)
+                    script = _replace_project_script(config.config_path, payload.get("script"))
+                    service._projects.pop(project_id, None)
+                    stat = script.stat()
+                    task = service.tasks.submit(
+                        project_id,
+                        "incremental_analyze",
+                        {},
+                        idempotency_key=f"replace_script:{project_id}:{script}:{stat.st_size}:{stat.st_mtime_ns}",
+                        actor="mirrororder-host",
+                    )
+                    self._send_json(
+                        {
+                            "project_id": project_id,
+                            "script": str(script),
+                            "task": task,
+                        },
+                        web_server.HTTPStatus.ACCEPTED,
+                    )
+                    return
+                return super()._app_post(parsed)
+
+        return Handler
+
     web_server.WorkspaceService.project = workspace_project
     web_server.ProjectService.project_payload = project_payload
     web_server.ProjectService.state = project_state
     web_server.WorkspaceService.capabilities = capabilities
+    web_server.make_handler = make_handler_with_project_inputs
     WorkspaceRegistry.create = create_and_prepare
     _INSTALLED = True
