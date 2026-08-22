@@ -26,17 +26,32 @@
     return text.replace(/\\/g, '/').replace(/\/+/g, '/');
   }
 
+  function uniquePaths(...values) {
+    return [...new Set(values.flat().map(pathOf).filter(Boolean))];
+  }
+
   function projectMedia() {
     const map = new Map();
     for (const group of state.groups || []) {
       for (const member of group.members || []) {
         const old = map.get(member.clip_id);
+        const sourcePath = member.source_media_path || member.media_path || '';
+        const localPath = member.resolved_media_path || (member.local_exists ? member.media_path : '') || '';
         if (!old) {
           map.set(member.clip_id, {
-            clipId: member.clip_id, name: memberFileName(member), camera: member.camera || '?',
-            path: member.media_path || '', start: Number(member.timeline_start || 0), end: Number(member.timeline_end || 0),
-            sourceStart: Number(member.source_start || 0), sourceEnd: Number(member.source_end ?? member.duration ?? 0),
-            groups: new Set([group.group_id]), exists: Boolean(member.exists),
+            clipId: member.clip_id,
+            mediaId: member.media_id || '',
+            name: memberFileName(member),
+            camera: member.camera || '?',
+            path: localPath || member.media_path || '',
+            sourcePath,
+            paths: uniquePaths(localPath, member.media_path, sourcePath),
+            start: Number(member.timeline_start || 0),
+            end: Number(member.timeline_end || 0),
+            sourceStart: Number(member.source_start || 0),
+            sourceEnd: Number(member.source_end ?? member.duration ?? 0),
+            groups: new Set([group.group_id]),
+            exists: Boolean(member.local_exists ?? member.exists),
           });
         } else {
           old.start = Math.min(old.start, Number(member.timeline_start || 0));
@@ -44,7 +59,11 @@
           old.sourceStart = Math.min(old.sourceStart, Number(member.source_start || 0));
           old.sourceEnd = Math.max(old.sourceEnd, Number(member.source_end ?? member.duration ?? 0));
           old.groups.add(group.group_id);
-          old.exists ||= Boolean(member.exists);
+          old.exists ||= Boolean(member.local_exists ?? member.exists);
+          old.mediaId ||= member.media_id || '';
+          old.sourcePath ||= sourcePath;
+          old.path ||= localPath || member.media_path || '';
+          old.paths = uniquePaths(old.paths, localPath, member.media_path, sourcePath);
         }
       }
     }
@@ -55,8 +74,8 @@
     return projectMedia().map((row) => ({
       id: `project:${row.clipId}`, name: row.name, lane: row.camera, camera: row.camera,
       start: row.start, end: row.end, duration: Math.max(0, row.end - row.start), sourceStart: row.sourceStart,
-      paths: row.path ? [row.path] : [], dragPath: row.exists ? row.path : '', clipId: row.clipId, groupIds: row.groups,
-      kind: 'asset-clip',
+      paths: row.paths, dragPath: row.exists ? row.path : '', clipId: row.clipId, mediaId: row.mediaId,
+      groupIds: row.groups, kind: 'asset-clip',
     }));
   }
 
@@ -133,7 +152,7 @@
             id: `xml:${serial++}`, name: element.getAttribute('name') || resource.name || kind,
             lane: lane || (depth ? String(depth) : '0'), camera: laneName(lane, depth ? `层${depth}` : '主线'),
             start, end, duration, sourceStart: sec(element.getAttribute('start')), paths: resource.paths,
-            dragPath: directFile ? resource.dragPath : '', clipId: '', groupIds: [], kind, ref,
+            dragPath: directFile ? resource.dragPath : '', clipId: '', mediaId: '', groupIds: [], kind, ref,
           });
         }
         if ((!lane || lane === '0') && duration > 0) cursor = Math.max(cursor, end);
@@ -149,8 +168,12 @@
     const rows = projectMedia();
     const byPath = new Map(), byName = new Map();
     for (const row of rows) {
-      const path = pathOf(row.path);
-      if (path) { if (!byPath.has(path)) byPath.set(path, []); byPath.get(path).push(row); }
+      for (const path of row.paths || []) {
+        const normalized = pathOf(path);
+        if (!normalized) continue;
+        if (!byPath.has(normalized)) byPath.set(normalized, []);
+        byPath.get(normalized).push(row);
+      }
       const name = String(row.name || '').toLowerCase();
       if (name) { if (!byName.has(name)) byName.set(name, []); byName.get(name).push(row); }
     }
@@ -163,9 +186,13 @@
       const score = (row) => Math.abs(row.sourceStart - item.sourceStart) + Math.abs((row.end - row.start) - item.duration) * .05;
       const best = [...unique].sort((a, b) => score(a) - score(b))[0];
       item.clipId = best.clipId;
+      item.mediaId = best.mediaId;
       item.groupIds = [...new Set(unique.flatMap((row) => row.groups))];
       if (!/^[ABC]$/.test(item.camera || '') && /^[ABC]$/.test(best.camera || '')) item.camera = best.camera;
-      if (!item.dragPath && item.kind === 'asset-clip' && unique.length === 1 && best.exists) item.dragPath = best.path;
+      // Never drag the XML's source-machine path. Once associated, native drag
+      // must use this device's resolved file copy.
+      if (item.kind === 'asset-clip' && unique.length === 1 && best.exists) item.dragPath = best.path;
+      else if (!unique.some((row) => row.exists)) item.dragPath = '';
     }
     return items;
   }
@@ -260,9 +287,10 @@
     document.documentElement.classList.add('native-mirrororder');
     document.querySelectorAll('[data-member-clip]').forEach((button) => {
       const group = state.groupMap.get(button.dataset.memberGroup), member = group?.members?.find((row) => row.clip_id === button.dataset.memberClip);
-      if (!member?.exists || !member.media_path) return;
-      button.classList.add('native-file-drag'); button.dataset.nativeDragPath = member.media_path; button.dataset.nativeDragLabel = memberFileName(member);
-      button.title = `${member.media_path}\n拖到 FCP / Premiere / Resolve 可作为普通文件导入`;
+      const path = member?.resolved_media_path || (member?.local_exists ? member.media_path : '');
+      if (!path) return;
+      button.classList.add('native-file-drag'); button.dataset.nativeDragPath = path; button.dataset.nativeDragLabel = memberFileName(member);
+      button.title = `${path}\n拖到 FCP / Premiere / Resolve 可作为普通文件导入`;
     });
     document.querySelectorAll('.timeline-clip[data-native-drag-path]').forEach((button) => {
       if (!button.dataset.nativeDragPath) return;
@@ -275,7 +303,7 @@
     const toggle = document.createElement('button'); toggle.id = 'timeline-toggle'; toggle.className = 'text-button timeline-toggle'; toggle.type = 'button'; toggle.textContent = '时间线';
     document.querySelector('.top-actions')?.insertBefore(toggle, $('#actor-button'));
     const panel = document.createElement('section'); panel.id = 'timeline-panel'; panel.className = 'timeline-panel'; panel.hidden = true;
-    panel.innerHTML = `<header class="timeline-head"><div class="timeline-title"><strong>XML 时间线</strong><span id="timeline-source" class="timeline-source">当前项目素材时间线</span></div><span class="native-drag-hint">App 内可把源素材直接拖到剪辑软件</span><div class="timeline-actions"><button id="timeline-current" class="text-button" type="button">当前项目</button><button id="timeline-load" class="text-button" type="button">加载 XML</button><button id="timeline-zoom-out" class="text-button" type="button">−</button><button id="timeline-fit" class="text-button" type="button">适配</button><button id="timeline-zoom-in" class="text-button" type="button">＋</button><button id="timeline-close" class="text-button" type="button">关闭</button></div><input id="timeline-file" type="file" accept=".fcpxml,.xml,text/xml,application/xml" hidden></header><div id="timeline-scroll" class="timeline-scroll"><div id="timeline-canvas" class="timeline-canvas"></div></div>`;
+    panel.innerHTML = `<header class="timeline-head"><div class="timeline-title"><strong>XML 时间线</strong><span id="timeline-source" class="timeline-source">当前项目素材时间线</span></div><span class="native-drag-hint">App 内可把本机素材直接拖到剪辑软件</span><div class="timeline-actions"><button id="timeline-current" class="text-button" type="button">当前项目</button><button id="timeline-load" class="text-button" type="button">加载 XML</button><button id="timeline-zoom-out" class="text-button" type="button">−</button><button id="timeline-fit" class="text-button" type="button">适配</button><button id="timeline-zoom-in" class="text-button" type="button">＋</button><button id="timeline-close" class="text-button" type="button">关闭</button></div><input id="timeline-file" type="file" accept=".fcpxml,.xml,text/xml,application/xml" hidden></header><div id="timeline-scroll" class="timeline-scroll"><div id="timeline-canvas" class="timeline-canvas"></div></div>`;
     document.querySelector('.app-shell')?.appendChild(panel);
     toggle.addEventListener('click', () => { timeline.open = !timeline.open; panel.hidden = !timeline.open; toggle.classList.toggle('active', timeline.open); if (timeline.open) { if (!timeline.items.length) { timeline.items = projectTimeline(); timeline.source = '当前项目素材时间线'; } requestAnimationFrame(fit); } });
     $('#timeline-close').addEventListener('click', () => toggle.click());
