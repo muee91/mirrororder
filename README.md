@@ -6,7 +6,7 @@
 
 项目保持原生 HTML/CSS/JavaScript 与 Python 标准库服务，不依赖 React、Vue、数据库、云服务或 Docker。视频通过 HTTP Range 直接读取原始素材，不复制视频文件。
 
-当前版本是本地多项目工作台。每个项目由稳定 `project_id` 注册在 `projects/registry.json`，浏览器与智能体统一使用版本化项目 API，不保留旧的单项目 `/api/...` 契约。
+当前版本是本地多项目工作台。每个项目由稳定 `project_id` 注册在 `projects/registry.json`，工作台与智能体统一使用版本化项目 API，不保留旧的单项目 `/api/...` 契约。
 
 ## 当前项目
 
@@ -27,18 +27,29 @@
 
 ## 快速启动
 
+先重新构建当前源码对应的 App：
+
 ```bash
 cd "/Users/editor/Code workspace/短剧素材核对平台GPT版"
+zsh macos-app/build_app.sh
 open "镜序.app"
 ```
 
-`镜序.app` 是原生 macOS 启动应用，支持选择工作区、本机或可信局域网模式、启动/停止服务、打开工作台、复制局域网地址、查看项目状态和最近日志，并管理前端主题、密度、默认模式和协作刷新设置。
+当前 `镜序.app` 是**工作台优先**的原生 macOS 应用：
 
-当前局域网地址示例：
+1. 打开 App 后自动检查并启动本机镜序服务；
+2. 服务就绪后，主窗口直接显示剧本 / Take / 播放器工作台；
+3. 不再要求先进入“运行概览”“服务”“Agent”等管理页面；
+4. 工作区、服务状态和日志只放在右上角“设置”中；
+5. 如需调试，仍可从 App 右上角打开浏览器版本。
 
-```text
-http://192.168.0.105:8765/
+App 内嵌工作台只连接 `127.0.0.1:8765`，不会自动把服务暴露到局域网。需要可信局域网协作时，继续使用命令行显式启动：
+
+```bash
+./script-organizer serve workspace.toml --host 0.0.0.0 --port 8765
 ```
+
+不要把端口映射到公网。项目创建、路径选择和令牌创建接口只接受本机请求。
 
 脚本入口仍可用：
 
@@ -46,35 +57,21 @@ http://192.168.0.105:8765/
 ./启动素材工作台.command
 ```
 
-脚本默认监听可信局域网；仅本机使用时传入 `SCRIPT_ORGANIZER_HOST=127.0.0.1`。日志位于 `.workspace/logs/`。
-
-如需可信局域网协作，显式使用：
-
-```bash
-./script-organizer serve workspace.toml --host 0.0.0.0 --port 8765
-```
-
-只允许本机访问：
-
-```bash
-./script-organizer serve workspace.toml --local-only --port 8765
-```
-
-不要把端口映射到公网。项目创建、路径选择和令牌创建接口只接受本机请求。
+日志位于 `.workspace/logs/`。
 
 ## 全新环境使用
 
 `镜序.app` 内置平台服务程序、网页工作台和 MCP 适配器；交付给新机器时只需要复制完整的 `镜序.app`，项目数据不要放进 App 包内。
 
-首次打开 App 后，按运行概览中的顺序完成：
+首次打开：
 
-1. 检查 Python 3.11 或更高版本。缺少时先安装 Python，再在 App 中点击刷新。
-2. 按需安装 FFmpeg 与 `faster-whisper`。它们只在新素材需要 ASR 转写时必需；仅浏览、审核或复用已有 ASR 缓存时不阻塞。
-3. 点击“创建工作区”，选择一个普通可写目录。App 会创建 `workspace.toml`、`projects/` 和 `.workspace/`，但不会创建或复制任何素材。
-4. 启动服务，打开工作台，在“新建项目”中选择 FCPXML 或媒体目录，以及 DOCX、TXT 或 Markdown 剧本。
+1. 如果已经有工作区，选择包含 `workspace.toml` 的目录；没有则在 App 中创建空工作区。
+2. App 会自动启动本地服务并进入工作台。
+3. 在工作台“新建项目”中选择 FCPXML 或媒体目录，以及 DOCX、TXT 或 Markdown 剧本。
+4. Python 3.11+ 是本地服务必需环境；FFmpeg 与 `faster-whisper` 只在新素材需要 ASR 转写时必需。
 5. 项目素材、ASR 缓存、分析输出和 `review.json` 都保留在工作区；后续更新只替换 `镜序.app`，不要覆盖工作区。
 
-完整发布包必须保留 App 的内部运行时资源。不要只复制 `MaterialWorkspace` 可执行文件，也不要把端口映射到公网。
+完整发布包必须保留 App 内部 `runtime/`。不要只复制 `MaterialWorkspace` 可执行文件。
 
 ## 重新分析
 
@@ -84,7 +81,7 @@ http://192.168.0.105:8765/
 ./script-organizer analyze workspace.toml beef
 ```
 
-分析会按剧本、逻辑 Take、有效片内范围、ASR内容和匹配配置生成确定性缓存键。未变化的 Take 会复用局部匹配缓存，再统一重跑顺序对齐和邻近上下文推断。
+分析会按剧本、逻辑 Take、有效片内范围、ASR 内容和匹配配置生成确定性缓存键。未变化的 Take 会复用局部匹配缓存，再统一重跑顺序对齐和邻近上下文推断。
 
 ## 项目与智能体
 
@@ -119,7 +116,11 @@ python3 -m py_compile src/script_organizer/*.py
 python3 -m pytest -q
 ```
 
-当前基线：44 项测试通过。
+macOS App 需要在 macOS 14+ 上重新构建：
+
+```bash
+zsh macos-app/build_app.sh
+```
 
 ## 主要目录
 
@@ -131,9 +132,10 @@ projects/registry.json      多项目注册表
 projects/beef/project.toml  《在制项目》配置
 projects/beef/cache/        ASR缓存
 projects/beef/output/       分析结果、审核记录和原样FCPXML导出
-output/playwright/          正式浏览器验收截图
-macos-app/                  原生 macOS 应用源码与构建脚本
-镜序.app                      已构建的双击启动应用
+macos-app/MirrorOrderApp.swift  当前工作台优先 macOS App
+macos-app/MaterialWorkspaceApp.swift  旧控制台实现，保留作参考/回退
+macos-app/build_app.sh      当前 App 构建脚本
+镜序.app                    本机重新构建后的双击应用
 tests/                      核心回归测试
 项目介绍.md                  产品、数据和架构说明
 AGENTS.md                   后续开发必须遵守的工程约束
