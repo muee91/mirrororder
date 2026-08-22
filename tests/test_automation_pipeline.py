@@ -119,3 +119,16 @@ def test_desktop_build_can_bundle_sync_engine() -> None:
     assert '"auto_resolve"' in tasks
     assert "ai_confirmed" in automation
     assert "待处理" in automation
+
+
+def test_project_creation_defaults_to_raw_media_and_is_host_local() -> None:
+    root = Path(__file__).resolve().parents[1]
+    automation = (root / "web" / "automation.js").read_text(encoding="utf-8")
+    server = (root / "src" / "script_organizer" / "web_server.py").read_text(encoding="utf-8")
+
+    assert "kind.value = 'media-directory'" in automation
+    assert "原始多机位素材目录（推荐" in automation
+    assert "已有同步 FCPXML（高级入口）" in automation
+    assert "项目创建只在 Host 本机或镜序 App 执行" in automation
+    assert 'if parts == ["api", "v1", "projects"]:' in server
+    assert "self._local_only()" in server
