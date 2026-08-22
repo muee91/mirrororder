@@ -27,13 +27,13 @@ class ProjectConfig:
     media_root: Path | None = None
     camera_patterns: dict[str, str] = field(default_factory=dict)
     media_timeline_mode: str = "sequential"
-    asr_backend: str = "cache"
+    asr_backend: str = "auto"
     asr_model: str = "small"
     asr_language: str = "zh"
     asr_device: str = "auto"
-    asr_camera_priority: tuple[str, ...] = ("A", "B", "C")
-    asr_ensure_preferred_camera: bool = False
-    asr_escalate_ambiguous: bool = False
+    asr_camera_priority: tuple[str, ...] = ("B", "C", "A")
+    asr_ensure_preferred_camera: bool = True
+    asr_escalate_ambiguous: bool = True
     asr_max_extra_cameras: int = 1
     asr_max_escalated_groups: int = 24
     minimum_overlap_seconds: float = 0.5
@@ -85,13 +85,13 @@ class ProjectConfig:
                 if str(camera).strip() and str(pattern).strip()
             } if isinstance(camera_patterns, dict) else {},
             media_timeline_mode=str(media.get("timeline_mode", "sequential")),
-            asr_backend=str(asr.get("backend", "cache")),
+            asr_backend=str(asr.get("backend", "auto")),
             asr_model=str(asr.get("model", "small")),
             asr_language=str(asr.get("language", "zh")),
             asr_device=str(asr.get("device", "auto")),
-            asr_camera_priority=tuple(str(value) for value in asr.get("camera_priority", ["A", "B", "C"])),
-            asr_ensure_preferred_camera=bool(asr.get("ensure_preferred_camera", False)),
-            asr_escalate_ambiguous=bool(asr.get("escalate_ambiguous", False)),
+            asr_camera_priority=tuple(str(value) for value in asr.get("camera_priority", ["B", "C", "A"])),
+            asr_ensure_preferred_camera=bool(asr.get("ensure_preferred_camera", True)),
+            asr_escalate_ambiguous=bool(asr.get("escalate_ambiguous", True)),
             asr_max_extra_cameras=max(0, int(asr.get("max_extra_cameras", 1))),
             asr_max_escalated_groups=max(0, int(asr.get("max_escalated_groups", 24))),
             minimum_overlap_seconds=float(multicam.get("minimum_overlap_seconds", 0.5)),
