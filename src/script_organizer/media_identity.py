@@ -46,12 +46,7 @@ def device_state_dir() -> Path:
 
 
 def provisional_media_id(value: str) -> str:
-    """Fallback identity used only when source bytes are unavailable.
-
-    A real content identity should replace this after analysis on a machine that
-    can read the media. Keeping the prefix explicit prevents treating filename
-    identity as equivalent to a verified content fingerprint.
-    """
+    """Fallback identity used only when source bytes are unavailable."""
     name = Path(str(value or "")).name.casefold()
     return "MP_" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:20] if name else ""
 
@@ -88,7 +83,8 @@ def binding_key(item: dict[str, Any]) -> str:
     media_id = str(item.get("media_id", "") or "")
     if media_id:
         return media_id
-    return provisional_media_id(str(item.get("media_path", "") or item.get("name", "")))
+    source = str(item.get("source_media_path", "") or item.get("media_path", "") or item.get("name", ""))
+    return provisional_media_id(source)
 
 
 def iter_project_media(index: dict[str, Any]) -> list[dict[str, Any]]:
@@ -100,13 +96,14 @@ def iter_project_media(index: dict[str, Any]) -> list[dict[str, Any]]:
         key = binding_key(clip)
         if not key:
             continue
+        source_path = str(clip.get("source_media_path", "") or clip.get("media_path", "") or "")
         existing = rows.setdefault(
             key,
             {
                 "media_id": key,
                 "verified": key.startswith("M_"),
-                "name": Path(str(clip.get("media_path", ""))).name or str(clip.get("name", "")),
-                "source_media_path": str(clip.get("media_path", "") or ""),
+                "name": Path(source_path).name or str(clip.get("name", "")),
+                "source_media_path": source_path,
                 "clip_ids": [],
             },
         )
@@ -117,12 +114,7 @@ def iter_project_media(index: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 class DeviceMediaStore:
-    """Per-device media roots and bindings.
-
-    This store intentionally lives outside the shared workspace. A synchronized
-    workspace may move between Macs while each machine keeps its own absolute
-    volume paths and media roots.
-    """
+    """Per-device media roots and bindings stored outside the shared workspace."""
 
     def __init__(self, path: Path | None = None):
         self.path = path or (device_state_dir() / "media-bindings.json")
@@ -160,33 +152,38 @@ class DeviceMediaStore:
         payload["updated_at"] = _now()
         _atomic_json(self.path, payload)
 
-    def project(self, project_id: str) -> dict[str, Any]:
-        payload = self.load()
-        projects = payload.setdefault("projects", {})
-        row = projects.setdefault(project_id, {"roots": [], "bindings": {}, "updated_at": ""})
-        row.setdefault("roots", [])
-        row.setdefault("bindings", {})
-        return row
+    def project_snapshot(self, project_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        root = payload if payload is not None else self.load()
+        projects = root.get("projects", {}) if isinstance(root.get("projects", {}), dict) else {}
+        raw = projects.get(project_id, {}) if isinstance(projects.get(project_id, {}), dict) else {}
+        return {
+            "roots": [str(value) for value in raw.get("roots", []) if str(value)],
+            "bindings": dict(raw.get("bindings", {})) if isinstance(raw.get("bindings", {}), dict) else {},
+            "updated_at": str(raw.get("updated_at", "") or ""),
+        }
 
-    def resolve(self, project_id: str, item: dict[str, Any]) -> str:
+    @staticmethod
+    def resolve_from_snapshot(project: dict[str, Any], item: dict[str, Any]) -> str:
         key = binding_key(item)
-        project = self.project(project_id)
         bound = str(project.get("bindings", {}).get(key, "") or "")
         if bound and Path(bound).is_file():
             return bound
-        original = str(item.get("media_path", "") or "")
+        original = str(item.get("source_media_path", "") or item.get("media_path", "") or "")
         if original and Path(original).is_file():
             return original
         return ""
 
+    def resolve(self, project_id: str, item: dict[str, Any]) -> str:
+        return self.resolve_from_snapshot(self.project_snapshot(project_id), item)
+
     def summary(self, project_id: str, index: dict[str, Any]) -> dict[str, Any]:
         payload = self.load()
-        project = payload.get("projects", {}).get(project_id, {}) if isinstance(payload.get("projects", {}), dict) else {}
+        project = self.project_snapshot(project_id, payload)
         inventory = iter_project_media(index)
         resolved = []
         missing = []
         for item in inventory:
-            path = self.resolve(project_id, item)
+            path = self.resolve_from_snapshot(project, item)
             row = {**item, "resolved_path": path, "local_exists": bool(path)}
             (resolved if path else missing).append(row)
         return {
@@ -194,7 +191,7 @@ class DeviceMediaStore:
             "device_id": payload.get("device_id", ""),
             "device_name": payload.get("device_name", ""),
             "state_path": str(self.path),
-            "roots": list(project.get("roots", [])) if isinstance(project, dict) else [],
+            "roots": project["roots"],
             "total": len(inventory),
             "resolved": len(resolved),
             "missing": len(missing),
@@ -234,15 +231,14 @@ class DeviceMediaStore:
         matched_verified = 0
         matched_provisional = 0
         for path in files:
-            media_id = media_id_for_path(path)
-            if media_id and media_id in expected_by_id:
-                bindings[media_id] = str(path)
-                matched_verified += 1
-                continue
             rows = provisional_by_name.get(path.name.casefold(), [])
             if len(rows) == 1:
                 bindings[str(rows[0]["media_id"])] = str(path)
                 matched_provisional += 1
+            media_id = media_id_for_path(path)
+            if media_id and media_id in expected_by_id:
+                bindings[media_id] = str(path)
+                matched_verified += 1
 
         project["bindings"] = bindings
         project["updated_at"] = _now()
