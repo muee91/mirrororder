@@ -6,8 +6,10 @@ import sys
 from pathlib import Path
 
 from .agent_store import AgentTokenStore
+from .device_media_runtime import install_device_media_runtime
 from .fcpxml_exporter import export
 from .material_index import analyze
+from .media_identity import DeviceMediaStore
 from .web_server import serve
 from .workspace import WorkspaceConfig, WorkspaceRegistry
 
@@ -21,6 +23,17 @@ def _workspace(value: str) -> WorkspaceConfig:
 
 def _project(workspace: WorkspaceConfig, project_id: str):
     return WorkspaceRegistry(workspace).project_config(project_id)
+
+
+def _project_index(workspace: WorkspaceConfig, project_id: str) -> dict:
+    config = _project(workspace, project_id)
+    path = config.output_dir / "material_index.json"
+    try:
+        with path.open(encoding="utf-8") as handle:
+            payload = json.load(handle)
+        return payload if isinstance(payload, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,6 +55,15 @@ def main(argv: list[str] | None = None) -> int:
         serve_parser.add_argument("--port", default=8765, type=int)
         serve_parser.add_argument("--local-only", action="store_true", help="仅允许本机访问")
 
+    scan_parser = subparsers.add_parser("media-scan", help="为当前设备扫描并绑定本地素材副本")
+    scan_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
+    scan_parser.add_argument("project_id", help="项目 ID")
+    scan_parser.add_argument("root", nargs="+", help="一个或多个本机素材目录")
+
+    media_status_parser = subparsers.add_parser("media-status", help="查看当前设备的本地素材绑定状态")
+    media_status_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
+    media_status_parser.add_argument("project_id", help="项目 ID")
+
     token_parser = subparsers.add_parser("agent-token-create", help="创建受限智能体令牌")
     token_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
     token_parser.add_argument("project_id", help="仅允许访问的项目 ID")
@@ -57,7 +79,22 @@ def main(argv: list[str] | None = None) -> int:
     workspace = _workspace(args.workspace)
 
     if args.command in {"serve", "run"}:
+        install_device_media_runtime()
         serve(workspace, "127.0.0.1" if args.local_only else args.host, args.port)
+        return 0
+
+    if args.command == "media-scan":
+        index = _project_index(workspace, args.project_id)
+        if not index:
+            raise SystemExit("项目还没有 material_index.json；请先在有源素材的机器完成 analyze")
+        summary = DeviceMediaStore().scan(args.project_id, index, args.root)
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "media-status":
+        index = _project_index(workspace, args.project_id)
+        summary = DeviceMediaStore().summary(args.project_id, index)
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "analyze":
@@ -83,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "agent-context":
         from .web_server import WorkspaceService
 
+        install_device_media_runtime()
         print(json.dumps(WorkspaceService(workspace).project(args.project_id).agent_context(), ensure_ascii=False, indent=2))
         return 0
 
