@@ -6,10 +6,12 @@ import sys
 from pathlib import Path
 
 from .agent_store import AgentTokenStore
+from .automation_runtime import install_automation_runtime
 from .device_media_runtime import install_device_media_runtime
 from .fcpxml_exporter import export
 from .material_index import analyze
 from .media_identity import DeviceMediaStore
+from .tasks import TaskManager
 from .web_server import serve
 from .workspace import WorkspaceConfig, WorkspaceRegistry
 
@@ -36,6 +38,13 @@ def _project_index(workspace: WorkspaceConfig, project_id: str) -> dict:
         return {}
 
 
+def _submit_and_print(workspace: WorkspaceConfig, project_id: str, task_type: str) -> int:
+    manager = TaskManager(WorkspaceRegistry(workspace).project_config)
+    task = manager.submit(project_id, task_type, {}, actor="cli")
+    print(json.dumps(task, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="script-organizer")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -43,6 +52,15 @@ def main(argv: list[str] | None = None) -> int:
     analyze_parser = subparsers.add_parser("analyze", help="增量分析指定工作区项目")
     analyze_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
     analyze_parser.add_argument("project_id", help="项目 ID")
+
+    for command, help_text in (
+        ("prepare", "自动完成同步、ASR、剧本匹配和低置信度救援"),
+        ("multicam-sync", "只运行本地多机位音频同步并生成 FCPXML"),
+        ("auto-resolve", "重新计算自动确认 / AI救援 / 人工异常队列"),
+    ):
+        task_parser = subparsers.add_parser(command, help=help_text)
+        task_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
+        task_parser.add_argument("project_id", help="项目 ID")
 
     export_parser = subparsers.add_parser("export", help="导出指定工作区项目的审核清单")
     export_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
@@ -84,8 +102,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command in {"serve", "run"}:
         install_device_media_runtime()
+        install_automation_runtime()
         serve(workspace, "127.0.0.1" if args.local_only else args.host, args.port)
         return 0
+
+    if args.command == "prepare":
+        return _submit_and_print(workspace, args.project_id, "prepare_project")
+    if args.command == "multicam-sync":
+        return _submit_and_print(workspace, args.project_id, "multicam_sync")
+    if args.command == "auto-resolve":
+        return _submit_and_print(workspace, args.project_id, "auto_resolve")
 
     if args.command == "media-scan":
         index = _project_index(workspace, args.project_id)
@@ -141,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         from .web_server import WorkspaceService
 
         install_device_media_runtime()
+        install_automation_runtime()
         print(json.dumps(WorkspaceService(workspace).project(args.project_id).agent_context(), ensure_ascii=False, indent=2))
         return 0
 
