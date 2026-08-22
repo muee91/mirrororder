@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from script_organizer.auto_resolver import resolve_project
+from script_organizer.automation_runtime import _replace_project_script
 from script_organizer.config import ProjectConfig
 from script_organizer.model_provider import ModelProvider, ModelProviderConfig
 from script_organizer.review_store import ReviewStore
@@ -132,3 +133,39 @@ def test_project_creation_defaults_to_raw_media_and_is_host_local() -> None:
     assert "项目创建只在 Host 本机或镜序 App 执行" in automation
     assert 'if parts == ["api", "v1", "projects"]:' in server
     assert "self._local_only()" in server
+
+
+def test_host_script_replacement_updates_only_script_source(tmp_path: Path) -> None:
+    old_script = tmp_path / "old.md"
+    new_script = tmp_path / "new.docx"
+    old_script.write_text("old", encoding="utf-8")
+    new_script.write_bytes(b"docx-placeholder")
+    fcpxml = tmp_path / "input.fcpxml"
+    fcpxml.write_text("<fcpxml/>", encoding="utf-8")
+    config_path = tmp_path / "project.toml"
+    config_path.write_text(
+        f'''[project]\nname = "Demo"\n\n[input]\nkind = "fcpxml"\nscript = "{old_script}"\nfcpxml = "{fcpxml}"\n\n[output]\ndirectory = "./output"\n''',
+        encoding="utf-8",
+    )
+    review_path = tmp_path / "output" / "review.json"
+    review_path.parent.mkdir()
+    review_payload = {"version": 2, "revision": 7, "groups": {"G1": {"state": "best"}}}
+    review_path.write_text(json.dumps(review_payload), encoding="utf-8")
+
+    selected = _replace_project_script(config_path, new_script)
+
+    assert selected == new_script.resolve()
+    assert ProjectConfig.from_file(config_path).script == new_script.resolve()
+    assert json.loads(review_path.read_text(encoding="utf-8")) == review_payload
+
+
+def test_script_replacement_route_is_local_and_reanalyzes() -> None:
+    root = Path(__file__).resolve().parents[1]
+    runtime = (root / "src" / "script_organizer" / "automation_runtime.py").read_text(encoding="utf-8")
+    automation = (root / "web" / "automation.js").read_text(encoding="utf-8")
+
+    assert 'parts[4] == "script"' in runtime
+    assert "self._local_only()" in runtime
+    assert '"incremental_analyze"' in runtime
+    assert "replace-project-script" in automation
+    assert "正在重新分析和归集" in automation
