@@ -136,8 +136,9 @@ def _escalate_ambiguous(
     changed = 0
     attempted_groups = 0
     errors: list[str] = []
+    iterable = rows.items() if isinstance(rows, dict) else []
 
-    for group_id, row in rows.items() if isinstance(rows, dict) else []:
+    for group_id, row in iterable:
         if attempted_groups >= source_config.asr_max_escalated_groups:
             break
         group = group_by_id.get(str(group_id))
