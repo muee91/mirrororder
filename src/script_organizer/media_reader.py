@@ -7,8 +7,11 @@ from fractions import Fraction
 from pathlib import Path
 
 from .fcpxml_reader import stable_clip_id
-from .media_identity import MEDIA_SUFFIXES, media_identity
+from .media_identity import media_identity
 from .models import Clip
+
+
+VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mxf", ".mts", ".avi", ".mkv"}
 
 
 def _probe(path: Path) -> tuple[float, float | None]:
@@ -56,13 +59,13 @@ def read_media_directory(
     camera_patterns: dict[str, str] | None = None,
     timeline_mode: str = "sequential",
 ) -> list[Clip]:
-    """Build clips from ordinary media without pretending unsynced files overlap."""
+    """Build clips from ordinary video media without pretending unsynced files overlap."""
     directory = Path(root)
     patterns = camera_patterns or {}
     files = sorted(
         path
         for path in directory.rglob("*")
-        if path.is_file() and path.suffix.lower() in MEDIA_SUFFIXES and not path.name.startswith("._")
+        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES and not path.name.startswith("._")
     )
     rows = []
     for occurrence, path in enumerate(files):
