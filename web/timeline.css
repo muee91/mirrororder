@@ -1,0 +1,188 @@
+.timeline-toggle.active {
+  color: var(--accent, #54c8f0);
+}
+
+.timeline-panel {
+  margin-top: 10px;
+  min-height: 220px;
+  max-height: 42vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border, rgba(255,255,255,.12));
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel, #101a29);
+}
+
+.timeline-panel[hidden] { display: none; }
+
+.timeline-head {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.12));
+  background: var(--panel-raised, rgba(255,255,255,.035));
+}
+
+.timeline-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.timeline-title strong { white-space: nowrap; }
+.timeline-source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted, #8fa1b8);
+  font-size: 12px;
+}
+
+.timeline-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timeline-actions button {
+  min-height: 28px;
+}
+
+.timeline-scroll {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+  background:
+    linear-gradient(to right, rgba(255,255,255,.025) 1px, transparent 1px) 0 0/120px 100%,
+    rgba(0,0,0,.08);
+}
+
+.timeline-canvas {
+  position: relative;
+  min-height: 170px;
+  padding-left: 74px;
+}
+
+.timeline-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 9;
+  height: 28px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.1));
+  background: color-mix(in srgb, var(--panel, #101a29) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.timeline-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255,255,255,.14);
+}
+
+.timeline-tick span {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  color: var(--muted, #8fa1b8);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timeline-track {
+  position: relative;
+  height: 50px;
+  border-bottom: 1px solid rgba(255,255,255,.055);
+}
+
+.timeline-track-label {
+  position: sticky;
+  left: -74px;
+  z-index: 8;
+  width: 66px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted, #8fa1b8);
+  background: var(--panel, #101a29);
+  border-right: 1px solid var(--border, rgba(255,255,255,.1));
+}
+
+.timeline-track-clips {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 40px;
+}
+
+.timeline-clip {
+  position: absolute;
+  top: 0;
+  height: 38px;
+  min-width: 7px;
+  padding: 4px 7px;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 6px;
+  overflow: hidden;
+  text-align: left;
+  color: var(--ink, #edf4fb);
+  background: rgba(84, 200, 240, .18);
+  cursor: pointer;
+}
+
+.timeline-clip.camera-B { background: rgba(168, 120, 255, .19); }
+.timeline-clip.camera-C { background: rgba(79, 220, 157, .16); }
+.timeline-clip.unlinked { background: rgba(255,255,255,.07); border-style: dashed; }
+.timeline-clip.gap { background: rgba(255,255,255,.035); color: var(--muted, #8fa1b8); }
+.timeline-clip.selected {
+  outline: 2px solid var(--accent, #54c8f0);
+  outline-offset: 1px;
+  z-index: 5;
+}
+
+.timeline-clip-name,
+.timeline-clip-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeline-clip-name { font-size: 11px; font-weight: 650; }
+.timeline-clip-meta { margin-top: 2px; font-size: 9px; color: var(--muted, #9fb0c5); }
+
+.timeline-empty {
+  padding: 34px;
+  color: var(--muted, #8fa1b8);
+  text-align: center;
+}
+
+html.native-mirrororder .member-card.native-file-drag,
+html.native-mirrororder .timeline-clip.native-file-drag {
+  cursor: grab;
+}
+html.native-mirrororder .member-card.native-file-drag:active,
+html.native-mirrororder .timeline-clip.native-file-drag:active {
+  cursor: grabbing;
+}
+
+.native-drag-hint {
+  color: var(--muted, #8fa1b8);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .timeline-panel { max-height: 36vh; }
+  .timeline-source, .native-drag-hint { display: none; }
+}
