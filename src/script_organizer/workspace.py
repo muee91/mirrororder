@@ -175,6 +175,7 @@ class WorkspaceRegistry:
             "ensure_preferred_camera = true",
             "escalate_ambiguous = true",
             "max_extra_cameras = 1",
+            "max_escalated_groups = 24",
             "",
             "[media]",
             f'timeline_mode = "{str(payload.get("timeline_mode", "sequential"))}"',
