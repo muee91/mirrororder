@@ -10,7 +10,15 @@ from typing import Any
 
 
 SERVER_NAME = "script-material-platform"
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.1.0"
+AGENT_TASK_TYPES = [
+    "prepare_project",
+    "multicam_sync",
+    "incremental_analyze",
+    "auto_resolve",
+    "transcribe",
+    "evidence_extract",
+]
 
 
 class GatewayClient:
@@ -88,12 +96,12 @@ TOOLS = [
     },
     {
         "name": "submit_task",
-        "description": "提交受限增量任务。仅支持 incremental_analyze、transcribe、evidence_extract，不会写入人工审核。",
+        "description": "提交受限 Host 任务。可执行同步、ASR、分析和自动救援；只写派生产物，不直接写人工 review.json。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project_id": {"type": "string"},
-                "type": {"enum": ["incremental_analyze", "transcribe", "evidence_extract"]},
+                "type": {"enum": AGENT_TASK_TYPES},
                 "targets": {"type": "object"},
                 "idempotency_key": {"type": "string"},
             },
