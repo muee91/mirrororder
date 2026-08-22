@@ -56,33 +56,55 @@ def write_analysis(config: ProjectConfig) -> None:
     (config.output_dir / "matches.json").write_text(json.dumps(matches), encoding="utf-8")
 
 
-def test_high_confidence_auto_confirms_and_ambiguous_goes_to_review(tmp_path: Path) -> None:
+def test_high_confidence_auto_confirms_mapping_without_editorial_keep(tmp_path: Path) -> None:
     config = config_for(tmp_path)
     write_analysis(config)
     provider = ModelProvider(ModelProviderConfig())
     result = resolve_project(config, provider)
 
-    assert result["groups"]["G1"]["status"] == "auto_confirmed"
-    assert result["groups"]["G1"]["state"] == "keep"
-    assert result["groups"]["G2"]["status"] == "needs_review"
-    assert result["groups"]["G2"]["state"] == "unreviewed"
+    confirmed = result["groups"]["G1"]
+    ambiguous = result["groups"]["G2"]
+    assert confirmed["status"] == "auto_confirmed"
+    assert confirmed["mapping_status"] == "confirmed"
+    assert confirmed["mapping_source"] == "deterministic"
+    assert confirmed["editorial_state"] == "unreviewed"
+    assert confirmed["script_segment_ids"] == ["S1"]
+    assert ambiguous["status"] == "needs_review"
+    assert ambiguous["mapping_status"] == "ambiguous"
+    assert ambiguous["editorial_state"] == "unreviewed"
     assert result["summary"]["completed"] == 1
 
 
-def test_manual_review_overrides_automation_and_auto_never_rejects(tmp_path: Path) -> None:
+def test_editorial_reject_does_not_become_mapping_evidence_and_manual_placement_does(tmp_path: Path) -> None:
     config = config_for(tmp_path)
     write_analysis(config)
-    ReviewStore(config.output_dir / "review.json").apply_action({
+    review = ReviewStore(config.output_dir / "review.json")
+    review.apply_action({
         "action": "set_group", "group_id": "G1", "state": "reject", "actor": "editor",
     })
-    result = resolve_project(config, ModelProvider(ModelProviderConfig()))
 
-    assert result["groups"]["G1"]["status"] == "human_override"
-    assert result["groups"]["G1"]["state"] == "reject"
-    assert all(
-        entry["state"] != "reject" or entry["status"] == "human_override"
-        for entry in result["groups"].values()
-    )
+    editorial_only = resolve_project(config, ModelProvider(ModelProviderConfig()))
+    entry = editorial_only["groups"]["G1"]
+    assert entry["status"] == "auto_confirmed"
+    assert entry["mapping_status"] == "confirmed"
+    assert entry["mapping_source"] == "deterministic"
+    assert entry["script_segment_ids"] == ["S1"]
+    assert entry["editorial_state"] == "reject"
+
+    review.apply_action({
+        "action": "set_group_placement",
+        "group_id": "G1",
+        "episode_ids": [1],
+        "script_segment_ids": ["S2"],
+        "actor": "editor",
+    })
+    manually_mapped = resolve_project(config, ModelProvider(ModelProviderConfig()))
+    entry = manually_mapped["groups"]["G1"]
+    assert entry["status"] == "human_override"
+    assert entry["mapping_status"] == "confirmed"
+    assert entry["mapping_source"] == "human"
+    assert entry["script_segment_ids"] == ["S2"]
+    assert entry["editorial_state"] == "reject"
 
 
 def test_desktop_build_can_bundle_sync_engine() -> None:
