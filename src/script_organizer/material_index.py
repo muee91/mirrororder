@@ -28,7 +28,7 @@ from .script_parser import ScriptDocument, parse_script
 from .transcript import TranscriptStore, transcribe_with_faster_whisper
 
 
-ANALYSIS_CACHE_VERSION = 3
+ANALYSIS_CACHE_VERSION = 4
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -95,6 +95,8 @@ def _script_analysis_key(script_segments: list, config: ProjectConfig) -> str:
             "max_windows": config.max_transcript_windows,
             "max_window_candidates": config.max_window_candidates,
             "camera_priority": config.asr_camera_priority,
+            "escalate_ambiguous": config.asr_escalate_ambiguous,
+            "max_extra_cameras": config.asr_max_extra_cameras,
         },
     }
     return hashlib.sha1(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
@@ -215,12 +217,7 @@ def _rescue_adjacent_scene_prefixes(
     config: ProjectConfig,
     max_distance: int = 2,
 ) -> int:
-    """Use a same-scene anchor to rescue a Take immediately before it.
-
-    This prevents a short repeated ASR fragment in an opening Take from
-    winning an unrelated episode, while keeping action/short-line coverage
-    honest until an editor confirms it.
-    """
+    """Use a same-scene anchor to rescue a Take immediately before it."""
     segment_by_id = {segment.segment_id: segment for segment in script_segments}
     anchors: list[tuple[int, tuple[int, str], str]] = []
     for index, group in enumerate(groups):
@@ -239,10 +236,7 @@ def _rescue_adjacent_scene_prefixes(
 
     rescued = 0
     for index, group in enumerate(groups):
-        following = next(
-            (item for item in anchors if index < item[0] <= index + max_distance),
-            None,
-        )
+        following = next((item for item in anchors if index < item[0] <= index + max_distance), None)
         if not following:
             continue
         scene_key = following[1]
@@ -267,7 +261,6 @@ def _rescue_adjacent_scene_prefixes(
         )
         if not candidates:
             continue
-        # A scene-constrained rescue outranks an unrelated repeated phrase.
         local_matches[group.group_id] = candidates + existing_same_scene
         matches[group.group_id] = list(local_matches[group.group_id])
         rescued += 1
@@ -275,7 +268,6 @@ def _rescue_adjacent_scene_prefixes(
 
 
 def _prewarm_candidates(items: object, group_id: str, keep_manual: bool) -> list[Candidate] | None:
-    """Reuse old final dialogue evidence once, but always rebuild context."""
     candidates = _candidates_from_payload(items, group_id)
     if candidates is None:
         return None
@@ -358,11 +350,7 @@ def _add_scene_context_candidates(
     matches: dict[str, list[Candidate]],
     script_segments: list,
 ) -> dict[str, list[Candidate]]:
-    """Place dialogue-free groups near reliable anchors without inventing a line."""
     segment_by_id = {segment.segment_id: segment for segment in script_segments}
-    scene_segments: defaultdict[tuple[int, str], list[str]] = defaultdict(list)
-    for segment in script_segments:
-        scene_segments[(segment.episode, segment.scene_id)].append(segment.segment_id)
     anchors: list[tuple[int, Candidate]] = []
     for index, group in enumerate(groups):
         top = next(
@@ -399,16 +387,17 @@ def _add_scene_context_candidates(
             candidate_anchor = segment_by_id.get(following[1].script_segment_id)
         if not candidate_anchor:
             continue
-        candidate = context_only_candidate(
-            group,
-            None,
-            [
-                f"前后可靠对白锚点位于第{candidate_anchor.episode}集 {candidate_anchor.scene_id}",
-                "仅归为此场附近素材，不绑定具体台词或动作",
-            ],
-            (candidate_anchor.episode,),
-        )
-        matches[group.group_id] = [candidate]
+        matches[group.group_id] = [
+            context_only_candidate(
+                group,
+                None,
+                [
+                    f"前后可靠对白锚点位于第{candidate_anchor.episode}集 {candidate_anchor.scene_id}",
+                    "仅归为此场附近素材，不绑定具体台词或动作",
+                ],
+                (candidate_anchor.episode,),
+            )
+        ]
     return matches
 
 
@@ -418,7 +407,6 @@ def _add_episode_context_candidates(
     script_segments: list,
     max_neighbor_groups: int = 12,
 ) -> dict[str, list[Candidate]]:
-    """Give dialogue-free groups a nearby episode context without fake lines."""
     segment_by_id = {segment.segment_id: segment for segment in script_segments}
     anchors: list[tuple[int, int]] = []
     for index, group in enumerate(groups):
@@ -450,14 +438,7 @@ def _add_episode_context_candidates(
                 if abs(previous[1] - following[1]) <= 2:
                     episodes = sorted({previous[1], following[1]})
                 else:
-                    # A short slate/preparation clip at a distant episode
-                    # boundary belongs with the following setup when the two
-                    # anchors are equally close; do not claim a 17–32 range.
-                    episodes = [
-                        previous[1]
-                        if previous_distance < following_distance
-                        else following[1]
-                    ]
+                    episodes = [previous[1] if previous_distance < following_distance else following[1]]
             elif min(previous_distance, following_distance) <= max_neighbor_groups:
                 episodes = [previous[1] if previous_distance <= following_distance else following[1]]
         elif previous and index - previous[0] <= max_neighbor_groups:
@@ -487,29 +468,18 @@ def _script_gap_metadata(
     review: dict[str, Any],
     minimum_segments: int = 4,
 ) -> list[dict[str, Any]]:
-    """Describe long script blocks with no material-level correspondence.
-
-    A context-only candidate is deliberately not considered coverage here:
-    it can identify a nearby episode, but it must not make a script line look
-    matched.  The result is diagnostic metadata for the editor and for the
-    next targeted review/ASR pass; it never creates a candidate or a review
-    decision.
-    """
     covered: set[str] = set()
     for candidates in matches.values():
         for candidate in candidates:
             if candidate.confidence == "context_only":
                 continue
-            covered.update(
-                candidate.script_segment_ids
-                or ((candidate.script_segment_id,) if candidate.script_segment_id else ())
-            )
+            covered.update(candidate.script_segment_ids or ((candidate.script_segment_id,) if candidate.script_segment_id else ()))
     for placement in review.get("placements", {}).values():
         if isinstance(placement, dict):
             covered.update(str(value) for value in placement.get("script_segment_ids", []) if value)
-    for assignments in review.get("assignments", {}).values():
+    for segment_id, assignments in review.get("assignments", {}).items():
         if isinstance(assignments, dict) and assignments:
-            covered.add(str(next(iter(review.get("assignments", {})), "")))
+            covered.add(str(segment_id))
 
     by_scene: defaultdict[tuple[int, str], list] = defaultdict(list)
     for segment in script_segments:
@@ -549,21 +519,11 @@ def _gap_rescue_group_ids(
     script_segments: list,
     previous_matches: dict,
 ) -> set[str]:
-    """Find only cached groups whose ASR contains text from prior script gaps.
-
-    This is intentionally a targeted prefilter for the weak-sequence rescue.
-    It does not create a candidate by itself: the matcher still requires
-    multiple same-scene lines to progress in both audio time and script order.
-    """
     gaps = previous_matches.get("script_gaps", []) if isinstance(previous_matches, dict) else []
     if not isinstance(gaps, list) or not gaps:
         return set()
     segment_by_id = {segment.segment_id: segment for segment in script_segments}
-    clip_to_group = {
-        member.clip_id: group.group_id
-        for group in groups
-        for member in group.members
-    }
+    clip_to_group = {member.clip_id: group.group_id for group in groups for member in group.members}
     transcript_grams: dict[str, set[str]] = defaultdict(set)
     for clip_id, transcript in transcripts.items():
         text = normalize_text(getattr(transcript, "text", ""))
@@ -589,6 +549,21 @@ def _gap_rescue_group_ids(
     return rescue_ids
 
 
+def _has_decisive_dialogue(candidates: list[Candidate], config: ProjectConfig) -> bool:
+    manual = next((candidate for candidate in candidates if candidate.confidence == "manual"), None)
+    if manual:
+        return True
+    if not candidates:
+        return False
+    top = candidates[0]
+    return (
+        top.confidence == "exact_dialogue"
+        and top.total_score >= config.high_confidence
+        and top.dialogue_score >= 0.80
+        and top.margin >= config.minimum_margin
+    )
+
+
 def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -> dict[str, Any]:
     config.ensure_output()
     previous_index = _read_json(config.output_dir / "material_index.json", {})
@@ -604,39 +579,55 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
         clips = read_media_directory(config.media_root, config.camera_patterns, config.media_timeline_mode)
     else:
         raise ValueError(f"不支持的 input.kind: {config.input_kind}")
+
     groups = build_multicam_groups(clips, config.minimum_overlap_seconds, config.split_bridge_ratio)
     script = parse_script(config.script)
     store = TranscriptStore(config.transcript_dir)
     transcripts = {}
     clip_by_id = {clip.clip_id: clip for clip in clips}
-    cached_transcripts = {}
     for clip in clips:
         transcript = store.load(clip)
-        if transcript:
-            cached_transcripts[clip.clip_id] = transcript
-            if transcript.text.strip() or transcript.segments:
-                transcripts[clip.clip_id] = transcript
+        if transcript and (transcript.text.strip() or transcript.segments):
+            transcripts[clip.clip_id] = transcript
+
+    asr_error = ""
+    asr_model = None
+
+    def ensure_asr_model():
+        nonlocal asr_model, asr_error
+        if config.asr_backend == "cache":
+            return None
+        if asr_model is not None:
+            return asr_model
+        try:
+            from faster_whisper import WhisperModel  # type: ignore
+        except ImportError:
+            asr_error = "faster-whisper 未安装；保留为缺失 transcript"
+            return None
+        try:
+            asr_model = WhisperModel(config.asr_model, device=config.asr_device, compute_type="auto")
+        except Exception as error:
+            asr_error = f"faster-whisper 初始化失败：{error}"
+            return None
+        return asr_model
+
     missing_transcript_groups = [
         group.group_id
         for group in groups
         if not any(member.clip_id in transcripts for member in group.members)
     ]
     preferred_missing_groups = []
+    priority = {camera: index for index, camera in enumerate(config.asr_camera_priority)}
     if config.asr_ensure_preferred_camera:
-        priority = {camera: index for index, camera in enumerate(config.asr_camera_priority)}
         for group in groups:
             members = sorted(group.members, key=lambda member: (priority.get(member.camera, 999), member.name))
             preferred = next((member for member in members if member.exists), None)
             if preferred and preferred.clip_id not in transcripts:
                 preferred_missing_groups.append(group.group_id)
     transcribe_groups = set(missing_transcript_groups) | set(preferred_missing_groups)
-    asr_error = ""
     if config.asr_backend != "cache" and transcribe_groups:
-        try:
-            from faster_whisper import WhisperModel  # type: ignore
-            model = WhisperModel(config.asr_model, device=config.asr_device, compute_type="auto")
-            remaining_groups = []
-            priority = {camera: index for index, camera in enumerate(config.asr_camera_priority)}
+        model = ensure_asr_model()
+        if model is not None:
             for group in groups:
                 if group.group_id not in transcribe_groups:
                     continue
@@ -644,13 +635,11 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
                     group.members,
                     key=lambda member: (priority.get(member.camera, 999), -float(member.duration), member.name),
                 )
-                success = False
                 for member in members:
                     clip = clip_by_id[member.clip_id]
                     if not clip.exists:
                         continue
                     if clip.clip_id in transcripts:
-                        success = True
                         break
                     try:
                         transcript = transcribe_with_faster_whisper(clip, store, model, config.asr_language)
@@ -658,14 +647,7 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
                         continue
                     if transcript.text.strip() or transcript.segments:
                         transcripts[clip.clip_id] = transcript
-                        cached_transcripts[clip.clip_id] = transcript
-                        success = True
                         break
-                if not success:
-                    remaining_groups.append(group.group_id)
-            missing_transcript_groups = remaining_groups
-        except ImportError:
-            asr_error = "faster-whisper 未安装；保留为缺失 transcript"
 
     script_segments = list(script.segments)
     script_payload = script.to_dict()
@@ -675,6 +657,7 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     rescue_group_ids = _gap_rescue_group_ids(groups, transcripts, script_segments, previous_matches)
     if affected_group_ids is not None:
         rescue_group_ids &= affected_group_ids
+
     matches: dict[str, list[Candidate]] = {}
     local_matches: dict[str, list[Candidate]] = {}
     group_analysis_keys: dict[str, str] = {}
@@ -683,6 +666,8 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     cache_recomputed = 0
     cache_targeted_rescued = 0
     scene_prefix_rescued = 0
+    asr_escalated_groups = 0
+    asr_escalated_clips = 0
     overrides = _load_overrides(config)
     group_overrides = overrides.get("groups", {}) if isinstance(overrides.get("groups", {}), dict) else {}
     previous_group_rows = (
@@ -707,6 +692,7 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     existing_group_ids = {group.group_id for group in groups}
     if affected_group_ids is not None and not affected_group_ids.issubset(existing_group_ids):
         raise ValueError("增量分析包含未知 group_id")
+
     for group in groups:
         override = group_overrides.get(group.group_id, {})
         analysis_key = _group_analysis_key(group, transcripts, script_key, override)
@@ -736,11 +722,7 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
             and isinstance(previous_row, dict)
             and not previous_row.get("analysis_key")
         ):
-            auto = _prewarm_candidates(
-                previous_row.get("candidates"),
-                group.group_id,
-                keep_manual=False,
-            )
+            auto = _prewarm_candidates(previous_row.get("candidates"), group.group_id, keep_manual=False)
             if auto is not None:
                 if isinstance(override, dict):
                     manual = _candidate_from_override(group, override)
@@ -764,6 +746,73 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
             cache_recomputed += 1
         local_matches[group.group_id] = auto[: config.max_candidates]
         matches[group.group_id] = list(local_matches[group.group_id])
+
+    # Only ambiguous Takes pay for extra ASR.  This happens before global
+    # sequence alignment so the extra camera contributes real local dialogue
+    # evidence rather than merely changing a contextual decision.
+    if config.asr_escalate_ambiguous and config.asr_max_extra_cameras > 0 and config.asr_backend != "cache":
+        model = ensure_asr_model()
+        if model is not None:
+            for group in groups:
+                if affected_group_ids is not None and group.group_id not in affected_group_ids:
+                    continue
+                if _has_decisive_dialogue(local_matches.get(group.group_id, []), config):
+                    continue
+                if any(candidate.confidence == "manual" for candidate in local_matches.get(group.group_id, [])):
+                    continue
+                members = sorted(
+                    group.members,
+                    key=lambda member: (priority.get(member.camera, 999), -float(member.duration), member.name),
+                )
+                attempted: set[str] = set()
+                successful_extra = 0
+                changed = False
+                while successful_extra < config.asr_max_extra_cameras:
+                    member = next(
+                        (
+                            item
+                            for item in members
+                            if item.exists and item.clip_id not in transcripts and item.clip_id not in attempted
+                        ),
+                        None,
+                    )
+                    if member is None:
+                        break
+                    attempted.add(member.clip_id)
+                    clip = clip_by_id[member.clip_id]
+                    try:
+                        transcript = transcribe_with_faster_whisper(clip, store, model, config.asr_language)
+                    except Exception:
+                        continue
+                    if not (transcript.text.strip() or transcript.segments):
+                        continue
+                    transcripts[clip.clip_id] = transcript
+                    successful_extra += 1
+                    asr_escalated_clips += 1
+                    changed = True
+                    auto = match_group(
+                        group,
+                        transcripts,
+                        script_segments,
+                        config,
+                        script_window_index,
+                        script_line_index,
+                        preserve_coherent_weak=group.group_id in rescue_group_ids,
+                    )
+                    override = group_overrides.get(group.group_id, {})
+                    if isinstance(override, dict):
+                        manual = _candidate_from_override(group, override)
+                        if manual:
+                            auto.insert(0, manual)
+                    local_matches[group.group_id] = auto[: config.max_candidates]
+                    matches[group.group_id] = list(local_matches[group.group_id])
+                    if _has_decisive_dialogue(local_matches[group.group_id], config):
+                        break
+                if changed:
+                    asr_escalated_groups += 1
+                    override = group_overrides.get(group.group_id, {})
+                    group_analysis_keys[group.group_id] = _group_analysis_key(group, transcripts, script_key, override)
+
     scene_prefix_rescued = _rescue_adjacent_scene_prefixes(
         groups,
         matches,
@@ -772,10 +821,6 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
         script_segments,
         config,
     )
-    # Cached candidates from earlier analyses may still contain a scene heading
-    # in a long range. Normalize both cached and newly computed candidates
-    # before alignment and serialization, without forcing unrelated Takes to
-    # rerun their ASR matching.
     local_matches = _without_scene_headings_map(local_matches, script_segments)
     matches = _without_scene_headings_map(matches, script_segments)
     matches, alignment_metadata = align_blocks(
@@ -787,21 +832,36 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     matches = _without_scene_headings_map(matches, script_segments)
     matches = _add_scene_context_candidates(groups, matches, script_segments)
     matches = _add_episode_context_candidates(groups, matches, script_segments)
+
     if config.enable_known_text_alignment:
         group_by_id = {group.group_id: group for group in groups}
         segment_by_id = {segment.segment_id: segment for segment in script_segments}
         for group_id, candidates in list(matches.items()):
             group = group_by_id[group_id]
-            member = next((item for item in group.members if item.exists), None)
-            if not member:
-                continue
+            member_by_clip = {member.clip_id: member for member in group.members if member.exists}
             updated = []
             for candidate in candidates:
                 ids = candidate.script_segment_ids or ((candidate.script_segment_id,) if candidate.script_segment_id else ())
                 known_text = "".join(segment_by_id[item].text for item in ids if item in segment_by_id)
-                alignment = align_known_text(member.media_path, known_text, config.stable_ts_model) if known_text else {"method": "stable-ts", "status": "not_run"}
+                should_align = (
+                    candidate.confidence in {"exact_dialogue", "manual"}
+                    or (
+                        candidate.confidence == "possible_dialogue"
+                        and candidate.total_score >= config.high_confidence
+                        and candidate.margin >= config.minimum_margin
+                    )
+                )
+                member = member_by_clip.get(candidate.transcript_clip_id or "")
+                if member is None:
+                    member = next(iter(member_by_clip.values()), None)
+                if known_text and should_align and member:
+                    alignment = align_known_text(member.media_path, known_text, config.stable_ts_model)
+                    alignment = {**alignment, "clip_id": member.clip_id, "camera": member.camera}
+                else:
+                    alignment = {"method": "stable-ts", "status": "not_run"}
                 updated.append(replace(candidate, script_segment_ids=tuple(ids), alignment=alignment))
             matches[group_id] = updated
+
     context = {
         group_id: list(candidate.script_segment_ids)
         for group_id, candidates in matches.items()
@@ -809,11 +869,12 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
         if candidate.confidence == "context_only"
     }
 
-    unusable_transcript_groups = [
+    missing_transcript_groups = [
         group.group_id
         for group in groups
         if not any(member.clip_id in transcripts for member in group.members)
     ]
+    unusable_transcript_groups = list(missing_transcript_groups)
     missing_media = [clip.clip_id for clip in clips if not clip.exists]
     script_issues = [] if script_segments else ["没有解析出剧本段落"]
     matched_group_ids = {
@@ -879,6 +940,8 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
             "analysis_cache_recomputed_groups": cache_recomputed,
             "analysis_cache_targeted_rescued_groups": cache_targeted_rescued,
             "scene_prefix_rescued_groups": scene_prefix_rescued,
+            "asr_escalated_groups": asr_escalated_groups,
+            "asr_escalated_clips": asr_escalated_clips,
         },
     }
     matches_payload = {
@@ -889,11 +952,7 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
                 "local_candidates": [candidate.to_dict() for candidate in local_matches[group_id]],
                 "analysis_key": group_analysis_keys[group_id],
                 "context_segment_ids": context.get(group_id, []),
-                "context_episodes": [
-                    episode
-                    for candidate in candidates[:1]
-                    for episode in candidate.context_episodes
-                ],
+                "context_episodes": [episode for candidate in candidates[:1] for episode in candidate.context_episodes],
             }
             for group_id, candidates in matches.items()
         },
@@ -916,6 +975,8 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
             "recomputed_groups": cache_recomputed,
             "targeted_rescued_groups": cache_targeted_rescued,
             "scene_prefix_rescued_groups": scene_prefix_rescued,
+            "asr_escalated_groups": asr_escalated_groups,
+            "asr_escalated_clips": asr_escalated_clips,
             "affected_group_ids": sorted(affected_group_ids) if affected_group_ids is not None else [],
         },
     }
