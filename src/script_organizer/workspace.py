@@ -173,6 +173,8 @@ class WorkspaceRegistry:
             f'transcript_dir = "{transcript_dir}"',
             'camera_priority = ["B", "C", "A"]',
             "ensure_preferred_camera = true",
+            "escalate_ambiguous = true",
+            "max_extra_cameras = 1",
             "",
             "[media]",
             f'timeline_mode = "{str(payload.get("timeline_mode", "sequential"))}"',
