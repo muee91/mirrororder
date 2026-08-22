@@ -12,6 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .local_vision_runtime import (
+    DEFAULT_LOCAL_VISION_MODEL,
+    LocalVisionRuntime,
+    LocalVisionRuntimeConfig,
+)
+
+
+_LOCAL_PROVIDERS = {"local", "llama", "llama.cpp", "llama-server"}
+
 
 @dataclass(frozen=True)
 class VisionProviderConfig:
@@ -29,6 +38,8 @@ class VisionProviderConfig:
         base_url = os.environ.get("MIRRORORDER_VISION_BASE_URL", "").strip().rstrip("/")
         api_key = os.environ.get("MIRRORORDER_VISION_API_KEY", "").strip()
         model = os.environ.get("MIRRORORDER_VISION_MODEL", "").strip()
+        if provider in _LOCAL_PROVIDERS and not model:
+            model = DEFAULT_LOCAL_VISION_MODEL
         try:
             timeout = max(10, min(300, int(os.environ.get("MIRRORORDER_VISION_TIMEOUT", "90"))))
         except ValueError:
@@ -44,16 +55,27 @@ class VisionProviderConfig:
         return cls(provider, base_url, api_key, model, timeout, max(0.5, min(0.99, threshold)), frames)
 
     @property
+    def is_local(self) -> bool:
+        return self.provider in _LOCAL_PROVIDERS
+
+    @property
     def enabled(self) -> bool:
-        return self.provider not in {"", "none", "off", "disabled"} and bool(self.base_url and self.model)
+        if self.provider in {"", "none", "off", "disabled"}:
+            return False
+        if self.is_local:
+            return bool(self.model)
+        return bool(self.base_url and self.model)
 
     def public(self) -> dict[str, Any]:
-        return {
+        payload = {
             "enabled": self.enabled,
             "provider": self.provider or "none",
             "model": self.model,
             "frame_count": self.frame_count,
         }
+        if self.is_local:
+            payload["runtime"] = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(self.model)).public()
+        return payload
 
 
 class VisionProvider:
@@ -62,10 +84,24 @@ class VisionProvider:
     The Host extracts a few low-resolution frames and constrains the model to a
     bounded list of nearby script candidates. Raw video is never uploaded by
     this class; only sampled JPEG frames are sent to the configured endpoint.
+
+    Local mode owns llama-server automatically. It never downloads a model
+    during Codex/build time; download can only happen at runtime after local
+    vision has explicitly been enabled and a visual rescue actually needs it.
     """
 
     def __init__(self, config: VisionProviderConfig | None = None):
         self.config = config or VisionProviderConfig.from_env()
+        self._local_runtime: LocalVisionRuntime | None = None
+
+    def _base_url(self) -> str:
+        if not self.config.enabled:
+            return ""
+        if not self.config.is_local:
+            return self.config.base_url
+        if self._local_runtime is None:
+            self._local_runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(self.config.model))
+        return self._local_runtime.ensure_server()
 
     @staticmethod
     def _encode_image(path: Path) -> str:
@@ -114,9 +150,13 @@ class VisionProvider:
     def rescue(self, context: dict[str, Any], frames: list[Path]) -> dict[str, Any] | None:
         if not self.config.enabled or not frames:
             return None
-        url = self.config.base_url
-        if not url.endswith("/chat/completions"):
-            url += "/chat/completions"
+        base_url = self._base_url()
+        if not base_url:
+            return None
+        url = base_url
+        if not url.endswith("/v1"):
+            url += "/v1"
+        url += "/chat/completions"
         system = (
             "你是短剧素材的视觉二审器。根据抽帧判断人物、场景和动作，但只能从输入给出的 candidate_id 中选择。"
             "禁止发明剧本位置。输出严格 JSON："
