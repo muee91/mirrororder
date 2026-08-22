@@ -19,6 +19,7 @@ class Clip:
     source_asset_id: str = ""
     source_start: Fraction = Fraction(0)
     source_end: Fraction | None = None
+    media_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -41,6 +42,7 @@ class GroupMember:
     exists: bool
     source_start: Fraction = Fraction(0)
     source_end: Fraction | None = None
+    media_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
