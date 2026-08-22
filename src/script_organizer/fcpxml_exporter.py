@@ -21,6 +21,15 @@ def _load(path: Path, fallback: object) -> object:
         return fallback
 
 
+def _placement_for_group(review: dict[str, Any], group: dict[str, Any]) -> dict[str, Any]:
+    group_id = str(group.get("group_id", "") or "")
+    parent_group_id = str(group.get("parent_group_id", "") or "")
+    placement = review.get("placements", {}).get(group_id, {})
+    if not placement and parent_group_id:
+        placement = review.get("placements", {}).get(parent_group_id, {})
+    return placement if isinstance(placement, dict) else {}
+
+
 def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
     index = _load(config.output_dir / "material_index.json", {})
     script = _load(config.output_dir / "script.json", {})
@@ -30,19 +39,32 @@ def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
     segment_rows = []
     for segment in script.get("segments", []):
         segment_id = segment.get("segment_id")
-        match_row = list(matches.get("by_segment", {}).get(segment_id, []))
+
+        # A manual script range is authoritative over stale automatic matching.
+        # Episode-only placement stays contextual and intentionally does not erase
+        # an automatic line candidate because the editor did not confirm a line.
+        match_row = []
+        for raw_candidate in matches.get("by_segment", {}).get(segment_id, []):
+            if not isinstance(raw_candidate, dict):
+                continue
+            group_id = raw_candidate.get("group_id")
+            group = groups_by_id.get(group_id, {})
+            placement = _placement_for_group(review, group)
+            placement_ids = [str(value) for value in placement.get("script_segment_ids", []) if value]
+            if placement_ids and segment_id not in placement_ids:
+                continue
+            candidate = dict(raw_candidate)
+            if placement_ids and segment_id in placement_ids:
+                candidate["confidence"] = "manual"
+            match_row.append(candidate)
+
         automatic_group_ids = {item.get("group_id") for item in match_row}
         for group_id, group in groups_by_id.items():
-            parent_group_id = str(group.get("parent_group_id", "") or "")
-            placement = review.get("placements", {}).get(group_id, {})
-            if not placement and parent_group_id:
-                placement = review.get("placements", {}).get(parent_group_id, {})
-            if (
-                isinstance(placement, dict)
-                and segment_id in placement.get("script_segment_ids", [])
-                and group_id not in automatic_group_ids
-            ):
+            placement = _placement_for_group(review, group)
+            placement_ids = [str(value) for value in placement.get("script_segment_ids", []) if value]
+            if segment_id in placement_ids and group_id not in automatic_group_ids:
                 match_row.append({"group_id": group_id, "confidence": "manual"})
+
         selected = []
         for candidate in match_row:
             group_id = candidate.get("group_id")
