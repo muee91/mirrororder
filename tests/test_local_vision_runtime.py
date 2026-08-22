@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from script_organizer.asr_runtime import _configure_model_cache
 from script_organizer.local_vision_runtime import DEFAULT_LOCAL_VISION_MODEL, LocalVisionRuntime
 from script_organizer.vision_provider import VisionProviderConfig
 
@@ -23,6 +24,16 @@ def test_local_model_cache_is_device_local(monkeypatch, tmp_path: Path) -> None:
     assert runtime.cache_dir == tmp_path / "MirrorOrder" / "models" / "llama-cache"
     assert "projects" not in runtime.cache_dir.parts
     assert runtime.public()["download_policy"] == "first_use_when_local_vision_enabled"
+
+
+def test_mlx_model_cache_is_device_local(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "MirrorOrder"))
+    monkeypatch.delenv("HF_HOME", raising=False)
+    monkeypatch.delenv("HF_HUB_CACHE", raising=False)
+    monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
+    cache = _configure_model_cache()
+    assert cache == tmp_path / "MirrorOrder" / "models" / "huggingface"
+    assert "projects" not in cache.parts
 
 
 def test_app_build_bundles_binary_but_never_model_weights() -> None:
