@@ -3,8 +3,8 @@
 ## 写代码前
 
 - 理解现有实现、调用链和状态流。
-- 先读 `README.md`、`项目介绍.md`、`DESKTOP_BRIDGE.md`、`SYNC_MODEL.md`。
-- 检查运行服务、项目配置、当前输出和 `review.json`。
+- 先读 `README.md`、`项目介绍.md`、`DESKTOP_BRIDGE.md`、`SYNC_MODEL.md`、`AUTOMATION_PIPELINE.md`。
+- 检查运行服务、项目配置、当前输出、`auto_decisions.json` 和 `review.json`。
 - 不确定时先给出证据和不确定点，禁止猜测式修改。
 
 ## 数据权威
@@ -18,6 +18,20 @@
 - `projects/beef/legacy_overrides.json` 仅为历史归档，不得重新接入牛肉项目分析。
 - 人工结果永远高于自动结果。
 - 系统不得自动Reject素材。
+- 自动确认写 `auto_decisions.json`，不得伪装成人工审核，也不得直接写 `review.json`。
+
+## 自动整理与模型救援
+
+- 默认产品目标是“自动完成，人工只处理异常”，不是让每个 Take 都人工点一次。
+- `prepare_project` 是完整主机流水线：媒体目录同步 → 生成 FCPXML → ASR/剧本分析 → 自动确认/AI Rescue。
+- 高置信度结果可自动确认剧本归属；自动确认语义默认是 `keep`，不是创意意义上的“最佳镜头”。
+- 低置信度时才允许调用可选模型；不得把全部 Take 都发给大模型。
+- 模型只能在本地算法给出的 candidate_id 中选择，禁止从整本剧本自由发明位置。
+- 模型结果必须再次通过本地最低分数、候选合法性与前后剧本顺序校验；未通过则进入 `needs_review`。
+- 无对白且没有可靠上下文的素材不得靠语言模型伪造动作归属；保留 `unresolved`，未来视觉模型需走单独证据链。
+- 未配置模型 Provider 时主流程仍必须离线可用：高置信度自动确认，低置信度进入异常队列。
+- Provider API Key 不得写入 workspace、project.toml、review.json 或可同步产物。
+- 修改这条链前先读 `AUTOMATION_PIPELINE.md`。
 
 ## 多设备与本机素材
 
@@ -33,9 +47,10 @@
 
 ## 多机位与FCPXML
 
-- 涉及多机位同步或NLE XML时，使用：
-  `/Users/editor/.agents/skills/multicam-audio-sync/SKILL.md`
+- 涉及多机位同步或NLE XML时，使用当前 `multicam-audio-sync` 引擎；它是 Host 可直接调用的确定性引擎，不得依赖 Codex 才能运行。
+- `macos-app/build_app.sh` 要把 repo vendor、`MIRRORORDER_MULTICAM_SYNC_ROOT` 或开发机 `~/.agents/skills/multicam-audio-sync` 中的引擎打包进 App runtime。
 - 不修改原始FCPXML，不重建或破坏已有同步关系。
+- 媒体目录项目允许生成新的 `output/sync/synchronized.fcpxml`，但不得覆盖用户已有 FCPXML。
 - `organized.fcpxml` 默认必须与输入文件字节完全一致。
 - 长素材按有效片内范围复用，禁止复制原始媒体。
 - A/B/C展示顺序不得打乱。
@@ -74,6 +89,7 @@
 - 切集、协作刷新和审核后保持各区域滚动位置。
 - 时间线是辅助看片层，不得抢占剧本→候选Take的主工作流。
 - 工作台要能看出当前设备素材定位覆盖率；浏览器远程访问时不得把服务器路径误称为客户端本机路径。
+- 工作台要直接显示自动 / AI / 人工 / 待处理数量；自动确认和 AI 确认不得继续出现在默认“未核对”队列。
 
 ## 审核与协作
 
@@ -84,6 +100,7 @@
 - 测试协作写入后必须恢复，不留下虚假审核结论。
 - 多台电脑同时审核时 `review.json` 必须有单一写入权威；禁止依赖 Dropbox/iCloud 文件级同步让多台机器直接并发写同一 `review.json`。
 - 推荐架构：中央项目状态/review authority + 每台设备本地 media resolver/native drag bridge。
+- 自动决策与人工审核必须分文件保存；人工 action 生效后界面必须立即覆盖自动状态，即使 `auto_decisions.json` 尚未重算。
 
 ## 验证要求
 
@@ -93,6 +110,16 @@
 python3 -m py_compile src/script_organizer/*.py
 python3 -m pytest -q
 ```
+
+涉及自动化流水线时还要验证：
+
+- 高置信度 exact_dialogue 进入 `auto_confirmed`。
+- 模糊候选在无模型时进入 `needs_review`，而不是假自动确认。
+- 模型只能返回已有 candidate_id；模型低置信度或顺序冲突必须回退人工。
+- 自动流程不会产生 `reject`，除非该状态来自 `human_override`。
+- `auto_decisions.json` 更新不会改动 `review.json`。
+- 新建媒体目录项目会自动提交 `prepare_project`。
+- 同步成功后项目使用生成的 `synchronized.fcpxml` 继续分析，而不是退回未同步 media-directory 时间线。
 
 涉及前端时还要验证：
 
@@ -106,10 +133,13 @@ python3 -m pytest -q
 - 时间线当前项目模式能显示真实拍摄位置。
 - 加载FCPXML后未关联块有明确状态。
 - 时间线与素材卡片双向定位有效。
+- 自动确认/AI确认不会出现在“只看未核对”结果中。
+- “待处理”只聚合 needs_review / unresolved 与真正未人工处理异常。
 
 涉及macOS App时还要真机验证：
 
 - `zsh macos-app/build_app.sh` 可以完成编译和codesign。
+- 构建日志显示打包 `multicam-audio-sync`，且构建后的 App 不依赖 Codex 才能运行同步。
 - 从素材卡拖到Finder得到当前设备真实文件。
 - 从素材卡拖到Final Cut Pro至少完成普通文件接收测试。
 - 普通点击素材仍然只执行播放/选择，不被拖拽桥接误伤。
