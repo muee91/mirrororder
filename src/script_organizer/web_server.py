@@ -524,8 +524,14 @@ def make_handler(service: WorkspaceService, web_root: Path):
                 self._send_json({"error": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
         def do_HEAD(self) -> None:
+            parsed = urllib.parse.urlparse(self.path)
             try:
-                self._static(urllib.parse.urlparse(self.path).path, head_only=True)
+                parts = _parts(parsed.path)
+                if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "media":
+                    project = service.project(parts[3])
+                    self._media(project, urllib.parse.unquote(parts[5]), head_only=True)
+                else:
+                    self._static(parsed.path, head_only=True)
             except ApiError as error:
                 self._send_json({"error": str(error)}, error.status)
 

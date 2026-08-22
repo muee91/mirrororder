@@ -95,6 +95,15 @@ def _request(base: str, path: str, token: str = "", method: str = "GET", payload
         return error.code, json.loads(error.read().decode("utf-8"))
 
 
+def _head_request(base: str, path: str, headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes]:
+    request = urllib.request.Request(base + path, method="HEAD", headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, dict(response.headers.items()), response.read()
+    except urllib.error.HTTPError as error:
+        return error.code, dict(error.headers.items()), error.read()
+
+
 def test_workspace_registry_preflights_fcpxml_and_media_directory(tmp_path):
     workspace = _workspace(tmp_path)
     registry = WorkspaceRegistry(workspace)
@@ -325,6 +334,42 @@ def test_agent_gateway_has_versioned_routes_and_enforces_auth(tmp_path):
         assert mcp_projects["projects"] == _request(base, "/api/agent/v1/projects", token)[1]["projects"]
         status, _payload = _request(base, "/api/agent/v1/projects/other/context", token)
         assert status == 403
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_media_head_preserves_range_headers_without_body(tmp_path):
+    workspace = _workspace(tmp_path)
+    config_path = _register_demo(workspace, tmp_path)
+    service = WorkspaceService(workspace)
+    index = json.loads((config_path.parent / "output" / "material_index.json").read_text(encoding="utf-8"))
+    clip_id = index["groups"][0]["members"][0]["clip_id"]
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(service, workspace.web_dir))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        get_request = urllib.request.Request(
+            f"{base}/api/v1/projects/demo/media/{clip_id}",
+            headers={"Range": "bytes=1-3"},
+        )
+        with urllib.request.urlopen(get_request, timeout=5) as response:
+            assert response.status == 206
+            assert response.headers["Content-Range"] == "bytes 1-3/5"
+            assert response.read() == b"ide"
+
+        status, headers, body = _head_request(
+            base,
+            f"/api/v1/projects/demo/media/{clip_id}",
+            {"Range": "bytes=1-3"},
+        )
+        assert status == 206
+        assert headers["Accept-Ranges"] == "bytes"
+        assert headers["Content-Range"] == "bytes 1-3/5"
+        assert headers["Content-Length"] == "3"
+        assert body == b""
     finally:
         server.shutdown()
         server.server_close()
