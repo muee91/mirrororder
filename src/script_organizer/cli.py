@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 from .agent_store import AgentTokenStore
+from .analysis_runtime import analyze
 from .automation_runtime import install_automation_runtime
 from .device_media_runtime import install_device_media_runtime
 from .fcpxml_exporter import export
-from .material_index import analyze
 from .media_identity import DeviceMediaStore
 from .tasks import TaskManager
 from .web_server import serve
@@ -38,11 +39,16 @@ def _project_index(workspace: WorkspaceConfig, project_id: str) -> dict:
         return {}
 
 
-def _submit_and_print(workspace: WorkspaceConfig, project_id: str, task_type: str) -> int:
+def _submit_and_wait(workspace: WorkspaceConfig, project_id: str, task_type: str) -> int:
     manager = TaskManager(WorkspaceRegistry(workspace).project_config)
     task = manager.submit(project_id, task_type, {}, actor="cli")
+    task_id = str(task.get("task_id", ""))
+    terminal = {"completed", "failed", "cancelled", "interrupted"}
+    while task.get("status") not in terminal:
+        time.sleep(0.2)
+        task = next((item for item in manager.list(project_id) if item.get("task_id") == task_id), task)
     print(json.dumps(task, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if task.get("status") == "completed" else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -107,11 +113,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "prepare":
-        return _submit_and_print(workspace, args.project_id, "prepare_project")
+        return _submit_and_wait(workspace, args.project_id, "prepare_project")
     if args.command == "multicam-sync":
-        return _submit_and_print(workspace, args.project_id, "multicam_sync")
+        return _submit_and_wait(workspace, args.project_id, "multicam_sync")
     if args.command == "auto-resolve":
-        return _submit_and_print(workspace, args.project_id, "auto_resolve")
+        return _submit_and_wait(workspace, args.project_id, "auto_resolve")
 
     if args.command == "media-scan":
         index = _project_index(workspace, args.project_id)
