@@ -37,7 +37,10 @@ def empty_automation() -> dict[str, Any]:
             "unresolved": 0,
             "completed": 0,
         },
-        "model": {"enabled": False, "provider": "none", "model": ""},
+        "model": {
+            "text": {"enabled": False, "provider": "none", "model": ""},
+            "vision": {"enabled": False, "provider": "none", "model": "", "frame_count": 0},
+        },
     }
 
 
@@ -83,11 +86,17 @@ class AutomationStore:
         result["summary"] = summarize(groups)
         model = raw.get("model", {})
         if isinstance(model, dict):
-            result["model"].update({
-                "enabled": bool(model.get("enabled", False)),
-                "provider": str(model.get("provider", "none") or "none"),
-                "model": str(model.get("model", "") or ""),
-            })
+            # Backward compatibility with the first flat text-provider format.
+            if any(key in model for key in ("enabled", "provider", "model")):
+                result["model"]["text"].update({
+                    "enabled": bool(model.get("enabled", False)),
+                    "provider": str(model.get("provider", "none") or "none"),
+                    "model": str(model.get("model", "") or ""),
+                })
+            for kind in ("text", "vision"):
+                value = model.get(kind, {})
+                if isinstance(value, dict):
+                    result["model"][kind].update(value)
         return result
 
     def save(
@@ -102,7 +111,12 @@ class AutomationStore:
         payload["groups"] = groups
         payload["summary"] = summarize(groups)
         if isinstance(model, dict):
-            payload["model"].update(model)
+            if any(key in model for key in ("enabled", "provider", "model")):
+                payload["model"]["text"].update(model)
+            for kind in ("text", "vision"):
+                value = model.get(kind, {})
+                if isinstance(value, dict):
+                    payload["model"][kind].update(value)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             fd, temporary = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=self.path.parent)
