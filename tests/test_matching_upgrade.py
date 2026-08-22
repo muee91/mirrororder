@@ -1,0 +1,147 @@
+from __future__ import annotations
+
+import sys
+from fractions import Fraction
+from types import SimpleNamespace
+
+from script_organizer.alignment import align_block
+from script_organizer.config import ProjectConfig
+from script_organizer.matcher import build_script_window_index, match_group
+from script_organizer.models import Candidate, GroupMember, MulticamGroup, ScriptSegment, Transcript, TranscriptSegment
+
+
+def _config(tmp_path):
+    return ProjectConfig(
+        tmp_path / "project.toml",
+        "test",
+        tmp_path / "input.fcpxml",
+        tmp_path / "script.docx",
+        tmp_path / "out",
+        tmp_path / "cache",
+    )
+
+
+def _group(group_id: str, clip_id: str = "b1", camera: str = "B") -> MulticamGroup:
+    member = GroupMember(
+        clip_id,
+        camera,
+        f"{camera}001",
+        "",
+        Fraction(0),
+        Fraction(30),
+        Fraction(30),
+        True,
+    )
+    return MulticamGroup(group_id, 0, 30, (member,), (camera,), "single-camera")
+
+
+def _candidate(group_id: str, ids: tuple[str, ...], score: float = 0.9) -> Candidate:
+    return Candidate(
+        group_id=group_id,
+        script_segment_id=ids[-1],
+        total_score=score,
+        dialogue_score=score,
+        sequence_score=score,
+        context_score=0.0,
+        margin=0.2,
+        method="dialogue_window",
+        confidence="exact_dialogue",
+        script_segment_ids=ids,
+    )
+
+
+def test_multiline_script_window_beats_independent_short_lines(tmp_path):
+    script = [
+        ScriptSegment("s1", 19, "19-03", 1, "dialogue", "李梦", "王总，你怎么来了？", ""),
+        ScriptSegment("s2", 19, "19-03", 2, "dialogue", "王总", "听说这里的牛肉三百八一斤？", ""),
+        ScriptSegment("s3", 21, "21-01", 1, "dialogue", "路人", "王总你怎么来了？", ""),
+    ]
+    transcript = Transcript(
+        "b1",
+        "B001",
+        "f",
+        "王总你咋来了我听说这里牛肉卖三百八",
+        (TranscriptSegment(2.0, 7.0, "王总你咋来了我听说这里牛肉卖三百八"),),
+    )
+    config = _config(tmp_path)
+    result = match_group(
+        _group("g1"),
+        {"b1": transcript},
+        script,
+        config,
+        build_script_window_index(script),
+    )
+    assert result
+    assert any(candidate.script_segment_ids == ("s1", "s2") for candidate in result)
+    multiline = next(candidate for candidate in result if candidate.script_segment_ids == ("s1", "s2"))
+    assert multiline.method == "dialogue_window"
+    assert multiline.confidence in {"exact_dialogue", "possible_dialogue"}
+
+
+def test_range_alignment_advances_from_range_end_not_range_start():
+    script = [
+        ScriptSegment(f"s{index}", 1, "1-1", index, "dialogue", "", f"台词{index}", "")
+        for index in range(1, 9)
+    ]
+    groups = [_group("g1"), _group("g2", "b2"), _group("g3", "b3")]
+    candidates = {
+        "g1": [_candidate("g1", ("s1", "s2", "s3", "s4"), 0.92)],
+        "g2": [
+            _candidate("g2", ("s2",), 0.91),
+            _candidate("g2", ("s5", "s6"), 0.88),
+        ],
+        "g3": [_candidate("g3", ("s7", "s8"), 0.90)],
+    }
+    selected = align_block(groups, candidates, script)
+    assert selected["g1"].script_segment_ids == ("s1", "s2", "s3", "s4")
+    assert selected["g2"].script_segment_ids == ("s5", "s6")
+    assert selected["g3"].script_segment_ids == ("s7", "s8")
+
+
+def test_range_alignment_allows_repeated_take_for_same_range():
+    script = [
+        ScriptSegment(f"s{index}", 1, "1-1", index, "dialogue", "", f"台词{index}", "")
+        for index in range(1, 6)
+    ]
+    groups = [_group("g1"), _group("g2", "b2"), _group("g3", "b3")]
+    span = ("s2", "s3", "s4")
+    selected = align_block(
+        groups,
+        {
+            "g1": [_candidate("g1", span, 0.93)],
+            "g2": [_candidate("g2", span, 0.91)],
+            "g3": [_candidate("g3", span, 0.90)],
+        },
+        script,
+    )
+    assert all(selected[group.group_id].script_segment_ids == span for group in groups)
+
+
+def test_known_text_alignment_reuses_loaded_model(monkeypatch, tmp_path):
+    from script_organizer import known_text_alignment
+
+    calls = {"loads": 0, "aligns": 0}
+
+    class FakeModel:
+        def align(self, _path, _text, language="zh"):
+            assert language == "zh"
+            calls["aligns"] += 1
+            return SimpleNamespace(
+                segments=[SimpleNamespace(start=1.0, end=2.0, text="你好")]
+            )
+
+    def load_model(_name):
+        calls["loads"] += 1
+        return FakeModel()
+
+    monkeypatch.setitem(sys.modules, "stable_whisper", SimpleNamespace(load_model=load_model))
+    known_text_alignment._load_model.cache_clear()
+    audio = tmp_path / "audio.wav"
+    audio.write_bytes(b"fake")
+
+    first = known_text_alignment.align_known_text(audio, "你好", "base")
+    second = known_text_alignment.align_known_text(audio, "再见", "base")
+
+    assert first["status"] == "success"
+    assert second["status"] == "success"
+    assert calls == {"loads": 1, "aligns": 2}

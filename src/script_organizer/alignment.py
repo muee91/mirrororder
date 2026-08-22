@@ -5,6 +5,9 @@ from dataclasses import replace
 from .models import Candidate, MulticamGroup, ScriptSegment
 
 
+ScriptSpan = tuple[int, int]
+
+
 def split_shooting_blocks(groups: list[MulticamGroup], gap_minutes: float = 20.0) -> list[list[MulticamGroup]]:
     ordered = sorted(groups, key=lambda group: (group.start, group.group_id))
     blocks: list[list[MulticamGroup]] = []
@@ -17,23 +20,58 @@ def split_shooting_blocks(groups: list[MulticamGroup], gap_minutes: float = 20.0
     return blocks
 
 
-def _candidate_position(candidate: Candidate, positions: dict[str, int]) -> int | None:
+def _candidate_span(candidate: Candidate, positions: dict[str, int]) -> ScriptSpan | None:
     ids = candidate.script_segment_ids or ((candidate.script_segment_id,) if candidate.script_segment_id else ())
-    values = [positions[segment_id] for segment_id in ids if segment_id in positions]
-    return min(values) if values else None
+    values = sorted(positions[segment_id] for segment_id in ids if segment_id in positions)
+    if not values:
+        return None
+    return values[0], values[-1]
 
 
-def _transition(last_position: int, position: int | None) -> tuple[float, float]:
-    if position is None:
+def _span_overlap(left: ScriptSpan, right: ScriptSpan) -> float:
+    start = max(left[0], right[0])
+    end = min(left[1], right[1])
+    if end < start:
+        return 0.0
+    overlap = end - start + 1
+    shortest = min(left[1] - left[0] + 1, right[1] - right[0] + 1)
+    return overlap / max(1, shortest)
+
+
+def _transition(last_span: ScriptSpan | None, span: ScriptSpan | None) -> tuple[float, float]:
+    """Score a transition between script ranges.
+
+    Repeated or strongly overlapping ranges are normal in short-drama takes,
+    small forward gaps are cheap, and backwards jumps remain possible but are
+    deliberately expensive.  A gap candidate leaves the previous script span
+    unchanged and receives a small penalty.
+    """
+    if span is None:
         return -0.12, 0.0
-    if last_position < 0:
+    if last_span is None:
         return 0.0, 0.65
-    delta = position - last_position
-    if delta == 0:
-        return -0.035, 0.72
-    if delta > 0:
-        return -min(0.20, max(0, delta - 1) * 0.012), max(0.72, 1.0 - min(0.28, (delta - 1) * 0.02))
-    return -0.42 * abs(delta), 0.20
+
+    overlap = _span_overlap(last_span, span)
+    if overlap > 0:
+        # Same-line and same-range retakes should remain attractive.  Partial
+        # overlap gets a slightly lower consistency but is still preferable to
+        # treating a long Take as a backwards jump merely because its start is
+        # before the previous range end.
+        penalty = -0.035 - (1.0 - overlap) * 0.035
+        consistency = min(0.98, 0.76 + overlap * 0.20)
+        return penalty, consistency
+
+    if span[0] > last_span[1]:
+        skipped = span[0] - last_span[1] - 1
+        penalty = -min(0.38, max(0, skipped) * 0.018)
+        consistency = max(0.62, 1.0 - min(0.38, skipped * 0.025))
+        return penalty, consistency
+
+    # Disjoint backwards movement.  This is legal because crews do pickups and
+    # jump around the script, but it must not beat a coherent forward path on
+    # weak text evidence.
+    backwards = max(1, last_span[0] - span[1])
+    return -min(1.8, 0.34 + 0.22 * backwards), 0.20
 
 
 def align_block(
@@ -41,20 +79,26 @@ def align_block(
     candidates_by_group: dict[str, list[Candidate]],
     script_segments: list[ScriptSegment],
 ) -> dict[str, Candidate | None]:
-    """Monotonic many-to-one DP: repeats are allowed, gaps are allowed."""
+    """Range-aware monotonic many-to-one DP.
+
+    Multiple Takes may map to the same script range, a Take may cover several
+    consecutive script segments, and unmatched Takes are represented by gaps.
+    State is the last selected script span rather than a single start position,
+    so a candidate covering S14-S19 naturally advances the next Take from S19.
+    """
     positions = {segment.segment_id: index for index, segment in enumerate(script_segments)}
-    # state: last script position -> (score, selected candidates by group)
-    states: dict[int, tuple[float, dict[str, Candidate | None]]] = {-1: (0.0, {})}
+    # state: last script span -> (score, selected candidates by group)
+    states: dict[ScriptSpan | None, tuple[float, dict[str, Candidate | None]]] = {None: (0.0, {})}
     for group in groups:
-        next_states: dict[int, tuple[float, dict[str, Candidate | None]]] = {}
+        next_states: dict[ScriptSpan | None, tuple[float, dict[str, Candidate | None]]] = {}
         options = list(candidates_by_group.get(group.group_id, [])) + [None]
-        for last_position, (score, path) in states.items():
+        for last_span, (score, path) in states.items():
             for candidate in options:
-                position = _candidate_position(candidate, positions) if candidate else None
-                transition_score, consistency = _transition(last_position, position)
+                span = _candidate_span(candidate, positions) if candidate else None
+                transition_score, consistency = _transition(last_span, span)
                 base = candidate.total_score if candidate else 0.0
                 option_score = score + base + transition_score
-                state_position = last_position if position is None else position
+                state_span = last_span if span is None else span
                 selected = dict(path)
                 if candidate is None:
                     selected[group.group_id] = None
@@ -65,11 +109,13 @@ def align_block(
                     if confidence == "exact_dialogue" and (candidate.margin < 0.08 or sequence_score < 0.70):
                         confidence = "possible_dialogue"
                     evidence = list(candidate.evidence)
-                    evidence.append(
-                        "拍摄块内按剧本顺序对齐"
-                        if position is not None
-                        else "未进入顺序对齐的剧本位置"
-                    )
+                    if span is not None:
+                        if span[0] == span[1]:
+                            evidence.append("拍摄块内按剧本顺序对齐")
+                        else:
+                            evidence.append("拍摄块内按剧本连续范围对齐")
+                    else:
+                        evidence.append("未进入顺序对齐的剧本位置")
                     selected[group.group_id] = replace(
                         candidate,
                         total_score=total_score,
@@ -77,10 +123,10 @@ def align_block(
                         confidence=confidence,
                         evidence=tuple(dict.fromkeys(evidence)),
                     )
-                previous = next_states.get(state_position)
+                previous = next_states.get(state_span)
                 if previous is None or option_score > previous[0]:
-                    next_states[state_position] = (option_score, selected)
-        # Keep the state space bounded while retaining the best positions.
+                    next_states[state_span] = (option_score, selected)
+        # Keep the state space bounded while retaining the best ranges.
         states = dict(sorted(next_states.items(), key=lambda item: item[1][0], reverse=True)[:160])
     if not states:
         return {group.group_id: None for group in groups}
@@ -101,11 +147,9 @@ def align_blocks(
             {"block": index, "start": float(block[0].start), "end": float(block[-1].end), "groups": len(block)}
         )
         for group in block:
-            # An explicit compatibility override is a human decision.  The
-            # monotonic DP may prefer an automatic candidate from a repeated
-            # take (especially when the next group jumps back in script
-            # order), so never let sequence alignment silently replace the
-            # override. This also preserves cross-episode manual ranges.
+            # An explicit compatibility override is a human decision. The
+            # sequence DP may prefer an automatic repeated-take candidate, so
+            # never let alignment silently replace the override.
             manual = next(
                 (
                     candidate
@@ -119,7 +163,12 @@ def align_blocks(
                 metadata["gaps"] += 1
                 continue
             current = result.get(group.group_id, [])
-            rest = [candidate for candidate in current if candidate.script_segment_id != chosen.script_segment_id]
+            chosen_ids = chosen.script_segment_ids or ((chosen.script_segment_id,) if chosen.script_segment_id else ())
+            rest = [
+                candidate
+                for candidate in current
+                if (candidate.script_segment_ids or ((candidate.script_segment_id,) if candidate.script_segment_id else ())) != chosen_ids
+            ]
             result[group.group_id] = [chosen] + rest
             metadata["aligned_groups"] += 1
     return result, metadata

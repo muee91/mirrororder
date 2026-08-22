@@ -1,17 +1,31 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 
+@lru_cache(maxsize=2)
+def _load_model(model_name: str):
+    import stable_whisper  # type: ignore
+
+    return stable_whisper.load_model(model_name)
+
+
 def align_known_text(audio_path: str | Path, text: str, model_name: str = "base") -> dict[str, Any]:
-    """Optional second-stage stable-ts alignment; first-stage results survive failure."""
+    """Optional second-stage stable-ts alignment; first-stage results survive failure.
+
+    The stable-ts model is process-cached because one analysis can align many
+    candidates.  Import/model failures are reported as data and never erase the
+    first-stage ASR/script match.
+    """
     try:
-        import stable_whisper  # type: ignore
+        model = _load_model(model_name)
     except ImportError:
         return {"method": "stable-ts", "status": "unavailable", "error": "stable-ts 未安装"}
+    except Exception as error:
+        return {"method": "stable-ts", "status": "failed", "error": str(error)}
     try:
-        model = stable_whisper.load_model(model_name)
         result = model.align(str(audio_path), text, language="zh")
         segments = []
         for segment in getattr(result, "segments", []) or []:
