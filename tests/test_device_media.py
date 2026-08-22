@@ -93,4 +93,6 @@ def test_new_transcript_cache_uses_media_id_not_absolute_path(tmp_path: Path) ->
 
     assert transcript_fingerprint(clip) == media_id
     assert target.name == f"{media_id}.json"
-    assert store.load(clip)?.text == "测试对白"
+    loaded = store.load(clip)
+    assert loaded is not None
+    assert loaded.text == "测试对白"
