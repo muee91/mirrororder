@@ -7,7 +7,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any, Callable
@@ -215,55 +214,6 @@ def _write_config(script_dir: Path, base: Path, work: Path, output: Path, projec
     (script_dir / "config.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _toml_string(value: Path) -> str:
-    return str(value).replace("\\", "\\\\").replace('"', '\\"')
-
-
-def _promote_config(config_path: Path, fcpxml: Path) -> None:
-    text = config_path.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    result = []
-    in_input = False
-    seen_kind = False
-    seen_fcpxml = False
-    inserted = False
-    quoted = _toml_string(fcpxml)
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            if in_input and not inserted:
-                if not seen_kind:
-                    result.append('kind = "fcpxml"')
-                if not seen_fcpxml:
-                    result.append(f'fcpxml = "{quoted}"')
-                inserted = True
-            in_input = stripped == "[input]"
-        if in_input and stripped.startswith("kind") and "=" in stripped:
-            result.append('kind = "fcpxml"')
-            seen_kind = True
-            continue
-        if in_input and stripped.startswith("fcpxml") and "=" in stripped:
-            result.append(f'fcpxml = "{quoted}"')
-            seen_fcpxml = True
-            continue
-        result.append(line)
-    if in_input and not inserted:
-        if not seen_kind:
-            result.append('kind = "fcpxml"')
-        if not seen_fcpxml:
-            result.append(f'fcpxml = "{quoted}"')
-    fd, temporary = tempfile.mkstemp(prefix=config_path.name + ".", suffix=".tmp", dir=config_path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write("\n".join(result) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, config_path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
-
-
 def run_multicam_sync(
     config: ProjectConfig,
     log: Callable[[str], None] | None = None,
@@ -333,7 +283,8 @@ def run_multicam_sync(
         except Exception as error:
             emit(f"Premiere XML 可选生成失败：{error}")
 
-    _promote_config(config.config_path, fcpxml)
+    # synchronized.fcpxml is a generated artifact. The original project.toml
+    # remains media-directory so re-sync/revision history never loses its source.
     report = {
         "status": "completed",
         "engine_source": engine_source,
@@ -344,7 +295,8 @@ def run_multicam_sync(
         "positions": [str(path) for path in positions],
         "fcpxml": str(fcpxml),
         "premiere_xml": premiere,
-        "project_promoted_to_fcpxml": True,
+        "source_kind": "media-directory",
+        "project_promoted_to_fcpxml": False,
     }
     (delivery / "sync_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
