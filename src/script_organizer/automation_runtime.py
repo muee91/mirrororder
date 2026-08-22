@@ -43,6 +43,18 @@ def install_automation_runtime() -> None:
 
     def workspace_project(service: Any, project_id: str) -> Any:
         project = original_workspace_project(service, project_id)
+        # multicam_sync promotes a media-directory project.toml to its generated
+        # FCPXML. WorkspaceService historically cached only by config path, so
+        # explicitly refresh when those effective inputs change.
+        fresh = service.registry.project_config(project_id)
+        if (
+            fresh.input_kind != project.config.input_kind
+            or fresh.fcpxml != project.config.fcpxml
+            or fresh.media_root != project.config.media_root
+            or fresh.script != project.config.script
+        ):
+            service._projects.pop(project_id, None)
+            project = original_workspace_project(service, project_id)
         _apply(project)
         return project
 
