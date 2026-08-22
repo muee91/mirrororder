@@ -22,6 +22,28 @@ def _decorate_member(store: DeviceMediaStore, project_id: str, item: dict[str, A
     item["exists"] = bool(resolved)
 
 
+def _apply_project(store: DeviceMediaStore, project: Any) -> None:
+    for clip in project.index.get("clips", []):
+        if isinstance(clip, dict):
+            _decorate_member(store, project.project_id, clip)
+    for group in project.index.get("groups", []):
+        if not isinstance(group, dict):
+            continue
+        for member in group.get("members", []):
+            if isinstance(member, dict):
+                _decorate_member(store, project.project_id, member)
+    project.clips = {
+        item.get("clip_id"): item
+        for item in project.index.get("clips", [])
+        if isinstance(item, dict)
+    }
+    project.groups = {
+        item.get("group_id"): item
+        for item in project.index.get("groups", [])
+        if isinstance(item, dict)
+    }
+
+
 def install_device_media_runtime() -> None:
     """Patch ProjectService at process startup without changing shared project files."""
     global _INSTALLED
@@ -35,30 +57,14 @@ def install_device_media_runtime() -> None:
 
     def reload_with_local_media(project: Any) -> None:
         original_reload(project)
-        for clip in project.index.get("clips", []):
-            if isinstance(clip, dict):
-                _decorate_member(store, project.project_id, clip)
-        for group in project.index.get("groups", []):
-            if not isinstance(group, dict):
-                continue
-            for member in group.get("members", []):
-                if isinstance(member, dict):
-                    _decorate_member(store, project.project_id, member)
-        # Rebuild lookups after decoration so the unchanged HTTP media endpoint
-        # transparently serves local copies.
-        project.clips = {
-            item.get("clip_id"): item
-            for item in project.index.get("clips", [])
-            if isinstance(item, dict)
-        }
-        project.groups = {
-            item.get("group_id"): item
-            for item in project.index.get("groups", [])
-            if isinstance(item, dict)
-        }
+        _apply_project(store, project)
 
     def payload_with_local_media(project: Any) -> dict[str, Any]:
         payload = original_payload(project)
+        # media-bindings.json is device-local and can change without any shared
+        # project file changing. Refresh runtime paths whenever project metadata
+        # is requested so a new scan takes effect immediately.
+        _apply_project(store, project)
         summary = store.summary(project.project_id, project.index)
         payload["local_media"] = {
             key: summary[key]
