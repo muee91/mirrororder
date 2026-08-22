@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import tempfile
+from fractions import Fraction
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock, Thread
@@ -11,9 +12,9 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from .config import ProjectConfig
-from .fcpxml_reader import read_fcpxml
 from .material_index import analyze
-from .media_reader import read_media_directory
+from .media_identity import DeviceMediaStore
+from .models import Clip
 from .transcript import TranscriptStore, transcribe_with_faster_whisper
 
 
@@ -43,6 +44,29 @@ def _write_json(path: Path, payload: object) -> None:
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def _clip_from_index(item: dict[str, Any], media_path: str) -> Clip:
+    duration = Fraction(str(item.get("duration", 0) or 0))
+    timeline_start = Fraction(str(item.get("timeline_start", 0) or 0))
+    timeline_end = Fraction(str(item.get("timeline_end", float(timeline_start + duration)) or float(timeline_start + duration)))
+    source_start = Fraction(str(item.get("source_start", 0) or 0))
+    source_end_raw = item.get("source_end")
+    source_end = Fraction(str(source_end_raw)) if source_end_raw is not None else source_start + duration
+    return Clip(
+        clip_id=str(item.get("clip_id", "") or ""),
+        name=str(item.get("name", "") or Path(media_path).stem),
+        camera=str(item.get("camera", "?") or "?"),
+        media_path=media_path,
+        timeline_start=timeline_start,
+        timeline_end=timeline_end,
+        duration=duration,
+        exists=bool(media_path and Path(media_path).is_file()),
+        source_asset_id=str(item.get("source_asset_id", "") or ""),
+        source_start=source_start,
+        source_end=source_end,
+        media_id=str(item.get("media_id", "") or ""),
+    )
 
 
 class TaskManager:
@@ -157,14 +181,36 @@ class TaskManager:
         clip_ids = task.get("targets", {}).get("clip_ids", [])
         if not isinstance(clip_ids, list) or not clip_ids:
             raise ValueError("transcribe 需要非空 clip_ids")
-        if len(clip_ids) > 12:
+        requested = {str(value) for value in clip_ids if str(value)}
+        if len(requested) > 12:
             raise ValueError("一次最多转写12条素材")
-        clips = read_fcpxml(config.fcpxml) if config.is_fcpxml and config.fcpxml else read_media_directory(
-            config.media_root or "", config.camera_patterns, config.media_timeline_mode
-        )
-        selected = [clip for clip in clips if clip.clip_id in set(str(value) for value in clip_ids)]
-        if len(selected) != len(set(str(value) for value in clip_ids)):
+
+        index = _read_json(config.output_dir / "material_index.json", {})
+        if not isinstance(index, dict):
+            raise ValueError("项目尚未生成素材索引")
+        by_id = {
+            str(item.get("clip_id")): item
+            for item in index.get("clips", [])
+            if isinstance(item, dict) and item.get("clip_id")
+        }
+        unknown = requested - set(by_id)
+        if unknown:
             raise ValueError("存在未知 clip_id")
+
+        device_store = DeviceMediaStore()
+        snapshot = device_store.project_snapshot(str(task.get("project_id", "")))
+        selected: list[Clip] = []
+        missing_local: list[str] = []
+        for clip_id in requested:
+            item = by_id[clip_id]
+            media_path = device_store.resolve_from_snapshot(snapshot, item)
+            if not media_path:
+                missing_local.append(clip_id)
+                continue
+            selected.append(_clip_from_index(item, media_path))
+        if missing_local:
+            raise ValueError("当前设备未定位素材：" + ", ".join(sorted(missing_local)))
+
         from faster_whisper import WhisperModel  # type: ignore
 
         model = WhisperModel(config.asr_model, device=config.asr_device, compute_type="auto")
@@ -175,9 +221,9 @@ class TaskManager:
             if current.get("cancel_requested"):
                 return {"transcribed": completed, "cancelled": True}
             transcript = transcribe_with_faster_whisper(clip, store, model, config.asr_language)
-            completed.append({"clip_id": clip.clip_id, "has_text": bool(transcript.text.strip())})
+            completed.append({"clip_id": clip.clip_id, "media_id": clip.media_id, "has_text": bool(transcript.text.strip())})
             self._update(config, task["task_id"], message=f"已转写 {len(completed)}/{len(selected)} 条素材")
-        return {"transcribed": completed, "cancelled": False}
+        return {"transcribed": completed, "cancelled": False, "device_local_media": True}
 
     @staticmethod
     def _affected_group_ids(config: ProjectConfig, targets: dict[str, Any]) -> list[str]:
