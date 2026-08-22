@@ -33,6 +33,8 @@ class ProjectConfig:
     asr_device: str = "auto"
     asr_camera_priority: tuple[str, ...] = ("A", "B", "C")
     asr_ensure_preferred_camera: bool = False
+    asr_escalate_ambiguous: bool = False
+    asr_max_extra_cameras: int = 1
     minimum_overlap_seconds: float = 0.5
     split_bridge_ratio: float = 1.8
     shooting_block_gap_minutes: float = 20.0
@@ -88,6 +90,8 @@ class ProjectConfig:
             asr_device=str(asr.get("device", "auto")),
             asr_camera_priority=tuple(str(value) for value in asr.get("camera_priority", ["A", "B", "C"])),
             asr_ensure_preferred_camera=bool(asr.get("ensure_preferred_camera", False)),
+            asr_escalate_ambiguous=bool(asr.get("escalate_ambiguous", False)),
+            asr_max_extra_cameras=max(0, int(asr.get("max_extra_cameras", 1))),
             minimum_overlap_seconds=float(multicam.get("minimum_overlap_seconds", 0.5)),
             split_bridge_ratio=float(multicam.get("split_bridge_ratio", 1.8)),
             shooting_block_gap_minutes=float(multicam.get("shooting_block_gap_minutes", 20.0)),
