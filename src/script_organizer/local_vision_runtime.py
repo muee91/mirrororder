@@ -25,7 +25,6 @@ def _application_support_root() -> Path:
 
 
 def _runtime_root() -> Path:
-    # In the packaged app this module lives at runtime/src/script_organizer/.
     return Path(__file__).resolve().parents[2]
 
 
@@ -70,10 +69,9 @@ class LocalVisionRuntimeConfig:
 class LocalVisionRuntime:
     """Own a localhost-only llama-server used for optional visual rescue.
 
-    No model is downloaded at build/Codex time. When local vision is explicitly
-    enabled and first needed, llama-server receives `-hf <repo:quant>` and its
-    cache is redirected into MirrorOrder Application Support. This keeps model
-    files device-local and outside the shared project/workspace.
+    Model weights are runtime-only device state. `prepare_async()` is used by
+    the App settings UI to trigger first download/loading without blocking the
+    Host HTTP request. A later visual rescue reuses the same process/cache.
     """
 
     _lock = threading.RLock()
@@ -82,6 +80,9 @@ class LocalVisionRuntime:
     _model = ""
     _log_handle: Any = None
     _registered_exit = False
+    _preparing = False
+    _prepare_thread: threading.Thread | None = None
+    _last_error = ""
 
     def __init__(self, config: LocalVisionRuntimeConfig | None = None):
         self.config = config or LocalVisionRuntimeConfig.from_env()
@@ -112,6 +113,19 @@ class LocalVisionRuntime:
         except (OSError, urllib.error.URLError, urllib.error.HTTPError, ValueError):
             return False
 
+    def cache_bytes(self) -> int:
+        total = 0
+        try:
+            for path in self.cache_dir.rglob("*"):
+                if path.is_file():
+                    try:
+                        total += path.stat().st_size
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+        return total
+
     def ensure_server(self) -> str:
         cls = self.__class__
         with cls._lock:
@@ -121,13 +135,18 @@ class LocalVisionRuntime:
                 and cls._model == self.config.model
                 and self._healthy(cls._base_url)
             ):
+                cls._preparing = False
                 return cls._base_url
-
+            cls._preparing = True
+            cls._last_error = ""
             if cls._process is not None:
                 cls.stop()
+                cls._preparing = True
 
             executable = _find_llama_server()
             if executable is None:
+                cls._preparing = False
+                cls._last_error = "llama-server 不可用；请使用包含本地视觉运行时的镜序 App"
                 return ""
 
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -138,9 +157,6 @@ class LocalVisionRuntime:
             environment["LLAMA_CACHE"] = str(self.cache_dir)
             environment.setdefault("LLAMA_ARG_HOST", "127.0.0.1")
             environment.setdefault("LLAMA_ARG_PORT", str(port))
-
-            # Current llama.cpp resolves the quant tag from -hf and also fetches
-            # mmproj when the repository provides one. Do not use shell=True.
             command = [
                 str(executable),
                 "-hf", self.config.model,
@@ -157,13 +173,15 @@ class LocalVisionRuntime:
                     env=environment,
                     start_new_session=True,
                 )
-            except OSError:
+            except OSError as error:
                 try:
                     cls._log_handle.close()
                 except Exception:
                     pass
                 cls._log_handle = None
                 cls._process = None
+                cls._preparing = False
+                cls._last_error = str(error)
                 return ""
             cls._base_url = base_url
             cls._model = self.config.model
@@ -174,21 +192,49 @@ class LocalVisionRuntime:
                 process = cls._process
                 current_url = cls._base_url
             if process is None or process.poll() is not None:
-                cls.stop()
+                with cls._lock:
+                    cls._last_error = "llama-server 在模型准备完成前退出"
+                    cls._preparing = False
+                cls.stop(preserve_error=True)
                 return ""
             if self._healthy(current_url, timeout=1.0):
+                with cls._lock:
+                    cls._preparing = False
                 return current_url
             time.sleep(0.5)
-        cls.stop()
+        with cls._lock:
+            cls._last_error = "本地视觉模型准备超时"
+            cls._preparing = False
+        cls.stop(preserve_error=True)
         return ""
 
+    def prepare_async(self) -> bool:
+        cls = self.__class__
+        with cls._lock:
+            if _find_llama_server() is None:
+                cls._last_error = "llama-server 不可用；请使用包含本地视觉运行时的镜序 App"
+                return False
+            if cls._preparing:
+                return True
+            if cls._process is not None and cls._process.poll() is None and self._healthy(cls._base_url):
+                return True
+            cls._preparing = True
+            cls._last_error = ""
+            thread = threading.Thread(target=self.ensure_server, name="mirrororder-local-vision", daemon=True)
+            cls._prepare_thread = thread
+            thread.start()
+            return True
+
     @classmethod
-    def stop(cls) -> None:
+    def stop(cls, preserve_error: bool = False) -> None:
         with cls._lock:
             process = cls._process
             cls._process = None
             cls._base_url = ""
             cls._model = ""
+            cls._preparing = False
+            if not preserve_error:
+                cls._last_error = ""
             if process is not None and process.poll() is None:
                 try:
                     process.terminate()
@@ -210,10 +256,30 @@ class LocalVisionRuntime:
         executable = _find_llama_server()
         cls = self.__class__
         running = bool(cls._process is not None and cls._process.poll() is None and self._healthy(cls._base_url))
+        cached_bytes = self.cache_bytes()
+        with cls._lock:
+            preparing = bool(cls._preparing)
+            last_error = cls._last_error
+        if executable is None:
+            status = "unavailable"
+        elif preparing:
+            status = "preparing"
+        elif running:
+            status = "running"
+        elif last_error:
+            status = "error"
+        elif cached_bytes > 0:
+            status = "cached"
+        else:
+            status = "not_prepared"
         return {
             "available": executable is not None,
             "running": running,
+            "preparing": preparing,
+            "status": status,
             "model": self.config.model,
             "cache_dir": str(self.cache_dir),
+            "cache_bytes": cached_bytes,
+            "last_error": last_error,
             "download_policy": "first_use_when_local_vision_enabled",
         }
