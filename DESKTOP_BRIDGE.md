@@ -2,15 +2,20 @@
 
 这份文档定义 macOS App 与浏览器工作台之间的剪辑桥接边界，供后续 Codex / 人工开发检查。
 
-## 1. 源素材直接拖到剪辑软件
+多设备素材解析规则另见 `SYNC_MODEL.md`。
+
+## 1. 当前设备素材直接拖到剪辑软件
 
 只在 `镜序.app` 内启用；普通浏览器不伪造本机文件拖拽。
 
 链路：
 
 ```text
-素材 A/B/C 卡片 pointerdown
-→ web/timeline_v3.js 通过 WKScriptMessageHandler 发送真实 media_path
+共享项目 clip / media_id
+→ 当前设备 media resolver
+→ 当前设备真实文件路径
+→ 素材 A/B/C 卡片 pointerdown
+→ web/timeline_v3.js 通过 WKScriptMessageHandler 发送 resolved media_path
 → EditorDragWebView 准备 file:// URL
 → 用户真正拖动鼠标
 → AppKit NSDraggingSession + NSDraggingItem
@@ -20,13 +25,22 @@
 
 约束：
 
-- 拖出去的是原始源文件，不是镜序内部的逻辑 Take。
-- 如果一个逻辑 Take 只使用源文件的一段，普通文件拖拽仍然得到完整源文件。这与 Finder 拖文件语义一致。
+- 拖出去的是**当前设备对同一 `media_id` 绑定出来的真实素材副本**，不是项目创建电脑的绝对路径。
+- 如果当前设备刚好仍能访问项目来源路径，也可以直接使用该文件；但绝对路径不是共享身份。
+- 如果一个逻辑 Take 只使用源文件的一段，普通文件拖拽仍然得到完整媒体文件。这与 Finder 拖文件语义一致。
 - 不生成代理文件，不复制媒体，不修改原始素材。
-- 文件不存在时不开始拖拽。
-- A/B/C 素材卡只要对应真实存在的媒体文件即可直接拖出。
-- XML 时间线上的 `asset-clip` / `video` / `audio` 只有在能明确落到单个真实媒体文件时才允许直接拖出。
-- `ref-clip` / `mc-clip` / multicam resource 可以用底层媒体路径帮助关联当前项目 Take，但不得随便挑第一个角度作为拖拽文件。
+- 当前设备没有解析到真实文件时不开始拖拽。
+- A/B/C 素材卡只要在当前设备有真实媒体绑定即可直接拖出。
+- XML 时间线上的 `asset-clip` / `video` / `audio` 只有在能明确落到单个当前设备真实媒体文件时才允许直接拖出。
+- `ref-clip` / `mc-clip` / multicam resource 可以用底层媒体帮助关联当前项目 Take，但不得随便挑第一个角度作为拖拽文件。
+
+设备绑定默认保存：
+
+```text
+~/Library/Application Support/MirrorOrder/media-bindings.json
+```
+
+这个文件不得写进共享 workspace。
 
 ## 2. XML 时间线预览
 
@@ -52,13 +66,14 @@ XML 时间线是只读预览，不修改原始 FCPXML，不改变项目分析结
 
 ## 3. 时间线 ↔ 素材双向关联
 
-关联证据优先级：
+项目内部关联证据优先级：
 
 ```text
-真实 media_path
+media_id / 项目 clip_id
+→ 真实 media_path
 → source_start 最接近的 occurrence
 → duration 轻量辅助
-→ 文件/clip 名称 fallback
+→ 文件/clip 名称 fallback（仅兼容旧项目）
 ```
 
 时间线 → 素材：
@@ -69,7 +84,7 @@ XML 时间线是只读预览，不修改原始 FCPXML，不改变项目分析结
 - 如果这个 Take 有人工 `placement.script_segment_ids`，人工剧本范围优先于自动 candidate。
 - 如果只人工指定了集数，则进入该集的待归集视图，不冒充具体台词确认。
 - 没有人工范围时才使用自动剧本 candidate。
-- 自动选中机位素材并加载播放器。
+- 自动选中机位素材并加载播放器；播放器的 HTTP media endpoint 由当前设备 resolver 读取本机文件。
 
 素材 → 时间线：
 
@@ -82,14 +97,20 @@ XML 时间线是只读预览，不修改原始 FCPXML，不改变项目分析结
 ## 4. 文件位置
 
 ```text
-macos-app/MirrorOrderDesktopApp.swift  # 当前原生App：工作台壳 + 原生文件拖拽
-macos-app/build_app.sh                 # 当前实际构建入口
-web/timeline.js                        # 轻量loader，只加载timeline_v3.js
-web/timeline_v3.js                     # FCPXML预览 / 双向关联 / native drag JS bridge
-web/timeline.css                       # 时间线UI
-web/ux_fixes.js                        # 从现有审核工作台装载timeline extension
-tests/test_desktop_bridge.py           # 桥接层静态回归约束
+macos-app/MirrorOrderDesktopApp.swift       # 当前原生App：工作台壳 + 本机素材扫描 + 原生文件拖拽
+macos-app/build_app.sh                      # 当前实际构建入口
+src/script_organizer/media_identity.py      # media_id + 每台设备本地绑定
+src/script_organizer/device_media_runtime.py# 服务运行时本机路径解析
+web/timeline.js                             # loader
+aweb/device_media.js                        # 本机/服务端素材覆盖状态
+web/timeline_v3.js                          # FCPXML预览 / 双向关联 / native drag JS bridge
+web/timeline.css                            # 时间线UI
+web/ux_fixes.js                             # 从现有审核工作台装载扩展
+tests/test_device_media.py                  # 多设备媒体身份与绑定回归
+tests/test_desktop_bridge.py                # 桥接层静态回归约束
 ```
+
+注：上面 `aweb/device_media.js` 表示仓库中的 `web/device_media.js`，后续整理文档时可以直接修正为标准路径；代码实际文件位于 `web/device_media.js`。
 
 旧 `macos-app/MaterialWorkspaceApp.swift` 与 `macos-app/MirrorOrderApp.swift` 不是当前构建入口，只保留做历史参考。
 
@@ -97,25 +118,38 @@ tests/test_desktop_bridge.py           # 桥接层静态回归约束
 
 ```bash
 git pull
+python3 -m pytest -q
 zsh macos-app/build_app.sh
 open "镜序.app"
 ```
 
-必须在 macOS 真机检查：
+第一台 Mac：
 
 1. App 自动进入工作台。
-2. 从 A/B/C 素材卡拖到 Finder，Finder 接收到原始文件。
-3. 从同一卡片拖到 Final Cut Pro Browser/Event，FCP 能按普通媒体文件接收。
-4. 普通点击素材卡仍只负责选中/播放，不被拖拽桥误伤。
-5. 点击 `时间线 → 当前项目`，A/B/C 时间块位置合理。
-6. 加载 FCP 导出的 1.9+ FCPXML，`media-rep` 文件能建立关联。
-7. 加载主 spine 未写 `offset` 的 XML，片段按顺序排列而不是全部叠在 0 秒。
-8. 点击时间线已关联素材能定位素材卡和播放器。
-9. 人工归集过的 Take 从时间线进入时遵守人工剧本范围，而不是旧自动匹配。
-10. 点击素材卡能反向高亮时间线。
-11. `ref-clip` / `mc-clip` 如果只知道多个底层角度，不提供任意单文件拖拽。
-12. `review.json` SHA / 内容不因时间线浏览和拖拽发生变化。
-13. 原始 FCPXML 与原始媒体不发生写入。
+2. 当前项目正常播放。
+3. 从 A/B/C 素材卡拖到 Finder，Finder 接收到真实文件。
+4. 从同一卡片拖到 Final Cut Pro Browser/Event，FCP 能按普通媒体文件接收。
+5. 普通点击素材卡仍只负责选中/播放，不被拖拽桥误伤。
+
+第二台 Mac：
+
+6. 打开相同共享项目数据。
+7. `设置 → 这台 Mac 的素材副本 → 选择素材目录并扫描`。
+8. 工作台显示本机素材覆盖率。
+9. 播放同一 clip 时读取第二台 Mac 的媒体副本。
+10. 从素材卡拖到 Finder/FCP 时得到第二台 Mac 自己磁盘上的文件。
+11. 本机扫描前后共享 `material_index.json` / `matches.json` / `review.json` 不发生路径改写。
+
+时间线：
+
+12. 点击 `时间线 → 当前项目`，A/B/C 时间块位置合理。
+13. 加载 FCP 导出的 1.9+ FCPXML，`media-rep` 文件能建立关联。
+14. 加载主 spine 未写 `offset` 的 XML，片段按顺序排列而不是全部叠在 0 秒。
+15. 点击时间线已关联素材能定位素材卡和播放器。
+16. 人工归集过的 Take 从时间线进入时遵守人工剧本范围，而不是旧自动匹配。
+17. 点击素材卡能反向高亮时间线。
+18. `ref-clip` / `mc-clip` 如果只知道多个底层角度，不提供任意单文件拖拽。
+19. 原始 FCPXML 与原始媒体不发生写入。
 
 ## 6. 后续不要误改
 
@@ -123,4 +157,5 @@ open "镜序.app"
 - 不要把逻辑 Take 自动渲染成临时媒体文件再拖出去，除非未来明确新增“导出子片段”功能。
 - 不要让自动 candidate 覆盖人工 placement。
 - 不要为 multicam/ref-clip 随意选择一个角度充当“该时间线片段的文件”。
+- 不要把 `/Volumes/...` 或本机素材根目录回写成共享项目权威数据。
 - XML 预览是只读视图；若未来做可编辑时间线，必须建立单独的 edit model，不能直接改原始 FCPXML DOM。
