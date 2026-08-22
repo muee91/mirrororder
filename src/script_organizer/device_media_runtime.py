@@ -16,8 +16,6 @@ def _decorate_member(store: DeviceMediaStore, project_id: str, item: dict[str, A
     resolved = store.resolve(project_id, lookup)
     item["resolved_media_path"] = resolved
     item["local_exists"] = bool(resolved)
-    # Runtime consumers (player, transcript evidence and native drag) should use
-    # this machine's copy. The shared source path remains available separately.
     item["media_path"] = resolved or source_path
     item["exists"] = bool(resolved)
 
@@ -45,7 +43,7 @@ def _apply_project(store: DeviceMediaStore, project: Any) -> None:
 
 
 def install_device_media_runtime() -> None:
-    """Patch ProjectService at process startup without changing shared project files."""
+    """Patch runtime paths while leaving synchronized project files untouched."""
     global _INSTALLED
     if _INSTALLED:
         return
@@ -53,17 +51,23 @@ def install_device_media_runtime() -> None:
 
     original_reload = web_server.ProjectService.reload
     original_payload = web_server.ProjectService.project_payload
+    original_workspace_project = web_server.WorkspaceService.project
     store = DeviceMediaStore()
 
     def reload_with_local_media(project: Any) -> None:
         original_reload(project)
         _apply_project(store, project)
 
+    def workspace_project_with_local_media(service: Any, project_id: str) -> Any:
+        project = original_workspace_project(service, project_id)
+        # The binding file is device-local and can change while shared analysis
+        # files remain byte-identical. Refresh on every API access so media GET,
+        # groups and project metadata all see a just-completed scan immediately.
+        _apply_project(store, project)
+        return project
+
     def payload_with_local_media(project: Any) -> dict[str, Any]:
         payload = original_payload(project)
-        # media-bindings.json is device-local and can change without any shared
-        # project file changing. Refresh runtime paths whenever project metadata
-        # is requested so a new scan takes effect immediately.
         _apply_project(store, project)
         summary = store.summary(project.project_id, project.index)
         payload["local_media"] = {
@@ -74,4 +78,5 @@ def install_device_media_runtime() -> None:
 
     web_server.ProjectService.reload = reload_with_local_media
     web_server.ProjectService.project_payload = payload_with_local_media
+    web_server.WorkspaceService.project = workspace_project_with_local_media
     _INSTALLED = True
