@@ -161,8 +161,8 @@ def _two_camera_fixture(tmp_path):
         f'''<?xml version="1.0"?><fcpxml version="1.8"><resources>
         <asset id="b" src="file://{media_b}"/><asset id="c" src="file://{media_c}"/>
         </resources><library><event><project><sequence><spine>
-        <asset-clip name="B001" ref="b" lane="1" offset="0s" duration="20s"/>
-        <asset-clip name="C001" ref="c" lane="2" offset="0s" duration="20s"/>
+        <asset-clip name="B001" ref="b" lane="2" offset="0s" duration="20s"/>
+        <asset-clip name="C001" ref="c" lane="3" offset="0s" duration="20s"/>
         </spine></sequence></project></event></library></fcpxml>''',
         encoding="utf-8",
     )
@@ -172,6 +172,7 @@ def _two_camera_fixture(tmp_path):
         encoding="utf-8",
     )
     clips = read_fcpxml(fcpxml)
+    assert {clip.name: clip.camera for clip in clips} == {"B001": "B", "C001": "C"}
     groups = build_multicam_groups(clips, 0.5, 1.8)
     return fcpxml, script, clips, groups
 
