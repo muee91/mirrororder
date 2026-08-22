@@ -118,7 +118,7 @@ def test_range_alignment_allows_repeated_take_for_same_range():
     assert all(selected[group.group_id].script_segment_ids == span for group in groups)
 
 
-def test_known_text_alignment_reuses_loaded_model(monkeypatch, tmp_path):
+def test_known_text_alignment_reuses_loaded_model_and_persistent_result(monkeypatch, tmp_path):
     from script_organizer import known_text_alignment
 
     calls = {"loads": 0, "aligns": 0}
@@ -127,24 +127,25 @@ def test_known_text_alignment_reuses_loaded_model(monkeypatch, tmp_path):
         def align(self, _path, _text, language="zh"):
             assert language == "zh"
             calls["aligns"] += 1
-            return SimpleNamespace(
-                segments=[SimpleNamespace(start=1.0, end=2.0, text="你好")]
-            )
+            return SimpleNamespace(segments=[SimpleNamespace(start=1.0, end=2.0, text="你好")])
 
     def load_model(_name):
         calls["loads"] += 1
         return FakeModel()
 
+    monkeypatch.setenv("MIRRORORDER_ALIGNMENT_CACHE_DIR", str(tmp_path / "alignment-cache"))
     monkeypatch.setitem(sys.modules, "stable_whisper", SimpleNamespace(load_model=load_model))
     known_text_alignment._load_model.cache_clear()
     audio = tmp_path / "audio.wav"
     audio.write_bytes(b"fake")
 
     first = known_text_alignment.align_known_text(audio, "你好", "base")
+    cached = known_text_alignment.align_known_text(audio, "你好", "base")
     second = known_text_alignment.align_known_text(audio, "再见", "base")
 
-    assert first["status"] == "success"
-    assert second["status"] == "success"
+    assert first["status"] == "success" and first["cached"] is False
+    assert cached["status"] == "success" and cached["cached"] is True
+    assert second["status"] == "success" and second["cached"] is False
     assert calls == {"loads": 1, "aligns": 2}
 
 
