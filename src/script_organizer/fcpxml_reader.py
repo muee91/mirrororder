@@ -9,6 +9,7 @@ from collections import defaultdict
 from fractions import Fraction
 from pathlib import Path
 
+from .media_identity import media_identity
 from .models import Clip, GroupMember, MulticamGroup
 
 
@@ -28,6 +29,16 @@ def _media_path(src: str) -> str:
     return urllib.parse.unquote(src)
 
 
+def _asset_media_path(asset: ET.Element) -> str:
+    direct = asset.get("src", "")
+    if direct:
+        return _media_path(direct)
+    reps = list(asset.findall("./media-rep"))
+    original = next((item for item in reps if item.get("kind") == "original-media"), None)
+    chosen = original or (reps[0] if reps else None)
+    return _media_path(chosen.get("src", "")) if chosen is not None else ""
+
+
 def stable_clip_id(media_path: str, source_asset_id: str, occurrence: int = 0) -> str:
     seed = f"{media_path}|{source_asset_id}|{occurrence}".encode("utf-8")
     return "C_" + hashlib.sha1(seed).hexdigest()[:16]
@@ -36,8 +47,12 @@ def stable_clip_id(media_path: str, source_asset_id: str, occurrence: int = 0) -
 def read_fcpxml(path: str | Path) -> list[Clip]:
     root = ET.parse(path).getroot()
     assets: dict[str, str] = {}
+    media_ids: dict[str, str] = {}
     for asset in root.findall(".//asset"):
-        assets[asset.get("id", "")] = _media_path(asset.get("src", ""))
+        asset_id = asset.get("id", "")
+        media_path = _asset_media_path(asset)
+        assets[asset_id] = media_path
+        media_ids[asset_id] = media_identity(media_path) if media_path else ""
     occurrence: defaultdict[tuple[str, str], int] = defaultdict(int)
     clips: list[Clip] = []
     sequence = root.find(".//sequence")
@@ -67,6 +82,7 @@ def read_fcpxml(path: str | Path) -> list[Clip]:
                 source_asset_id=source_asset_id,
                 source_start=source_start,
                 source_end=source_start + duration,
+                media_id=media_ids.get(source_asset_id, ""),
             )
         )
     return clips
@@ -84,6 +100,7 @@ def _member(clip: Clip) -> GroupMember:
         exists=clip.exists,
         source_start=clip.source_start,
         source_end=clip.source_end,
+        media_id=clip.media_id,
     )
 
 
@@ -154,6 +171,7 @@ def _slice_member(clip: Clip, start: Fraction, end: Fraction) -> GroupMember:
         exists=clip.exists,
         source_start=source_start,
         source_end=source_end,
+        media_id=clip.media_id,
     )
 
 
