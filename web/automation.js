@@ -4,6 +4,8 @@
 
   const COMPLETED = new Set(['auto_confirmed', 'ai_confirmed', 'human_override']);
   const NEEDS_ATTENTION = new Set(['needs_review', 'unresolved']);
+  const HOST_LOCAL = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(window.location.hostname);
+  const APP_CLIENT = Boolean(window.webkit?.messageHandlers?.mirrorOrder);
 
   function automationFor(group) {
     return group?.automation && typeof group.automation === 'object' ? group.automation : null;
@@ -96,13 +98,50 @@
     return manual;
   };
 
+  function installProjectCreationBoundary() {
+    const trigger = document.querySelector('#create-project');
+    if (!trigger || trigger.dataset.hostCreationBoundary === '1') return;
+    trigger.dataset.hostCreationBoundary = '1';
+    trigger.addEventListener('click', (event) => {
+      if (!HOST_LOCAL) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showToast('项目创建只在 Host 本机或镜序 App 执行；局域网 Web 用于查看、审核和协作');
+        return;
+      }
+      // app.js historically resets the form to FCPXML. Run after that handler
+      // and make raw multicam media + script the normal creation path.
+      queueMicrotask(() => {
+        const kind = document.querySelector('#new-project-kind');
+        if (!kind) return;
+        kind.value = 'media-directory';
+        updateProjectKindFields();
+        document.querySelector('#new-project-name')?.focus();
+      });
+    }, true);
+  }
+
   function enhanceProjectAndTaskUI() {
     const mediaOption = document.querySelector('#new-project-kind option[value="media-directory"]');
-    if (mediaOption) mediaOption.textContent = '原始多机位素材目录（自动音频同步）';
+    const fcpxmlOption = document.querySelector('#new-project-kind option[value="fcpxml"]');
+    if (mediaOption) mediaOption.textContent = '原始多机位素材目录（推荐 · 自动音频同步）';
+    if (fcpxmlOption) fcpxmlOption.textContent = '已有同步 FCPXML（高级入口）';
+    const mediaField = document.querySelector('[data-project-input="media-directory"]');
+    if (mediaField?.firstChild) mediaField.firstChild.textContent = '原始多机位素材目录\n        ';
+    const scriptField = document.querySelector('#new-project-script')?.closest('label');
+    if (scriptField?.firstChild) scriptField.firstChild.textContent = '剧本（DOCX、TXT 或 Markdown）\n        ';
     const createButton = document.querySelector('#project-form .primary-button');
     if (createButton) createButton.textContent = '创建并自动整理';
     const note = document.querySelector('#project-dialog .modal-title-row p');
-    if (note) note.textContent = '选择素材与剧本后，Host 自动同步多机位、ASR、剧本映射，并把疑难 Take 分流到待处理。';
+    if (note) {
+      note.textContent = APP_CLIENT
+        ? '选择这台 Mac 上的原始素材与剧本；项目由 MirrorOrder Host 创建并自动同步、ASR、剧本归集。'
+        : '选择 Host 本机可访问的原始素材与剧本；项目由 Host 创建并自动同步、ASR、剧本归集。';
+    }
+    installProjectCreationBoundary();
+    if (!HOST_LOCAL && triggerLabel()) {
+      triggerLabel().title = '请在 Host 本机或镜序 App 创建项目';
+    }
     const actions = document.querySelector('#task-dialog .task-actions');
     if (actions && !actions.querySelector('[data-task-type="prepare_project"]')) {
       const prepare = document.createElement('button');
@@ -114,6 +153,10 @@
         button.addEventListener('click', () => submitTask(button.dataset.taskType).catch((error) => showToast(error.message)));
       }
     }
+  }
+
+  function triggerLabel() {
+    return document.querySelector('#create-project');
   }
 
   const baseTaskLabel = taskLabel;
