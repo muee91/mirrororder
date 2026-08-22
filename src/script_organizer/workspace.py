@@ -166,7 +166,7 @@ class WorkspaceRegistry:
             f'directory = "{output_dir}"',
             "",
             "[asr]",
-            'backend = "faster-whisper"',
+            'backend = "auto"',
             'model = "small"',
             'language = "zh"',
             'device = "auto"',
