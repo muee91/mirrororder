@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from .automation_store import AutomationStore
 from .config import ProjectConfig
 from .model_provider import ModelProvider
 from .review_store import ReviewStore
+from .vision_provider import VisionProvider
 
 
 def _read_json(path: Path, fallback: object) -> object:
@@ -140,7 +142,144 @@ def _candidate_payload(
     }
 
 
-def resolve_project(config: ProjectConfig, provider: ModelProvider | None = None) -> dict[str, Any]:
+def _vision_candidate_rows(
+    row: dict[str, Any],
+    segment_by_id: dict[str, dict[str, Any]],
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Create a bounded local candidate list for no-dialogue visual rescue.
+
+    This deliberately uses only `context_segment_ids` already produced by the
+    deterministic matcher. The VLM never searches the full script.
+    """
+    context_ids = [
+        str(value)
+        for value in row.get("context_segment_ids", [])
+        if str(value) in segment_by_id
+    ]
+    result: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    seen: set[str] = set()
+    for segment_id in context_ids[:12]:
+        segment = segment_by_id[segment_id]
+        if str(segment.get("type", "")) == "scene_heading":
+            continue
+        candidate_id = f"vision:{segment_id}"
+        if candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        candidate = {
+            "candidate_id": candidate_id,
+            "script_segment_ids": [segment_id],
+            "confidence": "visual_context",
+            "total_score": 0.0,
+            "dialogue_score": 0.0,
+            "sequence_score": 0.0,
+            "margin": 0.0,
+        }
+        public = {
+            "candidate_id": candidate_id,
+            "script_segment_ids": [segment_id],
+            "episode_ids": _episodes([segment_id], segment_by_id),
+            "segment_type": str(segment.get("type", "")),
+            "script_text": str(segment.get("raw_text", "") or segment.get("text", "")),
+        }
+        result.append((candidate, public))
+    return result
+
+
+def _preferred_visual_member(group: dict[str, Any]) -> dict[str, Any] | None:
+    priority = {"B": 0, "C": 1, "A": 2}
+    members = [item for item in group.get("members", []) if isinstance(item, dict)]
+    members.sort(key=lambda item: (
+        priority.get(str(item.get("camera", "")).upper(), 99),
+        -float(item.get("duration", 0) or 0),
+        str(item.get("media_path", "")),
+    ))
+    for member in members:
+        path = str(member.get("media_path", "") or "")
+        if path and Path(path).is_file():
+            return member
+    return None
+
+
+def _try_visual_rescue(
+    vision: VisionProvider,
+    group: dict[str, Any],
+    row: dict[str, Any],
+    segment_by_id: dict[str, dict[str, Any]],
+    previous: tuple[int, int] | None,
+    following: tuple[int, int] | None,
+) -> dict[str, Any] | None:
+    if not vision.config.enabled:
+        return None
+    # Visual auto-confirm must be bounded by at least one deterministic/manual
+    # script anchor. Without an anchor it remains an exception for humans.
+    if previous is None and following is None:
+        return None
+    rows = _vision_candidate_rows(row, segment_by_id)
+    if not rows:
+        return None
+    member = _preferred_visual_member(group)
+    if member is None:
+        return None
+    start = float(member.get("source_start", 0) or 0)
+    raw_end = member.get("source_end")
+    end = float(raw_end) if raw_end is not None else start + float(member.get("duration", 0) or 0)
+    frames = vision.extract_frames(str(member.get("media_path", "")), start, end)
+    if not frames:
+        return None
+    try:
+        public_candidates = [public for _candidate, public in rows]
+        result = vision.rescue({
+            "group_id": str(group.get("group_id", "")),
+            "camera": str(member.get("camera", "")),
+            "take_time": {"start": group.get("start"), "end": group.get("end")},
+            "candidates": public_candidates,
+            "previous_confirmed_script_position": previous,
+            "following_confirmed_script_position": following,
+            "rule": "仅依据画面人物/场景/动作，从给定 candidates 选择；禁止搜索或发明其它剧本位置",
+        }, frames)
+    finally:
+        shutil.rmtree(frames[0].parent, ignore_errors=True)
+    if not result or not result.get("candidate_id"):
+        return None
+    selected = next(
+        ((candidate, public) for candidate, public in rows if public["candidate_id"] == result["candidate_id"]),
+        None,
+    )
+    if selected is None:
+        return None
+    candidate, public = selected
+    confidence = float(result.get("confidence", 0) or 0)
+    if confidence < vision.config.min_confidence:
+        return None
+    if not _sequence_consistent(candidate, segment_by_id, previous, following):
+        return None
+    ids = _candidate_ids(candidate)
+    return {
+        "status": "ai_confirmed",
+        "state": "keep",
+        "decision_source": "vision_rescue",
+        "candidate_id": public["candidate_id"],
+        "script_segment_ids": ids,
+        "episode_ids": public["episode_ids"],
+        "confidence": confidence,
+        "reason": str(result.get("reason", "") or "本地视觉模型识别动作后通过顺序复核"),
+        "evidence": {
+            "visual_summary": str(result.get("visual_summary", "") or ""),
+            "vision_confidence": confidence,
+            "camera": str(member.get("camera", "")),
+            "frame_count": vision.config.frame_count,
+            "sequence_consistent": True,
+            "candidate_source": "deterministic_context_segment_ids",
+        },
+    }
+
+
+def resolve_project(
+    config: ProjectConfig,
+    provider: ModelProvider | None = None,
+    vision_provider: VisionProvider | None = None,
+) -> dict[str, Any]:
     index = _read_json(config.output_dir / "material_index.json", {})
     script = _read_json(config.output_dir / "script.json", {})
     matches = _read_json(config.output_dir / "matches.json", {})
@@ -152,6 +291,7 @@ def resolve_project(config: ProjectConfig, provider: ModelProvider | None = None
     review = ReviewStore(config.output_dir / "review.json").load()
     manual_ids = _manual_group_ids(review, groups)
     provider = provider or ModelProvider()
+    vision_provider = vision_provider or VisionProvider()
 
     group_rows = matches.get("groups", {}) if isinstance(matches.get("groups", {}), dict) else {}
     decisions: dict[str, Any] = {}
@@ -211,14 +351,33 @@ def resolve_project(config: ProjectConfig, provider: ModelProvider | None = None
         following = anchors.get(following_index) if following_index is not None else None
 
         if not usable:
+            visual_entry = _try_visual_rescue(
+                vision_provider,
+                group,
+                row,
+                segment_by_id,
+                previous,
+                following,
+            )
+            if visual_entry is not None:
+                decisions[group_id] = visual_entry
+                ids = visual_entry.get("script_segment_ids", [])
+                if ids and ids[0] in segment_by_id:
+                    anchors[group_index] = _segment_position(segment_by_id[ids[0]])
+                    anchor_indexes = sorted(set(anchor_indexes + [group_index]))
+                continue
             decisions[group_id] = {
                 "status": "unresolved",
                 "state": "unreviewed",
-                "decision_source": "deterministic",
+                "decision_source": "vision_rescue" if vision_provider.config.enabled else "deterministic",
                 "script_segment_ids": [],
                 "episode_ids": [int(value) for value in row.get("context_episodes", []) if str(value).isdigit()],
                 "confidence": 0.0,
-                "reason": "没有可复核的对白候选；保留为异常/无对白队列，不伪造剧本归属",
+                "reason": (
+                    "本地视觉救援未通过锚点/置信度/候选复核，保留异常队列"
+                    if vision_provider.config.enabled
+                    else "没有可复核的对白候选；保留为异常/无对白队列，不伪造剧本归属"
+                ),
             }
             continue
 
@@ -300,5 +459,8 @@ def resolve_project(config: ProjectConfig, provider: ModelProvider | None = None
     return AutomationStore(config.output_dir).save(
         _analysis_revision(config.output_dir),
         decisions,
-        provider.config.public(),
+        {
+            "text": provider.config.public(),
+            "vision": vision_provider.config.public(),
+        },
     )
