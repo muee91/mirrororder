@@ -3,10 +3,12 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -17,8 +19,20 @@ class MulticamSyncUnavailable(RuntimeError):
     pass
 
 
+_REQUIRED_SCRIPTS = (
+    "project_config.py",
+    "make_index.py",
+    "extract_parallel.py",
+    "sync.py",
+    "compress_gaps.py",
+    "build_fcpxml.py",
+)
+_MEDIA_SUFFIXES = {".mp4", ".mov", ".mxf", ".mts", ".3gp", ".mpg", ".mpeg"}
+_CAMERA_DIR = re.compile(r"^(?:camera|cam)?[_-]?([A-Za-z])\d*", re.IGNORECASE)
+
+
 def _engine_candidates() -> list[Path]:
-    result = []
+    result: list[Path] = []
     env = os.environ.get("MIRRORORDER_MULTICAM_SYNC_ROOT", "").strip()
     if env:
         result.append(Path(env).expanduser())
@@ -29,32 +43,66 @@ def _engine_candidates() -> list[Path]:
             parent / "vendor" / "multicam-audio-sync",
         ])
     result.append(Path.home() / ".agents" / "skills" / "multicam-audio-sync")
-    seen = set()
+    seen: set[str] = set()
     unique = []
     for path in result:
-        resolved = str(path)
-        if resolved not in seen:
-            seen.add(resolved)
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
             unique.append(path)
     return unique
 
 
-def find_engine_root() -> Path:
+def _zip_candidates() -> list[Path]:
+    result: list[Path] = []
+    env = os.environ.get("MIRRORORDER_MULTICAM_SYNC_ZIP", "").strip()
+    if env:
+        result.append(Path(env).expanduser())
+    module = Path(__file__).resolve()
+    for parent in module.parents:
+        result.extend([
+            parent / "multicam-audio-sync-core.zip",
+            parent / "vendor" / "multicam-audio-sync-core.zip",
+        ])
+    seen: set[str] = set()
+    unique = []
+    for path in result:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
+
+
+def _valid_engine(path: Path) -> bool:
+    scripts = path / "scripts"
+    return all((scripts / name).is_file() for name in _REQUIRED_SCRIPTS)
+
+
+def _materialize_engine(runtime: Path) -> tuple[Path, str]:
+    if runtime.exists():
+        shutil.rmtree(runtime)
     for candidate in _engine_candidates():
-        scripts = candidate / "scripts"
-        if all((scripts / name).is_file() for name in (
-            "project_config.py",
-            "make_index.py",
-            "extract_parallel.py",
-            "sync.py",
-            "compress_gaps.py",
-            "build_fcpxml.py",
-        )):
-            return candidate
+        if _valid_engine(candidate):
+            shutil.copytree(candidate, runtime, ignore=shutil.ignore_patterns("__pycache__", "._*"))
+            return runtime, str(candidate)
+    archive = next((path for path in _zip_candidates() if path.is_file()), None)
+    if archive is not None:
+        scripts = runtime / "scripts"
+        scripts.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archive) as handle:
+            for info in handle.infolist():
+                name = Path(info.filename).name
+                if not name or name.startswith("._") or name == "__MACOSX":
+                    continue
+                if name.endswith(".py") or name == "config.json":
+                    (scripts / name).write_bytes(handle.read(info))
+        if _valid_engine(runtime):
+            return runtime, str(archive)
+        shutil.rmtree(runtime, ignore_errors=True)
     raise MulticamSyncUnavailable(
-        "未找到 multicam-audio-sync 引擎。构建镜序.app 时会优先打包 "
-        "vendor/multicam-audio-sync 或 ~/.agents/skills/multicam-audio-sync；"
-        "也可设置 MIRRORORDER_MULTICAM_SYNC_ROOT。"
+        "未找到可运行的 multicam-audio-sync。镜序优先使用 App runtime / repo vendor 固定版本，"
+        "其次接受 MIRRORORDER_MULTICAM_SYNC_ROOT 或 ~/.agents/skills/multicam-audio-sync。"
     )
 
 
@@ -103,6 +151,55 @@ def _days_from_index(work: Path) -> list[str]:
     if not days:
         raise RuntimeError("同步索引没有发现拍摄天/素材组")
     return days
+
+
+def _has_media(path: Path) -> bool:
+    try:
+        return any(item.is_file() and item.suffix.lower() in _MEDIA_SUFFIXES for item in path.iterdir())
+    except OSError:
+        return False
+
+
+def _looks_like_camera_dir(path: Path) -> bool:
+    return path.is_dir() and bool(_CAMERA_DIR.match(path.name)) and _has_media(path)
+
+
+def _has_day_layout(source: Path) -> bool:
+    try:
+        for day in source.iterdir():
+            if not day.is_dir() or day.name.startswith("."):
+                continue
+            try:
+                if any(_looks_like_camera_dir(child) for child in day.iterdir() if child.is_dir()):
+                    return True
+            except OSError:
+                continue
+    except OSError:
+        return False
+    return False
+
+
+def _prepare_media_base(source: Path, stage_root: Path) -> tuple[Path, str]:
+    """Accept both `day/A1` and direct `A1` roots without copying media."""
+    if _has_day_layout(source):
+        return source, "day-folders"
+    try:
+        direct_cameras = [item for item in source.iterdir() if _looks_like_camera_dir(item)]
+        direct_media = [item for item in source.iterdir() if item.is_file() and item.suffix.lower() in _MEDIA_SUFFIXES]
+    except OSError:
+        direct_cameras = []
+        direct_media = []
+    if not direct_cameras and not direct_media:
+        return source, "engine-detect"
+    if stage_root.exists():
+        shutil.rmtree(stage_root)
+    day = stage_root / "day1"
+    day.mkdir(parents=True, exist_ok=True)
+    for camera_dir in direct_cameras:
+        (day / camera_dir.name).symlink_to(camera_dir, target_is_directory=True)
+    for media in direct_media:
+        (day / media.name).symlink_to(media)
+    return stage_root, "normalized-single-day"
 
 
 def _write_config(script_dir: Path, base: Path, work: Path, output: Path, project_name: str) -> None:
@@ -179,23 +276,24 @@ def run_multicam_sync(
     if not config.media_root.is_dir():
         raise FileNotFoundError(f"素材目录不存在: {config.media_root}")
 
-    engine = find_engine_root()
     runtime = config.output_dir / ".multicam-sync" / "engine"
     work = config.output_dir / ".multicam-sync" / "work"
+    stage = config.output_dir / ".multicam-sync" / "media-layout"
     delivery = config.output_dir / "sync"
     runtime.parent.mkdir(parents=True, exist_ok=True)
-    if runtime.exists():
-        shutil.rmtree(runtime)
-    shutil.copytree(engine, runtime, ignore=shutil.ignore_patterns("__pycache__", "._*"))
-    script_dir = runtime / "scripts"
+    engine, engine_source = _materialize_engine(runtime)
+    script_dir = engine / "scripts"
     work.mkdir(parents=True, exist_ok=True)
     delivery.mkdir(parents=True, exist_ok=True)
-    _write_config(script_dir, config.media_root, work, delivery, config.name)
+    media_base, layout = _prepare_media_base(config.media_root, stage)
+    _write_config(script_dir, media_base, work, delivery, config.name)
 
     def emit(text: str) -> None:
         if log:
             log(text)
 
+    emit(f"同步引擎：{engine_source}")
+    emit(f"素材布局：{layout}")
     emit("盘点素材与时间码")
     _run(script_dir, "make_index.py", [], emit)
     emit("提取同步音频缓存")
@@ -209,14 +307,15 @@ def run_multicam_sync(
         raw = work / f"positions_{day}.tsv"
         if not raw.exists():
             raise RuntimeError(f"同步结果缺失: {raw}")
+        compressed = work / f"positions_{day}_compressed.tsv"
         if compress_gaps:
             emit(f"压缩全机停机间隙 {day}")
             _run(script_dir, "compress_gaps.py", [str(raw)], emit)
-            positions.append(work / f"positions_{day}_compressed.tsv")
         else:
-            compressed = work / f"positions_{day}_compressed.tsv"
             shutil.copyfile(raw, compressed)
-            positions.append(compressed)
+        if not compressed.exists():
+            raise RuntimeError(f"压缩后位置表缺失: {compressed}")
+        positions.append(compressed)
 
     emit("生成 FCPXML 1.8 多机位时间线")
     _run(script_dir, "build_fcpxml.py", [], emit)
@@ -237,8 +336,10 @@ def run_multicam_sync(
     _promote_config(config.config_path, fcpxml)
     report = {
         "status": "completed",
-        "engine_root": str(engine),
+        "engine_source": engine_source,
         "media_root": str(config.media_root),
+        "normalized_media_base": str(media_base),
+        "layout": layout,
         "days": days,
         "positions": [str(path) for path in positions],
         "fcpxml": str(fcpxml),
