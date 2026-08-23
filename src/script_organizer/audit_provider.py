@@ -36,6 +36,28 @@ VERDICTS = {"agree", "disagree", "insufficient_evidence"}
 SEVERITIES = {"info", "warning", "error"}
 
 
+def _remote_context(context: dict[str, Any]) -> dict[str, Any]:
+    """Keep local biometric cluster handles out of VLM requests."""
+    result = json.loads(json.dumps(context, ensure_ascii=False))
+    people = result.get("people")
+    if isinstance(people, dict):
+        for kind in ("speakers", "faces"):
+            rows = people.get(kind)
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if isinstance(row, dict):
+                    row.pop("identity_id", None)
+                    row.pop("local_identity_id", None)
+    semantic = result.get("semantic")
+    if isinstance(semantic, dict):
+        data = semantic.get("data")
+        if isinstance(data, dict):
+            data.pop("provider", None)
+            data.pop("model", None)
+    return result
+
+
 class TakeAuditProvider(TakeSemanticProvider):
     """Bounded multimodal critic for one Take.
 
@@ -81,7 +103,7 @@ class TakeAuditProvider(TakeSemanticProvider):
             "景别按每个clip_id分别判断；证据不足时用unknown。"
         )
         content: list[dict[str, Any]] = [
-            {"type": "text", "text": json.dumps(context, ensure_ascii=False)}
+            {"type": "text", "text": json.dumps(_remote_context(context), ensure_ascii=False)}
         ]
         for index, item in enumerate(usable_frames, start=1):
             path = Path(str(item.get("path", "")))
