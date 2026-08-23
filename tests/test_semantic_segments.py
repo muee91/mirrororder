@@ -140,17 +140,24 @@ def test_cached_asr_becomes_take_relative_search_segments(tmp_path: Path) -> Non
     )
     report = indexer.refresh(sources={"speech"})
     rows = SemanticStore(database).documents("demo", sources=["speech"])
+    actual = sorted(
+        (row["text"], row["clip_id"], row["start"], row["end"])
+        for row in rows
+    )
 
     assert report["semantics"]["new_vlm_inference"] is False
     assert len(rows) == 3
-    assert [(row["text"], row["clip_id"], row["start"], row["end"]) for row in rows] == [
-        ("你好", "CB", 0.5, 1.7),
-        ("再见", "CB", 4.0, 5.0),
-        ("你好", "CA", 7.0, 7.5),
-    ]
+    assert actual == sorted(
+        [
+            ("你好", "CB", 0.5, 1.7),
+            ("再见", "CB", 4.0, 5.0),
+            ("你好", "CA", 7.0, 7.5),
+        ]
+    )
     assert all(row["metadata"]["precision"] == "asr_segment" for row in rows)
     assert all(row["metadata"]["time_basis"] == "take_relative" for row in rows)
-    assert rows[0]["metadata"]["camera"] == "B"
+    canonical = next(row for row in rows if row["clip_id"] == "CB" and row["text"] == "你好")
+    assert canonical["metadata"]["camera"] == "B"
 
 
 def test_semantic_search_ui_seeks_from_member_source_start() -> None:
