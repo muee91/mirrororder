@@ -15,9 +15,10 @@ from .vision_provider import VisionProviderConfig
 class TakeSemanticProvider:
     """Structured Take description using the configured local/remote VLM.
 
-    This provider never sees raw video. Callers pass a bounded set of sampled
-    JPEG frames plus already-known project context. The result is descriptive
-    metadata only; it cannot mutate review or mapping state.
+    This provider never sees raw video or audio. Callers pass a bounded set of
+    sampled JPEG frames plus already-known project context. The result is
+    descriptive metadata only; it cannot mutate review or mapping state. Speech
+    remains a separate ASR evidence source instead of being invented by vision.
     """
 
     def __init__(self, config: VisionProviderConfig | None = None):
@@ -53,10 +54,14 @@ class TakeSemanticProvider:
             url += "/v1"
         url += "/chat/completions"
         system = (
-            "你是短剧素材的镜头语义索引器。只描述画面和输入中已经给出的上下文，不猜真实演员姓名，"
-            "不判断最终Best/Keep/Reject，也不发明剧本位置。输出严格JSON："
-            '{"location":"","shot_type":"","visible_people":[""],"actions":[""],'
-            '"props":[""],"emotion":[""],"continuity_clues":[""],"summary":""}。'
+            "你是短剧素材的镜头语义索引器。只描述抽样画面中实际可见的内容和输入中已经明确给出的上下文，"
+            "不猜真实演员姓名、人物关系、动机或未出现的剧情，不判断最终Best/Keep/Reject，也不发明剧本位置。"
+            "不要把输入里的ASR文本说成你从图片听到的声音。"
+            "输出严格JSON："
+            '{"description":"对画面可见内容的具体描述","location":"","shot_type":"",'
+            '"visible_people":[""],"actions":[""],"props":[""],"emotion":[""],'
+            '"continuity_clues":[""],"extracted_text":"画面中明确可见的文字，无则空字符串",'
+            '"tags":["不超过8个简短中文标签"],"summary":"简短中文总结"}。'
             "证据不足的字段返回空字符串或空数组。"
         )
         content: list[dict[str, Any]] = [{"type": "text", "text": json.dumps(context, ensure_ascii=False)}]
@@ -104,13 +109,14 @@ class TakeSemanticProvider:
         if not isinstance(result, dict):
             return None
 
-        def values(key: str) -> list[str]:
+        def values(key: str, limit: int = 12) -> list[str]:
             raw_value = result.get(key, [])
             if not isinstance(raw_value, list):
                 return []
-            return [str(value).strip()[:120] for value in raw_value if str(value).strip()][:12]
+            return [str(value).strip()[:120] for value in raw_value if str(value).strip()][:limit]
 
         return {
+            "description": str(result.get("description", "") or "")[:1600],
             "location": str(result.get("location", "") or "")[:160],
             "shot_type": str(result.get("shot_type", "") or "")[:120],
             "visible_people": values("visible_people"),
@@ -118,6 +124,8 @@ class TakeSemanticProvider:
             "props": values("props"),
             "emotion": values("emotion"),
             "continuity_clues": values("continuity_clues"),
+            "extracted_text": str(result.get("extracted_text", "") or "")[:1200],
+            "tags": values("tags", limit=8),
             "summary": str(result.get("summary", "") or "")[:1000],
             "provider": self.config.provider,
             "model": self.config.model,
