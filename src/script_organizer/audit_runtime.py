@@ -4,8 +4,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .audit_engine import FAILURE_TAXONOMY, AuditEngine, _analysis_revision
+from .audit_engine import FAILURE_TAXONOMY, AuditEngine, _analysis_revision, _mapping_for_group
 from .audit_store import AuditStore
+from .automation_store import AutomationStore
 
 
 _INSTALLED = False
@@ -24,6 +25,53 @@ def _audit_for_project(project: Any) -> tuple[dict[str, Any], str, bool]:
     current = _analysis_revision(project.config.output_dir)
     stale = bool(payload.get("analysis_revision") and payload.get("analysis_revision") != current)
     return payload, current, stale
+
+
+def _current_mapping_inputs(project: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    project.reload_if_changed()
+    review = project.review.load()
+    automation_groups = _as_dict(AutomationStore(project.config.output_dir).load().get("groups"))
+    return review, automation_groups
+
+
+def _mapping_is_current(
+    project: Any,
+    group_id: str,
+    row: dict[str, Any],
+    review: dict[str, Any],
+    automation_groups: dict[str, Any],
+) -> bool:
+    group = _as_dict(project.groups.get(group_id))
+    if not group:
+        return False
+    current = _mapping_for_group(
+        review,
+        _as_dict(automation_groups.get(group_id)),
+        group,
+    )
+    return _as_dict(row.get("mapping")) == current
+
+
+def _apply_shot_intelligence(take: dict[str, Any], row: dict[str, Any]) -> None:
+    """Shot facts are media evidence and may outlive mapping/judge freshness."""
+    shot = _as_dict(row.get("shot_intelligence"))
+    take["shot_intelligence"] = shot
+    angle_rows = _as_dict(shot.get("angles"))
+    for angle in _as_list(take.get("angles")):
+        if not isinstance(angle, dict):
+            continue
+        clip_id = str(angle.get("clip_id", "") or "")
+        intelligence = _as_dict(angle_rows.get(clip_id))
+        if not intelligence:
+            continue
+        angle["shot_type"] = str(intelligence.get("shot_type", "unknown") or "unknown")
+        angle["coverage_role"] = str(intelligence.get("coverage_role", "unknown") or "unknown")
+        angle["visible_people"] = [
+            str(value) for value in _as_list(intelligence.get("visible_people")) if str(value)
+        ]
+        angle["technical_issues"] = [
+            str(value) for value in _as_list(intelligence.get("technical_issues")) if str(value)
+        ]
 
 
 def _safe_judge(value: object) -> dict[str, Any]:
@@ -64,20 +112,58 @@ def install_audit_runtime() -> None:
         payload = original_build(project, **kwargs)
         audit, current_revision, stale = _audit_for_project(project)
         rows = _as_dict(audit.get("groups"))
+        review, automation_groups = _current_mapping_inputs(project)
         current_groups = 0
+        visual_current_groups = 0
+        mapping_stale_groups = 0
         for take in _as_list(payload.get("take_groups")):
             if not isinstance(take, dict):
                 continue
             group_id = str(take.get("group_id", "") or "")
             row = _as_dict(rows.get(group_id))
-            row_current = bool(row and row.get("analysis_revision") == current_revision)
-            if not row_current:
-                take["audit_state"] = {"available": bool(row), "stale": bool(row)}
+            visual_current = bool(row and row.get("analysis_revision") == current_revision)
+            if not visual_current:
+                take["audit_state"] = {
+                    "available": bool(row),
+                    "stale": bool(row),
+                    "analysis_stale": bool(row),
+                    "mapping_stale": False,
+                    "visual_current": False,
+                }
                 continue
+
+            visual_current_groups += 1
+            _apply_shot_intelligence(take, row)
+            mapping_current = _mapping_is_current(
+                project,
+                group_id,
+                row,
+                review,
+                automation_groups,
+            )
+            if not mapping_current:
+                mapping_stale_groups += 1
+                take["audit_state"] = {
+                    "available": True,
+                    "stale": True,
+                    "analysis_stale": False,
+                    "mapping_stale": True,
+                    "visual_current": True,
+                    "priority": int(row.get("priority", 0) or 0),
+                    "shot_intelligence_available": bool(_as_dict(row.get("shot_intelligence")).get("angles")),
+                }
+                # Judge, mapping issues, role suggestions and rough-cut guidance
+                # depend on the old effective mapping. Keep only media-derived
+                # shot intelligence until a fresh audit is run.
+                continue
+
             current_groups += 1
             take["audit_state"] = {
                 "available": True,
                 "stale": False,
+                "analysis_stale": False,
+                "mapping_stale": False,
+                "visual_current": True,
                 "priority": int(row.get("priority", 0) or 0),
                 "judge": _safe_judge(row.get("judge")),
                 "algorithm_feedback": _as_dict(row.get("algorithm_feedback")),
@@ -85,24 +171,6 @@ def install_audit_runtime() -> None:
                 "role_suggestions": _as_list(row.get("role_suggestions")),
             }
             take["role_suggestions"] = _as_list(row.get("role_suggestions"))
-            shot = _as_dict(row.get("shot_intelligence"))
-            take["shot_intelligence"] = shot
-            angle_rows = _as_dict(shot.get("angles"))
-            for angle in _as_list(take.get("angles")):
-                if not isinstance(angle, dict):
-                    continue
-                clip_id = str(angle.get("clip_id", "") or "")
-                intelligence = _as_dict(angle_rows.get(clip_id))
-                if not intelligence:
-                    continue
-                angle["shot_type"] = str(intelligence.get("shot_type", "unknown") or "unknown")
-                angle["coverage_role"] = str(intelligence.get("coverage_role", "unknown") or "unknown")
-                angle["visible_people"] = [
-                    str(value) for value in _as_list(intelligence.get("visible_people")) if str(value)
-                ]
-                angle["technical_issues"] = [
-                    str(value) for value in _as_list(intelligence.get("technical_issues")) if str(value)
-                ]
             issues = take.get("issues", []) if isinstance(take.get("issues"), list) else []
             for issue in _as_list(row.get("issues")):
                 if not isinstance(issue, dict):
@@ -127,11 +195,14 @@ def install_audit_runtime() -> None:
                 "actor_role_suggestions": True,
                 "audit_write_scope": "host_local",
                 "audit_is_review_authority": False,
+                "audit_split_freshness": True,
             }
         )
         payload.setdefault("summary", {})["audit"] = {
             **_as_dict(audit.get("summary")),
             "current_groups": current_groups,
+            "visual_current_groups": visual_current_groups,
+            "mapping_stale_groups": mapping_stale_groups,
             "stale": stale,
         }
         payload["audit_state"] = {
@@ -141,6 +212,8 @@ def install_audit_runtime() -> None:
             "updated_at": str(audit.get("updated_at", "") or ""),
             "analysis_revision": str(audit.get("analysis_revision", "") or ""),
             "stale": stale,
+            "mapping_stale_groups": mapping_stale_groups,
+            "visual_current_groups": visual_current_groups,
             "summary": _as_dict(audit.get("summary")),
         }
         return payload
@@ -148,11 +221,20 @@ def install_audit_runtime() -> None:
     def state_with_audit(project: Any) -> dict[str, Any]:
         payload = original_state(project)
         audit, current_revision, stale = _audit_for_project(project)
+        review, automation_groups = _current_mapping_inputs(project)
+        mapping_stale_groups = 0
+        for group_id, raw_row in _as_dict(audit.get("groups")).items():
+            row = _as_dict(raw_row)
+            if row.get("analysis_revision") != current_revision:
+                continue
+            if not _mapping_is_current(project, str(group_id), row, review, automation_groups):
+                mapping_stale_groups += 1
         payload["audit_revision"] = int(audit.get("revision", 0) or 0)
         payload["audit_updated_at"] = str(audit.get("updated_at", "") or "")
         payload["audit_analysis_revision"] = str(audit.get("analysis_revision", "") or "")
         payload["audit_current_analysis_revision"] = current_revision
         payload["audit_stale"] = stale
+        payload["audit_mapping_stale_groups"] = mapping_stale_groups
         return payload
 
     def run_with_audit(manager: Any, project_id: str, task_id: str) -> None:
@@ -249,11 +331,25 @@ def install_audit_runtime() -> None:
                     self._local_only()
                     project = service.project(parts[3])
                     audit, current_revision, stale = _audit_for_project(project)
+                    review, automation_groups = _current_mapping_inputs(project)
+                    mapping_stale_groups = [
+                        str(group_id)
+                        for group_id, raw_row in _as_dict(audit.get("groups")).items()
+                        if _as_dict(raw_row).get("analysis_revision") == current_revision
+                        and not _mapping_is_current(
+                            project,
+                            str(group_id),
+                            _as_dict(raw_row),
+                            review,
+                            automation_groups,
+                        )
+                    ]
                     self._send_json(
                         {
                             **audit,
                             "stale": stale,
                             "current_analysis_revision": current_revision,
+                            "mapping_stale_group_ids": mapping_stale_groups,
                             "failure_taxonomy": FAILURE_TAXONOMY,
                         }
                     )
