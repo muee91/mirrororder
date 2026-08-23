@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from script_organizer.config import ProjectConfig
 from script_organizer.delivery_semantics import resolve_delivery_state
+from script_organizer.fcpxml_exporter import build_selection_manifest
 
 
 def _group(group_id: str = "G_1", parent_group_id: str = "") -> dict:
@@ -134,6 +137,101 @@ def test_editorial_decision_does_not_silently_inherit_from_parent_split_group() 
     )
     assert result["state"] == "keep"
     assert result["decision_source"] == "automatic_mapping_fallback"
+
+
+def test_build_selection_manifest_v3_applies_editorial_decision(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+    config = ProjectConfig(
+        config_path=tmp_path / "project.toml",
+        name="Delivery Demo",
+        fcpxml=None,
+        script=tmp_path / "script.txt",
+        output_dir=output,
+        transcript_dir=tmp_path / "transcripts",
+        input_kind="media-directory",
+    )
+    (output / "material_index.json").write_text(
+        json.dumps({
+            "groups": [
+                {
+                    "group_id": "G_1",
+                    "parent_group_id": "",
+                    "members": [{"clip_id": "C_1"}],
+                }
+            ]
+        }),
+        encoding="utf-8",
+    )
+    (output / "script.json").write_text(
+        json.dumps({
+            "segments": [
+                {
+                    "segment_id": "S_1",
+                    "episode": 1,
+                    "scene_id": "SC_1",
+                    "text": "你好",
+                }
+            ]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    candidate = {
+        "group_id": "G_1",
+        "confidence": "exact_dialogue",
+        "total_score": 0.95,
+    }
+    (output / "matches.json").write_text(
+        json.dumps({"by_segment": {"S_1": [candidate]}}),
+        encoding="utf-8",
+    )
+    (output / "review.json").write_text(
+        json.dumps({
+            "version": 2,
+            "revision": 4,
+            "assignments": {"S_1": {"G_1": {"state": "best", "actor": "legacy"}}},
+            "groups": {},
+            "clips": {},
+            "placements": {},
+        }),
+        encoding="utf-8",
+    )
+    (output / "editorial.json").write_text(
+        json.dumps({
+            "version": 2,
+            "revision": 7,
+            "opinions": {
+                "assignment|S_1|G_1": {
+                    "target": {"kind": "assignment", "segment_id": "S_1", "group_id": "G_1"},
+                    "reviewers": {
+                        "id:a": {"state": "best", "actor": "A", "reviewer_id": "a"},
+                    },
+                }
+            },
+            "decisions": {
+                "assignment|S_1|G_1": {
+                    "target": {"kind": "assignment", "segment_id": "S_1", "group_id": "G_1"},
+                    "state": "reject",
+                    "actor": "主剪",
+                    "updated_at": "2026-08-24T01:00:00+00:00",
+                }
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    manifest = build_selection_manifest(config)
+    row = manifest["segments"][0]["groups"][0]
+    assert manifest["version"] == 3
+    assert manifest["contract"] == "delivery.v1"
+    assert manifest["revisions"] == {"review": 4, "editorial": 7}
+    assert manifest["decision_policy"]["majority_vote_enabled"] is False
+    assert row["state"] == "reject"
+    assert row["decision_source"] == "editorial_assignment"
+    assert row["decision_actor"] == "主剪"
+    assert row["legacy_state"] == ""
+    assert row["automatic_state"] == "keep"
+    assert manifest["summary"]["sources"] == {"editorial_assignment": 1}
 
 
 def test_selection_manifest_v3_documents_delivery_contract() -> None:
