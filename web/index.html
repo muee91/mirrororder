@@ -6,6 +6,7 @@
   <title>镜序 · 团队审阅</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/review.css">
 </head>
 <body>
   <header class="topbar">
@@ -18,7 +19,7 @@
       <span id="analysis-status" class="status-pill">读取项目</span>
     </div>
     <div class="top-actions">
-      <label class="project-switch">
+      <label class="project-switch workspace-switch">
         <span>项目库</span>
         <select id="workspace-select" aria-label="切换项目库"></select>
       </label>
@@ -26,8 +27,6 @@
         <span>项目</span>
         <select id="project-select" aria-label="切换项目"></select>
       </label>
-      <button id="identity-library-button" class="text-button" type="button">人物库</button>
-      <button id="proposal-button" class="text-button" type="button">AI 建议</button>
       <button id="actor-button" class="text-button" type="button">审核人</button>
       <span id="collab-status" class="connection-state">连接中</span>
     </div>
@@ -45,7 +44,9 @@
           <span id="progress">读取审核进度</span>
           <span id="error-summary"></span>
           <button id="show-unknown" class="text-button" type="button">只看待核对</button>
-          <button id="refresh" class="text-button" type="button">刷新</button>
+          <button id="identity-library-button" class="text-button review-secondary-action" type="button">人物</button>
+          <button id="proposal-button" class="text-button review-secondary-action" type="button">建议</button>
+          <button id="refresh" class="text-button review-secondary-action" type="button">刷新</button>
         </div>
       </div>
     </section>
@@ -188,8 +189,8 @@
     <form id="proposal-form" method="dialog">
       <div class="modal-title-row">
         <div>
-          <h2>AI 建议</h2>
-          <p>AI 建议不会自动写入审核；只有人工确认后才会成为团队结论。</p>
+          <h2>分析建议</h2>
+          <p>系统建议不会自动写入审核；只有人工确认后才会成为团队结论。</p>
         </div>
         <button id="proposal-close" class="icon-button" type="button" aria-label="关闭">关闭</button>
       </div>
