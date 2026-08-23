@@ -5,6 +5,7 @@ from typing import Any
 
 from .media_identity import DeviceMediaStore, media_id_for_path
 from .media_reader import infer_camera_label
+from .media_role_projection import enrich_coverage_graph, enrich_rough_cut_plan, revision_with_media_roles
 from .media_role_store import MEDIA_ROLE_CONTRACT, MediaRoleConflictError, MediaRoleStore
 
 
@@ -93,6 +94,7 @@ def _inventory(project: Any, device: DeviceMediaStore, roles: MediaRoleStore) ->
             "auxiliary": sum(
                 1 for row in rows
                 if _as_dict(row.get("label")).get("source_role") not in {None, "", "sync_camera"}
+                or _as_dict(row.get("label")).get("sync_policy") == "exclude"
             ),
         },
         "items": rows,
@@ -101,12 +103,18 @@ def _inventory(project: Any, device: DeviceMediaStore, roles: MediaRoleStore) ->
             "device_local_scan": True,
             "media_id_shared_identity": True,
             "unindexed_media_may_be_labeled": True,
+            "camera_override_is_shared_human_fact": True,
+            "auxiliary_without_timecode_or_audio_is_valid": True,
         },
     }
 
 
 def install_media_role_runtime() -> None:
-    """Install shared media-role metadata and App-local media inventory."""
+    """Install shared media-role metadata and App-local media inventory.
+
+    This layer is deliberately installed before Coverage/Rough Cut runtime imports
+    so those read models bind the media-role-aware projection functions.
+    """
 
     global _INSTALLED
     if _INSTALLED:
@@ -132,7 +140,12 @@ def install_media_role_runtime() -> None:
                 if not isinstance(angle, dict):
                     continue
                 media_id = str(angle.get("media_id", "") or "")
-                angle["media_role"] = _safe_role(rows.get(media_id))
+                role = _safe_role(rows.get(media_id))
+                angle["media_role"] = role
+                override = str(role.get("camera_override", "") or "")
+                if override:
+                    angle["detected_camera"] = str(angle.get("camera", "") or "")
+                    angle["camera"] = override
         payload.setdefault("revisions", {})["media_roles"] = int(roles.get("revision", 0) or 0)
         payload.setdefault("summary", {})["media_roles"] = {
             "labeled": len(rows),
@@ -221,6 +234,35 @@ def install_media_role_runtime() -> None:
                 return super()._agent_get(parsed)
 
         return Handler
+
+    # Patch the pure production projections before their runtime modules import
+    # them. This mirrors the existing read-model layering used by Editorial.
+    from . import coverage_graph
+
+    original_coverage_build = coverage_graph.build_coverage_graph
+    original_coverage_revision = coverage_graph.coverage_revision
+
+    def coverage_with_media_roles(project: Any, **kwargs: Any) -> dict[str, Any]:
+        return enrich_coverage_graph(project, original_coverage_build(project, **kwargs))
+
+    def coverage_revision_with_media_roles(project: Any) -> str:
+        base = original_coverage_revision(project)
+        role_revision = int(MediaRoleStore(project.config.output_dir).load().get("revision", 0) or 0)
+        return revision_with_media_roles(base, role_revision)
+
+    coverage_graph.build_coverage_graph = coverage_with_media_roles
+    coverage_graph.coverage_revision = coverage_revision_with_media_roles
+
+    # Import Rough Cut only after Coverage has been patched, so its module-level
+    # build_coverage_graph binding already includes media-role projection.
+    from . import rough_cut_plan
+
+    original_rough_cut_build = rough_cut_plan.build_rough_cut_plan
+
+    def rough_cut_with_media_roles(project: Any, **kwargs: Any) -> dict[str, Any]:
+        return enrich_rough_cut_plan(project, original_rough_cut_build(project, **kwargs))
+
+    rough_cut_plan.build_rough_cut_plan = rough_cut_with_media_roles
 
     review_read_model.build_review_read_model = build_with_media_roles
     web_server.ProjectService.state = state_with_media_roles
