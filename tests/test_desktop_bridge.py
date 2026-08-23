@@ -50,19 +50,54 @@ def test_desktop_service_start_script_saves_pid_after_background_launch():
     assert "NSHostingView(rootView: DesktopRootView())" in source
 
 
-def test_desktop_console_has_explicit_navigation_and_restart_drain():
+def test_desktop_navigation_is_project_first_and_system_features_live_in_settings():
     source = read("macos-app/MirrorOrderDesktopApp.swift")
 
-    for section in ("overview", "service", "workspaces", "projects", "models", "frontend", "agent", "workbench"):
-        assert f"case {section}" in source
-    for page in ("DashboardPage", "ServicePage", "WorkspacePage", "ProjectPage", "ModelPage", "FrontendPage", "AgentPage", "ConsoleWorkbenchPage"):
-        assert f"struct {page}" in source
-    assert "ConsoleSidebar" in source
+    assert "enum ConsoleSection" in source
+    assert "case projects" in source
+    assert "case workbench" in source
+    assert '@Published var section: ConsoleSection = .projects' in source
+    for removed_top_level in ("case overview", "case service", "case workspaces", "case models", "case frontend", "case agent"):
+        assert removed_top_level not in source
+
+    assert "struct ProjectPage" in source
+    assert "struct WorkbenchPage" in source
+    assert "struct SettingsSheet" in source
+    assert 'case general = "通用"' in source
+    assert 'case intelligence = "本地智能"' in source
+    assert 'case collaboration = "团队协作"' in source
+    assert 'case diagnostics = "诊断"' in source
+    assert "LocalRuntimeSettingsSection" in source
+    assert "FrontendSettingsSection" in source
+
     assert "private var lastStoppedGatewayPID: Int32?" in source
     assert "private func waitForStoppedGateway() async" in source
     assert "await waitForStoppedGateway()" in source
-    assert "isBusy = true" in source
     assert "statusText = \"正在应用服务配置\"" in source
+
+
+def test_desktop_has_native_project_creation_through_host_authority():
+    source = read("macos-app/MirrorOrderDesktopApp.swift")
+    runtime = read("src/script_organizer/automation_runtime.py")
+    server = read("src/script_organizer/web_server.py")
+
+    assert 'Label("新建项目", systemImage: "plus")' in source
+    assert "struct NewProjectSheet" in source
+    assert 'workspaceEndpoint("project-preflight")' in source
+    assert 'workspaceEndpoint("projects")' in source
+    assert '"input_kind": inputKind' in source
+    assert '"media_root": mediaRoot' in source
+    assert '"script": script' in source
+    assert "prepare_task_id" in source
+
+    # Host remains the authority: preflight is local-only and create is wrapped
+    # to submit prepare_project automatically.
+    assert 'parts == ["api", "v1", "project-preflight"]' in runtime
+    assert "self._local_only()" in runtime
+    assert "def create_and_prepare" in runtime
+    assert '"prepare_project"' in runtime
+    assert 'result["prepare_task_id"]' in runtime
+    assert 'self._rewrite(parsed, "/api/v1/projects")' in server
 
 
 def test_web_loader_uses_review_aware_timeline_v3_only():
@@ -100,12 +135,12 @@ def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     identity = read("src/script_organizer/media_identity.py")
     runtime = read("src/script_organizer/device_media_runtime.py")
 
-    assert "这台 Mac 的素材副本" in source
-    assert "为当前项目绑定素材目录" in source
+    assert "绑定 / 重定位本机素材" in source
+    assert "绑定当前项目素材" in source
     assert 'scanAll ? "media-scan-all" : "media-scan"' in source
     assert "workspacePaths" in source
     assert "media-scan-all" in source
-    assert "扫描当前工作区全部项目" in source
+    assert "扫描当前项目库全部项目" in source
     assert 'subparsers.add_parser("media-scan-all"' in cli
     assert '"Application Support" / "MirrorOrder"' in identity
     assert 'item["source_media_path"]' in runtime
