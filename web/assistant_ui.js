@@ -3,6 +3,12 @@
   window.__mirrorOrderAssistantInstalled = true;
 
   const APP_CLIENT = Boolean(window.webkit?.messageHandlers?.mirrorOrder);
+  const PRODUCTION_ISSUE_CODES = new Set([
+    'technical_quality',
+    'continuity_risk',
+    'possible_pickup',
+    'multicam_speaker_visual_mismatch',
+  ]);
   let nativeAudit = null;
   let currentItems = [];
   let currentFingerprint = '';
@@ -186,11 +192,9 @@
       };
     }
 
-    const issues = issuesFor(group).filter((item) => (
-      item?.code === 'technical_quality' || item?.code === 'continuity_risk' || item?.source === 'ai_audit'
-    ));
+    const issues = issuesFor(group).filter((item) => PRODUCTION_ISSUE_CODES.has(String(item?.code || '')));
     const detail = issues.find((item) => item?.detail)?.detail || '';
-    if (issues.length && !issueCodes(group).has('algorithm_disagreement')) {
+    if (issues.length) {
       return {
         key: `material-issue:${group.group_id}`,
         groupId: group.group_id,
