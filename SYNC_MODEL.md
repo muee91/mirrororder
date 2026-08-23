@@ -59,6 +59,22 @@ projects/<project_id>/inputs/source.fcpxml
 
 这些文件让所有设备看到同一套剧本、Take、候选和 XML 时间关系。
 
+### 共享人工生产元数据
+
+- `media_roles.json` / `media_roles.v1`
+  - `media_id`
+  - `camera_override`
+  - `source_role`（同步机位 / 航拍 / 空镜 / GoPro / 细节 / 自定义）
+  - `sync_policy`（`auto` / `exclude`）
+  - `scene_id`
+  - 制作备注 / actor / revision
+
+这类数据是“这条物理素材在项目里是什么”的人工事实，因此可以跨设备同步；它与本机素材路径完全分离。
+
+例如两台 Mac 都识别出同一个 `media_id=M_abc...` 后，都应该知道它被人工标为“航拍、24-3、不参与同步”，但各自仍用自己的 `media-bindings.json` 找到文件。
+
+`media_roles.json` 不拥有 Best / Keep / Reject 权威，不替代 `review.json` / `editorial.json`，也不能直接写 Delivery。
+
 ### 人工审核状态（最高优先级）
 
 - `review.json`
@@ -71,6 +87,8 @@ projects/<project_id>/inputs/source.fcpxml
 
 多人协作时 `review.json` 必须有单一写入权威。推荐所有同时在线的审核设备把审核 action 发给同一个镜序服务，由服务完成 revision 检查和原子写入；不要让多个电脑通过普通网盘同时直接改同一个 `review.json`。
 
+`editorial.json` 的 Individual Opinion / Final Editorial Decision 同样属于共享协作状态；Final Decision 的权限与 revision 规则由 Host 统一治理。
+
 ## 2. 推荐同步，但不是逻辑必需的数据
 
 ### ASR / 对齐缓存
@@ -82,7 +100,7 @@ projects/<project_id>/inputs/source.fcpxml
 
 同步它们的好处是其它设备不需要重新转写和重新跑昂贵分析。
 
-如果不同设备不需要运行分析，只负责看片和审核，则可以只同步最终 `material_index.json` / `script.json` / `matches.json` / `review.json`。
+如果不同设备不需要运行分析，只负责看片和审核，则可以只同步最终 `material_index.json` / `script.json` / `matches.json` / `review.json`；如果要保持制作端的机位覆盖、辅助素材与场景归属一致，再同步 `media_roles.json`。
 
 ### 导出结果
 
@@ -123,6 +141,8 @@ MIRRORORDER_DEVICE_STATE_DIR
 
 这个文件不得放进共享 workspace，不得提交 Git，也不应该通过 iCloud/Dropbox 在多台机器之间同步。
 
+同步任务可以临时读取本机文件并按 `media_id` 应用 `media_roles.v1`，但任务临时配置不得把路径回写到 `media_roles.json` 或其它共享项目状态。
+
 ## 4. `media_id` 与 `clip_id` 的区别
 
 ```text
@@ -161,6 +181,8 @@ C_331
 
 并分别拥有不同片内范围。
 
+因此人工机位覆盖和辅助素材角色应该绑定 `media_id`，而不是绑定 `/Volumes/.../A001.mov`。
+
 ## 5. 当前 media_id 算法
 
 有文件可读时：
@@ -185,6 +207,8 @@ C_331
 
 如果源文件暂时不可读，旧项目可以先使用 `MP_...` filename provisional identity。它只用于兼容迁移，不能冒充内容级确认；在有源文件的机器重新 analyze 后会得到正式 `M_...`。
 
+第一方多机位同步在读取本次任务的 `media_roles` 临时投影时使用相同 quick fingerprint，因此经过 symlink staging 后仍能正确识别被人工排除的辅助素材。
+
 ## 6. 局域网浏览器与第二台 Mac
 
 ```text
@@ -207,27 +231,32 @@ C_331
 
 局域网用户打开 App 显示的 gateway 地址；默认先输入一次性配对码。多个浏览器窗口可以分别使用 `workspace_id` 与 `project_id` 固定不同工作区和项目；媒体流始终来自该 gateway 所在设备。
 
+普通 Web 不提供素材目录扫描、`camera_override`、`source_role` 或同步策略写入口；这些属于 Production App。
+
 ## 7. 数据流
 
 ```text
                     共享项目状态
-        ┌────────────────────────────────┐
-        │ script / material_index        │
-        │ matches / review / media_id    │
-        └───────────────┬────────────────┘
-                        │
-              同步项目事实和审核
-                        │
-        ┌───────────────┴────────────────┐
-        │                                │
-   Mac Studio                        MacBook Pro
-        │                                │
-media-bindings.json                media-bindings.json
-        │                                │
-M_abc → /Volumes/PSSD/...          M_abc → /Volumes/T9/...
-        │                                │
-本机播放 / FCP拖拽                  本机播放 / FCP拖拽
+        ┌────────────────────────────────────┐
+        │ script / material_index / matches │
+        │ review / editorial / media_roles  │
+        │ media_id                          │
+        └─────────────────┬──────────────────┘
+                          │
+                同步项目事实和人工状态
+                          │
+        ┌─────────────────┴──────────────────┐
+        │                                    │
+   Mac Studio                            MacBook Pro
+        │                                    │
+media-bindings.json                    media-bindings.json
+        │                                    │
+M_abc → /Volumes/PSSD/...              M_abc → /Volumes/T9/...
+        │                                    │
+本机播放 / 同步 / FCP拖拽              本机播放 / 同步 / FCP拖拽
 ```
+
+例如 `media_roles.json` 说 `M_drone` 是“航拍 / exclude / SC24-3”，两台设备都共享这个事实；至于 `M_drone` 实际位于哪块盘，由各自 bindings 解析。
 
 ## 8. 哪些数据量真正需要网络同步
 
@@ -238,9 +267,18 @@ script.json
 material_index.json
 matches.json
 review.json
+editorial.json
 ```
 
 通常只是 JSON 文本，远小于原始视频。
+
+制作协作再加：
+
+```text
+media_roles.json
+script_supervisor.json
+其它共享生产事实
+```
 
 推荐完整协作集再加：
 
@@ -256,15 +294,15 @@ ASR缓存
 
 如果大家只是通过一台主机的镜序服务协作：
 
-- `review.json` 由主机服务统一写入
+- `review.json` / `editorial.json` / `media_roles.json` 由主机服务统一写入
 - revision / actor / 原子写入继续有效
 - 最安全
 
-如果每台电脑都运行自己的服务并依赖 Dropbox/iCloud 直接同步 `review.json`：
+如果每台电脑都运行自己的服务并依赖 Dropbox/iCloud 直接同步这些 JSON：
 
 - 文件同步工具可能产生冲突副本
 - 不保证跨机器文件锁
-- 不推荐用于真正同时审核
+- 不推荐用于真正同时编辑
 
 长期推荐架构：
 
@@ -274,4 +312,4 @@ ASR缓存
 每台设备本地 media resolver / native drag bridge
 ```
 
-即：**审核和分析事实中央同步，视频永远本地读取。**
+即：**审核、生产元数据和分析事实中央同步，视频永远本地读取。**
