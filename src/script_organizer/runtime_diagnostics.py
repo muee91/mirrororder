@@ -17,7 +17,10 @@ def _command_status(name: str) -> dict[str, Any]:
 
 
 def _module_status(name: str, required: bool) -> dict[str, Any]:
-    available = importlib.util.find_spec(name) is not None
+    try:
+        available = importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        available = False
     return {"name": name, "available": available, "required": required}
 
 
@@ -48,6 +51,8 @@ def environment_payload(workspaces: list[Path] | None = None) -> dict[str, Any]:
         _module_status("scipy", True),
         _module_status("faster_whisper", False),
         _module_status("mlx_whisper", False),
+        _module_status("cv2", False),
+        _module_status("sherpa_onnx", False),
     ]
     command_map = {item["name"]: item for item in commands}
     module_map = {item["name"]: item for item in modules}
@@ -74,6 +79,14 @@ def environment_payload(workspaces: list[Path] | None = None) -> dict[str, Any]:
         "multicam_engine": _engine_status(),
         "workspaces": workspace_rows,
         "media_directory_sync_ready": bool(required_ok),
+        "identity_runtime": {
+            "face": bool(module_map["numpy"]["available"] and module_map["cv2"]["available"]),
+            "speaker": bool(
+                module_map["numpy"]["available"]
+                and module_map["sherpa_onnx"]["available"]
+                and command_map["ffmpeg"]["available"]
+            ),
+        },
         "host": socket.gethostname(),
         "platform": sys.platform,
         "data_root": os.environ.get("MIRRORORDER_DATA_DIR", ""),
