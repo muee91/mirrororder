@@ -60,23 +60,51 @@ def _valid_base_url(value: str) -> str:
     return raw[:1000]
 
 
+def _public_connection(raw: object, *, key_name: str) -> dict[str, Any]:
+    row = raw if isinstance(raw, dict) else {}
+    return {
+        "enabled": bool(row.get("enabled", False)),
+        "provider": str(row.get("provider", "openai-compatible") or "openai-compatible")[:80],
+        "base_url": str(row.get("base_url", "") or "")[:1000],
+        "model": str(row.get("model", "") or "")[:300],
+        "has_api_key": bool(_read(_secrets_path()).get(key_name)),
+    }
+
+
 def load_model_connections(*, include_secrets: bool = False) -> dict[str, Any]:
     raw = _read(_connections_path())
-    text = raw.get("text", {}) if isinstance(raw.get("text"), dict) else {}
     secrets = _read(_secrets_path()) if include_secrets else {}
     payload = {
-        "version": 1,
-        "text": {
-            "enabled": bool(text.get("enabled", False)),
-            "provider": str(text.get("provider", "openai-compatible") or "openai-compatible")[:80],
-            "base_url": str(text.get("base_url", "") or "")[:1000],
-            "model": str(text.get("model", "") or "")[:300],
-            "has_api_key": bool(_read(_secrets_path()).get("text_api_key")),
-        },
+        "version": 2,
+        "text": _public_connection(raw.get("text", {}), key_name="text_api_key"),
+        "vision": _public_connection(raw.get("vision", {}), key_name="vision_api_key"),
     }
     if include_secrets:
         payload["text"]["api_key"] = str(secrets.get("text_api_key", "") or "")
+        payload["vision"]["api_key"] = str(secrets.get("vision_api_key", "") or "")
     return payload
+
+
+def _normalize_connection(
+    raw: dict[str, Any],
+    current: dict[str, Any],
+    *,
+    label: str,
+) -> dict[str, Any]:
+    enabled = bool(raw.get("enabled", current.get("enabled", False)))
+    provider = str(raw.get("provider", current.get("provider", "openai-compatible")) or "openai-compatible").strip().lower()
+    if provider not in {"openai-compatible", "openai", "local", "llama", "llama.cpp", "llama-server"}:
+        raise ValueError("当前只支持 OpenAI-compatible 或本地 llama 兼容接口")
+    base_url = _valid_base_url(str(raw.get("base_url", current.get("base_url", "")) or ""))
+    model = str(raw.get("model", current.get("model", "")) or "").strip()[:300]
+    if enabled and (not base_url or not model):
+        raise ValueError(f"启用{label}需要模型地址和模型名")
+    return {
+        "enabled": enabled,
+        "provider": provider,
+        "base_url": base_url,
+        "model": model,
+    }
 
 
 def save_model_connections(raw: object) -> dict[str, Any]:
@@ -84,31 +112,20 @@ def save_model_connections(raw: object) -> dict[str, Any]:
         raise ValueError("模型连接设置必须是对象")
     current = load_model_connections(include_secrets=True)
     text_raw = raw.get("text", {}) if isinstance(raw.get("text"), dict) else {}
-    current_text = current["text"]
-    enabled = bool(text_raw.get("enabled", current_text.get("enabled", False)))
-    provider = str(text_raw.get("provider", current_text.get("provider", "openai-compatible")) or "openai-compatible").strip().lower()
-    if provider not in {"openai-compatible", "openai", "local", "llama", "llama.cpp", "llama-server"}:
-        raise ValueError("当前只支持 OpenAI-compatible 或本地 llama 兼容接口")
-    base_url = _valid_base_url(str(text_raw.get("base_url", current_text.get("base_url", "")) or ""))
-    model = str(text_raw.get("model", current_text.get("model", "")) or "").strip()[:300]
-    if enabled and (not base_url or not model):
-        raise ValueError("启用语言模型需要模型地址和模型名")
-    public = {
-        "version": 1,
-        "text": {
-            "enabled": enabled,
-            "provider": provider,
-            "base_url": base_url,
-            "model": model,
-        },
-    }
+    vision_raw = raw.get("vision", {}) if isinstance(raw.get("vision"), dict) else {}
+    text = _normalize_connection(text_raw, current["text"], label="语言模型")
+    vision = _normalize_connection(vision_raw, current["vision"], label="多模态模型")
+    public = {"version": 2, "text": text, "vision": vision}
     _atomic(_connections_path(), public)
+
     secrets = _read(_secrets_path())
-    if "api_key" in text_raw:
-        key = str(text_raw.get("api_key", "") or "").strip()
+    for row, key_name in ((text_raw, "text_api_key"), (vision_raw, "vision_api_key")):
+        if "api_key" not in row:
+            continue
+        key = str(row.get("api_key", "") or "").strip()
         if key:
-            secrets["text_api_key"] = key
+            secrets[key_name] = key
         else:
-            secrets.pop("text_api_key", None)
+            secrets.pop(key_name, None)
     _atomic(_secrets_path(), secrets, secret=True)
     return load_model_connections(include_secrets=False)
