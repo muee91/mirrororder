@@ -1,3 +1,10 @@
+/* The production App owns the visible entry under 剪辑 → 时间线. The legacy
+   topbar trigger remains as a compatibility control used programmatically by
+   production_mode.js, but is not a second user-facing entrance. */
+html.native-production #timeline-toggle {
+  display: none !important;
+}
+
 .timeline-toggle.active {
   color: var(--accent, #54c8f0);
 }
