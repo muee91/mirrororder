@@ -1,0 +1,72 @@
+html.native-production .rough-cut-list{display:block}
+html.native-production .rough-cut-scene{border-bottom:1px solid var(--line);background:transparent}
+html.native-production .rough-cut-scene>summary{
+  display:grid;
+  grid-template-columns:62px minmax(0,1fr) 18px;
+  min-height:48px;
+  padding:7px 14px;
+  list-style:none;
+  cursor:pointer;
+}
+html.native-production .rough-cut-scene>summary::-webkit-details-marker{display:none}
+html.native-production .rough-cut-scene>summary:hover{background:var(--panel-soft)}
+html.native-production .rough-cut-scene-episode{align-self:center;color:var(--muted);font-size:10px;font-weight:650;font-variant-numeric:tabular-nums}
+html.native-production .rough-cut-scene-main{display:grid;align-content:center;min-width:0;gap:2px}
+html.native-production .rough-cut-scene-main strong,
+html.native-production .rough-cut-scene-main small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.native-production .rough-cut-scene-main strong{font-size:11px;font-weight:620}
+html.native-production .rough-cut-scene-main small{color:var(--muted);font-size:9px;line-height:1.35}
+html.native-production .rough-cut-scene-disclosure{align-self:center;justify-self:end;color:var(--muted);font-size:16px;transition:transform .12s ease}
+html.native-production .rough-cut-scene[open] .rough-cut-scene-disclosure{transform:rotate(90deg)}
+html.native-production .rough-cut-scene-body{border-top:1px solid var(--line);background:var(--panel-soft)}
+html.native-production .rough-cut-segment{border-bottom:1px solid var(--line)}
+html.native-production .rough-cut-segment:last-child{border-bottom:0}
+html.native-production .rough-cut-segment-head{
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr);
+  min-height:38px;
+  padding:6px 14px 6px 76px;
+  background:rgba(255,255,255,.28);
+}
+html.native-production .rough-cut-order{align-self:center;color:var(--muted);font-size:9px;font-variant-numeric:tabular-nums}
+html.native-production .rough-cut-script{display:grid;align-content:center;min-width:0;gap:2px}
+html.native-production .rough-cut-script strong,
+html.native-production .rough-cut-script small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.native-production .rough-cut-script strong{font-size:10px;font-weight:620}
+html.native-production .rough-cut-script small{color:var(--muted);font-size:9px}
+html.native-production .rough-cut-candidates{background:transparent}
+html.native-production .rough-cut-candidate{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 150px 18px;
+  width:100%;
+  min-height:42px;
+  padding:5px 14px 5px 120px;
+  border:0;
+  border-top:1px solid var(--line);
+  border-radius:0;
+  background:transparent;
+  color:var(--ink);
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+html.native-production .rough-cut-candidate:hover{background:var(--control-hover)}
+html.native-production .rough-cut-candidate.is-primary{box-shadow:inset 2px 0 0 var(--blue)}
+html.native-production .rough-cut-candidate-main{display:grid;align-content:center;min-width:0;gap:2px}
+html.native-production .rough-cut-candidate-main strong,
+html.native-production .rough-cut-candidate-main small,
+html.native-production .rough-cut-candidate-id{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.native-production .rough-cut-candidate-main strong{font-size:10px;font-weight:620}
+html.native-production .rough-cut-candidate-main small{color:var(--muted);font-size:9px}
+html.native-production .rough-cut-candidate-id{align-self:center;color:var(--muted);font-size:9px;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+html.native-production .rough-cut-empty{padding:10px 120px;color:var(--muted);font-size:10px}
+html.native-production .rough-cut-status-strip{overflow-x:auto}
+html.native-production #production-rough-cut-tab span:empty{display:none}
+
+@media(max-width:760px){
+  html.native-production .rough-cut-scene>summary{grid-template-columns:52px minmax(0,1fr) 14px;padding-inline:10px}
+  html.native-production .rough-cut-segment-head{grid-template-columns:36px minmax(0,1fr);padding-left:62px;padding-right:10px}
+  html.native-production .rough-cut-candidate{grid-template-columns:minmax(0,1fr) 14px;padding-left:98px;padding-right:10px}
+  html.native-production .rough-cut-candidate-id{display:none}
+  html.native-production .rough-cut-empty{padding-left:98px;padding-right:10px}
+}
