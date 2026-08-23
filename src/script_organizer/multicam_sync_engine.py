@@ -185,16 +185,17 @@ def _write_config(script_dir: Path, base: Path, export_base: Path, work: Path, o
 
 
 def _refresh_analysis_link(link: Path, target: Path) -> None:
-    """Keep one internal pointer for existing analysis code; never duplicate XML content."""
+    """Keep one internal symlink for old analysis paths without duplicating XML."""
     link.parent.mkdir(parents=True, exist_ok=True)
     try:
         if link.is_symlink() or link.exists():
             link.unlink()
         link.symlink_to(target.resolve())
-    except OSError:
-        # Some filesystems disallow symlinks. A byte-identical internal copy is a
-        # compatibility fallback, not a second path format.
-        shutil.copyfile(target, link)
+    except OSError as error:
+        raise RuntimeError(
+            "无法创建项目内部 synchronized.fcpxml 链接；为避免相对素材路径基准错误，"
+            "镜序不会复制一份到其他目录。请确认项目磁盘支持符号链接。"
+        ) from error
 
 
 def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None = None, compress_gaps: bool = True) -> dict[str, Any]:
