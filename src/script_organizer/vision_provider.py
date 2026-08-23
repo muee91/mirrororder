@@ -38,20 +38,24 @@ class VisionProviderConfig:
     def from_env(cls) -> "VisionProviderConfig":
         device = load_runtime_settings()
         raw_provider = os.environ.get("MIRRORORDER_VISION_PROVIDER")
-        explicit_env = raw_provider is not None or any(
-            name in os.environ
-            for name in (
-                "MIRRORORDER_VISION_BASE_URL",
-                "MIRRORORDER_VISION_API_KEY",
-                "MIRRORORDER_VISION_MODEL",
-            )
-        )
+        raw_base = os.environ.get("MIRRORORDER_VISION_BASE_URL")
+        raw_key = os.environ.get("MIRRORORDER_VISION_API_KEY")
+        raw_model = os.environ.get("MIRRORORDER_VISION_MODEL")
+        explicit_env = any(value is not None for value in (raw_provider, raw_base, raw_key, raw_model))
         saved = load_model_connections(include_secrets=True).get("vision", {})
         if explicit_env:
-            provider = str(raw_provider or "openai-compatible").strip().lower()
-            base_url = os.environ.get("MIRRORORDER_VISION_BASE_URL", "").strip().rstrip("/")
-            api_key = os.environ.get("MIRRORORDER_VISION_API_KEY", "").strip()
-            model = os.environ.get("MIRRORORDER_VISION_MODEL", "").strip()
+            if raw_provider is not None:
+                provider = str(raw_provider or "none").strip().lower()
+            elif device.get("local_vision_enabled") and not str(raw_base or "").strip():
+                # Backward compatibility: MIRRORORDER_VISION_MODEL alone has
+                # historically meant "override the local model", not "switch
+                # to a remote provider".
+                provider = "local"
+            else:
+                provider = "openai-compatible"
+            base_url = str(raw_base or "").strip().rstrip("/")
+            api_key = str(raw_key or "").strip()
+            model = str(raw_model or "").strip()
         elif isinstance(saved, dict) and saved.get("enabled") and saved.get("base_url") and saved.get("model"):
             provider = str(saved.get("provider", "openai-compatible") or "openai-compatible").strip().lower()
             base_url = str(saved.get("base_url", "") or "").strip().rstrip("/")
