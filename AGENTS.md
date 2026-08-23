@@ -5,6 +5,7 @@
 - 理解现有实现、调用链和状态流。
 - 先读 `README.md`、`项目介绍.md`、`DESKTOP_BRIDGE.md`、`SYNC_MODEL.md`、`AUTOMATION_PIPELINE.md`。
 - 涉及AI审计、人物/声纹、算法迭代或粗剪准备时再读 `docs/ai-audit-learning-loop.md`。
+- 涉及镜序助理、模型连接、Agent API或自动生产编排时再读 `docs/assistant-orchestration.md`。
 - 检查运行服务、项目配置、当前输出、`auto_decisions.json`、`review.json`、`editorial.json` 和已有 `audit.json`。
 - 不确定时先给出证据和不确定点，禁止猜测式修改。
 
@@ -22,6 +23,7 @@
 - 自动确认写 `auto_decisions.json`，不得伪装成人工审核，也不得直接写 `review.json`。
 - `audit.json` 是可重建的只读审计证据，不是生产判断权威；不得被 matcher、review 或 delivery 当作隐式真值。
 - `learning_cases.jsonl` 只用于离线 replay/eval/算法研发，生产 matcher 禁止读取它形成隐式反馈环。
+- `assistant.json` 是镜序助理的可重建派生状态，不是审核、Editorial Decision或Delivery权威。
 
 ## 自动整理、模型救援与Shadow Audit
 
@@ -39,6 +41,21 @@
 - 未配置模型 Provider 时主流程仍必须离线可用：高置信度自动确认，低置信度进入异常队列；Audit 可以只保留确定性问题分类。
 - Provider API Key 不得写入 workspace、project.toml、review.json、audit.json 或可同步产物。
 - 修改这条链前先读 `AUTOMATION_PIPELINE.md` 和 `docs/ai-audit-learning-loop.md`。
+
+## 镜序助理、模型与Agent
+
+- 镜序助理是 Host 上方的受限生产编排层，不是拥有文件系统/审核写权限的通用聊天 Agent。
+- Assistant Orchestrator 只能执行 `AgentToolRegistry.SAFE_ACTIONS` 中登记的第一方工具；新增工具必须显式定义参数上限、写入边界与测试。
+- 当前允许助理调度的高成本工作必须是 bounded/scoped：priority Audit ≤ 24 Take，视觉证据 ≤ 12 Take，身份索引 ≤ 16 Take；禁止用“AI接管”为理由默认全项目重算。
+- `run_priority_audit`、`extract_visual_evidence`、`index_unknown_identities` 可以补证据，但都不得直接形成 Best/Reject、人工归集或 Editorial Decision。
+- 已启用本地视觉时，助理可在主分析完成后主动审计尚无当前证据的高优先异常；幂等键必须绑定当前 analysis revision，不能复用旧分析任务。
+- 语言模型自动规划默认关闭；只有 App 明确“让助理规划”或设置 `MIRRORORDER_ASSISTANT_AUTO_PLAN=1` 才允许调用语言模型生成工具计划。
+- 模型生成的 tool name / arguments 必须由 Host 再次校验；未知工具一律拒绝，不能让模型绕过 allowlist。
+- 语言模型和可选远端多模态连接保存为设备本地状态；API Key 只能保存在本机 secrets，不得进入 workspace/project/assistant/audit/review/editorial/auto_decisions。
+- 外部多模态连接只有用户明确启用后才允许接收抽帧；未启用时继续使用已启用的本地视觉或不运行视觉模型。
+- App 可以查看模型连接、Agent API、规划和助理对话；普通 Team Web 只拿安全的 `assistant.v1` summary/items，不得获得模型配置、API Key、Host运行时或App助理聊天记录。
+- 外部 Agent API 继续使用 Bearer + `read/analyze/propose` scope；即使调用 assistant cycle 也不能直接写人工审核。
+- 修改这条链前先读 `docs/assistant-orchestration.md`。
 
 ## 人物、声纹与角色推断
 
@@ -154,6 +171,16 @@ python3 -m pytest -q
 - speaker角色候选必须来自speaker observation + 当前可靠剧本归集，不得把face observation当成说话人。
 - 多机位Shot Intelligence按clip_id独立保存和显示。
 - `learning_cases.jsonl` 不包含Host媒体绝对路径，且生产matcher没有读取入口。
+
+涉及镜序助理 / 模型 / Agent时还要验证：
+
+- 无语言模型时仍可生成确定性问题队列，且不会因为缺LLM阻断主流程。
+- 已启用本地视觉时只对高优先未审计Take提交bounded priority Audit，同一analysis revision不重复提交。
+- Assistant Tool Registry 拒绝未注册工具；证据与身份任务都有group数量上限。
+- 人工已确认identity不会被助理发起的指定Take索引重算。
+- 模型API Key只存在设备本地secret，Host/Web/Agent公开payload均不包含密钥。
+- Team Web和外部Agent拿不到App助理聊天记录、模型配置或Host运行时路径。
+- Agent assistant cycle仍需要analyze scope，且不能直接写review/editorial。
 
 涉及前端时还要验证：
 
