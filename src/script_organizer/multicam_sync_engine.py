@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import ProjectConfig
-from .media_relink import rewrite_fcpxml_media, rewrite_premiere_media, write_relink_manifest
 
 
 class MulticamSyncUnavailable(RuntimeError):
@@ -43,10 +42,7 @@ def _engine_candidates() -> list[Path]:
         result.append(Path(env).expanduser())
     module = Path(__file__).resolve()
     for parent in module.parents:
-        result.extend([
-            parent / "multicam-audio-sync",
-            parent / "vendor" / "multicam-audio-sync",
-        ])
+        result.extend([parent / "multicam-audio-sync", parent / "vendor" / "multicam-audio-sync"])
     seen: set[str] = set()
     unique = []
     for path in result:
@@ -64,13 +60,9 @@ def _valid_engine(path: Path) -> bool:
 
 def _check_prerequisites() -> None:
     missing_commands = [name for name in ("ffmpeg", "ffprobe") if shutil.which(name) is None]
-    missing_modules = [
-        name for name in ("numpy", "pandas", "scipy")
-        if importlib.util.find_spec(name) is None
-    ]
+    missing_modules = [name for name in ("numpy", "pandas", "scipy") if importlib.util.find_spec(name) is None]
     if not missing_commands and not missing_modules:
         return
-    requirements = "vendor/multicam-audio-sync/requirements.txt"
     details = []
     if missing_commands:
         details.append("缺少命令: " + ", ".join(missing_commands))
@@ -78,7 +70,7 @@ def _check_prerequisites() -> None:
         details.append("缺少 Python 模块: " + ", ".join(missing_modules))
     raise MulticamSyncUnavailable(
         "多机位同步环境未就绪（" + "；".join(details) + "）。"
-        "请安装 FFmpeg，并按 " + requirements + " 安装第一方同步引擎依赖。"
+        "请安装 FFmpeg，并按 vendor/multicam-audio-sync/requirements.txt 安装第一方同步引擎依赖。"
     )
 
 
@@ -95,22 +87,9 @@ def _materialize_engine(runtime: Path) -> tuple[Path, str]:
     )
 
 
-def _run(
-    script_dir: Path,
-    script: str,
-    args: list[str],
-    log: Callable[[str], None] | None = None,
-    timeout: int = 60 * 60 * 6,
-) -> str:
+def _run(script_dir: Path, script: str, args: list[str], log: Callable[[str], None] | None = None, timeout: int = 60 * 60 * 6) -> str:
     command = [sys.executable, str(script_dir / script), *args]
-    process = subprocess.Popen(
-        command,
-        cwd=script_dir,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
+    process = subprocess.Popen(command, cwd=script_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     lines = []
     try:
         assert process.stdout is not None
@@ -191,21 +170,8 @@ def _prepare_media_base(source: Path, stage_root: Path) -> tuple[Path, str]:
     return stage_root, "normalized-single-day"
 
 
-def _write_config(
-    script_dir: Path,
-    base: Path,
-    work: Path,
-    output: Path,
-    project_name: str,
-    out_name: str,
-) -> None:
-    """Write one builder-specific output name.
-
-    The upstream scripts historically shared manual.out_name. Reusing one value
-    across FCPXML, CapCut and Premiere lets later builders overwrite an earlier
-    artifact. MirrorOrder rewrites config.json before each builder instead.
-    """
-
+def _write_config(script_dir: Path, base: Path, export_base: Path, work: Path, output: Path, project_name: str, out_name: str) -> None:
+    """Give each builder a distinct filename and the real media root for relative URLs."""
     payload = {
         "BASE": str(base),
         "WORK": str(work),
@@ -213,16 +179,13 @@ def _write_config(
         "manual": {
             "project_name": project_name,
             "out_name": out_name,
+            "export_base": str(export_base),
         },
     }
     (script_dir / "config.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def run_multicam_sync(
-    config: ProjectConfig,
-    log: Callable[[str], None] | None = None,
-    compress_gaps: bool = True,
-) -> dict[str, Any]:
+def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None = None, compress_gaps: bool = True) -> dict[str, Any]:
     if not config.is_media_directory or not config.media_root:
         if config.fcpxml and config.fcpxml.exists():
             return {"status": "skipped", "reason": "项目已有 FCPXML", "fcpxml": str(config.fcpxml)}
@@ -241,12 +204,15 @@ def run_multicam_sync(
     work.mkdir(parents=True, exist_ok=True)
     delivery.mkdir(parents=True, exist_ok=True)
     media_base, layout = _prepare_media_base(config.media_root, stage)
-    _write_config(script_dir, media_base, work, delivery, config.name, "synchronized.fcpxml")
+
+    def write_builder_config(out_name: str) -> None:
+        _write_config(script_dir, media_base, config.media_root, work, delivery, config.name, out_name)
 
     def emit(text: str) -> None:
         if log:
             log(text)
 
+    write_builder_config("synchronized.fcpxml")
     emit(f"同步引擎：{engine_source}")
     emit(f"素材布局：{layout}")
     emit("盘点素材与时间码")
@@ -272,92 +238,39 @@ def run_multicam_sync(
             raise RuntimeError(f"压缩后位置表缺失: {compressed}")
         positions.append(compressed)
 
-    emit("生成 FCPXML 1.8 多机位时间线")
-    _write_config(script_dir, media_base, work, delivery, config.name, "synchronized.fcpxml")
+    emit("生成标准 FCPXML 1.8 多机位时间线（相对素材路径）")
+    write_builder_config("synchronized.fcpxml")
     _run(script_dir, "build_fcpxml.py", [], emit)
     fcpxml = delivery / "synchronized.fcpxml"
     if not fcpxml.is_file():
         raise RuntimeError("同步完成但 synchronized.fcpxml 未生成")
-
-    emit("规范化 FCPXML 素材路径，移除同步临时目录引用")
-    local_fcpxml = rewrite_fcpxml_media(
-        fcpxml,
-        scan_root=media_base,
-        source_root=config.media_root,
-    )
-    portable_fcpxml_path = delivery / "synchronized_portable.fcpxml"
-    portable_fcpxml = rewrite_fcpxml_media(
-        fcpxml,
-        scan_root=media_base,
-        source_root=config.media_root,
-        output=portable_fcpxml_path,
-        portable=True,
-    )
-
     emit("校验 FCPXML 帧边界、素材引用与结构")
     _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(config.media_root)], emit)
 
     capcut = ""
-    portable_capcut = ""
-    capcut_report: dict[str, Any] = {}
-    portable_capcut_report: dict[str, Any] = {}
     if (script_dir / "build_capcut_fcpxml.py").is_file():
         try:
-            emit("生成剪映 / CapCut FCPXML")
-            # build_capcut_fcpxml.py turns *_final.fcpxml into *_capcut.fcpxml.
-            _write_config(script_dir, media_base, work, delivery, config.name, "synchronized_final.fcpxml")
+            emit("生成标准 FCPXML 1.8 剪映兼容时间线（相对素材路径）")
+            write_builder_config("synchronized_final.fcpxml")
             _run(script_dir, "build_capcut_fcpxml.py", [], emit)
             capcut_path = delivery / "synchronized_capcut.fcpxml"
             if capcut_path.is_file():
-                capcut_report = rewrite_fcpxml_media(
-                    capcut_path,
-                    scan_root=media_base,
-                    source_root=config.media_root,
-                )
-                portable_capcut_path = delivery / "synchronized_capcut_portable.fcpxml"
-                portable_capcut_report = rewrite_fcpxml_media(
-                    capcut_path,
-                    scan_root=media_base,
-                    source_root=config.media_root,
-                    output=portable_capcut_path,
-                    portable=True,
-                )
+                _run(script_dir, "validate_fcpxml.py", [str(capcut_path), str(config.media_root)], emit)
                 capcut = str(capcut_path)
-                portable_capcut = str(portable_capcut_path)
         except Exception as error:
             emit(f"剪映 / CapCut FCPXML 可选生成失败：{error}")
 
     premiere = ""
-    premiere_report: dict[str, Any] = {}
     if (script_dir / "build_pr_xml.py").is_file():
         try:
             emit("生成 Premiere XML")
-            _write_config(script_dir, media_base, work, delivery, config.name, "synchronized_premiere.xml")
+            write_builder_config("synchronized_premiere.xml")
             _run(script_dir, "build_pr_xml.py", [], emit)
             premiere_path = delivery / "synchronized_premiere.xml"
-            if premiere_path.is_file():
-                premiere_report = rewrite_premiere_media(
-                    premiere_path,
-                    scan_root=media_base,
-                    source_root=config.media_root,
-                )
-                premiere = str(premiere_path)
+            premiere = str(premiere_path) if premiere_path.is_file() else ""
         except Exception as error:
             emit(f"Premiere XML 可选生成失败：{error}")
 
-    manifest_path = delivery / "media_relink_manifest.json"
-    relink_manifest = write_relink_manifest(
-        manifest_path,
-        source_root=config.media_root,
-        local_fcpxml=local_fcpxml,
-        portable_fcpxml=portable_fcpxml,
-        capcut_fcpxml=capcut_report,
-        portable_capcut_fcpxml=portable_capcut_report,
-        premiere_xml=premiere_report,
-    )
-
-    # synchronized.fcpxml is a generated artifact. The original project.toml
-    # remains media-directory so re-sync/revision history never loses its source.
     report = {
         "status": "completed",
         "engine_source": engine_source,
@@ -367,12 +280,9 @@ def run_multicam_sync(
         "days": days,
         "positions": [str(path) for path in positions],
         "fcpxml": str(fcpxml),
-        "portable_fcpxml": str(portable_fcpxml_path),
         "capcut_fcpxml": capcut,
-        "portable_capcut_fcpxml": portable_capcut,
         "premiere_xml": premiere,
-        "media_relink_manifest": str(manifest_path),
-        "media_reference_count": len(relink_manifest.get("files", [])),
+        "media_reference_mode": "relative-url",
         "source_kind": "media-directory",
         "project_promoted_to_fcpxml": False,
     }
