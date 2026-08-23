@@ -13,8 +13,7 @@ def test_native_production_layer_is_loaded_but_bridge_gated() -> None:
 
     assert '<link rel="stylesheet" href="/production.css">' in html
     assert '<script src="/production_mode.js"></script>' in html
-    assert "window.webkit?.messageHandlers?.mirrorOrder" in js
-    assert "if (!nativeBridge()) return;" in js
+    assert "if (!window.webkit?.messageHandlers?.mirrorOrder) return;" in js
     assert "document.documentElement.classList.add('native-production')" in js
     assert "html.native-production .topbar" in css
     assert "html.native-production .app-shell" in css
@@ -23,12 +22,11 @@ def test_native_production_layer_is_loaded_but_bridge_gated() -> None:
 def test_production_navigation_stays_project_scoped_and_professional() -> None:
     js = (ROOT / "web" / "production_mode.js").read_text(encoding="utf-8")
 
-    for label in ("审阅", "概览", "待处理", "素材", "剧本", "Take", "人物"):
+    for label in ("审阅", "概览", "待处理", "素材", "剧本", "Take", "人物", "粗剪", "组接", "时间线"):
         assert label in js
-    assert "Production" in js
     assert "项目制作导航" in js
-    assert "工作台" not in js
     assert "AI 控制台" not in js
+    assert "['timeline', '时间线']" in js
 
 
 def test_production_layer_does_not_create_a_second_write_path() -> None:
@@ -45,6 +43,8 @@ def test_production_layer_does_not_create_a_second_write_path() -> None:
 
 def test_normal_web_review_keeps_review_surface_without_production_dom() -> None:
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    ux = (ROOT / "web" / "ux_fixes.js").read_text(encoding="utf-8")
+    timeline_loader = (ROOT / "web" / "timeline.js").read_text(encoding="utf-8")
 
     assert 'id="workspace-select"' in html
     assert 'id="project-select"' in html
@@ -54,6 +54,8 @@ def test_normal_web_review_keeps_review_surface_without_production_dom() -> None
     assert 'id="production-panel"' not in html
     assert 'id="create-project" type="button" hidden' in html
     assert 'id="task-button" type="button" hidden' in html
+    assert "if (window.webkit?.messageHandlers?.mirrorOrder)" in ux
+    assert "if (!window.webkit?.messageHandlers?.mirrorOrder) return;" in timeline_loader
 
 
 def test_native_workspace_preserves_appkit_bridge_and_team_review_exit() -> None:
