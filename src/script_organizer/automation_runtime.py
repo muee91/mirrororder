@@ -4,11 +4,13 @@ import os
 import re
 import shutil
 import tempfile
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
 from .automation_store import AutomationStore
 from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
+from .identity_library import IdentityLibrary
 from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .runtime_diagnostics import environment_payload
@@ -129,6 +131,12 @@ def _workspace_for_service(service: Any) -> Any:
     return current.workspace
 
 
+def _identity_library_for(service: Any, project_id: str) -> IdentityLibrary:
+    service.registry.get(project_id)
+    workspace = _workspace_for_service(service)
+    return IdentityLibrary(WorkspaceDatabase(workspace.workspace_id), project_id)
+
+
 def install_automation_runtime() -> None:
     """Attach auto-decision state without making it human review authority."""
     global _INSTALLED
@@ -242,6 +250,18 @@ def install_automation_runtime() -> None:
                     }
                     self._send_json(health)
                     return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "identities"
+                ):
+                    self._local_only()
+                    project_id = parts[3]
+                    query = urllib.parse.parse_qs(parsed.query)
+                    kind = str((query.get("kind") or [""])[0] or "")
+                    library = _identity_library_for(service, project_id)
+                    self._send_json({"identities": library.list(kind)})
+                    return
                 return super()._app_get(parsed)
 
             def _app_post(self, parsed):
@@ -284,6 +304,36 @@ def install_automation_runtime() -> None:
                     else:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知本机运行时操作")
                     self._send_json(_runtime_payload(), web_server.HTTPStatus.ACCEPTED)
+                    return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "identities"
+                ):
+                    self._local_only()
+                    project_id = parts[3]
+                    payload = web_server._body(self)
+                    library = _identity_library_for(service, project_id)
+                    action = str(payload.get("action", "update") or "update")
+                    if action == "update":
+                        identity_id = str(payload.get("identity_id", "") or "")
+                        updated = library.update(
+                            identity_id,
+                            label=str(payload.get("label", "") or ""),
+                            role_name=str(payload.get("role_name", "") or ""),
+                        )
+                        self._send_json(updated)
+                    elif action == "merge":
+                        sources = payload.get("source_identity_ids", [])
+                        if not isinstance(sources, list):
+                            raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "source_identity_ids 必须是数组")
+                        merged = library.merge(
+                            str(payload.get("target_identity_id", "") or ""),
+                            [str(value) for value in sources],
+                        )
+                        self._send_json(merged)
+                    else:
+                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知身份库操作")
                     return
                 if (
                     len(parts) == 5
