@@ -30,6 +30,9 @@
   const roleLabels = {
     master: '主镜', dialogue: '对白', reaction: '反应', insert: '细节', establishing: '建立', transition: '过场',
   };
+  const sourceRoleLabels = {
+    aerial: '航拍', broll: '空镜', gopro: 'GoPro', insert: '细节', custom: '辅助', sync_camera: '同步机位',
+  };
   const supervisorLabels = {usable: '场记可用', partial: '场记部分可用', ng: '场记 NG'};
 
   function asArray(value) { return Array.isArray(value) ? value : []; }
@@ -90,7 +93,8 @@
           closeup: '近景', extreme_closeup: '特写', insert: '细节', unknown: '未识别',
         }[shot] || '未识别';
         const human = angle.shot_source === 'script_supervisor' ? ' · 人工' : '';
-        return `${angle.camera || '?'} ${shotText}${human}${role ? ` · ${role}` : ''}`;
+        const cameraOverride = angle.detected_camera && angle.detected_camera !== angle.camera ? ' · 人工机位' : '';
+        return `${angle.camera || '?'} ${shotText}${human}${cameraOverride}${role ? ` · ${role}` : ''}`;
       })
       .join('　');
   }
@@ -146,22 +150,48 @@
     `;
   }
 
+  function renderAuxiliary(scene) {
+    const rows = asArray(scene.auxiliary_media);
+    if (!rows.length) return '';
+    return `
+      <div class="rough-cut-auxiliary">
+        <div class="rough-cut-auxiliary-head"><strong>辅助覆盖</strong><span>可考虑建立、过场、细节；不自动替代 Best</span></div>
+        ${rows.map((row) => {
+          const sourceRole = String(row.source_role || 'custom');
+          const role = row.role_label || sourceRoleLabels[sourceRole] || sourceRole;
+          const detail = [row.camera ? `机位 ${row.camera}` : '', row.note || ''].filter(Boolean).join(' · ') || '已归入当前场景';
+          return `
+            <div class="auxiliary-media-row">
+              <span class="auxiliary-media-role">${esc(role)}</span>
+              <span class="auxiliary-media-main"><strong>${esc(row.display_name || row.media_id || '辅助素材')}</strong><small>${esc(row.sync_policy === 'exclude' ? '不参与同步' : '辅助素材')}</small></span>
+              <span class="auxiliary-media-note">${esc(detail)}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
   function renderScene(scene) {
     const summary = asObject(scene.summary);
     const attention = Number(summary.needs_choice || 0) + Number(summary.conflicts || 0) + Number(summary.no_eligible || 0);
     const readiness = String(scene.readiness || 'needs_review');
     const readinessText = readiness === 'ready' ? '已具备明确 Best' : readiness === 'blocked' ? '存在阻塞' : '需要编辑判断';
+    const auxiliaryCount = Number(summary.auxiliary_media || asArray(scene.auxiliary_media).length || 0);
     return `
       <details class="rough-cut-scene" ${attention ? 'open' : ''}>
         <summary>
           <span class="rough-cut-scene-episode">EP${esc(scene.episode || '—')}</span>
           <span class="rough-cut-scene-main">
             <strong>${esc(scene.heading || scene.scene_id || '未命名场景')}</strong>
-            <small>${Number(summary.segments || 0)} 段 · Best ${Number(summary.explicit_best || 0)} · 待选 ${Number(summary.needs_choice || 0)} · 冲突 ${Number(summary.conflicts || 0)} · ${esc(readinessText)}</small>
+            <small>${Number(summary.segments || 0)} 段 · Best ${Number(summary.explicit_best || 0)} · 待选 ${Number(summary.needs_choice || 0)} · 冲突 ${Number(summary.conflicts || 0)}${auxiliaryCount ? ` · 辅助 ${auxiliaryCount}` : ''} · ${esc(readinessText)}</small>
           </span>
           <span class="rough-cut-scene-disclosure">›</span>
         </summary>
-        <div class="rough-cut-scene-body">${asArray(scene.segments).map(renderSegment).join('') || '<div class="rough-cut-empty">这个场景没有需要规划的剧本段。</div>'}</div>
+        <div class="rough-cut-scene-body">
+          ${asArray(scene.segments).map(renderSegment).join('') || '<div class="rough-cut-empty">这个场景没有需要规划的剧本段。</div>'}
+          ${renderAuxiliary(scene)}
+        </div>
       </details>
     `;
   }
@@ -173,7 +203,7 @@
     if (!panel) return;
     panel.hidden = false;
     if (loading && !payload) {
-      panel.innerHTML = '<div class="production-empty"><strong>正在整理粗剪计划</strong><span>读取场景覆盖、场记和现有编辑决定，不会自动替你选择 Best。</span></div>';
+      panel.innerHTML = '<div class="production-empty"><strong>正在整理粗剪计划</strong><span>读取场景覆盖、辅助素材、场记和现有编辑决定，不会自动替你选择 Best。</span></div>';
       return;
     }
     if (!payload) {
@@ -192,17 +222,18 @@
     const readinessText = readiness === 'ready' ? '可进入组装' : readiness === 'blocked' ? '有阻塞项' : '需要编辑判断';
     panel.innerHTML = `
       <div class="production-section-head">
-        <div><strong>粗剪规划</strong><span>复用 Coverage、场记与 delivery.v1；场记 NG 约束规划但不会改写 Delivery，Best/NG 冲突必须人工处理。</span></div>
-        <span>${Number(summary.segments || 0)} 段 · ${esc(readinessText)}</span>
+        <div><strong>粗剪规划</strong><span>复用 Coverage、场记与 delivery.v1；辅助素材作为场景资源，不会被提升成对白 Best。</span></div>
+        <span>${Number(summary.segments || 0)} 段 · ${Number(summary.auxiliary_media || 0)} 辅助 · ${esc(readinessText)}</span>
       </div>
       <div class="production-status-strip rough-cut-status-strip">
         <span><strong>${Number(statuses.explicit_best || 0)}</strong>已有最佳</span>
         <span><strong>${Number(statuses.needs_editorial_choice || 0)}</strong>待选择</span>
         <span><strong>${Number(statuses.conflict_multiple_best || 0) + Number(statuses.conflict_supervisor_vs_best || 0)}</strong>冲突</span>
+        <span><strong>${Number(summary.auxiliary_media || 0)}</strong>辅助覆盖</span>
         <span><strong>${Number(statuses.no_eligible_take || 0)}</strong>无可用</span>
       </div>
       <div class="rough-cut-list">${asArray(payload.scenes).map(renderScene).join('') || '<div class="rough-cut-empty">当前范围没有粗剪规划内容。</div>'}</div>
-      <div class="production-note">场记是人工生产证据；Final Decision 仍按既有 delivery.v1 进入 Selection Manifest。这个规划页不写 Manifest、不生成时间线，也不修改 FCPXML。</div>
+      <div class="production-note">场记和素材角色都是人工生产证据；Final Decision 仍按既有 delivery.v1 进入 Selection Manifest。辅助素材不会自动成为 Primary，这个规划页也不写 Manifest、不生成时间线、不修改 FCPXML。</div>
     `;
   }
 
