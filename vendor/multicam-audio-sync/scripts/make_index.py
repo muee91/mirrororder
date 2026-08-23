@@ -11,10 +11,14 @@ day/cam 是显式列（由 project_config 的目录/文件名识别给出），�
 项目 camera_patterns 可覆盖不规范团队的命名。平铺目录中若文件名能明确识别
 A/B/C，会按文件名分机位而不是把全部素材默认成 A。
 
+镜序会把 media_roles.v1 中与同步有关的少量字段投影到本次任务的临时 config：
+`sync_policy=exclude` 的航拍/空镜/GoPro 等辅助素材不进入同步索引；
+`camera_override` 可覆盖目录/文件名推断。临时配置只使用 media_id，不包含本机路径。
+
 TC：优先视频流 timecode 标签（SMPTE "HH:MM:SS:FF"）；无 TC 则留空。
-没有音频/TC 的素材不是错误，但不能作为确定性同步证据，应在镜序素材角色层
-标为航拍/空镜/GoPro等辅助素材并由人工归场景。
+没有音频/TC 的素材不是错误；若它本来就是辅助素材，应由素材角色层排除同步并人工归场景。
 """
+import hashlib
 import os
 import sys
 import subprocess
@@ -26,6 +30,23 @@ EXT = (".mp4", ".mov", ".mxf", ".mts", ".m2ts", ".avi", ".mkv", ".mpg",
        ".mpeg", ".3gp", ".wmv", ".flv", ".webm", ".mp3", ".wav", ".aac",
        ".m4a", ".flac", ".wma", ".ogg", ".bmp", ".jpg", ".jpeg", ".png",
        ".gif", ".tif", ".heic", ".cr3", ".arw", ".dng")
+_SAMPLE_BYTES = 1024 * 1024
+
+
+def media_id_for_path(path):
+    """Mirror the Host's stable lightweight content identity for sync lookup."""
+    try:
+        size = os.path.getsize(path)
+        digest = hashlib.sha1()
+        digest.update(str(size).encode("ascii"))
+        with open(path, "rb") as handle:
+            digest.update(handle.read(_SAMPLE_BYTES))
+            if size > _SAMPLE_BYTES:
+                handle.seek(max(0, size - _SAMPLE_BYTES))
+                digest.update(handle.read(_SAMPLE_BYTES))
+        return "M_" + digest.hexdigest()[:24]
+    except OSError:
+        return ""
 
 
 def probe_file(path):
@@ -76,6 +97,12 @@ def probe_file(path):
             "tc": tc, "creation": creation}
 
 
+def _role_for_path(cfg, path):
+    media_id = media_id_for_path(path)
+    raw = cfg.media_roles.get(media_id, {}) if media_id else {}
+    return media_id, raw if isinstance(raw, dict) else {}
+
+
 def build():
     cfg = get_config()
     WORK = cfg.WORK or "/tmp/syncwork"
@@ -89,6 +116,8 @@ def build():
     n = 0
     nfail = 0
     n_unclassified = 0
+    n_excluded = 0
+    n_overridden = 0
     for day, dname in cfg.day_dirs:
         camdirs = cfg.day_cam_dirs[day]
         flat_multi_camera = sum(1 for dirs in camdirs.values() if "." in dirs) > 1
@@ -103,12 +132,23 @@ def build():
                         if os.path.splitext(fname)[1].lower() in EXT:
                             files.append(os.path.join(base, fname))
                 for p in sorted(set(files)):
-                    if cdir == "." and flat_multi_camera:
-                        inferred = infer_camera_label(os.path.basename(p), cfg.camera_patterns)
+                    if p in seen_paths:
+                        continue
+                    _media_id, role = _role_for_path(cfg, p)
+                    if str(role.get("sync_policy", "auto") or "auto") == "exclude":
+                        seen_paths.add(p)
+                        n_excluded += 1
+                        print(f"  辅助素材排除同步: {os.path.relpath(p, cfg.BASE)}", flush=True)
+                        continue
+
+                    override = str(role.get("camera_override", "") or "").strip().upper()
+                    inferred = infer_camera_label(os.path.basename(p), cfg.camera_patterns)
+                    effective_cam = override or inferred or cam
+                    if override:
+                        n_overridden += 1
+
+                    if cdir == "." and flat_multi_camera and not override:
                         if not inferred:
-                            # In a mixed flat folder, guessing unknown files as
-                            # A would silently mislabel footage. Require project
-                            # camera_patterns or a conventional filename instead.
                             if p not in seen_paths:
                                 n_unclassified += 1
                                 print(f"  机位未识别，跳过同步索引: {os.path.relpath(p, cfg.BASE)}", flush=True)
@@ -116,8 +156,14 @@ def build():
                             continue
                         if inferred != cam:
                             continue
-                    if p in seen_paths:
-                        continue
+                    elif cdir == "." and flat_multi_camera and override != cam:
+                        # The same flat folder is iterated once per detected camera.
+                        # Only emit the row during the override camera pass when it
+                        # already exists in day_cam_dirs; custom labels fall through
+                        # on the first pass and are still emitted once below.
+                        if override in camdirs:
+                            continue
+
                     seen_paths.add(p)
                     fname = os.path.basename(p)
                     rel = os.path.relpath(p, cfg.BASE)
@@ -127,8 +173,8 @@ def build():
                         nfail += 1
                         print(f"  探测失败: {rel}", flush=True)
                         continue
-                    seq = f"{day}_{cam}_{n:05d}"
-                    rows_index.append((seq, day, cam, rel_dir, fname))
+                    seq = f"{day}_{effective_cam}_{n:05d}"
+                    rows_index.append((seq, day, effective_cam, rel_dir, fname))
                     rows_dur.append((rel_dir, fname, info["dur"], info["size"] or 0))
                     rows_tc.append((rel_dir, fname, info["tc"], info["creation"] or ""))
                     n += 1
@@ -145,10 +191,13 @@ def build():
         for r in rows_tc:
             f.write("\t".join(map(str, r)) + "\n")
 
-    print(f"盘点完成: {n} 个媒体文件, 探测失败 {nfail}, 机位未分类 {n_unclassified}")
+    print(
+        f"盘点完成: {n} 个同步媒体, 探测失败 {nfail}, 机位未分类 {n_unclassified}, "
+        f"辅助排除 {n_excluded}, 机位覆盖 {n_overridden}"
+    )
     print(f"  index.tsv / durations.tsv / tc.tsv -> {WORK}")
     n_tc = sum(1 for r in rows_tc if r[2])
-    print(f"  带 TC 的素材: {n_tc}/{n}")
+    print(f"  带 TC 的同步素材: {n_tc}/{n}")
     return n, nfail
 
 
