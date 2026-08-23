@@ -8,8 +8,9 @@ from typing import Any
 
 from .agent_tools import AgentToolRegistry
 from .assistant_store import AssistantStore
-from .audit_engine import _analysis_revision
+from .audit_engine import _analysis_revision, _mapping_for_group
 from .audit_store import AuditStore
+from .automation_store import AutomationStore
 from .editorial_store import EditorialStore
 from .model_registry import AssistantLanguageModel, ModelRegistry
 from .review_store import ReviewStore
@@ -227,10 +228,30 @@ class AssistantOrchestrator:
     def _current_audit_groups(self) -> set[str]:
         audit = AuditStore(self.config.output_dir).load()
         current_analysis = _analysis_revision(self.config.output_dir)
+        review = ReviewStore(self.config.output_dir / "review.json").load()
+        automation_groups = _as_dict(AutomationStore(self.config.output_dir).load().get("groups"))
+        index = _read(self.config.output_dir / "material_index.json")
+        groups = {
+            str(item.get("group_id", "")): item
+            for item in _as_list(index.get("groups"))
+            if isinstance(item, dict) and item.get("group_id")
+        }
         result = set()
-        for group_id, row in _as_dict(audit.get("groups")).items():
-            if isinstance(row, dict) and str(row.get("analysis_revision", "") or "") == current_analysis:
-                result.add(str(group_id))
+        for group_id, raw_row in _as_dict(audit.get("groups")).items():
+            row = _as_dict(raw_row)
+            if str(row.get("analysis_revision", "") or "") != current_analysis:
+                continue
+            group = _as_dict(groups.get(str(group_id)))
+            if not group:
+                continue
+            current_mapping = _mapping_for_group(
+                review,
+                _as_dict(automation_groups.get(str(group_id))),
+                group,
+            )
+            if _as_dict(row.get("mapping")) != current_mapping:
+                continue
+            result.add(str(group_id))
         return result
 
     def _planner_context(self, project: dict[str, Any], attention: list[dict[str, Any]]) -> dict[str, Any]:
@@ -264,7 +285,7 @@ class AssistantOrchestrator:
             "目标是减少剪辑人员寻找问题的时间，同时控制算力。优先处理高风险歧义和算法反例，不要全量重复计算。"
             "人物识别只能针对少量未知身份，不能要求重算已人工确认的身份。"
             "输出严格JSON："
-            '{"briefing":"一句中文简报","actions":[{"tool":"run_priority_audit|extract_visual_evidence|index_unknown_identities|collect_learning_cases|noop","arguments":{}}],'
+            '{"briefing":"一句制作简报","actions":[{"tool":"run_priority_audit|extract_visual_evidence|index_unknown_identities|collect_learning_cases|noop","arguments":{}}],'
             '"questions":[{"group_id":"","text":"需要用户判断的问题"}]}。'
             "actions最多2个；没有必要动作时只返回noop。"
         )
@@ -334,10 +355,10 @@ class AssistantOrchestrator:
                     result = {"status": "failed", "error": str(error)[:500]}
                 action_results.append({"tool": tool, "result": result})
 
-        # Deterministic fallback: once a visual model has explicitly been
-        # enabled, the first-party assistant may proactively audit only the
-        # unresolved high-value groups that lack current audit evidence.
-        if allow_actions and not any(row.get("tool") == "run_priority_audit" for row in action_results):
+        # A successful model plan owns this cycle. Do not silently append a
+        # third expensive action behind the plan; deterministic auto-audit is a
+        # fallback only when no usable model plan was produced.
+        if allow_actions and plan is None:
             visual_enabled = bool(self.models.vision.enabled)
             if visual_enabled:
                 current_audit = self._current_audit_groups()
