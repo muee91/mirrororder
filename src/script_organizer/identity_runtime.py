@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Compatibility module. Keep the public import surface stable while the active
 # implementation evolves independently.
-from .identity_runtime_v2 import (
+from .identity_runtime_v3 import (
     FACE_DETECTOR,
     FACE_RECOGNIZER,
     SPEAKER_EMBEDDER,
