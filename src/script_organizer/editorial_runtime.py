@@ -37,7 +37,9 @@ def install_editorial_runtime() -> None:
 
     Legacy review.json remains untouched. Team Web may submit reviewer opinions;
     final Editorial Decision writes are Host-local until a role/permission model
-    exists. The review.v1 projection is enriched at read time only.
+    exists. The review.v1 projection is enriched at read time only. The bounded
+    AI audit layer is installed last so it can inspect the complete review model
+    without becoming collaboration authority.
     """
 
     global _INSTALLED
@@ -147,3 +149,9 @@ def install_editorial_runtime() -> None:
     web_server.ProjectService.state = state_with_editorial
     web_server.make_handler = make_handler_with_editorial
     _INSTALLED = True
+
+    # Audit must wrap the already editorial-aware review model. It remains a
+    # shadow evidence layer and cannot change collaboration or delivery state.
+    from .audit_runtime import install_audit_runtime
+
+    install_audit_runtime()
