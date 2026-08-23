@@ -171,7 +171,6 @@ def _prepare_media_base(source: Path, stage_root: Path) -> tuple[Path, str]:
 
 
 def _write_config(script_dir: Path, base: Path, export_base: Path, work: Path, output: Path, project_name: str, out_name: str) -> None:
-    """Give each builder a distinct filename and the real media root for relative URLs."""
     payload = {
         "BASE": str(base),
         "WORK": str(work),
@@ -197,16 +196,18 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
     runtime = config.output_dir / ".multicam-sync" / "engine"
     work = config.output_dir / ".multicam-sync" / "work"
     stage = config.output_dir / ".multicam-sync" / "media-layout"
-    delivery = config.output_dir / "sync"
+    report_dir = config.output_dir / "sync"
+    xml_delivery = config.media_root / "交付"
     runtime.parent.mkdir(parents=True, exist_ok=True)
     engine, engine_source = _materialize_engine(runtime)
     script_dir = engine / "scripts"
     work.mkdir(parents=True, exist_ok=True)
-    delivery.mkdir(parents=True, exist_ok=True)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    xml_delivery.mkdir(parents=True, exist_ok=True)
     media_base, layout = _prepare_media_base(config.media_root, stage)
 
-    def write_builder_config(out_name: str) -> None:
-        _write_config(script_dir, media_base, config.media_root, work, delivery, config.name, out_name)
+    def write_builder_config(out_name: str, output: Path = xml_delivery) -> None:
+        _write_config(script_dir, media_base, config.media_root, work, output, config.name, out_name)
 
     def emit(text: str) -> None:
         if log:
@@ -241,7 +242,7 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
     emit("生成标准 FCPXML 1.8 多机位时间线（相对素材路径）")
     write_builder_config("synchronized.fcpxml")
     _run(script_dir, "build_fcpxml.py", [], emit)
-    fcpxml = delivery / "synchronized.fcpxml"
+    fcpxml = xml_delivery / "synchronized.fcpxml"
     if not fcpxml.is_file():
         raise RuntimeError("同步完成但 synchronized.fcpxml 未生成")
     emit("校验 FCPXML 帧边界、素材引用与结构")
@@ -253,38 +254,27 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
             emit("生成标准 FCPXML 1.8 剪映兼容时间线（相对素材路径）")
             write_builder_config("synchronized_final.fcpxml")
             _run(script_dir, "build_capcut_fcpxml.py", [], emit)
-            capcut_path = delivery / "synchronized_capcut.fcpxml"
+            capcut_path = xml_delivery / "synchronized_capcut.fcpxml"
             if capcut_path.is_file():
                 _run(script_dir, "validate_fcpxml.py", [str(capcut_path), str(config.media_root)], emit)
                 capcut = str(capcut_path)
         except Exception as error:
             emit(f"剪映 / CapCut FCPXML 可选生成失败：{error}")
 
-    premiere = ""
-    if (script_dir / "build_pr_xml.py").is_file():
-        try:
-            emit("生成 Premiere XML")
-            write_builder_config("synchronized_premiere.xml")
-            _run(script_dir, "build_pr_xml.py", [], emit)
-            premiere_path = delivery / "synchronized_premiere.xml"
-            premiere = str(premiere_path) if premiere_path.is_file() else ""
-        except Exception as error:
-            emit(f"Premiere XML 可选生成失败：{error}")
-
     report = {
         "status": "completed",
         "engine_source": engine_source,
         "media_root": str(config.media_root),
+        "xml_delivery": str(xml_delivery),
         "normalized_media_base": str(media_base),
         "layout": layout,
         "days": days,
         "positions": [str(path) for path in positions],
         "fcpxml": str(fcpxml),
         "capcut_fcpxml": capcut,
-        "premiere_xml": premiere,
-        "media_reference_mode": "relative-url",
+        "media_reference_mode": "relative-to-xml",
         "source_kind": "media-directory",
         "project_promoted_to_fcpxml": False,
     }
-    (delivery / "sync_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    (report_dir / "sync_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
