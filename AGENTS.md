@@ -4,12 +4,13 @@
 
 - 理解现有实现、调用链和状态流。
 - 先读 `README.md`、`项目介绍.md`、`DESKTOP_BRIDGE.md`、`SYNC_MODEL.md`、`AUTOMATION_PIPELINE.md`。
-- 检查运行服务、项目配置、当前输出、`auto_decisions.json` 和 `review.json`。
+- 涉及AI审计、人物/声纹、算法迭代或粗剪准备时再读 `docs/ai-audit-learning-loop.md`。
+- 检查运行服务、项目配置、当前输出、`auto_decisions.json`、`review.json`、`editorial.json` 和已有 `audit.json`。
 - 不确定时先给出证据和不确定点，禁止猜测式修改。
 
 ## 数据权威
 
-- 当前自动判断只使用：
+- 当前生产自动判断只使用：
   - FCPXML
   - DOCX剧本
   - ASR缓存
@@ -19,19 +20,35 @@
 - 人工结果永远高于自动结果。
 - 系统不得自动Reject素材。
 - 自动确认写 `auto_decisions.json`，不得伪装成人工审核，也不得直接写 `review.json`。
+- `audit.json` 是可重建的只读审计证据，不是生产判断权威；不得被 matcher、review 或 delivery 当作隐式真值。
+- `learning_cases.jsonl` 只用于离线 replay/eval/算法研发，生产 matcher 禁止读取它形成隐式反馈环。
 
-## 自动整理与模型救援
+## 自动整理、模型救援与Shadow Audit
 
 - 默认产品目标是“自动完成，人工只处理异常”，不是让每个 Take 都人工点一次。
-- `prepare_project` 是完整主机流水线：媒体目录同步 → 生成 FCPXML → ASR/剧本分析 → 自动确认/AI Rescue。
+- `prepare_project` 是完整主机生产流水线：媒体目录同步 → 生成 FCPXML → ASR/剧本分析 → 自动确认/AI Rescue；它不默认全量运行 Shadow Audit。
 - 高置信度结果可自动确认剧本归属；自动确认语义默认是 `keep`，不是创意意义上的“最佳镜头”。
-- 低置信度时才允许调用可选模型；不得把全部 Take 都发给大模型。
-- 模型只能在本地算法给出的 candidate_id 中选择，禁止从整本剧本自由发明位置。
-- 模型结果必须再次通过本地最低分数、候选合法性与前后剧本顺序校验；未通过则进入 `needs_review`。
-- 无对白且没有可靠上下文的素材不得靠语言模型伪造动作归属；保留 `unresolved`，未来视觉模型需走单独证据链。
-- 未配置模型 Provider 时主流程仍必须离线可用：高置信度自动确认，低置信度进入异常队列。
-- Provider API Key 不得写入 workspace、project.toml、review.json 或可同步产物。
-- 修改这条链前先读 `AUTOMATION_PIPELINE.md`。
+- **AI Rescue** 只在低置信度/歧义时允许调用可选模型；不得把全部 Take 都发给大模型。
+- AI Rescue 模型只能在本地算法给出的 candidate_id 中选择，禁止从整本剧本自由发明位置。
+- AI Rescue 结果必须再次通过本地最低分数、候选合法性与前后剧本顺序校验；未通过则进入 `needs_review`。
+- **Shadow Audit** 是另一条只读链：可以优先抽查人工override、算法冲突、needs_review、unresolved和其它高信息量Take，输出问题、反例、算法反馈、景别与粗剪结构，但不得改变自动或人工状态。
+- Shadow Audit 只能写 `audit.json` / `learning_cases.jsonl`；不得写 `review.json`、`editorial.json`、`auto_decisions.json`。
+- Audit `agree/disagree/insufficient_evidence` 不是新的自动状态，禁止据此直接产生 `ai_confirmed`、Best、Keep或Reject。
+- Audit 默认稀疏、优先级调度、有 evidence fingerprint 缓存；禁止新增“新项目默认全量VLM扫一遍”的隐性成本。
+- 无对白且没有可靠上下文的素材不得靠语言模型伪造动作归属；保留 `unresolved`，视觉只能作为单独证据链或审计信息。
+- 未配置模型 Provider 时主流程仍必须离线可用：高置信度自动确认，低置信度进入异常队列；Audit 可以只保留确定性问题分类。
+- Provider API Key 不得写入 workspace、project.toml、review.json、audit.json 或可同步产物。
+- 修改这条链前先读 `AUTOMATION_PIPELINE.md` 和 `docs/ai-audit-learning-loop.md`。
+
+## 人物、声纹与角色推断
+
+- 人物/声纹 embedding 与 cluster 属于设备本地感知数据，人工角色名是高优先级元数据。
+- 已人工确认的人物/声纹身份不得因为模型版本、profile变化、普通重跑或指定Take重跑而被自动擦除后重新计算。
+- 只有明确的开发者强制重建（例如 `force_reindex=True`）才允许重新索引已经完整人工确认的身份组。
+- 允许使用“speaker cluster ASR文本 + 已可靠归集剧本段的 speaker/dialogue”提出角色候选，但必须标记 `requires_confirmation=true`，不能冒充人工确认。
+- 多机位画面中的人不一定是正在说话的人；禁止仅凭台词角色给当前 camera 的 face cluster 自动命名。
+- Face → 角色默认保持人工确认；未来只有存在可靠 active-speaker/lip-motion/audio-visual binding 时才可考虑自动关联 face ↔ speaker。
+- 人工已确认角色在素材卡上应优先于任何旧角色候选显示。
 
 ## 多设备与本机素材
 
@@ -40,7 +57,7 @@
 - 有源文件可读时 `media_id` 必须由内容指纹产生；`MP_...` filename identity 只允许作为旧项目迁移 fallback。
 - 每台设备自己的 `media_id -> /Volumes/...` 映射保存到设备 Application Support，不得写入共享 workspace。
 - macOS 默认设备状态：`~/Library/Application Support/MirrorOrder/media-bindings.json`。
-- 不得把本机卷名、Finder路径、本机素材根目录写入 `material_index.json`、`review.json` 或项目共享配置作为权威字段。
+- 不得把本机卷名、Finder路径、本机素材根目录写入 `material_index.json`、`review.json`、`audit.json` 或项目共享配置作为权威字段。
 - HTTP媒体播放和原生拖拽必须优先解析当前设备绑定；找不到本机媒体时明确显示缺失，不允许偷偷回退到错误同名文件。
 - 同内容媒体复制到不同磁盘、目录甚至改名后，正式 `media_id` 应保持一致。
 - 改多设备逻辑前先读 `SYNC_MODEL.md`。
@@ -56,6 +73,7 @@
 - A/B/C展示顺序不得打乱。
 - XML时间线预览只能读取和关联，不得直接修改用户加载的XML DOM或覆盖原XML。
 - FCPXML预览至少兼容1.8 `asset src`、1.9+ `media-rep src`、主spine隐式顺序和multicam/media资源引用。
+- Shot Intelligence 是 `clip_id` 级属性，不是Take全局属性；同一Take允许 A=全景、B=近景、C=特写，禁止把某一机位景别复制给其它机位。
 
 ## Desktop Bridge
 
@@ -75,6 +93,7 @@
 - 多集连拍允许一个Take归属多个集数和连续剧本范围。
 - 无对白素材只能根据邻近拍摄块提出可能集数。
 - 修改匹配算法后必须使用增量缓存，只重算受影响组。
+- AI提出matcher/feature/rule升级时必须作为候选算法离线Replay，不得让生产进程自改代码后立即生效。
 
 ## 前端产品约束
 
@@ -84,12 +103,16 @@
 - 剧本、素材列表和播放器独立滚动。
 - 文件名是机位卡片最重要的信息。
 - A/B/C卡片单行排列，宽度不足时局部横向滚动，禁止换行。
+- 景别（全景/中景/近景/特写等）可以作为机位卡片的克制次级标签，但不能压过文件名和机位。
+- 已确认角色优先显示；未确认的声纹剧本推断必须明确写“角色候选”，不得写成已确认人物。
+- Audit素材问题可在Take详情显示，但不要把普通Web做成模型诊断控制台。
 - 待归集模式不显示空白剧本栏。
 - 不向页面添加算法宣传、冗余说明或“牛皮癣”文字。
 - 切集、协作刷新和审核后保持各区域滚动位置。
 - 时间线是辅助看片层，不得抢占剧本→候选Take的主工作流。
 - 工作台要能看出当前设备素材定位覆盖率；浏览器远程访问时不得把服务器路径误称为客户端本机路径。
-- 工作台要直接显示自动 / AI / 人工 / 待处理数量；自动确认和 AI 确认不得继续出现在默认“未核对”队列。
+- 工作台要直接显示自动 / AI / 人工 / 待处理数量；这里的AI是生产链 `ai_confirmed`，不能把Shadow Audit数量混进来。
+- 自动确认和 AI 确认不得继续出现在默认“未核对”队列。
 
 ## 审核与协作
 
@@ -101,6 +124,7 @@
 - 多台电脑同时审核时 `review.json` 必须有单一写入权威；禁止依赖 Dropbox/iCloud 文件级同步让多台机器直接并发写同一 `review.json`。
 - 推荐架构：中央项目状态/review authority + 每台设备本地 media resolver/native drag bridge。
 - 自动决策与人工审核必须分文件保存；人工 action 生效后界面必须立即覆盖自动状态，即使 `auto_decisions.json` 尚未重算。
+- Shadow Audit 不得因为多数意见或AI判断升级为Editorial Decision；Final Decision仍需要显式人工动作。
 
 ## 验证要求
 
@@ -115,11 +139,21 @@ python3 -m pytest -q
 
 - 高置信度 exact_dialogue 进入 `auto_confirmed`。
 - 模糊候选在无模型时进入 `needs_review`，而不是假自动确认。
-- 模型只能返回已有 candidate_id；模型低置信度或顺序冲突必须回退人工。
+- AI Rescue只能返回已有 candidate_id；模型低置信度或顺序冲突必须回退人工。
 - 自动流程不会产生 `reject`，除非该状态来自 `human_override`。
 - `auto_decisions.json` 更新不会改动 `review.json`。
 - 新建媒体目录项目会自动提交 `prepare_project`。
 - 同步成功后项目使用生成的 `synchronized.fcpxml` 继续分析，而不是退回未同步 media-directory 时间线。
+
+涉及AI Audit / 人物 / 算法学习时还要验证：
+
+- `audit.json` 不改变 `review.json` / `editorial.json` / `auto_decisions.json`。
+- 普通Web不能启动Audit，也看不到Provider、模型名或Host绝对路径。
+- evidence fingerprint未变化时不会重复VLM审计。
+- 人工已完整确认的identity group普通重跑与指定Take重跑均跳过；只有显式force才可重建。
+- speaker角色候选必须来自speaker observation + 当前可靠剧本归集，不得把face observation当成说话人。
+- 多机位Shot Intelligence按clip_id独立保存和显示。
+- `learning_cases.jsonl` 不包含Host媒体绝对路径，且生产matcher没有读取入口。
 
 涉及前端时还要验证：
 
@@ -135,6 +169,8 @@ python3 -m pytest -q
 - 时间线与素材卡片双向定位有效。
 - 自动确认/AI确认不会出现在“只看未核对”结果中。
 - “待处理”只聚合 needs_review / unresolved 与真正未人工处理异常。
+- 有Shot Intelligence时A/B/C卡片各自显示正确景别；没有时不伪造标签。
+- 已确认角色与“角色候选”视觉语义明确区分。
 
 涉及macOS App时还要真机验证：
 
@@ -145,6 +181,7 @@ python3 -m pytest -q
 - 普通点击素材仍然只执行播放/选择，不被拖拽桥接误伤。
 - 第二台Mac选择不同素材目录后，播放与拖拽使用第二台Mac路径。
 - 扫描本机素材不得修改共享 `material_index.json` / `matches.json` / `review.json`。
+- Production中的“审计素材”只提交Host任务，不阻塞普通看片；完成后卡片景别/问题可刷新。
 
 涉及导出时还要验证：
 
