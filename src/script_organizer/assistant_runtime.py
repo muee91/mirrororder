@@ -106,22 +106,41 @@ def install_assistant_runtime() -> None:
         }
         return payload
 
-    def update_with_assistant(manager: Any, config: Any, task_id: str, **changes: Any) -> Any:
-        result = original_update(manager, config, task_id, **changes)
-        status = str(changes.get("status", "") or "")
+    def update_with_assistant(
+        manager: Any,
+        config: Any,
+        task_id: str,
+        status: str | None = None,
+        stage: str | None = None,
+        progress: dict[str, Any] | None = None,
+        result: dict[str, Any] | None = None,
+        error: str = "",
+        message: str = "",
+    ) -> None:
+        original_update(
+            manager,
+            config,
+            task_id,
+            status=status,
+            stage=stage,
+            progress=progress,
+            result=result,
+            error=error,
+            message=message,
+        )
         if status != "completed":
-            return result
+            return
         try:
             task = manager._task(manager._load(config), task_id)
         except Exception:
-            return result
+            return
         task_type = str(task.get("type", "") or "")
         if task_type not in _TRIGGER_TASKS:
-            return result
+            return
         project_id = str(task.get("project_id", "") or "")
         workspace_id = str(getattr(manager, "workspace_id", "") or "")
         if not project_id or not workspace_id:
-            return result
+            return
 
         def reconcile() -> None:
             try:
@@ -138,7 +157,6 @@ def install_assistant_runtime() -> None:
                 return
 
         Thread(target=reconcile, daemon=True, name=f"mirror-assistant-{project_id}").start()
-        return result
 
     def make_handler_with_assistant(service: Any, web_root: Path):
         BaseHandler = original_make_handler(service, web_root)
