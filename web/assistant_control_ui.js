@@ -32,10 +32,16 @@
       </div>
       <div id="mirror-assistant-agent-info" class="mirror-assistant-agent-info" hidden></div>
       <form id="mirror-assistant-model-form" class="mirror-assistant-model-form" hidden>
+        <div class="wide mirror-assistant-model-heading"><strong>语言模型</strong><span>用于自然语言解释和受限规划。未连接时仍可使用规则队列。</span></div>
         <label class="wide">语言模型地址<input id="mirror-assistant-model-url" type="url" placeholder="http://127.0.0.1:1234/v1"></label>
         <label>模型名<input id="mirror-assistant-model-name" type="text" placeholder="model-name"></label>
         <label>API Key<input id="mirror-assistant-model-key" type="password" placeholder="留空不修改"></label>
         <label class="wide"><span><input id="mirror-assistant-model-enabled" type="checkbox"> 启用语言模型连接</span></label>
+        <div class="wide mirror-assistant-model-heading"><strong>增强多模态</strong><span>可选。启用后高价值 Audit 可使用这个端点；默认仍优先使用你已经启用的本地视觉模型。</span></div>
+        <label class="wide">多模态模型地址<input id="mirror-assistant-vision-url" type="url" placeholder="https://provider.example/v1"></label>
+        <label>模型名<input id="mirror-assistant-vision-name" type="text" placeholder="vision-model"></label>
+        <label>API Key<input id="mirror-assistant-vision-key" type="password" placeholder="留空不修改"></label>
+        <label class="wide"><span><input id="mirror-assistant-vision-enabled" type="checkbox"> 启用外部多模态连接</span></label>
         <div class="mirror-assistant-control-actions"><button type="submit">保存连接</button></div>
       </form>
       <form id="mirror-assistant-chat" class="mirror-assistant-chat">
@@ -45,6 +51,32 @@
     ` : '<div class="mirror-assistant-status-row"><strong>镜序助理</strong><span>由制作 Host 主动整理问题；Web 只显示可审阅结论和提醒。</span></div>';
     panel.appendChild(controls);
     bindControls();
+  }
+
+  function renderBackendNudge(payload) {
+    const nudge = document.querySelector('#mirror-assistant-nudge');
+    if (!nudge || !payload) return;
+    const items = asArray(payload.items).filter((item) => Number(item?.priority || 0) >= 80);
+    if (!items.length) {
+      nudge.hidden = true;
+      return;
+    }
+    const first = items[0];
+    const fingerprint = `${state.projectId || ''}|${payload.revision || 0}|${first.key || first.group_id || ''}`;
+    const storageKey = `mirrororder-assistant-host-nudge:${state.workspaceId || ''}:${state.projectId || ''}`;
+    try {
+      if (localStorage.getItem(storageKey) === fingerprint) {
+        nudge.hidden = true;
+        return;
+      }
+    } catch (_error) {}
+    nudge.dataset.hostFingerprint = fingerprint;
+    nudge.dataset.hostStorageKey = storageKey;
+    const text = nudge.querySelector('p');
+    if (text) text.textContent = items.length === 1
+      ? String(first.message || '有一组素材需要你确认。')
+      : `我发现 ${items.length} 个需要优先处理的问题。最先建议看：${first.label || '需要判断'} · ${first.title || first.group_id}`;
+    nudge.hidden = false;
   }
 
   function renderBackendItems(payload) {
@@ -61,6 +93,7 @@
     if (!list) return;
     if (!items.length) {
       list.innerHTML = '<div class="mirror-assistant-empty">没有新的问题。镜序助理会在归集冲突、低置信素材、媒体缺失或审计反例出现时主动提醒。</div>';
+      renderBackendNudge(payload);
       return;
     }
     list.innerHTML = ['decision', 'production', 'people'].map((kind) => {
@@ -89,6 +122,18 @@
       const badge = entry.querySelector('.mirror-assistant-count');
       if (badge) badge.textContent = String(count);
     }
+    renderBackendNudge(payload);
+  }
+
+  function setConnectionFields(prefix, row) {
+    const url = document.querySelector(`#mirror-assistant-${prefix}-url`);
+    const name = document.querySelector(`#mirror-assistant-${prefix}-name`);
+    const enabled = document.querySelector(`#mirror-assistant-${prefix}-enabled`);
+    const key = document.querySelector(`#mirror-assistant-${prefix}-key`);
+    if (url && document.activeElement !== url) url.value = row.base_url || '';
+    if (name && document.activeElement !== name) name.value = row.model || '';
+    if (enabled) enabled.checked = Boolean(row.enabled);
+    if (key) key.placeholder = row.has_api_key ? '已保存 · 留空不修改' : '可选';
   }
 
   function renderModelStatus() {
@@ -96,22 +141,19 @@
     const models = asObject(modelPayload.models);
     const vision = asObject(models.multimodal_audit || models.vision);
     const language = asObject(models.assistant_language);
+    const languageLabel = language.source === 'local-vision-text-fallback'
+      ? '复用本地视觉模型'
+      : (language.enabled ? '已就绪' : '未连接');
     const target = document.querySelector('#mirror-assistant-model-status');
     if (target) {
       target.innerHTML = `<strong>AI连接</strong>`
         + `<span class="mirror-assistant-status-dot ${vision.enabled ? 'ready' : ''}"></span><span>视觉 ${vision.enabled ? '已就绪' : '未启用'}</span>`
-        + `<span class="mirror-assistant-status-dot ${language.enabled ? 'ready' : ''}"></span><span>语言 ${language.enabled ? '已就绪' : '未连接'}</span>`
+        + `<span class="mirror-assistant-status-dot ${language.enabled ? 'ready' : ''}"></span><span>语言 ${esc(languageLabel)}</span>`
         + `<span class="mirror-assistant-status-dot ready"></span><span>Agent API 已启用</span>`;
     }
-    const text = asObject(asObject(modelPayload.connections).text);
-    const url = document.querySelector('#mirror-assistant-model-url');
-    const name = document.querySelector('#mirror-assistant-model-name');
-    const enabled = document.querySelector('#mirror-assistant-model-enabled');
-    const key = document.querySelector('#mirror-assistant-model-key');
-    if (url && document.activeElement !== url) url.value = text.base_url || '';
-    if (name && document.activeElement !== name) name.value = text.model || '';
-    if (enabled) enabled.checked = Boolean(text.enabled);
-    if (key) key.placeholder = text.has_api_key ? '已保存 · 留空不修改' : '可选';
+    const connections = asObject(modelPayload.connections);
+    setConnectionFields('model', asObject(connections.text));
+    setConnectionFields('vision', asObject(connections.vision));
 
     const agent = asObject(modelPayload.agent_api);
     const info = document.querySelector('#mirror-assistant-agent-info');
@@ -159,26 +201,35 @@
     await refreshAssistant(true);
   }
 
+  function formConnection(prefix) {
+    const row = {
+      enabled: Boolean(document.querySelector(`#mirror-assistant-${prefix}-enabled`)?.checked),
+      provider: 'openai-compatible',
+      base_url: document.querySelector(`#mirror-assistant-${prefix}-url`)?.value.trim() || '',
+      model: document.querySelector(`#mirror-assistant-${prefix}-name`)?.value.trim() || '',
+    };
+    const key = document.querySelector(`#mirror-assistant-${prefix}-key`)?.value.trim() || '';
+    if (key) row.api_key = key;
+    return row;
+  }
+
   async function saveModels(event) {
     event.preventDefault();
     if (!APP_CLIENT) return;
-    const text = {
-      enabled: Boolean(document.querySelector('#mirror-assistant-model-enabled')?.checked),
-      provider: 'openai-compatible',
-      base_url: document.querySelector('#mirror-assistant-model-url')?.value.trim() || '',
-      model: document.querySelector('#mirror-assistant-model-name')?.value.trim() || '',
-    };
-    const key = document.querySelector('#mirror-assistant-model-key')?.value.trim() || '';
-    if (key) text.api_key = key;
     modelPayload = await fetchJson(projectApi('/assistant/models'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({text}),
+      body: JSON.stringify({
+        text: formConnection('model'),
+        vision: formConnection('vision'),
+      }),
     });
-    const input = document.querySelector('#mirror-assistant-model-key');
-    if (input) input.value = '';
+    for (const id of ['#mirror-assistant-model-key', '#mirror-assistant-vision-key']) {
+      const input = document.querySelector(id);
+      if (input) input.value = '';
+    }
     await refreshAssistant(true);
-    showToast('语言模型连接已保存到这台 Mac');
+    showToast('模型连接已保存到这台 Mac');
   }
 
   async function sendMessage(event) {
@@ -223,6 +274,13 @@
   document.addEventListener('click', (event) => {
     if (event.target.closest('#mirror-assistant-entry')) {
       requestAnimationFrame(() => refreshAssistant(true));
+      return;
+    }
+    if (event.target.closest('.mirror-assistant-nudge-close')) {
+      const nudge = document.querySelector('#mirror-assistant-nudge');
+      if (nudge?.dataset.hostFingerprint && nudge.dataset.hostStorageKey) {
+        try { localStorage.setItem(nudge.dataset.hostStorageKey, nudge.dataset.hostFingerprint); } catch (_error) {}
+      }
       return;
     }
     if (event.target.closest('[data-assistant-first-backend]')) {
