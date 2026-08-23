@@ -29,6 +29,13 @@ def _int(value: object, default: int = 0) -> int:
         return default
 
 
+def _float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _source_revision(coverage_revision: str, review: dict[str, Any], editorial: dict[str, Any]) -> str:
     raw = {
         "coverage": coverage_revision,
@@ -73,14 +80,35 @@ def _safe_angle(group_id: str, angle: dict[str, Any]) -> dict[str, Any]:
         "camera": str(angle.get("camera", "") or ""),
         "name": str(angle.get("name", "") or "")[:300],
         "shot_type": str(angle.get("shot_type", "unknown") or "unknown"),
+        "shot_source": str(angle.get("shot_source", "unknown") or "unknown"),
         "coverage_role": str(angle.get("coverage_role", "unknown") or "unknown"),
+        "supervisor_note": str(angle.get("supervisor_note", "") or "")[:500],
     }
+
+
+def _safe_supervisor(value: object) -> dict[str, Any]:
+    raw = _as_dict(value)
+    usable_range = _as_dict(raw.get("usable_range"))
+    return {
+        "scene": str(raw.get("scene", "") or "")[:80],
+        "shot": str(raw.get("shot", "") or "")[:80],
+        "take_number": raw.get("take_number"),
+        "status": str(raw.get("status", "unmarked") or "unmarked"),
+        "note": str(raw.get("note", "") or "")[:2000],
+        "usable_range": {
+            "start": _float(usable_range.get("start"), 0.0),
+            "end": _float(usable_range.get("end"), 0.0),
+        } if usable_range else {},
+        "preferred_clip_id": str(raw.get("preferred_clip_id", "") or ""),
+        "actor": str(raw.get("actor", "") or "")[:80],
+        "updated_at": str(raw.get("updated_at", "") or "")[:80],
+    } if raw else {}
 
 
 def _role_pools(candidates: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     pools: dict[str, list[dict[str, Any]]] = {}
     for candidate in candidates:
-        if candidate.get("delivery_state") == "reject":
+        if candidate.get("delivery_state") == "reject" or candidate.get("supervisor_blocked"):
             continue
         group_id = str(candidate.get("group_id", "") or "")
         for raw_angle in _as_list(candidate.get("angles")):
@@ -111,9 +139,6 @@ def _segment_plan(
         group = _as_dict(groups_by_id.get(group_id))
         if not group:
             continue
-        # Coverage only contains human or completed automatic mappings. The
-        # historical delivery fallback for a mapped group is therefore Keep,
-        # exactly as selection_manifest v3 treats manual/confirmed mapping.
         resolved = resolve_delivery_state(
             review=review,
             editorial=editorial,
@@ -121,15 +146,23 @@ def _segment_plan(
             group=group,
             automatic_state="keep",
         )
+        supervisor = _safe_supervisor(coverage_group.get("script_supervisor"))
+        supervisor_status = str(supervisor.get("status", "unmarked") or "unmarked")
         candidates.append(
             {
                 "group_id": group_id,
+                "group_start": _float(coverage_group.get("start"), 0.0),
+                "group_end": _float(coverage_group.get("end"), 0.0),
+                "duration": _float(coverage_group.get("duration"), 0.0),
                 "delivery_state": str(resolved.get("state", "unreviewed") or "unreviewed"),
                 "decision_source": str(resolved.get("decision_source", "unreviewed") or "unreviewed"),
                 "creative_authority": str(resolved.get("decision_source", "")) != "automatic_mapping_fallback",
                 "angles": [dict(item) for item in _as_list(coverage_group.get("angles")) if isinstance(item, dict)],
                 "continuity_risk": str(_as_dict(coverage_group.get("rough_cut")).get("continuity_risk", "unknown") or "unknown"),
                 "audit_mapping_current": bool(_as_dict(coverage_group.get("audit")).get("mapping_current", False)),
+                "script_supervisor": supervisor,
+                "supervisor_blocked": supervisor_status == "ng",
+                "supervisor_partial": supervisor_status == "partial",
             }
         )
 
@@ -140,11 +173,26 @@ def _segment_plan(
         )
     )
     best = [item for item in candidates if item["delivery_state"] == "best"]
-    eligible = [item for item in candidates if item["delivery_state"] != "reject"]
+    best_ng = [item for item in best if item["supervisor_blocked"]]
+    eligible = [
+        item for item in candidates
+        if item["delivery_state"] != "reject" and not item["supervisor_blocked"]
+    ]
     explicit_human = [item for item in eligible if item["creative_authority"]]
     issues: list[dict[str, Any]] = []
 
-    if len(best) == 1:
+    if best_ng:
+        selection_status = "conflict_supervisor_vs_best"
+        primary_group_id = ""
+        issues.append(
+            {
+                "code": "supervisor_ng_vs_best",
+                "severity": "warning",
+                "label": "Final Best 与场记 NG 冲突，需要人工重新确认",
+                "group_ids": [item["group_id"] for item in best_ng],
+            }
+        )
+    elif len(best) == 1:
         selection_status = "explicit_best"
         primary_group_id = best[0]["group_id"]
     elif len(best) > 1:
@@ -178,6 +226,21 @@ def _segment_plan(
             }
         )
 
+    partial_without_range = [
+        item["group_id"]
+        for item in eligible
+        if item["supervisor_partial"] and not _as_dict(item["script_supervisor"]).get("usable_range")
+    ]
+    if partial_without_range:
+        issues.append(
+            {
+                "code": "partial_without_range",
+                "severity": "info",
+                "label": f"{len(partial_without_range)} 个 Take 标记为部分可用，但尚未给出精确可用范围",
+                "group_ids": partial_without_range,
+            }
+        )
+
     high_continuity = [item["group_id"] for item in eligible if item["continuity_risk"] == "high"]
     if high_continuity:
         issues.append(
@@ -199,6 +262,8 @@ def _segment_plan(
             "candidates": len(candidates),
             "eligible": len(eligible),
             "explicit_best": len(best),
+            "supervisor_ng": sum(1 for item in candidates if item["supervisor_blocked"]),
+            "supervisor_partial": sum(1 for item in candidates if item["supervisor_partial"]),
             "human_authority_candidates": len(explicit_human),
             "automatic_mapping_candidates": sum(
                 1 for item in eligible if item["decision_source"] == "automatic_mapping_fallback"
@@ -216,8 +281,9 @@ def build_rough_cut_plan(
 ) -> dict[str, Any]:
     """Build a read-only assembly plan without choosing creative Bests.
 
-    The plan consumes coverage.v1 and the existing delivery.v1 resolver. It does
-    not write a timeline, selection manifest, FCPXML or human decision state.
+    Script-supervisor NG/partial annotations constrain planning but never rewrite
+    delivery.v1. A Final Best conflicting with supervisor NG becomes an explicit
+    blocker instead of silently privileging either human signal.
     """
 
     project.reload_if_changed()
@@ -232,6 +298,7 @@ def build_rough_cut_plan(
     scene_rows: list[dict[str, Any]] = []
     status_counts: Counter[str] = Counter()
     high_continuity = 0
+    partial_without_range = 0
 
     for scene in _as_list(coverage.get("scenes")):
         if not isinstance(scene, dict):
@@ -247,16 +314,22 @@ def build_rough_cut_plan(
             status_counts[planned["selection_status"]] += 1
             if any(issue.get("code") == "continuity_attention" for issue in planned["issues"]):
                 high_continuity += 1
+            if any(issue.get("code") == "partial_without_range" for issue in planned["issues"]):
+                partial_without_range += 1
 
-        conflicts = sum(1 for row in segment_plans if row["selection_status"] == "conflict_multiple_best")
+        conflicts = sum(
+            1 for row in segment_plans
+            if row["selection_status"] in {"conflict_multiple_best", "conflict_supervisor_vs_best"}
+        )
         no_eligible = sum(1 for row in segment_plans if row["selection_status"] == "no_eligible_take")
         needs_choice = sum(1 for row in segment_plans if row["selection_status"] == "needs_editorial_choice")
+        scene_attention = any(
+            any(issue.get("code") in {"continuity_attention", "partial_without_range"} for issue in row["issues"])
+            for row in segment_plans
+        )
         if conflicts or no_eligible:
             readiness = "blocked"
-        elif needs_choice or any(
-            any(issue.get("code") == "continuity_attention" for issue in row["issues"])
-            for row in segment_plans
-        ):
+        elif needs_choice or scene_attention:
             readiness = "needs_review"
         else:
             readiness = "ready"
@@ -277,9 +350,13 @@ def build_rough_cut_plan(
             }
         )
 
-    if status_counts.get("conflict_multiple_best", 0) or status_counts.get("no_eligible_take", 0):
+    if (
+        status_counts.get("conflict_multiple_best", 0)
+        or status_counts.get("conflict_supervisor_vs_best", 0)
+        or status_counts.get("no_eligible_take", 0)
+    ):
         readiness = "blocked"
-    elif status_counts.get("needs_editorial_choice", 0) or high_continuity:
+    elif status_counts.get("needs_editorial_choice", 0) or high_continuity or partial_without_range:
         readiness = "needs_review"
     else:
         readiness = "ready"
@@ -296,14 +373,18 @@ def build_rough_cut_plan(
             "segments": sum(len(scene["segments"]) for scene in scene_rows),
             "selection_status": dict(sorted(status_counts.items())),
             "high_continuity_segments": high_continuity,
+            "partial_without_range_segments": partial_without_range,
         },
         "scenes": scene_rows,
         "semantics": {
             "consumes_coverage_v1": True,
             "consumes_delivery_v1": True,
+            "consumes_script_supervisor_v1": True,
             "individual_opinions_used": False,
             "automatic_mapping_is_creative_best": False,
             "keep_promoted_to_best": False,
+            "script_supervisor_ng_is_delivery_reject": False,
+            "script_supervisor_constrains_planning": True,
             "writes_review": False,
             "writes_editorial": False,
             "writes_selection_manifest": False,
