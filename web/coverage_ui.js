@@ -57,7 +57,7 @@
     const button = ensureTab();
     if (button) button.classList.toggle('active', active);
     if (active) {
-      document.querySelectorAll('#production-bar [data-production-tab]').forEach((item) => item.classList.remove('active'));
+      document.querySelectorAll('#production-bar [data-production-tab], #production-rough-cut-tab').forEach((item) => item.classList.remove('active'));
     }
   }
 
@@ -186,7 +186,7 @@
       <div class="coverage-list">
         ${scenes.length ? scenes.map(renderScene).join('') : '<div class="coverage-empty-row">当前筛选范围没有场景。</div>'}
       </div>
-      <div class="production-note">最终编辑决定只作为覆盖视图注释；本阶段不改变 Selection Manifest、FCPXML 或任何交付结果。</div>
+      <div class="production-note">覆盖视图只整理既有事实，不改写现有 delivery.v1、Selection Manifest 或 FCPXML。</div>
     `;
   }
 
@@ -222,7 +222,7 @@
       refreshCoverage(true);
       return;
     }
-    if (event.target.closest('#production-bar [data-production-tab]') || event.target.closest('[data-focus-group]')) {
+    if (event.target.closest('#production-bar [data-production-tab], [data-rough-cut-tab], [data-focus-group]')) {
       setActive(false);
     }
   }, true);
