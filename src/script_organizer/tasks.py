@@ -11,6 +11,7 @@ COMPAT_TASK_TYPES = {
     "auto_resolve",
     "transcribe",
     "evidence_extract",
+    "identity_index",
 }
 
 from contextlib import contextmanager
@@ -24,6 +25,9 @@ from .identity_index import IdentityIndexer
 from .media_identity import DeviceMediaStore
 from .perception_index import PerceptionIndexer
 from .resource_scheduler import GLOBAL_RESOURCE_SCHEDULER, ResourceCancelled
+
+# Extend the durable v2 submit validator without duplicating its task store.
+_impl.TASK_TYPES.add("identity_index")
 
 # Public compatibility symbol. Older tests/tools monkeypatch this name.
 analyze = _default_analyze
@@ -64,8 +68,6 @@ class TaskManager(_impl.TaskManager):
                 "missing": int(summary.get("missing", 0) or 0),
             }
         except Exception:
-            # Analysis is authoritative; a failed local relink must not turn a
-            # completed deterministic analysis into a failed task.
             return {}
 
     @contextmanager
@@ -92,12 +94,7 @@ class TaskManager(_impl.TaskManager):
             task_id,
             cancelled=lambda: self._cancel_requested(config, task_id),
         ):
-            self._update(
-                config,
-                task_id,
-                stage=stage,
-                message=f"已获得 Host {label}资源",
-            )
+            self._update(config, task_id, stage=stage, message=f"已获得 Host {label}资源")
             yield
 
     def _perception_best_effort(
@@ -108,8 +105,6 @@ class TaskManager(_impl.TaskManager):
         mode: str,
         group_ids: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Update the rebuildable local perception index without risking core analysis."""
-
         if not self.workspace_id:
             return {"status": "deferred", "reason": "任务缺少 workspace_id"}
         task_id = str(task["task_id"])
@@ -215,6 +210,22 @@ class TaskManager(_impl.TaskManager):
             result["speaker"] = self._identity_best_effort(config, task, kind="speaker", group_ids=group_ids)
         return result
 
+    def _run_identity_task(self, config, task: dict[str, Any]) -> dict[str, Any]:
+        targets = task.get("targets", {}) if isinstance(task.get("targets"), dict) else {}
+        kind = str(targets.get("kind", "both") or "both")
+        if kind not in {"face", "speaker", "both"}:
+            raise ValueError("identity_index kind 必须是 face、speaker 或 both")
+        raw_groups = targets.get("group_ids", [])
+        if not isinstance(raw_groups, list):
+            raise ValueError("identity_index group_ids 必须是数组")
+        group_ids = [str(value) for value in raw_groups if str(value)] or None
+        result: dict[str, Any] = {}
+        if kind in {"face", "both"}:
+            result["face"] = self._identity_best_effort(config, task, kind="face", group_ids=group_ids)
+        if kind in {"speaker", "both"}:
+            result["speaker"] = self._identity_best_effort(config, task, kind="speaker", group_ids=group_ids)
+        return result
+
     def _run(self, project_id: str, task_id: str) -> None:
         config = self.project_loader(project_id)
         try:
@@ -247,12 +258,8 @@ class TaskManager(_impl.TaskManager):
                 if local_media:
                     result["local_media"] = local_media
                 selected_groups = sorted(affected) or None
-                result["perception"] = self._perception_best_effort(
-                    config, task, mode="tier0", group_ids=selected_groups
-                )
-                result["identity"] = self._identity_after_analysis(
-                    config, task, group_ids=selected_groups
-                )
+                result["perception"] = self._perception_best_effort(config, task, mode="tier0", group_ids=selected_groups)
+                result["identity"] = self._identity_after_analysis(config, task, group_ids=selected_groups)
             elif task_type == "auto_resolve":
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                     automation = _impl.resolve_project(config)
@@ -272,26 +279,20 @@ class TaskManager(_impl.TaskManager):
                     if local_media:
                         result["local_media"] = local_media
                     selected_groups = sorted(affected) or None
-                    result["perception"] = self._perception_best_effort(
-                        config, task, mode="tier0", group_ids=selected_groups
-                    )
-                    result["identity"] = self._identity_after_analysis(
-                        config, task, group_ids=selected_groups
-                    )
+                    result["perception"] = self._perception_best_effort(config, task, mode="tier0", group_ids=selected_groups)
+                    result["identity"] = self._identity_after_analysis(config, task, group_ids=selected_groups)
                 elif result.get("transcribed"):
                     result["analysis_deferred"] = True
                     result["analysis_deferred_reason"] = "当前设备没有可用项目源/同步产物；转写缓存已写入，可由Host后续分析"
+            elif task_type == "identity_index":
+                result = self._run_identity_task(config, task)
             else:
                 self._update(config, task_id, stage="evidence")
                 result = self._extract_evidence(config, task)
                 group_ids = [str(value) for value in task.get("targets", {}).get("group_ids", []) if str(value)]
                 if group_ids:
-                    result["perception"] = self._perception_best_effort(
-                        config, task, mode="semantic", group_ids=group_ids
-                    )
-                    result["identity"] = self._identity_after_analysis(
-                        config, task, group_ids=group_ids, explicit=True
-                    )
+                    result["perception"] = self._perception_best_effort(config, task, mode="semantic", group_ids=group_ids)
+                    result["identity"] = self._identity_after_analysis(config, task, group_ids=group_ids, explicit=True)
 
             self._update(config, task_id, status="completed", stage="completed", result=result, message="任务完成")
         except ResourceCancelled:
