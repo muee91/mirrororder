@@ -132,12 +132,15 @@ class TaskManager(_impl.TaskManager):
                             message=f"感知索引 {done}/{total} · {group_id}",
                         )
 
-                return indexer.run(
+                result = indexer.run(
                     mode=mode,
                     group_ids=group_ids,
                     progress=report,
                     cancelled=lambda: self._cancel_requested(config, task_id),
                 )
+                if result.get("status") == "cancelled":
+                    raise ResourceCancelled("感知索引阶段任务已取消")
+                return result
         except ResourceCancelled:
             raise
         except Exception as error:
@@ -222,7 +225,7 @@ class TaskManager(_impl.TaskManager):
 
             self._update(config, task_id, status="completed", stage="completed", result=result, message="任务完成")
         except ResourceCancelled:
-            self._update(config, task_id, status="cancelled", stage="cancelled", message="等待计算资源时任务已取消")
+            self._update(config, task_id, status="cancelled", stage="cancelled", message="等待计算资源或感知索引时任务已取消")
         except Exception as error:
             self._update(config, task_id, status="failed", stage="failed", error=str(error), message="任务失败")
         finally:
