@@ -1,12 +1,12 @@
-# 短剧素材核对平台 GPT 版
+# 镜序（MirrorOrder）
 
-这是一个面向剪辑人员的本地多机位素材整理平台。它解决的问题是：
+镜序是面向剪辑人员的本地多机位素材整理与后期制作辅助工具。它解决的问题是：
 
-> 拿到拍摄混乱的 A/B/C 多机位素材和一份剧本后，快速把实际拍摄 Take 按剧本顺序整理出来，并允许剪辑人员直接看片、修正归集、多人协作审核和把本机素材拖进剪辑软件。
+> 拿到拍摄混乱的 A/B/C 多机位素材、剧本和可选场记后，快速把实际拍摄 Take 按剧本顺序整理出来，让剪辑人员看片、修正归集、协作审阅、检查覆盖，并把本机素材安全地带入剪辑软件。
 
-项目的工作台与 API 保持原生 HTML/CSS/JavaScript 和 Python 标准库服务，不依赖 React、Vue、数据库、云服务或 Docker。媒体目录多机位同步使用仓库内第一方引擎所列的本地 Python 科学计算依赖；视频通过 HTTP Range 读取当前设备的真实媒体文件，不复制视频。
+项目的工作台与 API 保持原生 HTML/CSS/JavaScript 和 Python 标准库服务，不依赖 React、Vue、云服务或 Docker。媒体目录多机位同步使用仓库内第一方引擎所列的本地 Python 科学计算依赖；视频通过 HTTP Range 读取当前设备的真实媒体文件，不复制视频。
 
-当前版本是本地多项目工作台。每个项目由稳定 `project_id` 注册在 `projects/registry.json`，工作台与智能体统一使用版本化项目 API。
+当前版本是本地多项目工作台。每个项目由稳定 `project_id` 注册在 `projects/registry.json`，工作台、CLI 与智能体统一使用版本化项目 API。
 
 ## 核心数据模型
 
@@ -52,20 +52,24 @@ MacBook Pro: /Volumes/T9/备份/0814/A001.mov
 
 ## 快速启动
 
-重新构建当前源码对应的 App：
+交接构建优先使用统一门禁：
 
 ```bash
-zsh macos-app/build_app.sh
+zsh macos-app/build_ready.sh
 open "镜序.app"
 ```
 
-当前 `镜序.app` 是**工作台优先**的原生 macOS 应用：
+`build_ready.sh` 会先执行纯标准库静态检查，再运行完整 pytest，全部通过后才调用 `macos-app/build_app.sh`。如只是在开发机上明确要跳过 pytest，可以设置 `MIRRORORDER_SKIP_TESTS=1`，但该结果不能作为发布验收。
+
+当前 `镜序.app` 是 **Production** 原生工作台：
 
 1. 打开 App 后自动检查并启动本机镜序服务；
-2. 服务就绪后主窗口直接显示剧本 / Take / 播放器工作台；
+2. 服务就绪后主窗口直接进入项目制作工作台；
 3. App 内素材卡可以通过 AppKit 原生文件拖拽直接拖到 Finder / Final Cut Pro / Premiere / Resolve；
-4. `时间线` 可以预览当前项目或加载本地 FCPXML / XML，并和素材页双向关联；
-5. 工作区、本机素材绑定、服务状态和日志都在右上角 `设置`。
+4. `剪辑 → 时间线` 可以预览当前项目或加载本地 FCPXML / XML，并和素材页双向关联；
+5. `剪辑 → 粗剪 / 组接` 使用同一套人工权威与场记约束；
+6. `镜序助理` 主动提示归集冲突、低置信素材、缺失媒体和人物线索，但不会替用户写审核结论；
+7. 工作区、本机素材绑定、模型连接、服务状态和日志都收在 App 的设置 / 状态中心。
 
 App 管理的是一个多工作区 gateway，默认使用可配置的 `8766` 端口；它可以同时加载多个带稳定 `workspace_id` 的工作区，不接管已有的 `8765` 实例。
 
@@ -199,17 +203,25 @@ PID
 
 ## 浏览器与 App 的区别
 
-浏览器工作台支持：
+普通浏览器是 **Review** 面，支持：
 
-- 剧本 / 候选 Take / 审核；
-- XML 时间线；
-- 时间线 ↔ 素材关联；
-- 通过它所连接的 gateway 从网关主机播放媒体。
+- 剧本 / 候选 Take / 播放 / 审核；
+- 团队个人意见与协作状态；
+- 镜序助理的审阅提醒；
+- 通过它所连接的 gateway 从网关主机播放媒体；
+- 查看 gateway 主机的媒体可用性。
 
-`镜序.app` 额外提供：
+普通 Team Web **不暴露**项目创建、本机路径、生产任务、XML 时间线或原生文件拖拽。
 
+`镜序.app` 是 **Production** 面，额外提供：
+
+- 项目创建与生产任务；
 - 当前 Mac 的素材目录扫描与绑定；
-- AppKit 原生文件拖出到 FCP / Premiere / Resolve / Finder。
+- 素材 / Take / 人物 / 场记 / Coverage；
+- 粗剪、组接与 `剪辑 → 时间线`；
+- 本机语义“找素材”入口；
+- AppKit 原生文件拖出到 FCP / Premiere / Resolve / Finder；
+- Host-local 最终 Editorial Decision。
 
 浏览器远程访问某个 gateway 时，看到的是**gateway 主机**的媒体覆盖率；视频也由该主机读取和发送，不会把主机路径冒充浏览器客户端自己的本机路径。
 
@@ -256,7 +268,9 @@ PYTHONPATH=src python3 -m script_organizer.cli doctor workspace.toml
 ```
 
 该检查只报告当前 Host 的命令、Python 模块、第一方引擎与工作区写权限，不下载模型或修改项目数据。
-- 后台任务仅支持 `incremental_analyze`、`transcribe`、`evidence_extract`；任务只写 ASR 缓存和派生产物。
+- Agent Gateway 只暴露 allowlist 业务动作；没有通用 `shell` / `exec`。
+- Agent 可读取上下文、普通搜索、语义搜索与 Take 证据，并提交受限生产任务或待人工确认的归集提案。
+- 语义搜索同时提供 CLI `semantic-search` 与 MCP `semantic_search`；未连接 embedding 时仍使用本地 FTS / 关键词检索。
 - 智能体 Gateway 位于 `/api/agent/v1/workspaces/{workspace_id}`，使用单独 Bearer 令牌、项目白名单、`read/analyze/propose` 范围、有效期、速率限制和审计日志。
 - 智能体只能提交带有效片内范围和证据的归集提案。GUI 人工确认后才会原子写入 `review.json`；revision 变化会拒绝应用旧提案。
 
@@ -264,6 +278,12 @@ PYTHONPATH=src python3 -m script_organizer.cli doctor workspace.toml
 
 ```bash
 ./script-organizer agent-token-create workspace.toml beef --name codex
+```
+
+直接查询项目语义证据：
+
+```bash
+./script-organizer semantic-search workspace.toml beef "门口回头的反应镜头"
 ```
 
 本机 stdio MCP：
@@ -275,11 +295,19 @@ export SCRIPT_ORGANIZER_AGENT_TOKEN='创建时显示的令牌'
 PYTHONPATH=src python3 -m script_organizer.mcp_server
 ```
 
-## 测试
+## 测试与交接构建
+
+推荐一次跑完：
 
 ```bash
-python3 -m py_compile src/script_organizer/*.py
-python3 -m pytest -q
+zsh macos-app/build_ready.sh
+```
+
+等价的分步检查：
+
+```bash
+python3 macos-app/prebuild_check.py
+PYTHONPATH=src python3 -m pytest -q tests
 zsh macos-app/build_app.sh
 ```
 
@@ -289,26 +317,30 @@ zsh macos-app/build_app.sh
 2. 本机素材覆盖率正确；
 3. 同一素材能够从第二台的文件播放；
 4. 从 App 拖到 Finder / FCP 得到第二台的文件路径；
-5. 加载第一台导出的 FCPXML 仍能关联到第二台本地素材；
+5. 在 App `剪辑 → 时间线` 加载第一台导出的 FCPXML，仍能关联到第二台本地素材；
 6. 本机扫描前后共享 `material_index.json` / `matches.json` / `review.json` 不被路径改写。
 
 ## 主要目录
 
 ```text
-src/script_organizer/                 Python分析、分组、匹配、审核和Web服务
-src/script_organizer/media_identity.py  media_id 与设备本地绑定
-src/script_organizer/device_media_runtime.py  服务运行时本机路径解析
-web/                                  三栏核对工作台 / XML时间线
-workspace.toml                        工作区入口
-projects/registry.json                多项目注册表
-macos-app/MirrorOrderDesktopApp.swift 当前工作台优先 + 原生拖拽 App
-macos-app/build_app.sh                当前 App 构建脚本
-vendor/multicam-audio-sync/           第一方多机位同步、NLE XML、剪映适配与校验引擎
-vendor/multicam-audio-sync/requirements.txt  媒体目录同步所需 Python 依赖
-tests/                                核心回归测试
-DESKTOP_BRIDGE.md                     时间线 / 原生拖拽边界
-SYNC_MODEL.md                         多设备同步边界
-AGENTS.md                             后续开发必须遵守的工程约束
+src/script_organizer/                    Python 分析、分组、匹配、审核与 Host 服务
+src/script_organizer/media_identity.py   media_id 与设备本地绑定
+src/script_organizer/semantic_*.py       本地语义文档、FTS/可选向量检索与 API
+src/script_organizer/mcp_server.py       受限 Agent MCP 入口
+web/                                     Team Review + App Production 扩展
+macos-app/MirrorOrderDesktopCore.swift   原生 Host / WebKit / AppKit 桥接
+macos-app/MirrorOrderDesktopUI.swift     原生项目与设置 UI
+macos-app/prebuild_check.py              无副作用构建前静态契约检查
+macos-app/build_ready.sh                 preflight → pytest → App build 交接门
+macos-app/build_app.sh                   App 打包、运行时闭包与签名脚本
+workspace.toml                           工作区入口
+projects/registry.json                   多项目注册表
+vendor/multicam-audio-sync/              第一方多机位同步、NLE XML 与校验引擎
+tests/                                   核心回归测试
+DESKTOP_BRIDGE.md                        Production 时间线 / 原生拖拽边界
+SYNC_MODEL.md                            多设备同步边界
+AUTOMATION_PIPELINE.md                   自动归集与 AI 权威边界
+AGENTS.md                                后续开发必须遵守的工程约束
 ```
 
 ## 安全边界
@@ -320,5 +352,6 @@ AGENTS.md                             后续开发必须遵守的工程约束
 - `review.json` 是人工结果的共享持久化来源，修改前后都要验证人工记录未丢失。
 - 本机 `media-bindings.json` 永远不是共享项目状态。
 - 智能体无权直接写审核、Reject 素材、修改原始文件或改变全局匹配阈值。
+- Semantic Retrieval、Audit 和镜序助理都只能提供证据、解释或导航，不能成为最终 Editorial Decision。
 
-继续开发前阅读 [项目介绍.md](项目介绍.md)、[AGENTS.md](AGENTS.md)、[DESKTOP_BRIDGE.md](DESKTOP_BRIDGE.md) 和 [SYNC_MODEL.md](SYNC_MODEL.md)。
+继续开发前阅读 [项目介绍.md](项目介绍.md)、[AGENTS.md](AGENTS.md)、[DESKTOP_BRIDGE.md](DESKTOP_BRIDGE.md)、[SYNC_MODEL.md](SYNC_MODEL.md) 和 [AUTOMATION_PIPELINE.md](AUTOMATION_PIPELINE.md)。
