@@ -226,6 +226,11 @@
   async function saveMediaRole(mediaId, button) {
     const editor = button.closest('[data-media-role-editor]');
     if (!editor || !roles) return;
+    if (!state.actor) {
+      showToast('请先设置操作者昵称');
+      $('#identity-dialog')?.showModal();
+      return;
+    }
     const item = asArray(inventory?.items).find((row) => row.media_id === mediaId);
     if (!item) return;
     button.disabled = true;
@@ -244,7 +249,7 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           expected_revision: Number(roles.revision || 0),
-          actor: state.actor || 'Production',
+          actor: state.actor,
           changes: [{media_id: mediaId, entry}],
         }),
       });
