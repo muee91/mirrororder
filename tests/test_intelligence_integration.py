@@ -9,7 +9,7 @@ from script_organizer.config import ProjectConfig
 
 def _config(tmp_path: Path, script: Path) -> ProjectConfig:
     project = tmp_path / "project"
-    project.mkdir(exist_ok=True)
+    project.mkdir(parents=True, exist_ok=True)
     config_path = project / "project.toml"
     config_path.write_text("[project]\nname='demo'\n", encoding="utf-8")
     output = project / "output"
