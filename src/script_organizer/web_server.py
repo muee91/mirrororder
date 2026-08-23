@@ -26,6 +26,7 @@ from .agent_store import (
     AgentTokenStore,
     ProposalStore,
 )
+from .collaboration_access import CollaborationAccessStore
 from .config import ProjectConfig
 from .media_identity import DeviceMediaStore
 from .review_store import ReviewStore
@@ -387,6 +388,14 @@ class WorkspaceService:
         self.registry = WorkspaceRegistry(workspace)
         self.tokens = AgentTokenStore(workspace)
         self.tasks = TaskManager(self.project_config, workspace.workspace_id)
+        # Legacy single-workspace `serve` callers may not yet have a stable
+        # workspace_id. Gateway routes require one; this fallback only keeps
+        # their host-local runtime state isolated without changing workspace
+        # artifacts.
+        collaboration_scope = workspace.workspace_id or (
+            "legacy-" + hashlib.sha1(str(workspace.config_path.resolve()).encode("utf-8")).hexdigest()[:16]
+        )
+        self.collaborators = CollaborationAccessStore(collaboration_scope)
         self._projects: dict[str, ProjectService] = {}
 
     def project_config(self, project_id: str) -> ProjectConfig:
@@ -649,6 +658,12 @@ def make_handler(service: WorkspaceService, web_root: Path):
             if self.client_address[0] not in {"127.0.0.1", "::1"}:
                 raise ApiError(HTTPStatus.FORBIDDEN, "此操作只能在本机执行")
 
+        def _review_actor(self, requested: object) -> str:
+            return str(requested or "").strip()[:80]
+
+        def _require_review_access(self) -> None:
+            return
+
         def _agent(self, scope: str, project_id: str | None = None) -> dict[str, Any]:
             authorization = self.headers.get("Authorization", "")
             if not authorization.startswith("Bearer "):
@@ -802,6 +817,8 @@ def make_handler(service: WorkspaceService, web_root: Path):
             project = service.project(project_id)
             payload = _body(self)
             if rest == ["review"]:
+                self._require_review_access()
+                payload["actor"] = self._review_actor(payload.get("actor"))
                 if not payload.get("action"):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "审核写入必须使用原子 action")
                 if not str(payload.get("actor", "")).strip():
@@ -820,7 +837,8 @@ def make_handler(service: WorkspaceService, web_root: Path):
             elif len(rest) == 2 and rest[0] == "tasks":
                 self._send_json(service.tasks.cancel(project_id, rest[1]))
             elif rest == ["proposals", "apply"]:
-                actor = str(payload.get("actor", "") or "")[:80]
+                self._require_review_access()
+                actor = self._review_actor(payload.get("actor"))
                 proposal_ids = payload.get("proposal_ids", [])
                 if not actor or not isinstance(proposal_ids, list):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "应用提案需要审核昵称和提案列表")
@@ -1013,6 +1031,48 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
             if not gateway.security.allow(self.client_address[0], self._session()):
                 raise ApiError(HTTPStatus.UNAUTHORIZED, "需要先完成局域网配对")
 
+        def _is_local_client(self) -> bool:
+            return self.client_address[0] in {"127.0.0.1", "::1"}
+
+        def _browser_user(self) -> dict[str, Any]:
+            service = gateway.current
+            device_id = self.headers.get("X-MirrorOrder-Device", "").strip()
+            if not device_id and self._is_local_client():
+                # Native Host calls do not have browser localStorage. Keep a
+                # stable local manager record without granting the same
+                # fallback to LAN callers.
+                device_id = "host-api-local"
+            try:
+                return service.collaborators.observe(
+                    device_id,
+                    ip=self.client_address[0],
+                    user_agent=self.headers.get("User-Agent", ""),
+                    local=self._is_local_client(),
+                    paired=gateway.security.require_pairing,
+                )
+            except ValueError as error:
+                raise ApiError(HTTPStatus.BAD_REQUEST, str(error)) from error
+            except PermissionError as error:
+                raise ApiError(HTTPStatus.FORBIDDEN, str(error)) from error
+
+        def _review_actor(self, requested: object) -> str:
+            if not self.headers.get("X-MirrorOrder-Device", "").strip() and self._is_local_client():
+                # The native Host and local maintenance scripts are not
+                # browsers, so they do not have a browser identity header.
+                return str(requested or "").strip()[:80]
+            user = self._browser_user()
+            nickname = str(user.get("nickname", "") or "").strip()
+            if not nickname:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "请先填写审核昵称")
+            return nickname
+
+        def _require_review_access(self) -> None:
+            user = self._browser_user()
+            try:
+                CollaborationAccessStore.require_role(user, "reviewer")
+            except PermissionError as error:
+                raise ApiError(HTTPStatus.FORBIDDEN, str(error)) from error
+
         def _rewrite(self, parsed: urllib.parse.ParseResult, path: str) -> None:
             self.path = urllib.parse.urlunparse(("", "", path, "", parsed.query, ""))
 
@@ -1057,6 +1117,60 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
                 raise ApiError(HTTPStatus.NOT_FOUND, "not found")
             return workspace_id, False
 
+        def _user_route(self, parsed: urllib.parse.ParseResult) -> tuple[str, list[str]] | None:
+            parts = _parts(parsed.path)
+            if len(parts) < 5 or parts[:3] != ["api", "v1", "workspaces"] or parts[4] != "users":
+                return None
+            self._authorize_app()
+            workspace_id = urllib.parse.unquote(parts[3])
+            self._select_workspace(workspace_id)
+            return workspace_id, parts[5:]
+
+        def _user_get(self, parsed: urllib.parse.ParseResult) -> bool:
+            route = self._user_route(parsed)
+            if route is None:
+                return False
+            _workspace_id, rest = route
+            store = gateway.current.collaborators
+            if rest == ["me"]:
+                self._send_json({"user": self._browser_user()})
+                return True
+            if not self._is_local_client():
+                raise ApiError(HTTPStatus.FORBIDDEN, "用户管理只能在制作主机执行")
+            if not rest:
+                self._send_json({"users": store.list_users()})
+                return True
+            if rest == ["audit"]:
+                self._send_json({"audit": store.audit()})
+                return True
+            raise ApiError(HTTPStatus.NOT_FOUND, "not found")
+
+        def _user_post(self, parsed: urllib.parse.ParseResult) -> bool:
+            route = self._user_route(parsed)
+            if route is None:
+                return False
+            _workspace_id, rest = route
+            store = gateway.current.collaborators
+            try:
+                if rest == ["me"]:
+                    user = self._browser_user()
+                    CollaborationAccessStore.require_role(user, "viewer")
+                    self._send_json({"user": store.rename(
+                        self.headers.get("X-MirrorOrder-Device", "").strip(),
+                        _body(self).get("nickname"),
+                    )})
+                    return True
+                if len(rest) == 1 and rest[0]:
+                    if not self._is_local_client():
+                        raise ApiError(HTTPStatus.FORBIDDEN, "用户管理只能在制作主机执行")
+                    self._send_json({"user": store.update_user(rest[0], _body(self))})
+                    return True
+            except ValueError as error:
+                raise ApiError(HTTPStatus.BAD_REQUEST, str(error)) from error
+            except PermissionError as error:
+                raise ApiError(HTTPStatus.FORBIDDEN, str(error)) from error
+            raise ApiError(HTTPStatus.NOT_FOUND, "not found")
+
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
             try:
@@ -1065,6 +1179,8 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
                     self._send_json(gateway.security.public(local))
                     return
                 if parsed.path.startswith("/api/v1/"):
+                    if self._user_get(parsed):
+                        return
                     workspace_id, special = self._prepare_app(parsed)
                     if special == "workspace-list":
                         self._send_json(gateway.all_payload())
@@ -1106,6 +1222,8 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
                     self._send_json({"paired": True}, headers=headers)
                     return
                 if parsed.path.startswith("/api/v1/"):
+                    if self._user_post(parsed):
+                        return
                     parts = _parts(parsed.path)
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "workspaces"] and parts[4] == "projects":
                         self._authorize_app()

@@ -110,24 +110,46 @@ def load_template():
 
 
 def find_draft_root():
-    """动态探测用户剪映草稿根目录（不写死机器路径）。
+    """动态探测用户剪映/CapCut 草稿根目录（跨 macOS/Windows/Linux）。
 
-    依次探测常见位置；找不到时返回 None，由调用方回退到 OUT_DIR 本地放置。
+    按运行平台依次探测常见位置（glob recursive 覆盖 "User Data/Projects/"
+    等多级目录）；找不到时返回 None，由调用方回退到 OUT_DIR 本地放置。
+    仅探测**本机**路径，不会碰任何共享 workspace。
     """
     import glob
-    candidates = []
     home = os.path.expanduser("~")
-    for pat in (
-        f"{home}/Movies/JianyingPro/**/com.lveditor.draft",
-        f"{home}/Movies/CapCut/**/com.lveditor.draft",
-        f"{home}/Documents/JianyingPro/**/com.lveditor.draft",
-    ):
-        for hit in glob.glob(pat, recursive=True):
-            if os.path.isdir(hit):
-                candidates.append(hit)
-    if candidates:
-        return candidates[0]
-    return None
+    cand = []
+    if sys.platform == "darwin":
+        roots = (
+            f"{home}/Movies/JianyingPro",
+            f"{home}/Movies/CapCut",
+            f"{home}/Documents/JianyingPro",
+        )
+    elif os.name == "nt":      # Windows
+        roots = (
+            f"{home}/AppData/Local/JianyingPro",
+            f"{home}/AppData/Local/CapCut",
+            f"{home}/AppData/Roaming/JianyingPro",
+            f"{home}/AppData/Roaming/CapCut",
+        )
+    else:                       # Linux（CapCut AppImage 等）+ 兜底
+        roots = (
+            f"{home}/Documents",
+            f"{home}/.local/share",
+            f"{home}/.config",
+            f"{home}/AppData/Local/CapCut",
+            f"{home}/AppData/Local/JianyingPro",
+        )
+    for r in roots:
+        cand += glob.glob(f"{r}/**/com.lveditor.draft", recursive=True)
+    seen = set()
+    out = []
+    for c in cand:
+        c = os.path.normpath(c)
+        if os.path.isdir(c) and c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out[0] if out else None
 
 
 def build_clips():

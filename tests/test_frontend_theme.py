@@ -67,3 +67,24 @@ def test_desktop_surface_uses_project_first_hierarchy() -> None:
     assert 'case .attention: return attention.hasIssues || stage.kind == .failed' in ui
     assert 'CORE_SOURCE="$ROOT/macos-app/MirrorOrderDesktopCore.swift"' in build
     assert 'UI_SOURCE="$ROOT/macos-app/MirrorOrderDesktopUI.swift"' in build
+
+
+def test_project_inspector_keeps_one_fixed_active_task_surface() -> None:
+    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
+    core = (ROOT / "macos-app" / "MirrorOrderDesktopCore.swift").read_text(encoding="utf-8")
+    inspector_start = ui.index("private func inspector")
+
+    assert "private func activeTaskStrip(_ activity: ProjectActivity)" in ui
+    assert ui.index("activeTaskStrip(activity)", inspector_start) < ui.index("ScrollView {", inspector_start)
+    assert 'if let activity = controller.selectedProjectActivity, !activity.isActive {' in ui
+    assert "后台整理正在进行" not in ui
+    assert "日志时间按本机时区显示" in ui
+    assert "displayTaskLogLine" in ui
+    assert "if let activity = selectedProjectActivity, activity.isActive" in core
+    assert "startTaskPolling(projectID: selectedProjectID, taskID: activity.taskID)" in core
+    assert "PYTHONDONTWRITEBYTECODE=1 nohup" in core
+    assert "private var refreshFailureCount = 0" in core
+    assert "refreshFailureCount >= 3" in core
+    active_strip = ui[ui.index("private func activeTaskStrip"):ui.index("private func mediaSection")]
+    assert "Menu {" not in active_strip
+    assert 'Label("取消任务", systemImage: "xmark")' not in active_strip

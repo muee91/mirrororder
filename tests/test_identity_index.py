@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 
+import script_organizer.identity_worker as identity_worker
 from script_organizer.config import ProjectConfig
 from script_organizer.device_runtime_settings import (
     load_project_intelligence_settings,
@@ -14,6 +16,37 @@ from script_organizer.identity_index import IdentityIndexer
 from script_organizer.identity_library import IdentityLibrary
 from script_organizer.identity_runtime import FACE_DETECTOR, FACE_RECOGNIZER, SPEAKER_EMBEDDER
 from script_organizer.workspace_db import WorkspaceDatabase
+
+
+def test_identity_worker_reports_initialization_before_inference(monkeypatch, capsys, tmp_path: Path) -> None:
+    class FakeIndexer:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def _index(self) -> dict:
+            return {}
+
+        def run(self, _kind: str, **kwargs) -> dict:
+            kwargs["progress"](1, 1, "G1")
+            return {"processed": 1}
+
+    config_path = tmp_path / "project.toml"
+    config_path.write_text("[project]\nname='demo'\n", encoding="utf-8")
+    monkeypatch.setattr(identity_worker, "IdentityIndexer", FakeIndexer)
+    monkeypatch.setattr(identity_worker.sys, "stdin", io.StringIO(""))
+
+    assert identity_worker.main([
+        "--workspace-id", "ws_demo",
+        "--project-id", "project",
+        "--config", str(config_path),
+        "--kind", "speaker",
+    ]) == 0
+
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert events[0] == {"type": "status", "message": "正在读取角色声纹识别缓存"}
+    assert events[1] == {"type": "status", "message": "正在加载角色声纹识别模型"}
+    assert events[2]["type"] == "progress"
+    assert events[3] == {"type": "result", "result": {"processed": 1}}
 
 
 def _config(tmp_path: Path, groups: int = 2) -> tuple[ProjectConfig, dict]:
@@ -253,6 +286,59 @@ def test_identity_library_never_returns_embedding_and_can_merge(tmp_path: Path) 
     assert {row["identity_id"] for row in library.list("face")} == {"face_a"}
 
 
+def test_identity_library_lists_all_identity_details_in_bulk(monkeypatch, tmp_path: Path) -> None:
+    config, material = _config(tmp_path, groups=2)
+    del config
+    database = WorkspaceDatabase("ws", tmp_path / "workspace.sqlite3")
+    database.sync_take_index(
+        "project", name="demo", input_kind="media-directory", config_path="project.toml", index=material
+    )
+    for identity_id, group_id in (("face_a", "G1"), ("face_b", "G2")):
+        database.upsert_identity("project", identity_id=identity_id, kind="face", label=identity_id)
+        database.add_identity_observation(
+            "project",
+            group_id,
+            kind="face",
+            identity_id=identity_id,
+            confidence=0.9,
+            metadata={"camera": "B", "source_time": 2.5},
+        )
+    library = IdentityLibrary(database, "project")
+
+    monkeypatch.setattr(
+        library,
+        "_example",
+        lambda _identity_id: (_ for _ in ()).throw(AssertionError("per-row example query")),
+    )
+    monkeypatch.setattr(
+        library,
+        "_occurrences",
+        lambda _identity_id: (_ for _ in ()).throw(AssertionError("per-row occurrence query")),
+    )
+
+    payload = library.list("face")
+
+    assert [row["identity_id"] for row in payload] == ["face_a", "face_b"]
+    assert all(row["occurrences"] for row in payload)
+
+
+def test_identity_library_uses_null_for_an_identity_without_a_sample(tmp_path: Path) -> None:
+    config, material = _config(tmp_path, groups=1)
+    del config
+    database = WorkspaceDatabase("ws", tmp_path / "workspace.sqlite3")
+    database.sync_take_index(
+        "project", name="demo", input_kind="media-directory", config_path="project.toml", index=material
+    )
+    database.upsert_identity("project", identity_id="face_orphan", kind="face", label="人物候选")
+
+    payload = IdentityLibrary(database, "project").list("face")
+
+    assert len(payload) == 1
+    assert payload[0]["identity_id"] == "face_orphan"
+    assert payload[0]["example"] is None
+    assert payload[0]["occurrences"] == []
+
+
 def test_identity_runtime_and_project_intelligence_settings_are_separate(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "app-support"))
     defaults = load_runtime_settings()
@@ -301,6 +387,9 @@ def test_identity_models_are_pinned_and_never_downloaded_by_app_build() -> None:
 def test_identity_management_keeps_writes_local_and_remote_reads_sanitized() -> None:
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "automation_runtime.py").read_text(encoding="utf-8")
+    tasks = (root / "src" / "script_organizer" / "tasks.py").read_text(encoding="utf-8")
+    worker = (root / "src" / "script_organizer" / "identity_worker.py").read_text(encoding="utf-8")
+    app = (root / "macos-app" / "LocalRuntimeSettingsView.swift").read_text(encoding="utf-8")
     assert 'parts[4] == "identities"' in runtime
     assert "IdentityLibrary" in runtime
     assert "self._local_only()" in runtime
@@ -308,6 +397,16 @@ def test_identity_management_keeps_writes_local_and_remote_reads_sanitized() -> 
     assert '"intelligence-settings"' in runtime
     assert "_remote_identity_payload" in runtime
     assert 'safe_example.pop("face_crop_path", None)' in runtime
+    assert 'script_organizer.identity_worker' in tasks
+    assert "multiprocessing.get_context" not in tasks
+    assert "cancel\\n" in tasks
+    assert "IdentityIndexer" in worker
+    assert "cancelled.is_set" in worker
+    assert "_pending_total" in worker
+    assert '"done": 0' in worker
+    assert "IdentityIndexActivity" in app
+    assert "refreshActivity" in app
+    assert "identityProgress" in app
 
 
 def test_person_labeling_never_uses_a_full_camera_frame() -> None:

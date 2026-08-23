@@ -76,7 +76,7 @@ python3 build_pr_xml.py        # Premiere xmeml v4
 3. FCPXML 结构（DTD 强制）：`library` 只能含 `event|smart-collection`；`media`(multicam) 必须在 `resources`；`project`/`mc-clip`/`asset-clip` 必须在 `event`。
 4. 帧边界：所有时间值必须整帧吸附，否则 FCP 拒导。
 5. Premiere xmeml：file id 必须全文档唯一（跨序列共享）；单日序列 duration 取实际末端帧（不能是 0）。
-6. macOS 并行：`mp.set_start_method("fork", force=True)` 且放 `if __name__=="__main__":` 内，heredoc 主模块会 spawn 崩溃。
+6. **并行跨平台**：`sync.py` 用 `multiprocessing.Pool` + **模块级** `pair_worker`（池回调必须是可导入的函数），**不要**强制 `set_start_method("fork")`——保持默认 spawn（Windows/macOS）与 fork（Linux）均兼容。所有脚本都从 `if __name__=="__main__":` 启动。`python3 - <<EOF` heredoc 主模块里跑 Pool 会报 "An attempt has been made to start a new process before the current process has finished its bootstrapping phase"——这是**自测脚本形态问题**（spawn 无法 pickling stdin 主模块），与算法无关，写成脚本文件跑即可。
 
 ## 参考仓库研究（references/lessons-from-reference-repos.md）
 
@@ -118,6 +118,12 @@ python3 build_pr_xml.py        # Premiere xmeml v4
    - **铁证**：8月20日（可拖动）与新示例项目（修复后可拖动）逐字段核对完全一致；钉死版与新示例项目唯一差异集中在以上字段。普通轨段 render_index 有无不影响可移动（参照有、新示例项目无，均可拖动）。反推已验证：旧版主轨 MC 被剪成 7 段各带 render_index = 钉死；修成 1 整块无 render_index = 可拖动。
 7. **剪映编辑后的草稿用官方 AES-GCM 加密**，用 `capcut_draft_codec.py` 解码看剪映真实写入——**验证多机位是否识别成功的证据闭环**（加载前明文、加载/保存后加密；保存后结构=剪映接受的结构）。诊断媒体丢失：对比剪映保存版 subdraft 根目录是否出现自动补的文件、meta type18 是否新增条目，即剪映实际解析路径。
 
+### 验证边界（重要，勿夸大）
+
+- **下面两条剪映链路的"实机验证通过/硬规则"均针对本机 `macOS + 剪映 11.3.0`（VideoFusion-macOS.app）**：`build_capcut_fcpxml.py` 的无 multicam FCPXML 导入，与 `build_capcut_draft_31.py` 的原生 3+1 草稿。换操作系统（Windows/Linux）或其他剪映/CapCut 版本时，**必须先跑 `validate_capcut_draft.py`（草稿）`validate_fcpxml.py`（XML）自检 + 在目标平台剪映里实机导入确认**，再向用户宣称可用。
+- 跨平台为已尽力支持的**进程语义与路径探测**层：`sync.py` 多进程兼容 spawn（Windows/macOS）/fork（Linux）；`build_capcut_draft_31.find_draft_root()` 按平台枚举剪映/CapCut 草稿根。这不等于剪映本体的跨平台行为已被逐一实机验证。
+- 新增产物（`validate_capcut_draft.py`）`raw` 分支仅能 py_compile + 缺参/错目录的失败路径自检；**通过分支需用一次真实生成的草稿目录验证**（`python3 validate_capcut_draft.py <真实草稿目录>`）。`saved` 分支已用当天剪映保存草稿（如 `8月20日`，解码后组合被拆/重写）实跑通过，承接早前 11 项误报 FAIL。
+
 ## 脚本（scripts/，全部读 config.json，换项目无需改代码）
 
 - `project_config.py` — 项目参数模块：自动探测帧率/分辨率/旋转/音频/天/相机目录；`sec_to_ticks`/`fr` 精确换算
@@ -127,10 +133,14 @@ python3 build_pr_xml.py        # Premiere xmeml v4
 - `compress_gaps.py` — 压缩"三机全停"时段，输出 *_compressed.tsv（保持机间同步）
 - `build_fcpxml.py` — 生成 FCPXML 1.8（resources media + event project/mc-clip/asset-clip，整帧吸附）
 - `build_capcut_fcpxml.py` — 生成剪映专用 FCPXML 1.8（spine 直接放 asset-clip，带 lane/offset，无 multicam/gap；剪映只认 asset-clip）
-- `build_capcut_draft_31.py` — **生成剪映原生 3+1 多机位草稿（最终定稿，用户 2026-08-21 验证通过 + 可拖动 + 主轨可落新素材）**：主草稿 4 轨 = **多机位轨放主轨（索引0，1 整块，7 refs 含 combination，flag=None、无 render_index）+ A/B/C 普通轨（索引1/2/3，flag=2，514/508/480 段，对齐偏移在 target.start，素材文件名可读）**；全部轨 `type=mixed` + 顶层 `mixed_track_mode_on=true` + `version=360000`（混合轨道模式，主轨可落新/普通素材，见规则 6）；主草稿 videos=1503（1502 真实+1 mc）、drafts=[combination]（内嵌 3 角度轨）、config.maintrack_adsorb=false + use_float_render=true、顶层 render_index_track_mode_on=true、MC check_flag=62978047；subdraft 根+子目录双份文件；复制到剪映草稿根目录即可打开进多机位剪辑（按 1/2/3 切换，主轨可拖动、可落新素材）。**补充 2026-08-23：多机位骨架构型从 `capcut_draft_schema.json` 加载，不再引用本机剪映模板/示例项目路径**
+- `build_capcut_draft_31.py` — **生成剪映原生 3+1 多机位草稿（最终定稿，用户 2026-08-21 验证通过 + 可拖动 + 主轨可落新素材）**；草稿根 `find_draft_root()` 已做 macOS/Windows/Linux 跨平台探测（按平台枚举常见根，glob 递归找 `com.lveditor.draft`，找不到现场放置 OUT_DIR）：主草稿 4 轨 = **多机位轨放主轨（索引0，1 整块，7 refs 含 combination，flag=None、无 render_index）+ A/B/C 普通轨（索引1/2/3，flag=2，514/508/480 段，对齐偏移在 target.start，素材文件名可读）**；全部轨 `type=mixed` + 顶层 `mixed_track_mode_on=true` + `version=360000`（混合轨道模式，主轨可落新/普通素材，见规则 6）；主草稿 videos=1503（1502 真实+1 mc）、drafts=[combination]（内嵌 3 角度轨）、config.maintrack_adsorb=false + use_float_render=true、顶层 render_index_track_mode_on=true、MC check_flag=62978047；subdraft 根+子目录双份文件；复制到剪映草稿根目录即可打开进多机位剪辑（按 1/2/3 切换，主轨可拖动、可落新素材）。**补充 2026-08-23：多机位骨架构型从 `capcut_draft_schema.json` 加载，不再引用本机剪映模板/示例项目路径**
 - 早期 `build_capcut_draft_1track.py` 仅存在于技能历史研究中，不随镜序发行，也不是当前可用入口；当前剪映多机位草稿使用 `build_capcut_draft_31.py`
 - `build_capcut_test_draft.py` — 生成"多段测试"草稿（每角度 2 段真实素材，验证多段角度轨）
 - `capcut_draft_codec.py` — 剪映官方加密草稿编解码（AES-GCM，密钥/IV 内嵌固定偏移；本机 11.3.0 实测 24/24 解码成功）；CLI 可解码草稿并输出多机位识别摘要，是"剪映加载后验证"的证据工具
+- `validate_capcut_draft.py` — **生成/剪映已保存草稿的常设校验**，两种模式（`--mode=raw|saved|auto`，默认 `auto` 按 subdraft 子目录数推导）：
+  - `raw`（`build_capcut_draft_31.py` 单一组合原始产物，从严）：4 轨、主轨 1 段 7 refs、普通/角度轨 6 refs、内嵌 `draft.id`=文件夹名、角度轨恰 3 条且 `source.start=0`、refs 全部可解析、顶层 `render_index_track_mode_on/mixed_track_mode_on/version=360000`、`config.maintrack_adsorb=false`+`use_float_render=true`、MC `check_flag=62978047`、draftpath/subdraft 占位符、subdraft 根+子目录结构、meta type18 指向 `./subdraft/sub_draft_config.json`。
+  - `saved`（剪映加载并保存后的草稿，组合可能被拆成多个 subdraft、内嵌角度轨数与 id、meta、type18、`source.start` 会被剪映重写）：只锁**跨结构不变量**——仍须有内嵌组合、角度轨存在（≥1）、refs 可解析、各轨 refs 数 ∈ {6,7}（普通轨可混入多机位 7 refs 段）、MC `check_flag=62978047`；放宽被剪映重写的结构字段。
+  `python3 validate_capcut_draft.py <draft_dir> [--mode=raw|saved|auto]`（省略路径用 config OUT_DIR 拼目录），PASS 退出 0 / FAIL 退出 1。跨平台：只读一个草稿目录，不依赖 OS 特定路径
 - `validate_fcpxml.py` — **交付前常设校验**：帧边界（tick % frame_ticks==0）、素材可达（src/pathurl 解 percent 后存在）、引用完整（mc-clip→media、asset-clip→asset 等）、结构（mc-angle 内 clip 单调、spine 按 lane 分组不重叠）。`python3 validate_fcpxml.py <out.fcpxml> <BASE>`，PASS 退出 0 / FAIL 退出 1
 - `build_pr_xml.py` — 生成 Premiere xmeml v4（每机位 1 视频轨+1 音频轨，clipitem 内联 file）
 

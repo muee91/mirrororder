@@ -115,6 +115,7 @@ class TaskManager:
         if not isinstance(raw, dict) or not isinstance(raw.get("tasks"), list):
             return {"version": 2, "tasks": []}
         tasks = raw["tasks"]
+        changed = False
         for task in tasks:
             if not isinstance(task, dict):
                 continue
@@ -122,7 +123,11 @@ class TaskManager:
                 task["status"] = "interrupted"
                 task["interrupted_at"] = task.get("interrupted_at") or _now()
                 task.setdefault("logs", []).append("Host 已重启；旧内存任务标记为 interrupted，可安全重跑")
-        return {"version": 2, "tasks": tasks}
+                changed = True
+        payload = {"version": 2, "tasks": tasks}
+        if changed:
+            _write_json(self._path(config), payload)
+        return payload
 
     def _save(self, config: ProjectConfig, payload: dict[str, Any]) -> None:
         _write_json(self._path(config), payload)

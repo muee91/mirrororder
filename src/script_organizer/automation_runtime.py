@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import time
 import urllib.parse
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -159,6 +160,10 @@ def _remote_identity_payload(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
         example = item.get("example", {})
         if isinstance(example, dict):
             safe_example = dict(example)
+            safe_example["portrait_available"] = bool(
+                item.get("kind") == "face"
+                and Path(str(safe_example.get("face_crop_path", "") or "")).is_file()
+            )
             safe_example.pop("face_crop_path", None)
             safe_example.pop("source_frame_path", None)
             item["example"] = safe_example
@@ -284,6 +289,31 @@ def install_automation_runtime() -> None:
         BaseHandler = original_make_handler(service, web_root)
 
         class Handler(BaseHandler):
+            def _identity_portrait(self, project_id: str, identity_id: str) -> None:
+                """Stream only an indexed face crop, never a source frame/path."""
+
+                identity = _identity_library_for(service, project_id).get(identity_id)
+                if identity.get("kind") != "face":
+                    raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "该身份没有人脸裁图")
+                example = identity.get("example")
+                if not isinstance(example, dict):
+                    raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "该身份暂无可用人脸裁图")
+                portrait = Path(str(example.get("face_crop_path", "") or ""))
+                if portrait.suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
+                    raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "该身份暂无可用人脸裁图")
+                try:
+                    data = portrait.read_bytes()
+                except OSError as error:
+                    raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "该身份暂无可用人脸裁图") from error
+                if not data:
+                    raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "该身份暂无可用人脸裁图")
+                self.send_response(web_server.HTTPStatus.OK)
+                self.send_header("Content-Type", mimetypes.guess_type(portrait.name)[0] or "image/jpeg")
+                self.send_header("Cache-Control", "private, max-age=300")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
                 if parts == ["api", "v1", "local-runtime"]:
@@ -311,6 +341,14 @@ def install_automation_runtime() -> None:
                     if self.client_address[0] not in {"127.0.0.1", "::1"}:
                         identities = _remote_identity_payload(identities)
                     self._send_json({"identities": identities})
+                    return
+                if (
+                    len(parts) == 7
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "identities"
+                    and parts[6] == "portrait"
+                ):
+                    self._identity_portrait(parts[3], urllib.parse.unquote(parts[5]))
                     return
                 if (
                     len(parts) == 5
@@ -403,14 +441,37 @@ def install_automation_runtime() -> None:
                         raw_groups = payload.get("group_ids", [])
                         if not isinstance(raw_groups, list):
                             raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "group_ids 必须是数组")
+                        group_ids = [str(value) for value in raw_groups if str(value)]
+                        active = next(
+                            (
+                                task for task in service.tasks.list(project_id)
+                                if task.get("type") == "identity_index"
+                                and task.get("status") in {"queued", "running"}
+                                and task.get("targets") == {"kind": kind, "group_ids": group_ids}
+                            ),
+                            None,
+                        )
+                        if active is not None:
+                            self._send_json(
+                                {
+                                    "task": active,
+                                    "already_running": True,
+                                    "message": "人物库更新任务已在运行",
+                                },
+                                web_server.HTTPStatus.ACCEPTED,
+                            )
+                            return
                         task = service.tasks.submit(
                             project_id,
                             "identity_index",
-                            {"kind": kind, "group_ids": [str(value) for value in raw_groups if str(value)]},
+                            {"kind": kind, "group_ids": group_ids},
                             idempotency_key=f"identity-manual:{project_id}:{kind}:{time.time_ns()}",
                             actor="mirrororder-app",
                         )
-                        self._send_json({"task": task}, web_server.HTTPStatus.ACCEPTED)
+                        self._send_json(
+                            {"task": task, "message": "人物库更新任务已排队"},
+                            web_server.HTTPStatus.ACCEPTED,
+                        )
                     else:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知身份库操作")
                     return

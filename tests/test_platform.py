@@ -14,6 +14,7 @@ import pytest
 
 from script_organizer.agent_store import AgentAuthorizationError, AgentTokenStore, ProposalStore
 from script_organizer.config import ProjectConfig
+from script_organizer.collaboration_access import CollaborationAccessStore
 from script_organizer.material_index import analyze
 from script_organizer.media_identity import DeviceMediaStore
 from script_organizer.media_reader import read_media_directory
@@ -85,7 +86,14 @@ transcript_dir = "./cache/transcripts"
     return config
 
 
-def _request(base: str, path: str, token: str = "", method: str = "GET", payload: dict | None = None) -> tuple[int, dict]:
+def _request(
+    base: str,
+    path: str,
+    token: str = "",
+    method: str = "GET",
+    payload: dict | None = None,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, dict]:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     request = urllib.request.Request(
         base + path,
@@ -94,6 +102,7 @@ def _request(base: str, path: str, token: str = "", method: str = "GET", payload
         headers={
             **({"Authorization": "Bearer " + token} if token else {}),
             **({"Content-Type": "application/json"} if data else {}),
+            **(headers or {}),
         },
     )
     try:
@@ -436,6 +445,40 @@ def test_task_targets_only_affected_groups_and_is_idempotent(tmp_path, monkeypat
     assert manager.list("demo")[0]["status"] == "completed"
 
 
+def test_host_restart_persists_interrupted_task_state(tmp_path):
+    workspace = _workspace(tmp_path)
+    config_path = _register_demo(workspace, tmp_path)
+    config = ProjectConfig.from_file(config_path)
+    task_path = config.output_dir / "tasks.json"
+    task_path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "tasks": [
+                    {
+                        "task_id": "task_stale",
+                        "project_id": "demo",
+                        "type": "identity_index",
+                        "runner_id": "old-host",
+                        "status": "running",
+                        "stage": "speaker_identity",
+                        "logs": ["任务开始"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manager = TaskManager(lambda project_id: config if project_id == "demo" else (_ for _ in ()).throw(KeyError(project_id)))
+
+    listed = manager.list("demo")
+    saved = json.loads(task_path.read_text(encoding="utf-8"))
+
+    assert listed[0]["status"] == "interrupted"
+    assert saved["tasks"][0]["status"] == "interrupted"
+    assert "Host 已重启" in saved["tasks"][0]["logs"][-1]
+
+
 def test_agent_gateway_has_versioned_routes_and_enforces_auth(tmp_path):
     workspace = _workspace(tmp_path)
     _register_demo(workspace, tmp_path)
@@ -654,6 +697,89 @@ def test_workspace_gateway_isolates_same_project_ids_and_pairing(tmp_path):
                 else:
                     os.environ[key] = value
         assert json.loads(mcp_result["content"][0]["text"])["project"]["project_id"] == "shared"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_collaboration_access_stays_host_local_and_records_roles(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "app-support"))
+    store = CollaborationAccessStore("workspace-demo")
+
+    manager = store.observe("web-local-manager-001", ip="127.0.0.1", local=True)
+    reviewer = store.observe("web-lan-reviewer-001", ip="192.168.1.48", local=False)
+    renamed = store.rename("web-lan-reviewer-001", "剪辑小王")
+
+    assert manager["role"] == "manager"
+    assert reviewer["role"] == "reviewer"
+    assert renamed["nickname"] == "剪辑小王"
+    assert store.path.parent == (tmp_path / "app-support" / "workspaces" / "workspace-demo")
+    assert "review.json" not in str(store.path)
+    assert any(row["event"] == "nickname_changed" for row in store.audit())
+
+    disabled = store.update_user(renamed["user_id"], {"status": "disabled", "role": "viewer"})
+    assert disabled["status"] == "disabled"
+    with pytest.raises(PermissionError):
+        CollaborationAccessStore.require_role(disabled, "reviewer")
+
+
+def test_gateway_binds_review_actor_to_browser_identity(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "app-support"))
+    workspace = _workspace(tmp_path).with_workspace_id("ws_people")
+    _register_demo(workspace, tmp_path)
+    gateway = WorkspaceGateway([workspace], pairing_code="123456")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_gateway_handler(gateway, workspace.web_dir))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    headers = {"X-MirrorOrder-Device": "web-browser-identity-001"}
+    try:
+        status, payload = _request(base, "/api/v1/workspaces/ws_people/users/me", headers=headers)
+        assert status == 200
+        assert payload["user"]["role"] == "manager"
+
+        status, payload = _request(
+            base,
+            "/api/v1/workspaces/ws_people/users/me",
+            method="POST",
+            payload={"nickname": "剪辑甲"},
+            headers=headers,
+        )
+        assert status == 200
+        assert payload["user"]["nickname"] == "剪辑甲"
+
+        status, review = _request(
+            base,
+            "/api/v1/workspaces/ws_people/projects/demo/review",
+            method="POST",
+            payload={"action": "set_group", "group_id": "group_0001", "state": "keep", "actor": "冒名者"},
+            headers=headers,
+        )
+        assert status == 200
+        assert review["groups"]["group_0001"]["actor"] == "剪辑甲"
+
+        status, users = _request(base, "/api/v1/workspaces/ws_people/users")
+        assert status == 200
+        user_id = next(row["user_id"] for row in users["users"] if row["nickname"] == "剪辑甲")
+        status, updated = _request(
+            base,
+            f"/api/v1/workspaces/ws_people/users/{user_id}",
+            method="POST",
+            payload={"status": "disabled"},
+        )
+        assert status == 200
+        assert updated["user"]["status"] == "disabled"
+
+        status, error = _request(
+            base,
+            "/api/v1/workspaces/ws_people/projects/demo/review",
+            method="POST",
+            payload={"action": "set_group", "group_id": "group_0001", "state": "best"},
+            headers=headers,
+        )
+        assert status == 403
+        assert "停用" in error["error"]
     finally:
         server.shutdown()
         server.server_close()

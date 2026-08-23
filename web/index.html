@@ -213,10 +213,15 @@
   <dialog id="identity-library-dialog" class="modal identity-library-modal">
     <div class="modal-title-row">
       <div>
-        <h2>人物与声纹</h2>
-        <p>同一人物或声音会归入同一个身份簇。这里可查看该角色已关联的 Take 并直接定位播放。</p>
+        <h2>人物库</h2>
+        <p>按人物或声纹查看已归类的 Take，选择后会回到工作台定位播放。</p>
       </div>
       <button id="identity-library-close" class="icon-button" type="button" aria-label="关闭">关闭</button>
+    </div>
+    <div id="identity-library-summary" class="identity-library-summary"></div>
+    <div id="identity-library-tabs" class="identity-library-tabs" role="tablist" aria-label="身份类型">
+      <button class="identity-library-tab" type="button" data-identity-filter="face" role="tab">人物</button>
+      <button class="identity-library-tab" type="button" data-identity-filter="speaker" role="tab">声纹</button>
     </div>
     <div id="identity-library-list" class="identity-library-list"></div>
   </dialog>

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import RLock
 from typing import Any, Sequence
 
 from .workspace_db import WorkspaceDatabase
@@ -30,6 +32,9 @@ class IdentityLibrary:
     automatic re-indexing.
     """
 
+    _guard_lock = RLock()
+    _guarded_databases: set[tuple[Path, int]] = set()
+
     def __init__(self, database: WorkspaceDatabase, project_id: str):
         self.database = database
         self.project_id = str(project_id or "").strip()
@@ -39,19 +44,25 @@ class IdentityLibrary:
 
     def _install_confirmation_guard(self) -> None:
         """Prevent automatic cluster upserts from clobbering human labels."""
-        with self.database.connection() as connection:
-            connection.execute(
-                """
-                CREATE TRIGGER IF NOT EXISTS protect_human_identity_labels
-                BEFORE UPDATE OF label, role_name, metadata_json ON identities
-                WHEN COALESCE(json_extract(OLD.metadata_json, '$.human_confirmed'), 0) = 1
-                 AND COALESCE(json_extract(NEW.metadata_json, '$.auto_cluster'), 0) = 1
-                BEGIN
-                    SELECT RAISE(IGNORE);
-                END
-                """
-            )
-            connection.commit()
+        database_path = self.database.path.resolve()
+        database_key = (database_path, database_path.stat().st_ino)
+        with self._guard_lock:
+            if database_key in self._guarded_databases:
+                return
+            with self.database.connection() as connection:
+                connection.execute(
+                    """
+                    CREATE TRIGGER IF NOT EXISTS protect_human_identity_labels
+                    BEFORE UPDATE OF label, role_name, metadata_json ON identities
+                    WHEN COALESCE(json_extract(OLD.metadata_json, '$.human_confirmed'), 0) = 1
+                     AND COALESCE(json_extract(NEW.metadata_json, '$.auto_cluster'), 0) = 1
+                    BEGIN
+                        SELECT RAISE(IGNORE);
+                    END
+                    """
+                )
+                connection.commit()
+            self._guarded_databases.add(database_key)
 
     def _refresh_mapping_rescue(self) -> None:
         """Re-evaluate derived local mapping evidence after human role edits.
@@ -101,14 +112,38 @@ class IdentityLibrary:
                 """,
                 parameters,
             ).fetchall()
+
+        identity_ids = [str(row["identity_id"] or "") for row in rows]
+        observations_by_identity: dict[str, list[sqlite3.Row]] = {
+            identity_id: [] for identity_id in identity_ids if identity_id
+        }
+        if observations_by_identity:
+            placeholders = ",".join("?" for _ in observations_by_identity)
+            with self.database.connection() as connection:
+                observations = connection.execute(
+                    f"""
+                    SELECT identity_id, group_id, clip_id, start, end, confidence,
+                           observation_id, metadata_json
+                    FROM identity_observations
+                    WHERE project_id=? AND identity_id IN ({placeholders})
+                    """,
+                    (self.project_id, *observations_by_identity),
+                ).fetchall()
+            for observation in observations:
+                identity_id = str(observation["identity_id"] or "")
+                if identity_id in observations_by_identity:
+                    observations_by_identity[identity_id].append(observation)
+
         result = []
         for row in rows:
             metadata = _json_object(row["metadata_json"])
-            example = self._example(str(row["identity_id"] or ""))
-            occurrences = self._occurrences(str(row["identity_id"] or ""))
+            identity_id = str(row["identity_id"] or "")
+            observations = observations_by_identity.get(identity_id, [])
+            example = self._example_from_observations(observations)
+            occurrences = self._occurrences_from_observations(observations)
             result.append(
                 {
-                    "identity_id": str(row["identity_id"]),
+                    "identity_id": identity_id,
                     "kind": str(row["kind"]),
                     "label": str(row["label"] or ""),
                     "role_name": str(row["role_name"] or ""),
@@ -119,10 +154,45 @@ class IdentityLibrary:
                     "confirmed": bool(metadata.get("human_confirmed")),
                     "created_at": str(row["created_at"] or ""),
                     "updated_at": str(row["updated_at"] or ""),
-                    "example": example,
+                    "example": example or None,
                     "occurrences": occurrences,
                 }
             )
+        return result
+
+    @staticmethod
+    def _occurrences_from_observations(observations: Sequence[sqlite3.Row]) -> list[dict[str, Any]]:
+        ordered = sorted(
+            observations,
+            key=lambda row: (
+                -float(row["confidence"] or 0),
+                str(row["group_id"] or ""),
+                float(row["start"] or 0),
+                str(row["observation_id"] or ""),
+            ),
+        )
+        result: list[dict[str, Any]] = []
+        seen_groups: set[str] = set()
+        for row in ordered:
+            group_id = str(row["group_id"] or "")
+            if not group_id or group_id in seen_groups:
+                continue
+            seen_groups.add(group_id)
+            metadata = _json_object(row["metadata_json"])
+            result.append(
+                {
+                    "group_id": group_id,
+                    "clip_id": str(row["clip_id"] or ""),
+                    "camera": str(metadata.get("camera", "") or ""),
+                    "start": float(row["start"] or 0),
+                    "end": float(row["end"] or 0),
+                    "source_time": float(metadata.get("source_time", row["start"]) or 0),
+                    "confidence": float(row["confidence"] or 0),
+                    "transcript_text": str(metadata.get("text", "") or "")[:180],
+                }
+            )
+            if len(result) >= 12:
+                break
         return result
 
     def _occurrences(self, identity_id: str, limit: int = 12) -> list[dict[str, Any]]:
@@ -161,6 +231,36 @@ class IdentityLibrary:
                 }
             )
         return result
+
+    @staticmethod
+    def _example_from_observations(observations: Sequence[sqlite3.Row]) -> dict[str, Any]:
+        if not observations:
+            return {}
+        row = min(
+            observations,
+            key=lambda item: (
+                -float(item["confidence"] or 0),
+                -(float(item["end"] or 0) - float(item["start"] or 0)),
+                str(item["observation_id"] or ""),
+            ),
+        )
+        metadata = _json_object(row["metadata_json"])
+        return {
+            "group_id": str(row["group_id"] or ""),
+            "clip_id": str(row["clip_id"] or ""),
+            "start": float(row["start"] or 0),
+            "end": float(row["end"] or 0),
+            "confidence": float(row["confidence"] or 0),
+            # A person-labeling surface must never fall back to the complete
+            # camera frame. The source frame remains traceable metadata only.
+            "face_crop_path": str(metadata.get("face_crop_path", "") or ""),
+            "source_frame_path": str(
+                metadata.get("source_frame_path", metadata.get("frame_path", "")) or ""
+            ),
+            "camera": str(metadata.get("camera", "") or ""),
+            "source_time": float(metadata.get("source_time", row["start"]) or 0),
+            "transcript_text": str(metadata.get("text", "") or "")[:600],
+        }
 
     def _example(self, identity_id: str) -> dict[str, Any]:
         """Return one local, inspectable sample without exposing embeddings."""

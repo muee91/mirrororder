@@ -31,6 +31,8 @@ const state = {
   playerStart: 0,
   placementGroupId: null,
   actor: '',
+  deviceId: '',
+  userRole: 'viewer',
   analysisRevision: '',
   reviewRevision: 0,
   pollTimer: null,
@@ -39,6 +41,7 @@ const state = {
   audioUnlocked: false,
   tasks: [],
   proposals: [],
+  identityLibrary: {identities: [], filter: 'face'},
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -89,6 +92,7 @@ function applyWorkbenchDefaults() {
 async function fetchJson(url, options = {}) {
   const headers = {
     ...(state.session ? {'X-MirrorOrder-Session': state.session} : {}),
+    ...(state.deviceId ? {'X-MirrorOrder-Device': state.deviceId} : {}),
     ...(options.headers || {}),
   };
   const response = await fetch(url, {cache: 'no-store', credentials: 'same-origin', ...options, headers});
@@ -817,8 +821,31 @@ function updateActorDisplay() {
   $('#actor-button').textContent = state.actor ? `审核人：${state.actor}` : '设置审核人';
 }
 
-function saveActor(value) {
-  state.actor = String(value || '').trim().slice(0, 40);
+function loadDeviceId() {
+  try {
+    const current = localStorage.getItem('mirrororder-browser-device-id') || '';
+    if (/^[A-Za-z0-9._-]{12,120}$/.test(current)) {
+      state.deviceId = current;
+      return;
+    }
+    const random = window.crypto?.randomUUID?.()
+      || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    state.deviceId = `web-${random}`;
+    localStorage.setItem('mirrororder-browser-device-id', state.deviceId);
+  } catch (_error) {
+    state.deviceId = `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+async function saveActor(value) {
+  const nickname = String(value || '').trim().slice(0, 40);
+  const payload = await fetchJson(workspaceApi('/users/me'), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({nickname}),
+  });
+  state.actor = String(payload.user?.nickname || nickname);
+  state.userRole = String(payload.user?.role || state.userRole);
   try {
     localStorage.setItem('script-organizer-actor', state.actor);
   } catch (_error) {
@@ -833,6 +860,23 @@ function loadActor() {
   } catch (_error) {
     state.actor = '';
   }
+  updateActorDisplay();
+}
+
+async function syncActor() {
+  const legacyActor = state.actor;
+  const payload = await fetchJson(workspaceApi('/users/me'));
+  let user = payload.user || {};
+  if (!String(user.nickname || '').trim() && legacyActor) {
+    const renamed = await fetchJson(workspaceApi('/users/me'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({nickname: legacyActor}),
+    });
+    user = renamed.user || user;
+  }
+  state.actor = String(user.nickname || '').trim();
+  state.userRole = String(user.role || 'viewer');
   updateActorDisplay();
 }
 
@@ -1265,38 +1309,97 @@ function identityTitle(identity) {
   return label || role || (identity.kind === 'face' ? '未命名人物' : '未命名声音');
 }
 
+function identityTypeLabel(kind) {
+  return kind === 'face' ? '人物' : '声纹';
+}
+
+function identityOccurrenceSummary(identity, occurrence) {
+  const group = state.groupMap.get(String(occurrence.group_id || ''));
+  const member = group?.members?.find((item) => item.clip_id === occurrence.clip_id)
+    || group?.members?.find((item) => item.exists)
+    || group?.members?.[0];
+  const episodes = group ? inferredEpisodes(group) : [];
+  const scope = episodes.length ? `第${episodes.join('、')}集` : '待归集';
+  const camera = occurrence.camera || member?.camera || identityTypeLabel(identity.kind);
+  const file = member ? memberFileName(member) : '关联素材';
+  return {
+    camera,
+    scope,
+    file,
+    time: timeText(occurrence.source_time ?? occurrence.start),
+    available: Boolean(group && member?.clip_id),
+    clipId: member?.clip_id || occurrence.clip_id || '',
+  };
+}
+
+function identityPortraitUrl(identity) {
+  return projectApi(`/identities/${encodeURIComponent(identity.identity_id || '')}/portrait`);
+}
+
 function renderIdentityLibrary(identities) {
   const target = $('#identity-library-list');
-  const ready = identities.filter((identity) => Boolean(identity.confirmed) || Number(identity.take_count || 0) >= 2);
-  const singleTakeCount = identities.length - ready.length;
-  if (!ready.length) {
-    target.innerHTML = `<div class="proposal-empty">当前只有 ${singleTakeCount} 个单 Take 线索，尚不足以可靠归为角色。镜序会在后续索引中自动尝试合并，不要求逐条命名。</div>`;
+  const filter = state.identityLibrary.filter;
+  const rawByKind = {
+    face: identities.filter((identity) => identity.kind === 'face'),
+    speaker: identities.filter((identity) => identity.kind === 'speaker'),
+  };
+  const visibleByKind = {
+    face: rawByKind.face.filter((identity) => identity.confirmed || Number(identity.take_count || 0) >= 2),
+    speaker: rawByKind.speaker.filter((identity) => identity.confirmed || Number(identity.take_count || 0) >= 2),
+  };
+  if (!visibleByKind[filter].length && visibleByKind[filter === 'face' ? 'speaker' : 'face'].length) {
+    state.identityLibrary.filter = filter === 'face' ? 'speaker' : 'face';
+  }
+  const currentKind = state.identityLibrary.filter;
+  const rows = visibleByKind[currentKind];
+  const linkedTakes = rows.reduce((total, identity) => total + Number(identity.take_count || 0), 0);
+  const pendingSingles = rawByKind[currentKind].length - rows.length;
+  $('#identity-library-summary').innerHTML = [
+    `<span><strong>${visibleByKind.face.length}</strong> 人物簇</span>`,
+    `<span><strong>${visibleByKind.speaker.length}</strong> 声纹簇</span>`,
+    `<span><strong>${linkedTakes}</strong> 个关联 Take</span>`,
+  ].join('');
+  document.querySelectorAll('[data-identity-filter]').forEach((button) => {
+    const active = button.dataset.identityFilter === currentKind;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  if (!rows.length) {
+    target.innerHTML = `<div class="identity-empty-state"><strong>暂无可用${identityTypeLabel(currentKind)}簇</strong><span>${pendingSingles ? `已有 ${pendingSingles} 个单 Take 线索，等待更多证据后自动归类。` : '完成相关识别后，已归类的 Take 会在这里出现。'}</span></div>`;
     return;
   }
-  target.innerHTML = (singleTakeCount
-    ? `<p class="identity-library-note">另有 ${singleTakeCount} 个单 Take 线索正在等待更多证据，不会要求逐条命名。</p>`
-    : '')
-    + ready.map((identity) => {
-    const kind = identity.kind === 'face' ? '人物' : '声纹';
+  const pendingNote = pendingSingles
+    ? `<p class="identity-library-note">另有 ${pendingSingles} 个单 Take 线索等待更多证据，暂不作为人物候选展示。</p>`
+    : '';
+  target.innerHTML = pendingNote + `<div class="identity-library-grid">${rows.map((identity, index) => {
+    const kind = identityTypeLabel(identity.kind);
     const occurrences = Array.isArray(identity.occurrences) ? identity.occurrences : [];
-    const rows = occurrences.map((item) => (
-      `<button class="identity-take-row" type="button" data-identity-group="${esc(item.group_id || '')}">`
-        + `<span>${esc(item.camera || kind)} · ${esc(item.group_id || '')}</span>`
-        + `<small>${esc(timeText(item.source_time ?? item.start))}</small>`
+    const takeRows = occurrences.map((item) => {
+      const detail = identityOccurrenceSummary(identity, item);
+      return `<button class="identity-take-row" type="button" data-identity-group="${esc(item.group_id || '')}" data-identity-clip="${esc(detail.clipId)}" ${detail.available ? '' : 'disabled'}>`
+        + `<span class="identity-take-camera">${esc(detail.camera)}</span>`
+        + `<span class="identity-take-copy"><strong>${esc(detail.scope)}</strong><small>${esc(detail.file)}</small></span>`
+        + `<span class="identity-take-time">${esc(detail.time)}</span>`
       + '</button>'
-    )).join('');
+    }).join('');
+    const portrait = identity.kind === 'face' && (identity.example?.portrait_available || identity.example?.face_crop_path)
+      ? `<img src="${esc(identityPortraitUrl(identity))}" alt="${esc(identityTitle(identity))}的人脸样本">`
+      : `<span class="identity-portrait-fallback" aria-hidden="true">${kind}</span>`;
     return `<section class="identity-library-card">`
+      + `<div class="identity-portrait">${portrait}</div>`
+      + '<div class="identity-card-body">'
       + `<header><div><span class="identity-kind">${esc(kind)}</span><strong>${esc(identityTitle(identity))}</strong></div>`
-      + `<span>${Number(identity.take_count || 0)} Take</span></header>`
-      + `<p>${Number(identity.observation_count || 0)} 条本机证据${identity.confirmed ? ' · 已命名' : ' · 待在制作端命名'}</p>`
-      + (rows ? `<div class="identity-take-list">${rows}</div>` : '<p class="identity-empty">尚未找到可定位的 Take。</p>')
-    + '</section>';
-  }).join('');
+      + `<span class="identity-state ${identity.confirmed ? 'confirmed' : ''}">${identity.confirmed ? '已确认' : `候选 ${String(index + 1).padStart(2, '0')}`}</span></header>`
+      + `<p>${Number(identity.take_count || 0)} 个 Take · ${Number(identity.observation_count || 0)} 条识别证据</p>`
+      + (takeRows ? `<div class="identity-take-list">${takeRows}</div>` : '<p class="identity-empty">暂无可直接定位的 Take。</p>')
+      + '</div></section>';
+  }).join('')}</div>`;
 }
 
 async function showIdentityLibrary() {
   const payload = await fetchJson(projectApi('/identities'));
-  renderIdentityLibrary(payload.identities || []);
+  state.identityLibrary.identities = payload.identities || [];
+  renderIdentityLibrary(state.identityLibrary.identities);
   $('#identity-library-dialog').showModal();
 }
 
@@ -1360,7 +1463,9 @@ function ignoreKeyboard(event) {
 
 async function boot() {
   loadActor();
+  loadDeviceId();
   await loadWorkspace();
+  await syncActor();
   applyFrontendSettings(await fetchJson(workspaceApi('/settings')));
   await switchProject(state.projectId);
   setCollabStatus('协作已连接', true);
@@ -1441,11 +1546,23 @@ $('#identity-library-button').addEventListener('click', () => {
   showIdentityLibrary().catch((error) => showToast(error.message));
 });
 $('#identity-library-close').addEventListener('click', () => $('#identity-library-dialog').close());
+$('#identity-library-tabs').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-identity-filter]');
+  if (!button) return;
+  state.identityLibrary.filter = button.dataset.identityFilter || 'face';
+  renderIdentityLibrary(state.identityLibrary.identities);
+});
 $('#identity-library-list').addEventListener('click', (event) => {
   const button = event.target.closest('[data-identity-group]');
   if (!button) return;
   $('#identity-library-dialog').close();
-  if (!focusGroup(button.dataset.identityGroup || '')) showToast('该身份关联的 Take 已不在当前项目中');
+  const groupId = button.dataset.identityGroup || '';
+  const clipId = button.dataset.identityClip || '';
+  if (!focusGroup(groupId)) {
+    showToast('该身份关联的 Take 已不在当前项目中');
+  } else if (clipId) {
+    selectMember(groupId, clipId, true);
+  }
 });
 $('#proposal-close').addEventListener('click', () => $('#proposal-dialog').close());
 $('#apply-proposals').addEventListener('click', () => {
@@ -1463,8 +1580,9 @@ $('#identity-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const value = $('#actor-input').value.trim();
   if (!value) return;
-  saveActor(value);
-  $('#identity-dialog').close();
+  saveActor(value)
+    .then(() => $('#identity-dialog').close())
+    .catch((error) => showToast(error.message));
 });
 $('#placement-close').addEventListener('click', () => $('#placement-dialog').close());
 $('#placement-form').addEventListener('submit', (event) => {

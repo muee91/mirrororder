@@ -240,9 +240,15 @@ subdraft/4F5267B9-...` 为金标准）：
 }
 ```
 
-**主草稿 `draft_info.json` 有两种机制，按布局选择，不可混用**：
+> **本节「机制 A / 机制 B」均为历史踩坑记录，已废弃。**当前基线 = 机制 B 的
+> 关联方式（主草稿内嵌 combination + 7 refs）**嫁接到 4 轨 3+1 布局**，
+> 并补齐"主轨附加字段"（见下方"草稿损坏的历史与当前解法"），由
+> `build_capcut_draft_31.py` 实现，2026-08-21 剪映 11.3.0 实机验证通过。
+> 不要再按"按布局二选一"或"3+1 禁止混用机制 B"理解——那套结论已被推翻。
 
-**机制 A：3+1 布局（本脚本默认，用户 2026-08-21 指示）——"组合引用"结构**（旧版 bak_v2，剪映 04:43 加载保存成功实证）：
+**机制 A（已废弃）——"组合引用"3+1 结构**（旧版 bak_v2；曾用"组合引用"实现
+3+1 布局，剪映 04:43 加载保存成功实证；后被机制 B 关联方式 + 主轨附加字段
+取代，见当前基线）：
 - `tracks` = **多机位轨（索引 0 = 主轨道）+ 3 条普通 video 轨（A/B/C，主轨之上，
   索引 1/2/3，真实素材，`target_timerange.start` = 时间轴绝对位置，两天顺序
   合并、间隙保留）**；多机位轨 1 个 segment 引用 **combination.id**
@@ -265,7 +271,7 @@ subdraft/4F5267B9-...` 为金标准）：
   独立顶层 id → 组合被删、多机位消失，2026-08-21 实测；bak_v2 顶层 id=sub_id
   成功、剪映保存后顶层 id 仍是文件夹名 B3EEE341 实证）
 
-**机制 B：1-track 金标准（剪映自己创建多机位后的形态，`多机位演示` codec 解码实证）**：
+**机制 B（已废弃，仅 1-track）——剪映自己创建"只有 1 条多机位轨"的草稿后的形态**：
 - 轨 segment `material_id` = mc_video.id（**不是** combination.id）、
   `extra_material_refs` = **7 个字符串 id**（combination.id + 6 配套）、
   `hdr_settings` = `{"mode": 1}`、source/target 只含 `duration`
@@ -278,11 +284,21 @@ subdraft/4F5267B9-...` 为金标准）：
   不同 multi_camera_info.id：金标准主草稿 5C1B096F/mci 7290E720、subdraft
   94282BF2/mci 9BD84B14；cur_camera_track_id 相同，都指向角度轨0）
 
-**⚠️ 两套结构禁止混用（2026-08-21 实测"草稿损坏"根因）**：3+1 布局用机制 B
-（`materials.videos` 同时放真实素材 + mc_video、轨引用 mc_video.id + 内嵌
-draft + 占位符路径）会让剪映**读取阶段直接拒绝草稿**——draft_info.json 保持
-明文、无 `.backup` 生成，草稿列表显示"草稿损坏"。真实素材（1502 个）在
-`draft_meta_info.json` 注册（两种机制都要）。
+**"草稿损坏"的历史与当前解法（关键，勿误读为"禁止机制 B"）**：3+1 布局最早
+尝试 机制 B 关联方式（`materials.videos` 同时放真实素材 + mc_video、轨引用
+mc_video.id + 7 refs + combination 内嵌 draft + 占位符路径）时，确实触发过
+剪映**读取阶段直接拒绝草稿**（"草稿损坏"：draft_info.json 保持明文、无
+`.backup` 生成、real_edit_seconds=0）。**根因不是"机制 B 关联方式"本身，而
+是缺主轨附加字段**。补齐下列字段后即为**当前基线**（build_capcut_draft_31.py，
+2026-08-21 剪映 11.3.0 实机验证通过）：
+- `config.maintrack_adsorb=false` + `config.use_float_render=true`
+- 顶层 `render_index_track_mode_on=true` + `mixed_track_mode_on=true` + `version=360000`
+- 主草稿轨 `type="mixed"`；主轨整块段**不设** render_index/track_render_index
+- 主草稿 mc_video.`check_flag=62978047`（多机位放主轨用 62978047；不是旧模板
+  主稿的 63502335）
+缺这些字段 → 剪映把主轨组合段"自动切段+锁定"（多机位钉死拖不动）/ 判定为
+"可切开的浮动组合段"/ 主轨不接受普通素材。真实素材（1502 个）始终注册在
+`draft_meta_info.json`。
 
 踩坑史（全部实测，避免重蹈）：
 - 轨3 引用 combination + `materials.drafts`=[combination 仅路径无内嵌] + 无
@@ -290,12 +306,14 @@ draft + 占位符路径）会让剪映**读取阶段直接拒绝草稿**——dr
 - 轨3 引用 mc_video + `materials.drafts`=[] → 轨3 保留为 mc_video 占位，
   剪映无从得知 subdraft 位置 → 不创建 combination（"有名字的占位、无法编辑"，
   FC8ED596/旧多段测试）
-- **3+1 混用金标准主草稿结构（2026-08-21 实测"草稿损坏"根因）**：主草稿
+- **缺主轨附加字段的机制 B（历史"草稿损坏"根因，现已解决）**：主草稿
   `materials.videos` 同时放真实素材（1502 个）+ mc_video、轨引用
-  mc_video.id + 7 refs + combination 内嵌完整 draft + 占位符路径 → 剪映
-  **读取阶段直接拒绝草稿**（"草稿损坏"：draft_info.json 保持明文、无
-  .backup 生成、draft_settings 的 real_edit_seconds=0）。3+1 必须用机制 A
-  （组合引用：轨 → combination.id、不内嵌、相对路径、videos 只放真实素材）
+  mc_video.id + 7 refs + combination 内嵌完整 draft + 占位符路径，但**缺**
+  use_float_render / mixed_track_mode_on / 主轨段无 render_index / mc
+  check_flag=63502335 → 剪映**读取阶段直接拒绝草稿**（"草稿损坏"：
+  draft_info.json 保持明文、无 .backup 生成、real_edit_seconds=0）。
+  现在代码已补齐主轨附加字段（见上"当前基线"），同一结构通过验证，**不要**
+  回退到机制 A 组合引用。
 - **subdraft 顶层 id ≠ 文件夹名 → 组合被删、多机位消失**（2026-08-21 实测；
   bak_v2 顶层 id=sub_id 成功、剪映保存后顶层 id 仍是文件夹名 B3EEE341）。
   金标准（机制 B，剪映自己写的路径）顶层 id 才是独立 UUID（4F5267B9 顶层

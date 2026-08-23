@@ -16,6 +16,12 @@ COMPAT_TASK_TYPES = {
 
 from contextlib import contextmanager
 import inspect
+import json
+import os
+from pathlib import Path
+import selectors
+import subprocess
+import sys
 from typing import Any, Iterator
 
 from .analysis_runtime import analyze as _default_analyze
@@ -176,24 +182,13 @@ class TaskManager(_impl.TaskManager):
         stage = "face_identity" if kind == "face" else "speaker_identity"
         try:
             with self._resource(config, task, "cpu", stage, label):
-                indexer = IdentityIndexer(self.workspace_id, project_id, config)
-                last_reported = {"done": -1}
-
-                def report(done: int, total: int, group_id: str) -> None:
-                    if done == total or done - last_reported["done"] >= 10:
-                        last_reported["done"] = done
-                        self._update(
-                            config,
-                            task_id,
-                            progress={f"{kind}_done": done, f"{kind}_total": total},
-                            message=f"{label} {done}/{total} · {group_id}",
-                        )
-
-                result = indexer.run(
-                    kind,
+                result = self._run_identity_worker(
+                    config,
+                    task_id,
+                    project_id=project_id,
+                    kind=kind,
                     group_ids=group_ids,
-                    progress=report,
-                    cancelled=lambda: self._cancel_requested(config, task_id),
+                    label=label,
                 )
                 if result.get("status") == "cancelled":
                     raise ResourceCancelled(f"{label}阶段任务已取消")
@@ -203,6 +198,138 @@ class TaskManager(_impl.TaskManager):
         except Exception as error:
             self._update(config, task_id, message=f"{label}已延后，不影响主分析：{error}")
             return {"status": "deferred", "kind": kind, "error": str(error)}
+
+    def _run_identity_worker(
+        self,
+        config,
+        task_id: str,
+        *,
+        project_id: str,
+        kind: str,
+        group_ids: list[str] | None,
+        label: str,
+    ) -> dict[str, Any]:
+        """Proxy a worker process while the gateway keeps serving requests."""
+
+        source_root = Path(__file__).resolve().parents[1]
+        environment = dict(os.environ)
+        python_path = environment.get("PYTHONPATH", "")
+        environment["PYTHONPATH"] = str(source_root) + (
+            os.pathsep + python_path if python_path else ""
+        )
+        command = [
+            sys.executable,
+            "-m",
+            "script_organizer.identity_worker",
+            "--workspace-id",
+            self.workspace_id,
+            "--project-id",
+            project_id,
+            "--config",
+            str(config.config_path),
+            "--kind",
+            kind,
+        ]
+        for group_id in group_ids or []:
+            command.extend(["--group-id", group_id])
+        worker = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0,
+            env=environment,
+        )
+        stream = worker.stdout
+        if stream is None:
+            raise RuntimeError(f"{label}子进程标准输出不可用")
+        poller = selectors.DefaultSelector()
+        poller.register(stream, selectors.EVENT_READ)
+        last_reported = -1
+        result: dict[str, Any] | None = None
+        error = ""
+        detail_lines: list[str] = []
+        cancellation_sent = False
+        pending_output = b""
+
+        def handle_event(event: dict[str, Any]) -> None:
+            nonlocal last_reported, result, error
+            event_type = str(event.get("type", "") or "")
+            if event_type == "progress":
+                done = int(event.get("done", 0) or 0)
+                total = int(event.get("total", 0) or 0)
+                group_id = str(event.get("group_id", "") or "")
+                if done == 0 or done == total or done > last_reported:
+                    last_reported = done
+                    self._update(
+                        config,
+                        task_id,
+                        progress={f"{kind}_done": done, f"{kind}_total": total},
+                        message=f"{label} {done}/{total} · {group_id}",
+                    )
+            elif event_type == "status":
+                message = str(event.get("message", "") or "").strip()
+                if message:
+                    self._update(config, task_id, message=message)
+            elif event_type == "result":
+                raw_result = event.get("result")
+                result = dict(raw_result) if isinstance(raw_result, dict) else {}
+            elif event_type == "error":
+                error = str(event.get("error", "") or "人物索引子进程失败")
+
+        def handle_line(raw_line: bytes) -> None:
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line:
+                return
+            try:
+                event = json.loads(line)
+            except ValueError:
+                detail_lines.append(line)
+                return
+            if isinstance(event, dict):
+                handle_event(event)
+
+        def drain_output(chunk: bytes) -> None:
+            nonlocal pending_output
+            pending_output += chunk
+            lines = pending_output.split(b"\n")
+            pending_output = lines.pop()
+            for raw_line in lines:
+                handle_line(raw_line)
+
+        try:
+            while worker.poll() is None:
+                if self._cancel_requested(config, task_id) and not cancellation_sent:
+                    if worker.stdin is not None:
+                        worker.stdin.write(b"cancel\n")
+                        worker.stdin.flush()
+                    cancellation_sent = True
+                for _key, _mask in poller.select(timeout=0.25):
+                    chunk = os.read(stream.fileno(), 65536)
+                    if chunk:
+                        drain_output(chunk)
+            remaining = stream.read()
+            if remaining:
+                drain_output(remaining)
+            if pending_output:
+                handle_line(pending_output)
+        finally:
+            poller.close()
+            if worker.stdin is not None:
+                worker.stdin.close()
+            if worker.poll() is None:
+                worker.terminate()
+                worker.wait(timeout=5)
+
+        if error:
+            raise RuntimeError(error)
+        if result is None:
+            if worker.returncode not in {0, None}:
+                detail = "\n".join(line for line in detail_lines if line)[-1200:]
+                suffix = f"：{detail}" if detail else ""
+                raise RuntimeError(f"{label}子进程异常退出（exit {worker.returncode}）{suffix}")
+            raise RuntimeError(f"{label}子进程未返回结果")
+        return result
 
     def _identity_after_analysis(
         self,

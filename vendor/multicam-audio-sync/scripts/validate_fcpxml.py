@@ -5,26 +5,93 @@
   2. 帧边界审计  —— 所有 offset/duration/start/tcStart 是整数 tick、
      且 tick % frame_ticks == 0（整数 fps=1000，NTSC=1001）。
   3. 素材可达性  —— 所有 asset src / pathurl 解 percent 后指向真实文件。
-  4. 引用完整性  —— mc-clip ref→media、asset-clip ref→asset、multicam
-     format→format、clip video/audio→asset、mc-source angleID→mc-angle
-     angleID 全部能被解析。
+  4. 引用完整性  —— mc-clip ref→media、asset-clip ref→asset、<format ref>→
+     format、multicam format→format、clip video/audio→asset、mc-source
+     angleID→mc-angle angleID 全部能被解析。
   6. 结构抽查    —— 每个 mc-angle 内 clip 单调（offset+duration 不重叠、
      无负长 gap）；合并序列 spine 第二段 offset == 第一段 duration。
+  7. 官方 DTD   —— 可选：带 --dtd[=PATH]，用 FCP/Creator Studio 的官方
+     FCPXMLv1_8.dtd 做 xmllint 完整校验（完美导出的权威门槛）。
 
 用法：
-    python3 validate_fcpxml.py <output.fcpxml> [SOURCE_ROOT]
+    python3 validate_fcpxml.py <output.fcpxml> [SOURCE_ROOT] [--dtd[=PATH]]
+
+  --dtd   用官方 FCPXMLv1_8.dtd 校验。不带 PATH 时自动在
+          /Applications/*.app/.../Interchange.framework/.../ 查找；
+          /Applications 下未找到则从 PATH 读取（文件或含该 dtd 的目录）。
+          xmllint 不可用时该步被跳过并明确提示，不阻断结构校验。
 
 校验通过退出码 0（打印 PASS 汇总），任何失败退出码 1（打印 FAIL 明细）。
-DTD 官方校验（validation.md 第 1 节）需本机装 FCP / Creator Studio，无法
-在此脚本内自动化，仍保留为人工步骤。
+完全导出 = 结构校验 PASS + 官方 DTD 校验 PASS，二者缺一不可。
 """
+import glob
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote
 
 TICK_RE = re.compile(r"^(\d+)/(\d+)s$")
+
+DTD_NAME = "FCPXMLv1_8.dtd"
+
+
+def find_dtd(explicit=None):
+    """解析 --dtd 目标：文件/目录/None(自动查找) -> DTD 绝对路径或 None。"""
+    if explicit:
+        if os.path.isdir(explicit):
+            p = os.path.join(explicit, DTD_NAME)
+            return p if os.path.isfile(p) else None
+        return explicit if os.path.isfile(explicit) else None
+    for pat in (
+        "/Applications/*.app/Contents/Frameworks/Interchange.framework*/Resources/",
+        "/Applications/*.app/Contents/Frameworks/Interchange.framework*/"
+        "Versions/*/Resources/",
+    ):
+        for d in glob.glob(pat + DTD_NAME):
+            if os.path.isfile(d):
+                return d
+    return None
+
+
+def dtd_errors(xml_path, dtd_path):
+    """用官方 DTD 做完整校验。返回错误行列表（空 = 通过）。
+
+    姿势：注入 DOCTYPE（相对引用 DTD 文件名）+ xmllint --valid，把官方 DTD
+    拷进与注入 XML 同一临时目录。FCP 这份 DTD 有坑：--dtdvalid 因参数实体
+    加载方式会误报"解析失败"；--path 与绝对 SYSTEM 引用对 --valid 分支无效
+    （xmllint 按 XML 所在目录解析相对引用），故统一同目录相对引用。
+    """
+    xmllint = shutil.which("xmllint")
+    if not xmllint:
+        return ["xmllint 不可用（需 macOS 命令行工具），跳过 DTD 校验"]
+    with tempfile.TemporaryDirectory() as td:
+        injected = os.path.join(td, "__in__.xml")
+        text = open(xml_path, encoding="utf-8").read()
+        if text.lstrip().startswith("<?xml"):
+            end_decl = text.find("?>")
+            text = (text[:end_decl + 2]
+                    + f'\n<!DOCTYPE fcpxml SYSTEM "{DTD_NAME}">'
+                    + text[end_decl + 2:])
+        else:
+            text = f'<!DOCTYPE fcpxml SYSTEM "{DTD_NAME}">\n' + text
+        open(injected, "w", encoding="utf-8").write(text)
+        # xmllint 按注入 XML 所在目录解析相对 SYSTEM（非 cwd），因此把官方
+        # DTD 拷进同一 tempdir 命中相对引用。--dtdvalid 与 --path 对 FCP 这
+        # 份 DTD 均失效，故用内部 subset + 同目录引用。
+        dtd_local = os.path.join(td, DTD_NAME)
+        shutil.copyfile(dtd_path, dtd_local)
+        r = subprocess.run(
+            [xmllint, "--noout", "--valid", injected],
+            capture_output=True, text=True)
+    err = (r.stderr or "").strip()
+    if r.returncode == 0:
+        return []
+    lines = [ln for ln in err.splitlines() if "validity error" in ln]
+    return lines or [err or f"xmllint 失败 exit={r.returncode}"]
 
 
 def errs_from_frame_boundaries(root, frame_ticks):
@@ -109,6 +176,11 @@ def errs_from_refs(root):
         if e.tag.endswith("mc-clip"):
             if ref not in medias:
                 bad.append(f"{e.tag} ref: media 引用缺失 -> {ref}")
+        elif e.tag == "format":
+            # 标准 FCP：media 用子元素 <format ref="..."/> 指向 format 资源，
+            # 而非 asset；与 resources 下的 <format id> 区分。
+            if ref not in fmts:
+                bad.append(f"{e.tag} ref: format 引用缺失 -> {ref}")
         elif ref not in assets:
             bad.append(f"{e.tag} ref: asset 引用缺失 -> {ref}")
     for e in root.iter("mc-source"):
@@ -171,8 +243,16 @@ def main(argv):
     if len(argv) < 2:
         print(__doc__)
         return 1
-    xml_path = argv[1]
-    base = argv[2] if len(argv) > 2 else None
+    rest = list(argv[1:])
+    dtd_arg = next((a.split("=", 1)[1] for a in rest if a.startswith("--dtd=")), None)
+    if any(a == "--dtd" for a in rest):
+        dtd_arg = "" if dtd_arg is None else dtd_arg or None
+    rest = [a for a in rest if not a.startswith("--dtd")]
+    if not rest:
+        print(__doc__)
+        return 1
+    xml_path = rest[0]
+    base = rest[1] if len(rest) > 1 else None
     if not os.path.isfile(xml_path):
         print(f"FAIL: 文件不存在 {xml_path}")
         return 1
@@ -205,6 +285,20 @@ def main(argv):
     s = errs_from_structure(root)
     print(f"[结构] {len(s)} 处异常")
     all_fail += s
+
+    # 官方 DTD 完整校验（完美导出的权威门槛；需 --dtd 显式开启或带路径）
+    if any(a.startswith("--dtd") for a in argv):
+        dtd_path = find_dtd(dtd_arg)
+        if not dtd_path:
+            print("FAIL: 未找到官方 FCPXMLv1_8.dtd（传递 --dtd=PATH 指定）")
+            return 1
+        de = dtd_errors(xml_path, dtd_path)
+        if de:
+            print(f"\n=== FAIL ===\n[DTD] 官方 DTD {os.path.basename(dtd_path)}：")
+            for x in de:
+                print(" -", x)
+            return 1
+        print(f"[DTD] 官方 DTD 校验通过（{os.path.basename(dtd_path)}）")
 
     if all_fail:
         print("\n=== FAIL ===")

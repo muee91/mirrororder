@@ -420,5 +420,9 @@
   requestAnimationFrame(() => {
     ensureTab();
     refreshBoard(false);
+    if (new URLSearchParams(window.location.search).get('production') === 'supervisor') {
+      setActive(true);
+      refreshBoard(true);
+    }
   });
 })();
