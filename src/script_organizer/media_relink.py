@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
@@ -181,6 +180,11 @@ def rewrite_premiere_media(
     return {"path": str(target), "rewritten": len(rows), "files": rows}
 
 
+def _export_name(report: dict[str, Any] | None) -> str:
+    raw = str((report or {}).get("path", "") or "")
+    return Path(raw).name if raw else ""
+
+
 def write_relink_manifest(
     path: str | Path,
     *,
@@ -191,6 +195,8 @@ def write_relink_manifest(
     portable_capcut_fcpxml: dict[str, Any] | None = None,
     premiere_xml: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Write a device-neutral manifest; never persist the old machine root."""
+
     media_root = Path(source_root).resolve()
     files: dict[str, dict[str, Any]] = {}
     for report in (local_fcpxml, portable_fcpxml, capcut_fcpxml or {}, portable_capcut_fcpxml or {}, premiere_xml or {}):
@@ -214,11 +220,11 @@ def write_relink_manifest(
         },
         "files": [files[key] for key in sorted(files)],
         "exports": {
-            "fcpxml": str(local_fcpxml.get("path", "")),
-            "fcpxml_portable": str(portable_fcpxml.get("path", "")),
-            "capcut_fcpxml": str((capcut_fcpxml or {}).get("path", "")),
-            "capcut_fcpxml_portable": str((portable_capcut_fcpxml or {}).get("path", "")),
-            "premiere_xml": str((premiere_xml or {}).get("path", "")),
+            "fcpxml": _export_name(local_fcpxml),
+            "fcpxml_portable": _export_name(portable_fcpxml),
+            "capcut_fcpxml": _export_name(capcut_fcpxml),
+            "capcut_fcpxml_portable": _export_name(portable_capcut_fcpxml),
+            "premiere_xml": _export_name(premiere_xml),
         },
     }
     _atomic_json(Path(path), payload)
