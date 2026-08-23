@@ -58,7 +58,7 @@ def test_desktop_surface_uses_project_first_hierarchy() -> None:
     assert "NativeThemeMode.system.rawValue" in ui
     assert 'Text("项目")' in ui
     assert 'Text("工作台")' not in ui
-    assert 'systemImage: "ellipsis"' in ui
+    assert 'Image(systemName: "ellipsis")' in ui
     assert 'Text("永久删除项目…")' in ui
     assert 'Text("内容与人物")' in ui
     assert 'Text("可选增强")' in ui
