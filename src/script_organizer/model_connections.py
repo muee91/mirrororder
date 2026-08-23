@@ -75,13 +75,15 @@ def load_model_connections(*, include_secrets: bool = False) -> dict[str, Any]:
     raw = _read(_connections_path())
     secrets = _read(_secrets_path()) if include_secrets else {}
     payload = {
-        "version": 2,
+        "version": 3,
         "text": _public_connection(raw.get("text", {}), key_name="text_api_key"),
         "vision": _public_connection(raw.get("vision", {}), key_name="vision_api_key"),
+        "embedding": _public_connection(raw.get("embedding", {}), key_name="embedding_api_key"),
     }
     if include_secrets:
         payload["text"]["api_key"] = str(secrets.get("text_api_key", "") or "")
         payload["vision"]["api_key"] = str(secrets.get("vision_api_key", "") or "")
+        payload["embedding"]["api_key"] = str(secrets.get("embedding_api_key", "") or "")
     return payload
 
 
@@ -94,7 +96,7 @@ def _normalize_connection(
     enabled = bool(raw.get("enabled", current.get("enabled", False)))
     provider = str(raw.get("provider", current.get("provider", "openai-compatible")) or "openai-compatible").strip().lower()
     if provider not in {"openai-compatible", "openai", "local", "llama", "llama.cpp", "llama-server"}:
-        raise ValueError("当前只支持 OpenAI-compatible 或本地 llama 兼容接口")
+        raise ValueError("当前只支持 OpenAI-compatible 或本地兼容接口")
     base_url = _valid_base_url(str(raw.get("base_url", current.get("base_url", "")) or ""))
     model = str(raw.get("model", current.get("model", "")) or "").strip()[:300]
     if enabled and (not base_url or not model):
@@ -113,13 +115,19 @@ def save_model_connections(raw: object) -> dict[str, Any]:
     current = load_model_connections(include_secrets=True)
     text_raw = raw.get("text", {}) if isinstance(raw.get("text"), dict) else {}
     vision_raw = raw.get("vision", {}) if isinstance(raw.get("vision"), dict) else {}
+    embedding_raw = raw.get("embedding", {}) if isinstance(raw.get("embedding"), dict) else {}
     text = _normalize_connection(text_raw, current["text"], label="语言模型")
     vision = _normalize_connection(vision_raw, current["vision"], label="多模态模型")
-    public = {"version": 2, "text": text, "vision": vision}
+    embedding = _normalize_connection(embedding_raw, current["embedding"], label="语义检索模型")
+    public = {"version": 3, "text": text, "vision": vision, "embedding": embedding}
     _atomic(_connections_path(), public)
 
     secrets = _read(_secrets_path())
-    for row, key_name in ((text_raw, "text_api_key"), (vision_raw, "vision_api_key")):
+    for row, key_name in (
+        (text_raw, "text_api_key"),
+        (vision_raw, "vision_api_key"),
+        (embedding_raw, "embedding_api_key"),
+    ):
         if "api_key" not in row:
             continue
         key = str(row.get("api_key", "") or "").strip()
