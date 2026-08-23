@@ -2,9 +2,9 @@
 
 `review.v1` 是 MirrorOrder Host 面向团队 Web Review 的版本化只读投影。
 
-它的目标不是创建新的业务状态，而是让 Web 不再自行组合并解释 `material_index.json`、`script.json`、`matches.json`、`auto_decisions.json` 与 `review.json` 的内部语义。
+它的目标不是创建新的业务状态，而是让 Web 不再自行组合并解释 `material_index.json`、`script.json`、`matches.json`、`auto_decisions.json`、`review.json` 与协作状态的内部语义。
 
-## 边界
+## 1. 边界
 
 ```text
 Canonical Production Data
@@ -13,6 +13,7 @@ Canonical Production Data
   matches.json
   auto_decisions.json
   review.json
+  editorial.json
   device-local safe identity labels
         ↓
 MirrorOrder Host
@@ -24,17 +25,25 @@ Team Web Review
 
 `review.v1` 是 projection，不是 authority。
 
-权威顺序仍然是：
+剧本映射权威仍然是：
 
 ```text
-人工 review.json
+人工 review.json placement / assignment
   > auto_decisions.json
   > 自动候选 / 分析建议
 ```
 
-自动流程不得写 `review.json`，不得自动 Reject，也不得因为 Read Model 引入第二套人工决定存储。
+协作判断独立存储：
 
-## API
+```text
+editorial.json
+  Individual Opinion
+  Editorial Decision
+```
+
+`editorial.json` 不覆盖 `review.json`，自动流程也不得写入它。
+
+## 2. API
 
 多工作区 Gateway：
 
@@ -42,23 +51,25 @@ Team Web Review
 GET /api/v1/workspaces/{workspace_id}/projects/{project_id}/review-model
 ```
 
-单工作区 Host 的内部兼容路由：
+单工作区兼容路由：
 
 ```text
 GET /api/v1/projects/{project_id}/review-model
 ```
 
-旧 `/script`、`/groups`、`/matches`、`/review` 路由暂时保留。原生 App 仍使用较完整的 Production 数据链，因为 AppKit 原生文件拖拽必须解析当前 Mac 的真实媒体文件路径。
+普通 Web 使用 `review.v1`，不接收 Host 绝对文件路径。旧 `/script`、`/groups`、`/matches`、`/review` 路由暂时保留，原生 App 继续使用较完整的 Production 数据链，因为 AppKit 原生文件拖拽必须解析当前 Mac 的真实媒体文件路径。
 
-普通 Web 使用 `review.v1`，不接收 Host 绝对文件路径。
-
-## 顶层结构
+## 3. 顶层结构
 
 ```text
 review.v1
   contract_version
   project
   revisions
+    analysis
+    automation_analysis
+    review
+    editorial
   capabilities
   summary
   episodes[]
@@ -73,39 +84,20 @@ review.v1
     context
     automatic_state
     editorial_state
+      legacy_manual
+      individual_opinions
+      editorial_decision
     effective_mapping
     issues[]
   script_gaps[]
   review_state
+    legacy_review
+    editorial
 ```
 
-### `project`
+## 4. `angles`
 
-只包含团队审阅所需的项目名称、类型、统计和网关媒体覆盖数量。
-
-设备 ID、设备名、素材 roots 与 `/Volumes/...` 路径不会进入此对象。
-
-### `episodes / scenes / script_blocks`
-
-Host 将剧本结构投影为稳定的集、场、剧本段层级。`script_gap` 会作为剧本段 issue 提供，Web 不需要自己解释 `matches.script_gaps`。
-
-### `take_groups`
-
-每个逻辑 Take 包含：
-
-- `group_id / parent_group_id / take_index`
-- 拍摄时间范围与机位列表
-- `angles`
-- 候选对白文本
-- 安全的人物 / 声纹标签
-- 自动映射状态
-- 当前人工状态
-- 实际生效的映射来源
-- 需要人工注意的问题
-
-### `angles`
-
-Angle 可以包含：
+Web 可以获得：
 
 ```text
 clip_id
@@ -117,7 +109,7 @@ playback.url
 playback.available
 ```
 
-不会包含：
+不会获得：
 
 ```text
 media_path
@@ -127,11 +119,11 @@ resolved_media_path
 Finder path
 ```
 
-`playback.url` 指向当前 Gateway 的 HTTP Range media endpoint。浏览器只消费媒体流，不把 Gateway 文件系统路径冒充自己的本机文件。
+`playback.url` 指向 Gateway 的 HTTP Range media endpoint。浏览器消费媒体流，而不是把 Gateway 文件系统路径冒充自己的本机路径。
 
-### `automatic_state`
+## 5. 自动映射与人工归集
 
-直接投影 Host 的自动决定语义：
+`automatic_state` 继续使用：
 
 ```text
 auto_confirmed
@@ -141,83 +133,206 @@ needs_review
 unresolved
 ```
 
-它描述的是**剧本映射状态**，不是创意意义上的 Best / Keep / Reject。
+这些状态描述的是**剧本映射**，不是创意意义上的 Best / Keep / Reject。
 
-### `editorial_state`
+`effective_mapping` 只解释当前 Take 应归到什么剧本范围：
 
-当前 `review.json` v2 只有一套当前人工审核状态，还没有独立的 Individual Opinion 历史和最终 Editorial Decision 存储。因此 `review.v1` 明确返回：
+1. `review.json` 存在人工作品范围时，`source = human`；
+2. 否则已完成的自动状态可以成为 `source = automatic`；
+3. 没有可靠结果时为 `source = none`。
+
+Individual Opinion 与 Editorial Decision 都不会改变这条映射权威链。
+
+## 6. Individual Opinion
+
+多人协作意见使用：
+
+```text
+output/editorial.json
+```
+
+每个意见都有明确 target：
+
+```text
+group
+  group_id
+
+assignment
+  segment_id
+  group_id
+```
+
+每个 target 下按审核昵称分别保存：
+
+```text
+剪辑A → Best
+导演B → Keep
+制片C → Reject
+```
+
+因此一个人的修改不会覆盖其他人的意见。
+
+写入 API：
+
+```text
+POST /api/v1/workspaces/{workspace_id}/projects/{project_id}/opinions
+```
+
+请求示例：
+
+```json
+{
+  "target_kind": "assignment",
+  "segment_id": "S_27_18",
+  "group_id": "G_27_03",
+  "state": "keep",
+  "actor": "剪辑A"
+}
+```
+
+`state = unreviewed` 只清除该审核人在该 target 上自己的意见，不会删除其他人的意见。
+
+当前阶段**不会把现有 Web B/K/X 自动迁移成 Individual Opinion**。旧按钮仍走成熟的 `/review` 原子 action，避免在没有完整 UI 和导出迁移前改变既有审核语义。
+
+## 7. Editorial Decision
+
+最终编辑决定与个人意见分开存储，不通过“票数最多”自动产生。
+
+写入 API：
+
+```text
+POST /api/v1/workspaces/{workspace_id}/projects/{project_id}/editorial-decision
+```
+
+当前只允许 Host 本机 / 原生 App 使用。团队 LAN Web 暂时不能直接写最终决定，因为角色、权限和负责人模型尚未建立。
+
+最终决定要求：
+
+```text
+expected_revision
+```
+
+如果提交者基于旧 revision 操作，Host 返回 conflict，而不是静默覆盖更新后的最终决定。
+
+这是为了避免：
+
+```text
+主剪 A 看到 revision 8
+导演 B 已经提交 revision 9
+主剪 A 又用旧页面覆盖 B
+```
+
+当前 `editorial.json` 的 Editorial Decision 只进入协作投影，**尚未替代 `review.json` 作为导出/selection manifest 的既有人工状态来源**。迁移必须单独完成并验证，不能因为新字段存在就改变交付结果。
+
+## 8. `review.v1` 中的协作语义
+
+启用 Editorial Runtime 后：
+
+```text
+capabilities.individual_opinions = true
+capabilities.editorial_decision = true
+capabilities.editorial_decision_write_scope = host_local
+```
+
+每个 Take：
 
 ```text
 editorial_state
   legacy_manual
-  individual_opinion = null
-  editorial_decision = null
+  individual_opinions
+    group[]
+    assignments[]
+  editorial_decision
+    group
+    assignments[]
 ```
 
-同时 capabilities 声明：
+顶层：
 
 ```text
-individual_opinions = false
-editorial_decision = false
+revisions.editorial
+summary.collaboration
+review_state.editorial
 ```
 
-这避免把尚未实现的协作模型伪装成正式能力。
+Web 不需要知道 `editorial.json` 的文件结构，只需要消费 Host 投影。
 
-### `effective_mapping`
+## 9. 协作刷新
 
-这是 Host 对“当前应该把这个 Take 归到哪里”的只读解释：
-
-1. 人工 placement / assignment 存在时，`source = human`；
-2. 否则已完成的 `auto_confirmed / ai_confirmed / human_override` 可成为自动映射；
-3. 仍无可靠结果时为 `source = none`。
-
-它不写回任何文件。
-
-### `issues`
-
-第一版至少投影：
+`/state` 增加：
 
 ```text
-needs_review
-unresolved
-missing_media
-automation_stale
-script_gap
+editorial_revision
+editorial_updated_at
 ```
 
-这些 issue 用于 Web Review 聚焦异常，不用于修改自动或人工权威状态。
+普通 Web 在以下任一 revision 变化时重新加载 `review.v1`：
 
-## Web 兼容迁移
+```text
+analysis_revision
+review_revision
+editorial_revision
+```
 
-当前 `web/app.js` 仍有成熟的剧本 / Take / Viewer 渲染逻辑。为了避免一次性重写看片链，`web/review_model.js` 在普通浏览器中将 `review.v1` 映射回现有前端运行时 state。
+因此其它审核人的新意见可以在轮询周期内进入当前审阅页面，而不需要浏览器直接读取共享文件。
 
-这只是前端兼容适配层：
+## 10. 多设备与同步
 
-- 正常 Web 分析读取走 `/review-model`；
-- 原生 App 检测到 `window.webkit.messageHandlers.mirrorOrder` 后直接跳过 adapter；
-- 审核写入继续走现有原子 `/review` action API；
-- 搜索、配对、协作 revision polling 等独立 API 暂时保留；
-- 后续可以逐步让 Web 组件直接消费 `review.v1`，再删除兼容 adapter。
+`editorial.json` 属于**共享项目协作状态**，不是 Device Local 数据。
 
-## 安全与回归红线
+推荐：
+
+```text
+同一个中央 MirrorOrder Host
+        ↓
+原子 opinion / decision API
+        ↓
+editorial.json
+```
+
+不要让多台机器通过 Dropbox / iCloud 同时直接写同一份 `editorial.json`。它与 `review.json` 一样需要单一在线写入权威。
+
+仍然 Device Local 的数据包括：
+
+```text
+media-bindings.json
+/Volumes/... 路径
+Finder path
+embedding
+本机 runtime / model 状态
+```
+
+## 11. Web 兼容迁移
+
+`web/app.js` 仍有成熟的剧本 / Take / Viewer 渲染逻辑。`web/review_model.js` 把 `review.v1` 映射回现有前端 state，避免一次性重写看片链。
+
+当前迁移规则：
+
+- 普通 Web 分析读取走 `/review-model`；
+- 原生 App 检测到 `window.webkit.messageHandlers.mirrorOrder` 后跳过 adapter；
+- 普通 Web 不显示生产时间线、更换剧本、runtime 等制作入口；
+- 旧审核写入继续使用 `/review`；
+- 协作意见 API 已具备，但 B/K/X 尚未迁移；
+- 后续 UI 可以直接消费 `take.editorial_state`，然后逐步减少 legacy adapter。
+
+## 12. 安全与回归红线
 
 - Read Model 不返回原始媒体绝对路径。
-- Read Model 不返回 embedding、模型配置、API Key、runtime 设置或生产任务控制。
-- Read Model 不成为新的写入权威。
-- 人工映射永远优先于自动映射。
-- `auto_confirmed` / `ai_confirmed` 不得伪装成人工 Keep / Best。
-- 普通 Web 不获得 AppKit 原生文件拖拽能力。
-- App 的 current-device media resolver 与 native drag bridge 不改。
-- 旧读 API 在契约迁移完成前继续保留。
+- Read Model 不返回 embedding、API Key、模型配置、runtime 设置或生产任务控制。
+- 自动状态不得伪装成人工 Best / Keep。
+- Individual Opinion 不得自动升级为 Editorial Decision。
+- Editorial Decision 不得根据多数票自动生成。
+- Editorial Decision stale revision 不得静默覆盖。
+- `editorial.json` 不得写入 `review.json` 或 `auto_decisions.json`。
+- App current-device media resolver 与 AppKit native drag bridge 不改。
+- 当前交付/导出语义在专门迁移之前继续以既有人工审核链为准。
 
-## 下一阶段
+## 13. 下一阶段
 
-`review.v1` 建立了 Host → Web 的语义边界，但真正的多人 Editorial Model 仍未实现。下一步若引入：
+下一步是 **Editorial UI Migration**，而不是继续增加存储格式：
 
-```text
-Individual Opinion
-Editorial Decision
-comments / decision history
-```
-
-应建立独立、revision-safe 的协作状态模型，再由 `review.v1` 投影；不要复用或重载当前 `review.json` 字段来假装两层语义已经存在。
+1. Web 的 Best / Keep / Reject 改成“我的意见”；
+2. Take/剧本段附近显示团队意见汇总，但控制视觉噪音；
+3. App Production Inspector 提供明确的“最终编辑决定”动作；
+4. 再定义 Editorial Decision 与 FCPXML / selection manifest /交付选择之间的转换规则；
+5. 完成迁移后，才考虑逐步退出 `review.json` 中重叠的创意审核语义。
