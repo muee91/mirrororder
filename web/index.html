@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>镜序 · 视频素材工作台</title>
+  <title>镜序 · 团队审阅</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -13,46 +13,44 @@
       <img class="brand-logo" src="/logo.svg" alt="镜序">
       <div>
         <h1 id="product-name">镜序</h1>
-        <span id="project-name">视频素材工作台</span>
+        <span id="project-name">团队审阅</span>
       </div>
       <span id="analysis-status" class="status-pill">读取项目</span>
     </div>
     <div class="top-actions">
       <label class="project-switch">
-        <span>工作区</span>
-        <select id="workspace-select" aria-label="切换工作区"></select>
+        <span>项目库</span>
+        <select id="workspace-select" aria-label="切换项目库"></select>
       </label>
       <label class="project-switch">
         <span>项目</span>
         <select id="project-select" aria-label="切换项目"></select>
       </label>
-      <button id="create-project" class="text-button" type="button">新建项目</button>
-      <button id="task-button" class="text-button" type="button">任务</button>
-      <button id="proposal-button" class="text-button" type="button">提案</button>
-      <button id="actor-button" class="text-button" type="button">设置审核人</button>
+      <button id="proposal-button" class="text-button" type="button">AI 建议</button>
+      <button id="actor-button" class="text-button" type="button">审核人</button>
       <span id="collab-status" class="connection-state">连接中</span>
     </div>
   </header>
 
   <main class="app-shell">
-    <section class="toolbar" aria-label="项目筛选">
+    <section class="toolbar" aria-label="审阅筛选">
       <div id="episode-picks" class="episode-picks" aria-label="直接选择集数"></div>
       <div class="utility-row">
         <div class="search-wrap">
-          <input id="search" type="search" placeholder="搜索素材文件名、完整路径、剧本或对白" autocomplete="off">
+          <input id="search" type="search" placeholder="搜索素材、剧本或对白" autocomplete="off">
           <div id="search-results" class="search-results" hidden></div>
         </div>
         <div class="toolbar-summary">
           <span id="progress">读取审核进度</span>
           <span id="error-summary"></span>
-          <button id="show-unknown" class="text-button" type="button">只看未核对</button>
+          <button id="show-unknown" class="text-button" type="button">只看待核对</button>
           <button id="refresh" class="text-button" type="button">刷新</button>
         </div>
       </div>
     </section>
 
     <section id="update-banner" class="update-banner" hidden>
-      <span>素材分析已有增量更新</span>
+      <span>制作端有新的分析结果</span>
       <button id="dismiss-update" type="button">知道了</button>
     </section>
 
@@ -60,7 +58,7 @@
       <aside id="script-column" class="panel script-column">
         <header class="panel-head">
           <div>
-            <strong>剧本时间轴</strong>
+            <strong>剧本</strong>
             <span id="script-scope" class="subtle"></span>
           </div>
           <span id="script-count" class="subtle"></span>
@@ -120,14 +118,14 @@
 
   <dialog id="pairing-dialog" class="modal identity-modal">
     <form id="pairing-form" method="dialog">
-      <h2>连接局域网工作台</h2>
+      <h2>连接团队审阅</h2>
       <p>请输入镜序 App 显示的一次性配对码。</p>
       <label>
         配对码
         <input id="pairing-code" required autocomplete="one-time-code">
       </label>
       <div class="modal-actions">
-        <button class="primary-button" value="pair" type="submit">连接工作台</button>
+        <button class="primary-button" value="pair" type="submit">连接</button>
       </div>
     </form>
   </dialog>
@@ -163,60 +161,25 @@
     </form>
   </dialog>
 
-  <dialog id="project-dialog" class="modal project-modal">
+  <!-- 兼容旧前端脚本：制作型入口保留为不可见 DOM，服务端仍要求本机权限。 -->
+  <button id="create-project" type="button" hidden></button>
+  <button id="task-button" type="button" hidden></button>
+  <dialog id="project-dialog" hidden>
     <form id="project-form" method="dialog">
-      <div class="modal-title-row">
-        <div>
-          <h2>新建素材项目</h2>
-          <p>创建前检查输入路径、剧本格式、媒体存在性和目录写权限。</p>
-        </div>
-        <button id="project-close" class="icon-button" type="button" aria-label="关闭">关闭</button>
-      </div>
-      <div class="form-grid">
-        <label>项目名称<input id="new-project-name" required maxlength="80"></label>
-        <label>输入类型
-          <select id="new-project-kind">
-            <option value="fcpxml">已有 FCPXML 多机位时间线</option>
-            <option value="media-directory">媒体目录（不伪造同步）</option>
-          </select>
-        </label>
-      </div>
-      <label class="path-field" data-project-input="fcpxml">
-        FCPXML
-        <span><input id="new-project-fcpxml" readonly required><button data-pick-kind="file" data-pick-target="new-project-fcpxml" type="button">选择</button></span>
-      </label>
-      <label class="path-field" data-project-input="media-directory" hidden>
-        媒体目录
-        <span><input id="new-project-media-root" readonly><button data-pick-kind="folder" data-pick-target="new-project-media-root" type="button">选择</button></span>
-      </label>
-      <label class="path-field">
-        剧本（DOCX、TXT 或 Markdown）
-        <span><input id="new-project-script" readonly required><button data-pick-kind="file" data-pick-target="new-project-script" type="button">选择</button></span>
-      </label>
-      <p class="modal-note">项目输出、ASR 缓存和不可变输入统一保存在工作区项目目录；本机素材目录只保存到这台 Mac 的设备绑定。</p>
-      <label>机位规则（可选）
-        <input id="new-project-camera-patterns" placeholder="A=^A, B=^B, C=^C">
-      </label>
-      <div class="modal-actions">
-        <button class="primary-button" value="create" type="submit">预检并创建</button>
-      </div>
+      <button id="project-close" type="button">关闭</button>
+      <input id="new-project-name">
+      <select id="new-project-kind"><option value="media-directory">media-directory</option><option value="fcpxml">fcpxml</option></select>
+      <span data-project-input="fcpxml"><input id="new-project-fcpxml"><button data-pick-kind="file" data-pick-target="new-project-fcpxml" type="button"></button></span>
+      <span data-project-input="media-directory"><input id="new-project-media-root"><button data-pick-kind="folder" data-pick-target="new-project-media-root" type="button"></button></span>
+      <input id="new-project-script"><button data-pick-kind="file" data-pick-target="new-project-script" type="button"></button>
+      <input id="new-project-camera-patterns">
     </form>
   </dialog>
-
-  <dialog id="task-dialog" class="modal task-modal">
+  <dialog id="task-dialog" hidden>
     <form id="task-form" method="dialog">
-      <div class="modal-title-row">
-        <div>
-          <h2>后台任务</h2>
-          <p>任务只写入 ASR 缓存和派生产物，不会修改媒体、FCPXML 或人工审核。</p>
-        </div>
-        <button id="task-close" class="icon-button" type="button" aria-label="关闭">关闭</button>
-      </div>
-      <div class="task-actions">
-        <button data-task-type="incremental_analyze" type="button">增量分析当前项目</button>
-        <button data-task-type="evidence_extract" type="button">提取当前 Take 证据</button>
-      </div>
-      <div id="task-list" class="task-list"></div>
+      <button id="task-close" type="button">关闭</button>
+      <div class="task-actions"></div>
+      <div id="task-list"></div>
     </form>
   </dialog>
 
@@ -224,14 +187,14 @@
     <form id="proposal-form" method="dialog">
       <div class="modal-title-row">
         <div>
-          <h2>智能体提案</h2>
-          <p>提案不会自动写入审核；仅由人工确认后合并到 review.json。</p>
+          <h2>AI 建议</h2>
+          <p>AI 建议不会自动写入审核；只有人工确认后才会成为团队结论。</p>
         </div>
         <button id="proposal-close" class="icon-button" type="button" aria-label="关闭">关闭</button>
       </div>
       <div id="proposal-list" class="proposal-list"></div>
       <div class="modal-actions">
-        <button id="apply-proposals" class="primary-button" type="button">应用所选提案</button>
+        <button id="apply-proposals" class="primary-button" type="button">应用所选建议</button>
       </div>
     </form>
   </dialog>
