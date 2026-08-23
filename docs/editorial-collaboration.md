@@ -1,14 +1,15 @@
 # MirrorOrder Editorial Collaboration
 
-这份文档描述 `editorial.json` 的协作职责、当前 UI 语义与后续交付迁移顺序。
+这份文档描述 `editorial.json` 的协作职责、当前 UI 语义与交付边界。
 
 ## 当前职责
 
-- `review.json`：既有人工剧本归集与旧人工审核；当前导出链继续使用。
+- `review.json`：既有人工剧本归集与旧人工审核；剧本归集权威继续使用。
 - `editorial.json`：多人 Individual Opinion 与独立 Editorial Decision。
 - `auto_decisions.json`：自动剧本映射状态。
+- `selection_manifest.json v3 / delivery.v1`：把最终编辑决定解析成统一交付语义。
 
-三者不得互相伪装。
+四者不得互相伪装。
 
 ## 协作原则
 
@@ -34,14 +35,12 @@
 
 ### MirrorOrder Production App
 
-原生 App 保持完整 Production 数据链与 AppKit native drag。Viewer Inspector 增加 **“最终编辑决定”**：
+原生 App 保持完整 Production 数据链与 AppKit native drag。Viewer Inspector 提供 **“最终编辑决定”**：
 
 - 显示当前 Take / 当前剧本段的团队意见；
 - 可显式确定 Best / Keep / Reject 或清除最终决定；
 - 写入要求 `expected_revision`；
 - revision 过期时拒绝静默覆盖并要求基于最新协作状态重新确认。
-
-当前 Editorial Decision **不会改变 FCPXML、selection manifest 或既有导出结果**。
 
 ## reviewer identity
 
@@ -54,22 +53,52 @@ reviewer-02 · 小王 → Keep
 
 浏览器使用本地持久化 `reviewer_id`。旧 `editorial.json v1` 的 actor-keyed opinions 会在读取时兼容迁移为 fallback reviewer identity。
 
-## 下一步：Delivery Semantics
+## Delivery Semantics 已落地
 
-UI 迁移完成后，下一阶段不应继续增加新的审核存储格式，而应明确 **Editorial Decision 如何进入交付**：
+Editorial Decision 现在已经进入：
 
-1. 定义 Editorial Decision 与 legacy `review.json` 的过渡优先级；
-2. 明确 selection manifest 如何消费最终决定；
-3. 明确 FCPXML / NLE 输出中 Best / Keep / Reject 的具体转换规则；
-4. 为旧项目提供无 `editorial.json` 时的兼容行为；
-5. 完成验证后再考虑收缩 `review.json` 中重叠的创意审核字段。
+```text
+selection_manifest.json
+version = 3
+contract = delivery.v1
+```
+
+交付解析顺序：
+
+```text
+Editorial assignment
+  > Editorial group
+  > legacy review assignment
+  > legacy review group / clip
+  > automatic mapping fallback（旧兼容）
+```
+
+Individual Opinion 不参与多数票，也不会自动产生任何交付 Best / Keep / Reject。
+
+没有 `editorial.json` 或没有 Final Decision 的旧项目继续按 legacy review 与旧自动 fallback 兼容导出。
+
+当前 `organized.fcpxml` 仍只是源 FCPXML 的未修改副本；Delivery 层不会直接修改原始 FCPXML、多机位结构、Rating 或 Keyword。
+
+详见 `docs/delivery-semantics.md`。
+
+## 下一步：NLE Delivery Adapter
+
+下一阶段不再增加新的审核状态，而是让剪辑软件安全消费 `delivery.v1`：
+
+1. 定义 Final Cut Pro Rating / Keyword 映射；
+2. 在独立测试 FCPXML fixture 上实现结构化写入；
+3. 验证 multicam / asset-clip / ref-clip / range round-trip；
+4. 输出独立 `mirrororder-delivery.fcpxml`，绝不覆盖 source；
+5. 验证真实 FCP 导入行为后，再在 App 暴露正式“导出到 Final Cut Pro”；
+6. Premiere / Resolve 后续复用同一 `delivery.v1`，不得另造审核权威顺序。
 
 ## 不允许
 
-- 不允许把自动归集当作 Keep / Best。
+- 不允许把自动归集伪装成 Final Editorial Decision。
 - 不允许把个人意见直接当最终决定。
 - 不允许 Editorial Decision 根据多数票自动产生。
 - 不允许 stale revision 覆盖更新后的最终决定。
+- 不允许同名审核人因为昵称相同而覆盖彼此意见。
 - 不允许 `editorial.json` 保存设备绝对媒体路径、embedding、API Key 或 runtime 配置。
-- 不允许因为协作层破坏 AppKit native drag、原始 FCPXML 或既有人工剧本归集权威。
-- 在 Delivery Semantics 专门迁移完成前，不允许新 Editorial Decision 静默改变既有交付结果。
+- 不允许因为协作/交付层破坏 AppKit native drag、原始 FCPXML 或既有人工剧本归集权威。
+- 不允许任何 NLE adapter 重新定义 Best / Keep / Reject 的权威顺序。
