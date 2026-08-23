@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from threading import Thread
 from typing import Any
 from urllib.parse import parse_qs
@@ -71,7 +70,7 @@ def install_semantic_runtime() -> None:
     if _INSTALLED:
         return
 
-    from . import assistant_orchestrator, model_registry, tasks as tasks_module, web_server
+    from . import model_registry, tasks as tasks_module, web_server
     from .agent_tools import AgentToolRegistry
     from .assistant_orchestrator import AssistantOrchestrator
 
@@ -97,7 +96,9 @@ def install_semantic_runtime() -> None:
             tools.project_id,
             tools.config,
         )
-        return safe_search_payload(searcher.search(query, limit=limit, sources=sources))
+        return safe_search_payload(
+            searcher.search(query, limit=limit, sources=sources, refresh=False)
+        )
 
     def answer_with_semantic(self: AssistantOrchestrator, message: str) -> dict[str, Any]:
         text = str(message or "").strip()[:3000]
@@ -220,7 +221,7 @@ def install_semantic_runtime() -> None:
 
         Thread(target=refresh, daemon=True, name=f"mirror-semantic-{project_id}").start()
 
-    def make_handler_with_semantic(service: Any, web_root: Path):
+    def make_handler_with_semantic(service: Any, web_root):
         BaseHandler = original_make_handler(service, web_root)
 
         class Handler(BaseHandler):
@@ -243,13 +244,17 @@ def install_semantic_runtime() -> None:
                     and parts[:3] == ["api", "v1", "projects"]
                     and parts[4] == "semantic-search"
                 ):
+                    self._local_only()
                     project_id = parts[3]
                     text, limit, sources = self._search_parameters(parsed)
                     if not text:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "语义搜索内容不能为空")
-                    payload = _searcher(service, project_id).search(text, limit=limit, sources=sources)
-                    if self.client_address[0] not in {"127.0.0.1", "::1"}:
-                        payload = safe_search_payload(payload)
+                    payload = _searcher(service, project_id).search(
+                        text,
+                        limit=limit,
+                        sources=sources,
+                        refresh=True,
+                    )
                     self._send_json(payload)
                     return
                 return super()._app_get(parsed)
@@ -267,7 +272,12 @@ def install_semantic_runtime() -> None:
                     if not text:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "语义搜索内容不能为空")
                     payload = safe_search_payload(
-                        _searcher(service, project_id).search(text, limit=limit, sources=sources)
+                        _searcher(service, project_id).search(
+                            text,
+                            limit=limit,
+                            sources=sources,
+                            refresh=False,
+                        )
                     )
                     service.tokens.audit(agent, "read:semantic-search", project_id)
                     self._send_json(payload)
