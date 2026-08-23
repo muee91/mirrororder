@@ -1,0 +1,38 @@
+name: MirrorOrder CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test runner
+        run: python -m pip install --upgrade pip pytest
+      - name: Compile Python
+        run: python -m py_compile src/script_organizer/*.py tests/*.py
+      - name: Run tests
+        run: python -m pytest -q
+
+  macos-app-smoke:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Python
+        run: python3 -m py_compile src/script_organizer/*.py tests/*.py
+      - name: Build app
+        run: zsh macos-app/build_app.sh
+      - name: Verify app bundle
+        run: |
+          test -x '镜序.app/Contents/MacOS/MaterialWorkspace'
+          file '镜序.app/Contents/MacOS/MaterialWorkspace'
+          plutil -lint '镜序.app/Contents/Info.plist'
+          codesign --verify --deep --strict '镜序.app'
