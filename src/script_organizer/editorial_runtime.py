@@ -154,6 +154,8 @@ def install_editorial_runtime() -> None:
     # module-level projection bindings include camera overrides and auxiliary
     # media. Assembly remains preview-only. Assistant sits on top without
     # gaining review, Editorial Decision, Delivery or FCPXML write authority.
+    # Semantic Retrieval installs last because it wraps the finished assistant
+    # and task runtime with read-only retrieval grounding.
     from .audit_runtime import install_audit_runtime
     from .script_supervisor_runtime import install_script_supervisor_runtime
     from .media_role_runtime import install_media_role_runtime
@@ -166,8 +168,10 @@ def install_editorial_runtime() -> None:
     from .rough_cut_runtime import install_rough_cut_runtime
     from .assembly_runtime import install_assembly_runtime
     from .assistant_runtime import install_assistant_runtime
+    from .semantic_runtime import install_semantic_runtime
 
     install_coverage_runtime()
     install_rough_cut_runtime()
     install_assembly_runtime()
     install_assistant_runtime()
+    install_semantic_runtime()
