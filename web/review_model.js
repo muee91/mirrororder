@@ -5,26 +5,11 @@
   if (window.webkit?.messageHandlers?.mirrorOrder) return;
   if (window.__mirrorOrderReviewModelInstalled) return;
   window.__mirrorOrderReviewModelInstalled = true;
-  document.documentElement.classList.add('team-review');
 
   const legacyFetchJson = fetchJson;
   const legacySwitchProject = switchProject;
   let switchingProject = false;
   let cachedSwitchReview = null;
-
-  function stripProductionControls() {
-    for (const selector of [
-      '#replace-project-script',
-      '#timeline-toggle',
-      '#timeline-panel',
-    ]) {
-      document.querySelector(selector)?.remove();
-    }
-  }
-
-  const productionObserver = new MutationObserver(stripProductionControls);
-  productionObserver.observe(document.documentElement, {childList: true, subtree: true});
-  stripProductionControls();
 
   function flattenScript(model) {
     const rows = [];
@@ -148,6 +133,7 @@
     state.segmentMap = new Map(allSegments().map((segment) => [segment.segment_id, segment]));
     state.analysisRevision = revisions.analysis || state.analysisRevision;
     state.reviewRevision = Number(state.review.revision || revisions.review || 0);
+    state.editorialRevision = Number(revisions.editorial || 0);
   }
 
   fetchJson = async function reviewModelFetchJson(url, options = {}) {
@@ -174,7 +160,6 @@
     $('#analysis-status').textContent = `${state.project.stats?.groups || model.summary?.take_groups || 0}组 · ${state.project.stats?.clips || 0}条素材`;
     renderContent();
     focusRequestedGroup();
-    stripProductionControls();
     if (showNotice) {
       $('#update-banner').hidden = false;
       playUpdateSound();
@@ -189,7 +174,40 @@
     } finally {
       switchingProject = false;
       cachedSwitchReview = null;
-      stripProductionControls();
     }
   };
+
+  // Team Web polls one compact state endpoint, then reloads the authoritative
+  // review.v1 projection whenever production analysis, legacy review, or the
+  // new collaboration revision changes. This keeps opinions live without
+  // teaching the browser how editorial.json is stored internally.
+  pollState = async function reviewModelPollState() {
+    try {
+      const next = await legacyFetchJson(projectApi('/state'));
+      const analysisChanged = Boolean(
+        next.analysis_revision && next.analysis_revision !== state.analysisRevision
+      );
+      const reviewChanged = Number(next.review_revision || 0) !== Number(state.reviewRevision || 0);
+      const editorialChanged = Number(next.editorial_revision || 0) !== Number(state.editorialRevision || 0);
+      if (analysisChanged || reviewChanged || editorialChanged) {
+        await reloadAnalysis(analysisChanged);
+        if (reviewChanged) {
+          const actor = latestReviewActor(state.review);
+          if (actor && actor !== state.actor) showToast(`${actor} 的修改已同步`);
+        }
+      }
+      setCollabStatus('协作已连接', true);
+    } catch (_error) {
+      setCollabStatus('协作连接中断', false);
+    }
+  };
+
+  // Production-only extensions can still be present in the shared static
+  // bundle for the native App. Remove their entry points from every ordinary
+  // browser, including a browser opened on the Host Mac itself.
+  requestAnimationFrame(() => {
+    document.querySelector('#replace-project-script')?.remove();
+    document.querySelector('#timeline-button')?.remove();
+    document.querySelector('#timeline-dialog')?.remove();
+  });
 })();
