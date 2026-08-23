@@ -167,7 +167,7 @@ class PerceptionIndexer:
         output_dir = self.frame_root / group_id / digest
         extracted = self.frame_extractor(media_path, source_start, source_end, count, output_dir)
         frames = []
-        for index, item in enumerate(extracted):
+        for item in extracted:
             path = Path(str(item.get("path", "")))
             if not path.is_file():
                 continue
@@ -186,6 +186,32 @@ class PerceptionIndexer:
                 }
             )
         return frames
+
+    def _replace_frames(self, group_id: str, frames: list[dict[str, Any]]) -> None:
+        previous = self.database.frames(self.project_id, group_id)
+        keep = {str(item.get("path", "")) for item in frames}
+        self.database.replace_frames(self.project_id, group_id, frames)
+        for item in previous:
+            old_path = Path(str(item.get("path", "")))
+            if str(old_path) in keep:
+                continue
+            try:
+                if old_path.is_file() and self.frame_root in old_path.parents:
+                    old_path.unlink()
+            except OSError:
+                pass
+
+    def _tier0_pending(self, groups: dict[str, dict[str, Any]], group_ids: list[str] | None) -> list[str]:
+        requested = {str(value) for value in (group_ids or []) if str(value)}
+        result = []
+        for group_id in groups:
+            if requested and group_id not in requested:
+                continue
+            cached = self.database.frames(self.project_id, group_id)
+            if any(Path(str(item.get("path", ""))).is_file() for item in cached):
+                continue
+            result.append(group_id)
+        return result
 
     def _semantic_context(self, group: dict[str, Any]) -> dict[str, Any]:
         matches = self._matches().get("groups", {})
@@ -249,10 +275,10 @@ class PerceptionIndexer:
             return {"status": "deferred", "reason": "项目尚未生成 material_index.json"}
         structure = self._sync_structure(index)
         groups = self._groups(index)
-        pending = self.database.pending_groups(
-            self.project_id,
-            semantic=(mode == "semantic"),
-            group_ids=group_ids,
+        pending = (
+            self._tier0_pending(groups, group_ids)
+            if mode == "tier0"
+            else self.database.pending_groups(self.project_id, semantic=True, group_ids=group_ids)
         )
         run_id = self.database.start_perception_run(self.project_id, mode)
         processed = 0
@@ -262,7 +288,10 @@ class PerceptionIndexer:
             total = len(pending)
             for group_id in pending:
                 if cancelled and cancelled():
-                    details = {"structure": structure, "pending": max(0, total - processed - failed)}
+                    details = {
+                        "structure": structure,
+                        "pending": max(0, total - processed - failed - unavailable),
+                    }
                     self.database.finish_perception_run(
                         run_id,
                         status="cancelled",
@@ -278,28 +307,37 @@ class PerceptionIndexer:
                 if mode == "tier0":
                     frames = self._extract_for_group(group, 1, "midpoint")
                     if frames:
-                        self.database.replace_frames(self.project_id, group_id, frames)
+                        self._replace_frames(group_id, frames)
                         processed += 1
                     else:
                         failed += 1
                 else:
-                    frames = self._extract_for_group(group, 3, "semantic_sample")
-                    if frames:
-                        self.database.replace_frames(self.project_id, group_id, frames)
-                    else:
-                        frames = self.database.frames(self.project_id, group_id)
-                    paths = [Path(str(item.get("path", ""))) for item in frames if Path(str(item.get("path", ""))).is_file()]
-                    if not paths or not self.semantic_provider.enabled:
+                    if not self.semantic_provider.enabled:
                         self.database.set_semantic(self.project_id, group_id, {}, "unavailable")
                         unavailable += 1
                     else:
-                        result = self.semantic_provider.describe(self._semantic_context(group), paths)
-                        if result is None:
-                            self.database.set_semantic(self.project_id, group_id, {}, "failed")
-                            failed += 1
+                        frames = [
+                            item
+                            for item in self.database.frames(self.project_id, group_id)
+                            if Path(str(item.get("path", ""))).is_file()
+                        ]
+                        if len(frames) < 3:
+                            extracted = self._extract_for_group(group, 3, "semantic_sample")
+                            if extracted:
+                                self._replace_frames(group_id, extracted)
+                                frames = extracted
+                        paths = [Path(str(item.get("path", ""))) for item in frames if Path(str(item.get("path", ""))).is_file()]
+                        if not paths:
+                            self.database.set_semantic(self.project_id, group_id, {}, "unavailable")
+                            unavailable += 1
                         else:
-                            self.database.set_semantic(self.project_id, group_id, result, "ready")
-                            processed += 1
+                            result = self.semantic_provider.describe(self._semantic_context(group), paths)
+                            if result is None:
+                                self.database.set_semantic(self.project_id, group_id, {}, "failed")
+                                failed += 1
+                            else:
+                                self.database.set_semantic(self.project_id, group_id, result, "ready")
+                                processed += 1
                 if progress:
                     progress(processed + failed + unavailable, total, group_id)
             details = {"structure": structure, "unavailable": unavailable}
