@@ -2,6 +2,8 @@
 
 镜序是后期制作工具，不是 AI 控制台。界面的首要目标是让用户快速理解当前制作对象、进度、异常和下一步操作；技术实现只在需要诊断时出现。
 
+工程落地与迁移阶段见 `docs/production-review-boundary.md`。如果旧 README、历史“工作台”文案或兼容层代码与这里的产品边界冲突，以本文件和该边界文档为当前产品权威。
+
 ## Product surfaces
 
 ### App — Production
