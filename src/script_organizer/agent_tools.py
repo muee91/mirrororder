@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .audit_engine import _analysis_revision
+from .audit_engine import _analysis_revision, _mapping_for_group
 from .audit_store import AuditStore
 from .automation_store import AutomationStore
 from .learning_dataset import write_learning_dataset
@@ -34,6 +34,24 @@ def _candidate_ids(candidate: dict[str, Any]) -> list[str]:
         [candidate.get("script_segment_id")] if candidate.get("script_segment_id") else []
     )
     return [str(value) for value in raw if str(value)]
+
+
+def _audit_freshness(
+    group: dict[str, Any],
+    automatic: dict[str, Any],
+    review: dict[str, Any],
+    audit_row: dict[str, Any],
+    current_analysis: str,
+) -> tuple[bool, bool]:
+    visual_current = bool(
+        audit_row
+        and str(audit_row.get("analysis_revision", "") or "") == current_analysis
+    )
+    if not visual_current:
+        return False, False
+    current_mapping = _mapping_for_group(review, automatic, group)
+    mapping_current = _as_dict(audit_row.get("mapping")) == current_mapping
+    return True, mapping_current
 
 
 class AgentToolRegistry:
@@ -86,6 +104,7 @@ class AgentToolRegistry:
         review = ReviewStore(self.config.output_dir / "review.json").load()
         audit = _as_dict(AuditStore(self.config.output_dir).load().get("groups"))
         placements = _as_dict(review.get("placements"))
+        current_analysis = _analysis_revision(self.config.output_dir)
         rows: list[dict[str, Any]] = []
         for group in _as_list(index.get("groups")):
             if not isinstance(group, dict):
@@ -108,8 +127,27 @@ class AgentToolRegistry:
             manual_ids = [str(value) for value in _as_list(manual.get("script_segment_ids")) if str(value)]
             top_ids = _candidate_ids(first)
             audit_row = _as_dict(audit.get(group_id))
-            judge = _as_dict(audit_row.get("judge"))
-            issues = [item for item in _as_list(audit_row.get("issues")) if isinstance(item, dict)]
+            visual_current, mapping_current = _audit_freshness(
+                group,
+                automatic,
+                review,
+                audit_row,
+                current_analysis,
+            )
+            if mapping_current:
+                judge = _as_dict(audit_row.get("judge"))
+                issues = [item for item in _as_list(audit_row.get("issues")) if isinstance(item, dict)]
+                role_suggestions = [
+                    item for item in _as_list(audit_row.get("role_suggestions"))
+                    if isinstance(item, dict) and item.get("role_name")
+                ]
+            else:
+                # Mapping-sensitive AI output must never survive a human mapping
+                # change in the assistant queue. Media-derived shot intelligence
+                # remains available through review.v1 / inspect_take instead.
+                judge = {}
+                issues = []
+                role_suggestions = []
             codes = {str(item.get("code", "") or "") for item in issues}
             priority = 0
             reasons: list[str] = []
@@ -137,10 +175,6 @@ class AgentToolRegistry:
             if not first:
                 priority = max(priority, 84)
                 reasons.append("no_candidate")
-            role_suggestions = [
-                item for item in _as_list(audit_row.get("role_suggestions"))
-                if isinstance(item, dict) and item.get("role_name")
-            ]
             if role_suggestions:
                 priority = max(priority, 38)
                 reasons.append("role_candidate")
@@ -152,6 +186,8 @@ class AgentToolRegistry:
                     "priority": priority,
                     "reasons": list(dict.fromkeys(reasons)),
                     "automatic_status": status,
+                    "audit_visual_current": visual_current,
+                    "audit_mapping_stale": bool(visual_current and not mapping_current),
                     "candidate": {
                         "candidate_id": str(first.get("candidate_id", "") or ""),
                         "script_segment_ids": top_ids,
@@ -183,21 +219,42 @@ class AgentToolRegistry:
         if group is None:
             raise KeyError(target)
         matches = _as_dict(_read(self.config.output_dir / "matches.json").get("groups"))
-        automatic = _as_dict(AutomationStore(self.config.output_dir).load().get("groups")).get(target, {})
+        automation_groups = _as_dict(AutomationStore(self.config.output_dir).load().get("groups"))
+        automatic = _as_dict(automation_groups.get(target))
+        review = ReviewStore(self.config.output_dir / "review.json").load()
         audit = _as_dict(AuditStore(self.config.output_dir).load().get("groups")).get(target, {})
+        audit_row = _as_dict(audit)
+        visual_current, mapping_current = _audit_freshness(
+            group,
+            automatic,
+            review,
+            audit_row,
+            _analysis_revision(self.config.output_dir),
+        )
+        audit_payload: dict[str, Any] = {
+            "available": bool(audit_row),
+            "visual_current": visual_current,
+            "mapping_current": mapping_current,
+            "mapping_stale": bool(visual_current and not mapping_current),
+            "shot_intelligence": _as_dict(audit_row.get("shot_intelligence")) if visual_current else {},
+        }
+        if mapping_current:
+            audit_payload.update(
+                {
+                    "judge": _as_dict(audit_row.get("judge")),
+                    "issues": _as_list(audit_row.get("issues")),
+                    "rough_cut": _as_dict(audit_row.get("rough_cut")),
+                    "role_suggestions": _as_list(audit_row.get("role_suggestions")),
+                }
+            )
         return {
             "group_id": target,
             "kind": str(group.get("kind", "") or ""),
             "cameras": [str(value) for value in _as_list(group.get("cameras")) if str(value)],
             "duration": float(group.get("duration", 0) or 0),
             "candidates": _as_list(_as_dict(matches.get(target)).get("candidates"))[:5],
-            "automatic": _as_dict(automatic),
-            "audit": {
-                "judge": _as_dict(_as_dict(audit).get("judge")),
-                "issues": _as_list(_as_dict(audit).get("issues")),
-                "rough_cut": _as_dict(_as_dict(audit).get("rough_cut")),
-                "role_suggestions": _as_list(_as_dict(audit).get("role_suggestions")),
-            },
+            "automatic": automatic,
+            "audit": audit_payload,
         }
 
     def model_status(self) -> dict[str, Any]:
