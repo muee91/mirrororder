@@ -10,7 +10,7 @@ from typing import Any
 
 
 SERVER_NAME = "script-material-platform"
-SERVER_VERSION = "1.1.0"
+SERVER_VERSION = "1.2.0"
 AGENT_TASK_TYPES = [
     "prepare_project",
     "multicam_sync",
@@ -82,10 +82,29 @@ TOOLS = [
     },
     {
         "name": "search",
-        "description": "搜索项目内素材文件名、路径、剧本或现有 ASR 证据。",
+        "description": "按素材文件名、剧本或已有 ASR 证据做确定性文本搜索。适合精确名称和已知台词。",
         "inputSchema": {
             "type": "object",
             "properties": {"project_id": {"type": "string"}, "query": {"type": "string"}},
+            "required": ["project_id", "query"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "semantic_search",
+        "description": "只读搜索项目的画面描述、对白与人工场记。可使用设备已建语义向量并自动降级为关键词索引；不会触发新视觉推理或写审核结论。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string"},
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 60},
+                "sources": {
+                    "type": "array",
+                    "items": {"enum": ["visual", "speech", "slate"]},
+                    "uniqueItems": True,
+                },
+            },
             "required": ["project_id", "query"],
             "additionalProperties": False,
         },
@@ -160,6 +179,21 @@ def _tool_call(client: GatewayClient, name: str, arguments: dict[str, Any]) -> d
     if name == "search":
         query = urllib.parse.urlencode({"q": str(arguments.get("query", ""))})
         return _result(client.request("GET", client.scoped_path(f"/api/agent/v1/projects/{project_id}/search?{query}")))
+    if name == "semantic_search":
+        sources = arguments.get("sources", [])
+        params = {
+            "q": str(arguments.get("query", "")),
+            "limit": max(1, min(60, int(arguments.get("limit", 16) or 16))),
+        }
+        if isinstance(sources, list) and sources:
+            params["sources"] = ",".join(str(value) for value in sources if str(value))
+        query = urllib.parse.urlencode(params)
+        return _result(
+            client.request(
+                "GET",
+                client.scoped_path(f"/api/agent/v1/projects/{project_id}/semantic-search?{query}"),
+            )
+        )
     if name == "get_evidence":
         group_id = urllib.parse.quote(str(arguments.get("group_id", "")), safe="")
         return _result(client.request("GET", client.scoped_path(f"/api/agent/v1/projects/{project_id}/evidence/{group_id}")))
