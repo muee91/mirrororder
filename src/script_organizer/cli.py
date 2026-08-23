@@ -171,10 +171,13 @@ def main(argv: list[str] | None = None) -> int:
         return _submit_and_wait(workspace, args.project_id, "auto_resolve")
 
     if args.command == "media-scan":
+        store = DeviceMediaStore()
         index = _project_index(workspace, args.project_id)
-        if not index:
-            raise SystemExit("项目还没有 material_index.json；请先在有源素材的机器完成 analyze")
-        summary = DeviceMediaStore().scan(workspace.workspace_id, args.project_id, index, args.root)
+        summary = (
+            store.scan(workspace.workspace_id, args.project_id, index, args.root)
+            if index
+            else store.probe_roots(workspace.workspace_id, args.project_id, args.root)
+        )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
@@ -187,10 +190,11 @@ def main(argv: list[str] | None = None) -> int:
             if not project_id:
                 continue
             index = _project_index(workspace, project_id)
-            if not index:
-                summaries[project_id] = {"error": "项目还没有 material_index.json"}
-                continue
-            summaries[project_id] = store.scan(workspace.workspace_id, project_id, index, args.root)
+            summaries[project_id] = (
+                store.scan(workspace.workspace_id, project_id, index, args.root)
+                if index
+                else store.probe_roots(workspace.workspace_id, project_id, args.root)
+            )
         print(json.dumps({"projects": summaries}, ensure_ascii=False, indent=2))
         return 0
 
