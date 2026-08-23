@@ -16,9 +16,11 @@ def _counts(payload: dict[str, Any]) -> dict[str, int]:
     for row in opinion_rows.values():
         if not isinstance(row, dict):
             continue
-        actors = row.get("actors", {}) if isinstance(row.get("actors", {}), dict) else {}
-        opinions += len(actors)
-        reviewers.update(str(actor) for actor in actors if str(actor))
+        reviewer_rows = row.get("reviewers", {}) if isinstance(row.get("reviewers", {}), dict) else {}
+        opinions += len(reviewer_rows)
+        for reviewer_key, opinion in reviewer_rows.items():
+            if isinstance(opinion, dict):
+                reviewers.add(str(opinion.get("reviewer_id", "") or reviewer_key))
     return {
         "opinions": opinions,
         "reviewers": len(reviewers),
@@ -63,7 +65,6 @@ def install_editorial_runtime() -> None:
                 state = {}
             state["individual_opinions"] = collaboration["opinions"]
             state["editorial_decision"] = collaboration["decision"]
-            # Keep the Phase-2 singular placeholder out of the public contract.
             state.pop("individual_opinion", None)
             take["editorial_state"] = state
         payload.setdefault("revisions", {})["editorial"] = int(editorial.get("revision", 0) or 0)
@@ -76,7 +77,7 @@ def install_editorial_runtime() -> None:
         )
         payload.setdefault("summary", {})["collaboration"] = counts
         payload.setdefault("review_state", {})["editorial"] = {
-            "version": int(editorial.get("version", 1) or 1),
+            "version": int(editorial.get("version", 2) or 2),
             "revision": int(editorial.get("revision", 0) or 0),
             "updated_at": str(editorial.get("updated_at", "") or ""),
             "opinions": editorial.get("opinions", {}) if isinstance(editorial.get("opinions", {}), dict) else {},
