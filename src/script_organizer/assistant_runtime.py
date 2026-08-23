@@ -235,11 +235,18 @@ def install_assistant_runtime() -> None:
                     if parts[5] == "message":
                         self._send_json(assistant.answer(str(body.get("message", "") or "")))
                         return
-                if (
+
+                review_write = (
                     len(parts) == 5
                     and parts[:3] == ["api", "v1", "projects"]
                     and parts[4] == "review"
-                ):
+                )
+                proposal_apply = (
+                    len(parts) == 6
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4:] == ["proposals", "apply"]
+                )
+                if review_write or proposal_apply:
                     project_id = parts[3]
                     result = super()._app_post(parsed)
                     Thread(
