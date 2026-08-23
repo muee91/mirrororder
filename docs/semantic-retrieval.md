@@ -9,7 +9,7 @@
 镜序已有三类高价值证据：
 
 1. **画面证据**：Take Perception / `TakeSemanticProvider` 对少量抽样帧生成的结构化描述。
-2. **对白证据**：现有 ASR cache 与 Take 片内范围裁切后的转写。
+2. **对白证据**：现有 ASR cache 与 Take 片内范围裁切后的转写 segment。
 3. **人工生产证据**：`script_supervisor.v2` 电子场记记录、人工可用范围与备注。
 
 此前这些证据存在于不同读模型里，镜序助理回答问题时主要收到项目摘要、异常队列与若干场记，并没有一个“用户问题 → 相关素材证据”的统一召回层。
@@ -18,14 +18,14 @@
 
 ```text
 已有生产证据
-  ├─ visual semantic JSON
-  ├─ ASR transcript
+  ├─ visual semantic JSON            Take 级
+  ├─ ASR transcript segments         对白片段级
   └─ script supervisor
         │
         ▼
 ProjectSemanticIndexer
   ├─ visual document
-  ├─ speech document
+  ├─ speech segment documents
   └─ slate document
         │
         ├─ FTS / trigram 文本索引       始终可用或降级 LIKE
@@ -42,7 +42,7 @@ RRF 风格融合排序
         │
         ├─ App「找素材」
         ├─ Host read-only API
-        ├─ Agent read-only API
+        ├─ Agent read-only API / MCP
         └─ 镜序助理 grounding context
 ```
 
@@ -58,7 +58,7 @@ RRF 风格融合排序
 
 镜序没有直接照搬“全片一次 VLM 分镜”或“新项目默认全量视觉模型扫描”，原因是镜序已有更严格的生产边界：视觉推理必须是稀疏、受预算控制、可缓存的增强证据，不能把项目准备成本升级成全素材 VLM 扫描。
 
-因此当前 `ProjectSemanticIndexer.refresh()` **只索引已经存在的证据，不触发新的 VLM 推理**。深度视觉描述仍由 `PerceptionIndexer(mode="semantic")` / `evidence_extract` 等已有 bounded 流程产生。
+因此当前 `ProjectSemanticIndexer.refresh()` **只索引已经存在的证据，不触发新的 VLM 或 ASR 推理**。深度视觉描述仍由 `PerceptionIndexer(mode="semantic")` / `evidence_extract` 等已有 bounded 流程产生。
 
 ## 3. 三类语义文档
 
@@ -66,7 +66,7 @@ RRF 风格融合排序
 
 来源：设备本地 `takes.semantic_json`，只有 `semantic_status=ready` 才进入索引。
 
-当前可检索字段：
+当前粒度仍然是 **逻辑 Take 级**，可检索字段包括：
 
 - `summary`
 - `description`
@@ -92,9 +92,45 @@ RRF 风格融合排序
 
 ### 3.2 speech
 
-来源：当前设备可解析媒体对应的 ASR cache。
+来源：当前设备可解析媒体对应的**既有 ASR cache**。
 
-Indexer 按逻辑 Take 的各机位片内范围读取 transcript，去掉完全重复文本，再形成 Take 级对白文档。SQLite 中只保存 `group_id / clip_id / media_id` 等身份，不保存 `/Volumes/...` 等设备绝对路径。
+当前索引粒度已经升级为 ASR segment：
+
+```text
+源文件 ASR segment 时间
+  ↓ slice_transcript(逻辑 Take 的 source_start/source_end)
+Take-relative start/end
+  ↓
+semantic speech document
+```
+
+每个结果保留：
+
+- `group_id`
+- `clip_id`
+- `media_id`
+- `start / end`（相对逻辑 Take / 当前 member 的片内范围）
+- `metadata.precision = asr_segment`
+- `metadata.time_basis = take_relative`
+- `metadata.camera`
+- `metadata.transcript_backend`
+
+同步多机位常常会在 A/B/C 缓存中出现同一句、同一时刻的重复转写。Indexer 使用现有 B/C/A 收音优先启发式，并只折叠**文本相同且时间近似重合**的多机位副本；同一句在稍后再次说出仍保留为独立 segment。
+
+老缓存如果只有整段 `text`、没有 segment 时间戳，则保留 `take_fallback` 文档，不因为升级索引而失去原有搜索能力。
+
+App 点击对白结果时：
+
+```text
+找到 group + clip
+→ selectMember
+→ member.source_start + result.start
+→ player.currentTime
+```
+
+因此“定位对白”可以落到实际证据时间，而不是只打开整组 Take。
+
+SQLite 中只保存项目身份与片内时间，不保存 `/Volumes/...` 等设备绝对路径。
 
 ### 3.3 slate
 
@@ -173,6 +209,8 @@ embedding  语义检索编码
 
 没有配置 embedding 模型时，产品界面显示“关键词模式”，而不是假装有语义向量能力。
 
+当前交接构建**不强行打包一个未经跨 Mac/中文召回验证的 embedding 模型**。本地固定 embedding runtime 属于下一阶段模型验收，而不是本次构建阻塞项。
+
 ## 6. 混合召回
 
 `SemanticSearcher` 执行：
@@ -194,11 +232,12 @@ visual / speech / slate evidence rows
 ```json
 {
   "group_id": "...",
+  "clip_id": "...",
   "source": "visual | speech | slate",
   "source_label": "画面 | 对白 | 场记",
   "snippet": "...",
-  "start": 0,
-  "end": 0
+  "start": 0.5,
+  "end": 1.7
 }
 ```
 
@@ -234,7 +273,7 @@ App 本机响应可以包含诊断级 encoder / refresh 信息；远程 Team Web
 
 如果语言模型不可用，助理不再只返回“模型未连接”，而是直接列出最高相关的画面 / 对白 / 场记证据，因此自然语言找素材在离线文本检索模式仍可用。
 
-## 8. API
+## 8. API / CLI / MCP
 
 Host / App：
 
@@ -254,9 +293,21 @@ Agent：
 GET /api/agent/v1/projects/{project_id}/semantic-search?q=...
 ```
 
-Agent 必须有 `read` scope。该 API 没有 POST 写入版本。
+CLI：
 
-`AgentToolRegistry.search_project_semantics()` 是只读 helper，**没有加入 `SAFE_ACTIONS`**，因此模型规划器不能借语义检索绕过生产工具 allowlist。
+```bash
+script-organizer semantic-search workspace.toml <project_id> "门口回头"
+```
+
+MCP tool：
+
+```text
+semantic_search
+```
+
+Agent 必须有 `read` scope。语义搜索没有写入版本，也没有通用 shell/exec 入口。
+
+`AgentToolRegistry.search_project_semantics()` 是只读 helper，**没有加入模型可执行生产动作的 `SAFE_ACTIONS`**，因此检索不能借助规划器绕过生产工具 allowlist。
 
 ## 9. App 产品面
 
@@ -266,9 +317,9 @@ Agent 必须有 `read` scope。该 API 没有 POST 写入版本。
 找素材
 [门口反应镜头 / 红色杯子 / 后面笑场           ][搜索]
 
-画面 · Take ...
-对白 · Take ...
-场记 · Take ...
+画面 · Take ...       [看片定位]
+对白 · Take ... 4.2s  [定位对白]
+场记 · Take ...       [看片定位]
 ```
 
 用户主界面只看制作语言，不出现 embedding / vector / cosine 等实现术语。
@@ -279,12 +330,12 @@ Agent 必须有 `read` scope。该 API 没有 POST 写入版本。
 
 索引刷新有两条入口：
 
-1. `prepare_project / incremental_analyze / transcribe / evidence_extract / auto_resolve` 完成后异步 refresh；
-2. 用户搜索 / 助理回答前执行一次增量 refresh，保证刚写的场记和已有视觉证据可被召回。
+1. `prepare_project / incremental_analyze / transcribe / evidence_extract / auto_resolve` 等相关生产结果完成后异步 refresh；
+2. 用户搜索 / 助理回答前执行一次增量 refresh，保证刚写的场记和已有视觉/对白证据可被召回。
 
 `content_fingerprint` 保证不重复写入未变化文档；已有向量在编码器暂时不可用时可保留。如果文本发生变化但编码失败，则不会拿旧文本向量冒充新内容。
 
-重要：refresh 不调用 VLM，因此它不会把普通搜索变成新的视觉分析任务。
+重要：refresh 不调用 VLM 或 ASR，因此它不会把普通搜索变成新的媒体分析任务。
 
 ## 11. 红线
 
@@ -296,7 +347,7 @@ Agent 必须有 `read` scope。该 API 没有 POST 写入版本。
 - 产生自动 Reject / Best；
 - 把 Audit 结论当作素材语义真值；
 - 把媒体绝对路径写进语义文档；
-- 因为开启搜索而全项目触发 VLM；
+- 因为开启搜索而全项目触发 VLM / ASR；
 - 在 Team Web 暴露 API Key、模型地址、模型名或本机路径；
 - 把检索排序分数展示成审核可信度。
 
@@ -304,12 +355,12 @@ Agent 必须有 `read` scope。该 API 没有 POST 写入版本。
 
 当前接口已经把 Encoder 与索引层解耦。后续若打包本地中文 embedding runtime，优先替换 `SemanticEncoder` 的 provider，而不改语义文档、搜索 API 或助理 contract。
 
-推荐顺序：
+本次交接已完成 **speech segment precision**，后续剩余顺序：
 
-1. 验证现有项目 FTS / ASR / 场记检索质量；
+1. 真机验证现有项目 FTS / ASR segment / 场记检索质量；
 2. 选择可商用、中文表现稳定的本地 embedding 模型与 ONNX/runtime；
-3. 固化 tokenizer + 模型版本 fingerprint；
-4. 增加离线 recall benchmark；
-5. 再考虑片段级而非 Take 级 visual segmentation。
+3. 固化 tokenizer + 模型版本 fingerprint，并增加离线 recall benchmark；
+4. 对视觉证据增加 bounded segment layer，而不是全项目无差别 VLM 扫描；
+5. 视觉 segment 稳定后再评估 image-to-image / fast visual lane 的真实产品价值。
 
 在这些验证完成前，不把 embedding 维数、具体模型品牌或“语义准确率”写死成产品承诺。
