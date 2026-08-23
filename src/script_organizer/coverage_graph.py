@@ -56,6 +56,22 @@ def _source_revision(
     ).hexdigest()[:20]
 
 
+def coverage_revision(project: Any) -> str:
+    """Cheap source fingerprint for polling without building the full graph."""
+    project.reload_if_changed()
+    review = ReviewStore(project.config.output_dir / "review.json").load()
+    editorial = EditorialStore(project.config.output_dir).load()
+    audit = AuditStore(project.config.output_dir).load()
+    automation = AutomationStore(project.config.output_dir).load()
+    return _source_revision(
+        _analysis_revision(project.config.output_dir),
+        review,
+        editorial,
+        audit,
+        automation,
+    )
+
+
 def _scene_index(script: dict[str, Any]) -> tuple[OrderedDict[str, dict[str, Any]], dict[str, str]]:
     scenes: OrderedDict[str, dict[str, Any]] = OrderedDict()
     segment_scene: dict[str, str] = {}
@@ -109,19 +125,42 @@ def _audit_freshness(
     return visual_current, mapping_current
 
 
+def _editorial_decision_index(editorial: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index final decisions once; Individual Opinions are deliberately ignored."""
+    result: dict[str, dict[str, Any]] = {}
+    for raw in _as_dict(editorial.get("decisions")).values():
+        decision = _as_dict(raw)
+        target = _as_dict(decision.get("target"))
+        group_id = str(target.get("group_id", "") or "")
+        if not group_id:
+            continue
+        bucket = result.setdefault(group_id, {"group": {}, "assignments": []})
+        safe = {
+            "state": str(decision.get("state", "") or ""),
+            "updated_at": str(decision.get("updated_at", "") or ""),
+        }
+        if str(target.get("kind", "") or "") == "assignment":
+            segment_id = str(target.get("segment_id", "") or "")
+            if segment_id:
+                bucket["assignments"].append({"segment_id": segment_id, **safe})
+        else:
+            bucket["group"] = safe
+    for bucket in result.values():
+        bucket["assignments"].sort(key=lambda item: (item["segment_id"], item["updated_at"]))
+    return result
+
+
 def _editorial_for_scene(
-    editorial: EditorialStore,
+    decisions: dict[str, dict[str, Any]],
     group_id: str,
     scene_segment_ids: set[str],
 ) -> dict[str, Any]:
-    collaboration = editorial.for_group(group_id)
-    decision = _as_dict(collaboration.get("decision"))
-    group_decision = _as_dict(decision.get("group"))
+    bucket = _as_dict(decisions.get(group_id))
+    group_decision = _as_dict(bucket.get("group"))
     assignments = [
         item
-        for item in _as_list(decision.get("assignments"))
-        if isinstance(item, dict)
-        and str(_as_dict(item.get("target")).get("segment_id", "")) in scene_segment_ids
+        for item in _as_list(bucket.get("assignments"))
+        if isinstance(item, dict) and str(item.get("segment_id", "")) in scene_segment_ids
     ]
     states = [str(item.get("state", "") or "") for item in assignments if item.get("state")]
     if assignments:
@@ -136,20 +175,8 @@ def _editorial_for_scene(
     return {
         "state": resolved,
         "source": source,
-        "group": {
-            "state": str(group_decision.get("state", "") or ""),
-            "actor": str(group_decision.get("actor", "") or ""),
-            "updated_at": str(group_decision.get("updated_at", "") or ""),
-        } if group_decision else {},
-        "assignments": [
-            {
-                "segment_id": str(_as_dict(item.get("target")).get("segment_id", "") or ""),
-                "state": str(item.get("state", "") or ""),
-                "actor": str(item.get("actor", "") or ""),
-                "updated_at": str(item.get("updated_at", "") or ""),
-            }
-            for item in assignments
-        ],
+        "group": group_decision,
+        "assignments": assignments,
     }
 
 
@@ -170,10 +197,10 @@ def _safe_angle(member: dict[str, Any], intelligence: dict[str, Any]) -> dict[st
         "coverage_role": str(intelligence.get("coverage_role", "unknown") or "unknown"),
         "visible_people": [
             str(value) for value in _as_list(intelligence.get("visible_people")) if str(value)
-        ],
+        ][:12],
         "technical_issues": [
             str(value) for value in _as_list(intelligence.get("technical_issues")) if str(value)
-        ],
+        ][:12],
     }
 
 
@@ -185,9 +212,10 @@ def build_coverage_graph(
 ) -> dict[str, Any]:
     """Build a scene-centric, read-only coverage graph for production planning.
 
-    The graph does not infer missing shots and does not turn Editorial Decision
-    into delivery authority. It only organizes existing mapping, shot evidence,
-    continuity evidence and explicit final editorial annotations.
+    The graph never infers a missing shot from absence and does not turn an
+    Editorial Decision into delivery authority. It only organizes existing
+    effective mapping, per-clip shot evidence, current continuity evidence and
+    explicit final editorial annotations.
     """
 
     project.reload_if_changed()
@@ -198,8 +226,8 @@ def build_coverage_graph(
     automation_groups = _as_dict(automation.get("groups"))
     audit = AuditStore(project.config.output_dir).load()
     audit_groups = _as_dict(audit.get("groups"))
-    editorial_store = EditorialStore(project.config.output_dir)
-    editorial = editorial_store.load()
+    editorial = EditorialStore(project.config.output_dir).load()
+    editorial_decisions = _editorial_decision_index(editorial)
     analysis_revision = _analysis_revision(project.config.output_dir)
 
     scenes, segment_scene = _scene_index(script)
@@ -211,6 +239,12 @@ def build_coverage_graph(
         if (not requested_scene or key == requested_scene)
         and (not requested_episode or _int(value.get("episode"), 0) == requested_episode)
     }
+    selected_episodes = {
+        _int(scenes[key].get("episode"), 0)
+        for key in selected_scene_ids
+        if key in scenes and _int(scenes[key].get("episode"), 0) > 0
+    }
+    global_scope = not requested_scene and not requested_episode
 
     scene_groups: dict[str, list[dict[str, Any]]] = {key: [] for key in selected_scene_ids}
     unplaced_group_ids: list[str] = []
@@ -226,49 +260,55 @@ def build_coverage_graph(
         segment_ids = [str(value) for value in _as_list(mapping.get("script_segment_ids")) if str(value)]
         mapped_scene_ids = list(dict.fromkeys(segment_scene[value] for value in segment_ids if value in segment_scene))
         if not mapped_scene_ids:
-            episode_ids = [_int(value) for value in _as_list(mapping.get("episode_ids")) if _int(value) > 0]
+            episode_ids = sorted({_int(value) for value in _as_list(mapping.get("episode_ids")) if _int(value) > 0})
             if episode_ids:
-                episode_only_groups.append(
-                    {
-                        "group_id": group_id,
-                        "episode_ids": sorted(set(episode_ids)),
-                        "mapping_source": str(mapping.get("source", "none") or "none"),
-                    }
-                )
-            else:
+                if global_scope or not selected_episodes or selected_episodes.intersection(episode_ids):
+                    episode_only_groups.append(
+                        {
+                            "group_id": group_id,
+                            "episode_ids": episode_ids,
+                            "mapping_source": str(mapping.get("source", "none") or "none"),
+                        }
+                    )
+            elif global_scope:
                 unplaced_group_ids.append(group_id)
+            continue
+
+        target_scene_ids = [value for value in mapped_scene_ids if value in selected_scene_ids]
+        if not target_scene_ids:
             continue
 
         audit_row = _as_dict(audit_groups.get(group_id))
         visual_current, mapping_current = _audit_freshness(audit_row, analysis_revision, mapping)
-        shot_angles = _as_dict(_as_dict(audit_row.get("shot_intelligence")).get("angles")) if visual_current else {}
+        shot_angles = (
+            _as_dict(_as_dict(audit_row.get("shot_intelligence")).get("angles"))
+            if visual_current else {}
+        )
         fresh_rough_cut = _as_dict(audit_row.get("rough_cut")) if mapping_current else {}
         fresh_issues = [
             item for item in _as_list(audit_row.get("issues"))
             if mapping_current and isinstance(item, dict)
         ]
+        members = [item for item in _as_list(group.get("members")) if isinstance(item, dict)]
+        members.sort(key=lambda item: (str(item.get("camera", "")), str(item.get("clip_id", ""))))
+        angles = [
+            _safe_angle(member, _as_dict(shot_angles.get(str(member.get("clip_id", "") or ""))))
+            for member in members
+        ]
+        continuity_risk = str(fresh_rough_cut.get("continuity_risk", "unknown") or "unknown")
+        continuity_issues = [
+            {
+                "code": "continuity_risk",
+                "severity": str(item.get("severity", "warning") or "warning"),
+                "detail": str(item.get("detail", "") or "")[:500],
+            }
+            for item in fresh_issues
+            if str(item.get("code", "") or "") == "continuity_risk"
+        ]
 
-        for mapped_scene_id in mapped_scene_ids:
-            if mapped_scene_id not in selected_scene_ids:
-                continue
+        for mapped_scene_id in target_scene_ids:
             scene = scenes[mapped_scene_id]
             scene_segment_ids = set(str(value) for value in _as_list(scene.get("segment_ids")) if str(value))
-            members = [item for item in _as_list(group.get("members")) if isinstance(item, dict)]
-            members.sort(key=lambda item: (str(item.get("camera", "")), str(item.get("clip_id", ""))))
-            angles = [
-                _safe_angle(member, _as_dict(shot_angles.get(str(member.get("clip_id", "") or ""))))
-                for member in members
-            ]
-            continuity_risk = str(fresh_rough_cut.get("continuity_risk", "unknown") or "unknown")
-            continuity_issues = [
-                {
-                    "code": "continuity_risk",
-                    "severity": str(item.get("severity", "warning") or "warning"),
-                    "detail": str(item.get("detail", "") or ""),
-                }
-                for item in fresh_issues
-                if str(item.get("code", "") or "") == "continuity_risk"
-            ]
             scene_groups[mapped_scene_id].append(
                 {
                     "group_id": group_id,
@@ -276,7 +316,11 @@ def build_coverage_graph(
                     "end": _float(group.get("end"), 0.0),
                     "duration": _float(group.get("duration"), 0.0),
                     "mapping_source": str(mapping.get("source", "none") or "none"),
-                    "mapping_status": str(mapping.get("status", "") or ""),
+                    "mapping_status": str(
+                        mapping.get("status", "")
+                        or mapping.get("mapping_status", "")
+                        or ("confirmed" if segment_ids else "")
+                    ),
                     "script_segment_ids": [value for value in segment_ids if value in scene_segment_ids],
                     "audit": {
                         "visual_current": visual_current,
@@ -292,7 +336,7 @@ def build_coverage_graph(
                     } if mapping_current else {},
                     "continuity_issues": continuity_issues,
                     "editorial_decision": _editorial_for_scene(
-                        editorial_store,
+                        editorial_decisions,
                         group_id,
                         scene_segment_ids,
                     ),
@@ -311,7 +355,12 @@ def build_coverage_graph(
             continue
         take_groups = scene_groups.get(current_scene_id, [])
         total_groups.update(str(item.get("group_id", "")) for item in take_groups if item.get("group_id"))
-        angles = [angle for group in take_groups for angle in _as_list(group.get("angles")) if isinstance(angle, dict)]
+        angles = [
+            angle
+            for group in take_groups
+            for angle in _as_list(group.get("angles"))
+            if isinstance(angle, dict)
+        ]
         total_angles += len(angles)
         known = [angle for angle in angles if str(angle.get("shot_type", "unknown")) != "unknown"]
         known_angles += len(known)
@@ -319,6 +368,11 @@ def build_coverage_graph(
             str(angle.get("coverage_role", "unknown") or "unknown")
             for angle in angles
             if str(angle.get("coverage_role", "unknown") or "unknown") != "unknown"
+        )
+        take_role_counts = Counter(
+            str(_as_dict(group.get("rough_cut")).get("coverage_role", "unknown") or "unknown")
+            for group in take_groups
+            if str(_as_dict(group.get("rough_cut")).get("coverage_role", "unknown") or "unknown") != "unknown"
         )
         shot_counts = Counter(
             str(angle.get("shot_type", "unknown") or "unknown")
@@ -346,7 +400,7 @@ def build_coverage_graph(
                 {
                     "code": "no_mapped_take",
                     "severity": "warning",
-                    "label": "场景尚无已确认或已自动完成的 Take 归集",
+                    "label": "场景当前没有有效归集 Take",
                 }
             )
         elif angles and not known:
@@ -392,6 +446,7 @@ def build_coverage_graph(
                     "known_shots": len(known),
                     "unknown_shots": max(0, len(angles) - len(known)),
                     "coverage_roles": dict(sorted(role_counts.items())),
+                    "take_coverage_roles": dict(sorted(take_role_counts.items())),
                     "shot_types": dict(sorted(shot_counts.items())),
                     "editorial_decisions": dict(sorted(editorial_counts.items())),
                     "continuity_risks": len(continuity),
@@ -403,9 +458,10 @@ def build_coverage_graph(
         )
 
     scene_rows.sort(key=lambda item: (item["episode"], item["script_order"]["start"], item["scene_id"]))
+    revision = _source_revision(analysis_revision, review, editorial, audit, automation)
     return {
         "contract": COVERAGE_CONTRACT,
-        "revision": _source_revision(analysis_revision, review, editorial, audit, automation),
+        "revision": revision,
         "project_id": str(getattr(project, "project_id", "") or ""),
         "revisions": {
             "analysis": analysis_revision,
@@ -437,6 +493,7 @@ def build_coverage_graph(
             "individual_opinions_used": False,
             "delivery_authority_changed": False,
             "missing_shots_are_not_inferred": True,
+            "candidate_only_mapping_used": False,
         },
     }
 
