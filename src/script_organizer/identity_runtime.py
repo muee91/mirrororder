@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import importlib.util
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import threading
-import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,9 +59,14 @@ SPEAKER_EMBEDDER = ModelArtifact(
     ),
     sha256="f86cd6c509f331f0e20b07bd48d1b2eb7de54202643401c4e84695ac861a0e5a",
     size_bytes=26534363,
-    license="Apache-2.0 ecosystem model",
+    license="Apache-2.0",
     source="k2-fsa/sherpa-onnx speaker-recongition-models",
 )
+
+_RUNTIME_PACKAGES = {
+    "face": ("cv2", "opencv-python==4.14.0.94"),
+    "speaker": ("sherpa_onnx", "sherpa-onnx==1.13.5"),
+}
 
 
 def _application_support_root() -> Path:
@@ -73,6 +80,22 @@ def identity_model_root() -> Path:
     return _application_support_root() / "models" / "identity"
 
 
+def identity_python_root() -> Path:
+    return _application_support_root() / "runtime" / "python-packages"
+
+
+def _activate_runtime_packages() -> None:
+    root = identity_python_root()
+    if not root.is_dir():
+        return
+    value = str(root)
+    if value not in sys.path:
+        # Keep optional packages ahead of global site-packages, but do not add a
+        # second numpy unless explicitly installed there (we use --no-deps).
+        sys.path.insert(0, value)
+    importlib.invalidate_caches()
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -82,18 +105,27 @@ def _sha256(path: Path) -> str:
 
 
 def _module(name: str) -> bool:
+    _activate_runtime_packages()
     try:
         return importlib.util.find_spec(name) is not None
     except (ImportError, ValueError):
         return False
 
 
-class IdentityRuntime:
-    """Device-local model lifecycle for actor and speaker identity features.
+def _pip_available() -> bool:
+    try:
+        return importlib.util.find_spec("pip") is not None
+    except (ImportError, ValueError):
+        return False
 
-    Model weights are fetched only after the corresponding device setting has
-    been enabled or the user explicitly prepares that feature. Build/refactor
-    time never downloads these artifacts.
+
+class IdentityRuntime:
+    """Device-local runtime/model lifecycle for actor and speaker identity.
+
+    Neither Python inference wheels nor ONNX weights are fetched at build time.
+    When the user explicitly prepares an enabled feature, missing optional wheels
+    are installed under MirrorOrder Application Support and model weights are
+    downloaded there with exact size + SHA-256 validation.
     """
 
     _lock = threading.RLock()
@@ -136,20 +168,65 @@ class IdentityRuntime:
     def dependency_status(kind: str) -> dict[str, Any]:
         if kind == "face":
             modules = {"numpy": _module("numpy"), "cv2": _module("cv2")}
-            return {
-                "available": all(modules.values()),
-                "modules": modules,
-                "commands": {},
-            }
-        if kind == "speaker":
+            commands: dict[str, bool] = {}
+            base_ready = modules["numpy"]
+            optional_ready = modules["cv2"]
+        elif kind == "speaker":
             modules = {"numpy": _module("numpy"), "sherpa_onnx": _module("sherpa_onnx")}
             commands = {"ffmpeg": bool(shutil.which("ffmpeg"))}
-            return {
-                "available": all(modules.values()) and all(commands.values()),
-                "modules": modules,
-                "commands": commands,
-            }
-        raise ValueError("identity kind 必须是 face 或 speaker")
+            base_ready = modules["numpy"] and commands["ffmpeg"]
+            optional_ready = modules["sherpa_onnx"]
+        else:
+            raise ValueError("identity kind 必须是 face 或 speaker")
+        installer = _pip_available()
+        return {
+            "available": bool(base_ready and optional_ready),
+            "installable": bool(base_ready and installer),
+            "installer": "pip" if installer else "",
+            "modules": modules,
+            "commands": commands,
+        }
+
+    @classmethod
+    def _install_optional_runtime(cls, kind: str) -> None:
+        module_name, package = _RUNTIME_PACKAGES[kind]
+        if _module(module_name):
+            return
+        if not _pip_available():
+            raise RuntimeError(f"当前 Python 没有 pip，无法自动安装 {package}")
+        root = identity_python_root()
+        root.mkdir(parents=True, exist_ok=True)
+        command = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-input",
+            "--only-binary=:all:",
+            "--no-deps",
+            "--upgrade",
+            "--target",
+            str(root),
+            package,
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=600,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(f"安装 {package} 失败：{error}") from error
+        if completed.returncode != 0:
+            tail = "\n".join((completed.stdout or "").splitlines()[-8:])
+            raise RuntimeError(f"安装 {package} 失败：{tail}"[:1600])
+        _activate_runtime_packages()
+        if not _module(module_name):
+            raise RuntimeError(f"{package} 已安装但模块 {module_name} 无法加载")
 
     @classmethod
     def _download(cls, kind: str, artifact: ModelArtifact) -> Path:
@@ -196,9 +273,13 @@ class IdentityRuntime:
     def prepare(cls, kind: str) -> dict[str, Any]:
         dependency = cls.dependency_status(kind)
         if not dependency["available"]:
-            missing = [name for name, ok in dependency["modules"].items() if not ok]
-            missing.extend(name for name, ok in dependency["commands"].items() if not ok)
-            raise RuntimeError("缺少本地识别运行时：" + ", ".join(missing))
+            if dependency["installable"]:
+                cls._install_optional_runtime(kind)
+                dependency = cls.dependency_status(kind)
+            if not dependency["available"]:
+                missing = [name for name, ok in dependency["modules"].items() if not ok]
+                missing.extend(name for name, ok in dependency["commands"].items() if not ok)
+                raise RuntimeError("缺少本地识别运行时：" + ", ".join(missing))
         with cls._lock:
             cls._errors[kind] = ""
         for artifact in cls.artifacts(kind):
@@ -270,20 +351,22 @@ class IdentityRuntime:
             status = "preparing"
         elif ready and dependency["available"]:
             status = "ready"
-        elif ready:
-            status = "missing_runtime"
         elif not dependency["available"]:
             status = "missing_runtime"
         else:
             status = "not_prepared"
         return {
             "kind": kind,
-            "available": bool(dependency["available"]),
+            # available means the App can make the feature ready without a
+            # developer intervention: either dependencies already exist or the
+            # pinned optional wheel can be installed into Application Support.
+            "available": bool(dependency["available"] or dependency["installable"]),
             "prepared": ready,
             "preparing": preparing,
             "status": status,
             "cache_dir": str(cls.model_dir(kind)),
             "cache_bytes": cache_bytes,
+            "python_runtime_dir": str(identity_python_root()),
             "dependencies": dependency,
             "artifacts": rows,
             "last_error": error,
@@ -296,4 +379,8 @@ class IdentityRuntime:
             "face": cls.public_kind("face"),
             "speaker": cls.public_kind("speaker"),
             "root": str(identity_model_root()),
+            "python_runtime_root": str(identity_python_root()),
         }
+
+
+_activate_runtime_packages()
