@@ -123,7 +123,9 @@ class FaceEmbeddingProvider:
                 if confidence < 0.80 or min(float(face[2]), float(face[3])) < 36:
                     continue
                 try:
-                    aligned = self.recognizer.alignCrop(image, face[:-1])
+                    # OpenCV's Python example passes the complete YuNet result
+                    # row to alignCrop, including the detector score column.
+                    aligned = self.recognizer.alignCrop(image, face)
                     embedding = self.recognizer.feature(aligned).flatten().astype(self.np.float32)
                 except Exception:
                     continue
@@ -322,7 +324,11 @@ class IdentityIndexer:
             3,
             self.identity_frame_root / group_id / digest,
         )
-        extracted = [Path(str(item.get("path", ""))) for item in rows if Path(str(item.get("path", ""))).is_file()]
+        extracted = [
+            Path(str(item.get("path", "")))
+            for item in rows
+            if Path(str(item.get("path", ""))).is_file()
+        ]
         return extracted or existing
 
     def _speaker_ranges(self, member: dict[str, Any], media_path: str) -> list[dict[str, Any]]:
@@ -376,7 +382,9 @@ class IdentityIndexer:
         width = len(vectors[0])
         if any(len(vector) != width for vector in vectors):
             return []
-        return _normalize([sum(vector[index] for vector in vectors) / len(vectors) for index in range(width)])
+        return _normalize(
+            [sum(vector[index] for vector in vectors) / len(vectors) for index in range(width)]
+        )
 
     def _identity_count(self, kind: str) -> int:
         with self.database.connection() as connection:
@@ -385,6 +393,17 @@ class IdentityIndexer:
                 (self.project_id, kind),
             ).fetchone()
         return int(row[0] or 0) if row else 0
+
+    def _identity_exists(self, identity_id: str, kind: str) -> bool:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT 1 FROM identities
+                WHERE project_id=? AND identity_id=? AND kind=?
+                """,
+                (self.project_id, identity_id, kind),
+            ).fetchone()
+        return row is not None
 
     def _assign(
         self,
@@ -419,15 +438,19 @@ class IdentityIndexer:
                 digest = hashlib.sha1(_encode_embedding(vector)).hexdigest()[:18]
                 best_id = f"{kind}_{digest}"
                 if best_id not in clusters:
-                    created += 1
-                    label = ("人物候选 " if kind == "face" else "声音候选 ") + f"{created:02d}"
-                    self.database.upsert_identity(
-                        self.project_id,
-                        identity_id=best_id,
-                        kind=kind,
-                        label=label,
-                        metadata={"auto_cluster": True, "threshold": threshold},
-                    )
+                    # Explicit rebuilds can regenerate the same deterministic ID.
+                    # Never upsert an existing row here: it may carry a human
+                    # actor/role label that automatic clustering must preserve.
+                    if not self._identity_exists(best_id, kind):
+                        created += 1
+                        label = ("人物候选 " if kind == "face" else "声音候选 ") + f"{created:02d}"
+                        self.database.upsert_identity(
+                            self.project_id,
+                            identity_id=best_id,
+                            kind=kind,
+                            label=label,
+                            metadata={"auto_cluster": True, "threshold": threshold},
+                        )
                     clusters[best_id] = []
                 best_score = 1.0
             clusters.setdefault(best_id, []).append(vector)
@@ -459,8 +482,11 @@ class IdentityIndexer:
         selected = self._preferred_member(group)
         clip_id = str(selected[0].get("clip_id", "") or "") if selected else ""
         return self._assign(
-            "face", str(group.get("group_id", "")), observations,
-            clip_id=clip_id, threshold=self.face_threshold,
+            "face",
+            str(group.get("group_id", "")),
+            observations,
+            clip_id=clip_id,
+            threshold=self.face_threshold,
         )
 
     def _run_speaker(self, group: dict[str, Any]) -> int:
@@ -476,13 +502,22 @@ class IdentityIndexer:
             raise RuntimeError("说话人 provider 未初始化")
         observations = provider.extract(media_path, ranges)
         return self._assign(
-            "speaker", str(group.get("group_id", "")), observations,
-            clip_id=str(member.get("clip_id", "") or ""), threshold=self.speaker_threshold,
+            "speaker",
+            str(group.get("group_id", "")),
+            observations,
+            clip_id=str(member.get("clip_id", "") or ""),
+            threshold=self.speaker_threshold,
         )
 
     def _state_version(self, kind: str) -> str:
         if kind == "face":
-            return "face-v1|" + FACE_DETECTOR.sha256[:12] + "|" + FACE_RECOGNIZER.sha256[:12] + f"|{self.face_threshold:.3f}"
+            return (
+                "face-v1|"
+                + FACE_DETECTOR.sha256[:12]
+                + "|"
+                + FACE_RECOGNIZER.sha256[:12]
+                + f"|{self.face_threshold:.3f}"
+            )
         return "speaker-v1|" + SPEAKER_EMBEDDER.sha256[:12] + f"|{self.speaker_threshold:.3f}"
 
     def _state_key(self, kind: str, group_id: str) -> str:
@@ -490,7 +525,10 @@ class IdentityIndexer:
 
     def _already_indexed(self, kind: str, group_id: str) -> bool:
         with self.database.connection() as connection:
-            row = connection.execute("SELECT value FROM meta WHERE key=?", (self._state_key(kind, group_id),)).fetchone()
+            row = connection.execute(
+                "SELECT value FROM meta WHERE key=?",
+                (self._state_key(kind, group_id),),
+            ).fetchone()
         return bool(row and str(row[0]) == self._state_version(kind))
 
     def _mark_indexed(self, kind: str, group_id: str) -> None:
@@ -519,15 +557,23 @@ class IdentityIndexer:
         requested = {str(value) for value in (group_ids or []) if str(value)}
         force = bool(requested)
         ordered = [
-            group for group in groups.values()
+            group
+            for group in groups.values()
             if (not requested or str(group.get("group_id", "")) in requested)
             and (force or not self._already_indexed(kind, str(group.get("group_id", ""))))
         ]
-        ordered.sort(key=lambda row: (float(row.get("start", 0) or 0), str(row.get("group_id", ""))))
+        ordered.sort(
+            key=lambda row: (float(row.get("start", 0) or 0), str(row.get("group_id", "")))
+        )
         if not ordered:
             return {
-                "status": "completed", "kind": kind, "processed": 0,
-                "observations": 0, "failed": 0, "total": 0, "skipped_cached": True,
+                "status": "completed",
+                "kind": kind,
+                "processed": 0,
+                "observations": 0,
+                "failed": 0,
+                "total": 0,
+                "skipped_cached": True,
                 "intelligence": self.database.project_intelligence(self.project_id),
             }
         if kind == "face" and self.face_provider is None:
@@ -540,8 +586,11 @@ class IdentityIndexer:
         for group in ordered:
             if cancelled and cancelled():
                 return {
-                    "status": "cancelled", "kind": kind, "processed": processed,
-                    "observations": observations, "failed": failed,
+                    "status": "cancelled",
+                    "kind": kind,
+                    "processed": processed,
+                    "observations": observations,
+                    "failed": failed,
                 }
             group_id = str(group.get("group_id", ""))
             try:
