@@ -2,7 +2,7 @@
 """Generate a JianyingPro (CapCut) importable FCPXML 1.8 from audio-synced positions.
 
 剪映版仍是标准 FCPXML 1.8，只使用剪映当前能识别的 asset-clip 结构。
-素材 src 使用标准相对 URL，不写本机绝对路径。
+素材 src 使用标准相对 URL，并以 XML 所在 OUT_DIR 为基准。
 """
 import os, sys
 from urllib.parse import quote
@@ -14,6 +14,7 @@ from project_config import get_config
 cfg = get_config()
 WORK = cfg.WORK or "/tmp/syncwork"
 BASE = cfg.BASE or "/"
+OUTPUT_BASE = os.path.realpath(cfg.OUT_DIR or ".")
 EXPORT_BASE = os.path.realpath(cfg.manual.get("export_base") or BASE)
 FRAME_DEN = cfg.frame_den
 FRAME_TICKS = cfg.frame_ticks
@@ -37,10 +38,11 @@ def sec_to_ticks(s):
 
 def url_export(path):
     physical = os.path.realpath(os.path.join(BASE, path))
-    rel = os.path.relpath(physical, EXPORT_BASE)
-    if rel == os.pardir or rel.startswith(os.pardir + os.sep):
-        raise RuntimeError(f"素材不在 export_base 内，无法生成通用相对引用: {physical}")
-    return quote("./" + rel.replace(os.sep, "/"), safe="/:@-._~")
+    inside = os.path.commonpath([EXPORT_BASE, physical]) == EXPORT_BASE
+    if not inside:
+        raise RuntimeError(f"素材不在 export_base 内，拒绝写入 XML: {physical}")
+    rel = os.path.relpath(physical, OUTPUT_BASE).replace(os.sep, "/")
+    return quote(rel, safe="/:@-._~")
 
 
 def asset_block(aid, name, src, dur_ticks, fmt):
