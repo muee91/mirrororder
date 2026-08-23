@@ -30,6 +30,13 @@ def _as_list(value: object) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _candidate_ids(candidate: dict[str, Any]) -> list[str]:
+    ids = candidate.get("script_segment_ids") or (
+        [candidate.get("script_segment_id")] if candidate.get("script_segment_id") else []
+    )
+    return [str(value) for value in ids if str(value)]
+
+
 def _manual_ids(review: dict[str, Any], group: dict[str, Any]) -> list[str]:
     group_id = str(group.get("group_id", "") or "")
     parent = str(group.get("parent_group_id", "") or "")
@@ -46,8 +53,10 @@ def _manual_ids(review: dict[str, Any], group: dict[str, Any]) -> list[str]:
 def write_learning_dataset(config: ProjectConfig, audit: dict[str, Any]) -> dict[str, Any]:
     """Write replay-ready hard cases without media paths or model authority.
 
-    Human overrides and audit disagreements are especially valuable. The file
-    is an R&D dataset only; production matching never reads it.
+    Human overrides and audit disagreements are especially valuable. The raw
+    matcher top candidate is kept separately from auto_decisions because an
+    explicit human override can legitimately rewrite the latter to
+    ``human_override``. The file is R&D-only; production matching never reads it.
     """
 
     index = _read(config.output_dir / "material_index.json")
@@ -69,6 +78,11 @@ def write_learning_dataset(config: ProjectConfig, audit: dict[str, Any]) -> dict
         automatic = _as_dict(automation_groups.get(group_id))
         manual_ids = _manual_ids(review, group)
         automatic_ids = [str(value) for value in _as_list(automatic.get("script_segment_ids")) if str(value)]
+        row = _as_dict(match_groups.get(group_id))
+        raw_candidates = [candidate for candidate in _as_list(row.get("candidates")) if isinstance(candidate, dict)]
+        raw_candidates.sort(key=lambda candidate: float(candidate.get("total_score", 0) or 0), reverse=True)
+        top_candidate_ids = _candidate_ids(raw_candidates[0]) if raw_candidates else []
+
         audit_row = _as_dict(audit_groups.get(group_id))
         judge = _as_dict(audit_row.get("judge"))
         issue_codes = [
@@ -79,24 +93,20 @@ def write_learning_dataset(config: ProjectConfig, audit: dict[str, Any]) -> dict
         failure = _as_dict(audit_row.get("algorithm_feedback"))
         status = str(automatic.get("status", "") or "")
         human_override = bool(manual_ids)
-        mapping_conflict = bool(manual_ids and automatic_ids and set(manual_ids) != set(automatic_ids))
+        auto_conflict = bool(manual_ids and automatic_ids and set(manual_ids) != set(automatic_ids))
+        matcher_conflict = bool(manual_ids and top_candidate_ids and set(manual_ids) != set(top_candidate_ids))
         disagreement = str(judge.get("verdict", "")) == "disagree"
         hard_status = status in {"needs_review", "unresolved"}
-        if not (human_override or mapping_conflict or disagreement or hard_status):
+        if not (human_override or auto_conflict or matcher_conflict or disagreement or hard_status):
             continue
 
         candidates = []
-        row = _as_dict(match_groups.get(group_id))
-        for candidate in _as_list(row.get("candidates"))[:3]:
-            if not isinstance(candidate, dict):
-                continue
-            ids = candidate.get("script_segment_ids") or (
-                [candidate.get("script_segment_id")] if candidate.get("script_segment_id") else []
-            )
+        for candidate in raw_candidates[:3]:
+            ids = _candidate_ids(candidate)
             candidates.append(
                 {
                     "candidate_id": str(candidate.get("candidate_id", "") or ""),
-                    "script_segment_ids": [str(value) for value in ids if str(value)],
+                    "script_segment_ids": ids,
                     "confidence": str(candidate.get("confidence", "") or ""),
                     "total_score": float(candidate.get("total_score", 0) or 0),
                     "dialogue_score": float(candidate.get("dialogue_score", 0) or 0),
@@ -117,6 +127,10 @@ def write_learning_dataset(config: ProjectConfig, audit: dict[str, Any]) -> dict
                     "mapping_source": str(automatic.get("mapping_source", "") or ""),
                     "script_segment_ids": automatic_ids,
                     "confidence": float(automatic.get("confidence", 0) or 0),
+                },
+                "matcher_prediction": {
+                    "script_segment_ids": top_candidate_ids,
+                    "conflicts_with_human": matcher_conflict,
                 },
                 "human_expected": {
                     "script_segment_ids": manual_ids,
