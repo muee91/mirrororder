@@ -150,8 +150,10 @@ def install_editorial_runtime() -> None:
     web_server.make_handler = make_handler_with_editorial
     _INSTALLED = True
 
-    # Audit must wrap the already editorial-aware review model. It remains a
-    # shadow evidence layer and cannot change collaboration or delivery state.
+    # Audit wraps the editorial-aware review model; Assistant wraps the complete
+    # production read/runtime stack and may only execute allowlisted tools.
     from .audit_runtime import install_audit_runtime
+    from .assistant_runtime import install_assistant_runtime
 
     install_audit_runtime()
+    install_assistant_runtime()
