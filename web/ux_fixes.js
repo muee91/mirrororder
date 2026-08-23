@@ -184,10 +184,19 @@
     rows[next]?.scrollIntoView({block: 'nearest'});
   });
 
-  // Timeline and native file-drag features live in a separate extension so the
-  // core review UI remains small and deterministic.
-  const timelineScript = document.createElement('script');
-  timelineScript.src = '/timeline.js';
-  timelineScript.defer = true;
-  document.body.appendChild(timelineScript);
+  // Media availability is useful in both Review and Production, but the XML
+  // timeline/native-file layer belongs to the App. Keep the two capabilities
+  // separate instead of letting the legacy timeline bundle leak production UI
+  // into Team Web.
+  const deviceMediaScript = document.createElement('script');
+  deviceMediaScript.src = '/device_media.js';
+  deviceMediaScript.defer = true;
+  document.body.appendChild(deviceMediaScript);
+
+  if (window.webkit?.messageHandlers?.mirrorOrder) {
+    const timelineScript = document.createElement('script');
+    timelineScript.src = '/timeline.js';
+    timelineScript.defer = true;
+    document.body.appendChild(timelineScript);
+  }
 })();
