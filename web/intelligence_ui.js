@@ -14,7 +14,6 @@
   };
   let nativeAudit = null;
   let nativeRolesByGroup = new Map();
-  let nativeProjectId = '';
 
   function currentTake(groupId) {
     return (state.reviewModel?.take_groups || []).find((take) => take.group_id === groupId) || null;
@@ -139,12 +138,9 @@
     const intelligence = shotFor(group, member);
     const label = SHOT_LABELS[intelligence?.shot_type];
     const range = $('#player-range');
-    if (range && label && !range.dataset.shotDecorated) {
-      range.textContent = `${label} · ${range.textContent}`;
-      range.dataset.shotDecorated = '1';
-    } else if (range && !label) {
-      delete range.dataset.shotDecorated;
-    }
+    // baseRenderInspector rewrites player-range on every selection, therefore
+    // decorate it every time rather than retaining DOM-local cache flags.
+    if (range && label) range.textContent = `${label} · ${range.textContent}`;
     return result;
   };
 
@@ -181,7 +177,6 @@
     ]);
     if (state.projectId !== projectId) return;
     nativeAudit = audit;
-    nativeProjectId = projectId;
     nativeRolesByGroup = buildNativeRoleIndex(identities?.identities || []);
     state.auditRevision = Number(audit?.revision || 0);
     if (render) rerenderNativeIntelligence();
@@ -221,6 +216,12 @@
   }
 
   if (APP_CLIENT) {
+    const baseTaskLabel = taskLabel;
+    taskLabel = function intelligenceTaskLabel(task) {
+      if (task?.type === 'audit') return '素材审计';
+      return baseTaskLabel(task);
+    };
+
     const baseReloadAnalysis = reloadAnalysis;
     reloadAnalysis = async function intelligenceReloadAnalysis(...args) {
       const result = await baseReloadAnalysis(...args);
