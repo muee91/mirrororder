@@ -9,6 +9,7 @@ from typing import Any
 
 from .automation_store import AutomationStore
 from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
+from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .runtime_diagnostics import environment_payload
 from .workspace_db import WorkspaceDatabase
@@ -99,7 +100,11 @@ def _runtime_payload() -> dict[str, Any]:
     return {
         "local_vision_enabled": bool(settings.get("local_vision_enabled")),
         "local_vision_model": str(settings.get("local_vision_model", "") or ""),
+        "face_identity_enabled": bool(settings.get("face_identity_enabled")),
+        "speaker_identity_enabled": bool(settings.get("speaker_identity_enabled")),
+        "identity_processing_mode": str(settings.get("identity_processing_mode", "after_prepare")),
         "vision": runtime.public(),
+        "identity": IdentityRuntime.public(),
         "mlx_cache_bytes": _directory_bytes(root / "huggingface"),
         "model_root": str(root),
         "environment": environment_payload(),
@@ -180,8 +185,6 @@ def install_automation_runtime() -> None:
                 )
                 payload["intelligence"] = database.project_intelligence(project.project_id)
             except Exception:
-                # The local database is a rebuildable acceleration layer. A
-                # damaged or unavailable DB must not make review payloads fail.
                 payload["intelligence"] = {
                     "takes": 0,
                     "framed_takes": 0,
@@ -268,6 +271,14 @@ def install_automation_runtime() -> None:
                                 web_server.HTTPStatus.SERVICE_UNAVAILABLE,
                                 runtime.public().get("last_error") or "本地视觉运行时不可用",
                             )
+                    elif action == "prepare_identity":
+                        kind = str(payload.get("kind", "") or "")
+                        if kind not in {"face", "speaker"}:
+                            raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "身份识别类型必须是 face 或 speaker")
+                        save_runtime_settings({
+                            "face_identity_enabled" if kind == "face" else "speaker_identity_enabled": True
+                        })
+                        IdentityRuntime.prepare_async(kind)
                     elif action == "stop":
                         LocalVisionRuntime.stop()
                     else:
