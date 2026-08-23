@@ -68,13 +68,7 @@ def _confirmed_roles(
     project_id: str,
     group_id: str,
 ) -> dict[str, dict[str, float]]:
-    """Return human-confirmed role evidence scored by identity similarity.
-
-    observation.confidence can mean detector/diarization success. It is not the
-    probability that the observation belongs to the confirmed actor/speaker.
-    Automatic clustering stores that relationship as cluster_similarity, so the
-    rescue gate must use it when available.
-    """
+    """Return human-confirmed role evidence scored by identity similarity."""
 
     result: dict[str, dict[str, float]] = {"speaker": {}, "face": {}}
     with database.connection() as connection:
@@ -106,9 +100,6 @@ def _confirmed_roles(
         try:
             similarity = max(0.0, min(1.0, float(raw_similarity)))
         except (TypeError, ValueError):
-            # v1 indexes already wrote cluster_similarity. This fallback keeps
-            # manually-created/legacy local observations usable without making
-            # the shared matcher depend on a migration.
             similarity = observation_confidence
         identity_confidence = min(observation_confidence, similarity)
         result[kind][role] = max(result[kind].get(role, 0.0), identity_confidence)
@@ -152,16 +143,49 @@ def _support(
     }
 
 
+def _baseline_without_identity(decision: dict[str, Any]) -> dict[str, Any]:
+    """Restore a previously-derived identity decision to its pre-rescue state."""
+
+    evidence = dict(decision.get("evidence", {})) if isinstance(decision.get("evidence"), dict) else {}
+    stored = evidence.get("identity_baseline")
+    if str(decision.get("mapping_source", "")) == "identity_rescue" and isinstance(stored, dict):
+        restored = dict(stored)
+        restored_evidence = (
+            dict(restored.get("evidence", {}))
+            if isinstance(restored.get("evidence"), dict)
+            else {}
+        )
+        restored_evidence.pop("identity", None)
+        restored_evidence.pop("identity_baseline", None)
+        restored["evidence"] = restored_evidence
+        return restored
+
+    cleaned = dict(decision)
+    evidence.pop("identity", None)
+    evidence.pop("identity_baseline", None)
+    cleaned["evidence"] = evidence
+    return cleaned
+
+
+def _stored_baseline(decision: dict[str, Any]) -> dict[str, Any]:
+    baseline = dict(decision)
+    evidence = dict(baseline.get("evidence", {})) if isinstance(baseline.get("evidence"), dict) else {}
+    evidence.pop("identity", None)
+    evidence.pop("identity_baseline", None)
+    baseline["evidence"] = evidence
+    return baseline
+
+
 def apply_identity_rescue(
     config: ProjectConfig,
     automation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Apply device-local confirmed role evidence to ambiguous automation only.
+    """Apply reversible device-local role evidence to ambiguous automation only.
 
-    Shared deterministic matches.json is never modified. A confirmed speaker can
-    promote one already-existing matcher candidate when it is uniquely supported.
-    Face evidence is supporting context only. No identity evidence can override a
-    human mapping or a previously confirmed deterministic/AI mapping.
+    Shared deterministic matches.json is never modified. Every mapping promoted
+    by identity evidence keeps its pre-rescue decision so actor/role edits can
+    immediately re-evaluate or revoke that derived mapping. Human mappings and
+    deterministic/model confirmations remain outside this layer's authority.
     """
 
     store = AutomationStore(config.output_dir)
@@ -193,14 +217,22 @@ def apply_identity_rescue(
     match_groups = matches.get("groups", {}) if isinstance(matches.get("groups"), dict) else {}
     changed = False
 
-    for group_id, decision in list(groups.items()):
-        if not isinstance(decision, dict):
+    for group_id, raw_decision in list(groups.items()):
+        if not isinstance(raw_decision, dict):
             continue
+
+        decision = _baseline_without_identity(raw_decision)
+        if decision != raw_decision:
+            groups[group_id] = decision
+            changed = True
+
         if str(decision.get("status", "")) not in {"needs_review", "unresolved"}:
             continue
+
         roles = _confirmed_roles(database, project_id, group_id)
         if not roles["speaker"] and not roles["face"]:
             continue
+
         row = match_groups.get(group_id, {}) if isinstance(match_groups.get(group_id), dict) else {}
         candidates = [item for item in row.get("candidates", []) if isinstance(item, dict)]
         candidates = [item for item in candidates if _candidate_ids(item)]
@@ -228,6 +260,7 @@ def apply_identity_rescue(
             )
             if strong_speaker and unique and matcher_support:
                 ids = _candidate_ids(best)
+                updated["evidence"]["identity_baseline"] = _stored_baseline(decision)
                 updated.update(
                     {
                         "status": "ai_confirmed",
@@ -279,6 +312,7 @@ def apply_identity_rescue(
             if len(suggestions) == 1:
                 segment_id = suggestions[0]
                 segment = segment_by_id[segment_id]
+                updated["evidence"]["identity_baseline"] = _stored_baseline(decision)
                 updated.update(
                     {
                         "status": "needs_review",
@@ -291,7 +325,8 @@ def apply_identity_rescue(
                     }
                 )
                 updated["evidence"]["identity"]["context_suggestion"] = segment_id
-        if updated != decision:
+
+        if updated != groups.get(group_id):
             groups[group_id] = updated
             changed = True
 
