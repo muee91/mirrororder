@@ -27,6 +27,14 @@
     transition: '过场',
     unknown: '未分类',
   };
+  const sourceRoleLabels = {
+    sync_camera: '同步机位',
+    aerial: '航拍',
+    broll: '空镜',
+    gopro: 'GoPro',
+    insert: '细节',
+    custom: '辅助',
+  };
   const editorialLabels = {
     best: '最终最佳',
     keep: '最终保留',
@@ -80,6 +88,8 @@
     ];
     const roles = compactCounts(summary.coverage_roles, roleLabels, ['master', 'dialogue', 'reaction', 'insert', 'establishing', 'transition']);
     if (roles) parts.push(roles);
+    const auxiliary = Number(summary.auxiliary_media || 0);
+    if (auxiliary) parts.push(`辅助 ${auxiliary}`);
     const risks = Number(summary.continuity_risks || 0);
     if (risks) parts.push(`连续性 ${risks}`);
     return parts.join(' · ');
@@ -95,7 +105,8 @@
     const rows = asArray(group.angles).map((angle) => {
       const shot = shotLabels[String(angle.shot_type || 'unknown')] || '未识别';
       const role = roleLabels[String(angle.coverage_role || 'unknown')] || '';
-      return `${angle.camera || '?'} ${shot}${role && role !== '未分类' ? ` · ${role}` : ''}`;
+      const changed = angle.detected_camera && angle.detected_camera !== angle.camera ? ' · 人工机位' : '';
+      return `${angle.camera || '?'} ${shot}${role && role !== '未分类' ? ` · ${role}` : ''}${changed}`;
     });
     return rows.join('　');
   }
@@ -130,6 +141,28 @@
     `;
   }
 
+  function renderAuxiliary(scene) {
+    const rows = asArray(scene.auxiliary_media);
+    if (!rows.length) return '';
+    return `
+      <div class="coverage-auxiliary">
+        <div class="coverage-auxiliary-head"><strong>辅助素材</strong><span>独立于同步 Take · 不参与 Best 选择</span></div>
+        ${rows.map((row) => {
+          const sourceRole = String(row.source_role || 'custom');
+          const role = row.role_label || sourceRoleLabels[sourceRole] || sourceRole;
+          const camera = row.camera ? `机位 ${row.camera}` : '不参与同步';
+          return `
+            <div class="auxiliary-media-row">
+              <span class="auxiliary-media-role">${esc(role)}</span>
+              <span class="auxiliary-media-main"><strong>${esc(row.display_name || row.media_id || '辅助素材')}</strong><small>${esc(camera)}</small></span>
+              <span class="auxiliary-media-note">${esc(row.note || '已归入当前场景')}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
   function renderScene(scene) {
     const issues = asArray(scene.issues);
     const warning = issues.find((item) => item?.code === 'continuity_attention');
@@ -137,6 +170,7 @@
     const secondary = [warning?.label, coverageIssue?.label].filter(Boolean).join(' · ');
     const heading = scene.heading || scene.scene_id || '未命名场景';
     const takes = asArray(scene.take_groups);
+    const auxiliary = asArray(scene.auxiliary_media);
     return `
       <details class="coverage-scene" ${warning ? 'open' : ''}>
         <summary>
@@ -149,6 +183,7 @@
         </summary>
         <div class="coverage-scene-body">
           ${takes.length ? takes.map(renderTake).join('') : '<div class="coverage-empty-row">当前场景还没有有效归集 Take。</div>'}
+          ${auxiliary.length ? renderAuxiliary(scene) : ''}
         </div>
       </details>
     `;
@@ -161,7 +196,7 @@
     if (!panel) return;
     panel.hidden = false;
     if (loading && !payload) {
-      panel.innerHTML = '<div class="production-empty"><strong>正在整理场景覆盖</strong><span>读取当前归集、景别和连续性证据。</span></div>';
+      panel.innerHTML = '<div class="production-empty"><strong>正在整理场景覆盖</strong><span>读取当前归集、景别、辅助素材和连续性证据。</span></div>';
       return;
     }
     if (!payload) {
@@ -174,19 +209,20 @@
     if (counter) counter.textContent = Number(summary.continuity_risks || 0) ? String(summary.continuity_risks) : '';
     panel.innerHTML = `
       <div class="production-section-head">
-        <div><strong>场景覆盖</strong><span>按已存在的归集和机位证据整理；不会因为没识别到某种景别就推断“缺镜头”。</span></div>
-        <span>${Number(summary.mapped_take_groups || 0)} Take · ${Number(summary.known_shots || 0)}/${Number(summary.angles || 0)} 景别</span>
+        <div><strong>场景覆盖</strong><span>同步 Take 与辅助素材分开整理；不会因为没识别到某种景别就推断“缺镜头”。</span></div>
+        <span>${Number(summary.mapped_take_groups || 0)} Take · ${Number(summary.auxiliary_media || 0)} 辅助 · ${Number(summary.known_shots || 0)}/${Number(summary.angles || 0)} 景别</span>
       </div>
       <div class="production-status-strip coverage-status-strip">
         <span><strong>${Number(summary.scenes || 0)}</strong>场景</span>
+        <span><strong>${Number(summary.auxiliary_media || 0)}</strong>辅助素材</span>
         <span><strong>${Number(summary.continuity_risks || 0)}</strong>连续性提醒</span>
-        <span><strong>${Number(summary.episode_only_groups || 0)}</strong>仅归集到集</span>
-        <span><strong>${Number(summary.unplaced_groups || 0)}</strong>未归集</span>
+        <span><strong>${Number(summary.unplaced_auxiliary_media || 0)}</strong>辅助未归场景</span>
+        <span><strong>${Number(summary.unplaced_groups || 0)}</strong>Take 未归集</span>
       </div>
       <div class="coverage-list">
         ${scenes.length ? scenes.map(renderScene).join('') : '<div class="coverage-empty-row">当前筛选范围没有场景。</div>'}
       </div>
-      <div class="production-note">覆盖视图只整理既有事实，不改写现有 delivery.v1、Selection Manifest 或 FCPXML。</div>
+      <div class="production-note">航拍、空镜、GoPro 等辅助素材可以没有 TC/音频；它们是场景覆盖资源，不是同步失败，也不会变成 Editorial Decision 或 delivery.v1 的 Best。</div>
     `;
   }
 
