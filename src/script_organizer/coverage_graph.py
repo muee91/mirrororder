@@ -37,6 +37,11 @@ def _float(value: object, default: float = 0.0) -> float:
         return default
 
 
+def _safe_name(value: object, fallback: str = "") -> str:
+    raw = str(value or "").strip().replace("\\", "/")
+    return (raw.rsplit("/", 1)[-1] if raw else str(fallback or ""))[:300]
+
+
 def _source_revision(
     analysis_revision: str,
     review: dict[str, Any],
@@ -104,7 +109,7 @@ def _scene_index(script: dict[str, Any]) -> tuple[OrderedDict[str, dict[str, Any
         if str(segment.get("type", "") or "") == "scene_heading":
             heading = str(segment.get("raw_text", "") or segment.get("text", "") or "").strip()
             if heading:
-                scene["heading"] = heading
+                scene["heading"] = heading[:500]
         segment_scene[segment_id] = scene_id
     return scenes, segment_scene
 
@@ -181,11 +186,12 @@ def _editorial_for_scene(
 
 
 def _safe_angle(member: dict[str, Any], intelligence: dict[str, Any]) -> dict[str, Any]:
+    clip_id = str(member.get("clip_id", "") or "")
     return {
-        "clip_id": str(member.get("clip_id", "") or ""),
+        "clip_id": clip_id,
         "media_id": str(member.get("media_id", "") or ""),
         "camera": str(member.get("camera", "") or ""),
-        "name": str(member.get("name", "") or ""),
+        "name": _safe_name(member.get("name"), clip_id),
         "duration": _float(member.get("duration"), 0.0),
         "source_start": _float(member.get("source_start"), 0.0),
         "source_end": (
@@ -262,7 +268,7 @@ def build_coverage_graph(
         if not mapped_scene_ids:
             episode_ids = sorted({_int(value) for value in _as_list(mapping.get("episode_ids")) if _int(value) > 0})
             if episode_ids:
-                if global_scope or not selected_episodes or selected_episodes.intersection(episode_ids):
+                if global_scope or (selected_episodes and selected_episodes.intersection(episode_ids)):
                     episode_only_groups.append(
                         {
                             "group_id": group_id,
