@@ -12,7 +12,7 @@
   const GROUPS = {
     media: {label: '素材', items: [['media', '素材库'], ['takes', 'Take'], ['people', '人物'], ['supervisor', '场记']]},
     script: {label: '剧本', items: [['script', '剧本'], ['coverage', '覆盖']]},
-    edit: {label: '剪辑', items: [['rough-cut', '粗剪'], ['assembly', '组接']]},
+    edit: {label: '剪辑', items: [['rough-cut', '粗剪'], ['assembly', '组接'], ['timeline', '时间线']]},
     review: {label: '审阅', items: [['review', '看片'], ['issues', '待处理'], ['overview', '概览']]},
   };
 
@@ -133,21 +133,33 @@
     target.innerHTML = GROUPS[nav.group].items.map(([key, label]) => `<button type="button" data-production-target="${key}" class="${nav.target === key ? 'active' : ''}">${label}${key === 'issues' && nav.issueCount ? ` <span>${nav.issueCount}</span>` : ''}</button>`).join('');
     document.querySelectorAll('[data-production-group]').forEach((button) => button.classList.toggle('active', button.dataset.productionGroup === nav.group));
   }
+  function timelineToggle(active) {
+    const toggle = document.querySelector('#timeline-toggle');
+    if (!toggle) return false;
+    const isActive = toggle.classList.contains('active');
+    if (Boolean(active) !== isActive) toggle.click();
+    return true;
+  }
   function proxyClick(target) {
     if (target === 'supervisor') return window.openScriptSupervisorWorkspace?.();
+    if (target === 'timeline') {
+      if (!timelineToggle(true)) setTimeout(() => timelineToggle(true), 80);
+      return;
+    }
     const external = {coverage:'#production-coverage-tab','rough-cut':'#production-rough-cut-tab',assembly:'#production-assembly-tab'}[target];
     if (external) return document.querySelector(external)?.click();
     document.querySelector(`#production-bar .production-tabs [data-production-tab="${CSS.escape(target)}"]`)?.click();
   }
   function navigate(target) {
     window.closeScriptSupervisorWorkspace?.();
+    if (target !== 'timeline') timelineToggle(false);
     nav.target = target; nav.group = groupForTarget(target); renderSubtabs();
-    if (['coverage','rough-cut','assembly','supervisor'].includes(target)) { proxyClick(target); return; }
+    if (['coverage','rough-cut','assembly','supervisor','timeline'].includes(target)) { proxyClick(target); return; }
     renderProduction();
   }
   window.mirrorOrderProductionNavigate = navigate;
   function syncProxyState() {
-    const external = [['coverage','#production-coverage-tab'],['rough-cut','#production-rough-cut-tab'],['assembly','#production-assembly-tab']];
+    const external = [['coverage','#production-coverage-tab'],['rough-cut','#production-rough-cut-tab'],['assembly','#production-assembly-tab'],['timeline','#timeline-toggle']];
     for (const [key, selector] of external) if (document.querySelector(selector)?.classList.contains('active')) { nav.target = key; nav.group = groupForTarget(key); }
     renderSubtabs();
   }
@@ -159,12 +171,12 @@
     const ids = manual.length ? manual : candidateScriptIds(auto);
     if (ids.length) { const segment = state.segmentMap.get(ids[0]); state.mode='script'; state.episode=Number(segment?.episode)||null; state.segmentId=ids[0]; }
     else { state.mode='unassigned'; state.segmentId=null; state.episode=inferredEpisodes(group)[0] ?? null; }
-    state.selectedGroupId=groupId; nav.target='review'; nav.group='review'; renderContent({candidateTop:0}); renderSubtabs();
+    state.selectedGroupId=groupId; nav.target='review'; nav.group='review'; timelineToggle(false); renderContent({candidateTop:0}); renderSubtabs();
     requestAnimationFrame(() => { const first=(group.members||[]).slice().sort((a,b)=>(cameraOrder[a.camera]??99)-(cameraOrder[b.camera]??99))[0]; if(first) selectMember(group.group_id,first.clip_id,false); });
     return true;
   }
   window.focusGroup = focusGroup;
-  function focusEpisode(value) { state.mode='script'; state.episode=Number(value)||null; state.segmentId=visibleSegments().find((row)=>row.type!=='scene_heading')?.segment_id||null; nav.target='review'; nav.group='review'; renderContent({candidateTop:0}); renderSubtabs(); }
+  function focusEpisode(value) { state.mode='script'; state.episode=Number(value)||null; state.segmentId=visibleSegments().find((row)=>row.type!=='scene_heading')?.segment_id||null; nav.target='review'; nav.group='review'; timelineToggle(false); renderContent({candidateTop:0}); renderSubtabs(); }
 
   function handleClick(event) {
     const groupButton = event.target.closest('[data-production-group]');
@@ -172,7 +184,7 @@
     const proxy = event.target.closest('[data-production-target]');
     if (proxy) { event.preventDefault(); navigate(proxy.dataset.productionTarget); return; }
     const legacy = event.target.closest('#production-bar .production-tabs [data-production-tab]');
-    if (legacy) { nav.target=legacy.dataset.productionTab; nav.group=groupForTarget(nav.target); window.closeScriptSupervisorWorkspace?.(); renderProduction(); return; }
+    if (legacy) { nav.target=legacy.dataset.productionTab; nav.group=groupForTarget(nav.target); window.closeScriptSupervisorWorkspace?.(); timelineToggle(false); renderProduction(); return; }
     const row = event.target.closest('[data-focus-group]'); if (row) { event.preventDefault(); focusGroup(row.dataset.focusGroup); return; }
     const episode = event.target.closest('[data-focus-episode]'); if (episode) { event.preventDefault(); focusEpisode(episode.dataset.focusEpisode); return; }
     const action = event.target.closest('[data-production-action]')?.dataset.productionAction;
@@ -188,7 +200,7 @@
     renderSubtabs();
     const panel = document.querySelector('#production-panel'); if (!panel) return;
     if (nav.target === 'review') { panel.hidden=true; panel.innerHTML=''; }
-    else if (['coverage','rough-cut','assembly','supervisor'].includes(nav.target)) { /* owned by extension */ }
+    else if (['coverage','rough-cut','assembly','supervisor','timeline'].includes(nav.target)) { /* owned by extension */ }
     else { panel.hidden=false; panel.innerHTML=panelMarkup(view); }
   }
 
@@ -200,5 +212,5 @@
   ensureUI();
   const requested = new URLSearchParams(location.search).get('production');
   if (requested) { nav.target=requested; nav.group=groupForTarget(requested); }
-  requestAnimationFrame(() => { renderProduction(); if (requested && ['coverage','rough-cut','assembly','supervisor'].includes(requested)) setTimeout(()=>navigate(requested),80); });
+  requestAnimationFrame(() => { renderProduction(); if (requested && ['coverage','rough-cut','assembly','supervisor','timeline'].includes(requested)) setTimeout(()=>navigate(requested),80); });
 })();
