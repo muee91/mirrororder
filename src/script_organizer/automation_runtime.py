@@ -114,6 +114,16 @@ def _project_relative_script(project: Any) -> str:
         return ""
 
 
+def _workspace_for_service(service: Any) -> Any:
+    workspace = getattr(service, "workspace", None)
+    if workspace is not None:
+        return workspace
+    current = getattr(service, "current", None)
+    if current is None:
+        raise RuntimeError("请求尚未选择工作区")
+    return current.workspace
+
+
 def install_automation_runtime() -> None:
     """Attach auto-decision state without making it human review authority."""
     global _INSTALLED
@@ -219,7 +229,8 @@ def install_automation_runtime() -> None:
                     return
                 if parts == ["api", "v1", "workspace-database"]:
                     self._local_only()
-                    database = WorkspaceDatabase(service.workspace.workspace_id)
+                    workspace = _workspace_for_service(service)
+                    database = WorkspaceDatabase(workspace.workspace_id)
                     health = database.health()
                     health["projects"] = {
                         str(entry.get("project_id", "")): database.project_intelligence(str(entry.get("project_id", "")))
