@@ -19,6 +19,8 @@ from typing import Any, Iterator
 from .analysis_runtime import analyze as _default_analyze
 from .asr_runtime import ASRRuntime
 from . import tasks_v2 as _impl
+from .device_runtime_settings import load_runtime_settings
+from .identity_index import IdentityIndexer
 from .media_identity import DeviceMediaStore
 from .perception_index import PerceptionIndexer
 from .resource_scheduler import GLOBAL_RESOURCE_SCHEDULER, ResourceCancelled
@@ -33,7 +35,8 @@ class TaskManager(_impl.TaskManager):
 
     Projects stay independent: creating/switching projects never waits for a
     different project to finish. Scarce resources (multicam sync, MLX, local
-    vision) are queued globally so several projects do not saturate one Mac.
+    vision, local identity indexing) are queued globally so several projects do
+    not saturate one Mac.
     """
 
     @staticmethod
@@ -122,7 +125,6 @@ class TaskManager(_impl.TaskManager):
                 last_reported = {"done": -1}
 
                 def report(done: int, total: int, group_id: str) -> None:
-                    # Avoid rewriting tasks.json for every single Take on large projects.
                     if done == total or done - last_reported["done"] >= 10:
                         last_reported["done"] = done
                         self._update(
@@ -146,6 +148,72 @@ class TaskManager(_impl.TaskManager):
         except Exception as error:
             self._update(config, task_id, message=f"感知索引已延后，不影响主分析：{error}")
             return {"status": "deferred", "error": str(error)}
+
+    def _identity_best_effort(
+        self,
+        config,
+        task: dict[str, Any],
+        *,
+        kind: str,
+        group_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        if not self.workspace_id:
+            return {"status": "deferred", "reason": "任务缺少 workspace_id", "kind": kind}
+        settings = load_runtime_settings()
+        enabled_key = "face_identity_enabled" if kind == "face" else "speaker_identity_enabled"
+        if not settings.get(enabled_key):
+            return {"status": "disabled", "kind": kind}
+        task_id = str(task["task_id"])
+        project_id = str(task.get("project_id", ""))
+        label = "演员人脸识别" if kind == "face" else "角色声纹识别"
+        stage = "face_identity" if kind == "face" else "speaker_identity"
+        try:
+            with self._resource(config, task, "cpu", stage, label):
+                indexer = IdentityIndexer(self.workspace_id, project_id, config)
+                last_reported = {"done": -1}
+
+                def report(done: int, total: int, group_id: str) -> None:
+                    if done == total or done - last_reported["done"] >= 10:
+                        last_reported["done"] = done
+                        self._update(
+                            config,
+                            task_id,
+                            progress={f"{kind}_done": done, f"{kind}_total": total},
+                            message=f"{label} {done}/{total} · {group_id}",
+                        )
+
+                result = indexer.run(
+                    kind,
+                    group_ids=group_ids,
+                    progress=report,
+                    cancelled=lambda: self._cancel_requested(config, task_id),
+                )
+                if result.get("status") == "cancelled":
+                    raise ResourceCancelled(f"{label}阶段任务已取消")
+                return result
+        except ResourceCancelled:
+            raise
+        except Exception as error:
+            self._update(config, task_id, message=f"{label}已延后，不影响主分析：{error}")
+            return {"status": "deferred", "kind": kind, "error": str(error)}
+
+    def _identity_after_analysis(
+        self,
+        config,
+        task: dict[str, Any],
+        *,
+        group_ids: list[str] | None = None,
+        explicit: bool = False,
+    ) -> dict[str, Any]:
+        settings = load_runtime_settings()
+        if not explicit and settings.get("identity_processing_mode") != "after_prepare":
+            return {"status": "manual"}
+        result: dict[str, Any] = {}
+        if settings.get("face_identity_enabled"):
+            result["face"] = self._identity_best_effort(config, task, kind="face", group_ids=group_ids)
+        if settings.get("speaker_identity_enabled"):
+            result["speaker"] = self._identity_best_effort(config, task, kind="speaker", group_ids=group_ids)
+        return result
 
     def _run(self, project_id: str, task_id: str) -> None:
         config = self.project_loader(project_id)
@@ -178,11 +246,12 @@ class TaskManager(_impl.TaskManager):
                 local_media = self._refresh_media_bindings(config, project_id)
                 if local_media:
                     result["local_media"] = local_media
+                selected_groups = sorted(affected) or None
                 result["perception"] = self._perception_best_effort(
-                    config,
-                    task,
-                    mode="tier0",
-                    group_ids=sorted(affected) or None,
+                    config, task, mode="tier0", group_ids=selected_groups
+                )
+                result["identity"] = self._identity_after_analysis(
+                    config, task, group_ids=selected_groups
                 )
             elif task_type == "auto_resolve":
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
@@ -202,11 +271,12 @@ class TaskManager(_impl.TaskManager):
                     local_media = self._refresh_media_bindings(config, project_id)
                     if local_media:
                         result["local_media"] = local_media
+                    selected_groups = sorted(affected) or None
                     result["perception"] = self._perception_best_effort(
-                        config,
-                        task,
-                        mode="tier0",
-                        group_ids=sorted(affected) or None,
+                        config, task, mode="tier0", group_ids=selected_groups
+                    )
+                    result["identity"] = self._identity_after_analysis(
+                        config, task, group_ids=selected_groups
                     )
                 elif result.get("transcribed"):
                     result["analysis_deferred"] = True
@@ -217,15 +287,15 @@ class TaskManager(_impl.TaskManager):
                 group_ids = [str(value) for value in task.get("targets", {}).get("group_ids", []) if str(value)]
                 if group_ids:
                     result["perception"] = self._perception_best_effort(
-                        config,
-                        task,
-                        mode="semantic",
-                        group_ids=group_ids,
+                        config, task, mode="semantic", group_ids=group_ids
+                    )
+                    result["identity"] = self._identity_after_analysis(
+                        config, task, group_ids=group_ids, explicit=True
                     )
 
             self._update(config, task_id, status="completed", stage="completed", result=result, message="任务完成")
         except ResourceCancelled:
-            self._update(config, task_id, status="cancelled", stage="cancelled", message="等待计算资源或感知索引时任务已取消")
+            self._update(config, task_id, status="cancelled", stage="cancelled", message="等待计算资源或本地感知时任务已取消")
         except Exception as error:
             self._update(config, task_id, status="failed", stage="failed", error=str(error), message="任务失败")
         finally:
@@ -263,6 +333,7 @@ class TaskManager(_impl.TaskManager):
             result["local_media"] = local_media
         if not self._cancel_requested(config, task_id):
             result["perception"] = self._perception_best_effort(config, task, mode="tier0")
+            result["identity"] = self._identity_after_analysis(config, task)
         return result
 
     def _transcribe(self, config, task: dict[str, Any]) -> dict[str, Any]:
