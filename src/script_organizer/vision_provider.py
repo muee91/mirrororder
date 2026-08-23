@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .device_runtime_settings import load_runtime_settings
+from .model_connections import load_model_connections
 from .local_vision_runtime import (
     DEFAULT_LOCAL_VISION_MODEL,
     LocalVisionRuntime,
@@ -37,14 +38,30 @@ class VisionProviderConfig:
     def from_env(cls) -> "VisionProviderConfig":
         device = load_runtime_settings()
         raw_provider = os.environ.get("MIRRORORDER_VISION_PROVIDER")
-        provider = (
-            raw_provider.strip().lower()
-            if raw_provider is not None
-            else ("local" if device.get("local_vision_enabled") else "none")
+        explicit_env = raw_provider is not None or any(
+            name in os.environ
+            for name in (
+                "MIRRORORDER_VISION_BASE_URL",
+                "MIRRORORDER_VISION_API_KEY",
+                "MIRRORORDER_VISION_MODEL",
+            )
         )
-        base_url = os.environ.get("MIRRORORDER_VISION_BASE_URL", "").strip().rstrip("/")
-        api_key = os.environ.get("MIRRORORDER_VISION_API_KEY", "").strip()
-        model = os.environ.get("MIRRORORDER_VISION_MODEL", "").strip()
+        saved = load_model_connections(include_secrets=True).get("vision", {})
+        if explicit_env:
+            provider = str(raw_provider or "openai-compatible").strip().lower()
+            base_url = os.environ.get("MIRRORORDER_VISION_BASE_URL", "").strip().rstrip("/")
+            api_key = os.environ.get("MIRRORORDER_VISION_API_KEY", "").strip()
+            model = os.environ.get("MIRRORORDER_VISION_MODEL", "").strip()
+        elif isinstance(saved, dict) and saved.get("enabled") and saved.get("base_url") and saved.get("model"):
+            provider = str(saved.get("provider", "openai-compatible") or "openai-compatible").strip().lower()
+            base_url = str(saved.get("base_url", "") or "").strip().rstrip("/")
+            api_key = str(saved.get("api_key", "") or "").strip()
+            model = str(saved.get("model", "") or "").strip()
+        else:
+            provider = "local" if device.get("local_vision_enabled") else "none"
+            base_url = ""
+            api_key = ""
+            model = ""
         if provider in _LOCAL_PROVIDERS and not model:
             model = str(device.get("local_vision_model") or DEFAULT_LOCAL_VISION_MODEL)
         try:
