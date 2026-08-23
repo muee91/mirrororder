@@ -4,7 +4,6 @@ import hashlib
 import json
 import math
 import os
-import shutil
 import subprocess
 from collections import defaultdict
 from fractions import Fraction
@@ -15,7 +14,7 @@ from .config import ProjectConfig
 from .identity_runtime import FACE_DETECTOR, FACE_RECOGNIZER, SPEAKER_EMBEDDER, IdentityRuntime
 from .media_identity import DeviceMediaStore
 from .models import Clip
-from .perception_index import PerceptionIndexer, _default_extract_frames
+from .perception_index import _default_extract_frames
 from .transcript import TranscriptStore
 from .workspace_db import WorkspaceDatabase
 
@@ -104,12 +103,7 @@ class FaceEmbeddingProvider:
         self.cv = cv
         self.np = np
         self.detector = cv.FaceDetectorYN.create(
-            str(models[FACE_DETECTOR.filename]),
-            "",
-            (320, 320),
-            0.80,
-            0.30,
-            5000,
+            str(models[FACE_DETECTOR.filename]), "", (320, 320), 0.80, 0.30, 5000
         )
         self.recognizer = cv.FaceRecognizerSF.create(str(models[FACE_RECOGNIZER.filename]), "")
 
@@ -126,9 +120,7 @@ class FaceEmbeddingProvider:
                 continue
             for face_index, face in enumerate(faces):
                 confidence = float(face[-1])
-                box_width = float(face[2])
-                box_height = float(face[3])
-                if confidence < 0.80 or min(box_width, box_height) < 36:
+                if confidence < 0.80 or min(float(face[2]), float(face[3])) < 36:
                     continue
                 try:
                     aligned = self.recognizer.alignCrop(image, face[:-1])
@@ -165,11 +157,14 @@ class SpeakerEmbeddingProvider:
         import sherpa_onnx
 
         self.np = np
-        self.sherpa = sherpa_onnx
         provider = os.environ.get("MIRRORORDER_SPEAKER_PROVIDER", "cpu").strip() or "cpu"
+        try:
+            threads = int(os.environ.get("MIRRORORDER_SPEAKER_THREADS", "2") or 2)
+        except ValueError:
+            threads = 2
         config = sherpa_onnx.SpeakerEmbeddingExtractorConfig(
             model=str(models[SPEAKER_EMBEDDER.filename]),
-            num_threads=max(1, min(4, int(os.environ.get("MIRRORORDER_SPEAKER_THREADS", "2") or 2))),
+            num_threads=max(1, min(4, threads)),
             debug=False,
             provider=provider,
         )
@@ -195,7 +190,6 @@ class SpeakerEmbeddingProvider:
         samples = self.np.frombuffer(completed.stdout, dtype="<f4").astype(self.np.float32, copy=False)
         if samples.size < 16000:
             return None
-        # Reject almost-silent windows before spending inference time.
         rms = float(self.np.sqrt(self.np.mean(samples * samples)))
         if rms < 0.003:
             return None
@@ -221,21 +215,20 @@ class SpeakerEmbeddingProvider:
             except (OSError, subprocess.SubprocessError, RuntimeError):
                 continue
             vector = _normalize(list(embedding))
-            if not vector:
-                continue
-            result.append(
-                {
-                    "embedding": vector,
-                    "confidence": 1.0,
-                    "start": start,
-                    "end": end,
-                    "metadata": {
-                        "text": str(item.get("text", "") or "")[:500],
-                        "source": str(item.get("source", "asr") or "asr"),
-                        "model": SPEAKER_EMBEDDER.name,
-                    },
-                }
-            )
+            if vector:
+                result.append(
+                    {
+                        "embedding": vector,
+                        "confidence": 1.0,
+                        "start": start,
+                        "end": end,
+                        "metadata": {
+                            "text": str(item.get("text", "") or "")[:500],
+                            "source": str(item.get("source", "asr") or "asr"),
+                            "model": SPEAKER_EMBEDDER.name,
+                        },
+                    }
+                )
         return result
 
 
@@ -425,16 +418,17 @@ class IdentityIndexer:
             if not best_id or best_score < threshold:
                 digest = hashlib.sha1(_encode_embedding(vector)).hexdigest()[:18]
                 best_id = f"{kind}_{digest}"
-                created += 1
-                label = ("人物候选 " if kind == "face" else "声音候选 ") + f"{created:02d}"
-                self.database.upsert_identity(
-                    self.project_id,
-                    identity_id=best_id,
-                    kind=kind,
-                    label=label,
-                    metadata={"auto_cluster": True, "threshold": threshold},
-                )
-                clusters[best_id] = []
+                if best_id not in clusters:
+                    created += 1
+                    label = ("人物候选 " if kind == "face" else "声音候选 ") + f"{created:02d}"
+                    self.database.upsert_identity(
+                        self.project_id,
+                        identity_id=best_id,
+                        kind=kind,
+                        label=label,
+                        metadata={"auto_cluster": True, "threshold": threshold},
+                    )
+                    clusters[best_id] = []
                 best_score = 1.0
             clusters.setdefault(best_id, []).append(vector)
             metadata = dict(observation.get("metadata", {}))
@@ -458,18 +452,15 @@ class IdentityIndexer:
         frames = self._face_frames(group)
         if not frames:
             return 0
-        provider = self.face_provider or FaceEmbeddingProvider()
+        provider = self.face_provider
+        if provider is None:
+            raise RuntimeError("人脸 provider 未初始化")
         observations = provider.extract(frames)
-        clip_id = ""
         selected = self._preferred_member(group)
-        if selected:
-            clip_id = str(selected[0].get("clip_id", "") or "")
+        clip_id = str(selected[0].get("clip_id", "") or "") if selected else ""
         return self._assign(
-            "face",
-            str(group.get("group_id", "")),
-            observations,
-            clip_id=clip_id,
-            threshold=self.face_threshold,
+            "face", str(group.get("group_id", "")), observations,
+            clip_id=clip_id, threshold=self.face_threshold,
         )
 
     def _run_speaker(self, group: dict[str, Any]) -> int:
@@ -480,15 +471,35 @@ class IdentityIndexer:
         ranges = self._speaker_ranges(member, media_path)
         if not ranges:
             return 0
-        provider = self.speaker_provider or SpeakerEmbeddingProvider()
+        provider = self.speaker_provider
+        if provider is None:
+            raise RuntimeError("说话人 provider 未初始化")
         observations = provider.extract(media_path, ranges)
         return self._assign(
-            "speaker",
-            str(group.get("group_id", "")),
-            observations,
-            clip_id=str(member.get("clip_id", "") or ""),
-            threshold=self.speaker_threshold,
+            "speaker", str(group.get("group_id", "")), observations,
+            clip_id=str(member.get("clip_id", "") or ""), threshold=self.speaker_threshold,
         )
+
+    def _state_version(self, kind: str) -> str:
+        if kind == "face":
+            return "face-v1|" + FACE_DETECTOR.sha256[:12] + "|" + FACE_RECOGNIZER.sha256[:12] + f"|{self.face_threshold:.3f}"
+        return "speaker-v1|" + SPEAKER_EMBEDDER.sha256[:12] + f"|{self.speaker_threshold:.3f}"
+
+    def _state_key(self, kind: str, group_id: str) -> str:
+        return f"identity:{self.project_id}:{kind}:{group_id}"
+
+    def _already_indexed(self, kind: str, group_id: str) -> bool:
+        with self.database.connection() as connection:
+            row = connection.execute("SELECT value FROM meta WHERE key=?", (self._state_key(kind, group_id),)).fetchone()
+        return bool(row and str(row[0]) == self._state_version(kind))
+
+    def _mark_indexed(self, kind: str, group_id: str) -> None:
+        with self.database.connection() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)",
+                (self._state_key(kind, group_id), self._state_version(kind)),
+            )
+            connection.commit()
 
     def run(
         self,
@@ -506,28 +517,38 @@ class IdentityIndexer:
         self._sync_structure(index)
         groups = self._groups(index)
         requested = {str(value) for value in (group_ids or []) if str(value)}
+        force = bool(requested)
         ordered = [
             group for group in groups.values()
-            if not requested or str(group.get("group_id", "")) in requested
+            if (not requested or str(group.get("group_id", "")) in requested)
+            and (force or not self._already_indexed(kind, str(group.get("group_id", ""))))
         ]
         ordered.sort(key=lambda row: (float(row.get("start", 0) or 0), str(row.get("group_id", ""))))
+        if not ordered:
+            return {
+                "status": "completed", "kind": kind, "processed": 0,
+                "observations": 0, "failed": 0, "total": 0, "skipped_cached": True,
+                "intelligence": self.database.project_intelligence(self.project_id),
+            }
+        if kind == "face" and self.face_provider is None:
+            self.face_provider = FaceEmbeddingProvider()
+        if kind == "speaker" and self.speaker_provider is None:
+            self.speaker_provider = SpeakerEmbeddingProvider()
         processed = 0
         observations = 0
         failed = 0
         for group in ordered:
             if cancelled and cancelled():
                 return {
-                    "status": "cancelled",
-                    "kind": kind,
-                    "processed": processed,
-                    "observations": observations,
-                    "failed": failed,
+                    "status": "cancelled", "kind": kind, "processed": processed,
+                    "observations": observations, "failed": failed,
                 }
             group_id = str(group.get("group_id", ""))
             try:
                 count = self._run_face(group) if kind == "face" else self._run_speaker(group)
                 observations += count
                 processed += 1
+                self._mark_indexed(kind, group_id)
             except Exception:
                 failed += 1
             if progress:
