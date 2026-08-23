@@ -31,3 +31,21 @@ def test_lan_pairing_uses_cookie_safe_browser_requests() -> None:
     assert "fetch(`${projectApi('/search')}" not in app
     assert "sessionStorage.getItem('mirrororder-session')" not in app
     assert "sessionStorage.setItem('mirrororder-session'" not in app
+
+
+def test_review_room_loads_responsive_professional_surface() -> None:
+    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "review.css").read_text(encoding="utf-8")
+
+    assert '<link rel="stylesheet" href="/review.css">' in html
+    assert 'id="identity-library-button"' in html
+    assert '>人物</button>' in html
+    assert 'id="proposal-button"' in html
+    assert '>建议</button>' in html
+    assert 'class="project-switch workspace-switch"' in html
+    assert "body{min-width:0" in css
+    assert "@media(max-width:1260px)" in css
+    assert "@media(max-width:900px)" in css
+    assert "@media(max-width:680px)" in css
+    assert 'grid-template-areas:"script takes inspector"' in css
+    assert "box-shadow:inset 3px 0 0 var(--blue)" in css
