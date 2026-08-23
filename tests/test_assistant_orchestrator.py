@@ -3,15 +3,19 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 from script_organizer.agent_tools import AgentToolRegistry
 from script_organizer.assistant_orchestrator import AssistantOrchestrator
+from script_organizer.assistant_runtime import _refresh_after_review
+from script_organizer.audit_engine import _analysis_revision, _mapping_for_group
+from script_organizer.audit_store import AuditStore
+from script_organizer.automation_store import AutomationStore
+from script_organizer.config import ProjectConfig
 from script_organizer.device_runtime_settings import save_runtime_settings
 from script_organizer.model_connections import load_model_connections, save_model_connections
 from script_organizer.model_registry import ModelRegistry
 from script_organizer.review_store import ReviewStore
-from script_organizer.automation_store import AutomationStore
-from script_organizer.config import ProjectConfig
 from script_organizer.vision_provider import VisionProviderConfig
 
 
@@ -34,6 +38,20 @@ class FakeTaskManager:
         }
         self.submitted.append(row)
         return row
+
+
+class FakeLanguagePlan:
+    enabled = True
+
+    def complete_json(self, **_kwargs):
+        return {
+            "briefing": "只补这一组视觉证据。",
+            "actions": [
+                {"tool": "extract_visual_evidence", "arguments": {"group_ids": ["G1"]}},
+                {"tool": "noop", "arguments": {}},
+            ],
+            "questions": [],
+        }
 
 
 def _config(tmp_path: Path) -> ProjectConfig:
@@ -124,6 +142,48 @@ def _clear_model_env(monkeypatch) -> None:
         "MIRRORORDER_VISION_MODEL",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+def _save_current_audit(config: ProjectConfig) -> None:
+    index = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
+    group = index["groups"][0]
+    review = ReviewStore(config.output_dir / "review.json").load()
+    automatic = AutomationStore(config.output_dir).load()["groups"]["G1"]
+    mapping = _mapping_for_group(review, automatic, group)
+    analysis_revision = _analysis_revision(config.output_dir)
+    AuditStore(config.output_dir).save(
+        {
+            "analysis_revision": analysis_revision,
+            "review_revision": review["revision"],
+            "summary": {"current_groups": 1},
+            "groups": {
+                "G1": {
+                    "group_id": "G1",
+                    "analysis_revision": analysis_revision,
+                    "evidence_fingerprint": "demo",
+                    "priority": 82,
+                    "mapping": mapping,
+                    "judge": {"verdict": "agree", "confidence": 0.8, "reason": "demo"},
+                    "issues": [],
+                    "algorithm_feedback": {},
+                    "role_suggestions": [],
+                    "shot_intelligence": {
+                        "angles": {
+                            "CA": {
+                                "clip_id": "CA",
+                                "camera": "A",
+                                "shot_type": "closeup",
+                                "coverage_role": "dialogue",
+                                "visible_people": [],
+                                "technical_issues": [],
+                            }
+                        }
+                    },
+                    "rough_cut": {},
+                }
+            },
+        }
+    )
 
 
 def test_model_connections_are_device_local_and_secrets_are_not_public(monkeypatch, tmp_path: Path) -> None:
@@ -220,6 +280,69 @@ def test_enabled_local_vision_triggers_one_bounded_priority_audit(monkeypatch, t
     assert len(manager.submitted) == 1
 
 
+def test_explicit_model_plan_does_not_stack_hidden_priority_audit(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "app-support"))
+    _clear_model_env(monkeypatch)
+    save_runtime_settings({"local_vision_enabled": True, "local_vision_model": "local-test.gguf"})
+    config = _config(tmp_path)
+    manager = FakeTaskManager()
+    assistant = AssistantOrchestrator("ws", "demo", config, task_manager=manager)
+    assistant.language = FakeLanguagePlan()
+    payload = assistant.cycle(trigger="app", allow_actions=True, force_plan=True)
+    assert [row["type"] for row in manager.submitted] == ["evidence_extract"]
+    assert all(row["type"] != "audit" for row in manager.submitted)
+    results = payload["orchestration"]["last_action"]["results"]
+    assert [row["tool"] for row in results] == ["extract_visual_evidence", "noop"]
+
+
+def test_mapping_change_makes_old_audit_non_current_without_changing_analysis(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _save_current_audit(config)
+    assistant = AssistantOrchestrator("ws", "demo", config)
+    assert assistant._current_audit_groups() == {"G1"}
+
+    ReviewStore(config.output_dir / "review.json").apply_action(
+        {
+            "action": "set_group_placement",
+            "group_id": "G1",
+            "episode_ids": [1],
+            "script_segment_ids": ["S2"],
+            "actor": "editor",
+        }
+    )
+    assert _analysis_revision(config.output_dir) == AuditStore(config.output_dir).load()["analysis_revision"]
+    assert assistant._current_audit_groups() == set()
+
+
+def test_review_refresh_rebuilds_learning_cases_from_latest_human_truth(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _save_current_audit(config)
+    ReviewStore(config.output_dir / "review.json").apply_action(
+        {
+            "action": "set_group_placement",
+            "group_id": "G1",
+            "episode_ids": [1],
+            "script_segment_ids": ["S2"],
+            "actor": "editor",
+        }
+    )
+    fake_service = SimpleNamespace(
+        workspace=SimpleNamespace(workspace_id="ws"),
+        tasks=FakeTaskManager(),
+        project=lambda _project_id: SimpleNamespace(config=config),
+    )
+    _refresh_after_review(fake_service, "demo")
+    rows = [
+        json.loads(line)
+        for line in (config.output_dir / "learning_cases.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert rows
+    assert rows[0]["group_id"] == "G1"
+    assert rows[0]["human_expected"]["script_segment_ids"] == ["S2"]
+    assert rows[0]["matcher_prediction"]["conflicts_with_human"] is True
+
+
 def test_bounded_evidence_and_identity_tools_submit_scoped_tasks(tmp_path: Path) -> None:
     config = _config(tmp_path)
     manager = FakeTaskManager()
@@ -252,6 +375,7 @@ def test_disabled_models_do_not_create_expensive_task(monkeypatch, tmp_path: Pat
 def test_static_runtime_and_ui_contracts() -> None:
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "assistant_runtime.py").read_text(encoding="utf-8")
+    audit_runtime = (root / "src" / "script_organizer" / "audit_runtime.py").read_text(encoding="utf-8")
     orchestrator = (root / "src" / "script_organizer" / "assistant_orchestrator.py").read_text(encoding="utf-8")
     tools = (root / "src" / "script_organizer" / "agent_tools.py").read_text(encoding="utf-8")
     index = (root / "web" / "index.html").read_text(encoding="utf-8")
@@ -265,6 +389,8 @@ def test_static_runtime_and_ui_contracts() -> None:
     assert 'parts[5] == "models"' in runtime
     assert 'parts[5] == "message"' in runtime
     assert 'parts[5:] == ["assistant", "cycle"]' in runtime
+    assert "_refresh_after_review" in runtime
+    assert "write_learning_dataset" in runtime
     assert "self._local_only()" in runtime
     assert '"direct_review_write": False' in runtime
     assert '"messages"' not in runtime.split("def _safe_assistant", 1)[1].split("def install_assistant_runtime", 1)[0]
@@ -281,6 +407,12 @@ def test_static_runtime_and_ui_contracts() -> None:
     )
     assert "不得写review.json或editorial.json" in orchestrator
     assert "已人工确认的人物或声纹不得要求重复计算" in orchestrator
+    assert "if allow_actions and plan is None" in orchestrator
+    assert "_mapping_for_group" in orchestrator
+    assert '"audit_split_freshness": True' in audit_runtime
+    assert '"mapping_stale": True' in audit_runtime
+    assert '"visual_current": True' in audit_runtime
+    assert "_apply_shot_intelligence(take, row)" in audit_runtime
     assert '/assistant.css' in index
     assert '/assistant_control.css' in index
     assert index.index('/assistant_ui.js') < index.index('/assistant_control_ui.js')
