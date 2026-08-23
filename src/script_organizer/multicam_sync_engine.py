@@ -4,7 +4,6 @@ import csv
 import importlib.util
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -12,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import ProjectConfig
+from .media_reader import infer_camera_label
 
 
 class MulticamSyncUnavailable(RuntimeError):
@@ -32,7 +32,6 @@ _REQUIRED_SCRIPTS = (
 )
 _REQUIRED_FILES = _REQUIRED_SCRIPTS + ("capcut_draft_schema.json",)
 _MEDIA_SUFFIXES = {".mp4", ".mov", ".mxf", ".mts", ".3gp", ".mpg", ".mpeg"}
-_CAMERA_DIR = re.compile(r"^(?:camera|cam)?[_-]?([A-Za-z])\d*", re.IGNORECASE)
 
 
 def _engine_candidates() -> list[Path]:
@@ -128,17 +127,17 @@ def _has_media(path: Path) -> bool:
         return False
 
 
-def _looks_like_camera_dir(path: Path) -> bool:
-    return path.is_dir() and bool(_CAMERA_DIR.match(path.name)) and _has_media(path)
+def _looks_like_camera_dir(path: Path, patterns: dict[str, str] | None = None) -> bool:
+    return path.is_dir() and infer_camera_label(path.name, patterns) != "?" and _has_media(path)
 
 
-def _has_day_layout(source: Path) -> bool:
+def _has_day_layout(source: Path, patterns: dict[str, str] | None = None) -> bool:
     try:
         for day in source.iterdir():
             if not day.is_dir() or day.name.startswith("."):
                 continue
             try:
-                if any(_looks_like_camera_dir(child) for child in day.iterdir() if child.is_dir()):
+                if any(_looks_like_camera_dir(child, patterns) for child in day.iterdir() if child.is_dir()):
                     return True
             except OSError:
                 continue
@@ -147,12 +146,24 @@ def _has_day_layout(source: Path) -> bool:
     return False
 
 
-def _prepare_media_base(source: Path, stage_root: Path) -> tuple[Path, str]:
-    """Accept both `day/A1` and direct `A1` roots without copying media."""
-    if _has_day_layout(source):
+def _prepare_media_base(
+    source: Path,
+    stage_root: Path,
+    camera_patterns: dict[str, str] | None = None,
+) -> tuple[Path, str]:
+    """Accept day/camera and direct camera roots without copying media.
+
+    Industry conventions A/B/C, A机/B机/C机 are defaults. Project
+    camera_patterns can recognize unconventional direct camera folders before
+    the vendor engine receives the normalized symlink view.
+    """
+    if _has_day_layout(source, camera_patterns):
         return source, "day-folders"
     try:
-        direct_cameras = [item for item in source.iterdir() if _looks_like_camera_dir(item)]
+        direct_cameras = [
+            item for item in source.iterdir()
+            if _looks_like_camera_dir(item, camera_patterns)
+        ]
         direct_media = [item for item in source.iterdir() if item.is_file() and item.suffix.lower() in _MEDIA_SUFFIXES]
     except OSError:
         direct_cameras = []
@@ -173,17 +184,13 @@ def _prepare_media_base(source: Path, stage_root: Path) -> tuple[Path, str]:
 def _prepare_multiple_media_roots(
     roots: tuple[Path, ...],
     stage_root: Path,
+    camera_patterns: dict[str, str] | None = None,
 ) -> tuple[Path, str, Path]:
-    """Build a symlink-only engine view for several device-local roots.
-
-    The synchronizer requires one BASE with top-level day folders. We preserve
-    the user's media in place and expose each selected root through symlinks.
-    The returned export boundary is the narrowest common parent of the roots.
-    """
+    """Build a symlink-only engine view for several device-local roots."""
     if not roots:
         raise ValueError("媒体目录项目缺少本机素材根目录")
     if len(roots) == 1:
-        base, layout = _prepare_media_base(roots[0], stage_root)
+        base, layout = _prepare_media_base(roots[0], stage_root, camera_patterns)
         return base, layout, roots[0]
     if stage_root.exists():
         shutil.rmtree(stage_root)
@@ -198,7 +205,7 @@ def _prepare_multiple_media_roots(
             if child.is_dir() and not child.name.startswith(".")
         ]
         has_days = any(
-            any(_looks_like_camera_dir(grandchild) for grandchild in child.iterdir() if grandchild.is_dir())
+            any(_looks_like_camera_dir(grandchild, camera_patterns) for grandchild in child.iterdir() if grandchild.is_dir())
             for child in children
             if child.is_dir()
         )
@@ -226,7 +233,16 @@ def _prepare_multiple_media_roots(
     return stage_root, "normalized-multiple-roots", export_base
 
 
-def _write_config(script_dir: Path, base: Path, export_base: Path, work: Path, output: Path, project_name: str, out_name: str) -> None:
+def _write_config(
+    script_dir: Path,
+    base: Path,
+    export_base: Path,
+    work: Path,
+    output: Path,
+    project_name: str,
+    out_name: str,
+    camera_patterns: dict[str, str] | None = None,
+) -> None:
     payload = {
         "BASE": str(base),
         "WORK": str(work),
@@ -235,6 +251,7 @@ def _write_config(script_dir: Path, base: Path, export_base: Path, work: Path, o
             "project_name": project_name,
             "out_name": out_name,
             "export_base": str(export_base),
+            "camera_patterns": dict(camera_patterns or {}),
         },
     }
     (script_dir / "config.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -281,10 +298,23 @@ def run_multicam_sync(
     work.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
     xml_delivery.mkdir(parents=True, exist_ok=True)
-    media_base, layout, export_base = _prepare_multiple_media_roots(roots, stage)
+    media_base, layout, export_base = _prepare_multiple_media_roots(
+        roots,
+        stage,
+        config.camera_patterns,
+    )
 
     def write_builder_config(out_name: str, output: Path = xml_delivery) -> None:
-        _write_config(script_dir, media_base, export_base, work, output, config.name, out_name)
+        _write_config(
+            script_dir,
+            media_base,
+            export_base,
+            work,
+            output,
+            config.name,
+            out_name,
+            config.camera_patterns,
+        )
 
     def emit(text: str) -> None:
         if log:
@@ -368,6 +398,10 @@ def run_multicam_sync(
         "capcut_fcpxml": capcut,
         "media_reference_mode": "relative-to-xml",
         "source_kind": "media-directory",
+        "camera_detection": {
+            "conventional": ["A", "B", "C", "A机", "B机", "C机"],
+            "configured_patterns": sorted(config.camera_patterns),
+        },
         "project_promoted_to_fcpxml": False,
     }
     (report_dir / "sync_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
