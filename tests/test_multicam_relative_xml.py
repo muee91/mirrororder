@@ -28,6 +28,11 @@ def _load_builder(monkeypatch, path: Path, *, base: Path, output: Path, export_b
         def sec_to_ticks(value):
             return int(round(float(value) * 50000))
 
+        @staticmethod
+        def url_abs(base, path):
+            from urllib.parse import quote
+            return "file://" + quote(str(Path(base) / path))
+
     fake_project_config = types.ModuleType("project_config")
     fake_project_config.get_config = lambda: FakeConfig()
     monkeypatch.setitem(sys.modules, "project_config", fake_project_config)
@@ -40,7 +45,7 @@ def _load_builder(monkeypatch, path: Path, *, base: Path, output: Path, export_b
     return module
 
 
-def test_builder_resolves_staging_symlink_to_standard_relative_url(tmp_path: Path, monkeypatch) -> None:
+def _staging_fixture(tmp_path: Path):
     source = tmp_path / "素材根"
     camera = source / "A1"
     camera.mkdir(parents=True)
@@ -48,12 +53,15 @@ def test_builder_resolves_staging_symlink_to_standard_relative_url(tmp_path: Pat
     media.write_bytes(b"media")
     delivery = source / "交付"
     delivery.mkdir()
-
     stage = tmp_path / "project" / "output" / ".multicam-sync" / "media-layout"
     fake_day = stage / "day1"
     fake_day.mkdir(parents=True)
     (fake_day / "A1").symlink_to(camera, target_is_directory=True)
+    return source, delivery, stage, media
 
+
+def test_fcp_builder_resolves_staging_symlink_to_relative_url(tmp_path: Path, monkeypatch) -> None:
+    source, delivery, stage, _media = _staging_fixture(tmp_path)
     root = Path(__file__).resolve().parents[1]
     builder = _load_builder(
         monkeypatch,
@@ -62,29 +70,43 @@ def test_builder_resolves_staging_symlink_to_standard_relative_url(tmp_path: Pat
         output=delivery,
         export_base=source,
     )
-
     value = unquote(builder.url_export("day1/A1/片段 01.mov"))
     assert value == "../A1/片段 01.mov"
     assert ".multicam-sync" not in value
     assert str(tmp_path) not in value
-    assert not value.startswith("file:")
 
 
-def test_both_fcpxml_builders_use_relative_urls_and_no_absolute_url_helper() -> None:
+def test_capcut_builder_keeps_absolute_file_url_but_resolves_staging(tmp_path: Path, monkeypatch) -> None:
+    source, delivery, stage, media = _staging_fixture(tmp_path)
     root = Path(__file__).resolve().parents[1]
-    for name in ("build_fcpxml.py", "build_capcut_fcpxml.py"):
-        source = (root / "vendor" / "multicam-audio-sync" / "scripts" / name).read_text(encoding="utf-8")
-        assert "url_export(" in source
-        assert "os.path.relpath(physical, OUTPUT_BASE)" in source
-        assert "cfg.url_abs(BASE, path)" not in source
-        assert "file://" not in source
+    builder = _load_builder(
+        monkeypatch,
+        root / "vendor" / "multicam-audio-sync" / "scripts" / "build_capcut_fcpxml.py",
+        base=stage,
+        output=delivery,
+        export_base=source,
+    )
+    value = unquote(builder.url_abs("day1/A1/片段 01.mov"))
+    assert value.startswith("file://")
+    assert str(media) in value
+    assert ".multicam-sync" not in value
 
 
-def test_mirrororder_delivers_xml_inside_media_root_and_has_no_custom_portable_format() -> None:
+def test_builders_have_distinct_media_url_policies() -> None:
+    root = Path(__file__).resolve().parents[1]
+    fcp = (root / "vendor" / "multicam-audio-sync" / "scripts" / "build_fcpxml.py").read_text(encoding="utf-8")
+    capcut = (root / "vendor" / "multicam-audio-sync" / "scripts" / "build_capcut_fcpxml.py").read_text(encoding="utf-8")
+    assert "url_export(" in fcp
+    assert "os.path.relpath(physical, OUTPUT_BASE)" in fcp
+    assert "url_abs(" in capcut
+    assert "cfg.url_abs" in capcut
+    assert "os.path.relpath(physical, OUTPUT_BASE)" not in capcut
+
+
+def test_mirrororder_has_no_custom_portable_format() -> None:
     root = Path(__file__).resolve().parents[1]
     source = (root / "src" / "script_organizer" / "multicam_sync_engine.py").read_text(encoding="utf-8")
     assert 'xml_delivery = config.media_root / "交付"' in source
-    assert '"media_reference_mode": "relative-to-xml"' in source
     assert "portable_fcpxml" not in source
     assert "media_relink_manifest" not in source
     assert "media_relink" not in source
