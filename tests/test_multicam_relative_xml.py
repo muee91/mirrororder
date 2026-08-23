@@ -31,6 +31,7 @@ def _load_builder(monkeypatch, path: Path, *, base: Path, output: Path, export_b
     fake_project_config = types.ModuleType("project_config")
     fake_project_config.get_config = lambda: FakeConfig()
     monkeypatch.setitem(sys.modules, "project_config", fake_project_config)
+    monkeypatch.setitem(sys.modules, "pandas", types.ModuleType("pandas"))
 
     spec = importlib.util.spec_from_file_location("mirrororder_test_multicam_builder", path)
     assert spec and spec.loader
