@@ -31,12 +31,34 @@ def _default() -> dict[str, Any]:
     }
 
 
+def _shared_group(row: object) -> dict[str, Any]:
+    """Remove device/runtime-only details before audit evidence is shared."""
+    if not isinstance(row, dict):
+        return {}
+    result = json.loads(json.dumps(row, ensure_ascii=False))
+    judge = result.get("judge")
+    if isinstance(judge, dict):
+        judge.pop("provider", None)
+        judge.pop("model", None)
+    suggestions = result.get("role_suggestions")
+    if isinstance(suggestions, list):
+        for suggestion in suggestions:
+            if isinstance(suggestion, dict):
+                # Identity IDs are derived from device-local biometric clusters.
+                # The shared artifact needs the role hypothesis, not the local
+                # cluster handle used to inspect it on one Mac.
+                suggestion.pop("identity_id", None)
+                suggestion.pop("local_identity_id", None)
+    return result
+
+
 class AuditStore:
     """Shared, rebuildable AI audit artifact.
 
     audit.json is evidence, not review authority. It may be regenerated whenever
     its evidence fingerprint changes and must never write review.json,
-    editorial.json or auto_decisions.json.
+    editorial.json or auto_decisions.json. Device-local identity IDs, model
+    runtime details and media paths are not part of the shared contract.
     """
 
     def __init__(self, output_dir: Path):
@@ -67,7 +89,8 @@ class AuditStore:
             saved["contract"] = AUDIT_CONTRACT
             saved["revision"] = int(current.get("revision", 0) or 0) + 1
             saved["updated_at"] = _now()
-            saved["groups"] = payload.get("groups", {}) if isinstance(payload.get("groups"), dict) else {}
+            raw_groups = payload.get("groups", {}) if isinstance(payload.get("groups"), dict) else {}
+            saved["groups"] = {str(group_id): _shared_group(row) for group_id, row in raw_groups.items()}
             saved["summary"] = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, temporary = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=self.path.parent)
