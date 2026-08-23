@@ -5,6 +5,7 @@ from threading import Thread
 from typing import Any
 
 from .assistant_orchestrator import AssistantOrchestrator
+from .model_connections import load_model_connections, save_model_connections
 from .model_registry import ModelRegistry
 
 
@@ -131,9 +132,6 @@ def install_assistant_runtime() -> None:
                     task_manager=manager,
                 ).cycle(
                     trigger=f"task:{task_type}",
-                    # Analysis completion may trigger a bounded audit. Audit and
-                    # identity completion only refresh the queue, preventing a
-                    # recursive expensive-task loop.
                     allow_actions=task_type in {"prepare_project", "incremental_analyze", "auto_resolve", "transcribe"},
                 )
             except Exception:
@@ -162,6 +160,7 @@ def install_assistant_runtime() -> None:
                         self._send_json(
                             {
                                 "models": ModelRegistry().public(),
+                                "connections": load_model_connections(include_secrets=False),
                                 "agent_api": {
                                     "contract": "agent.v1",
                                     "base": f"/api/agent/v1/projects/{project_id}",
@@ -177,8 +176,17 @@ def install_assistant_runtime() -> None:
                 if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "assistant":
                     self._local_only()
                     project_id = parts[3]
-                    assistant = _orchestrator(service, project_id)
                     body = web_server._body(self)
+                    if parts[5] == "models":
+                        saved = save_model_connections(body)
+                        self._send_json(
+                            {
+                                "connections": saved,
+                                "models": ModelRegistry().public(),
+                            }
+                        )
+                        return
+                    assistant = _orchestrator(service, project_id)
                     if parts[5] == "cycle":
                         payload = assistant.cycle(
                             trigger="app",
