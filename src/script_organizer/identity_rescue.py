@@ -8,7 +8,6 @@ from typing import Any
 
 from .automation_store import AutomationStore
 from .config import ProjectConfig
-from .identity_library import IdentityLibrary
 from .media_identity import device_state_dir
 from .workspace_db import WorkspaceDatabase
 
@@ -19,6 +18,16 @@ def _read_json(path: Path) -> dict[str, Any]:
         return value if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}
+
+
+def _json_object(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    try:
+        decoded = json.loads(str(value or "{}"))
+    except (TypeError, ValueError):
+        return {}
+    return dict(decoded) if isinstance(decoded, dict) else {}
 
 
 def _norm(value: object) -> str:
@@ -54,17 +63,55 @@ def _database_for_config(config: ProjectConfig) -> WorkspaceDatabase | None:
     return None
 
 
-def _confirmed_roles(evidence: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str, float]]:
+def _confirmed_roles(
+    database: WorkspaceDatabase,
+    project_id: str,
+    group_id: str,
+) -> dict[str, dict[str, float]]:
+    """Return human-confirmed role evidence scored by identity similarity.
+
+    observation.confidence can mean detector/diarization success. It is not the
+    probability that the observation belongs to the confirmed actor/speaker.
+    Automatic clustering stores that relationship as cluster_similarity, so the
+    rescue gate must use it when available.
+    """
+
     result: dict[str, dict[str, float]] = {"speaker": {}, "face": {}}
-    for kind in ("speaker", "face"):
-        for row in evidence.get(kind, []):
-            if not row.get("confirmed"):
-                continue
-            role = _norm(row.get("role_name"))
-            if not role:
-                continue
-            confidence = max(0.0, min(1.0, float(row.get("confidence", 0) or 0)))
-            result[kind][role] = max(result[kind].get(role, 0.0), confidence)
+    with database.connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT o.kind, o.confidence, o.metadata_json AS observation_metadata_json,
+                   i.role_name, i.metadata_json AS identity_metadata_json
+            FROM identity_observations AS o
+            JOIN identities AS i
+              ON i.project_id=o.project_id AND i.identity_id=o.identity_id
+            WHERE o.project_id=? AND o.group_id=?
+              AND o.kind IN ('speaker', 'face')
+            """,
+            (project_id, str(group_id)),
+        ).fetchall()
+    for row in rows:
+        kind = str(row["kind"] or "")
+        if kind not in result:
+            continue
+        identity_metadata = _json_object(row["identity_metadata_json"])
+        if not identity_metadata.get("human_confirmed"):
+            continue
+        role = _norm(row["role_name"])
+        if not role:
+            continue
+        observation_confidence = max(0.0, min(1.0, float(row["confidence"] or 0)))
+        observation_metadata = _json_object(row["observation_metadata_json"])
+        raw_similarity = observation_metadata.get("cluster_similarity")
+        try:
+            similarity = max(0.0, min(1.0, float(raw_similarity)))
+        except (TypeError, ValueError):
+            # v1 indexes already wrote cluster_similarity. This fallback keeps
+            # manually-created/legacy local observations usable without making
+            # the shared matcher depend on a migration.
+            similarity = observation_confidence
+        identity_confidence = min(observation_confidence, similarity)
+        result[kind][role] = max(result[kind].get(role, 0.0), identity_confidence)
     return result
 
 
@@ -127,9 +174,6 @@ def apply_identity_rescue(
     if database is None:
         return current
 
-    project_id = config.project_dir.name
-    # The local database project ID may differ from the directory name. Resolve
-    # it by the exact config_path we used to locate the database.
     with database.connection() as connection:
         row = connection.execute(
             "SELECT project_id FROM projects WHERE config_path=? LIMIT 1",
@@ -138,7 +182,6 @@ def apply_identity_rescue(
     if row is None:
         return current
     project_id = str(row[0])
-    library = IdentityLibrary(database, project_id)
 
     script = _read_json(config.output_dir / "script.json")
     matches = _read_json(config.output_dir / "matches.json")
@@ -155,8 +198,7 @@ def apply_identity_rescue(
             continue
         if str(decision.get("status", "")) not in {"needs_review", "unresolved"}:
             continue
-        evidence = library.group_identities(group_id)
-        roles = _confirmed_roles(evidence)
+        roles = _confirmed_roles(database, project_id, group_id)
         if not roles["speaker"] and not roles["face"]:
             continue
         row = match_groups.get(group_id, {}) if isinstance(match_groups.get(group_id), dict) else {}
