@@ -16,7 +16,7 @@ AssistantOrchestrator
 AgentToolRegistry
         ↓
 ┌──────────────┬───────────────┬────────────────┐
-│ deterministic│ local vision  │ optional LLM   │
+│ deterministic│ local/remote  │ optional LLM   │
 │ Host facts   │ Audit / VLM   │ plan / explain │
 └──────────────┴───────────────┴────────────────┘
         ↓
@@ -31,11 +31,11 @@ assistant.json / assistant.v1
 Human Review / Editorial Decision
 ```
 
-`assistant.json` 是可重建的派生状态，不是审核权威。它可以被重新生成；任何时候都不能替代 `review.json`、`editorial.json` 或 `auto_decisions.json`。
+`assistant.json` 是可重建的派生状态，不是审核权威。它不能替代 `review.json`、`editorial.json` 或 `auto_decisions.json`。
 
-## 2. 什么时候触发
+## 2. 触发与算力边界
 
-当前第一版在以下 Host 任务完成后重新整理助理状态：
+以下 Host 任务完成后重新整理助理状态：
 
 - `prepare_project`
 - `incremental_analyze`
@@ -45,25 +45,36 @@ Human Review / Editorial Decision
 - `identity_index`
 - `evidence_extract`
 
-前四类任务完成后，助理可以执行受限的后续动作；Audit、身份识别和证据提取完成后只刷新问题队列，避免形成递归昂贵任务。
+前四类完成后允许执行受限后续动作；Audit、身份识别和证据提取完成后只刷新问题队列，防止递归昂贵任务。
 
-当本机视觉模型已经由用户明确启用时，助理允许在分析结束后自动提交**最多 24 个高优先疑难 Take** 的 `priority audit`。已经有当前分析版本 Audit 证据的 Take 不重复计算；任务幂等键同时包含 analysis revision，分析内容变化后才允许产生新审计。
+视觉能力已经由用户明确启用时，助理允许在主分析结束后自动提交**最多 24 个高优先疑难 Take** 的 `priority audit`。已有当前 analysis revision Audit 证据的 Take 不重复计算；审计任务幂等键包含 analysis revision。
 
-助理不会因为“AI 已启用”就全量扫描所有素材。
+其它受限工具的上限：
+
+```text
+extract_visual_evidence   最多 12 Take / 调用
+index_unknown_identities  最多 16 Take / 调用
+```
+
+身份索引继续遵守 identity cache：人工已确认的 identity 不因助理的指定 Take 调用而重新计算。
+
+镜序不会因为“AI 已启用”就全项目跑 VLM、人脸或声纹。
 
 ## 3. Agent Tool Registry
 
-模型没有文件系统控制权。Assistant Orchestrator 只能执行 MirrorOrder 自己注册的工具。
+模型没有文件系统控制权。Assistant Orchestrator 只能执行 MirrorOrder 自己注册的 allowlist 工具。
 
-第一版可自动执行的工具只有：
+当前可执行工具：
 
 ```text
 run_priority_audit
+extract_visual_evidence
+index_unknown_identities
 collect_learning_cases
 noop
 ```
 
-同时存在只读能力：
+只读能力：
 
 ```text
 inspect_project
@@ -72,8 +83,6 @@ list_attention_groups
 model_status
 failure_patterns
 ```
-
-任何没有进入 allowlist 的模型动作都必须拒绝。
 
 明确禁止：
 
@@ -87,49 +96,42 @@ failure_patterns
 - 修改全局匹配阈值
 - 直接部署模型提出的算法补丁
 
-## 4. 模型注册表
+任何没有进入 allowlist 的 tool name 都必须拒绝。
 
-统一入口是 `ModelRegistry`，公开契约为 `models.v1`。
+## 4. Model Registry
 
-角色：
+统一入口是 `ModelRegistry`，公开契约为 `models.v1`：
 
 ```text
-production_rescue
-  生产映射链中的受限文本二审
-
-vision
-  本地或远端视觉能力
-
-multimodal_audit
-  Shadow Audit 使用的多模态能力
-
-assistant_language
-  镜序助理的自然语言解释与受限规划
+production_rescue   生产映射链受限文本二审
+vision              本地或用户明确连接的远端视觉能力
+multimodal_audit    Shadow Audit 使用的多模态能力
+assistant_language  自然语言解释与受限规划
 ```
 
-### 当前模型优先级
-
-`assistant_language` 按以下顺序选择：
+`assistant_language` 选择顺序：
 
 1. `MIRRORORDER_ASSISTANT_MODEL_*` 显式环境变量；
 2. App 保存的本机语言模型连接；
-3. 已配置的 production rescue LLM；
-4. 已启用的本地视觉模型，作为 text-only fallback；
+3. production rescue LLM；
+4. 已启用本地视觉模型，作为 text-only fallback；
 5. 无语言模型。
 
-因此当前只安装本地小参数视觉模型时，镜序仍然可以：
+因此当前只有本地小参数视觉模型时，镜序仍然可以：
 
 - 做 per-clip 景别判断；
-- 做受限 Shadow Audit；
-- 输出素材质量、连续性和 coverage 线索；
+- 做 Shadow Audit；
+- 输出技术质量、连续性与 coverage 线索；
 - 主动挑出最值得审计的低置信 Take；
-- 在用户明确要求“让助理规划”时复用本地模型做简短文本规划。
+- 用户明确点击“让助理规划”时复用本地模型做简短 JSON 规划。
 
-没有语言模型时，问题队列和优先级仍由确定性规则生成，不影响镜序工作。
+没有语言模型时，问题队列和优先级继续由确定性规则生成。
 
-## 5. 本机语言模型连接
+## 5. App 模型连接
 
-App 的“镜序助理 → 模型连接”允许配置 OpenAI-compatible 接口：
+“镜序助理 → 模型连接”现在有两个可选连接：
+
+### 语言模型
 
 ```text
 base_url
@@ -137,7 +139,23 @@ model
 api_key
 ```
 
-模型连接属于设备本地状态：
+用于自然语言解释和受限工具规划。
+
+### 增强多模态
+
+同样使用 OpenAI-compatible `chat/completions`：
+
+```text
+base_url
+model
+api_key
+```
+
+只有用户明确启用这个连接，视觉 Provider 才会使用它；否则继续使用已经启用的本地视觉模型或保持无视觉模型状态。远端多模态启用后，Audit 可能把**有限抽样 JPEG 帧**发送到该端点；原始视频不会由该 Provider 上传。
+
+环境变量仍然高于 App 保存连接。兼容旧行为：本地视觉已启用且只设置 `MIRRORORDER_VISION_MODEL` 时，它仍表示替换本地模型，不会被误判为远端连接。
+
+本机配置位置：
 
 ```text
 ~/Library/Application Support/MirrorOrder/model-connections.json
@@ -146,57 +164,45 @@ api_key
 
 `model-secrets.json` 尽可能以 `0600` 权限保存。
 
-API Key 不得写入：
-
-- workspace
-- project.toml
-- `assistant.json`
-- `audit.json`
-- `review.json`
-- `editorial.json`
-- `auto_decisions.json`
-- Team Web payload
-
-Team Web 不显示 provider、模型名、API Key 或运行时诊断。
+API Key 不得进入：workspace、project.toml、`assistant.json`、`audit.json`、`review.json`、`editorial.json`、`auto_decisions.json` 或 Team Web / Agent 公开 payload。
 
 ## 6. 语言模型规划
 
-语言模型不是自由 Agent。它只能输出结构化计划：
+语言模型不是自由 Agent。它只能返回结构化计划，例如：
 
 ```json
 {
-  "briefing": "一句制作简报",
+  "briefing": "有两组素材值得先补证据",
   "actions": [
     {
-      "tool": "run_priority_audit",
-      "arguments": {
-        "group_ids": ["G_001"]
-      }
+      "tool": "extract_visual_evidence",
+      "arguments": {"group_ids": ["G_001"]}
+    },
+    {
+      "tool": "index_unknown_identities",
+      "arguments": {"group_ids": ["G_001"], "kind": "speaker"}
     }
   ],
   "questions": [
-    {
-      "group_id": "G_001",
-      "text": "需要用户判断的问题"
-    }
+    {"group_id": "G_001", "text": "请看片确认是否为补拍"}
   ]
 }
 ```
 
-Host 会重新验证工具名与参数；模型写出的任意未注册工具都不会执行。
+Host 会再次验证 tool name 与参数；每次计划最多执行 2 个动作。
 
 自动模型规划默认关闭。只有：
 
-- 用户在 App 点击“让助理规划”；或
+- App 用户点击“让助理规划”；或
 - Host 明确设置 `MIRRORORDER_ASSISTANT_AUTO_PLAN=1`
 
 才允许调用语言模型做规划。
 
-这与自动 priority audit 不同：后者是确定性调度，只在本地视觉已经启用、存在高价值未审计异常时运行。
+自动 priority audit 不依赖语言模型；它是 Host 的确定性、bounded 调度。
 
 ## 7. 主动问题队列
 
-助理优先级不是“AI confidence 排行”，而是生产风险排序：
+问题按生产风险排序，而不是做“AI confidence 排行”：
 
 ```text
 100  人工归集 vs 当前算法冲突
@@ -207,10 +213,10 @@ Host 会重新验证工具名与参数；模型写出的任意未注册工具都
  84  no_candidate
  82  top candidates 分差过小
  66  技术质量 / continuity 风险
- 38  角色候选待人工确认
+ 38  角色候选待确认
 ```
 
-用户主要看到自然语言和动作：
+用户主要看到：
 
 ```text
 看片
@@ -218,20 +224,18 @@ Host 会重新验证工具名与参数；模型写出的任意未注册工具都
 确认人物
 ```
 
-而不是模型名称、embedding、prompt、token、runtime 或算法调试字段。
+Host `assistant.v1` 是主动提醒与问题队列的来源；前端本地问题生成只保留为 Host API 不可用时的降级路径。
 
 ## 8. 人物与多机位
 
-角色推断只能作为候选。
-
-可靠链路：
+角色推断只能作为候选：
 
 ```text
 speaker cluster
 + ASR 对白
 + 已可靠归集的剧本范围
 + 剧本 speaker
-→ role_suggestion
+→ role_suggestion (requires_confirmation)
 ```
 
 多机位必须保持：
@@ -240,27 +244,27 @@ speaker cluster
 speaker != visible_actor
 ```
 
-例如 B 机画面拍王强，但现场正在说话的是李雪，这不是冲突。没有可靠视听绑定时，助理不得因为台词属于李雪就把 B 机画面人物标成李雪。
+B 机拍王强而现场说话的是李雪不是矛盾。没有可靠视听绑定时，不得因为台词属于李雪就把 B 机 face 命名为李雪。
 
-人工确认过的 face / speaker identity 不应重复计算或被自动覆盖。
+人工确认过的 face / speaker identity 不重复计算或自动覆盖。
 
 ## 9. Agent API
 
-外部 Codex / Agent 与镜序助理不是同一权限主体，但共享同一套安全边界。
+外部 Codex / Agent 与镜序助理不是同一权限主体，但共用安全边界。
 
-现有 Agent API：
+Host project route：
 
 ```text
 /api/agent/v1/projects/{project_id}/...
 ```
 
-Gateway 对外使用 workspace-scoped 路由：
+Gateway workspace route：
 
 ```text
 /api/agent/v1/workspaces/{workspace_id}/projects/{project_id}/...
 ```
 
-Bearer token scope：
+Bearer scope：
 
 ```text
 read
@@ -268,26 +272,23 @@ analyze
 propose
 ```
 
-本轮新增：
+新增：
 
 ```text
 GET  /api/agent/v1/projects/{project_id}/assistant
 POST /api/agent/v1/projects/{project_id}/assistant/cycle
 ```
 
-`assistant/cycle` 需要 `analyze` scope。即使通过 Agent API 触发，仍只能调用 Assistant 的 allowlisted tools；Agent API 本身仍无权直接写人工审核。
+`assistant/cycle` 需要 `analyze` scope。它仍只能调用 Assistant allowlist，不能直接写人工审核。
 
-App 的镜序助理面板现在有明确的 **Agent API** 入口，用于查看接口和权限边界；普通 Team Web 不展示这一制作配置。
+App 镜序助理面板有明确 **Agent API** 入口显示 project route、capabilities route 和权限边界；Team Web 不展示这些制作配置。
 
 ## 10. 算法学习
 
-镜序助理可以调用 `collect_learning_cases` 更新 `learning_cases.jsonl`，但生产 matcher 永远不读取这个文件。
-
-正确升级链：
+`collect_learning_cases` 更新 `learning_cases.jsonl`，生产 matcher 永远不读取该文件。
 
 ```text
-生产失败案例
-→ human override / audit disagreement
+human override / audit disagreement
 → learning_cases.jsonl
 → failure pattern clustering
 → candidate algorithm patch
@@ -299,9 +300,7 @@ App 的镜序助理面板现在有明确的 **Agent API** 入口，用于查看�
 禁止：
 
 ```text
-LLM 发现问题
-→ 直接修改 production matcher
-→ 自动部署
+LLM发现问题 → 直接修改production matcher → 自动部署
 ```
 
 ## 11. App / Web 边界
@@ -310,39 +309,38 @@ LLM 发现问题
 
 可以：
 
-- 查看镜序助理主动问题；
-- 点击问题直接看片 / 归集 / 人物库；
-- 查看视觉、语言和 Agent API 是否可用；
-- 配置本机语言模型连接；
+- 查看主动问题并直达看片 / 归集 / 人物库；
+- 查看本地/远端视觉、语言模型和 Agent API 是否可用；
+- 配置设备本地语言模型与可选多模态连接；
 - 点击“让助理规划”；
-- 与镜序助理进行当前项目范围内的自然语言问答。
+- 与镜序助理做当前项目范围内问答。
 
 ### Team Web Review
 
-只接收经过 Host 投影的安全 `assistant.v1`：
+安全 `assistant.v1` 只包含：
 
 - summary
 - items
-- messages
+- revision / updated_at
 
-不暴露：
+不包含：
 
-- provider 配置
+- App 助理聊天记录
+- provider / 模型配置
 - API Key
-- 模型路径
-- Host runtime
+- Host runtime / 模型路径
 - Agent token 管理
 - 自动生产任务控制
 
-## 12. 下一阶段
+外部 Agent 的 assistant read 同样不读取 App 助理聊天记录。
 
-Assistant Orchestrator 已经提供真正的控制平面。下一阶段优先增加的不是更多聊天能力，而是更丰富的**第一方安全工具**：
+## 12. 后续工具优先级
 
-1. `extract_visual_evidence(group_ids)`
-2. `index_unknown_identities(group_ids)`，跳过已确认 identity
-3. `build_coverage_graph(scene_id)`
-4. `find_continuity_risks(scene_id)`
-5. `evaluate_algorithm_candidate(version)`，仅离线 replay
-6. Rough Cut Planner，以 Coverage Graph + Editorial Decision 为输入
+Assistant Orchestrator 已形成真正控制平面。下一阶段重点不是增加闲聊，而是增加新的第一方安全工具：
+
+1. `build_coverage_graph(scene_id)`
+2. `find_continuity_risks(scene_id)`
+3. `evaluate_algorithm_candidate(version)`，只允许离线 replay
+4. Rough Cut Planner，以 Coverage Graph + Editorial Decision 为输入
 
 每增加一个工具，都必须单独定义写入边界、算力上限和回归测试。
