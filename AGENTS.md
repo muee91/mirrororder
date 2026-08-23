@@ -47,8 +47,8 @@
 
 ## 多机位与FCPXML
 
-- 涉及多机位同步或NLE XML时，使用当前 `multicam-audio-sync` 引擎；它是 Host 可直接调用的确定性引擎，不得依赖 Codex 才能运行。
-- `macos-app/build_app.sh` 要把 repo vendor、`MIRRORORDER_MULTICAM_SYNC_ROOT` 或开发机 `~/.agents/skills/multicam-audio-sync` 中的引擎打包进 App runtime。
+- 涉及多机位同步或NLE XML时，使用仓库内 `vendor/multicam-audio-sync` 的第一方确定性引擎；它由 Host/App 直接调用，不得依赖 Codex 或用户目录中的外部技能才能运行。
+- `macos-app/build_app.sh` 必须把仓库内第一方引擎完整打包进 App runtime。`MIRRORORDER_MULTICAM_SYNC_ROOT` 只有在同时设置 `MIRRORORDER_ALLOW_MULTICAM_SYNC_OVERRIDE=1` 时才可用于明确的开发覆盖，不能作为发布构建的隐式来源。
 - 不修改原始FCPXML，不重建或破坏已有同步关系。
 - 媒体目录项目允许生成新的 `output/sync/synchronized.fcpxml`，但不得覆盖用户已有 FCPXML。
 - `organized.fcpxml` 默认必须与输入文件字节完全一致。

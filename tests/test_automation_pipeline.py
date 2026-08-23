@@ -3,10 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from script_organizer.auto_resolver import resolve_project
+from script_organizer.analysis_runtime import analyze as analyze_project
 from script_organizer.automation_runtime import _replace_project_script
 from script_organizer.config import ProjectConfig
 from script_organizer.model_provider import ModelProvider, ModelProviderConfig
+from script_organizer.multicam_sync_engine import MulticamSyncUnavailable, _check_prerequisites
 from script_organizer.review_store import ReviewStore
 
 
@@ -115,19 +119,76 @@ def test_desktop_build_can_bundle_sync_engine() -> None:
     automation = (root / "web" / "automation.js").read_text(encoding="utf-8")
 
     assert "MIRRORORDER_MULTICAM_SYNC_ROOT" in build
-    assert ".agents/skills/multicam-audio-sync" in build
+    assert "MIRRORORDER_ALLOW_MULTICAM_SYNC_OVERRIDE" in build
+    assert "MIRRORORDER_APP_OUTPUT" in build
+    assert 'ROOT/vendor/multicam-audio-sync' in build
+    assert "first-party multicam-audio-sync" in build
+    assert ".agents/skills/multicam-audio-sync" not in build
     assert '"prepare_project"' in tasks
     assert '"auto_resolve"' in tasks
     assert "ai_confirmed" in automation
     assert "待处理" in automation
 
 
+def test_first_party_multicam_engine_is_complete_and_path_clean() -> None:
+    root = Path(__file__).resolve().parents[1]
+    engine = root / "vendor" / "multicam-audio-sync"
+    required = {
+        "project_config.py",
+        "make_index.py",
+        "extract_parallel.py",
+        "sync.py",
+        "compress_gaps.py",
+        "build_fcpxml.py",
+        "build_capcut_fcpxml.py",
+        "build_capcut_draft_31.py",
+        "build_pr_xml.py",
+        "capcut_draft_codec.py",
+        "validate_fcpxml.py",
+        "capcut_draft_schema.json",
+    }
+    assert (engine / "SKILL.md").is_file()
+    assert (engine / "requirements.txt").is_file()
+    assert required <= {path.name for path in (engine / "scripts").iterdir()}
+    assert not list(engine.rglob("__pycache__"))
+    assert not list(engine.rglob("._*"))
+    text = "\n".join(path.read_text(encoding="utf-8", errors="ignore")
+                      for path in engine.rglob("*")
+                      if path.is_file() and path.suffix in {".md", ".py", ".json"})
+    assert "/Users/editor/" not in text
+    assert "/Volumes/PSSD" not in text
+    assert "MIRRORORDER_MULTICAM_SYNC_ROOT" not in text
+
+
+def test_host_runtime_does_not_fallback_to_external_skill() -> None:
+    root = Path(__file__).resolve().parents[1]
+    runtime = (root / "src" / "script_organizer" / "multicam_sync_engine.py").read_text(encoding="utf-8")
+    assert "Path.home() / \".agents\"" not in runtime
+    assert "zipfile" not in runtime
+    assert "validate_fcpxml.py" in runtime
+    assert "_check_prerequisites()" in runtime
+
+
+def test_multicam_prerequisites_fail_before_sync_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("script_organizer.multicam_sync_engine.shutil.which", lambda _name: None)
+    monkeypatch.setattr("script_organizer.multicam_sync_engine.importlib.util.find_spec", lambda _name: None)
+
+    with pytest.raises(MulticamSyncUnavailable, match="缺少命令.*ffmpeg.*ffprobe.*缺少 Python 模块"):
+        _check_prerequisites()
+
+
 def test_project_creation_defaults_to_raw_media_and_is_host_local() -> None:
     root = Path(__file__).resolve().parents[1]
+    app = (root / "web" / "app.js").read_text(encoding="utf-8")
     automation = (root / "web" / "automation.js").read_text(encoding="utf-8")
     server = (root / "src" / "script_organizer" / "web_server.py").read_text(encoding="utf-8")
 
-    assert "kind.value = 'media-directory'" in automation
+    assert "function openProjectDialog()" in app
+    assert "new-project-kind').value = 'media-directory'" in app
+    assert "function preferredProject(projects)" in app
+    assert "function hasExplicitProjectSelection()" in app
+    assert "script-organizer-project-selection-explicit" in app
+    assert "kind.value = 'media-directory'" not in automation
     assert "原始多机位素材目录（推荐" in automation
     assert "已有同步 FCPXML（高级入口）" in automation
     assert "项目创建只在 Host 本机或镜序 App 执行" in automation
@@ -154,9 +215,59 @@ def test_host_script_replacement_updates_only_script_source(tmp_path: Path) -> N
 
     selected = _replace_project_script(config_path, new_script)
 
-    assert selected == new_script.resolve()
-    assert ProjectConfig.from_file(config_path).script == new_script.resolve()
+    project_script = config_path.parent / "inputs" / "script.docx"
+    assert selected == project_script
+    assert ProjectConfig.from_file(config_path).script == project_script.resolve()
+    assert project_script.read_bytes() == new_script.read_bytes()
     assert json.loads(review_path.read_text(encoding="utf-8")) == review_payload
+
+
+def test_media_directory_analysis_redacts_host_paths_after_sync_input(tmp_path: Path) -> None:
+    media_root = tmp_path / "HostOnly" / "media"
+    media_root.mkdir(parents=True)
+    media = media_root / "A001.mov"
+    media.write_bytes(b"video")
+    project = tmp_path / "project"
+    inputs = project / "inputs"
+    sync = project / "output" / "sync"
+    inputs.mkdir(parents=True)
+    sync.mkdir(parents=True)
+    script = inputs / "script.md"
+    script.write_text("# 第1集\n\n1-1 室内\n\n小王：你好\n", encoding="utf-8")
+    generated = sync / "synchronized.fcpxml"
+    generated.write_text(
+        f'''<fcpxml version="1.8"><resources><asset id="a" src="file://{media}"/></resources>
+        <library><event><project><sequence><spine>
+        <asset-clip name="A001" ref="a" lane="1" offset="0s" duration="1s"/>
+        </spine></sequence></project></event></library></fcpxml>''',
+        encoding="utf-8",
+    )
+    config_path = project / "project.toml"
+    config_path.write_text(
+        f'''[project]
+name = "Portable Directory"
+[input]
+kind = "media-directory"
+script = "./inputs/script.md"
+[output]
+directory = "./output"
+[asr]
+backend = "cache"
+transcript_dir = "./cache/transcripts"
+[media]
+root = "{media_root}"
+''',
+        encoding="utf-8",
+    )
+
+    result = analyze_project(ProjectConfig.from_file(config_path))
+    index = result["index"]
+
+    assert index["source"]["media_root"] == ""
+    assert index["source"]["derived_fcpxml"] == "./output/sync/synchronized.fcpxml"
+    assert index["clips"][0]["media_path"] == ""
+    assert index["clips"][0]["exists"] is False
+    assert str(media_root) not in json.dumps(index, ensure_ascii=False)
 
 
 def test_script_replacement_route_is_local_and_reanalyzes() -> None:

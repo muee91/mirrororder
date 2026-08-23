@@ -16,6 +16,7 @@ from script_organizer.agent_store import AgentAuthorizationError, AgentTokenStor
 from script_organizer.config import ProjectConfig
 from script_organizer.material_index import analyze
 from script_organizer.media_reader import read_media_directory
+from script_organizer.source_descriptor import shared_source_descriptor
 from script_organizer.mcp_server import GatewayClient, _tool_call
 from script_organizer.review_store import ReviewStore
 from script_organizer.script_parser import parse_script
@@ -110,7 +111,8 @@ def _head_request(base: str, path: str, headers: dict[str, str] | None = None) -
         return error.code, dict(error.headers.items()), error.read()
 
 
-def test_workspace_registry_preflights_fcpxml_and_media_directory(tmp_path):
+def test_workspace_registry_preflights_fcpxml_and_media_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
     workspace = _workspace(tmp_path)
     registry = WorkspaceRegistry(workspace)
     media, fcpxml, script = _project_files(tmp_path)
@@ -135,7 +137,120 @@ def test_workspace_registry_preflights_fcpxml_and_media_directory(tmp_path):
     })
     config = registry.project_config(directory["project_id"])
     assert config.is_media_directory and config.media_root == media_root
+    config_text = (workspace.registry_path.parent / "directory-demo" / "project.toml").read_text(encoding="utf-8")
+    assert str(media_root) not in config_text
     assert read_media_directory(media_root, config.camera_patterns)[0].camera == "A"
+    assert directory["config_path"] == "projects/directory-demo/project.toml"
+    assert not Path(directory["config_path"]).is_absolute()
+
+
+def test_new_project_copies_inputs_and_keeps_project_config_portable(tmp_path):
+    workspace = _workspace(tmp_path)
+    registry = WorkspaceRegistry(workspace)
+    media, fcpxml, script = _project_files(tmp_path)
+    created = registry.create({
+        "name": "Portable FCP",
+        "project_id": "portable-fcp",
+        "input_kind": "fcpxml",
+        "fcpxml": str(fcpxml),
+        "script": str(script),
+    })
+    project_dir = workspace.registry_path.parent / "portable-fcp"
+    config_text = (project_dir / "project.toml").read_text(encoding="utf-8")
+    assert 'script = "./inputs/' in config_text
+    assert 'fcpxml = "./inputs/source.fcpxml"' in config_text
+    assert 'directory = "./output"' in config_text
+    assert 'transcript_dir = "./cache/transcripts"' in config_text
+    assert str(fcpxml) not in config_text and str(script) not in config_text
+    assert (project_dir / "inputs/source.fcpxml").read_bytes() == fcpxml.read_bytes()
+    assert (project_dir / "inputs/script.md").read_bytes() == script.read_bytes()
+    assert created["config_path"] == "projects/portable-fcp/project.toml"
+
+
+def test_project_preflight_reports_warnings_without_writing(tmp_path):
+    workspace = _workspace(tmp_path)
+    registry = WorkspaceRegistry(workspace)
+    _media, fcpxml, script = _project_files(tmp_path)
+    result = registry.preflight_create({
+        "name": "Preflight",
+        "input_kind": "fcpxml",
+        "fcpxml": str(fcpxml),
+        "script": str(script),
+    })
+    assert result["ready"] is True
+    assert result["will_copy_inputs"] is True
+    assert result["will_write_shared_absolute_paths"] is False
+    assert result["detected"] == {
+        "script_segments": 2,
+        "logical_clips": 1,
+        "available_media": 1,
+        "missing_media": 0,
+    }
+    assert not (workspace.registry_path.parent / "preflight").exists()
+
+
+def test_project_preflight_rejects_unusable_script_before_creating_project(tmp_path):
+    workspace = _workspace(tmp_path)
+    registry = WorkspaceRegistry(workspace)
+    _media, fcpxml, script = _project_files(tmp_path)
+    script.write_text("只有一段说明，没有集数标题", encoding="utf-8")
+
+    result = registry.preflight_create({
+        "name": "Invalid Script",
+        "input_kind": "fcpxml",
+        "fcpxml": str(fcpxml),
+        "script": str(script),
+    })
+
+    assert result["ready"] is False
+    assert result["detected"]["script_segments"] == 0
+    assert any("剧本没有解析出可用段落" in message for message in result["errors"])
+    assert not (workspace.registry_path.parent / "invalid-script").exists()
+
+
+def test_shared_source_descriptor_omits_device_media_root(tmp_path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    config_path = project_dir / "project.toml"
+    config_path.write_text(
+        """[project]
+name = "Portable"
+[input]
+kind = "media-directory"
+script = "./inputs/script.md"
+[output]
+directory = "./output"
+[media]
+root = "/Volumes/HostOnly/footage"
+""",
+        encoding="utf-8",
+    )
+    config = ProjectConfig.from_file(config_path)
+
+    assert shared_source_descriptor(config) == {
+        "kind": "media-directory",
+        "fcpxml": "",
+        "fcpxml_sha256": "",
+        "script": "./inputs/script.md",
+        "script_sha256": "",
+        "media_root": "",
+        "media_binding": "device-local",
+    }
+
+
+def test_workspace_registry_normalizes_legacy_absolute_config_paths(tmp_path):
+    workspace = _workspace(tmp_path)
+    config_path = _register_demo(workspace, tmp_path)
+    registry = WorkspaceRegistry(workspace)
+    registry_path = workspace.registry_path
+    payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    payload["projects"][0]["config_path"] = str(config_path)
+    registry_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    entry = registry.get("demo")
+
+    assert entry["config_path"] == "projects/demo/project.toml"
+    assert registry.project_config("demo").config_path == config_path.resolve()
 
 
 def test_script_parser_supports_txt_and_markdown(tmp_path):
@@ -461,7 +576,7 @@ def test_workspace_gateway_isolates_same_project_ids_and_pairing(tmp_path):
         assert status == 200
         assert _request(base, "/api/v1/pairing", method="POST", payload={"code": "wrong"})[0] == 401
         status, payload = _request(base, "/api/v1/pairing", method="POST", payload={"code": "123456"})
-        assert status == 200 and payload["session"].startswith("mos_")
+        assert status == 200 and payload == {"paired": True}
 
         left_service = gateway.select("ws_left")
         _record, token = left_service.tokens.create("gateway-agent", ["shared"], ["read"], 1)
@@ -497,6 +612,50 @@ def test_workspace_gateway_isolates_same_project_ids_and_pairing(tmp_path):
                 else:
                     os.environ[key] = value
         assert json.loads(mcp_result["content"][0]["text"])["project"]["project_id"] == "shared"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_gateway_pairing_sets_httponly_cookie_for_browser_media(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    workspace = _workspace(root).with_workspace_id("ws_cookie")
+    workspace.config_path.write_text(
+        workspace.config_path.read_text(encoding="utf-8").replace("[workspace]\n", '[workspace]\nid = "ws_cookie"\n'),
+        encoding="utf-8",
+    )
+    workspace = WorkspaceConfig.from_file(workspace.config_path)
+    config_path = _register_demo(workspace, root, "demo")
+    index = json.loads((config_path.parent / "output" / "material_index.json").read_text(encoding="utf-8"))
+    clip_id = index["groups"][0]["members"][0]["clip_id"]
+    gateway = WorkspaceGateway([workspace], pairing_code="123456")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_gateway_handler(gateway, workspace.web_dir))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        request = urllib.request.Request(
+            base + "/api/v1/pairing",
+            data=b'{"code":"123456"}',
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            cookie = response.headers["Set-Cookie"]
+        assert payload == {"paired": True}
+        assert "HttpOnly" in cookie and "SameSite=Lax" in cookie and "Path=/" in cookie
+
+        media = urllib.request.Request(
+            base + f"/api/v1/workspaces/ws_cookie/projects/demo/media/{clip_id}",
+            headers={"Cookie": cookie, "Range": "bytes=1-3"},
+        )
+        with urllib.request.urlopen(media, timeout=5) as response:
+            assert response.status == 206
+            assert response.headers["Content-Range"] == "bytes 1-3/5"
+            assert response.read() == b"ide"
     finally:
         server.shutdown()
         server.server_close()

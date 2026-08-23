@@ -71,6 +71,9 @@ def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     assert 'cp "$LLAMA_SERVER_SOURCE" "$RUNTIME_BIN"' in build
     assert 'install_name_tool -id "@rpath/$name"' in build
     assert 'RUNTIME_LIB_SOURCES=(' in build
+    assert 'llama-runtime.lock' in build
+    assert "validate_macho_closure" in build
+    assert "external Mach-O dependency" in build
     assert 'codesign --force --sign - "$RUNTIME/bin/llama-server"' in build
     assert 'codesign --force --deep --sign - "$APP"' in build
     assert '"$SOURCE" "$LOCAL_RUNTIME_SOURCE"' in build
@@ -81,6 +84,9 @@ def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     assert "LocalRuntimeSettingsSection(" in desktop
     assert "workspaceID: controller.selectedWorkspaceID" in desktop
     assert '@Published var port = "8766"' in desktop
+    assert 'private let selectedWorkspaceKey = "selectedWorkspaceID"' in desktop
+    assert 'private let selectedProjectKey = "selectedProjectID"' in desktop
+    assert "persistSelection()" in desktop
     assert 'appendingPathComponent("local-runtime")' in panel
     assert "首次下载并准备模型" in panel
     assert 'appendingPathComponent("api/v1/workspaces")' in panel

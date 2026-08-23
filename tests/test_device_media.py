@@ -41,12 +41,12 @@ def test_device_media_store_binds_verified_copy_without_shared_path_change(tmp_p
         ]
     }
     store = DeviceMediaStore(tmp_path / "device" / "media-bindings.json")
-    summary = store.scan("demo", index, [str(local.parent)])
+    summary = store.scan("ws_demo", "demo", index, [str(local.parent)])
 
     assert summary["total"] == 1
     assert summary["resolved"] == 1
     assert summary["missing"] == 0
-    assert store.resolve("demo", index["clips"][0]) == str(local)
+    assert store.resolve("ws_demo", "demo", index["clips"][0]) == str(local)
     assert index["clips"][0]["media_path"] == "/Volumes/OTHER/A001.mov"
 
 
@@ -64,12 +64,45 @@ def test_legacy_project_can_relink_unique_filename_before_reanalysis(tmp_path: P
         ]
     }
     store = DeviceMediaStore(tmp_path / "state" / "media-bindings.json")
-    summary = store.scan("beef", index, [str(local.parent)])
+    summary = store.scan("ws_beef", "beef", index, [str(local.parent)])
 
     key = provisional_media_id("A003C012.mov")
     assert key.startswith("MP_")
     assert summary["resolved"] == 1
-    assert store.resolve("beef", index["clips"][0]) == str(local)
+    assert store.resolve("ws_beef", "beef", index["clips"][0]) == str(local)
+
+
+def test_same_project_id_isolated_between_workspaces(tmp_path: Path) -> None:
+    source = tmp_path / "source" / "A001.mov"
+    left = tmp_path / "left" / "A001.mov"
+    right = tmp_path / "right" / "renamed.mov"
+    source.parent.mkdir()
+    left.parent.mkdir()
+    right.parent.mkdir()
+    source.write_bytes(b"same-media" * 1000)
+    left.write_bytes(source.read_bytes())
+    right.write_bytes(source.read_bytes())
+    media_id = media_id_for_path(source)
+    index = {
+        "clips": [
+            {
+                "clip_id": "shared-clip",
+                "media_id": media_id,
+                "name": "A001",
+                "media_path": "/Volumes/SOURCE/A001.mov",
+            }
+        ]
+    }
+    store = DeviceMediaStore(tmp_path / "state" / "media-bindings.json")
+    store.scan("ws_left", "shared", index, [str(left.parent)])
+    store.scan("ws_right", "shared", index, [str(right.parent)])
+
+    assert store.resolve("ws_left", "shared", index["clips"][0]) == str(left)
+    assert store.resolve("ws_right", "shared", index["clips"][0]) == str(right)
+    payload = store.load()
+    assert set(payload["workspaces"]) == {"ws_left", "ws_right"}
+    assert set(payload["workspaces"]["ws_left"]["projects"]) == {"shared"}
+    assert set(payload["workspaces"]["ws_right"]["projects"]) == {"shared"}
 
 
 def test_new_transcript_cache_uses_media_id_not_absolute_path(tmp_path: Path) -> None:

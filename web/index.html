@@ -193,14 +193,7 @@
         剧本（DOCX、TXT 或 Markdown）
         <span><input id="new-project-script" readonly required><button data-pick-kind="file" data-pick-target="new-project-script" type="button">选择</button></span>
       </label>
-      <div class="form-grid">
-        <label>输出目录（可选）
-          <span class="path-inline"><input id="new-project-output" readonly><button data-pick-kind="folder" data-pick-target="new-project-output" type="button">选择</button></span>
-        </label>
-        <label>ASR 缓存目录（可选）
-          <span class="path-inline"><input id="new-project-transcript" readonly><button data-pick-kind="folder" data-pick-target="new-project-transcript" type="button">选择</button></span>
-        </label>
-      </div>
+      <p class="modal-note">项目输出、ASR 缓存和不可变输入统一保存在工作区项目目录；本机素材目录只保存到这台 Mac 的设备绑定。</p>
       <label>机位规则（可选）
         <input id="new-project-camera-patterns" placeholder="A=^A, B=^B, C=^C">
       </label>

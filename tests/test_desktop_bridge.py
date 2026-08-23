@@ -33,6 +33,21 @@ def test_desktop_service_start_script_saves_pid_after_background_launch():
     assert '@Published var port = "8766"' in source
     assert "gateway" in source
     assert "--pairing-code" in source
+    assert 'appendingPathComponent("MirrorOrder/gateway"' in source
+    assert 'var pidFile: URL { gatewayStateRoot.appendingPathComponent' in source
+    assert "legacyPidFiles" in source
+    assert 'command.contains("script-organizer gateway")' in source
+    assert 'command.contains("--port \\(portNumber)")' in source
+    assert "allWorkspacePaths.contains" in source
+    assert "preferredProject(in workspace: GatewayWorkspace)" in source
+    assert 'private let selectionExplicitKey = "selectionExplicit"' in source
+    assert "selectionExplicit" in source
+    assert "final class MirrorOrderAppDelegate: NSObject, NSApplicationDelegate" in source
+    assert "lanAddress = \"\"" in source
+    assert "lanAddress = await Self.currentLANAddress()" in source
+    assert "Task.detached(priority: .utility)" in source
+    assert "DispatchQueue.main.async" in source
+    assert "NSHostingView(rootView: DesktopRootView())" in source
 
 
 def test_web_loader_uses_review_aware_timeline_v3_only():
@@ -75,6 +90,7 @@ def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     assert 'scanAll ? "media-scan-all" : "media-scan"' in source
     assert "workspacePaths" in source
     assert "media-scan-all" in source
+    assert "扫描当前工作区全部项目" in source
     assert 'subparsers.add_parser("media-scan-all"' in cli
     assert '"Application Support" / "MirrorOrder"' in identity
     assert 'item["source_media_path"]' in runtime

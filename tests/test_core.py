@@ -290,6 +290,78 @@ def test_clip_paths_with_unicode_and_spaces_are_read(tmp_path):
     assert float(clip.source_start) == .875
 
 
+def test_fcpxml_19_media_rep_and_implicit_spine_offsets_are_read(tmp_path):
+    first = tmp_path / "A001.mov"
+    second = tmp_path / "B001.mov"
+    first.write_bytes(b"a")
+    second.write_bytes(b"b")
+    xml = f'''<fcpxml version="1.9"><resources>
+      <asset id="a" name="A001"><media-rep kind="original-media" src="file://{first}"/></asset>
+      <asset id="b" name="B001"><media-rep kind="original-media" src="file://{second}"/></asset>
+    </resources><library><event><project><sequence><spine>
+      <asset-clip name="A001" ref="a" duration="3s"/>
+      <asset-clip name="B001" ref="b" duration="2s"/>
+    </spine></sequence></project></event></library></fcpxml>'''
+    path = tmp_path / "media-rep.fcpxml"
+    path.write_text(xml, encoding="utf-8")
+
+    clips = read_fcpxml(path)
+
+    assert [(clip.name, clip.camera, float(clip.timeline_start), float(clip.timeline_end)) for clip in clips] == [
+        ("A001", "?", 0.0, 3.0),
+        ("B001", "?", 3.0, 5.0),
+    ]
+    assert all(clip.exists for clip in clips)
+
+
+def test_fcpxml_multicam_expands_all_angles_and_ignores_resource_sequence(tmp_path):
+    media = {camera: tmp_path / f"{camera}001.mov" for camera in ("A", "B", "C")}
+    for path in media.values():
+        path.write_bytes(path.name.encode("utf-8"))
+    xml = f'''<fcpxml version="1.8"><resources>
+      <asset id="a" src="file://{media["A"]}"/><asset id="b" src="file://{media["B"]}"/><asset id="c" src="file://{media["C"]}"/>
+      <media id="compound"><sequence><spine><asset-clip ref="a" duration="99s"/></spine></sequence></media>
+      <media id="multi"><multicam>
+        <mc-angle name="A" angleID="angle_A"><clip offset="0s" duration="10s"><video ref="a" duration="10s"/></clip></mc-angle>
+        <mc-angle name="B" angleID="angle_B"><gap duration="2s"/><clip offset="2s" duration="8s"><video ref="b" duration="8s"/></clip></mc-angle>
+        <mc-angle name="C" angleID="angle_C"><clip offset="1s" duration="9s"><video ref="c" duration="9s"/></clip></mc-angle>
+      </multicam></media>
+    </resources><library><event>
+      <project><sequence><spine><mc-clip ref="multi" offset="20s" start="0s" duration="10s"><mc-source angleID="angle_A"/></mc-clip></spine></sequence></project>
+    </event></library></fcpxml>'''
+    path = tmp_path / "multicam.fcpxml"
+    path.write_text(xml, encoding="utf-8")
+
+    clips = read_fcpxml(path)
+
+    assert {clip.camera for clip in clips} == {"A", "B", "C"}
+    assert {clip.name for clip in clips} == {"A001", "B001", "C001"}
+    assert [(clip.camera, float(clip.timeline_start), float(clip.timeline_end)) for clip in clips] == [
+        ("A", 20.0, 30.0),
+        ("B", 22.0, 30.0),
+        ("C", 21.0, 30.0),
+    ]
+
+
+def test_fcpxml_ref_clip_and_missing_media_are_retained(tmp_path):
+    missing = tmp_path / "missing.mov"
+    xml = f'''<fcpxml version="1.9"><resources>
+      <asset id="a" name="Missing"><media-rep kind="original-media" src="file://{missing}"/></asset>
+      <media id="compound"><sequence><spine><asset-clip ref="a" duration="4s"/></spine></sequence></media>
+    </resources><library><event><project><sequence><spine>
+      <ref-clip name="Nested" ref="compound" offset="7s" start="0s" duration="4s"/>
+    </spine></sequence></project></event></library></fcpxml>'''
+    path = tmp_path / "ref.fcpxml"
+    path.write_text(xml, encoding="utf-8")
+
+    clips = read_fcpxml(path)
+
+    assert len(clips) == 1
+    assert clips[0].media_path == str(missing)
+    assert clips[0].exists is False
+    assert float(clips[0].timeline_start) == 7.0
+
+
 def test_single_camera_clip_is_kept_as_group(tmp_path):
     media = tmp_path / "single.mov"; media.write_bytes(b"x")
     clip = Clip("c1", "single", "A", str(media), 0, 1, 1, True)

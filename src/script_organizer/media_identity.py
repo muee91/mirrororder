@@ -122,10 +122,10 @@ class DeviceMediaStore:
 
     def _default(self) -> dict[str, Any]:
         return {
-            "version": 1,
+            "version": 2,
             "device_id": str(uuid.uuid4()),
             "device_name": platform.node() or "MirrorOrder Device",
-            "projects": {},
+            "workspaces": {},
             "updated_at": _now(),
         }
 
@@ -139,10 +139,10 @@ class DeviceMediaStore:
             with self.path.open(encoding="utf-8") as handle:
                 payload = json.load(handle)
             if isinstance(payload, dict):
-                payload.setdefault("version", 1)
+                payload["version"] = max(2, int(payload.get("version", 1) or 1))
                 payload.setdefault("device_id", str(uuid.uuid4()))
                 payload.setdefault("device_name", platform.node() or "MirrorOrder Device")
-                payload.setdefault("projects", {})
+                payload.setdefault("workspaces", {})
                 return payload
         except (OSError, ValueError):
             pass
@@ -152,10 +152,31 @@ class DeviceMediaStore:
         payload["updated_at"] = _now()
         _atomic_json(self.path, payload)
 
-    def project_snapshot(self, project_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    @staticmethod
+    def _empty_project() -> dict[str, Any]:
+        return {"roots": [], "bindings": {}, "updated_at": ""}
+
+    def project_snapshot(
+        self,
+        workspace_id: str,
+        project_id: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         root = payload if payload is not None else self.load()
-        projects = root.get("projects", {}) if isinstance(root.get("projects", {}), dict) else {}
+        workspaces = root.get("workspaces", {}) if isinstance(root.get("workspaces", {}), dict) else {}
+        workspace = workspaces.get(workspace_id, {}) if isinstance(workspaces.get(workspace_id, {}), dict) else {}
+        projects = workspace.get("projects", {}) if isinstance(workspace.get("projects", {}), dict) else {}
         raw = projects.get(project_id, {}) if isinstance(projects.get(project_id, {}), dict) else {}
+        if not raw:
+            legacy_projects = root.get("projects", {})
+            legacy = legacy_projects.pop(project_id, None) if isinstance(legacy_projects, dict) else None
+            if isinstance(legacy, dict):
+                workspace = root.setdefault("workspaces", {}).setdefault(workspace_id, {"projects": {}})
+                projects = workspace.setdefault("projects", {})
+                projects[project_id] = legacy
+                raw = legacy
+                if payload is None:
+                    self._save(root)
         return {
             "roots": [str(value) for value in raw.get("roots", []) if str(value)],
             "bindings": dict(raw.get("bindings", {})) if isinstance(raw.get("bindings", {}), dict) else {},
@@ -173,12 +194,12 @@ class DeviceMediaStore:
             return original
         return ""
 
-    def resolve(self, project_id: str, item: dict[str, Any]) -> str:
-        return self.resolve_from_snapshot(self.project_snapshot(project_id), item)
+    def resolve(self, workspace_id: str, project_id: str, item: dict[str, Any]) -> str:
+        return self.resolve_from_snapshot(self.project_snapshot(workspace_id, project_id), item)
 
-    def summary(self, project_id: str, index: dict[str, Any]) -> dict[str, Any]:
+    def summary(self, workspace_id: str, project_id: str, index: dict[str, Any]) -> dict[str, Any]:
+        project = self.project_snapshot(workspace_id, project_id)
         payload = self.load()
-        project = self.project_snapshot(project_id, payload)
         inventory = iter_project_media(index)
         resolved = []
         missing = []
@@ -198,10 +219,23 @@ class DeviceMediaStore:
             "items": resolved + missing,
         }
 
-    def scan(self, project_id: str, index: dict[str, Any], roots: Iterable[str]) -> dict[str, Any]:
+    def scan(
+        self,
+        workspace_id: str,
+        project_id: str,
+        index: dict[str, Any],
+        roots: Iterable[str],
+    ) -> dict[str, Any]:
         payload = self.load()
-        projects = payload.setdefault("projects", {})
-        project = projects.setdefault(project_id, {"roots": [], "bindings": {}, "updated_at": ""})
+        workspaces = payload.setdefault("workspaces", {})
+        workspace = workspaces.setdefault(workspace_id, {"projects": {}})
+        projects = workspace.setdefault("projects", {})
+        project = projects.get(project_id)
+        if not isinstance(project, dict):
+            legacy_projects = payload.get("projects", {})
+            legacy = legacy_projects.pop(project_id, None) if isinstance(legacy_projects, dict) else None
+            project = legacy if isinstance(legacy, dict) else self._empty_project()
+            projects[project_id] = project
         stored_roots = [str(value) for value in project.get("roots", []) if str(value)]
         for raw_root in roots:
             root = str(Path(raw_root).expanduser())
@@ -243,7 +277,7 @@ class DeviceMediaStore:
         project["bindings"] = bindings
         project["updated_at"] = _now()
         self._save(payload)
-        summary = self.summary(project_id, index)
+        summary = self.summary(workspace_id, project_id, index)
         summary["scan"] = {
             "files_seen": len(files),
             "verified_matches": matched_verified,
@@ -251,9 +285,27 @@ class DeviceMediaStore:
         }
         return summary
 
-    def forget_missing(self, project_id: str) -> None:
+    def add_roots(self, workspace_id: str, project_id: str, roots: Iterable[str]) -> dict[str, Any]:
+        """Register host-local roots before the first analysis creates an index."""
         payload = self.load()
-        project = payload.setdefault("projects", {}).setdefault(project_id, {"roots": [], "bindings": {}})
+        workspaces = payload.setdefault("workspaces", {})
+        workspace = workspaces.setdefault(workspace_id, {"projects": {}})
+        projects = workspace.setdefault("projects", {})
+        project = projects.setdefault(project_id, self._empty_project())
+        stored = [str(value) for value in project.get("roots", []) if str(value)]
+        for raw_root in roots:
+            root = str(Path(raw_root).expanduser().resolve())
+            if root and root not in stored:
+                stored.append(root)
+        project["roots"] = stored
+        project["updated_at"] = _now()
+        self._save(payload)
+        return self.project_snapshot(workspace_id, project_id, payload)
+
+    def forget_missing(self, workspace_id: str, project_id: str) -> None:
+        payload = self.load()
+        workspace = payload.setdefault("workspaces", {}).setdefault(workspace_id, {"projects": {}})
+        project = workspace.setdefault("projects", {}).setdefault(project_id, self._empty_project())
         bindings = project.setdefault("bindings", {})
         project["bindings"] = {key: value for key, value in bindings.items() if Path(str(value)).is_file()}
         self._save(payload)

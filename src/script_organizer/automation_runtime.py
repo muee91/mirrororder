@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 from .automation_store import AutomationStore
 from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
+from .runtime_diagnostics import environment_payload
 
 _INSTALLED = False
 _SCRIPT_SUFFIXES = {".docx", ".txt", ".md", ".markdown"}
@@ -34,14 +36,19 @@ def _apply(project: Any) -> dict[str, Any]:
 
 
 def _replace_project_script(config_path: Path, raw_script: object) -> Path:
-    script = Path(str(raw_script or "")).expanduser().resolve()
-    if not script.is_file() or script.suffix.lower() not in _SCRIPT_SUFFIXES:
+    source = Path(str(raw_script or "")).expanduser().resolve()
+    if not source.is_file() or source.suffix.lower() not in _SCRIPT_SUFFIXES:
         raise ValueError("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
+    script = config_path.parent / "inputs" / f"script{source.suffix.lower()}"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    temporary_copy = script.with_suffix(script.suffix + ".tmp")
+    shutil.copy2(source, temporary_copy)
+    os.replace(temporary_copy, script)
     text = config_path.read_text(encoding="utf-8")
     lines = text.splitlines()
     in_input = False
     replaced = False
-    escaped = str(script).replace("\\", "\\\\").replace('"', '\\"')
+    escaped = ("./inputs/" + script.name).replace("\\", "\\\\").replace('"', '\\"')
     for index, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith("[") and stripped.endswith("]"):
@@ -94,6 +101,7 @@ def _runtime_payload() -> dict[str, Any]:
         "vision": runtime.public(),
         "mlx_cache_bytes": _directory_bytes(root / "huggingface"),
         "model_root": str(root),
+        "environment": environment_payload(),
     }
 
 
@@ -152,7 +160,7 @@ def install_automation_runtime() -> None:
 
     def create_and_prepare(registry: WorkspaceRegistry, payload: dict[str, Any]) -> dict[str, Any]:
         entry = original_create(registry, payload)
-        manager = TaskManager(registry.project_config)
+        manager = TaskManager(registry.project_config, registry.config.workspace_id)
         task = manager.submit(
             str(entry["project_id"]),
             "prepare_project",
@@ -178,6 +186,10 @@ def install_automation_runtime() -> None:
 
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
+                if parts == ["api", "v1", "project-preflight"]:
+                    self._local_only()
+                    self._send_json(service.registry.preflight_create(web_server._body(self)))
+                    return
                 if parts == ["api", "v1", "local-runtime"]:
                     self._local_only()
                     payload = web_server._body(self)

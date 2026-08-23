@@ -6,6 +6,14 @@
 
 同一条素材在不同电脑上可以位于完全不同的磁盘和目录。共享项目使用 `media_id` 识别物理媒体；每台设备用自己的 `media-bindings.json` 把 `media_id` 映射到本机文件。
 
+设备绑定的完整作用域是：
+
+```text
+workspaces[workspace_id].projects[project_id].bindings[media_id]
+```
+
+不同工作区即使恰好存在同名 `project_id`，也不能读取彼此的本机素材 roots 或 bindings。旧版仅按 `project_id` 保存的设备状态会在首次使用时原子迁入第一个实际访问的工作区，不再作为跨工作区 fallback。
+
 ## 1. 必须在设备间同步的数据
 
 ### 工作区身份
@@ -20,10 +28,19 @@
 ### 项目定义
 
 - `workspace.toml`
-- `projects/registry.json`
+- `projects/registry.json`（`config_path` 相对 workspace 根目录）
 - `projects/<project>/project.toml`
 - 作为项目依据的剧本文件或其不可变副本
 - 作为项目依据的 FCPXML / XML 或其不可变副本
+
+新建项目的不可变输入默认位于：
+
+```text
+projects/<project_id>/inputs/script.<ext>
+projects/<project_id>/inputs/source.fcpxml
+```
+
+`project.toml` 只引用这些项目内输入、`./output` 和 `./cache`。媒体目录项目的本机素材根目录不写入项目配置或共享 `material_index.json`，而由设备本地绑定负责解析。
 
 注意：`project.toml` 中历史绝对路径只是项目来源参考，不能作为跨设备媒体身份。
 
@@ -168,24 +185,27 @@ C_331
 
 如果源文件暂时不可读，旧项目可以先使用 `MP_...` filename provisional identity。它只用于兼容迁移，不能冒充内容级确认；在有源文件的机器重新 analyze 后会得到正式 `M_...`。
 
-## 6. 第二台电脑的实际流程
+## 6. 局域网浏览器与第二台 Mac
 
 ```text
-1. 获取/同步同一个 MirrorOrder workspace
-2. 安装并打开 镜序.app
-3. App 启动本机或局域网 gateway
-4. 设置 → 工作区 → 添加或选择对应工作区
-5. 选择当前项目 → 这台 Mac 的素材副本 → 为当前项目绑定素材目录
-6. 镜序扫描本机文件并计算 media_id
-7. media_id 与共享 material_index 对应
-8. 写入本机 Application Support/media-bindings.json
-9. Web 工作台刷新
-10. 播放、Finder/FCP 拖拽全部使用这台 Mac 的文件
+局域网 Web：
+1. 在 gateway 主机启动镜序并完成该主机的素材绑定。
+2. 其它设备打开 gateway 地址并完成配对。
+3. 浏览器视频由 gateway 主机解析和读取媒体，再以 HTTP Range 发送。
+4. 浏览器客户端不需要素材目录、本机绑定或主机绝对路径。
+
+第二台 Mac 自己运行镜序（可选）：
+1. 获取/同步同一个 MirrorOrder workspace。
+2. 在第二台 Mac 安装并打开 镜序.app。
+3. 设置 → 工作区 → 添加或选择对应工作区。
+4. 选择当前项目 → 这台 Mac 的素材副本 → 为当前项目绑定素材目录。
+5. 镜序扫描第二台 Mac 的素材并写入其 Application Support/media-bindings.json。
+6. 第二台 Mac 自己提供的 Web 播放和原生 Finder/FCP 拖拽使用第二台 Mac 的文件。
 ```
 
 不会修改共享 `material_index.json` 中的项目来源路径。
 
-局域网用户打开 App 显示的 gateway 地址；默认先输入一次性配对码。多个浏览器窗口可以分别使用 `workspace_id` 与 `project_id` 固定不同工作区和项目。
+局域网用户打开 App 显示的 gateway 地址；默认先输入一次性配对码。多个浏览器窗口可以分别使用 `workspace_id` 与 `project_id` 固定不同工作区和项目；媒体流始终来自该 gateway 所在设备。
 
 ## 7. 数据流
 

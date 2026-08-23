@@ -36,6 +36,15 @@ auto_resolve
 
 已有 FCPXML 项目会跳过 `multicam_sync`，直接进入分析与自动确认。
 
+创建项目之前，Host 会执行不写盘预检：
+
+- 剧本能否解析出集数和可用段落；
+- FCPXML 主项目 sequence 能否解析出逻辑素材，包含 `media-rep`、`ref-clip` 和 `mc-clip` 角度；
+- 输入文件权限、项目目录写权限；
+- 媒体目录项目的 FFmpeg、FFprobe、Python 科学计算依赖和仓库内第一方引擎是否就绪。
+
+缺失源媒体只产生警告并保留逻辑片段，后续由当前设备的 `media-bindings.json` 解决；预检不会复制原始媒体、修改原始 FCPXML 或写入审核。
+
 ## 2. 自动结果与人工结果分离
 
 自动状态写：
@@ -134,18 +143,26 @@ export MIRRORORDER_MODEL_BASE_URL='http://127.0.0.1:1234/v1'
 
 API Key 不得写入 workspace / project.toml / review.json。
 
-## 7. multicam-audio-sync 的集成方式
+## 7. multicam-audio-sync 的第一方集成方式
 
-MirrorOrder Host 直接调用同步脚本，不通过 Codex。
+MirrorOrder Host 直接调用仓库内同步脚本，不通过 Codex，也不在运行时依赖外部 skill。
 
-运行时按以下顺序寻找引擎：
+运行时使用以下来源：
 
-1. `MIRRORORDER_MULTICAM_SYNC_ROOT`
-2. App runtime 内的 `multicam-audio-sync`
-3. repo `vendor/multicam-audio-sync`
-4. `~/.agents/skills/multicam-audio-sync`
+1. App runtime 内的 `multicam-audio-sync`
+2. 仓库 `vendor/multicam-audio-sync`
 
-`macos-app/build_app.sh` 会优先把 repo vendor 或当前开发机安装的 skill 复制进 `镜序.app/Contents/Resources/runtime/multicam-audio-sync`。因此构建后的 App 运行同步时不需要 Codex。
+开发调试可同时设置 `MIRRORORDER_MULTICAM_SYNC_ROOT` 与 `MIRRORORDER_ALLOW_MULTICAM_SYNC_OVERRIDE=1` 覆盖第一方目录；普通发布构建始终使用仓库 vendor，缺少它会直接失败。`macos-app/build_app.sh` 将脚本、参考文档、FCPXML 校验器和 `capcut_draft_schema.json` 一并复制到 `镜序.app/Contents/Resources/runtime/multicam-audio-sync`，因此另一台 Mac 运行同步时不需要 Codex、Python 外部技能目录或本项目之外的同步包。
+
+第一方引擎的职责边界：
+
+- `sync.py` 负责 TC 先验、音频互相关和鲁棒拟合；
+- `build_fcpxml.py` 输出 FCPXML 1.8 原生多机位时间线；
+- `build_capcut_fcpxml.py` 与 `build_capcut_draft_31.py` 是剪映适配器；
+- `build_pr_xml.py` 输出 Premiere 可导入的 FCP7/xmeml v4；
+- `validate_fcpxml.py` 在 Host 生成交付 FCPXML 后执行帧边界、素材路径、引用和结构校验。
+
+媒体目录同步前，Host 会检查 `ffmpeg`、`ffprobe` 和 `numpy`、`pandas`、`scipy`；所需 Python 依赖写在第一方引擎的 `vendor/multicam-audio-sync/requirements.txt`。剪映加密草稿编解码额外使用 `pycryptodome`，但不是普通 FCPXML/Premiere 同步的必需依赖。
 
 同步产物：
 

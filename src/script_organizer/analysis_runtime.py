@@ -13,6 +13,7 @@ from .fcpxml_reader import build_multicam_groups, read_fcpxml
 from .material_index import analyze as _analyze_core
 from .media_reader import read_media_directory
 from .review_store import ReviewStore
+from .source_descriptor import redact_device_media_paths, shared_source_descriptor
 from .transcript import TranscriptStore
 
 
@@ -179,13 +180,14 @@ def _restore_source_identity(
         return result
     generated = generated_sync_fcpxml(source_config)
     index["source"] = {
-        "kind": source_config.input_kind,
-        "fcpxml": str(source_config.fcpxml) if source_config.fcpxml else "",
-        "media_root": str(source_config.media_root) if source_config.media_root else "",
-        "script": str(source_config.script),
-        "derived_fcpxml": str(generated) if source_config.is_media_directory and generated.is_file() else "",
+        **shared_source_descriptor(source_config),
+        "derived_fcpxml": "./output/sync/synchronized.fcpxml"
+        if source_config.is_media_directory and generated.is_file()
+        else "",
         "analysis_input_kind": analysis_config.input_kind,
     }
+    if source_config.is_media_directory:
+        redact_device_media_paths(index)
     index.setdefault("stats", {})["asr_runtime"] = runtime.public()
     if asr_errors:
         errors = index.setdefault("errors", {})

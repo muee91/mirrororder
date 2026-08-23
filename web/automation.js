@@ -109,15 +109,6 @@
         showToast('项目创建只在 Host 本机或镜序 App 执行；局域网 Web 用于查看、审核和协作');
         return;
       }
-      // app.js historically resets the form to FCPXML. Run after that handler
-      // and make raw multicam media + script the normal creation path.
-      queueMicrotask(() => {
-        const kind = document.querySelector('#new-project-kind');
-        if (!kind) return;
-        kind.value = 'media-directory';
-        updateProjectKindFields();
-        document.querySelector('#new-project-name')?.focus();
-      });
     }, true);
   }
 

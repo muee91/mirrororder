@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import tempfile
 import tomllib
 from dataclasses import dataclass
@@ -12,6 +13,9 @@ from typing import Any
 from uuid import uuid4
 
 from .config import ProjectConfig
+from .fcpxml_reader import read_fcpxml
+from .runtime_diagnostics import environment_payload
+from .script_parser import parse_script
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -42,6 +46,19 @@ def _now() -> str:
 def project_id_for(value: str) -> str:
     candidate = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return candidate[:48] or "project"
+
+
+def _has_media_file(root: Path, limit: int = 512) -> bool:
+    """Bounded preflight probe; full media enumeration belongs to a task."""
+    try:
+        for count, item in enumerate(root.rglob("*"), start=1):
+            if item.is_file():
+                return True
+            if count >= limit:
+                return True
+    except OSError:
+        return False
+    return False
 
 
 @dataclass(frozen=True)
@@ -129,7 +146,27 @@ class WorkspaceRegistry:
         if not isinstance(raw, dict):
             return {"version": 1, "projects": []}
         projects = raw.get("projects", [])
-        return {"version": 1, "projects": projects if isinstance(projects, list) else []}
+        normalized = []
+        changed = False
+        root = self.config.config_path.parent.resolve()
+        for item in projects if isinstance(projects, list) else []:
+            if not isinstance(item, dict):
+                continue
+            current = dict(item)
+            config_value = str(current.get("config_path", "") or "")
+            if config_value:
+                config_path = Path(config_value).expanduser()
+                if config_path.is_absolute():
+                    try:
+                        current["config_path"] = os.path.relpath(config_path.resolve(), root)
+                        changed = True
+                    except ValueError:
+                        pass
+            normalized.append(current)
+        payload = {"version": 1, "projects": normalized}
+        if changed:
+            _write_json(self.config.registry_path, payload)
+        return payload
 
     def list(self) -> list[dict[str, Any]]:
         return sorted(
@@ -145,7 +182,20 @@ class WorkspaceRegistry:
 
     def project_config(self, project_id: str) -> ProjectConfig:
         entry = self.get(project_id)
-        return ProjectConfig.from_file(str(entry["config_path"]))
+        config_path = Path(str(entry["config_path"]))
+        if not config_path.is_absolute():
+            config_path = self.config.config_path.parent / config_path
+        config = ProjectConfig.from_file(config_path)
+        if config.is_media_directory and (not config.media_root or not config.media_root.is_dir()):
+            from .media_identity import DeviceMediaStore
+
+            snapshot = DeviceMediaStore().project_snapshot(self.config.workspace_id, project_id)
+            roots = [Path(value) for value in snapshot.get("roots", []) if Path(value).is_dir()]
+            if roots:
+                from dataclasses import replace
+
+                config = replace(config, media_root=roots[0])
+        return config
 
     def register_existing(self, project_id: str, config_path: str | Path) -> dict[str, Any]:
         config = ProjectConfig.from_file(config_path)
@@ -154,7 +204,10 @@ class WorkspaceRegistry:
         entry = {
             "project_id": project_id,
             "name": config.name,
-            "config_path": str(Path(config_path).resolve()),
+            "config_path": os.path.relpath(
+                Path(config_path).expanduser().resolve(),
+                self.config.config_path.parent,
+            ),
             "input_kind": config.input_kind,
             "created_at": _now(),
             "updated_at": _now(),
@@ -165,6 +218,9 @@ class WorkspaceRegistry:
         return entry
 
     def create(self, payload: dict[str, Any]) -> dict[str, Any]:
+        preflight = self.preflight_create(payload)
+        if not preflight["ready"]:
+            raise ValueError("项目预检失败：" + "；".join(preflight["errors"]))
         name = str(payload.get("name", "")).strip()
         project_id = project_id_for(str(payload.get("project_id") or name))
         if not name:
@@ -174,9 +230,9 @@ class WorkspaceRegistry:
         input_kind = str(payload.get("input_kind", "fcpxml"))
         if input_kind not in {"fcpxml", "media-directory"}:
             raise ValueError("不支持的项目类型")
-        script = Path(str(payload.get("script", ""))).expanduser()
-        fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser() if payload.get("fcpxml") else None
-        media_root = Path(str(payload.get("media_root", ""))).expanduser() if payload.get("media_root") else None
+        script = Path(str(payload.get("script", ""))).expanduser().resolve()
+        fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser().resolve() if payload.get("fcpxml") else None
+        media_root = Path(str(payload.get("media_root", ""))).expanduser().resolve() if payload.get("media_root") else None
         if not script.is_file() or script.suffix.lower() not in {".docx", ".txt", ".md", ".markdown"}:
             raise ValueError("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
         if input_kind == "fcpxml" and (
@@ -190,10 +246,22 @@ class WorkspaceRegistry:
         project_dir = self.config.registry_path.parent / project_id
         if project_dir.exists():
             raise ValueError("项目目录已存在")
-        output_dir = Path(str(payload.get("output_dir") or project_dir / "output")).expanduser()
-        transcript_dir = Path(str(payload.get("transcript_dir") or project_dir / "cache" / "transcripts")).expanduser()
-        for directory in (project_dir, output_dir, transcript_dir):
-            directory.mkdir(parents=True, exist_ok=True)
+        output_dir = project_dir / "output"
+        transcript_dir = project_dir / "cache" / "transcripts"
+        try:
+            for directory in (project_dir, output_dir, transcript_dir):
+                directory.mkdir(parents=True, exist_ok=True)
+            inputs_dir = project_dir / "inputs"
+            inputs_dir.mkdir(parents=True, exist_ok=True)
+            script_copy = inputs_dir / f"script{script.suffix.lower()}"
+            shutil.copy2(script, script_copy)
+            fcpxml_copy = None
+            if fcpxml:
+                fcpxml_copy = inputs_dir / "source.fcpxml"
+                shutil.copy2(fcpxml, fcpxml_copy)
+        except Exception:
+            shutil.rmtree(project_dir, ignore_errors=True)
+            raise
         patterns = payload.get("camera_patterns", {})
         if not isinstance(patterns, dict):
             patterns = {}
@@ -205,23 +273,21 @@ class WorkspaceRegistry:
             "",
             "[input]",
             f'kind = "{input_kind}"',
-            f'script = "{script}"',
+            'script = "./inputs/' + script_copy.name + '"',
         ]
-        if fcpxml:
-            lines.append(f'fcpxml = "{fcpxml}"')
-        if media_root:
-            lines.append(f'media_root = "{media_root}"')
+        if fcpxml_copy:
+            lines.append('fcpxml = "./inputs/source.fcpxml"')
         lines.extend([
             "",
             "[output]",
-            f'directory = "{output_dir}"',
+            'directory = "./output"',
             "",
             "[asr]",
             'backend = "auto"',
             'model = "small"',
             'language = "zh"',
             'device = "auto"',
-            f'transcript_dir = "{transcript_dir}"',
+            'transcript_dir = "./cache/transcripts"',
             'camera_priority = ["B", "C", "A"]',
             "ensure_preferred_camera = true",
             "escalate_ambiguous = true",
@@ -234,4 +300,84 @@ class WorkspaceRegistry:
         for camera, pattern in sorted(patterns.items()):
             lines.append(f'camera_patterns.{str(camera).upper()} = "{str(pattern)}"')
         config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return self.register_existing(project_id, config_path)
+        entry = self.register_existing(project_id, config_path)
+        if media_root:
+            from .media_identity import DeviceMediaStore
+
+            DeviceMediaStore().add_roots(self.config.workspace_id, project_id, [str(media_root)])
+        return entry
+
+    def preflight_create(self, payload: dict[str, Any]) -> dict[str, Any]:
+        errors: list[str] = []
+        warnings: list[str] = []
+        detected = {
+            "script_segments": 0,
+            "logical_clips": 0,
+            "available_media": 0,
+            "missing_media": 0,
+        }
+        name = str(payload.get("name", "")).strip()
+        project_id = project_id_for(str(payload.get("project_id") or name))
+        input_kind = str(payload.get("input_kind", "fcpxml"))
+        script = Path(str(payload.get("script", ""))).expanduser()
+        fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser() if payload.get("fcpxml") else None
+        media_root = Path(str(payload.get("media_root", ""))).expanduser() if payload.get("media_root") else None
+        if not name:
+            errors.append("项目名称不能为空")
+        if input_kind not in {"fcpxml", "media-directory"}:
+            errors.append("不支持的项目类型")
+        if not script.is_file() or script.suffix.lower() not in {".docx", ".txt", ".md", ".markdown"}:
+            errors.append("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
+        elif not os.access(script, os.R_OK):
+            errors.append("剧本没有读取权限")
+        if input_kind == "fcpxml":
+            if fcpxml is None or not fcpxml.is_file() or fcpxml.suffix.lower() not in {".fcpxml", ".fcpxmld"}:
+                errors.append("FCPXML 项目需要可读取的 FCPXML 文件")
+            elif not os.access(fcpxml, os.R_OK):
+                errors.append("FCPXML 没有读取权限")
+        if input_kind == "media-directory":
+            if media_root is None or not media_root.is_dir():
+                errors.append("媒体目录项目需要可读取的媒体目录")
+            elif not os.access(media_root, os.R_OK):
+                errors.append("媒体目录没有读取权限")
+            elif not _has_media_file(media_root):
+                warnings.append("媒体目录为空，创建后无法开始分析")
+        project_dir = self.config.registry_path.parent / project_id
+        if project_dir.exists():
+            errors.append("项目目录已存在")
+        if not self.config.registry_path.parent.is_dir() or not os.access(self.config.registry_path.parent, os.W_OK):
+            errors.append("工作区 projects 目录不可写")
+        if input_kind == "fcpxml" and fcpxml and fcpxml.is_file():
+            try:
+                clips = read_fcpxml(fcpxml)
+                detected["logical_clips"] = len(clips)
+                detected["available_media"] = sum(clip.exists for clip in clips)
+                detected["missing_media"] = sum(not clip.exists for clip in clips)
+                if not clips:
+                    warnings.append("FCPXML 未发现可分析时间线素材，创建后需要检查主项目 sequence")
+                else:
+                    missing = sum(not clip.exists for clip in clips)
+                    if missing:
+                        warnings.append(f"FCPXML 有 {missing} 个源媒体当前不可达，将依赖本机 media_id 绑定")
+            except Exception as error:
+                errors.append(f"FCPXML 无法解析：{error}")
+        if script.is_file() and script.suffix.lower() in {".docx", ".txt", ".md", ".markdown"}:
+            try:
+                segments = parse_script(script).segments
+                detected["script_segments"] = len(segments)
+                if not segments:
+                    errors.append("剧本没有解析出可用段落，请检查集数、场次和文本格式")
+            except Exception as error:
+                errors.append(f"剧本无法解析：{error}")
+        if input_kind == "media-directory" and not environment_payload()["media_directory_sync_ready"]:
+            warnings.append("媒体目录同步环境未就绪；可先创建项目，但 prepare_project 会等待 FFmpeg 和第一方 Python 依赖就绪")
+        return {
+            "ready": not errors,
+            "project_id": project_id,
+            "input_kind": input_kind,
+            "errors": errors,
+            "warnings": warnings,
+            "detected": detected,
+            "will_copy_inputs": True,
+            "will_write_shared_absolute_paths": False,
+        }

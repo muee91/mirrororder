@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
-import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -25,7 +25,12 @@ _REQUIRED_SCRIPTS = (
     "sync.py",
     "compress_gaps.py",
     "build_fcpxml.py",
+    "build_capcut_fcpxml.py",
+    "build_capcut_draft_31.py",
+    "build_pr_xml.py",
+    "validate_fcpxml.py",
 )
+_REQUIRED_FILES = _REQUIRED_SCRIPTS + ("capcut_draft_schema.json",)
 _MEDIA_SUFFIXES = {".mp4", ".mov", ".mxf", ".mts", ".3gp", ".mpg", ".mpeg"}
 _CAMERA_DIR = re.compile(r"^(?:camera|cam)?[_-]?([A-Za-z])\d*", re.IGNORECASE)
 
@@ -41,28 +46,6 @@ def _engine_candidates() -> list[Path]:
             parent / "multicam-audio-sync",
             parent / "vendor" / "multicam-audio-sync",
         ])
-    result.append(Path.home() / ".agents" / "skills" / "multicam-audio-sync")
-    seen: set[str] = set()
-    unique = []
-    for path in result:
-        key = str(path)
-        if key not in seen:
-            seen.add(key)
-            unique.append(path)
-    return unique
-
-
-def _zip_candidates() -> list[Path]:
-    result: list[Path] = []
-    env = os.environ.get("MIRRORORDER_MULTICAM_SYNC_ZIP", "").strip()
-    if env:
-        result.append(Path(env).expanduser())
-    module = Path(__file__).resolve()
-    for parent in module.parents:
-        result.extend([
-            parent / "multicam-audio-sync-core.zip",
-            parent / "vendor" / "multicam-audio-sync-core.zip",
-        ])
     seen: set[str] = set()
     unique = []
     for path in result:
@@ -74,8 +57,28 @@ def _zip_candidates() -> list[Path]:
 
 
 def _valid_engine(path: Path) -> bool:
-    scripts = path / "scripts"
-    return all((scripts / name).is_file() for name in _REQUIRED_SCRIPTS)
+    root = path / "scripts"
+    return all((root / name).is_file() for name in _REQUIRED_FILES)
+
+
+def _check_prerequisites() -> None:
+    missing_commands = [name for name in ("ffmpeg", "ffprobe") if shutil.which(name) is None]
+    missing_modules = [
+        name for name in ("numpy", "pandas", "scipy")
+        if importlib.util.find_spec(name) is None
+    ]
+    if not missing_commands and not missing_modules:
+        return
+    requirements = "vendor/multicam-audio-sync/requirements.txt"
+    details = []
+    if missing_commands:
+        details.append("缺少命令: " + ", ".join(missing_commands))
+    if missing_modules:
+        details.append("缺少 Python 模块: " + ", ".join(missing_modules))
+    raise MulticamSyncUnavailable(
+        "多机位同步环境未就绪（" + "；".join(details) + "）。"
+        "请安装 FFmpeg，并按 " + requirements + " 安装第一方同步引擎依赖。"
+    )
 
 
 def _materialize_engine(runtime: Path) -> tuple[Path, str]:
@@ -85,23 +88,9 @@ def _materialize_engine(runtime: Path) -> tuple[Path, str]:
         if _valid_engine(candidate):
             shutil.copytree(candidate, runtime, ignore=shutil.ignore_patterns("__pycache__", "._*"))
             return runtime, str(candidate)
-    archive = next((path for path in _zip_candidates() if path.is_file()), None)
-    if archive is not None:
-        scripts = runtime / "scripts"
-        scripts.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(archive) as handle:
-            for info in handle.infolist():
-                name = Path(info.filename).name
-                if not name or name.startswith("._") or name == "__MACOSX":
-                    continue
-                if name.endswith(".py") or name == "config.json":
-                    (scripts / name).write_bytes(handle.read(info))
-        if _valid_engine(runtime):
-            return runtime, str(archive)
-        shutil.rmtree(runtime, ignore_errors=True)
     raise MulticamSyncUnavailable(
-        "未找到可运行的 multicam-audio-sync。镜序优先使用 App runtime / repo vendor 固定版本，"
-        "其次接受 MIRRORORDER_MULTICAM_SYNC_ROOT 或 ~/.agents/skills/multicam-audio-sync。"
+        "未找到镜序内置的第一方 multicam-audio-sync。请检查 App runtime 或 "
+        "repo vendor/multicam-audio-sync；开发时可显式设置 MIRRORORDER_MULTICAM_SYNC_ROOT。"
     )
 
 
@@ -226,6 +215,7 @@ def run_multicam_sync(
     if not config.media_root.is_dir():
         raise FileNotFoundError(f"素材目录不存在: {config.media_root}")
 
+    _check_prerequisites()
     runtime = config.output_dir / ".multicam-sync" / "engine"
     work = config.output_dir / ".multicam-sync" / "work"
     stage = config.output_dir / ".multicam-sync" / "media-layout"
@@ -272,6 +262,8 @@ def run_multicam_sync(
     fcpxml = delivery / "synchronized.fcpxml"
     if not fcpxml.is_file():
         raise RuntimeError("同步完成但 synchronized.fcpxml 未生成")
+    emit("校验 FCPXML 帧边界、素材引用与结构")
+    _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(config.media_root)], emit)
 
     premiere = ""
     if (script_dir / "build_pr_xml.py").is_file():

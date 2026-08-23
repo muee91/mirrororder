@@ -21,3 +21,13 @@ def test_desktop_app_exposes_light_system_and_dark_workbench_themes() -> None:
     assert 'Text("跟随系统").tag("system")' in settings
     assert 'Text("深色").tag("dark")' in settings
     assert "置信度标签保持浅色模式的原有颜色" in settings
+
+
+def test_lan_pairing_uses_cookie_safe_browser_requests() -> None:
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert "credentials: 'same-origin'" in app
+    assert "fetch(projectApi('/review')" not in app
+    assert "fetch(`${projectApi('/search')}" not in app
+    assert "sessionStorage.getItem('mirrororder-session')" not in app
+    assert "sessionStorage.setItem('mirrororder-session'" not in app

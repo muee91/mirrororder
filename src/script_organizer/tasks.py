@@ -19,6 +19,7 @@ from typing import Any, Iterator
 from .analysis_runtime import analyze as _default_analyze
 from .asr_runtime import ASRRuntime
 from . import tasks_v2 as _impl
+from .media_identity import DeviceMediaStore
 from .resource_scheduler import GLOBAL_RESOURCE_SCHEDULER, ResourceCancelled
 
 # Public compatibility symbol. Older tests/tools monkeypatch this name.
@@ -38,6 +39,30 @@ class TaskManager(_impl.TaskManager):
     def _asr_resource(config) -> str:
         runtime = ASRRuntime.from_config(config)
         return "mlx" if runtime.backend == "mlx-whisper" else "cpu"
+
+    def _refresh_media_bindings(self, config, project_id: str) -> dict[str, int]:
+        """Bind a newly analyzed media-directory project on this Host only."""
+        if not config.is_media_directory or not self.workspace_id:
+            return {}
+        store = DeviceMediaStore()
+        snapshot = store.project_snapshot(self.workspace_id, project_id)
+        roots = snapshot.get("roots", []) if isinstance(snapshot, dict) else []
+        if not roots:
+            return {}
+        try:
+            index = _impl._read_json(config.output_dir / "material_index.json", {})
+            if not isinstance(index, dict):
+                return {}
+            summary = store.scan(self.workspace_id, project_id, index, roots)
+            return {
+                "total": int(summary.get("total", 0) or 0),
+                "resolved": int(summary.get("resolved", 0) or 0),
+                "missing": int(summary.get("missing", 0) or 0),
+            }
+        except Exception:
+            # Analysis is authoritative; a failed local relink must not turn a
+            # completed deterministic analysis into a failed task.
+            return {}
 
     @contextmanager
     def _resource(
@@ -99,6 +124,9 @@ class TaskManager(_impl.TaskManager):
                 result["affected_group_ids"] = sorted(affected)
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                     result["automation"] = _impl.resolve_project(config)["summary"]
+                local_media = self._refresh_media_bindings(config, project_id)
+                if local_media:
+                    result["local_media"] = local_media
             elif task_type == "auto_resolve":
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                     automation = _impl.resolve_project(config)
@@ -114,6 +142,9 @@ class TaskManager(_impl.TaskManager):
                         result["analysis"] = analyze(config, affected or None)["index"]["stats"]
                     with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                         result["automation"] = _impl.resolve_project(config)["summary"]
+                    local_media = self._refresh_media_bindings(config, project_id)
+                    if local_media:
+                        result["local_media"] = local_media
                 elif result.get("transcribed"):
                     result["analysis_deferred"] = True
                     result["analysis_deferred_reason"] = "当前设备没有可用项目源/同步产物；转写缓存已写入，可由Host后续分析"
@@ -157,6 +188,9 @@ class TaskManager(_impl.TaskManager):
             automation = _impl.resolve_project(config)
         result["automation"] = automation["summary"]
         result["model"] = automation.get("model", {})
+        local_media = self._refresh_media_bindings(config, str(task.get("project_id", "")))
+        if local_media:
+            result["local_media"] = local_media
         return result
 
     def _transcribe(self, config, task: dict[str, Any]) -> dict[str, Any]:

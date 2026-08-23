@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from fractions import Fraction
 from pathlib import Path
+from typing import Iterable
 
 from .media_identity import media_identity
 from .models import Clip, GroupMember, MulticamGroup
@@ -35,8 +36,59 @@ def _asset_media_path(asset: ET.Element) -> str:
         return _media_path(direct)
     reps = list(asset.findall("./media-rep"))
     original = next((item for item in reps if item.get("kind") == "original-media"), None)
-    chosen = original or (reps[0] if reps else None)
+    chosen = original if original is not None else (reps[0] if reps else None)
     return _media_path(chosen.get("src", "")) if chosen is not None else ""
+
+
+def _tag(element: ET.Element) -> str:
+    return element.tag.rsplit("}", 1)[-1]
+
+
+def _children(element: ET.Element, name: str | None = None) -> list[ET.Element]:
+    values = list(element)
+    return [item for item in values if name is None or _tag(item) == name]
+
+
+def _descendants(element: ET.Element, name: str) -> Iterable[ET.Element]:
+    return (item for item in element.iter() if _tag(item) == name)
+
+
+def _camera_name(value: str, fallback: str = "?") -> str:
+    raw = str(value or "").strip().upper()
+    if raw in {"A", "B", "C"}:
+        return raw
+    for camera in ("A", "B", "C"):
+        if raw.startswith(camera) or raw.endswith(camera) or f"_{camera}" in raw or f"-{camera}" in raw:
+            return camera
+    return fallback
+
+
+def _camera_for(element: ET.Element, fallback: str = "?") -> str:
+    lane = element.get("lane", "")
+    lane_camera = {"1": "A", "2": "B", "3": "C"}.get(lane)
+    return lane_camera or _camera_name(lane, fallback)
+
+
+def _main_spine(root: ET.Element) -> ET.Element | None:
+    """Select the user project sequence, never a sequence inside a resource."""
+    for project in _descendants(root, "project"):
+        sequence = next(_descendants(project, "sequence"), None)
+        if sequence is None:
+            continue
+        spine = next((item for item in _children(sequence) if _tag(item) == "spine"), None)
+        if spine is not None:
+            return spine
+    return None
+
+
+def _story_start(element: ET.Element, cursor: Fraction, parent_start: Fraction, depth: int) -> Fraction:
+    if element.get("offset") is not None:
+        offset = parse_time(element.get("offset"))
+        return offset if depth == 0 else parent_start + offset
+    lane = element.get("lane", "")
+    if not lane or lane == "0":
+        return cursor
+    return parent_start
 
 
 def stable_clip_id(media_path: str, source_asset_id: str, occurrence: int = 0) -> str:
@@ -48,23 +100,46 @@ def read_fcpxml(path: str | Path) -> list[Clip]:
     root = ET.parse(path).getroot()
     assets: dict[str, str] = {}
     media_ids: dict[str, str] = {}
-    for asset in root.findall(".//asset"):
+    for asset in _descendants(root, "asset"):
         asset_id = asset.get("id", "")
         media_path = _asset_media_path(asset)
         assets[asset_id] = media_path
         media_ids[asset_id] = media_identity(media_path) if media_path else ""
+
+    multicam_media: dict[str, list[tuple[str, ET.Element]]] = {}
+    referenced_media: dict[str, ET.Element] = {}
+    for media in _descendants(root, "media"):
+        media_id = media.get("id", "")
+        angles: list[tuple[str, ET.Element]] = []
+        for multicam in _children(media, "multicam"):
+            for angle in _children(multicam, "mc-angle"):
+                camera = _camera_name(angle.get("name", "") or angle.get("angleID", ""))
+                angles.append((camera, angle))
+        if media_id and angles:
+            multicam_media[media_id] = angles
+        sequence = next(_descendants(media, "sequence"), None)
+        if media_id and sequence is not None:
+            spine = next((item for item in _children(sequence) if _tag(item) == "spine"), None)
+            if spine is not None:
+                referenced_media[media_id] = spine
+
     occurrence: defaultdict[tuple[str, str], int] = defaultdict(int)
     clips: list[Clip] = []
-    sequence = root.find(".//sequence")
-    if sequence is None:
+    spine = _main_spine(root)
+    if spine is None:
         return clips
-    for element in sequence.findall("./spine/asset-clip"):
-        source_asset_id = element.get("ref", "")
+
+    def append_clip(
+        source_asset_id: str,
+        name: str,
+        camera: str,
+        start: Fraction,
+        duration: Fraction,
+        source_start: Fraction,
+    ) -> None:
+        if duration <= 0:
+            return
         media_path = assets.get(source_asset_id, "")
-        camera = {"1": "A", "2": "B", "3": "C"}.get(element.get("lane", ""), element.get("lane", "?") or "?")
-        start = parse_time(element.get("offset"))
-        duration = parse_time(element.get("duration"))
-        source_start = parse_time(element.get("start"))
         key = (media_path, source_asset_id)
         current = occurrence[key]
         occurrence[key] += 1
@@ -72,7 +147,7 @@ def read_fcpxml(path: str | Path) -> list[Clip]:
         clips.append(
             Clip(
                 clip_id=clip_id,
-                name=element.get("name", Path(media_path).stem),
+                name=name or Path(media_path).stem or source_asset_id,
                 camera=camera,
                 media_path=media_path,
                 timeline_start=start,
@@ -85,6 +160,113 @@ def read_fcpxml(path: str | Path) -> list[Clip]:
                 media_id=media_ids.get(source_asset_id, ""),
             )
         )
+
+    def emit_asset_reference(
+        element: ET.Element,
+        start: Fraction,
+        duration: Fraction,
+        source_start: Fraction,
+        camera: str,
+    ) -> bool:
+        source_asset_id = element.get("ref", "")
+        if source_asset_id not in assets:
+            return False
+        append_clip(
+            source_asset_id,
+            element.get("name", ""),
+            _camera_for(element, camera),
+            start,
+            duration,
+            source_start,
+        )
+        return True
+
+    def emit_multicam(element: ET.Element, start: Fraction, duration: Fraction, camera: str) -> None:
+        resource_id = element.get("ref", "")
+        outer_source_start = parse_time(element.get("start"))
+        outer_end = outer_source_start + duration
+        for angle_camera, angle in multicam_media.get(resource_id, []):
+            # mc-source is the editing angle selected in FCP, not evidence that
+            # the other synchronized cameras should be discarded. Analyze every
+            # angle so B/C audio can outrank the displayed A angle when needed.
+            walk_story(
+                angle,
+                parent_start=Fraction(0),
+                depth=1,
+                inherited_camera=angle_camera or camera,
+                clip_window=(outer_source_start, outer_end, start),
+            )
+
+    def emit_referenced_media(element: ET.Element, start: Fraction, duration: Fraction, camera: str) -> bool:
+        resource_id = element.get("ref", "")
+        resource_spine = referenced_media.get(resource_id)
+        if resource_spine is None:
+            return False
+        source_start = parse_time(element.get("start"))
+        walk_story(
+            resource_spine,
+            parent_start=Fraction(0),
+            depth=1,
+            inherited_camera=camera,
+            clip_window=(source_start, source_start + duration, start),
+        )
+        return True
+
+    def walk_story(
+        parent: ET.Element,
+        parent_start: Fraction,
+        depth: int,
+        inherited_camera: str,
+        clip_window: tuple[Fraction, Fraction, Fraction] | None = None,
+    ) -> None:
+        cursor = parent_start
+        for element in _children(parent):
+            kind = _tag(element)
+            duration = parse_time(element.get("duration"))
+            start = _story_start(element, cursor, parent_start, depth)
+            end = start + duration
+            lane = element.get("lane", "")
+            if (not lane or lane == "0") and duration > 0:
+                cursor = max(cursor, end)
+            if duration <= 0:
+                if _children(element):
+                    walk_story(element, start, depth + 1, inherited_camera, clip_window)
+                continue
+
+            effective_start = start
+            effective_end = end
+            source_start = parse_time(element.get("start"))
+            timeline_start = start
+            if clip_window is not None:
+                window_start, window_end, outer_timeline_start = clip_window
+                effective_start = max(start, window_start)
+                effective_end = min(end, window_end)
+                if effective_end <= effective_start:
+                    continue
+                source_start += effective_start - start
+                timeline_start = outer_timeline_start + (effective_start - window_start)
+            effective_duration = effective_end - effective_start
+            camera = _camera_for(element, inherited_camera)
+
+            if kind == "mc-clip" and element.get("ref", "") in multicam_media:
+                emit_multicam(element, timeline_start, effective_duration, camera)
+                continue
+
+            if kind in {"asset-clip", "video", "audio", "ref-clip", "sync-clip", "clip"}:
+                if emit_asset_reference(element, timeline_start, effective_duration, source_start, camera):
+                    continue
+                if kind in {"ref-clip", "sync-clip"} and emit_referenced_media(
+                    element,
+                    timeline_start,
+                    effective_duration,
+                    camera,
+                ):
+                    continue
+
+            if kind == "gap" or _children(element):
+                walk_story(element, start, depth + 1, camera, clip_window)
+
+    walk_story(spine, Fraction(0), 0, "?")
     return clips
 
 

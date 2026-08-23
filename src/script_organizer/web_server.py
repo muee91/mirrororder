@@ -14,6 +14,7 @@ import time
 import unicodedata
 import urllib.parse
 from http import HTTPStatus
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -340,6 +341,7 @@ class ProjectService:
                 timeline_end=0,
                 duration=0,
                 exists=bool(clip.get("exists", False)),
+                media_id=str(clip.get("media_id", "") or ""),
             )
             transcript = store.load(source)
             if transcript:
@@ -382,7 +384,7 @@ class WorkspaceService:
         self.workspace = workspace
         self.registry = WorkspaceRegistry(workspace)
         self.tokens = AgentTokenStore(workspace)
-        self.tasks = TaskManager(self.project_config)
+        self.tasks = TaskManager(self.project_config, workspace.workspace_id)
         self._projects: dict[str, ProjectService] = {}
 
     def project_config(self, project_id: str) -> ProjectConfig:
@@ -390,11 +392,12 @@ class WorkspaceService:
 
     def project(self, project_id: str) -> ProjectService:
         entry = self.registry.get(project_id)
-        config_path = str(entry["config_path"])
+        config_path = self.registry.project_config(project_id).config_path
         current = self._projects.get(project_id)
-        if current and str(current.config.config_path) == config_path:
+        if current and current.config.config_path == config_path:
             return current
         project = ProjectService(project_id, ProjectConfig.from_file(config_path))
+        project.workspace_id = self.workspace.workspace_id
         self._projects[project_id] = project
         return project
 
@@ -619,12 +622,19 @@ def make_handler(service: WorkspaceService, web_root: Path):
         def log_message(self, format: str, *args: Any) -> None:
             return
 
-        def _send_json(self, payload: object, status: HTTPStatus = HTTPStatus.OK) -> None:
+        def _send_json(
+            self,
+            payload: object,
+            status: HTTPStatus = HTTPStatus.OK,
+            headers: dict[str, str] | None = None,
+        ) -> None:
             body = _json_bytes(payload)
             try:
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
+                for key, value in (headers or {}).items():
+                    self.send_header(key, value)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -956,7 +966,26 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
 
     class Handler(BaseHandler):
         def _session(self) -> str:
-            return self.headers.get("X-MirrorOrder-Session", "")
+            header = self.headers.get("X-MirrorOrder-Session", "").strip()
+            if header:
+                return header
+            try:
+                cookies = SimpleCookie()
+                cookies.load(self.headers.get("Cookie", ""))
+                item = cookies.get("MirrorOrderSession")
+                return item.value if item else ""
+            except (KeyError, ValueError):
+                return ""
+
+        @staticmethod
+        def _session_cookie(token: str, max_age: int) -> str:
+            cookie = SimpleCookie()
+            cookie["MirrorOrderSession"] = token
+            cookie["MirrorOrderSession"]["path"] = "/"
+            cookie["MirrorOrderSession"]["max-age"] = str(max_age)
+            cookie["MirrorOrderSession"]["httponly"] = True
+            cookie["MirrorOrderSession"]["samesite"] = "Lax"
+            return cookie.output(header="").strip()
 
         def _authorize_app(self) -> None:
             if not gateway.security.allow(self.client_address[0], self._session()):
@@ -1047,7 +1076,12 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
                 if parsed.path == "/api/v1/pairing":
                     payload = _body(self)
                     token = gateway.security.exchange(str(payload.get("code", "")))
-                    self._send_json({"session": token})
+                    headers = (
+                        {"Set-Cookie": self._session_cookie(token, gateway.security.session_ttl_seconds)}
+                        if token
+                        else {}
+                    )
+                    self._send_json({"paired": True}, headers=headers)
                     return
                 if parsed.path.startswith("/api/v1/"):
                     parts = _parts(parsed.path)

@@ -91,7 +91,7 @@ async function fetchJson(url, options = {}) {
     ...(state.session ? {'X-MirrorOrder-Session': state.session} : {}),
     ...(options.headers || {}),
   };
-  const response = await fetch(url, {cache: 'no-store', ...options, headers});
+  const response = await fetch(url, {cache: 'no-store', credentials: 'same-origin', ...options, headers});
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload.error || `请求失败 (${response.status})`);
@@ -679,16 +679,12 @@ function selectMember(groupId, clipId, autoplay = false) {
 }
 
 async function postReviewAction(action) {
-  const response = await fetch(projectApi('/review'), {
+  const response = await fetchJson(projectApi('/review'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({...action, actor: state.actor}),
   });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || '审核保存失败');
-  }
-  state.review = await response.json();
+  state.review = response;
   state.reviewRevision = Number(state.review.revision || 0);
   setCollabStatus('已同步', true);
   return state.review;
@@ -875,12 +871,9 @@ async function runSearch(query) {
   }
   state.searchController = new AbortController();
   try {
-    const response = await fetch(`${projectApi('/search')}?q=${encodeURIComponent(query)}`, {
-      cache: 'no-store',
+    const payload = await fetchJson(`${projectApi('/search')}?q=${encodeURIComponent(query)}`, {
       signal: state.searchController.signal,
     });
-    if (!response.ok) throw new Error('搜索失败');
-    const payload = await response.json();
     renderSearchResults(payload.results || []);
   } catch (error) {
     if (error.name !== 'AbortError') renderSearchResults([]);
@@ -940,6 +933,24 @@ function renderWorkspaceSelector() {
   target.value = state.workspaceId;
 }
 
+function preferredProject(projects) {
+  return [...projects].sort((left, right) => {
+    const leftStats = left.stats || {};
+    const rightStats = right.stats || {};
+    const leftHasData = Number(leftStats.groups || 0) > 0 || Number(leftStats.clips || 0) > 0;
+    const rightHasData = Number(rightStats.groups || 0) > 0 || Number(rightStats.clips || 0) > 0;
+    return Number(rightHasData) - Number(leftHasData);
+  })[0]?.project_id || '';
+}
+
+function hasExplicitProjectSelection() {
+  try { return localStorage.getItem('script-organizer-project-selection-explicit') === '1'; } catch (_error) { return false; }
+}
+
+function rememberExplicitProjectSelection() {
+  try { localStorage.setItem('script-organizer-project-selection-explicit', '1'); } catch (_error) {}
+}
+
 function updateLocation() {
   const url = new URL(window.location.href);
   url.searchParams.set('workspace_id', state.workspaceId);
@@ -992,8 +1003,8 @@ async function loadWorkspace() {
   })();
   state.projectId = projects.some((item) => item.project_id === requestedProjectId)
     ? requestedProjectId
-    : projects.some((item) => item.project_id === savedProjectId)
-      ? savedProjectId : projects[0].project_id;
+    : hasExplicitProjectSelection() && projects.some((item) => item.project_id === savedProjectId)
+      ? savedProjectId : preferredProject(projects);
   try { localStorage.setItem('script-organizer-workspace-id', state.workspaceId); } catch (_error) {}
   renderWorkspaceSelector();
   renderProjectSelector();
@@ -1023,7 +1034,7 @@ async function switchWorkspace(workspaceId) {
   state.workspace = await fetchJson(workspaceApi());
   const projects = state.workspace.projects || [];
   if (!projects.length) throw new Error('工作区没有可用项目');
-  state.projectId = projects[0].project_id;
+  state.projectId = preferredProject(projects);
   resetProjectView();
   renderWorkspaceSelector();
   renderProjectSelector();
@@ -1058,6 +1069,16 @@ function updateProjectKindFields() {
   $('#new-project-media-root').required = !fcpxml;
 }
 
+function openProjectDialog() {
+  $('#project-form').reset();
+  // Raw media is the normal product entry. The FCPXML path remains an
+  // explicit advanced choice rather than depending on late-loaded scripts.
+  $('#new-project-kind').value = 'media-directory';
+  updateProjectKindFields();
+  if (!$('#project-dialog').open) $('#project-dialog').showModal();
+  requestAnimationFrame(() => $('#new-project-name').focus());
+}
+
 async function createProject() {
   const inputKind = $('#new-project-kind').value;
   const payload = {
@@ -1066,10 +1087,19 @@ async function createProject() {
     fcpxml: $('#new-project-fcpxml').value,
     media_root: $('#new-project-media-root').value,
     script: $('#new-project-script').value,
-    output_dir: $('#new-project-output').value,
-    transcript_dir: $('#new-project-transcript').value,
     camera_patterns: parseCameraPatterns($('#new-project-camera-patterns').value),
   };
+  const preflight = await fetchJson(workspaceApi('/project-preflight'), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  if (!preflight.ready) {
+    throw new Error(`项目预检失败：${(preflight.errors || []).join('；')}`);
+  }
+  if ((preflight.warnings || []).length) {
+    showToast(`预检提示：${preflight.warnings.join('；')}`);
+  }
   const created = await fetchJson(workspaceApi('/projects'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1293,9 +1323,11 @@ $('#show-unknown').addEventListener('click', () => {
 });
 $('#refresh').addEventListener('click', () => location.reload());
 $('#project-select').addEventListener('change', (event) => {
+  rememberExplicitProjectSelection();
   switchProject(event.target.value).catch((error) => showToast(error.message));
 });
 $('#workspace-select').addEventListener('change', (event) => {
+  rememberExplicitProjectSelection();
   switchWorkspace(event.target.value).catch((error) => showToast(error.message));
 });
 $('#pairing-form').addEventListener('submit', (event) => {
@@ -1305,17 +1337,13 @@ $('#pairing-form').addEventListener('submit', (event) => {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({code: $('#pairing-code').value.trim()}),
   }).then(async (payload) => {
-    state.session = payload.session || '';
-    try { sessionStorage.setItem('mirrororder-session', state.session); } catch (_error) {}
+    state.session = '';
     $('#pairing-dialog').close();
     await boot();
   }).catch((error) => showToast(error.message));
 });
 $('#create-project').addEventListener('click', () => {
-  $('#project-form').reset();
-  $('#new-project-kind').value = 'fcpxml';
-  updateProjectKindFields();
-  $('#project-dialog').showModal();
+  openProjectDialog();
 });
 $('#project-close').addEventListener('click', () => $('#project-dialog').close());
 $('#new-project-kind').addEventListener('change', updateProjectKindFields);
@@ -1403,7 +1431,6 @@ document.addEventListener('keydown', async (event) => {
   else await setDecision(state.segmentId, candidate.group_id, decision);
 });
 
-try { state.session = sessionStorage.getItem('mirrororder-session') || ''; } catch (_error) {}
 boot().catch((error) => {
   if (String(error.message || '').includes('需要先完成局域网配对')) {
     $('#pairing-dialog').showModal();

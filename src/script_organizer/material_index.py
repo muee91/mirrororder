@@ -25,6 +25,7 @@ from .models import Candidate, MulticamGroup
 from .known_text_alignment import align_known_text
 from .review_store import ReviewStore
 from .script_parser import ScriptDocument, parse_script
+from .source_descriptor import redact_device_media_paths, shared_source_descriptor
 from .transcript import TranscriptStore, transcribe_with_faster_whisper
 
 
@@ -650,12 +651,10 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     previous_group_rows = previous_matches.get("groups", {}) if isinstance(previous_matches, dict) and isinstance(previous_matches.get("groups", {}), dict) else {}
     previous_group_items = previous_index.get("groups", []) if isinstance(previous_index, dict) else []
     previous_groups = {str(item.get("group_id")): item for item in previous_group_items if isinstance(item, dict) and item.get("group_id")}
+    source_descriptor = shared_source_descriptor(config)
     same_previous_sources = (
         isinstance(previous_index, dict)
-        and previous_index.get("source", {}).get("kind") == config.input_kind
-        and previous_index.get("source", {}).get("fcpxml") == (str(config.fcpxml) if config.fcpxml else "")
-        and previous_index.get("source", {}).get("media_root") == (str(config.media_root) if config.media_root else "")
-        and previous_index.get("source", {}).get("script") == str(config.script)
+        and previous_index.get("analysis_source", previous_index.get("source", {})) == source_descriptor
         and previous_script == script_payload
     )
     existing_group_ids = {group.group_id for group in groups}
@@ -850,12 +849,8 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     index_payload = {
         "version": 2,
         "project": config.name,
-        "source": {
-            "kind": config.input_kind,
-            "fcpxml": str(config.fcpxml) if config.fcpxml else "",
-            "media_root": str(config.media_root) if config.media_root else "",
-            "script": str(config.script),
-        },
+        "source": source_descriptor,
+        "analysis_source": source_descriptor,
         "clips": [clip.to_dict() for clip in clips],
         "groups": group_payloads,
         "errors": errors,
@@ -887,6 +882,8 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
             "asr_escalation_skipped_reviewed_groups": asr_escalation_skipped_reviewed_groups,
         },
     }
+    if config.is_media_directory:
+        redact_device_media_paths(index_payload)
     matches_payload = {
         "version": 2,
         "groups": {

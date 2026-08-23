@@ -101,8 +101,9 @@ class TaskManager:
     deterministic artifacts and caches.
     """
 
-    def __init__(self, project_loader: Callable[[str], ProjectConfig]):
+    def __init__(self, project_loader: Callable[[str], ProjectConfig], workspace_id: str = ""):
         self.project_loader = project_loader
+        self.workspace_id = workspace_id
         self._lock = RLock()
         self._threads: dict[str, Thread] = {}
 
@@ -276,7 +277,9 @@ class TaskManager:
             raise ValueError("存在未知 clip_id")
 
         device_store = DeviceMediaStore()
-        snapshot = device_store.project_snapshot(str(task.get("project_id", "")))
+        if not self.workspace_id:
+            raise ValueError("任务缺少工作区身份，无法读取本机素材绑定")
+        snapshot = device_store.project_snapshot(self.workspace_id, str(task.get("project_id", "")))
         selected: list[Clip] = []
         missing_local: list[str] = []
         for clip_id in requested:

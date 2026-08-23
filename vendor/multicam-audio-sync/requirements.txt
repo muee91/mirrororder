@@ -1,0 +1,9 @@
+# Required by the first-party synchronization pipeline:
+# make_index.py, sync.py, and the FCPXML/NLE generators.
+numpy
+pandas
+scipy
+
+# Optional: only required to decode or encode a CapCut draft that the editor
+# has already opened and saved in CapCut's encrypted container format.
+pycryptodome

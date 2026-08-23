@@ -20,8 +20,8 @@ def _decorate_member(store: DeviceMediaStore, snapshot: dict[str, Any], item: di
     item["exists"] = bool(resolved)
 
 
-def _apply_project(store: DeviceMediaStore, project: Any) -> None:
-    snapshot = store.project_snapshot(project.project_id)
+def _apply_project(store: DeviceMediaStore, project: Any, workspace_id: str) -> None:
+    snapshot = store.project_snapshot(workspace_id, project.project_id)
     for clip in project.index.get("clips", []):
         if isinstance(clip, dict):
             _decorate_member(store, snapshot, clip)
@@ -57,17 +57,23 @@ def install_device_media_runtime() -> None:
 
     def reload_with_local_media(project: Any) -> None:
         original_reload(project)
-        _apply_project(store, project)
+        workspace_id = str(getattr(project, "workspace_id", "") or "")
+        if workspace_id:
+            _apply_project(store, project, workspace_id)
 
     def workspace_project_with_local_media(service: Any, project_id: str) -> Any:
         project = original_workspace_project(service, project_id)
-        _apply_project(store, project)
+        project.workspace_id = service.workspace.workspace_id
+        _apply_project(store, project, service.workspace.workspace_id)
         return project
 
     def payload_with_local_media(project: Any) -> dict[str, Any]:
         payload = original_payload(project)
-        _apply_project(store, project)
-        summary = store.summary(project.project_id, project.index)
+        workspace_id = str(getattr(project, "workspace_id", "") or "")
+        if not workspace_id:
+            return payload
+        _apply_project(store, project, workspace_id)
+        summary = store.summary(workspace_id, project.project_id, project.index)
         payload["local_media"] = {
             key: summary[key]
             for key in ("device_id", "device_name", "roots", "total", "resolved", "missing")

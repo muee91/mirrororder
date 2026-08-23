@@ -11,6 +11,7 @@ from .agent_store import AgentTokenStore
 from .analysis_runtime import analyze
 from .automation_runtime import install_automation_runtime
 from .device_media_runtime import install_device_media_runtime
+from .runtime_diagnostics import environment_payload
 from .fcpxml_exporter import export
 from .local_vision_runtime import LocalVisionRuntime
 from .media_identity import DeviceMediaStore
@@ -42,7 +43,7 @@ def _project_index(workspace: WorkspaceConfig, project_id: str) -> dict:
 
 
 def _submit_and_wait(workspace: WorkspaceConfig, project_id: str, task_type: str) -> int:
-    manager = TaskManager(WorkspaceRegistry(workspace).project_config)
+    manager = TaskManager(WorkspaceRegistry(workspace).project_config, workspace.workspace_id)
     task = manager.submit(project_id, task_type, {}, actor="cli")
     task_id = str(task.get("task_id", ""))
     terminal = {"completed", "failed", "cancelled", "interrupted"}
@@ -113,7 +114,14 @@ def main(argv: list[str] | None = None) -> int:
     context_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
     context_parser.add_argument("project_id", help="项目 ID")
 
+    doctor_parser = subparsers.add_parser("doctor", help="检查本机运行环境与工作区写权限")
+    doctor_parser.add_argument("workspace", nargs="*", help="一个或多个 workspace.toml 或工作区目录")
+
     args = parser.parse_args(argv)
+    if args.command == "doctor":
+        paths = [str(_workspace(value).config_path.parent) for value in args.workspace]
+        print(json.dumps(environment_payload([Path(value) for value in paths]), ensure_ascii=False, indent=2))
+        return 0
     if args.command == "gateway":
         workspaces = [ensure_workspace_id(_workspace(value).config_path) for value in args.workspace]
         install_device_media_runtime()
@@ -137,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             signal.signal(signal.SIGTERM, previous_sigterm)
         return 0
 
-    workspace = _workspace(args.workspace)
+    workspace = ensure_workspace_id(_workspace(args.workspace).config_path)
 
     if args.command in {"serve", "run"}:
         install_device_media_runtime()
@@ -166,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         index = _project_index(workspace, args.project_id)
         if not index:
             raise SystemExit("项目还没有 material_index.json；请先在有源素材的机器完成 analyze")
-        summary = DeviceMediaStore().scan(args.project_id, index, args.root)
+        summary = DeviceMediaStore().scan(workspace.workspace_id, args.project_id, index, args.root)
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
@@ -182,18 +190,25 @@ def main(argv: list[str] | None = None) -> int:
             if not index:
                 summaries[project_id] = {"error": "项目还没有 material_index.json"}
                 continue
-            summaries[project_id] = store.scan(project_id, index, args.root)
+            summaries[project_id] = store.scan(workspace.workspace_id, project_id, index, args.root)
         print(json.dumps({"projects": summaries}, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "media-status":
         index = _project_index(workspace, args.project_id)
-        summary = DeviceMediaStore().summary(args.project_id, index)
+        summary = DeviceMediaStore().summary(workspace.workspace_id, args.project_id, index)
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "analyze":
-        result = analyze(_project(workspace, args.project_id))
+        config = _project(workspace, args.project_id)
+        result = analyze(config)
+        if config.is_media_directory:
+            store = DeviceMediaStore()
+            snapshot = store.project_snapshot(workspace.workspace_id, args.project_id)
+            roots = snapshot.get("roots", []) if isinstance(snapshot, dict) else []
+            if roots:
+                store.scan(workspace.workspace_id, args.project_id, result["index"], roots)
         print(json.dumps(result["index"]["stats"], ensure_ascii=False))
         return 0
 
