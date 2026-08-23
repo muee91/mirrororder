@@ -50,6 +50,21 @@ def test_desktop_service_start_script_saves_pid_after_background_launch():
     assert "NSHostingView(rootView: DesktopRootView())" in source
 
 
+def test_desktop_console_has_explicit_navigation_and_restart_drain():
+    source = read("macos-app/MirrorOrderDesktopApp.swift")
+
+    for section in ("overview", "service", "workspaces", "projects", "models", "frontend", "agent", "workbench"):
+        assert f"case {section}" in source
+    for page in ("DashboardPage", "ServicePage", "WorkspacePage", "ProjectPage", "ModelPage", "FrontendPage", "AgentPage", "ConsoleWorkbenchPage"):
+        assert f"struct {page}" in source
+    assert "ConsoleSidebar" in source
+    assert "private var lastStoppedGatewayPID: Int32?" in source
+    assert "private func waitForStoppedGateway() async" in source
+    assert "await waitForStoppedGateway()" in source
+    assert "isBusy = true" in source
+    assert "statusText = \"正在应用服务配置\"" in source
+
+
 def test_web_loader_uses_review_aware_timeline_v3_only():
     loader = read("web/timeline.js")
     timeline = read("web/timeline_v3.js")
