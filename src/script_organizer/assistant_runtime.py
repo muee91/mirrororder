@@ -6,6 +6,8 @@ from typing import Any
 
 from .agent_tools import AgentToolRegistry
 from .assistant_orchestrator import AssistantOrchestrator
+from .audit_store import AuditStore
+from .learning_dataset import write_learning_dataset
 from .model_connections import load_model_connections, save_model_connections
 from .model_registry import ModelRegistry
 
@@ -41,6 +43,22 @@ def _orchestrator(service: Any, project_id: str) -> AssistantOrchestrator:
         project.config,
         task_manager=service.tasks,
     )
+
+
+def _refresh_after_review(service: Any, project_id: str) -> None:
+    """Cheap derived-state refresh after human review authority changes.
+
+    This never changes review/editorial/automation. It only rebuilds the R&D
+    learning projection from the latest human truth and refreshes assistant.v1.
+    """
+    try:
+        project = service.project(project_id)
+        audit = AuditStore(project.config.output_dir).load()
+        if audit.get("groups"):
+            write_learning_dataset(project.config, audit)
+        _orchestrator(service, project_id).cycle(trigger="review", allow_actions=False)
+    except Exception:
+        return
 
 
 def _safe_assistant(payload: dict[str, Any]) -> dict[str, Any]:
@@ -217,6 +235,20 @@ def install_assistant_runtime() -> None:
                     if parts[5] == "message":
                         self._send_json(assistant.answer(str(body.get("message", "") or "")))
                         return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "review"
+                ):
+                    project_id = parts[3]
+                    result = super()._app_post(parsed)
+                    Thread(
+                        target=_refresh_after_review,
+                        args=(service, project_id),
+                        daemon=True,
+                        name=f"mirror-assistant-review-{project_id}",
+                    ).start()
+                    return result
                 return super()._app_post(parsed)
 
             def _agent_get(self, parsed):
