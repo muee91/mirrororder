@@ -49,3 +49,21 @@ def test_review_room_loads_responsive_professional_surface() -> None:
     assert "@media(max-width:680px)" in css
     assert 'grid-template-areas:"script takes inspector"' in css
     assert "box-shadow:inset 3px 0 0 var(--blue)" in css
+
+
+def test_desktop_surface_uses_project_first_hierarchy() -> None:
+    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
+    build = (ROOT / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
+
+    assert "NativeThemeMode.system.rawValue" in ui
+    assert 'Text("项目")' in ui
+    assert 'Text("工作台")' not in ui
+    assert 'systemImage: "ellipsis"' in ui
+    assert 'Text("永久删除项目…")' in ui
+    assert 'Text("内容与人物")' in ui
+    assert 'Text("可选增强")' in ui
+    assert 'Label("\\(attention.count) 项需处理"' in ui
+    assert 'case .ready: return stage.kind == .ready' in ui
+    assert 'case .attention: return attention.hasIssues || stage.kind == .failed' in ui
+    assert 'CORE_SOURCE="$ROOT/macos-app/MirrorOrderDesktopCore.swift"' in build
+    assert 'UI_SOURCE="$ROOT/macos-app/MirrorOrderDesktopUI.swift"' in build
