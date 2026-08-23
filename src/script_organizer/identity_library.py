@@ -34,6 +34,29 @@ class IdentityLibrary:
         self.project_id = str(project_id or "").strip()
         if not self.project_id:
             raise ValueError("project_id 不能为空")
+        self._install_confirmation_guard()
+
+    def _install_confirmation_guard(self) -> None:
+        """Prevent automatic cluster upserts from clobbering human labels.
+
+        IdentityIndexer marks its automatically-created rows with auto_cluster.
+        A row touched through this library is marked human_confirmed. SQLite
+        then ignores future automatic UPDATE branches for that identity while
+        observations/centroids remain free to refresh.
+        """
+        with self.database.connection() as connection:
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS protect_human_identity_labels
+                BEFORE UPDATE OF label, role_name, metadata_json ON identities
+                WHEN COALESCE(json_extract(OLD.metadata_json, '$.human_confirmed'), 0) = 1
+                 AND COALESCE(json_extract(NEW.metadata_json, '$.auto_cluster'), 0) = 1
+                BEGIN
+                    SELECT RAISE(IGNORE);
+                END
+                """
+            )
+            connection.commit()
 
     def list(self, kind: str = "") -> list[dict[str, Any]]:
         if kind and kind not in {"face", "speaker"}:
