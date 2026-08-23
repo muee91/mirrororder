@@ -227,10 +227,14 @@
     <div id="identity-library-list" class="identity-library-list"></div>
   </dialog>
 
+  <!-- Boot is intentionally two-phase: app.js may start boot immediately, but
+       API fetches stay gated until every static extension has installed. -->
+  <script src="/startup_gate.js"></script>
   <script src="/app.js"></script>
   <script src="/review_model.js"></script>
   <script src="/ux_fixes.js"></script>
   <script src="/production_mode.js"></script>
+  <script src="/device_media.js"></script>
   <script src="/media_role_ui.js"></script>
   <script src="/coverage_ui.js"></script>
   <script src="/rough_cut_ui.js"></script>
@@ -242,5 +246,6 @@
   <script src="/assistant_ui.js"></script>
   <script src="/assistant_control_ui.js"></script>
   <script src="/semantic_search_ui.js"></script>
+  <script src="/startup_release.js"></script>
 </body>
 </html>
