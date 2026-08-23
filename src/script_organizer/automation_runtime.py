@@ -19,6 +19,7 @@ from .workspace_db import WorkspaceDatabase
 
 _INSTALLED = False
 _SCRIPT_SUFFIXES = {".docx", ".txt", ".md", ".markdown"}
+_AGENT_TASK_TYPES = {"incremental_analyze", "transcribe", "evidence_extract"}
 
 
 def _apply(project: Any) -> dict[str, Any]:
@@ -160,7 +161,7 @@ def _queue_identity_jobs(service: Any, kinds: list[str]) -> list[dict[str, Any]]
 
 
 def install_automation_runtime() -> None:
-    """Attach auto-decision state without making it human review authority."""
+    """Attach production automation while preserving App/Web/Agent boundaries."""
     global _INSTALLED
     if _INSTALLED:
         return
@@ -174,6 +175,19 @@ def install_automation_runtime() -> None:
     original_capabilities = web_server.WorkspaceService.capabilities
     original_create = WorkspaceRegistry.create
     original_make_handler = web_server.make_handler
+    original_task_submit = TaskManager.submit
+
+    def guarded_task_submit(
+        manager: TaskManager,
+        project_id: str,
+        task_type: str,
+        targets: dict[str, Any] | None = None,
+        idempotency_key: str = "",
+        actor: str = "human",
+    ) -> dict[str, Any]:
+        if str(actor).startswith("agent:") and task_type not in _AGENT_TASK_TYPES:
+            raise ValueError("外部智能体只能提交 incremental_analyze、transcribe 或 evidence_extract")
+        return original_task_submit(manager, project_id, task_type, targets, idempotency_key, actor)
 
     def workspace_project(service: Any, project_id: str) -> Any:
         project = original_workspace_project(service, project_id)
@@ -233,8 +247,7 @@ def install_automation_runtime() -> None:
 
     def capabilities(service: Any, agent: dict[str, Any]) -> dict[str, Any]:
         payload = original_capabilities(service, agent)
-        # identity_index is a device-local App task, not an external-agent API.
-        payload["task_types"] = sorted(value for value in TASK_TYPES if value != "identity_index")
+        payload["task_types"] = sorted(_AGENT_TASK_TYPES)
         return payload
 
     def create_and_prepare(registry: WorkspaceRegistry, payload: dict[str, Any]) -> dict[str, Any]:
@@ -285,6 +298,16 @@ def install_automation_runtime() -> None:
 
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
+                # Production task submission/cancellation is App-only. LAN Web
+                # can still read task status and use review endpoints; future
+                # team AI requests use a bounded review-analysis API instead.
+                if (
+                    len(parts) >= 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "tasks"
+                ):
+                    self._local_only()
+                    return super()._app_post(parsed)
                 if parts == ["api", "v1", "project-preflight"]:
                     self._local_only()
                     self._send_json(service.registry.preflight_create(web_server._body(self)))
@@ -405,6 +428,7 @@ def install_automation_runtime() -> None:
 
         return Handler
 
+    TaskManager.submit = guarded_task_submit
     web_server.WorkspaceService.project = workspace_project
     web_server.ProjectService.project_payload = project_payload
     web_server.ProjectService.state = project_state
