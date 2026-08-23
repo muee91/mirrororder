@@ -162,15 +162,15 @@ assignment
   group_id
 ```
 
-每个 target 下按审核昵称分别保存：
+每个 target 下按稳定 `reviewer_id` 分别保存，`actor` 只是显示昵称：
 
 ```text
-剪辑A → Best
-导演B → Keep
-制片C → Reject
+reviewer-01 · 剪辑A → Best
+reviewer-02 · 小王   → Keep
+reviewer-03 · 小王   → Reject
 ```
 
-因此一个人的修改不会覆盖其他人的意见。
+因此即使两个人使用相同昵称，也不会互相覆盖。旧调用如果暂时没有 `reviewer_id`，Host 会用昵称兼容键保存；正式 Web UI 迁移后应始终发送稳定 reviewer identity。
 
 写入 API：
 
@@ -186,11 +186,12 @@ POST /api/v1/workspaces/{workspace_id}/projects/{project_id}/opinions
   "segment_id": "S_27_18",
   "group_id": "G_27_03",
   "state": "keep",
-  "actor": "剪辑A"
+  "actor": "剪辑A",
+  "reviewer_id": "reviewer-7f9f..."
 }
 ```
 
-`state = unreviewed` 只清除该审核人在该 target 上自己的意见，不会删除其他人的意见。
+`state = unreviewed` 只清除该 reviewer identity 在该 target 上自己的意见，不会删除其他人的意见。
 
 当前阶段**不会把现有 Web B/K/X 自动迁移成 Individual Opinion**。旧按钮仍走成熟的 `/review` 原子 action，避免在没有完整 UI 和导出迁移前改变既有审核语义。
 
@@ -331,7 +332,7 @@ embedding
 
 下一步是 **Editorial UI Migration**，而不是继续增加存储格式：
 
-1. Web 的 Best / Keep / Reject 改成“我的意见”；
+1. Web 的 Best / Keep / Reject 改成“我的意见”，并为浏览器生成稳定 reviewer identity；
 2. Take/剧本段附近显示团队意见汇总，但控制视觉噪音；
 3. App Production Inspector 提供明确的“最终编辑决定”动作；
 4. 再定义 Editorial Decision 与 FCPXML / selection manifest /交付选择之间的转换规则；
