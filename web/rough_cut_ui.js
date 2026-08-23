@@ -12,6 +12,7 @@
     explicit_best: '已有最佳',
     needs_editorial_choice: '待选择',
     conflict_multiple_best: 'Best 冲突',
+    conflict_supervisor_vs_best: 'Best / 场记冲突',
     no_eligible_take: '无可用 Take',
   };
   const sourceLabels = {
@@ -24,19 +25,12 @@
     unreviewed: '未判断',
   };
   const stateLabels = {
-    best: '最佳',
-    keep: '保留',
-    reject: '隐藏',
-    unreviewed: '未判断',
+    best: '最佳', keep: '保留', reject: '隐藏', unreviewed: '未判断',
   };
   const roleLabels = {
-    master: '主镜',
-    dialogue: '对白',
-    reaction: '反应',
-    insert: '细节',
-    establishing: '建立',
-    transition: '过场',
+    master: '主镜', dialogue: '对白', reaction: '反应', insert: '细节', establishing: '建立', transition: '过场',
   };
+  const supervisorLabels = {usable: '场记可用', partial: '场记部分可用', ng: '场记 NG'};
 
   function asArray(value) { return Array.isArray(value) ? value : []; }
   function asObject(value) { return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; }
@@ -61,7 +55,8 @@
     const button = ensureTab();
     if (button) button.classList.toggle('active', active);
     if (active) {
-      document.querySelectorAll('#production-bar [data-production-tab], #production-coverage-tab').forEach((item) => item.classList.remove('active'));
+      document.querySelectorAll('#production-bar [data-production-tab], #production-coverage-tab, #production-assembly-tab')
+        .forEach((item) => item.classList.remove('active'));
     }
   }
 
@@ -76,9 +71,13 @@
 
   function candidateText(candidate) {
     const source = String(candidate.decision_source || 'unreviewed');
-    const state = String(candidate.delivery_state || 'unreviewed');
-    if (source === 'automatic_mapping_fallback') return '自动归集候选';
-    return `${sourceLabels[source] || '审核'} · ${stateLabels[state] || state}`;
+    const stateValue = String(candidate.delivery_state || 'unreviewed');
+    const base = source === 'automatic_mapping_fallback'
+      ? '自动归集候选'
+      : `${sourceLabels[source] || '审核'} · ${stateLabels[stateValue] || stateValue}`;
+    const supervisor = asObject(candidate.script_supervisor);
+    const supervisorText = supervisorLabels[String(supervisor.status || '')] || '';
+    return supervisorText ? `${base} · ${supervisorText}` : base;
   }
 
   function candidateAngles(candidate) {
@@ -90,9 +89,20 @@
           wide: '全景', full: '全身', medium: '中景', medium_closeup: '中近景',
           closeup: '近景', extreme_closeup: '特写', insert: '细节', unknown: '未识别',
         }[shot] || '未识别';
-        return `${angle.camera || '?'} ${shotText}${role ? ` · ${role}` : ''}`;
+        const human = angle.shot_source === 'script_supervisor' ? ' · 人工' : '';
+        return `${angle.camera || '?'} ${shotText}${human}${role ? ` · ${role}` : ''}`;
       })
       .join('　');
+  }
+
+  function supervisorDetail(candidate) {
+    const supervisor = asObject(candidate.script_supervisor);
+    const range = asObject(supervisor.usable_range);
+    const parts = [];
+    if (range.end != null) parts.push(`可用 ${Number(range.start || 0).toFixed(1)}–${Number(range.end || 0).toFixed(1)}s`);
+    if (supervisor.preferred_clip_id) parts.push('已指定优先机位');
+    if (supervisor.note) parts.push(`场记：${String(supervisor.note).replace(/\s+/g, ' ').slice(0, 90)}`);
+    return parts.join(' · ');
   }
 
   function renderCandidate(candidate, primaryGroupId) {
@@ -100,11 +110,12 @@
     const primary = groupId && groupId === primaryGroupId;
     const risk = String(candidate.continuity_risk || 'unknown');
     const riskText = risk === 'high' ? ' · 连续性风险高' : risk === 'medium' ? ' · 连续性需留意' : '';
+    const supervisor = supervisorDetail(candidate);
     return `
       <button class="rough-cut-candidate${primary ? ' is-primary' : ''}" type="button" data-focus-group="${esc(groupId)}">
         <span class="rough-cut-candidate-main">
           <strong>${esc(candidateText(candidate))}${primary ? ' · Primary' : ''}</strong>
-          <small>${esc(candidateAngles(candidate) || '尚无机位景别证据')}${esc(riskText)}</small>
+          <small>${esc(candidateAngles(candidate) || '尚无机位景别证据')}${esc(riskText)}${supervisor ? ` · ${esc(supervisor)}` : ''}</small>
         </span>
         <span class="rough-cut-candidate-id">${esc(groupId)}</span>
         <span class="production-chevron">›</span>
@@ -115,7 +126,7 @@
   function renderSegment(segment) {
     const script = asObject(segment.script);
     const status = String(segment.selection_status || 'needs_editorial_choice');
-    const issue = asArray(segment.issues).find((item) => item?.severity === 'warning');
+    const issue = asArray(segment.issues).find((item) => item?.severity === 'warning') || asArray(segment.issues)[0];
     const roleText = rolePoolText(segment);
     const candidates = asArray(segment.candidates);
     const statusText = statusLabels[status] || status;
@@ -162,7 +173,7 @@
     if (!panel) return;
     panel.hidden = false;
     if (loading && !payload) {
-      panel.innerHTML = '<div class="production-empty"><strong>正在整理粗剪计划</strong><span>读取场景覆盖和现有编辑决定，不会自动替你选择 Best。</span></div>';
+      panel.innerHTML = '<div class="production-empty"><strong>正在整理粗剪计划</strong><span>读取场景覆盖、场记和现有编辑决定，不会自动替你选择 Best。</span></div>';
       return;
     }
     if (!payload) {
@@ -171,33 +182,32 @@
     }
     const summary = asObject(payload.summary);
     const statuses = asObject(summary.selection_status);
-    const attention = Number(statuses.needs_editorial_choice || 0) + Number(statuses.conflict_multiple_best || 0) + Number(statuses.no_eligible_take || 0);
+    const attention = Number(statuses.needs_editorial_choice || 0)
+      + Number(statuses.conflict_multiple_best || 0)
+      + Number(statuses.conflict_supervisor_vs_best || 0)
+      + Number(statuses.no_eligible_take || 0);
     const count = document.querySelector('#production-rough-cut-count');
     if (count) count.textContent = attention ? String(attention) : '';
     const readiness = String(payload.readiness || 'needs_review');
     const readinessText = readiness === 'ready' ? '可进入组装' : readiness === 'blocked' ? '有阻塞项' : '需要编辑判断';
     panel.innerHTML = `
       <div class="production-section-head">
-        <div><strong>粗剪规划</strong><span>复用 Coverage 与现有 delivery.v1；只整理决策准备度，不把 Keep 或自动归集升级成 Best。</span></div>
+        <div><strong>粗剪规划</strong><span>复用 Coverage、场记与 delivery.v1；场记 NG 约束规划但不会改写 Delivery，Best/NG 冲突必须人工处理。</span></div>
         <span>${Number(summary.segments || 0)} 段 · ${esc(readinessText)}</span>
       </div>
       <div class="production-status-strip rough-cut-status-strip">
         <span><strong>${Number(statuses.explicit_best || 0)}</strong>已有最佳</span>
         <span><strong>${Number(statuses.needs_editorial_choice || 0)}</strong>待选择</span>
-        <span><strong>${Number(statuses.conflict_multiple_best || 0)}</strong>Best 冲突</span>
+        <span><strong>${Number(statuses.conflict_multiple_best || 0) + Number(statuses.conflict_supervisor_vs_best || 0)}</strong>冲突</span>
         <span><strong>${Number(statuses.no_eligible_take || 0)}</strong>无可用</span>
       </div>
       <div class="rough-cut-list">${asArray(payload.scenes).map(renderScene).join('') || '<div class="rough-cut-empty">当前范围没有粗剪规划内容。</div>'}</div>
-      <div class="production-note">Final Decision 继续按既有 delivery.v1 进入 Selection Manifest；这个规划页本身不写 Manifest、不生成时间线，也不修改 FCPXML。</div>
+      <div class="production-note">场记是人工生产证据；Final Decision 仍按既有 delivery.v1 进入 Selection Manifest。这个规划页不写 Manifest、不生成时间线，也不修改 FCPXML。</div>
     `;
   }
 
   async function refreshPlan(force = false) {
     if (!state.projectId || loading) return;
-    if (!force && payload && sourceRevision && sourceRevision === String(state.coverageRevision || '')) {
-      renderPlan();
-      return;
-    }
     loading = true;
     renderPlan();
     const projectId = state.projectId;
