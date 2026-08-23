@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -137,6 +138,27 @@ def _identity_library_for(service: Any, project_id: str) -> IdentityLibrary:
     return IdentityLibrary(WorkspaceDatabase(workspace.workspace_id), project_id)
 
 
+def _queue_identity_jobs(service: Any, kinds: list[str]) -> list[dict[str, Any]]:
+    queued = []
+    for entry in service.registry.list():
+        project_id = str(entry.get("project_id", "") or "")
+        if not project_id:
+            continue
+        for kind in kinds:
+            try:
+                task = service.tasks.submit(
+                    project_id,
+                    "identity_index",
+                    {"kind": kind},
+                    idempotency_key=f"identity-enable:{project_id}:{kind}:{time.time_ns()}",
+                    actor="mirrororder-app",
+                )
+                queued.append({"project_id": project_id, "kind": kind, "task_id": task.get("task_id", "")})
+            except Exception as error:
+                queued.append({"project_id": project_id, "kind": kind, "error": str(error)})
+    return queued
+
+
 def install_automation_runtime() -> None:
     """Attach auto-decision state without making it human review authority."""
     global _INSTALLED
@@ -211,7 +233,8 @@ def install_automation_runtime() -> None:
 
     def capabilities(service: Any, agent: dict[str, Any]) -> dict[str, Any]:
         payload = original_capabilities(service, agent)
-        payload["task_types"] = sorted(TASK_TYPES)
+        # identity_index is a device-local App task, not an external-agent API.
+        payload["task_types"] = sorted(value for value in TASK_TYPES if value != "identity_index")
         return payload
 
     def create_and_prepare(registry: WorkspaceRegistry, payload: dict[str, Any]) -> dict[str, Any]:
@@ -250,11 +273,7 @@ def install_automation_runtime() -> None:
                     }
                     self._send_json(health)
                     return
-                if (
-                    len(parts) == 5
-                    and parts[:3] == ["api", "v1", "projects"]
-                    and parts[4] == "identities"
-                ):
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "identities":
                     self._local_only()
                     project_id = parts[3]
                     query = urllib.parse.parse_qs(parsed.query)
@@ -274,10 +293,20 @@ def install_automation_runtime() -> None:
                     self._local_only()
                     payload = web_server._body(self)
                     action = str(payload.get("action", "set") or "set")
+                    queued: list[dict[str, Any]] = []
                     if action == "set":
+                        before = load_runtime_settings()
                         settings = save_runtime_settings(payload)
                         if not settings.get("local_vision_enabled"):
                             LocalVisionRuntime.stop()
+                        if settings.get("identity_processing_mode") == "after_prepare":
+                            newly_enabled = []
+                            if settings.get("face_identity_enabled") and not before.get("face_identity_enabled"):
+                                newly_enabled.append("face")
+                            if settings.get("speaker_identity_enabled") and not before.get("speaker_identity_enabled"):
+                                newly_enabled.append("speaker")
+                            if newly_enabled:
+                                queued = _queue_identity_jobs(service, newly_enabled)
                     elif action == "prepare":
                         settings = save_runtime_settings({
                             "local_vision_enabled": True,
@@ -303,22 +332,20 @@ def install_automation_runtime() -> None:
                         LocalVisionRuntime.stop()
                     else:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知本机运行时操作")
-                    self._send_json(_runtime_payload(), web_server.HTTPStatus.ACCEPTED)
+                    response = _runtime_payload()
+                    if queued:
+                        response["identity_tasks"] = queued
+                    self._send_json(response, web_server.HTTPStatus.ACCEPTED)
                     return
-                if (
-                    len(parts) == 5
-                    and parts[:3] == ["api", "v1", "projects"]
-                    and parts[4] == "identities"
-                ):
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "identities":
                     self._local_only()
                     project_id = parts[3]
                     payload = web_server._body(self)
                     library = _identity_library_for(service, project_id)
                     action = str(payload.get("action", "update") or "update")
                     if action == "update":
-                        identity_id = str(payload.get("identity_id", "") or "")
                         updated = library.update(
-                            identity_id,
+                            str(payload.get("identity_id", "") or ""),
                             label=str(payload.get("label", "") or ""),
                             role_name=str(payload.get("role_name", "") or ""),
                         )
@@ -332,26 +359,31 @@ def install_automation_runtime() -> None:
                             [str(value) for value in sources],
                         )
                         self._send_json(merged)
+                    elif action == "index":
+                        kind = str(payload.get("kind", "both") or "both")
+                        if kind not in {"face", "speaker", "both"}:
+                            raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "kind 必须是 face、speaker 或 both")
+                        raw_groups = payload.get("group_ids", [])
+                        if not isinstance(raw_groups, list):
+                            raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "group_ids 必须是数组")
+                        task = service.tasks.submit(
+                            project_id,
+                            "identity_index",
+                            {"kind": kind, "group_ids": [str(value) for value in raw_groups if str(value)]},
+                            idempotency_key=f"identity-manual:{project_id}:{kind}:{time.time_ns()}",
+                            actor="mirrororder-app",
+                        )
+                        self._send_json({"task": task}, web_server.HTTPStatus.ACCEPTED)
                     else:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知身份库操作")
                     return
-                if (
-                    len(parts) == 5
-                    and parts[:3] == ["api", "v1", "projects"]
-                    and parts[4] == "script"
-                ):
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "script":
                     self._local_only()
                     project_id = parts[3]
                     service.registry.get(project_id)
-                    active = [
-                        task for task in service.tasks.list(project_id)
-                        if task.get("status") in {"queued", "running"}
-                    ]
+                    active = [task for task in service.tasks.list(project_id) if task.get("status") in {"queued", "running"}]
                     if active:
-                        raise web_server.ApiError(
-                            web_server.HTTPStatus.CONFLICT,
-                            "当前项目仍有后台任务运行，请结束后再更换剧本",
-                        )
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, "当前项目仍有后台任务运行，请结束后再更换剧本")
                     payload = web_server._body(self)
                     config = service.registry.project_config(project_id)
                     script = _replace_project_script(config.config_path, payload.get("script"))
@@ -365,11 +397,7 @@ def install_automation_runtime() -> None:
                         actor="mirrororder-host",
                     )
                     self._send_json(
-                        {
-                            "project_id": project_id,
-                            "script": _project_relative_script(service.project(project_id)),
-                            "task": task,
-                        },
+                        {"project_id": project_id, "script": _project_relative_script(service.project(project_id)), "task": task},
                         web_server.HTTPStatus.ACCEPTED,
                     )
                     return
