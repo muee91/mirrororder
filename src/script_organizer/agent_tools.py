@@ -43,7 +43,13 @@ class AgentToolRegistry:
     filesystem access. None of these tools may write review/editorial decisions.
     """
 
-    SAFE_ACTIONS = {"run_priority_audit", "collect_learning_cases", "noop"}
+    SAFE_ACTIONS = {
+        "run_priority_audit",
+        "extract_visual_evidence",
+        "index_unknown_identities",
+        "collect_learning_cases",
+        "noop",
+    }
 
     def __init__(self, workspace_id: str, project_id: str, config: Any, task_manager: Any | None = None):
         self.workspace_id = str(workspace_id or "")
@@ -197,15 +203,23 @@ class AgentToolRegistry:
     def model_status(self) -> dict[str, Any]:
         return ModelRegistry().public()
 
+    def _active_task(self, task_type: str) -> dict[str, Any] | None:
+        if self.task_manager is None:
+            return None
+        return next(
+            (
+                task for task in self.task_manager.list(self.project_id)
+                if task.get("type") == task_type and task.get("status") in {"queued", "running"}
+            ),
+            None,
+        )
+
     def run_priority_audit(self, group_ids: list[str] | None = None, *, max_groups: int = 24) -> dict[str, Any]:
         if self.task_manager is None:
             raise RuntimeError("当前上下文不能提交Host任务")
-        active = [
-            task for task in self.task_manager.list(self.project_id)
-            if task.get("type") == "audit" and task.get("status") in {"queued", "running"}
-        ]
+        active = self._active_task("audit")
         if active:
-            return {"status": "already_running", "task_id": str(active[0].get("task_id", ""))}
+            return {"status": "already_running", "task_id": str(active.get("task_id", ""))}
         selected = [str(value) for value in (group_ids or []) if str(value)]
         revision = _analysis_revision(self.config.output_dir)
         task = self.task_manager.submit(
@@ -220,6 +234,46 @@ class AgentToolRegistry:
                 f"assistant-audit:{self.project_id}:{revision}:"
                 f"{','.join(selected[:24]) or 'priority'}"
             ),
+            actor="mirrororder-assistant",
+        )
+        return {"status": "submitted", "task_id": str(task.get("task_id", ""))}
+
+    def extract_visual_evidence(self, group_ids: list[str]) -> dict[str, Any]:
+        if self.task_manager is None:
+            raise RuntimeError("当前上下文不能提交Host任务")
+        selected = list(dict.fromkeys(str(value) for value in group_ids if str(value)))[:12]
+        if not selected:
+            raise ValueError("视觉证据提取至少需要一个 group_id")
+        active = self._active_task("evidence_extract")
+        if active:
+            return {"status": "already_running", "task_id": str(active.get("task_id", ""))}
+        revision = _analysis_revision(self.config.output_dir)
+        task = self.task_manager.submit(
+            self.project_id,
+            "evidence_extract",
+            {"group_ids": selected},
+            idempotency_key=f"assistant-evidence:{self.project_id}:{revision}:{','.join(selected)}",
+            actor="mirrororder-assistant",
+        )
+        return {"status": "submitted", "task_id": str(task.get("task_id", ""))}
+
+    def index_unknown_identities(self, group_ids: list[str], *, kind: str = "both") -> dict[str, Any]:
+        if self.task_manager is None:
+            raise RuntimeError("当前上下文不能提交Host任务")
+        if kind not in {"face", "speaker", "both"}:
+            raise ValueError("identity kind 必须是 face、speaker 或 both")
+        selected = list(dict.fromkeys(str(value) for value in group_ids if str(value)))[:16]
+        if not selected:
+            raise ValueError("身份识别至少需要一个 group_id")
+        active = self._active_task("identity_index")
+        if active:
+            return {"status": "already_running", "task_id": str(active.get("task_id", ""))}
+        revision = _analysis_revision(self.config.output_dir)
+        task = self.task_manager.submit(
+            self.project_id,
+            "identity_index",
+            {"kind": kind, "group_ids": selected},
+            idempotency_key=f"assistant-identity:{self.project_id}:{revision}:{kind}:{','.join(selected)}",
             actor="mirrororder-assistant",
         )
         return {"status": "submitted", "task_id": str(task.get("task_id", ""))}
@@ -257,10 +311,14 @@ class AgentToolRegistry:
             raise ValueError("镜序助理不能执行未授权工具")
         if tool == "noop":
             return {"status": "noop"}
+        raw = args.get("group_ids", [])
+        group_ids = [str(value) for value in raw] if isinstance(raw, list) else []
         if tool == "run_priority_audit":
-            raw = args.get("group_ids", [])
-            group_ids = [str(value) for value in raw] if isinstance(raw, list) else []
             return self.run_priority_audit(group_ids, max_groups=int(args.get("max_groups", 24) or 24))
+        if tool == "extract_visual_evidence":
+            return self.extract_visual_evidence(group_ids)
+        if tool == "index_unknown_identities":
+            return self.index_unknown_identities(group_ids, kind=str(args.get("kind", "both") or "both"))
         if tool == "collect_learning_cases":
             return self.collect_learning_cases()
         raise ValueError("未知镜序助理工具")
