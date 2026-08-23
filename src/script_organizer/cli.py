@@ -11,6 +11,7 @@ from .agent_store import AgentTokenStore
 from .analysis_runtime import analyze
 from .automation_runtime import install_automation_runtime
 from .device_media_runtime import install_device_media_runtime
+from .editorial_runtime import install_editorial_runtime
 from .runtime_diagnostics import environment_payload
 from .fcpxml_exporter import export
 from .local_vision_runtime import LocalVisionRuntime
@@ -129,6 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         install_device_media_runtime()
         install_automation_runtime()
         install_review_read_model_runtime()
+        install_editorial_runtime()
         previous_sigterm = signal.getsignal(signal.SIGTERM)
 
         def stop_gateway(_signum, _frame) -> None:
@@ -154,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
         install_device_media_runtime()
         install_automation_runtime()
         install_review_read_model_runtime()
+        install_editorial_runtime()
         previous_sigterm = signal.getsignal(signal.SIGTERM)
 
         def stop_host(_signum, _frame) -> None:
