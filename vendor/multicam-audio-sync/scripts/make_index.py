@@ -5,29 +5,23 @@
   {WORK}/index.tsv         id \t day \t cam \t dir \t file
   {WORK}/durations.tsv     dir \t file \t dur \t size
   {WORK}/tc.tsv            dir \t file \t tc \t creation
-day/cam 是显式列（由 project_config 的目录识别给出），下游无需猜。
+day/cam 是显式列（由 project_config 的目录/文件名识别给出），下游无需猜。
 
-用法：
-  python3 make_index.py [BASE] [WORK]
-  BASE 缺省用 project_config.get_config()（config.json 或环境变量）
+默认接受行业常见 A/B/C、A机/B机/C机、A1/B1/C1、CAM_A 等机位命名；
+项目 camera_patterns 可覆盖不规范团队的命名。平铺目录中若文件名能明确识别
+A/B/C，会按文件名分机位而不是把全部素材默认成 A。
 
-兼容格式：mp4/mov/mxf/mts/mp3/wav 等任意 ffprobe 能读的媒体；
-目录结构：{BASE}/{天}/{相机子目录}/{文件}，天/相机识别见 project_config。
-TC：优先视频流 timecode 标签（SMPTE "HH:MM:SS:FF"）；无 TC 则留空
-（sync.py 会对无 TC 素材退化为纯音频互相关锚点）。
+TC：优先视频流 timecode 标签（SMPTE "HH:MM:SS:FF"）；无 TC 则留空。
+没有音频/TC 的素材不是错误，但不能作为确定性同步证据，应在镜序素材角色层
+标为航拍/空镜/GoPro等辅助素材并由人工归场景。
 """
 import os
-import re
 import sys
-import glob
 import subprocess
-import numpy as np
-import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from project_config import Config, get_config
+from project_config import get_config, infer_camera_label
 
-# 支持的媒体扩展名（覆盖主流相机/手机/录音格式）
 EXT = (".mp4", ".mov", ".mxf", ".mts", ".m2ts", ".avi", ".mkv", ".mpg",
        ".mpeg", ".3gp", ".wmv", ".flv", ".webm", ".mp3", ".wav", ".aac",
        ".m4a", ".flac", ".wma", ".ogg", ".bmp", ".jpg", ".jpeg", ".png",
@@ -65,8 +59,6 @@ def probe_file(path):
             pass
     if fmt.get("tags", {}).get("creation_time"):
         creation = fmt["tags"]["creation_time"]
-    # TC：遍历所有 stream（video/audio/**data**——Sony XAVC 的 timecode
-    # 在 timed-metadata data stream 里），取第一个非空 SMPTE timecode
     tc = ""
     w = h = None
     for s in info.get("streams", []):
@@ -93,27 +85,40 @@ def build():
     rows_index = []
     rows_dur = []
     rows_tc = []
+    seen_paths = set()
     n = 0
     nfail = 0
+    n_unclassified = 0
     for day, dname in cfg.day_dirs:
         camdirs = cfg.day_cam_dirs[day]
+        flat_multi_camera = sum(1 for dirs in camdirs.values() if "." in dirs) > 1
         for cam in sorted(camdirs):
             for cdir in camdirs[cam]:
-                base = os.path.join(cfg.BASE, dname, cdir) if cdir != "." \
-                    else os.path.join(cfg.BASE, dname)
-                # 大小写不敏感扫描：扩展名统一转小写判断
+                base = os.path.join(cfg.BASE, dname, cdir) if cdir != "." else os.path.join(cfg.BASE, dname)
                 files = []
                 if os.path.isdir(base):
                     for fname in os.listdir(base):
-                        # macOS AppleDouble metadata is not media. It often
-                        # carries the original extension (for example
-                        # `._A001.MP4`) and must not reach ffprobe.
                         if fname.startswith("._"):
                             continue
                         if os.path.splitext(fname)[1].lower() in EXT:
                             files.append(os.path.join(base, fname))
-                files = sorted(set(files))
-                for p in files:
+                for p in sorted(set(files)):
+                    if cdir == "." and flat_multi_camera:
+                        inferred = infer_camera_label(os.path.basename(p), cfg.camera_patterns)
+                        if not inferred:
+                            # In a mixed flat folder, guessing unknown files as
+                            # A would silently mislabel footage. Require project
+                            # camera_patterns or a conventional filename instead.
+                            if p not in seen_paths:
+                                n_unclassified += 1
+                                print(f"  机位未识别，跳过同步索引: {os.path.relpath(p, cfg.BASE)}", flush=True)
+                                seen_paths.add(p)
+                            continue
+                        if inferred != cam:
+                            continue
+                    if p in seen_paths:
+                        continue
+                    seen_paths.add(p)
                     fname = os.path.basename(p)
                     rel = os.path.relpath(p, cfg.BASE)
                     rel_dir = os.path.dirname(rel)
@@ -122,14 +127,13 @@ def build():
                         nfail += 1
                         print(f"  探测失败: {rel}", flush=True)
                         continue
-                    # id 全局唯一：天_相机_序号
                     seq = f"{day}_{cam}_{n:05d}"
                     rows_index.append((seq, day, cam, rel_dir, fname))
                     rows_dur.append((rel_dir, fname, info["dur"], info["size"] or 0))
                     rows_tc.append((rel_dir, fname, info["tc"], info["creation"] or ""))
                     n += 1
     if n == 0:
-        raise RuntimeError(f"素材根目录下没有发现任何媒体文件: {cfg.BASE}")
+        raise RuntimeError(f"素材根目录下没有发现任何可归类同步媒体: {cfg.BASE}")
 
     with open(f"{WORK}/index.tsv", "w") as f:
         for r in rows_index:
@@ -141,9 +145,8 @@ def build():
         for r in rows_tc:
             f.write("\t".join(map(str, r)) + "\n")
 
-    print(f"盘点完成: {n} 个媒体文件, 失败 {nfail}")
+    print(f"盘点完成: {n} 个媒体文件, 探测失败 {nfail}, 机位未分类 {n_unclassified}")
     print(f"  index.tsv / durations.tsv / tc.tsv -> {WORK}")
-    # 摘要
     n_tc = sum(1 for r in rows_tc if r[2])
     print(f"  带 TC 的素材: {n_tc}/{n}")
     return n, nfail
