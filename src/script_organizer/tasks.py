@@ -20,6 +20,7 @@ from .analysis_runtime import analyze as _default_analyze
 from .asr_runtime import ASRRuntime
 from . import tasks_v2 as _impl
 from .media_identity import DeviceMediaStore
+from .perception_index import PerceptionIndexer
 from .resource_scheduler import GLOBAL_RESOURCE_SCHEDULER, ResourceCancelled
 
 # Public compatibility symbol. Older tests/tools monkeypatch this name.
@@ -96,6 +97,53 @@ class TaskManager(_impl.TaskManager):
             )
             yield
 
+    def _perception_best_effort(
+        self,
+        config,
+        task: dict[str, Any],
+        *,
+        mode: str,
+        group_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Update the rebuildable local perception index without risking core analysis."""
+
+        if not self.workspace_id:
+            return {"status": "deferred", "reason": "任务缺少 workspace_id"}
+        task_id = str(task["task_id"])
+        project_id = str(task.get("project_id", ""))
+        if not project_id:
+            return {"status": "deferred", "reason": "任务缺少 project_id"}
+        resource = "vision" if mode == "semantic" else "cpu"
+        label = "Take 视觉语义" if mode == "semantic" else "Take 感知索引"
+        stage = "semantic_index" if mode == "semantic" else "perception_index"
+        try:
+            with self._resource(config, task, resource, stage, label):
+                indexer = PerceptionIndexer(self.workspace_id, project_id, config)
+                last_reported = {"done": -1}
+
+                def report(done: int, total: int, group_id: str) -> None:
+                    # Avoid rewriting tasks.json for every single Take on large projects.
+                    if done == total or done - last_reported["done"] >= 10:
+                        last_reported["done"] = done
+                        self._update(
+                            config,
+                            task_id,
+                            progress={"perception_done": done, "perception_total": total},
+                            message=f"感知索引 {done}/{total} · {group_id}",
+                        )
+
+                return indexer.run(
+                    mode=mode,
+                    group_ids=group_ids,
+                    progress=report,
+                    cancelled=lambda: self._cancel_requested(config, task_id),
+                )
+        except ResourceCancelled:
+            raise
+        except Exception as error:
+            self._update(config, task_id, message=f"感知索引已延后，不影响主分析：{error}")
+            return {"status": "deferred", "error": str(error)}
+
     def _run(self, project_id: str, task_id: str) -> None:
         config = self.project_loader(project_id)
         try:
@@ -127,6 +175,12 @@ class TaskManager(_impl.TaskManager):
                 local_media = self._refresh_media_bindings(config, project_id)
                 if local_media:
                     result["local_media"] = local_media
+                result["perception"] = self._perception_best_effort(
+                    config,
+                    task,
+                    mode="tier0",
+                    group_ids=sorted(affected) or None,
+                )
             elif task_type == "auto_resolve":
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                     automation = _impl.resolve_project(config)
@@ -145,12 +199,26 @@ class TaskManager(_impl.TaskManager):
                     local_media = self._refresh_media_bindings(config, project_id)
                     if local_media:
                         result["local_media"] = local_media
+                    result["perception"] = self._perception_best_effort(
+                        config,
+                        task,
+                        mode="tier0",
+                        group_ids=sorted(affected) or None,
+                    )
                 elif result.get("transcribed"):
                     result["analysis_deferred"] = True
                     result["analysis_deferred_reason"] = "当前设备没有可用项目源/同步产物；转写缓存已写入，可由Host后续分析"
             else:
                 self._update(config, task_id, stage="evidence")
                 result = self._extract_evidence(config, task)
+                group_ids = [str(value) for value in task.get("targets", {}).get("group_ids", []) if str(value)]
+                if group_ids:
+                    result["perception"] = self._perception_best_effort(
+                        config,
+                        task,
+                        mode="semantic",
+                        group_ids=group_ids,
+                    )
 
             self._update(config, task_id, status="completed", stage="completed", result=result, message="任务完成")
         except ResourceCancelled:
@@ -161,7 +229,6 @@ class TaskManager(_impl.TaskManager):
             self._threads.pop(task_id, None)
 
     def _prepare_project(self, project_id: str, config, task: dict[str, Any]) -> dict[str, Any]:
-        del project_id
         result: dict[str, Any] = {}
         task_id = str(task["task_id"])
         if config.is_media_directory:
@@ -188,9 +255,11 @@ class TaskManager(_impl.TaskManager):
             automation = _impl.resolve_project(config)
         result["automation"] = automation["summary"]
         result["model"] = automation.get("model", {})
-        local_media = self._refresh_media_bindings(config, str(task.get("project_id", "")))
+        local_media = self._refresh_media_bindings(config, project_id)
         if local_media:
             result["local_media"] = local_media
+        if not self._cancel_requested(config, task_id):
+            result["perception"] = self._perception_best_effort(config, task, mode="tier0")
         return result
 
     def _transcribe(self, config, task: dict[str, Any]) -> dict[str, Any]:
