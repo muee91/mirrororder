@@ -28,7 +28,9 @@
       <div class="mirror-assistant-control-actions">
         <button type="button" data-assistant-plan="1">让助理规划</button>
         <button type="button" data-assistant-model-toggle="1">模型连接</button>
+        <button type="button" data-assistant-agent-toggle="1">Agent API</button>
       </div>
+      <div id="mirror-assistant-agent-info" class="mirror-assistant-agent-info" hidden></div>
       <form id="mirror-assistant-model-form" class="mirror-assistant-model-form" hidden>
         <label class="wide">语言模型地址<input id="mirror-assistant-model-url" type="url" placeholder="http://127.0.0.1:1234/v1"></label>
         <label>模型名<input id="mirror-assistant-model-name" type="text" placeholder="model-name"></label>
@@ -110,6 +112,14 @@
     if (name && document.activeElement !== name) name.value = text.model || '';
     if (enabled) enabled.checked = Boolean(text.enabled);
     if (key) key.placeholder = text.has_api_key ? '已保存 · 留空不修改' : '可选';
+
+    const agent = asObject(modelPayload.agent_api);
+    const info = document.querySelector('#mirror-assistant-agent-info');
+    if (info) {
+      info.innerHTML = `<strong>外部智能体接口</strong><p>Bearer 权限分为 read / analyze / propose。智能体可以读取项目、请求分析和提交提案，但不能直接写人工审核。</p>`
+        + `<code>${esc(agent.base || '/api/agent/v1/projects/{project_id}')}</code>`
+        + `<small>能力入口 ${esc(agent.capabilities || '/api/agent/v1/capabilities')}</small>`;
+    }
   }
 
   async function refreshAssistant(render = true) {
@@ -201,6 +211,10 @@
     document.querySelector('[data-assistant-model-toggle]')?.addEventListener('click', () => {
       const form = document.querySelector('#mirror-assistant-model-form');
       if (form) form.hidden = !form.hidden;
+    });
+    document.querySelector('[data-assistant-agent-toggle]')?.addEventListener('click', () => {
+      const info = document.querySelector('#mirror-assistant-agent-info');
+      if (info) info.hidden = !info.hidden;
     });
     document.querySelector('#mirror-assistant-model-form')?.addEventListener('submit', (event) => saveModels(event).catch((error) => showToast(error.message)));
     document.querySelector('#mirror-assistant-chat')?.addEventListener('submit', (event) => sendMessage(event));
