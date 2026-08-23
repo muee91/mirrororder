@@ -149,18 +149,24 @@ def install_editorial_runtime() -> None:
     _INSTALLED = True
 
     # Runtime order is deliberate. Audit adds rebuildable evidence. Script
-    # Supervisor adds shared human production facts. Coverage and Rough Cut read
-    # both. Assembly is a preview-only edit model. Assistant sits on top without
+    # Supervisor and Media Roles add shared human production facts. Media Roles
+    # must install before Coverage/Rough Cut modules are imported so their
+    # module-level projection bindings include camera overrides and auxiliary
+    # media. Assembly remains preview-only. Assistant sits on top without
     # gaining review, Editorial Decision, Delivery or FCPXML write authority.
     from .audit_runtime import install_audit_runtime
     from .script_supervisor_runtime import install_script_supervisor_runtime
+    from .media_role_runtime import install_media_role_runtime
+
+    install_audit_runtime()
+    install_script_supervisor_runtime()
+    install_media_role_runtime()
+
     from .coverage_runtime import install_coverage_runtime
     from .rough_cut_runtime import install_rough_cut_runtime
     from .assembly_runtime import install_assembly_runtime
     from .assistant_runtime import install_assistant_runtime
 
-    install_audit_runtime()
-    install_script_supervisor_runtime()
     install_coverage_runtime()
     install_rough_cut_runtime()
     install_assembly_runtime()
