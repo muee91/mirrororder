@@ -10,6 +10,7 @@ from .audit_store import AuditStore
 from .automation_store import AutomationStore
 from .editorial_store import EditorialStore
 from .review_store import ReviewStore
+from .script_supervisor_store import ScriptSupervisorStore
 
 
 COVERAGE_CONTRACT = "coverage.v1"
@@ -48,6 +49,7 @@ def _source_revision(
     editorial: dict[str, Any],
     audit: dict[str, Any],
     automation: dict[str, Any],
+    supervisor: dict[str, Any],
 ) -> str:
     raw = {
         "analysis": analysis_revision,
@@ -55,6 +57,7 @@ def _source_revision(
         "editorial": _int(editorial.get("revision"), 0),
         "audit": _int(audit.get("revision"), 0),
         "automation": str(automation.get("updated_at", "") or ""),
+        "script_supervisor": _int(supervisor.get("revision"), 0),
     }
     return hashlib.sha1(
         json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -68,12 +71,14 @@ def coverage_revision(project: Any) -> str:
     editorial = EditorialStore(project.config.output_dir).load()
     audit = AuditStore(project.config.output_dir).load()
     automation = AutomationStore(project.config.output_dir).load()
+    supervisor = ScriptSupervisorStore(project.config.output_dir).load()
     return _source_revision(
         _analysis_revision(project.config.output_dir),
         review,
         editorial,
         audit,
         automation,
+        supervisor,
     )
 
 
@@ -185,8 +190,38 @@ def _editorial_for_scene(
     }
 
 
-def _safe_angle(member: dict[str, Any], intelligence: dict[str, Any]) -> dict[str, Any]:
+def _safe_supervisor_entry(value: object) -> dict[str, Any]:
+    raw = _as_dict(value)
+    if not raw:
+        return {}
+    usable_range = _as_dict(raw.get("usable_range"))
+    return {
+        "scene": str(raw.get("scene", "") or "")[:80],
+        "shot": str(raw.get("shot", "") or "")[:80],
+        "take_number": raw.get("take_number"),
+        "status": str(raw.get("status", "unmarked") or "unmarked"),
+        "note": str(raw.get("note", "") or "")[:2000],
+        "usable_range": {
+            "start": _float(usable_range.get("start"), 0.0),
+            "end": _float(usable_range.get("end"), 0.0),
+        } if usable_range else {},
+        "preferred_clip_id": str(raw.get("preferred_clip_id", "") or ""),
+        "actor": str(raw.get("actor", "") or "")[:80],
+        "updated_at": str(raw.get("updated_at", "") or "")[:80],
+    }
+
+
+def _safe_angle(
+    member: dict[str, Any],
+    intelligence: dict[str, Any],
+    supervisor_angle: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     clip_id = str(member.get("clip_id", "") or "")
+    manual = _as_dict(supervisor_angle)
+    manual_shot = str(manual.get("shot_type", "unknown") or "unknown")
+    audit_shot = str(intelligence.get("shot_type", "unknown") or "unknown")
+    shot_type = manual_shot if manual_shot != "unknown" else audit_shot
+    shot_source = "script_supervisor" if manual_shot != "unknown" else ("audit" if audit_shot != "unknown" else "unknown")
     return {
         "clip_id": clip_id,
         "media_id": str(member.get("media_id", "") or ""),
@@ -199,7 +234,9 @@ def _safe_angle(member: dict[str, Any], intelligence: dict[str, Any]) -> dict[st
             if member.get("source_end") is not None
             else None
         ),
-        "shot_type": str(intelligence.get("shot_type", "unknown") or "unknown"),
+        "shot_type": shot_type,
+        "shot_source": shot_source,
+        "supervisor_note": str(manual.get("note", "") or "")[:500],
         "coverage_role": str(intelligence.get("coverage_role", "unknown") or "unknown"),
         "visible_people": [
             str(value) for value in _as_list(intelligence.get("visible_people")) if str(value)
@@ -218,10 +255,9 @@ def build_coverage_graph(
 ) -> dict[str, Any]:
     """Build a scene-centric, read-only coverage graph for production planning.
 
-    The graph never infers a missing shot from absence and does not turn an
-    Editorial Decision into delivery authority. It only organizes existing
-    effective mapping, per-clip shot evidence, current continuity evidence and
-    explicit final editorial annotations.
+    The graph never infers a missing shot from absence. Human script-supervisor
+    shot labels override AI shot labels, but supervisor annotations remain
+    production evidence rather than Editorial Decision or delivery authority.
     """
 
     project.reload_if_changed()
@@ -234,6 +270,8 @@ def build_coverage_graph(
     audit_groups = _as_dict(audit.get("groups"))
     editorial = EditorialStore(project.config.output_dir).load()
     editorial_decisions = _editorial_decision_index(editorial)
+    supervisor = ScriptSupervisorStore(project.config.output_dir).load()
+    supervisor_entries = _as_dict(supervisor.get("entries"))
     analysis_revision = _analysis_revision(project.config.output_dir)
 
     scenes, segment_scene = _scene_index(script)
@@ -274,6 +312,7 @@ def build_coverage_graph(
                             "group_id": group_id,
                             "episode_ids": episode_ids,
                             "mapping_source": str(mapping.get("source", "none") or "none"),
+                            "script_supervisor": _safe_supervisor_entry(supervisor_entries.get(group_id)),
                         }
                     )
             elif global_scope:
@@ -295,10 +334,16 @@ def build_coverage_graph(
             item for item in _as_list(audit_row.get("issues"))
             if mapping_current and isinstance(item, dict)
         ]
+        supervisor_entry = _as_dict(supervisor_entries.get(group_id))
+        supervisor_angles = _as_dict(supervisor_entry.get("angles"))
         members = [item for item in _as_list(group.get("members")) if isinstance(item, dict)]
         members.sort(key=lambda item: (str(item.get("camera", "")), str(item.get("clip_id", ""))))
         angles = [
-            _safe_angle(member, _as_dict(shot_angles.get(str(member.get("clip_id", "") or ""))))
+            _safe_angle(
+                member,
+                _as_dict(shot_angles.get(str(member.get("clip_id", "") or ""))),
+                _as_dict(supervisor_angles.get(str(member.get("clip_id", "") or ""))),
+            )
             for member in members
         ]
         continuity_risk = str(fresh_rough_cut.get("continuity_risk", "unknown") or "unknown")
@@ -334,6 +379,7 @@ def build_coverage_graph(
                         "mapping_stale": bool(visual_current and not mapping_current),
                     },
                     "angles": angles,
+                    "script_supervisor": _safe_supervisor_entry(supervisor_entry),
                     "rough_cut": {
                         "technical_usability": str(fresh_rough_cut.get("technical_usability", "unknown") or "unknown"),
                         "take_completeness": str(fresh_rough_cut.get("take_completeness", "unknown") or "unknown"),
@@ -355,12 +401,18 @@ def build_coverage_graph(
     known_angles = 0
     total_continuity_risks = 0
     unobserved_scenes = 0
+    supervisor_annotated_groups: set[str] = set()
 
     for current_scene_id, scene in scenes.items():
         if current_scene_id not in selected_scene_ids:
             continue
         take_groups = scene_groups.get(current_scene_id, [])
         total_groups.update(str(item.get("group_id", "")) for item in take_groups if item.get("group_id"))
+        supervisor_annotated_groups.update(
+            str(group.get("group_id", ""))
+            for group in take_groups
+            if _as_dict(group.get("script_supervisor"))
+        )
         angles = [
             angle
             for group in take_groups
@@ -388,6 +440,11 @@ def build_coverage_graph(
         editorial_counts = Counter(
             str(_as_dict(group.get("editorial_decision")).get("state", "unreviewed") or "unreviewed")
             for group in take_groups
+        )
+        supervisor_counts = Counter(
+            str(_as_dict(group.get("script_supervisor")).get("status", "unmarked") or "unmarked")
+            for group in take_groups
+            if _as_dict(group.get("script_supervisor"))
         )
         continuity = [
             {
@@ -455,6 +512,7 @@ def build_coverage_graph(
                     "take_coverage_roles": dict(sorted(take_role_counts.items())),
                     "shot_types": dict(sorted(shot_counts.items())),
                     "editorial_decisions": dict(sorted(editorial_counts.items())),
+                    "script_supervisor": dict(sorted(supervisor_counts.items())),
                     "continuity_risks": len(continuity),
                 },
                 "issues": issues,
@@ -464,7 +522,7 @@ def build_coverage_graph(
         )
 
     scene_rows.sort(key=lambda item: (item["episode"], item["script_order"]["start"], item["scene_id"]))
-    revision = _source_revision(analysis_revision, review, editorial, audit, automation)
+    revision = _source_revision(analysis_revision, review, editorial, audit, automation, supervisor)
     return {
         "contract": COVERAGE_CONTRACT,
         "revision": revision,
@@ -474,6 +532,7 @@ def build_coverage_graph(
             "review": _int(review.get("revision"), 0),
             "editorial": _int(editorial.get("revision"), 0),
             "audit": _int(audit.get("revision"), 0),
+            "script_supervisor": _int(supervisor.get("revision"), 0),
             "automation_updated_at": str(automation.get("updated_at", "") or ""),
         },
         "filters": {
@@ -490,6 +549,7 @@ def build_coverage_graph(
             "unobserved_scenes": unobserved_scenes,
             "unplaced_groups": len(unplaced_group_ids),
             "episode_only_groups": len(episode_only_groups),
+            "script_supervisor_groups": len(supervisor_annotated_groups),
         },
         "scenes": scene_rows,
         "episode_only_groups": episode_only_groups,
@@ -500,6 +560,9 @@ def build_coverage_graph(
             "delivery_authority_changed": False,
             "missing_shots_are_not_inferred": True,
             "candidate_only_mapping_used": False,
+            "script_supervisor_is_human_evidence": True,
+            "script_supervisor_shot_overrides_ai": True,
+            "script_supervisor_is_editorial_authority": False,
         },
     }
 
