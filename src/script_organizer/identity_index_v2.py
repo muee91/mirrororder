@@ -11,9 +11,6 @@ from .identity_index_legacy import (
     FaceEmbeddingProvider as _LegacyFaceProvider,
     IdentityIndexer as _LegacyIndexer,
     SpeakerEmbeddingProvider as _LegacySpeakerProvider,
-    _centroid,
-    _clip_for_member,
-    _cosine,
     _decode_embedding,
     _normalize,
     _threshold,
@@ -27,7 +24,6 @@ from .identity_runtime import (
     IdentityRuntime,
 )
 from .perception_index import _default_extract_frames
-from .transcript import TranscriptStore
 
 
 def _integer(name: str, default: int, lower: int, upper: int) -> int:
@@ -36,6 +32,23 @@ def _integer(name: str, default: int, lower: int, upper: int) -> int:
     except ValueError:
         value = default
     return max(lower, min(upper, value))
+
+
+def _cosine(left: list[float], right: list[float]) -> float:
+    if not left or len(left) != len(right):
+        return -1.0
+    return float(sum(a * b for a, b in zip(left, right)))
+
+
+def _centroid(vectors: list[list[float]]) -> list[float]:
+    if not vectors:
+        return []
+    width = len(vectors[0])
+    if any(len(vector) != width for vector in vectors):
+        return []
+    return _normalize(
+        [sum(vector[index] for vector in vectors) / len(vectors) for index in range(width)]
+    )
 
 
 class FaceEmbeddingProvider(_LegacyFaceProvider):
