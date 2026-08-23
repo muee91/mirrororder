@@ -156,6 +156,31 @@ class DeviceMediaStore:
     def _empty_project() -> dict[str, Any]:
         return {"roots": [], "bindings": {}, "updated_at": ""}
 
+    @staticmethod
+    def _media_files(roots: Iterable[str]) -> list[Path]:
+        files: list[Path] = []
+        seen: set[str] = set()
+        for root_text in roots:
+            root = Path(root_text).expanduser()
+            if not root.exists() or not root.is_dir():
+                continue
+            try:
+                candidates = root.rglob("*")
+                for path in candidates:
+                    if not path.is_file() or path.suffix.lower() not in MEDIA_SUFFIXES or path.name.startswith("._"):
+                        continue
+                    try:
+                        key = str(path.resolve())
+                    except OSError:
+                        key = str(path)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    files.append(path)
+            except OSError:
+                continue
+        return files
+
     def project_snapshot(
         self,
         workspace_id: str,
@@ -250,16 +275,7 @@ class DeviceMediaStore:
             if not str(item.get("media_id", "")).startswith("M_"):
                 provisional_by_name[str(item.get("name", "")).casefold()].append(item)
 
-        files: list[Path] = []
-        for root_text in stored_roots:
-            root = Path(root_text)
-            if not root.exists() or not root.is_dir():
-                continue
-            files.extend(
-                path
-                for path in root.rglob("*")
-                if path.is_file() and path.suffix.lower() in MEDIA_SUFFIXES and not path.name.startswith("._")
-            )
+        files = self._media_files(stored_roots)
 
         bindings = dict(project.get("bindings", {}))
         matched_verified = 0
@@ -301,6 +317,37 @@ class DeviceMediaStore:
         project["updated_at"] = _now()
         self._save(payload)
         return self.project_snapshot(workspace_id, project_id, payload)
+
+    def probe_roots(self, workspace_id: str, project_id: str, roots: Iterable[str]) -> dict[str, Any]:
+        """Register and enumerate local media before a project index exists.
+
+        A new media-directory project has no material_index.json until the first
+        sync/analysis completes. The desktop UI still needs immediate feedback
+        that the selected root is readable and contains media. This probe does
+        not create shared project facts or pretend the files are bound to clip
+        IDs; the normal post-analysis scan performs the authoritative binding.
+        """
+        snapshot = self.add_roots(workspace_id, project_id, roots)
+        files = self._media_files(snapshot.get("roots", []))
+        payload = self.load()
+        count = len(files)
+        return {
+            "version": 1,
+            "device_id": payload.get("device_id", ""),
+            "device_name": payload.get("device_name", ""),
+            "state_path": str(self.path),
+            "roots": snapshot.get("roots", []),
+            "total": count,
+            "resolved": count,
+            "missing": 0,
+            "items": [],
+            "pending_analysis": True,
+            "scan": {
+                "files_seen": count,
+                "verified_matches": 0,
+                "provisional_name_matches": 0,
+            },
+        }
 
     def forget_missing(self, workspace_id: str, project_id: str) -> None:
         payload = self.load()
