@@ -4,6 +4,7 @@ from pathlib import Path
 from threading import Thread
 from typing import Any
 
+from .agent_tools import AgentToolRegistry
 from .assistant_orchestrator import AssistantOrchestrator
 from .model_connections import load_model_connections, save_model_connections
 from .model_registry import ModelRegistry
@@ -97,7 +98,7 @@ def install_assistant_runtime() -> None:
             "read": True,
             "request_cycle": "analyze" in set(agent.get("scopes", [])),
             "direct_review_write": False,
-            "tools": ["run_priority_audit", "collect_learning_cases", "noop"],
+            "tools": sorted(AgentToolRegistry.SAFE_ACTIONS),
         }
         payload["agent_api"] = {
             "contract": "agent.v1",
