@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Sequence
 
 from .workspace_db import WorkspaceDatabase
@@ -37,13 +38,7 @@ class IdentityLibrary:
         self._install_confirmation_guard()
 
     def _install_confirmation_guard(self) -> None:
-        """Prevent automatic cluster upserts from clobbering human labels.
-
-        IdentityIndexer marks its automatically-created rows with auto_cluster.
-        A row touched through this library is marked human_confirmed. SQLite
-        then ignores future automatic UPDATE branches for that identity while
-        observations/centroids remain free to refresh.
-        """
+        """Prevent automatic cluster upserts from clobbering human labels."""
         with self.database.connection() as connection:
             connection.execute(
                 """
@@ -57,6 +52,31 @@ class IdentityLibrary:
                 """
             )
             connection.commit()
+
+    def _refresh_mapping_rescue(self) -> None:
+        """Re-evaluate derived local mapping evidence after human role edits.
+
+        This is intentionally best-effort. Editing the local actor/voice library
+        must never fail because project outputs are missing or the local
+        intelligence layer is damaged.
+        """
+        try:
+            with self.database.connection() as connection:
+                row = connection.execute(
+                    "SELECT config_path FROM projects WHERE project_id=? LIMIT 1",
+                    (self.project_id,),
+                ).fetchone()
+            if row is None:
+                return
+            config_path = Path(str(row[0] or "")).expanduser()
+            if not config_path.is_file():
+                return
+            from .config import ProjectConfig
+            from .identity_rescue import apply_identity_rescue
+
+            apply_identity_rescue(ProjectConfig.from_file(config_path))
+        except Exception:
+            return
 
     def list(self, kind: str = "") -> list[dict[str, Any]]:
         if kind and kind not in {"face", "speaker"}:
@@ -143,7 +163,9 @@ class IdentityLibrary:
                 ),
             )
             connection.commit()
-        return self.get(identity_id)
+        result = self.get(identity_id)
+        self._refresh_mapping_rescue()
+        return result
 
     def merge(
         self,
@@ -202,10 +224,12 @@ class IdentityLibrary:
                 (_now(), self.project_id, target),
             )
             connection.commit()
-        return self.get(target)
+        result = self.get(target)
+        self._refresh_mapping_rescue()
+        return result
 
     def group_identities(self, group_id: str) -> dict[str, list[dict[str, Any]]]:
-        """Return identity evidence for matcher/App use, never raw embeddings."""
+        """Return identity evidence for App use, never raw embeddings."""
         with self.database.connection() as connection:
             rows = connection.execute(
                 """
