@@ -23,21 +23,27 @@ def parse_time(value: str | None) -> Fraction:
     return Fraction(raw)
 
 
-def _media_path(src: str) -> str:
-    parsed = urllib.parse.urlparse(urllib.parse.unquote(src))
-    if parsed.scheme == "file":
-        return parsed.path
-    return urllib.parse.unquote(src)
+def _media_path(src: str, document_dir: Path | None = None) -> str:
+    """Resolve FCPXML media URLs, including standard document-relative URLs."""
+    decoded = urllib.parse.unquote(src)
+    parsed = urllib.parse.urlparse(decoded)
+    value = parsed.path if parsed.scheme == "file" else decoded
+    if value and document_dir is not None and not os.path.isabs(value):
+        try:
+            return str((document_dir / value).resolve())
+        except OSError:
+            return str(document_dir / value)
+    return value
 
 
-def _asset_media_path(asset: ET.Element) -> str:
+def _asset_media_path(asset: ET.Element, document_dir: Path | None = None) -> str:
     direct = asset.get("src", "")
     if direct:
-        return _media_path(direct)
+        return _media_path(direct, document_dir)
     reps = list(asset.findall("./media-rep"))
     original = next((item for item in reps if item.get("kind") == "original-media"), None)
     chosen = original if original is not None else (reps[0] if reps else None)
-    return _media_path(chosen.get("src", "")) if chosen is not None else ""
+    return _media_path(chosen.get("src", ""), document_dir) if chosen is not None else ""
 
 
 def _tag(element: ET.Element) -> str:
@@ -97,12 +103,14 @@ def stable_clip_id(media_path: str, source_asset_id: str, occurrence: int = 0) -
 
 
 def read_fcpxml(path: str | Path) -> list[Clip]:
-    root = ET.parse(path).getroot()
+    document_path = Path(path).expanduser().resolve()
+    document_dir = document_path.parent
+    root = ET.parse(document_path).getroot()
     assets: dict[str, str] = {}
     media_ids: dict[str, str] = {}
     for asset in _descendants(root, "asset"):
         asset_id = asset.get("id", "")
-        media_path = _asset_media_path(asset)
+        media_path = _asset_media_path(asset, document_dir)
         assets[asset_id] = media_path
         media_ids[asset_id] = media_identity(media_path) if media_path else ""
 
@@ -186,9 +194,6 @@ def read_fcpxml(path: str | Path) -> list[Clip]:
         outer_source_start = parse_time(element.get("start"))
         outer_end = outer_source_start + duration
         for angle_camera, angle in multicam_media.get(resource_id, []):
-            # mc-source is the editing angle selected in FCP, not evidence that
-            # the other synchronized cameras should be discarded. Analyze every
-            # angle so B/C audio can outrank the displayed A angle when needed.
             walk_story(
                 angle,
                 parent_start=Fraction(0),
