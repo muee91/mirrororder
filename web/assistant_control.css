@@ -1,0 +1,25 @@
+.mirror-assistant-agent-info{
+  margin-top:9px;
+  padding:9px 10px;
+  border-top:1px solid #e6e9ed;
+  background:#fafbfc;
+  color:#5f6875;
+  font-size:9px;
+  line-height:1.5;
+}
+.mirror-assistant-agent-info[hidden]{display:none}
+.mirror-assistant-agent-info strong{display:block;margin-bottom:3px;color:#344054;font-size:10px}
+.mirror-assistant-agent-info p{margin:0 0 6px}
+.mirror-assistant-agent-info code{
+  display:block;
+  padding:5px 6px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  border:1px solid #e1e5ea;
+  border-radius:5px;
+  background:#fff;
+  color:#45566c;
+  font:9px ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.mirror-assistant-agent-info small{display:block;margin-top:4px;color:#8a929e;font-size:8px}
