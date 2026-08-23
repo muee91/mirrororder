@@ -148,15 +148,20 @@ def install_editorial_runtime() -> None:
     web_server.make_handler = make_handler_with_editorial
     _INSTALLED = True
 
-    # Runtime order is deliberate: Audit enriches evidence; Coverage organizes
-    # current scene facts; Rough Cut Planner reads Coverage + delivery.v1; the
-    # Assistant sits on top without gaining review, delivery or timeline writes.
+    # Runtime order is deliberate. Audit adds rebuildable evidence. Script
+    # Supervisor adds shared human production facts. Coverage and Rough Cut read
+    # both. Assembly is a preview-only edit model. Assistant sits on top without
+    # gaining review, Editorial Decision, Delivery or FCPXML write authority.
     from .audit_runtime import install_audit_runtime
+    from .script_supervisor_runtime import install_script_supervisor_runtime
     from .coverage_runtime import install_coverage_runtime
     from .rough_cut_runtime import install_rough_cut_runtime
+    from .assembly_runtime import install_assembly_runtime
     from .assistant_runtime import install_assistant_runtime
 
     install_audit_runtime()
+    install_script_supervisor_runtime()
     install_coverage_runtime()
     install_rough_cut_runtime()
+    install_assembly_runtime()
     install_assistant_runtime()
