@@ -46,6 +46,10 @@
       source_start: Number(angle.source_start || 0),
       source_end: angle.source_end === null || angle.source_end === undefined
         ? null : Number(angle.source_end),
+      shot_type: angle.shot_type || 'unknown',
+      coverage_role: angle.coverage_role || 'unknown',
+      visible_people: [...(angle.visible_people || [])],
+      technical_issues: [...(angle.technical_issues || [])],
       local_exists: exists,
       exists,
     };
@@ -65,6 +69,10 @@
       duration: Number(take.duration || 0),
       cameras: [...(take.cameras || [])],
       members,
+      audit_state: take.audit_state ? {...take.audit_state} : null,
+      role_suggestions: [...(take.role_suggestions || [])],
+      issues: [...(take.issues || [])],
+      people: take.people ? {...take.people} : {faces: [], speakers: []},
       ...(automation ? {automation} : {}),
     };
   }
@@ -117,6 +125,7 @@
         analysis_revision: revisions.automation_analysis || '',
         summary: {...automationSummary},
       },
+      audit: {...(model.summary?.audit || {})},
     };
     state.script = flattenScript(model);
     state.groups = (model.take_groups || []).map(legacyGroup);
@@ -134,6 +143,7 @@
     state.analysisRevision = revisions.analysis || state.analysisRevision;
     state.reviewRevision = Number(state.review.revision || revisions.review || 0);
     state.editorialRevision = Number(revisions.editorial || 0);
+    state.auditRevision = Number(revisions.audit || 0);
   }
 
   fetchJson = async function reviewModelFetchJson(url, options = {}) {
@@ -178,9 +188,8 @@
   };
 
   // Team Web polls one compact state endpoint, then reloads the authoritative
-  // review.v1 projection whenever production analysis, legacy review, or the
-  // new collaboration revision changes. This keeps opinions live without
-  // teaching the browser how editorial.json is stored internally.
+  // review.v1 projection whenever production, review, collaboration, or audit
+  // evidence changes. Audit is still read-only evidence, not review authority.
   pollState = async function reviewModelPollState() {
     try {
       const next = await legacyFetchJson(projectApi('/state'));
@@ -189,7 +198,8 @@
       );
       const reviewChanged = Number(next.review_revision || 0) !== Number(state.reviewRevision || 0);
       const editorialChanged = Number(next.editorial_revision || 0) !== Number(state.editorialRevision || 0);
-      if (analysisChanged || reviewChanged || editorialChanged) {
+      const auditChanged = Number(next.audit_revision || 0) !== Number(state.auditRevision || 0);
+      if (analysisChanged || reviewChanged || editorialChanged || auditChanged) {
         await reloadAnalysis(analysisChanged);
         if (reviewChanged) {
           const actor = latestReviewActor(state.review);
