@@ -55,7 +55,7 @@ def _safe_entry(media_id: str, value: object) -> dict[str, Any]:
         raise ValueError("sync_policy 必须是 auto 或 exclude")
     return {
         "media_id": _text(media_id, 160),
-        "display_name": _text(raw.get("display_name"), 300),
+        "display_name": Path(_text(raw.get("display_name"), 300)).name,
         "camera_override": _text(raw.get("camera_override"), 40).upper(),
         "source_role": source_role,
         "role_label": _text(raw.get("role_label"), 80),
@@ -149,7 +149,12 @@ class MediaRoleStore:
         actor = _text(action.get("actor"), 80)
         if not actor:
             raise ValueError("素材角色写入需要操作者昵称")
+        # `changes[].entry` is the canonical contract. `updates[]` is accepted as
+        # a local-App convenience for flat electronic-slate rows; both pass the
+        # exact same sanitizer and revision lock.
         changes = action.get("changes", []) if isinstance(action.get("changes"), list) else []
+        if not changes and isinstance(action.get("updates"), list):
+            changes = action.get("updates", [])
         if not changes:
             raise ValueError("素材角色写入至少需要一条 change")
         if len(changes) > 200:
@@ -170,10 +175,14 @@ class MediaRoleStore:
                 media_id = _text(change.get("media_id"), 160)
                 if not media_id:
                     raise ValueError("素材角色 change 缺少 media_id")
+                if isinstance(change.get("entry"), dict):
+                    raw_entry = change["entry"]
+                else:
+                    raw_entry = {key: value for key, value in change.items() if key != "media_id"}
                 entry = _safe_entry(
                     media_id,
                     {
-                        **(change.get("entry", {}) if isinstance(change.get("entry"), dict) else {}),
+                        **raw_entry,
                         "actor": actor,
                         "updated_at": timestamp,
                     },
