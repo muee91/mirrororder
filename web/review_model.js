@@ -5,11 +5,26 @@
   if (window.webkit?.messageHandlers?.mirrorOrder) return;
   if (window.__mirrorOrderReviewModelInstalled) return;
   window.__mirrorOrderReviewModelInstalled = true;
+  document.documentElement.classList.add('team-review');
 
   const legacyFetchJson = fetchJson;
   const legacySwitchProject = switchProject;
   let switchingProject = false;
   let cachedSwitchReview = null;
+
+  function stripProductionControls() {
+    for (const selector of [
+      '#replace-project-script',
+      '#timeline-toggle',
+      '#timeline-panel',
+    ]) {
+      document.querySelector(selector)?.remove();
+    }
+  }
+
+  const productionObserver = new MutationObserver(stripProductionControls);
+  productionObserver.observe(document.documentElement, {childList: true, subtree: true});
+  stripProductionControls();
 
   function flattenScript(model) {
     const rows = [];
@@ -159,6 +174,7 @@
     $('#analysis-status').textContent = `${state.project.stats?.groups || model.summary?.take_groups || 0}组 · ${state.project.stats?.clips || 0}条素材`;
     renderContent();
     focusRequestedGroup();
+    stripProductionControls();
     if (showNotice) {
       $('#update-banner').hidden = false;
       playUpdateSound();
@@ -173,6 +189,7 @@
     } finally {
       switchingProject = false;
       cachedSwitchReview = null;
+      stripProductionControls();
     }
   };
 })();
