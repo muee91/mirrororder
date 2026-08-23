@@ -107,11 +107,20 @@ def make_candidates(gX, gY, prior_delta, margin):
     return cand
 
 def pair_worker(args):
-    """Correlate one X clip against one Y clip; return (xid, yid, offset, conf)."""
+    """Correlate one X clip against one Y clip; return (xid, yid, offset, conf).
+
+    A clip without an audio track is valid media, just not usable as an audio
+    correlation anchor. Treat it as zero-confidence evidence instead of letting
+    decimation of a missing cache crash the whole synchronization run.
+    """
     xid, yid = args
-    ax = decimate(load_audio(xid))
-    ay = decimate(load_audio(yid))
-    if ax is None or ay is None or len(ax) < SR or len(ay) < SR:
+    ax_raw = load_audio(xid)
+    ay_raw = load_audio(yid)
+    if ax_raw is None or ay_raw is None:
+        return (xid, yid, None, 0.0)
+    ax = decimate(ax_raw)
+    ay = decimate(ay_raw)
+    if len(ax) < SR or len(ay) < SR:
         return (xid, yid, None, 0.0)
     off, conf = corr_offset(ax, ay)
     return (xid, yid, off, conf)
