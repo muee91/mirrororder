@@ -4,6 +4,7 @@ import hashlib
 from collections import Counter
 from typing import Any
 
+from .media_role_store import MediaRoleStore
 from .script_supervisor_store import ScriptSupervisorStore
 
 
@@ -38,16 +39,33 @@ def _safe_attachment(record: dict[str, Any], attachment: dict[str, Any]) -> dict
     }
 
 
+def _record_scene(record: dict[str, Any], media_roles: dict[str, Any]) -> str:
+    explicit = str(record.get("script_scene_id", "") or "")
+    if explicit:
+        return explicit
+    # A media-role scene_id is also an explicit human production fact. Reuse it
+    # only when all attached materials with a scene assignment agree. Human
+    # display text such as “24场” is deliberately not interpreted here.
+    scene_ids = {
+        str(_as_dict(media_roles.get(str(attachment.get("media_id", "") or ""))).get("scene_id", "") or "")
+        for attachment in _as_list(record.get("attachments"))
+        if isinstance(attachment, dict) and attachment.get("media_id")
+    }
+    scene_ids.discard("")
+    return next(iter(scene_ids)) if len(scene_ids) == 1 else ""
+
+
 def _scene_pool(project: Any) -> tuple[dict[str, list[dict[str, Any]]], int]:
     board = ScriptSupervisorStore(project.config.output_dir).load()
     records = board.get("records", {}) if isinstance(board.get("records"), dict) else {}
+    roles_payload = MediaRoleStore(project.config.output_dir).load()
+    media_roles = roles_payload.get("media", {}) if isinstance(roles_payload.get("media"), dict) else {}
     by_scene: dict[str, list[dict[str, Any]]] = {}
     for raw in records.values():
         record = _as_dict(raw)
-        # Linked Take records are already represented in coverage.take_groups.
         if record.get("source_group_id"):
             continue
-        scene_id = str(record.get("script_scene_id", "") or "")
+        scene_id = _record_scene(record, media_roles)
         if not scene_id:
             continue
         for raw_attachment in _as_list(record.get("attachments")):
@@ -87,7 +105,8 @@ def enrich_coverage_with_standalone_slate(project: Any, graph: dict[str, Any]) -
     graph.setdefault("semantics", {}).update(
         {
             "standalone_slate_media_supported": True,
-            "standalone_slate_requires_explicit_script_scene_id": True,
+            "standalone_slate_requires_explicit_scene_link": True,
+            "media_role_scene_is_explicit_link": True,
             "human_scene_text_is_not_guessed_into_script_scene": True,
             "standalone_slate_media_is_take": False,
             "standalone_slate_media_is_editorial_authority": False,
