@@ -241,6 +241,8 @@ class AssistantOrchestrator:
             "models": self.models.public(),
             "allowed_tools": [
                 {"name": "run_priority_audit", "purpose": "对高价值疑难Take运行有缓存的Shadow Audit"},
+                {"name": "extract_visual_evidence", "purpose": "只为指定的少量Take补充视觉语义和证据"},
+                {"name": "index_unknown_identities", "purpose": "只索引指定Take的未知人物/声纹；已确认身份必须复用"},
                 {"name": "collect_learning_cases", "purpose": "刷新只供离线算法研发使用的hard cases"},
                 {"name": "noop", "purpose": "当前不需要自动动作"},
             ],
@@ -249,6 +251,7 @@ class AssistantOrchestrator:
                 "不得自动Best或Reject",
                 "不得覆盖人工归集",
                 "多机位画面人物不等于说话角色",
+                "已人工确认的人物或声纹不得要求重复计算",
                 "优先减少危险的高置信误判，而不是追求所有素材都有答案",
             ],
         }
@@ -259,8 +262,9 @@ class AssistantOrchestrator:
         system = (
             "你是镜序助理的生产编排器。你只能从allowed_tools里选择动作，不能直接修改审核、创意决定、FCPXML或媒体。"
             "目标是减少剪辑人员寻找问题的时间，同时控制算力。优先处理高风险歧义和算法反例，不要全量重复计算。"
+            "人物识别只能针对少量未知身份，不能要求重算已人工确认的身份。"
             "输出严格JSON："
-            '{"briefing":"一句中文简报","actions":[{"tool":"run_priority_audit|collect_learning_cases|noop","arguments":{}}],'
+            '{"briefing":"一句中文简报","actions":[{"tool":"run_priority_audit|extract_visual_evidence|index_unknown_identities|collect_learning_cases|noop","arguments":{}}],'
             '"questions":[{"group_id":"","text":"需要用户判断的问题"}]}。'
             "actions最多2个；没有必要动作时只返回noop。"
         )
