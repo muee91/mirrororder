@@ -90,8 +90,6 @@ def _activate_runtime_packages() -> None:
         return
     value = str(root)
     if value not in sys.path:
-        # Keep optional packages ahead of global site-packages, but do not add a
-        # second numpy unless explicitly installed there (we use --no-deps).
         sys.path.insert(0, value)
     importlib.invalidate_caches()
 
@@ -120,15 +118,10 @@ def _pip_available() -> bool:
 
 
 class IdentityRuntime:
-    """Device-local runtime/model lifecycle for actor and speaker identity.
-
-    Neither Python inference wheels nor ONNX weights are fetched at build time.
-    When the user explicitly prepares an enabled feature, missing optional wheels
-    are installed under MirrorOrder Application Support and model weights are
-    downloaded there with exact size + SHA-256 validation.
-    """
+    """Device-local runtime/model lifecycle for actor and speaker identity."""
 
     _lock = threading.RLock()
+    _prepare_locks = {"face": threading.Lock(), "speaker": threading.Lock()}
     _preparing: set[str] = set()
     _errors: dict[str, str] = {"face": "", "speaker": ""}
 
@@ -254,11 +247,8 @@ class IdentityRuntime:
                 os.fsync(handle.fileno())
             actual_size = tmp.stat().st_size
             if actual_size != artifact.size_bytes:
-                raise RuntimeError(
-                    f"{artifact.name} 下载大小异常：{actual_size} != {artifact.size_bytes}"
-                )
-            actual_hash = _sha256(tmp)
-            if actual_hash != artifact.sha256:
+                raise RuntimeError(f"{artifact.name} 下载大小异常：{actual_size} != {artifact.size_bytes}")
+            if _sha256(tmp) != artifact.sha256:
                 raise RuntimeError(f"{artifact.name} SHA-256 校验失败")
             os.replace(tmp, target)
             try:
@@ -271,20 +261,26 @@ class IdentityRuntime:
 
     @classmethod
     def prepare(cls, kind: str) -> dict[str, Any]:
-        dependency = cls.dependency_status(kind)
-        if not dependency["available"]:
-            if dependency["installable"]:
-                cls._install_optional_runtime(kind)
-                dependency = cls.dependency_status(kind)
+        if kind not in cls._prepare_locks:
+            raise ValueError("identity kind 必须是 face 或 speaker")
+        # A UI prepare click and a just-queued identity task may arrive together.
+        # Serialize only the same feature so two workers never install/download
+        # into the same target files concurrently.
+        with cls._prepare_locks[kind]:
+            dependency = cls.dependency_status(kind)
             if not dependency["available"]:
-                missing = [name for name, ok in dependency["modules"].items() if not ok]
-                missing.extend(name for name, ok in dependency["commands"].items() if not ok)
-                raise RuntimeError("缺少本地识别运行时：" + ", ".join(missing))
-        with cls._lock:
-            cls._errors[kind] = ""
-        for artifact in cls.artifacts(kind):
-            cls._download(kind, artifact)
-        return cls.public_kind(kind)
+                if dependency["installable"]:
+                    cls._install_optional_runtime(kind)
+                    dependency = cls.dependency_status(kind)
+                if not dependency["available"]:
+                    missing = [name for name, ok in dependency["modules"].items() if not ok]
+                    missing.extend(name for name, ok in dependency["commands"].items() if not ok)
+                    raise RuntimeError("缺少本地识别运行时：" + ", ".join(missing))
+            with cls._lock:
+                cls._errors[kind] = ""
+            for artifact in cls.artifacts(kind):
+                cls._download(kind, artifact)
+            return cls.public_kind(kind)
 
     @classmethod
     def prepare_async(cls, kind: str) -> bool:
@@ -299,7 +295,7 @@ class IdentityRuntime:
         def worker() -> None:
             try:
                 cls.prepare(kind)
-            except Exception as error:  # runtime status must survive provider failures
+            except Exception as error:
                 with cls._lock:
                     cls._errors[kind] = str(error)
             finally:
@@ -312,10 +308,7 @@ class IdentityRuntime:
     @classmethod
     def ensure_models(cls, kind: str) -> dict[str, Path]:
         cls.prepare(kind)
-        return {
-            artifact.filename: cls.model_path(kind, artifact)
-            for artifact in cls.artifacts(kind)
-        }
+        return {artifact.filename: cls.model_path(kind, artifact) for artifact in cls.artifacts(kind)}
 
     @classmethod
     def public_kind(cls, kind: str) -> dict[str, Any]:
@@ -357,9 +350,6 @@ class IdentityRuntime:
             status = "not_prepared"
         return {
             "kind": kind,
-            # available means the App can make the feature ready without a
-            # developer intervention: either dependencies already exist or the
-            # pinned optional wheel can be installed into Application Support.
             "available": bool(dependency["available"] or dependency["installable"]),
             "prepared": ready,
             "preparing": preparing,
