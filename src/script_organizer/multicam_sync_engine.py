@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from .config import ProjectConfig
 from .media_reader import infer_camera_label
+from .media_role_store import MediaRoleStore
 
 
 class MulticamSyncUnavailable(RuntimeError):
@@ -151,12 +152,7 @@ def _prepare_media_base(
     stage_root: Path,
     camera_patterns: dict[str, str] | None = None,
 ) -> tuple[Path, str]:
-    """Accept day/camera and direct camera roots without copying media.
-
-    Industry conventions A/B/C, A机/B机/C机 are defaults. Project
-    camera_patterns can recognize unconventional direct camera folders before
-    the vendor engine receives the normalized symlink view.
-    """
+    """Accept day/camera and direct camera roots without copying media."""
     if _has_day_layout(source, camera_patterns):
         return source, "day-folders"
     try:
@@ -233,6 +229,45 @@ def _prepare_multiple_media_roots(
     return stage_root, "normalized-multiple-roots", export_base
 
 
+def _sync_media_roles(config: ProjectConfig) -> tuple[dict[str, dict[str, str]], list[str], dict[str, int]]:
+    """Return path-free media-role facts needed only by the sync task.
+
+    The vendor engine receives media_id -> {camera_override, source_role,
+    sync_policy}; no device path, scene assignment, note, actor or review data is
+    projected into its temporary config.
+    """
+    payload = MediaRoleStore(config.output_dir).load()
+    rows = payload.get("media", {}) if isinstance(payload.get("media", {}), dict) else {}
+    projected: dict[str, dict[str, str]] = {}
+    camera_labels: set[str] = set()
+    excluded = 0
+    overridden = 0
+    for media_id, raw in rows.items():
+        if not isinstance(raw, dict) or not str(media_id).startswith("M_"):
+            continue
+        sync_policy = str(raw.get("sync_policy", "auto") or "auto")
+        camera = str(raw.get("camera_override", "") or "").strip().upper()
+        source_role = str(raw.get("source_role", "sync_camera") or "sync_camera")
+        if sync_policy == "auto" and not camera and source_role == "sync_camera":
+            continue
+        projected[str(media_id)] = {
+            "camera_override": camera,
+            "source_role": source_role,
+            "sync_policy": sync_policy,
+        }
+        if sync_policy == "exclude":
+            excluded += 1
+        if camera:
+            overridden += 1
+            if sync_policy != "exclude":
+                camera_labels.add(camera)
+    return projected, sorted(camera_labels), {
+        "projected": len(projected),
+        "excluded": excluded,
+        "camera_overrides": overridden,
+    }
+
+
 def _write_config(
     script_dir: Path,
     base: Path,
@@ -242,6 +277,8 @@ def _write_config(
     project_name: str,
     out_name: str,
     camera_patterns: dict[str, str] | None = None,
+    media_roles: dict[str, dict[str, str]] | None = None,
+    camera_labels: list[str] | None = None,
 ) -> None:
     payload = {
         "BASE": str(base),
@@ -252,6 +289,8 @@ def _write_config(
             "out_name": out_name,
             "export_base": str(export_base),
             "camera_patterns": dict(camera_patterns or {}),
+            "media_roles": dict(media_roles or {}),
+            "camera_labels": list(camera_labels or []),
         },
     }
     (script_dir / "config.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -303,6 +342,7 @@ def run_multicam_sync(
         stage,
         config.camera_patterns,
     )
+    media_roles, camera_labels, media_role_summary = _sync_media_roles(config)
 
     def write_builder_config(out_name: str, output: Path = xml_delivery) -> None:
         _write_config(
@@ -314,6 +354,8 @@ def run_multicam_sync(
             config.name,
             out_name,
             config.camera_patterns,
+            media_roles,
+            camera_labels,
         )
 
     def emit(text: str) -> None:
@@ -327,6 +369,10 @@ def run_multicam_sync(
     write_builder_config("synchronized.fcpxml")
     emit(f"同步引擎：{engine_source}")
     emit(f"素材布局：{layout}")
+    if media_role_summary["excluded"]:
+        emit(f"辅助素材：{media_role_summary['excluded']} 条已标记为不参与同步")
+    if media_role_summary["camera_overrides"]:
+        emit(f"机位覆盖：{media_role_summary['camera_overrides']} 条人工机位标记")
     emit("盘点素材与时间码")
     update_progress(0, 1)
     _run(script_dir, "make_index.py", [], emit)
@@ -401,6 +447,12 @@ def run_multicam_sync(
         "camera_detection": {
             "conventional": ["A", "B", "C", "A机", "B机", "C机"],
             "configured_patterns": sorted(config.camera_patterns),
+            "manual_camera_labels": camera_labels,
+        },
+        "media_roles": {
+            **media_role_summary,
+            "paths_projected": False,
+            "identity": "media_id",
         },
         "project_promoted_to_fcpxml": False,
     }
