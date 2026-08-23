@@ -5,6 +5,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from .audit_engine import _analysis_revision
 from .audit_store import AuditStore
 from .automation_store import AutomationStore
 from .learning_dataset import write_learning_dataset
@@ -206,6 +207,7 @@ class AgentToolRegistry:
         if active:
             return {"status": "already_running", "task_id": str(active[0].get("task_id", ""))}
         selected = [str(value) for value in (group_ids or []) if str(value)]
+        revision = _analysis_revision(self.config.output_dir)
         task = self.task_manager.submit(
             self.project_id,
             "audit",
@@ -214,7 +216,10 @@ class AgentToolRegistry:
                 "group_ids": selected[:120],
                 "max_groups": max(1, min(120, int(max_groups))),
             },
-            idempotency_key=f"assistant-audit:{self.project_id}:{','.join(selected[:24]) or 'priority'}",
+            idempotency_key=(
+                f"assistant-audit:{self.project_id}:{revision}:"
+                f"{','.join(selected[:24]) or 'priority'}"
+            ),
             actor="mirrororder-assistant",
         )
         return {"status": "submitted", "task_id": str(task.get("task_id", ""))}
