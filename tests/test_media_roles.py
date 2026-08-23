@@ -57,6 +57,31 @@ def test_auxiliary_role_defaults_to_sync_exclude_and_is_revision_safe(tmp_path: 
         )
 
 
+def test_media_role_store_discards_device_paths(tmp_path: Path) -> None:
+    store = MediaRoleStore(tmp_path)
+    saved = store.apply_many(
+        {
+            "expected_revision": 0,
+            "actor": "editor",
+            "changes": [
+                {
+                    "media_id": "M_AUX",
+                    "entry": {
+                        "display_name": "DJI_0001.MP4",
+                        "source_role": "aerial",
+                        "media_path": "/Volumes/RAID/day1/DJI_0001.MP4",
+                        "resolved_media_path": "/Volumes/RAID/day1/DJI_0001.MP4",
+                    },
+                }
+            ],
+        }
+    )
+    serialized = json.dumps(saved, ensure_ascii=False)
+    assert "/Volumes/" not in serialized
+    assert "media_path" not in saved["media"]["M_AUX"]
+    assert "resolved_media_path" not in saved["media"]["M_AUX"]
+
+
 def _project(tmp_path: Path) -> SimpleNamespace:
     output = tmp_path / "output"
     output.mkdir()
@@ -168,6 +193,7 @@ def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     vendor_sync = (root / "vendor" / "multicam-audio-sync" / "scripts" / "sync.py").read_text(encoding="utf-8")
     ui = (root / "web" / "media_role_ui.js").read_text(encoding="utf-8")
     index = (root / "web" / "index.html").read_text(encoding="utf-8")
+    build = (root / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
 
     assert editorial.index("install_media_role_runtime()") < editorial.index("from .coverage_runtime import install_coverage_runtime")
     assert editorial.index("install_media_role_runtime()") < editorial.index("install_coverage_runtime()")
@@ -180,7 +206,8 @@ def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     assert "MediaRoleStore(config.output_dir)" in sync_engine
     assert '"paths_projected": False' in sync_engine
     assert '"media_roles": dict(media_roles or {})' in sync_engine
-    assert 'sync_policy", "auto") == "exclude"' in vendor_index
+    assert 'role.get("sync_policy", "auto")' in vendor_index
+    assert '== "exclude":' in vendor_index
     assert "media_id_for_path" in vendor_index
     assert "ax_raw = load_audio(xid)" in vendor_sync
     assert "if ax_raw is None or ay_raw is None" in vendor_sync
@@ -190,3 +217,8 @@ def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     assert "航拍" in ui and "空镜" in ui and "GoPro" in ui
     assert '<script src="/media_role_ui.js"></script>' in index
     assert '<link rel="stylesheet" href="/media_roles.css">' in index
+
+    # Release builds copy the whole Python source tree and whole web directory,
+    # so newly added runtime modules and App-only assets are not an allowlist gap.
+    assert 'rsync -a --exclude \'__pycache__\' --exclude \'*.pyc\' "$ROOT/src/" "$RUNTIME/src/"' in build
+    assert 'cp -R "$ROOT/web" "$RUNTIME/web"' in build
