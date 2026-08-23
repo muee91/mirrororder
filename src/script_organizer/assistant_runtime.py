@@ -43,6 +43,7 @@ def _orchestrator(service: Any, project_id: str) -> AssistantOrchestrator:
 
 
 def _safe_assistant(payload: dict[str, Any]) -> dict[str, Any]:
+    """Team Web / external agents receive production issues, never App chat."""
     return {
         "version": int(payload.get("version", 1) or 1),
         "contract": str(payload.get("contract", "assistant.v1") or "assistant.v1"),
@@ -50,7 +51,6 @@ def _safe_assistant(payload: dict[str, Any]) -> dict[str, Any]:
         "updated_at": str(payload.get("updated_at", "") or ""),
         "summary": str(payload.get("summary", "") or ""),
         "items": payload.get("items", []) if isinstance(payload.get("items"), list) else [],
-        "messages": payload.get("messages", []) if isinstance(payload.get("messages"), list) else [],
     }
 
 
