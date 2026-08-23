@@ -184,6 +184,19 @@ def _write_config(script_dir: Path, base: Path, export_base: Path, work: Path, o
     (script_dir / "config.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _refresh_analysis_link(link: Path, target: Path) -> None:
+    """Keep one internal pointer for existing analysis code; never duplicate XML content."""
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to(target.resolve())
+    except OSError:
+        # Some filesystems disallow symlinks. A byte-identical internal copy is a
+        # compatibility fallback, not a second path format.
+        shutil.copyfile(target, link)
+
+
 def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None = None, compress_gaps: bool = True) -> dict[str, Any]:
     if not config.is_media_directory or not config.media_root:
         if config.fcpxml and config.fcpxml.exists():
@@ -246,7 +259,9 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
     if not fcpxml.is_file():
         raise RuntimeError("同步完成但 synchronized.fcpxml 未生成")
     emit("校验 FCPXML 帧边界、素材引用与结构")
-    _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(config.media_root)], emit)
+    _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(fcpxml.parent)], emit)
+    analysis_link = report_dir / "synchronized.fcpxml"
+    _refresh_analysis_link(analysis_link, fcpxml)
 
     capcut = ""
     if (script_dir / "build_capcut_fcpxml.py").is_file():
@@ -256,7 +271,7 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
             _run(script_dir, "build_capcut_fcpxml.py", [], emit)
             capcut_path = xml_delivery / "synchronized_capcut.fcpxml"
             if capcut_path.is_file():
-                _run(script_dir, "validate_fcpxml.py", [str(capcut_path), str(config.media_root)], emit)
+                _run(script_dir, "validate_fcpxml.py", [str(capcut_path), str(capcut_path.parent)], emit)
                 capcut = str(capcut_path)
         except Exception as error:
             emit(f"剪映 / CapCut FCPXML 可选生成失败：{error}")
@@ -271,6 +286,7 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
         "days": days,
         "positions": [str(path) for path in positions],
         "fcpxml": str(fcpxml),
+        "analysis_fcpxml": str(analysis_link),
         "capcut_fcpxml": capcut,
         "media_reference_mode": "relative-to-xml",
         "source_kind": "media-directory",
