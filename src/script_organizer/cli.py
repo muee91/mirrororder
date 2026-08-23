@@ -17,6 +17,7 @@ from .fcpxml_exporter import export
 from .local_vision_runtime import LocalVisionRuntime
 from .media_identity import DeviceMediaStore
 from .review_read_model import install_review_read_model_runtime
+from .semantic_search import SemanticSearcher
 from .tasks import TaskManager
 from .web_server import serve, serve_gateway
 from .workspace import WorkspaceConfig, WorkspaceRegistry, ensure_workspace_id
@@ -76,6 +77,26 @@ def main(argv: list[str] | None = None) -> int:
     export_parser = subparsers.add_parser("export", help="导出指定工作区项目的审核清单")
     export_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
     export_parser.add_argument("project_id", help="项目 ID")
+
+    semantic_parser = subparsers.add_parser(
+        "semantic-search",
+        help="只读搜索当前项目的画面描述、对白和人工场记",
+    )
+    semantic_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
+    semantic_parser.add_argument("project_id", help="项目 ID")
+    semantic_parser.add_argument("query", help="自然语言、对白或场记关键词")
+    semantic_parser.add_argument("--limit", default=16, type=int)
+    semantic_parser.add_argument(
+        "--source",
+        action="append",
+        choices=("visual", "speech", "slate"),
+        help="只搜索指定证据来源；可重复",
+    )
+    semantic_parser.add_argument(
+        "--no-refresh",
+        action="store_true",
+        help="只读现有语义索引，不从当前项目证据刷新文档",
+    )
 
     for command in ("serve", "run"):
         serve_parser = subparsers.add_parser(command, help="启动本地多项目工作台")
@@ -176,6 +197,21 @@ def main(argv: list[str] | None = None) -> int:
         return _submit_and_wait(workspace, args.project_id, "multicam_sync")
     if args.command == "auto-resolve":
         return _submit_and_wait(workspace, args.project_id, "auto_resolve")
+
+    if args.command == "semantic-search":
+        config = _project(workspace, args.project_id)
+        payload = SemanticSearcher(
+            workspace.workspace_id,
+            args.project_id,
+            config,
+        ).search(
+            args.query,
+            limit=max(1, min(60, int(args.limit))),
+            sources=args.source,
+            refresh=not args.no_refresh,
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
 
     if args.command == "media-scan":
         store = DeviceMediaStore()
