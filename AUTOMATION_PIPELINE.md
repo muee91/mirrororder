@@ -1,8 +1,13 @@
-# 镜序自动整理与 AI Rescue
+# 镜序自动整理、AI Rescue 与 Shadow Audit
 
 目标：**默认自动完成，人工只处理异常。**
 
-Codex、第三方模型和本地模型都不是镜序核心运行依赖。素材同步、ASR、剧本候选、顺序对齐和高置信度确认均由 MirrorOrder Host 的确定性流水线执行；模型只处理本地算法已经判定为歧义的少量 Take。
+Codex、第三方模型和本地模型都不是镜序核心运行依赖。素材同步、ASR、剧本候选、顺序对齐和高置信度确认均由 MirrorOrder Host 的确定性流水线执行。
+
+模型现在有两条严格分开的链：
+
+1. **AI Rescue（生产决策链）**：只处理本地算法已经判定为歧义的少量 Take，只能在已有候选中选择，并必须通过本地复核；
+2. **Shadow Audit（只读审计链）**：可以优先抽查冲突、人工 override、needs_review / unresolved 和其它高信息量 Take，用于找算法反例、列素材问题和生成粗剪结构，但不得改变任何审核或自动归集结果。
 
 ## 1. 新项目默认流水线
 
@@ -34,6 +39,8 @@ auto_resolve
   自动完成 / AI确认 / 人工覆盖 / 待处理
 ```
 
+`prepare_project` **不会自动运行全量 Shadow Audit**。素材审计是显式、可缓存、受 Host 视觉资源调度的 Production 任务，避免新项目因为增加 AI 能力而突然变成全量视频推理。
+
 已有 FCPXML 项目会跳过 `multicam_sync`，直接进入分析与自动确认。
 
 创建项目之前，Host 会执行不写盘预检：
@@ -45,7 +52,7 @@ auto_resolve
 
 缺失源媒体只产生警告并保留逻辑片段，后续由当前设备的 `media-bindings.json` 解决；预检不会复制原始媒体、修改原始 FCPXML 或写入审核。
 
-## 2. 自动结果与人工结果分离
+## 2. 自动结果、人工结果与审计结果分离
 
 自动状态写：
 
@@ -59,6 +66,24 @@ output/auto_decisions.json
 output/review.json
 ```
 
+协作意见与最终编辑决定写：
+
+```text
+output/editorial.json
+```
+
+AI Shadow Audit 写：
+
+```text
+output/audit.json
+```
+
+算法研发 hard cases 写：
+
+```text
+output/learning_cases.jsonl
+```
+
 规则：
 
 - `review.json` 永远高于 `auto_decisions.json`。
@@ -66,6 +91,9 @@ output/review.json
 - 自动流程不得自动 Reject。
 - 人工一旦修改某个 Take / placement / assignment，后续自动解析将该组标记为 `human_override`。
 - 自动确认默认语义是 `keep` / “剧本归属已确认”，不是创意意义上的“最佳镜头”。
+- `audit.json` 只是可重建证据，不是新的审核权威。
+- Shadow Audit 不得写 `review.json`、`editorial.json` 或 `auto_decisions.json`。
+- Production matcher 不读取 `learning_cases.jsonl`；它只用于离线 replay / eval / 算法研发。
 
 ## 3. 自动状态
 
@@ -79,6 +107,8 @@ unresolved      无可靠对白/候选/证据不足
 
 工作台把前三类视为“已完成”，默认人工只处理后两类。
 
+注意：Shadow Audit 的 `agree / disagree / insufficient_evidence` **不是新的自动状态**，不会把一个 Take 从 `needs_review` 直接升级成 `ai_confirmed`。
+
 ## 4. 高置信度自动确认
 
 当前自动确认至少要求：
@@ -91,9 +121,9 @@ unresolved      无可靠对白/候选/证据不足
 
 通过后写入 `auto_decisions.json`，不会触碰人工审核。
 
-## 5. 大模型何时介入
+## 5. AI Rescue 何时介入
 
-模型不是主匹配器。只有本地候选没有达到自动确认门槛时才考虑 AI Rescue。
+AI Rescue 不是主匹配器。只有本地候选没有达到自动确认门槛时才考虑模型二审。
 
 Host 只发送：
 
@@ -114,7 +144,91 @@ Host 只发送：
 
 任一失败 → `needs_review`，不自动写人工结果。
 
-## 6. 第三方 / 本地模型
+## 6. Shadow Audit 如何介入
+
+Shadow Audit 的目标不是再次充当 matcher，而是尝试证明当前算法判断有问题，并积累后续粗剪需要的结构化素材智力。
+
+默认 Production 入口：
+
+```text
+mode = priority
+max_groups = 60
+```
+
+优先审计：
+
+- 人工归集 / override 与自动候选存在差异的 Take；
+- `needs_review`；
+- `unresolved`；
+- top candidates 过近；
+- 无可靠对白；
+- 当前 Host 缺媒体；
+- 需要补景别、coverage、连续性或技术质量信息的高价值 Take。
+
+每个 Take 生成 evidence fingerprint。输入证据没有变化时直接复用 `audit.json`，不重复调用 VLM。
+
+审计输出包括：
+
+```text
+verdict
+  agree / disagree / insufficient_evidence
+
+issues
+  failure taxonomy + severity + detail
+
+algorithm_feedback
+  failure_class
+  suspected_missing_feature
+  counterexample
+
+shot_intelligence · per clip_id
+  shot_type
+  coverage_role
+  visible_people
+  technical_issues
+
+rough_cut
+  technical_usability
+  take_completeness
+  coverage_role
+  continuity_risk
+```
+
+多机位景别按 `clip_id` 保存。例如同一个 Take 可以是：
+
+```text
+A → 全景
+B → 近景
+C → 特写
+```
+
+不能把某一机位的景别复制给整个 Take。
+
+完整边界见 `docs/ai-audit-learning-loop.md`。
+
+## 7. 演员 / 角色推断边界
+
+声纹可以利用已确认的剧本归集提出角色候选：
+
+```text
+speaker cluster
++
+该 cluster 的 ASR 文本
++
+当前已归集剧本段的 speaker / dialogue
+↓
+角色候选（requires_confirmation=true）
+```
+
+已经人工确认的身份不得因为再次索引、指定 Take 重跑或模型 profile 更新而重复计算覆盖；只有明确的开发者强制重建才允许重新索引。
+
+多机位画面不能因为台词角色而自动给 face cluster 命名。B/C 机可能拍的是听者、反应镜头或双人镜头，所以：
+
+- speaker → 剧本角色：允许提出候选；
+- face → 剧本角色：默认人工确认；
+- 未来只有在可靠 active-speaker / lip-motion / audio-visual binding 存在时，才考虑自动建立 face ↔ speaker 关系。
+
+## 8. 第三方 / 本地模型
 
 当前 Provider 使用 OpenAI-compatible `chat/completions` 接口。通过 Host 进程环境变量配置：
 
@@ -137,13 +251,14 @@ export MIRRORORDER_MODEL_BASE_URL='http://127.0.0.1:1234/v1'
 ```text
 高置信度 → 自动确认
 低置信度 → 直接进入 needs_review / unresolved
+Shadow Audit → 保留确定性问题分类和已有缓存，不影响主流程
 ```
 
 所以镜序在完全离线、无 API Key、无 Codex 时仍能完成确定性主流程。
 
-API Key 不得写入 workspace / project.toml / review.json。
+API Key 不得写入 workspace / project.toml / review.json / audit.json。
 
-## 7. multicam-audio-sync 的第一方集成方式
+## 9. multicam-audio-sync 的第一方集成方式
 
 MirrorOrder Host 直接调用仓库内同步脚本，不通过 Codex，也不在运行时依赖外部 skill。
 
@@ -176,18 +291,20 @@ output/.multicam-sync/...
 
 原始媒体不会被修改；已有用户 FCPXML 项目也不会被覆盖。
 
-## 8. Host 任务
+## 10. Host 任务
 
 ```text
-prepare_project      完整自动流水线
+prepare_project      完整确定性主流水线 + AI Rescue；不自动全量 Audit
 multicam_sync        只做多机位音频同步 + XML
 auto_resolve         只重跑自动确认 / AI Rescue
 incremental_analyze  现有增量分析，完成后刷新自动决策
 transcribe           定向 ASR，分析可用时刷新自动决策
-evidence_extract     证据提取
+evidence_extract     定向证据提取
+identity_index       App 显式人物 / 声纹索引
+audit                App 显式 Shadow Audit；默认优先级 + 缓存
 ```
 
-CLI：
+CLI 主流水线仍保持：
 
 ```bash
 ./script-organizer prepare workspace.toml <project_id>
@@ -195,13 +312,17 @@ CLI：
 ./script-organizer auto-resolve workspace.toml <project_id>
 ```
 
-## 9. 人工界面原则
+Audit 当前由 App Production 提交 Host 任务，不作为 Agent 可提交任务，也不作为 Web 审阅操作。
 
-工作台顶部显示：
+## 11. 人工界面原则
+
+工作台顶部继续显示生产状态：
 
 ```text
 自动 N   AI N   人工 N   待处理 N
 ```
+
+这里的 `AI` 指生产链的 `ai_confirmed`，**不是 Shadow Audit 数量**。
 
 “只看未核对”应把 `auto_confirmed` / `ai_confirmed` 当作完成，只留下真正异常。
 
@@ -212,14 +333,65 @@ CLI：
 - 无对白且没有可靠上下文；
 - 跨集/非单调 pickup 导致顺序复核失败；
 - 同步/媒体缺失异常；
-- 需要创意判断的 Best / Reject。
+- 需要创意判断的 Best / Reject；
+- Audit disagreement 或素材质量提示中确实需要制作判断的项目。
 
-## 10. 不允许的回归
+素材卡可以直接显示景别和角色上下文，但文件名、机位和播放仍是主信息。不得把页面改造成模型诊断控制台。
+
+## 12. 算法自我迭代
+
+所谓“算法自我迭代”必须是受控研发闭环：
+
+```text
+Production algorithm N
+↓
+learning_cases.jsonl
+↓
+AI 聚类失败模式 / 提出 feature 或 rule 假设
+↓
+Candidate algorithm N+1
+↓
+Frozen Eval Set / Replay
+↓
+与 N 比较
+↓
+安全门槛 + 人工 promotion
+↓
+Production algorithm N+1
+```
+
+禁止：
+
+```text
+运行中的模型发现问题
+↓
+直接修改 matcher.py
+↓
+立即进入生产
+```
+
+后续 Eval 至少要跟踪：
+
+- mapping accuracy；
+- false confident assignment rate；
+- human override rate；
+- needs_review rate；
+- unresolved rate；
+- frozen gold regression count；
+- auto Reject count = 0。
+
+## 13. 不允许的回归
 
 - 不得把所有 Take 都发给大模型。
-- 不得让模型搜索整本剧本后自由返回任意位置。
-- 不得因为模型高置信度就绕过本地复核。
-- 不得让自动流程写 `review.json`。
+- 不得让 AI Rescue 搜索整本剧本后自由返回任意位置。
+- 不得因为 AI Rescue 模型高置信度就绕过本地复核。
+- 不得让 Shadow Audit 直接升级为 `ai_confirmed`。
+- 不得让 Shadow Audit 写 `review.json` / `editorial.json` / `auto_decisions.json`。
+- 不得按 AI Judge 的 disagreement 自动 Reject 或改剧本归集。
+- 不得把多机位某一画面的人脸因为台词角色而自动命名。
+- 不得重复计算并覆盖人工已确认的演员 / 声纹身份。
+- 不得把同一个 Take 的某个机位景别复制给其它机位。
+- 不得让生产 matcher 读取 `learning_cases.jsonl` 形成隐式反馈环。
 - 不得自动 Reject。
 - 不得用 LLM 替代音频同步、ASR 时间戳、FCPXML 时间关系或 `media_id`。
 - 不得恢复“每个 Take 默认都需要人工点一下”的产品逻辑。
