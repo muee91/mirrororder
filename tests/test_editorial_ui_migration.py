@@ -23,7 +23,7 @@ def test_team_web_writes_individual_opinions_with_stable_reviewer_identity() -> 
     )
 
 
-def test_native_app_gets_final_decision_without_changing_delivery_semantics() -> None:
+def test_native_app_gets_final_decision_and_delivery_semantics() -> None:
     root = Path(__file__).resolve().parents[1]
     ui = (root / "web" / "editorial_ui.js").read_text(encoding="utf-8")
     runtime = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
@@ -33,7 +33,8 @@ def test_native_app_gets_final_decision_without_changing_delivery_semantics() ->
     assert "projectApi('/editorial-decision')" in ui
     assert "expected_revision: Number(nativeEditorial.revision || 0)" in ui
     assert "最终编辑决定" in ui
-    assert "不会改变 FCPXML 或导出结果" in ui
+    assert "会进入 delivery.v1 / Selection Manifest" in ui
+    assert "不会直接改写源 FCPXML" in ui
     assert 'parts[4] == "editorial-decision"' in runtime
     assert "self._local_only()" in runtime
 
