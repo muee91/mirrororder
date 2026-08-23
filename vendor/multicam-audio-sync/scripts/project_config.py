@@ -281,6 +281,14 @@ class Config:
             str(camera).upper(): str(pattern)
             for camera, pattern in raw_patterns.items()
         } if isinstance(raw_patterns, dict) else {}
+        raw_roles = self.manual.get("media_roles", {})
+        self.media_roles = raw_roles if isinstance(raw_roles, dict) else {}
+        raw_labels = self.manual.get("camera_labels", [])
+        self.camera_labels = sorted({
+            str(value).strip().upper()
+            for value in raw_labels
+            if str(value).strip()
+        }) if isinstance(raw_labels, list) else []
 
         self.fps = None
         self.width = None
@@ -322,6 +330,9 @@ class Config:
             for c in camdirs:
                 if c not in all_cams:
                     all_cams.append(c)
+        for camera in self.camera_labels:
+            if camera not in all_cams:
+                all_cams.append(camera)
         self.cam_list = sorted(all_cams)
 
         probe_path = None
