@@ -4,6 +4,7 @@ from pathlib import Path
 from threading import Thread
 from typing import Any
 
+from .script_supervisor_parser import parse_supervisor_text
 from .script_supervisor_store import (
     SUPERVISOR_CONTRACT,
     ScriptSupervisorConflictError,
@@ -18,6 +19,10 @@ def _as_dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _as_list(value: object) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _safe_entry(value: object) -> dict[str, Any]:
     raw = _as_dict(value)
     if not raw:
@@ -26,51 +31,122 @@ def _safe_entry(value: object) -> dict[str, Any]:
     angles = _as_dict(raw.get("angles"))
     return {
         "group_id": str(raw.get("group_id", "") or ""),
-        "scene": str(raw.get("scene", "") or ""),
-        "shot": str(raw.get("shot", "") or ""),
+        "scene": str(raw.get("scene", "") or "")[:80],
+        "shot": str(raw.get("shot", "") or "")[:80],
         "take_number": raw.get("take_number"),
         "status": str(raw.get("status", "unmarked") or "unmarked"),
-        "note": str(raw.get("note", "") or ""),
+        "note": str(raw.get("note", "") or "")[:2000],
         "usable_range": {
             "start": usable_range.get("start"),
             "end": usable_range.get("end"),
         } if usable_range else {},
-        "preferred_clip_id": str(raw.get("preferred_clip_id", "") or ""),
+        "preferred_clip_id": str(raw.get("preferred_clip_id", "") or "")[:160],
         "angles": {
             str(clip_id): {
                 "shot_type": str(_as_dict(row).get("shot_type", "unknown") or "unknown"),
-                "note": str(_as_dict(row).get("note", "") or ""),
+                "note": str(_as_dict(row).get("note", "") or "")[:500],
             }
             for clip_id, row in angles.items()
             if isinstance(row, dict)
         },
-        "actor": str(raw.get("actor", "") or ""),
-        "updated_at": str(raw.get("updated_at", "") or ""),
+        "actor": str(raw.get("actor", "") or "")[:80],
+        "updated_at": str(raw.get("updated_at", "") or "")[:80],
+    }
+
+
+def _safe_attachment(value: object) -> dict[str, Any]:
+    raw = _as_dict(value)
+    return {
+        "clip_id": str(raw.get("clip_id", "") or "")[:160],
+        "media_id": str(raw.get("media_id", "") or "")[:160],
+        "camera": str(raw.get("camera", "") or "")[:40],
+        "display_name": Path(str(raw.get("display_name", "") or "")).name[:300],
+        "shot_type": str(raw.get("shot_type", "unknown") or "unknown")[:40],
+        "source_role": str(raw.get("source_role", "sync_camera") or "sync_camera")[:40],
+        "note": str(raw.get("note", "") or "")[:500],
+    }
+
+
+def _safe_record(value: object) -> dict[str, Any]:
+    raw = _as_dict(value)
+    if not raw:
+        return {}
+    usable_range = _as_dict(raw.get("usable_range"))
+    return {
+        "record_id": str(raw.get("record_id", "") or "")[:160],
+        "source_group_id": str(raw.get("source_group_id", "") or "")[:160],
+        "episode": raw.get("episode"),
+        "scene": str(raw.get("scene", "") or "")[:80],
+        "shot": str(raw.get("shot", "") or "")[:80],
+        "take_number": raw.get("take_number"),
+        "status": str(raw.get("status", "unmarked") or "unmarked"),
+        "note": str(raw.get("note", "") or "")[:2000],
+        "usable_range": {
+            "start": usable_range.get("start"),
+            "end": usable_range.get("end"),
+        } if usable_range else {},
+        "preferred_clip_id": str(raw.get("preferred_clip_id", "") or "")[:160],
+        "attachments": [
+            _safe_attachment(row)
+            for row in _as_list(raw.get("attachments"))
+            if isinstance(row, dict)
+        ][:32],
+        "actor": str(raw.get("actor", "") or "")[:80],
+        "updated_at": str(raw.get("updated_at", "") or "")[:80],
     }
 
 
 def _safe_board(payload: dict[str, Any]) -> dict[str, Any]:
     entries = payload.get("entries", {}) if isinstance(payload.get("entries"), dict) else {}
+    records = payload.get("records", {}) if isinstance(payload.get("records"), dict) else {}
     return {
-        "version": int(payload.get("version", 1) or 1),
+        "version": int(payload.get("version", 2) or 2),
         "contract": str(payload.get("contract", SUPERVISOR_CONTRACT) or SUPERVISOR_CONTRACT),
         "revision": int(payload.get("revision", 0) or 0),
         "updated_at": str(payload.get("updated_at", "") or ""),
+        "records": {
+            str(record_id): _safe_record(row)
+            for record_id, row in records.items()
+            if isinstance(row, dict)
+        },
+        # Compatibility projection; ordinary Team Web only consumes this per-Take.
         "entries": {
             str(group_id): _safe_entry(row)
             for group_id, row in entries.items()
             if isinstance(row, dict)
         },
+        "semantics": {
+            "record_is_primary_identity": True,
+            "record_may_exist_without_take": True,
+            "attachments_use_clip_or_media_identity": True,
+            "device_paths_exposed": False,
+            "editorial_authority": False,
+        },
     }
 
 
-def install_script_supervisor_runtime() -> None:
-    """Install the shared human script-supervisor annotation layer.
+def _refresh_assistant(service: Any, project_id: str) -> None:
+    try:
+        from .assistant_runtime import _orchestrator
 
-    App Production is the write surface. Team Web receives only per-Take safe
-    annotations through review.v1. Agent API may read the board, but there is no
-    agent write route. These annotations are production evidence, not Editorial
-    Decision and not a replacement for review.json placement authority.
+        Thread(
+            target=lambda: _orchestrator(service, project_id).cycle(
+                trigger="script-supervisor", allow_actions=False
+            ),
+            daemon=True,
+            name=f"mirror-assistant-supervisor-{project_id}",
+        ).start()
+    except Exception:
+        pass
+
+
+def install_script_supervisor_runtime() -> None:
+    """Install the shared human electronic script-supervisor layer.
+
+    App Production owns the full board and writes. Team Web receives only safe
+    per-Take projections through review.v1. Agent API may read the board but has
+    no write route. Human slate facts are production evidence, never Editorial
+    Decision and never a replacement for review.json placement authority.
     """
 
     global _INSTALLED
@@ -86,7 +162,8 @@ def install_script_supervisor_runtime() -> None:
 
     def build_with_supervisor(project: Any, **kwargs: Any) -> dict[str, Any]:
         payload = original_build(project, **kwargs)
-        board = ScriptSupervisorStore(project.config.output_dir).load()
+        store = ScriptSupervisorStore(project.config.output_dir)
+        board = store.load()
         entries = board.get("entries", {}) if isinstance(board.get("entries"), dict) else {}
         for take in payload.get("take_groups", []):
             if not isinstance(take, dict):
@@ -96,14 +173,13 @@ def install_script_supervisor_runtime() -> None:
         payload.setdefault("revisions", {})["script_supervisor"] = int(board.get("revision", 0) or 0)
         payload.setdefault("capabilities", {}).update(
             {
-                "script_supervisor_v1": True,
+                "script_supervisor_v2": True,
+                "script_supervisor_record_model": True,
                 "script_supervisor_write_scope": "host_local",
                 "script_supervisor_is_editorial_authority": False,
             }
         )
-        payload.setdefault("summary", {})["script_supervisor"] = ScriptSupervisorStore(
-            project.config.output_dir
-        ).summary()
+        payload.setdefault("summary", {})["script_supervisor"] = store.summary()
         return payload
 
     def state_with_supervisor(project: Any) -> dict[str, Any]:
@@ -122,6 +198,9 @@ def install_script_supervisor_runtime() -> None:
             "read": True,
             "agent_write": False,
             "app_write": True,
+            "record_model": True,
+            "natural_language_parse": True,
+            "standalone_media_rows": True,
             "editorial_authority": False,
         }
         return payload
@@ -145,40 +224,47 @@ def install_script_supervisor_runtime() -> None:
 
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
-                if (
-                    len(parts) == 5
-                    and parts[:3] == ["api", "v1", "projects"]
-                    and parts[4] == "script-supervisor"
-                ):
-                    self._local_only()
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"]:
                     project_id = parts[3]
                     project = service.project(project_id)
-                    store = ScriptSupervisorStore(project.config.output_dir)
-                    body = web_server._body(self)
-                    try:
-                        saved = store.apply(body)
-                    except ScriptSupervisorConflictError as error:
-                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
-                    except ValueError as error:
-                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
-                    self._send_json(_safe_board(saved))
-
-                    # Human production annotations can change rough-cut planning
-                    # and assistant context. Refresh only cheap derived state;
-                    # never submit expensive tasks from this write path.
-                    try:
-                        from .assistant_runtime import _orchestrator
-
-                        Thread(
-                            target=lambda: _orchestrator(service, project_id).cycle(
-                                trigger="script-supervisor", allow_actions=False
-                            ),
-                            daemon=True,
-                            name=f"mirror-assistant-supervisor-{project_id}",
-                        ).start()
-                    except Exception:
-                        pass
-                    return
+                    if parts[4] == "script-supervisor":
+                        self._local_only()
+                        store = ScriptSupervisorStore(project.config.output_dir)
+                        body = web_server._body(self)
+                        try:
+                            if body.get("action") in {"upsert_record", "delete_record"} or "record" in body:
+                                saved = store.apply_record(
+                                    {
+                                        **body,
+                                        "delete": body.get("action") == "delete_record" or bool(body.get("delete")),
+                                    }
+                                )
+                            else:
+                                saved = store.apply(body)
+                        except ScriptSupervisorConflictError as error:
+                            raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                        except ValueError as error:
+                            raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
+                        self._send_json(_safe_board(saved))
+                        _refresh_assistant(service, project_id)
+                        return
+                    if parts[4] == "script-supervisor-parse":
+                        self._local_only()
+                        body = web_server._body(self)
+                        text = str(body.get("text", "") or "").strip()
+                        if not text:
+                            raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "快速录入内容不能为空")
+                        parsed_result = parse_supervisor_text(
+                            text,
+                            previous=_as_dict(body.get("previous")),
+                            allow_model=bool(body.get("allow_model", True)),
+                        )
+                        self._send_json({
+                            "contract": "script_supervisor_parse.v1",
+                            "input": text[:2000],
+                            "result": parsed_result,
+                        })
+                        return
                 return super()._app_post(parsed)
 
             def _agent_get(self, parsed):
