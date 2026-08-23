@@ -1,0 +1,117 @@
+.mirror-semantic-search {
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  padding-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.mirror-semantic-search-form {
+  display: grid;
+  gap: 7px;
+}
+
+.mirror-semantic-search-title,
+.mirror-semantic-result-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.mirror-semantic-search-title span,
+.mirror-semantic-result-head span,
+.mirror-semantic-model-status,
+.mirror-semantic-settings-body p {
+  font-size: 11px;
+  color: var(--text-secondary, #737373);
+}
+
+.mirror-semantic-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.mirror-semantic-search-row input,
+.mirror-semantic-settings-body input {
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 3%, transparent);
+  color: inherit;
+  padding: 0 9px;
+  font: inherit;
+}
+
+.mirror-semantic-search-results {
+  display: grid;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.mirror-semantic-result {
+  padding: 8px 9px;
+  border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.mirror-semantic-result:first-child { border-top: 0; }
+
+.mirror-semantic-result-head strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mirror-semantic-result-head span:last-child { margin-left: auto; }
+
+.mirror-semantic-result p,
+.mirror-semantic-empty {
+  margin: 5px 0 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary, #666);
+}
+
+.mirror-semantic-result button,
+.mirror-semantic-search-row button,
+.mirror-semantic-settings-body button {
+  min-height: 32px;
+}
+
+.mirror-semantic-settings {
+  font-size: 12px;
+}
+
+.mirror-semantic-settings summary {
+  cursor: pointer;
+  color: var(--text-secondary, #666);
+  user-select: none;
+}
+
+.mirror-semantic-settings-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 9px;
+}
+
+.mirror-semantic-settings-body p,
+.mirror-semantic-check,
+#mirror-semantic-model-save,
+#mirror-semantic-model-status {
+  grid-column: 1 / -1;
+}
+
+.mirror-semantic-settings-body label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary, #666);
+}
+
+.mirror-semantic-check {
+  display: flex !important;
+  align-items: center;
+  gap: 7px !important;
+}
+
+.mirror-semantic-check input { min-height: auto; }
