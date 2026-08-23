@@ -262,7 +262,7 @@
         ${['best', 'keep', 'reject'].map((value) => `<button type="button" data-final-state="${value}" class="${decision?.state === value ? 'selected' : ''}">${esc(LABELS[value])}</button>`).join('')}
         ${decision ? '<button type="button" data-final-state="unreviewed">清除</button>' : ''}
       </div>
-      <div class="native-editorial-note">最终决定与个人意见分开保存；当前阶段不会改变 FCPXML 或导出结果。</div>
+      <div class="native-editorial-note">最终决定与个人意见分开保存；会进入 delivery.v1 / Selection Manifest，但不会直接改写源 FCPXML。</div>
     `;
     section.querySelectorAll('[data-final-state]').forEach((button) => button.addEventListener('click', () => {
       saveNativeDecision(button.dataset.finalState).catch((error) => showToast(error.message));
