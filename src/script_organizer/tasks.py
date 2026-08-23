@@ -15,6 +15,7 @@ COMPAT_TASK_TYPES = {
 }
 
 from contextlib import contextmanager
+import inspect
 from typing import Any, Iterator
 
 from .analysis_runtime import analyze as _default_analyze
@@ -32,6 +33,17 @@ _impl.TASK_TYPES.add("identity_index")
 # Public compatibility symbol. Older tests/tools monkeypatch this name.
 analyze = _default_analyze
 TASK_TYPES = _impl.TASK_TYPES
+
+
+def _run_analysis(
+    config,
+    affected_group_ids: set[str] | None = None,
+    progress=None,
+):
+    """Call the current analyzer while keeping older test/tool doubles usable."""
+    if "progress" in inspect.signature(analyze).parameters:
+        return analyze(config, affected_group_ids, progress=progress)
+    return analyze(config, affected_group_ids)
 
 
 class TaskManager(_impl.TaskManager):
@@ -201,7 +213,10 @@ class TaskManager(_impl.TaskManager):
         explicit: bool = False,
     ) -> dict[str, Any]:
         settings = load_runtime_settings()
-        if not explicit and settings.get("identity_processing_mode") != "after_prepare":
+        # Identity evidence is project-level and user-triggered from the
+        # current project panel. Enabling a device runtime must not silently
+        # enqueue work across every project on this Mac.
+        if not explicit:
             return {"status": "manual"}
         result: dict[str, Any] = {}
         if settings.get("face_identity_enabled"):
@@ -246,11 +261,16 @@ class TaskManager(_impl.TaskManager):
                     result = _impl.run_multicam_sync(
                         config,
                         lambda text: self._update(config, task_id, message=text),
+                        progress=lambda done, total: self._update(
+                            config,
+                            task_id,
+                            progress={"done": done, "total": total},
+                        ),
                     )
             elif task_type == "incremental_analyze":
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
                 with self._resource(config, task, self._asr_resource(config), "analysis", "MLX/ASR"):
-                    result = analyze(config, affected or None)["index"]["stats"]
+                    result = _run_analysis(config, affected or None)["index"]["stats"]
                 result["affected_group_ids"] = sorted(affected)
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                     result["automation"] = _impl.resolve_project(config)["summary"]
@@ -272,7 +292,7 @@ class TaskManager(_impl.TaskManager):
                 if result.get("transcribed") and _impl._analysis_inputs_available(config):
                     affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
                     with self._resource(config, task, self._asr_resource(config), "analysis", "MLX/ASR"):
-                        result["analysis"] = analyze(config, affected or None)["index"]["stats"]
+                        result["analysis"] = _run_analysis(config, affected or None)["index"]["stats"]
                     with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                         result["automation"] = _impl.resolve_project(config)["summary"]
                     local_media = self._refresh_media_bindings(config, project_id)
@@ -305,11 +325,27 @@ class TaskManager(_impl.TaskManager):
     def _prepare_project(self, project_id: str, config, task: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         task_id = str(task["task_id"])
+
+        def report(phase: str, done: int, total: int, message: str) -> None:
+            stage = {"asr": "analysis", "matching": "analysis", "rescue": "resolve"}.get(phase, phase)
+            self._update(
+                config,
+                task_id,
+                stage=stage,
+                progress={"done": done, "total": total},
+                message=message,
+            )
+
         if config.is_media_directory:
             with self._resource(config, task, "sync", "sync", "多机位同步"):
                 result["sync"] = _impl.run_multicam_sync(
                     config,
                     lambda text: self._update(config, task_id, message=text),
+                    progress=lambda done, total: self._update(
+                        config,
+                        task["task_id"],
+                        progress={"done": done, "total": total},
+                    ),
                 )
             if self._cancel_requested(config, task_id):
                 return {**result, "cancelled": True}
@@ -318,15 +354,27 @@ class TaskManager(_impl.TaskManager):
             raise ValueError("项目源输入不完整，无法执行自动准备")
 
         with self._resource(config, task, self._asr_resource(config), "analysis", "MLX/ASR"):
-            self._update(config, task_id, message="开始 ASR 与剧本匹配")
-            analysis = analyze(config)
+            self._update(
+                config,
+                task_id,
+                progress={"done": 0, "total": 3},
+                message="开始 ASR 与剧本匹配；正在建立素材索引、读取缓存并匹配剧本",
+            )
+            analysis = _run_analysis(config, progress=report)
+        self._update(config, task_id, progress={"done": 1, "total": 3}, message="ASR 与剧本匹配完成")
         result["analysis"] = analysis["index"]["stats"]
         if self._cancel_requested(config, task_id):
             return {**result, "cancelled": True}
 
         with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
-            self._update(config, task_id, message="自动确认剧本归属并处理疑难 Take")
+            self._update(
+                config,
+                task_id,
+                progress={"done": 1, "total": 3},
+                message="自动确认剧本归属并处理疑难 Take",
+            )
             automation = _impl.resolve_project(config)
+        self._update(config, task_id, progress={"done": 2, "total": 3}, message="自动归集完成，准备处理感知索引")
         result["automation"] = automation["summary"]
         result["model"] = automation.get("model", {})
         local_media = self._refresh_media_bindings(config, project_id)
@@ -335,6 +383,7 @@ class TaskManager(_impl.TaskManager):
         if not self._cancel_requested(config, task_id):
             result["perception"] = self._perception_best_effort(config, task, mode="tier0")
             result["identity"] = self._identity_after_analysis(config, task)
+        self._update(config, task_id, progress={"done": 3, "total": 3}, message="项目整理阶段完成")
         return result
 
     def _transcribe(self, config, task: dict[str, Any]) -> dict[str, Any]:

@@ -15,6 +15,7 @@ import pytest
 from script_organizer.agent_store import AgentAuthorizationError, AgentTokenStore, ProposalStore
 from script_organizer.config import ProjectConfig
 from script_organizer.material_index import analyze
+from script_organizer.media_identity import DeviceMediaStore
 from script_organizer.media_reader import read_media_directory
 from script_organizer.source_descriptor import shared_source_descriptor
 from script_organizer.mcp_server import GatewayClient, _tool_call
@@ -131,7 +132,7 @@ def test_workspace_registry_preflights_fcpxml_and_media_directory(tmp_path, monk
         "name": "目录项目",
         "project_id": "directory-demo",
         "input_kind": "media-directory",
-        "media_root": str(media_root),
+        "media_roots": [str(media_root), str(tmp_path)],
         "script": str(script),
         "camera_patterns": {"A": "^A"},
     })
@@ -142,6 +143,34 @@ def test_workspace_registry_preflights_fcpxml_and_media_directory(tmp_path, monk
     assert read_media_directory(media_root, config.camera_patterns)[0].camera == "A"
     assert directory["config_path"] == "projects/directory-demo/project.toml"
     assert not Path(directory["config_path"]).is_absolute()
+
+
+def test_device_media_roots_override_stale_existing_project_media_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    workspace = _workspace(tmp_path).with_workspace_id("ws_device")
+    stale_root = tmp_path / "stale-media"
+    selected_root = tmp_path / "selected-media"
+    stale_root.mkdir()
+    selected_root.mkdir()
+    script = tmp_path / "script.md"
+    script.write_text("# 第1集\n\n台词", encoding="utf-8")
+    project_dir = workspace.registry_path.parent / "demo"
+    project_dir.mkdir(parents=True)
+    config_path = project_dir / "project.toml"
+    config_path.write_text(
+        "[project]\nname = 'Demo'\n\n[input]\nkind = 'media-directory'\n"
+        f"script = '{script}'\nmedia_root = '{stale_root}'\n\n"
+        "[output]\ndirectory = './output'\n",
+        encoding="utf-8",
+    )
+    registry = WorkspaceRegistry(workspace)
+    registry.register_existing("demo", config_path)
+    DeviceMediaStore().add_roots("ws_device", "demo", [str(selected_root)])
+
+    config = registry.project_config("demo")
+
+    assert config.media_root == selected_root
+    assert config.media_roots == (selected_root,)
 
 
 def test_new_project_copies_inputs_and_keeps_project_config_portable(tmp_path):
@@ -165,6 +194,19 @@ def test_new_project_copies_inputs_and_keeps_project_config_portable(tmp_path):
     assert (project_dir / "inputs/source.fcpxml").read_bytes() == fcpxml.read_bytes()
     assert (project_dir / "inputs/script.md").read_bytes() == script.read_bytes()
     assert created["config_path"] == "projects/portable-fcp/project.toml"
+
+
+def test_project_delete_removes_only_workspace_owned_project_directory(tmp_path):
+    workspace = _workspace(tmp_path)
+    config = _register_demo(workspace, tmp_path)
+    registry = WorkspaceRegistry(workspace)
+
+    result = registry.delete("demo", "demo")
+
+    assert result["deleted"] is True
+    assert result["project_id"] == "demo"
+    assert not config.parent.exists()
+    assert registry.list() == []
 
 
 def test_project_preflight_reports_warnings_without_writing(tmp_path):

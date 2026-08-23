@@ -186,7 +186,7 @@ class WorkspaceRegistry:
         if not config_path.is_absolute():
             config_path = self.config.config_path.parent / config_path
         config = ProjectConfig.from_file(config_path)
-        if config.is_media_directory and (not config.media_root or not config.media_root.is_dir()):
+        if config.is_media_directory:
             from .media_identity import DeviceMediaStore
 
             snapshot = DeviceMediaStore().project_snapshot(self.config.workspace_id, project_id)
@@ -194,7 +194,11 @@ class WorkspaceRegistry:
             if roots:
                 from dataclasses import replace
 
-                config = replace(config, media_root=roots[0])
+                # Device-local bindings are authoritative for the current
+                # machine. A shared project may retain an old source reference
+                # that still exists, but it must never override the roots the
+                # user selected for this device.
+                config = replace(config, media_root=roots[0], media_roots=tuple(roots))
         return config
 
     def register_existing(self, project_id: str, config_path: str | Path) -> dict[str, Any]:
@@ -232,7 +236,17 @@ class WorkspaceRegistry:
             raise ValueError("不支持的项目类型")
         script = Path(str(payload.get("script", ""))).expanduser().resolve()
         fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser().resolve() if payload.get("fcpxml") else None
-        media_root = Path(str(payload.get("media_root", ""))).expanduser().resolve() if payload.get("media_root") else None
+        raw_media_roots = payload.get("media_roots", [])
+        if not isinstance(raw_media_roots, list):
+            raw_media_roots = []
+        media_roots = [
+            Path(str(value)).expanduser().resolve()
+            for value in raw_media_roots
+            if str(value).strip()
+        ]
+        if not media_roots and payload.get("media_root"):
+            media_roots = [Path(str(payload.get("media_root"))).expanduser().resolve()]
+        media_root = media_roots[0] if media_roots else None
         if not script.is_file() or script.suffix.lower() not in {".docx", ".txt", ".md", ".markdown"}:
             raise ValueError("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
         if input_kind == "fcpxml" and (
@@ -241,7 +255,9 @@ class WorkspaceRegistry:
             or fcpxml.suffix.lower() not in {".fcpxml", ".fcpxmld"}
         ):
             raise ValueError("FCPXML 项目需要可读取的 FCPXML 文件")
-        if input_kind == "media-directory" and (media_root is None or not media_root.is_dir()):
+        if input_kind == "media-directory" and (
+            not media_roots or any(not root.is_dir() for root in media_roots)
+        ):
             raise ValueError("媒体目录项目需要可读取的媒体目录")
         project_dir = self.config.registry_path.parent / project_id
         if project_dir.exists():
@@ -301,11 +317,52 @@ class WorkspaceRegistry:
             lines.append(f'camera_patterns.{str(camera).upper()} = "{str(pattern)}"')
         config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         entry = self.register_existing(project_id, config_path)
-        if media_root:
+        if media_roots:
             from .media_identity import DeviceMediaStore
 
-            DeviceMediaStore().add_roots(self.config.workspace_id, project_id, [str(media_root)])
+            DeviceMediaStore().add_roots(self.config.workspace_id, project_id, [str(value) for value in media_roots])
         return entry
+
+    def delete(self, project_id: str, confirmation: str = "") -> dict[str, Any]:
+        """Delete one generated project directory and registry entry atomically.
+
+        Only project directories owned by this workspace may be removed. The
+        caller must echo the project ID so a UI confirmation cannot target a
+        different project after selection changes.
+        """
+        project_id = str(project_id or "").strip()
+        if not project_id or confirmation != project_id:
+            raise ValueError("删除项目需要确认 project_id")
+        entry = self.get(project_id)
+        config_path = Path(str(entry.get("config_path", "")))
+        if not config_path.is_absolute():
+            config_path = self.config.config_path.parent / config_path
+        project_dir = config_path.expanduser().resolve().parent
+        projects_root = self.config.registry_path.parent.resolve()
+        if project_dir.parent != projects_root:
+            raise ValueError("只能删除当前工作区 projects 目录内的项目")
+        if not project_dir.is_dir():
+            raise ValueError("项目目录不存在，无法删除")
+
+        payload = self.load()
+        remaining = [
+            item for item in payload["projects"]
+            if str(item.get("project_id", "")) != project_id
+        ]
+        quarantine = projects_root / f".mirrororder-delete-{project_id}-{uuid4().hex}"
+        os.replace(project_dir, quarantine)
+        try:
+            payload["projects"] = remaining
+            _write_json(self.config.registry_path, payload)
+        except Exception:
+            os.replace(quarantine, project_dir)
+            raise
+        shutil.rmtree(quarantine)
+        return {
+            "project_id": project_id,
+            "deleted": True,
+            "config_path": str(entry.get("config_path", "")),
+        }
 
     def preflight_create(self, payload: dict[str, Any]) -> dict[str, Any]:
         errors: list[str] = []
@@ -321,7 +378,12 @@ class WorkspaceRegistry:
         input_kind = str(payload.get("input_kind", "fcpxml"))
         script = Path(str(payload.get("script", ""))).expanduser()
         fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser() if payload.get("fcpxml") else None
-        media_root = Path(str(payload.get("media_root", ""))).expanduser() if payload.get("media_root") else None
+        raw_media_roots = payload.get("media_roots", [])
+        if not isinstance(raw_media_roots, list):
+            raw_media_roots = []
+        media_roots = [Path(str(value)).expanduser() for value in raw_media_roots if str(value).strip()]
+        if not media_roots and payload.get("media_root"):
+            media_roots = [Path(str(payload.get("media_root"))).expanduser()]
         if not name:
             errors.append("项目名称不能为空")
         if input_kind not in {"fcpxml", "media-directory"}:
@@ -336,11 +398,13 @@ class WorkspaceRegistry:
             elif not os.access(fcpxml, os.R_OK):
                 errors.append("FCPXML 没有读取权限")
         if input_kind == "media-directory":
-            if media_root is None or not media_root.is_dir():
+            if not media_roots:
                 errors.append("媒体目录项目需要可读取的媒体目录")
-            elif not os.access(media_root, os.R_OK):
-                errors.append("媒体目录没有读取权限")
-            elif not _has_media_file(media_root):
+            else:
+                invalid = [root for root in media_roots if not root.is_dir() or not os.access(root, os.R_OK)]
+                if invalid:
+                    errors.append("存在不可读取的媒体目录：" + "、".join(str(root) for root in invalid))
+            if media_roots and not errors and not any(_has_media_file(root) for root in media_roots):
                 warnings.append("媒体目录为空，创建后无法开始分析")
         project_dir = self.config.registry_path.parent / project_id
         if project_dir.exists():

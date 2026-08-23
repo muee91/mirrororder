@@ -1221,10 +1221,83 @@ async function reloadAnalysis(showNotice = false) {
   $('#project-name').textContent = project.project;
   $('#analysis-status').textContent = `${project.stats?.groups || 0}组 · ${project.stats?.clips || 0}条素材`;
   renderContent();
+  focusRequestedGroup();
   if (showNotice) {
     $('#update-banner').hidden = false;
     playUpdateSound();
   }
+}
+
+function focusRequestedGroup() {
+  const url = new URL(window.location.href);
+  const groupId = url.searchParams.get('group_id') || '';
+  if (!focusGroup(groupId)) return;
+  url.searchParams.delete('group_id');
+  history.replaceState({}, '', url);
+}
+
+function focusGroup(groupId) {
+  const group = state.groupMap.get(groupId);
+  if (!group) return false;
+  const member = (group.members || []).find((item) => item.exists) || group.members?.[0];
+  state.mode = 'unassigned';
+  state.episode = null;
+  state.segmentId = null;
+  state.selectedGroupId = groupId;
+  state.selectedClipId = member?.clip_id || null;
+  renderContent();
+  if (member?.clip_id) selectMember(groupId, member.clip_id, false);
+  requestAnimationFrame(() => {
+    document.querySelector(`[data-take-group="${CSS.escape(groupId)}"]`)?.scrollIntoView({block: 'center'});
+  });
+  return true;
+}
+
+function timeText(seconds) {
+  const value = Math.max(0, Math.round(Number(seconds) || 0));
+  return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
+}
+
+function identityTitle(identity) {
+  const label = String(identity.label || '').trim();
+  const role = String(identity.role_name || '').trim();
+  if (label && role) return `${label} · ${role}`;
+  return label || role || (identity.kind === 'face' ? '未命名人物' : '未命名声音');
+}
+
+function renderIdentityLibrary(identities) {
+  const target = $('#identity-library-list');
+  const ready = identities.filter((identity) => Boolean(identity.confirmed) || Number(identity.take_count || 0) >= 2);
+  const singleTakeCount = identities.length - ready.length;
+  if (!ready.length) {
+    target.innerHTML = `<div class="proposal-empty">当前只有 ${singleTakeCount} 个单 Take 线索，尚不足以可靠归为角色。镜序会在后续索引中自动尝试合并，不要求逐条命名。</div>`;
+    return;
+  }
+  target.innerHTML = (singleTakeCount
+    ? `<p class="identity-library-note">另有 ${singleTakeCount} 个单 Take 线索正在等待更多证据，不会要求逐条命名。</p>`
+    : '')
+    + ready.map((identity) => {
+    const kind = identity.kind === 'face' ? '人物' : '声纹';
+    const occurrences = Array.isArray(identity.occurrences) ? identity.occurrences : [];
+    const rows = occurrences.map((item) => (
+      `<button class="identity-take-row" type="button" data-identity-group="${esc(item.group_id || '')}">`
+        + `<span>${esc(item.camera || kind)} · ${esc(item.group_id || '')}</span>`
+        + `<small>${esc(timeText(item.source_time ?? item.start))}</small>`
+      + '</button>'
+    )).join('');
+    return `<section class="identity-library-card">`
+      + `<header><div><span class="identity-kind">${esc(kind)}</span><strong>${esc(identityTitle(identity))}</strong></div>`
+      + `<span>${Number(identity.take_count || 0)} Take</span></header>`
+      + `<p>${Number(identity.observation_count || 0)} 条本机证据${identity.confirmed ? ' · 已命名' : ' · 待在制作端命名'}</p>`
+      + (rows ? `<div class="identity-take-list">${rows}</div>` : '<p class="identity-empty">尚未找到可定位的 Take。</p>')
+    + '</section>';
+  }).join('');
+}
+
+async function showIdentityLibrary() {
+  const payload = await fetchJson(projectApi('/identities'));
+  renderIdentityLibrary(payload.identities || []);
+  $('#identity-library-dialog').showModal();
 }
 
 async function pollState() {
@@ -1363,6 +1436,16 @@ document.querySelectorAll('[data-task-type]').forEach((button) => button.addEven
 }));
 $('#proposal-button').addEventListener('click', () => {
   refreshProposals().then(() => $('#proposal-dialog').showModal()).catch((error) => showToast(error.message));
+});
+$('#identity-library-button').addEventListener('click', () => {
+  showIdentityLibrary().catch((error) => showToast(error.message));
+});
+$('#identity-library-close').addEventListener('click', () => $('#identity-library-dialog').close());
+$('#identity-library-list').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-identity-group]');
+  if (!button) return;
+  $('#identity-library-dialog').close();
+  if (!focusGroup(button.dataset.identityGroup || '')) showToast('该身份关联的 Take 已不在当前项目中');
 });
 $('#proposal-close').addEventListener('click', () => $('#proposal-dialog').close());
 $('#apply-proposals').addEventListener('click', () => {

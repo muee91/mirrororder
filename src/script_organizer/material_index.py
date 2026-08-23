@@ -7,7 +7,7 @@ import tempfile
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .alignment import align_blocks
 from .config import ProjectConfig
@@ -544,7 +544,11 @@ def _reviewed_group_ids(review: dict[str, Any]) -> set[str]:
     return reviewed
 
 
-def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -> dict[str, Any]:
+def analyze(
+    config: ProjectConfig,
+    affected_group_ids: set[str] | None = None,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> dict[str, Any]:
     config.ensure_output()
     previous_index = _read_json(config.output_dir / "material_index.json", {})
     previous_script = _read_json(config.output_dir / "script.json", {})
@@ -558,7 +562,8 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     elif config.is_media_directory:
         if config.media_root is None:
             raise ValueError("媒体目录项目缺少 media.root")
-        clips = read_media_directory(config.media_root, config.camera_patterns, config.media_timeline_mode)
+        roots = config.media_roots or (config.media_root,)
+        clips = read_media_directory(roots, config.camera_patterns, config.media_timeline_mode)
     else:
         raise ValueError(f"不支持的 input.kind: {config.input_kind}")
 
@@ -661,7 +666,10 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     if affected_group_ids is not None and not affected_group_ids.issubset(existing_group_ids):
         raise ValueError("增量分析包含未知 group_id")
 
-    for group in groups:
+    total_groups = len(groups)
+    if progress:
+        progress(0, total_groups, "正在建立剧本候选索引")
+    for group_index, group in enumerate(groups, start=1):
         override = group_overrides.get(group.group_id, {})
         analysis_key = _group_analysis_key(group, transcripts, script_key, override)
         group_analysis_keys[group.group_id] = analysis_key
@@ -706,6 +714,12 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
             cache_recomputed += 1
         local_matches[group.group_id] = auto[: config.max_candidates]
         matches[group.group_id] = list(local_matches[group.group_id])
+        if progress and (
+            group_index == total_groups
+            or group_index == 1
+            or group_index % max(1, total_groups // 100) == 0
+        ):
+            progress(group_index, total_groups, f"已匹配 {group_index}/{total_groups} 个逻辑 Take")
 
     if (
         config.asr_escalate_ambiguous

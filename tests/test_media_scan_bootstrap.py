@@ -75,3 +75,66 @@ def test_media_scan_bootstraps_new_project_before_material_index(tmp_path: Path,
     snapshot = DeviceMediaStore().project_snapshot("ws_bootstrap", "demo")
     assert snapshot["roots"] == [str(media.resolve())]
     assert snapshot["bindings"] == {}
+
+
+def test_media_scan_replace_replaces_bootstrap_roots(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+
+    workspace = tmp_path / "workspace.toml"
+    projects = tmp_path / "projects"
+    project_dir = projects / "demo"
+    inputs = project_dir / "inputs"
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    inputs.mkdir(parents=True)
+    first.mkdir()
+    second.mkdir()
+    (first / "A001.mov").write_bytes(b"first")
+    (second / "A001.mov").write_bytes(b"second")
+    (inputs / "script.md").write_text("第1集\n1-1 室内\n小王：你好\n", encoding="utf-8")
+
+    workspace.write_text(
+        "[workspace]\n"
+        'id = "ws_replace"\n'
+        'name = "测试工作区"\n'
+        'registry = "./projects/registry.json"\n'
+        'web_directory = "./web"\n',
+        encoding="utf-8",
+    )
+    (projects / "registry.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "projects": [
+                    {
+                        "project_id": "demo",
+                        "name": "Demo",
+                        "config_path": "projects/demo/project.toml",
+                        "input_kind": "media-directory",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project_dir / "project.toml").write_text(
+        "[project]\n"
+        'id = "demo"\n'
+        'name = "Demo"\n\n'
+        "[input]\n"
+        'kind = "media-directory"\n'
+        'script = "./inputs/script.md"\n\n'
+        "[output]\n"
+        'directory = "./output"\n\n'
+        "[asr]\n"
+        'transcript_dir = "./cache/transcripts"\n',
+        encoding="utf-8",
+    )
+
+    assert main(["media-scan", str(workspace), "demo", str(first)]) == 0
+    capsys.readouterr()
+    assert main(["media-scan", str(workspace), "demo", "--replace", str(second)]) == 0
+    capsys.readouterr()
+
+    snapshot = DeviceMediaStore().project_snapshot("ws_replace", "demo")
+    assert snapshot["roots"] == [str(second.resolve())]

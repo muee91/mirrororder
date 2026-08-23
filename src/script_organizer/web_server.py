@@ -27,10 +27,12 @@ from .agent_store import (
     ProposalStore,
 )
 from .config import ProjectConfig
+from .media_identity import DeviceMediaStore
 from .review_store import ReviewStore
 from .tasks import TaskManager
 from .transcript import TranscriptStore, slice_transcript
 from .workspace import WorkspaceConfig, WorkspaceRegistry
+from .workspace_db import WorkspaceDatabase
 
 
 class ApiError(RuntimeError):
@@ -414,6 +416,8 @@ class WorkspaceService:
                         "input_kind": payload["input_kind"],
                         "stats": payload["stats"],
                         "analysis_revision": payload["analysis_revision"],
+                        "source": payload.get("source", {}),
+                        "local_media": payload.get("local_media", {}),
                     }
                 )
             except Exception as error:
@@ -777,6 +781,24 @@ def make_handler(service: WorkspaceService, web_root: Path):
             if len(parts) < 4 or parts[:3] != ["api", "v1", "projects"]:
                 raise ApiError(HTTPStatus.NOT_FOUND, "not found")
             project_id, rest = parts[3], parts[4:]
+            if rest == ["delete"]:
+                self._local_only()
+                payload = _body(self)
+                if str(payload.get("confirm_project_id", "")) != project_id:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "删除项目需要确认 project_id")
+                active = [
+                    task for task in service.tasks.list(project_id)
+                    if task.get("status") in {"queued", "running"}
+                ]
+                if active:
+                    raise ApiError(HTTPStatus.CONFLICT, "当前项目仍有后台任务运行，请等待完成或取消后再删除")
+                result = service.registry.delete(project_id, str(payload.get("confirm_project_id", "")))
+                current_service = getattr(service, "current", service)
+                current_service._projects.pop(project_id, None)
+                DeviceMediaStore().remove_project(current_service.workspace.workspace_id, project_id)
+                WorkspaceDatabase(current_service.workspace.workspace_id).remove_project(project_id)
+                self._send_json(result)
+                return
             project = service.project(project_id)
             payload = _body(self)
             if rest == ["review"]:

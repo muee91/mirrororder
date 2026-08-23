@@ -14,6 +14,16 @@ def test_desktop_is_project_first_production_surface() -> None:
     assert 'NewProjectSheet(controller: controller' in source
     assert 'workspaceEndpoint("project-preflight")' in source
     assert 'workspaceEndpoint("projects")' in source
+    assert '"开始项目整理"' in source
+    assert '"重新开始项目整理"' in source
+    assert 'Label("删除项目", systemImage: "trash")' in source
+    assert '.alert(item: $state.deleteProject)' in source
+    assert 'Text("已有对齐 FCPXML").tag("fcpxml")' in source
+    assert 'Button("选择目录…")' in source
+    assert "整理任务进度" in source
+    assert 'Label("项目智能处理", systemImage: "sparkles")' in source
+    assert "ProjectIntelligenceSheet" in source
+    assert "ProjectIntelligenceSection" in source
     assert 'case intelligence = "本地智能"' in source
     assert 'case collaboration = "团队协作"' in source
     assert 'case diagnostics = "诊断"' in source

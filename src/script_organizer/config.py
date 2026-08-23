@@ -25,6 +25,7 @@ class ProjectConfig:
     transcript_dir: Path
     input_kind: str = "fcpxml"
     media_root: Path | None = None
+    media_roots: tuple[Path, ...] = ()
     camera_patterns: dict[str, str] = field(default_factory=dict)
     media_timeline_mode: str = "sequential"
     asr_backend: str = "auto"
@@ -68,7 +69,22 @@ class ProjectConfig:
         media = raw.get("media", {})
         input_kind = str(inputs.get("kind") or ("fcpxml" if inputs.get("fcpxml") else "media-directory"))
         fcpxml = _path(inputs.get("fcpxml"), base, base / "input.fcpxml") if inputs.get("fcpxml") else None
-        media_root = _path(media.get("root") or inputs.get("media_root"), base, base / "media") if (media.get("root") or inputs.get("media_root")) else None
+        configured_root = media.get("root") or inputs.get("media_root")
+        media_root = _path(configured_root, base, base / "media") if configured_root else None
+        raw_roots = media.get("roots", [])
+        configured_roots = (
+            tuple(
+                _path(str(value), base, base / "media")
+                for value in raw_roots
+                if str(value).strip()
+            )
+            if isinstance(raw_roots, list)
+            else ()
+        )
+        if not configured_roots and media_root is not None:
+            configured_roots = (media_root,)
+        if configured_roots:
+            media_root = configured_roots[0]
         camera_patterns = media.get("camera_patterns", {})
         return cls(
             config_path=config_path,
@@ -79,6 +95,7 @@ class ProjectConfig:
             transcript_dir=_path(asr.get("transcript_dir"), base, base / "cache" / "transcripts"),
             input_kind=input_kind,
             media_root=media_root,
+            media_roots=configured_roots,
             camera_patterns={
                 str(camera).upper(): str(pattern)
                 for camera, pattern in camera_patterns.items()

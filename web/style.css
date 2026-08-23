@@ -736,6 +736,23 @@ button:disabled{cursor:not-allowed;opacity:.45}
 .proposal-row{display:grid;grid-template-columns:20px minmax(0,1fr);gap:9px}
 .proposal-evidence{margin:7px 0 0;padding-left:18px;color:#536174;font-size:11px}
 .proposal-empty{padding:24px 0;color:var(--muted);text-align:center}
+.identity-library-modal{width:min(760px,calc(100vw - 32px))}
+.identity-library-list{max-height:min(62vh,620px);overflow:auto;border-top:1px solid var(--line)}
+.identity-library-card{padding:14px 0;border-bottom:1px solid var(--line)}
+.identity-library-card header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.identity-library-card header>div{display:flex;align-items:center;gap:8px;min-width:0}
+.identity-library-card header strong{font-size:14px;line-height:1.35}
+.identity-library-card header>span,.identity-library-card p{color:var(--muted);font-size:12px}
+.identity-library-card p{margin:5px 0 0}
+.identity-library-note{margin:0;padding:11px 0;color:var(--muted);font-size:12px;line-height:1.5;border-bottom:1px solid var(--line)}
+.identity-kind{display:inline-flex;align-items:center;justify-content:center;min-width:34px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;color:var(--blue);font-size:10px;font-weight:700}
+.identity-take-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:10px}
+.identity-take-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:34px;padding:0 9px;border:1px solid var(--line);border-radius:5px;background:var(--control);color:var(--control-ink);text-align:left;cursor:pointer}
+.identity-take-row:hover{background:var(--control-hover);border-color:var(--blue)}
+.identity-take-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.identity-take-row small{color:var(--muted);font-variant-numeric:tabular-nums}
+.identity-empty{padding:8px 0}
+@media(max-width:680px){.identity-take-list{grid-template-columns:1fr}}
 
 @media(max-height:820px){
   .app-shell{padding-top:8px}

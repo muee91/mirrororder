@@ -104,6 +104,8 @@ class IdentityLibrary:
         result = []
         for row in rows:
             metadata = _json_object(row["metadata_json"])
+            example = self._example(str(row["identity_id"] or ""))
+            occurrences = self._occurrences(str(row["identity_id"] or ""))
             result.append(
                 {
                     "identity_id": str(row["identity_id"]),
@@ -117,9 +119,83 @@ class IdentityLibrary:
                     "confirmed": bool(metadata.get("human_confirmed")),
                     "created_at": str(row["created_at"] or ""),
                     "updated_at": str(row["updated_at"] or ""),
+                    "example": example,
+                    "occurrences": occurrences,
                 }
             )
         return result
+
+    def _occurrences(self, identity_id: str, limit: int = 12) -> list[dict[str, Any]]:
+        """Return clustered Take evidence that can be opened in the workbench."""
+
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT o.group_id, o.clip_id, o.start, o.end, o.confidence,
+                       o.metadata_json
+                FROM identity_observations AS o
+                WHERE o.project_id=? AND o.identity_id=?
+                ORDER BY o.confidence DESC, o.group_id, o.start, o.observation_id
+                LIMIT ?
+                """,
+                (self.project_id, identity_id, max(1, min(60, int(limit)))),
+            ).fetchall()
+        result: list[dict[str, Any]] = []
+        seen_groups: set[str] = set()
+        for row in rows:
+            group_id = str(row["group_id"] or "")
+            if not group_id or group_id in seen_groups:
+                continue
+            seen_groups.add(group_id)
+            metadata = _json_object(row["metadata_json"])
+            result.append(
+                {
+                    "group_id": group_id,
+                    "clip_id": str(row["clip_id"] or ""),
+                    "camera": str(metadata.get("camera", "") or ""),
+                    "start": float(row["start"] or 0),
+                    "end": float(row["end"] or 0),
+                    "source_time": float(metadata.get("source_time", row["start"]) or 0),
+                    "confidence": float(row["confidence"] or 0),
+                    "transcript_text": str(metadata.get("text", "") or "")[:180],
+                }
+            )
+        return result
+
+    def _example(self, identity_id: str) -> dict[str, Any]:
+        """Return one local, inspectable sample without exposing embeddings."""
+        with self.database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT o.group_id, o.clip_id, o.start, o.end, o.confidence,
+                       o.metadata_json
+                FROM identity_observations AS o
+                WHERE o.project_id=? AND o.identity_id=?
+                ORDER BY o.confidence DESC, (o.end-o.start) DESC, o.observation_id
+                LIMIT 1
+                """,
+                (self.project_id, identity_id),
+            ).fetchone()
+        if row is None:
+            return {}
+        metadata = _json_object(row["metadata_json"])
+        face_crop_path = str(metadata.get("face_crop_path", "") or "")
+        return {
+            "group_id": str(row["group_id"] or ""),
+            "clip_id": str(row["clip_id"] or ""),
+            "start": float(row["start"] or 0),
+            "end": float(row["end"] or 0),
+            "confidence": float(row["confidence"] or 0),
+            # A person-labeling surface must never fall back to the complete
+            # camera frame. The source frame remains traceable metadata only.
+            "face_crop_path": face_crop_path,
+            "source_frame_path": str(
+                metadata.get("source_frame_path", metadata.get("frame_path", "")) or ""
+            ),
+            "camera": str(metadata.get("camera", "") or ""),
+            "source_time": float(metadata.get("source_time", row["start"]) or 0),
+            "transcript_text": str(metadata.get("text", "") or "")[:600],
+        }
 
     def get(self, identity_id: str) -> dict[str, Any]:
         identity_id = str(identity_id or "")

@@ -26,6 +26,7 @@
         <span>项目</span>
         <select id="project-select" aria-label="切换项目"></select>
       </label>
+      <button id="identity-library-button" class="text-button" type="button">人物库</button>
       <button id="proposal-button" class="text-button" type="button">AI 建议</button>
       <button id="actor-button" class="text-button" type="button">审核人</button>
       <span id="collab-status" class="connection-state">连接中</span>
@@ -197,6 +198,17 @@
         <button id="apply-proposals" class="primary-button" type="button">应用所选建议</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="identity-library-dialog" class="modal identity-library-modal">
+    <div class="modal-title-row">
+      <div>
+        <h2>人物与声纹</h2>
+        <p>同一人物或声音会归入同一个身份簇。这里可查看该角色已关联的 Take 并直接定位播放。</p>
+      </div>
+      <button id="identity-library-close" class="icon-button" type="button" aria-label="关闭">关闭</button>
+    </div>
+    <div id="identity-library-list" class="identity-library-list"></div>
   </dialog>
 
   <script src="/app.js"></script>

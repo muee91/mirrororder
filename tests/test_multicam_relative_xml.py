@@ -108,5 +108,11 @@ def test_mirrororder_has_no_custom_portable_format() -> None:
     source = (root / "src" / "script_organizer" / "multicam_sync_engine.py").read_text(encoding="utf-8")
     assert 'xml_delivery = config.media_root / "交付"' in source
     assert "portable_fcpxml" not in source
+
+
+def test_first_party_sync_index_ignores_macos_appledouble_sidecars() -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "vendor" / "multicam-audio-sync" / "scripts" / "make_index.py").read_text(encoding="utf-8")
+    assert 'if fname.startswith("._")' in source
     assert "media_relink_manifest" not in source
     assert "media_relink" not in source

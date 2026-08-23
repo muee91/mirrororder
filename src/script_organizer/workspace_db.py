@@ -277,6 +277,11 @@ class WorkspaceDatabase:
             )
             connection.commit()
 
+    def remove_project(self, project_id: str) -> None:
+        with self._lock, self.connection() as connection:
+            connection.execute("DELETE FROM projects WHERE project_id=?", (str(project_id),))
+            connection.commit()
+
     def sync_take_index(
         self,
         project_id: str,

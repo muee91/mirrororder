@@ -42,12 +42,12 @@ def test_desktop_service_start_script_saves_pid_after_background_launch():
     assert "preferredProject(in workspace: GatewayWorkspace)" in source
     assert 'private let selectionExplicitKey = "selectionExplicit"' in source
     assert "selectionExplicit" in source
-    assert "final class MirrorOrderAppDelegate: NSObject, NSApplicationDelegate" in source
     assert "lanAddress = \"\"" in source
     assert "lanAddress = await Self.currentLANAddress()" in source
     assert "Task.detached(priority: .utility)" in source
-    assert "DispatchQueue.main.async" in source
-    assert "NSHostingView(rootView: DesktopRootView())" in source
+    assert 'WindowGroup("镜序")' in source
+    assert "DesktopRootView()" in source
+    assert "Settings { EmptyView() }" not in source
 
 
 def test_desktop_navigation_is_project_first_and_system_features_live_in_settings():
@@ -76,6 +76,15 @@ def test_desktop_navigation_is_project_first_and_system_features_live_in_setting
     assert "statusText = \"正在应用服务配置\"" in source
 
 
+def test_desktop_gateway_probe_ignores_non_numeric_stats_extensions():
+    source = read("macos-app/MirrorOrderDesktopApp.swift")
+
+    assert "private struct GatewayStats: Decodable" in source
+    assert "try? container.decode(Int.self, forKey: key)" in source
+    assert "var numericStats: [String: Int]" in source
+    assert "let stats: [String: Int]?" not in source
+
+
 def test_desktop_has_native_project_creation_through_host_authority():
     source = read("macos-app/MirrorOrderDesktopApp.swift")
     runtime = read("src/script_organizer/automation_runtime.py")
@@ -89,6 +98,22 @@ def test_desktop_has_native_project_creation_through_host_authority():
     assert '"media_root": mediaRoot' in source
     assert '"script": script' in source
     assert "prepare_task_id" in source
+    assert "func startProject(_ project: GatewayProject)" in source
+    assert "func deleteProject(_ project: GatewayProject)" in source
+    assert 'projectEndpoint(project.project_id, "tasks")' in source
+    assert 'projectEndpoint(project.project_id, "delete")' in source
+    assert '"开始项目整理"' in source
+    assert '"重新开始项目整理"' in source
+    assert 'Label("删除项目", systemImage: "trash")' in source
+    assert '.alert(item: $state.deleteProject)' in source
+    assert "let progress: [String: Int]?" in source
+    assert "let logs: [String]?" in source
+    assert "private func startTaskPolling" in source
+    assert "整理任务进度" in source
+    assert 'Text("已有对齐 FCPXML").tag("fcpxml")' in source
+    assert 'Button("选择目录…")' in source
+    assert '"media_roots": roots' in source
+    assert 'rest == ["delete"]' in server
 
     # Host remains the authority: preflight is local-only and create is wrapped
     # to submit prepare_project automatically.
@@ -98,6 +123,20 @@ def test_desktop_has_native_project_creation_through_host_authority():
     assert '"prepare_project"' in runtime
     assert 'result["prepare_task_id"]' in runtime
     assert 'self._rewrite(parsed, "/api/v1/projects")' in server
+
+
+def test_desktop_controls_have_stable_hit_targets():
+    source = read("macos-app/MirrorOrderDesktopApp.swift")
+    runtime = read("macos-app/LocalRuntimeSettingsView.swift")
+
+    assert "private struct AppHitTarget: ViewModifier" in source
+    assert "func appHitTarget(minWidth: CGFloat = 44, minHeight: CGFloat = 40)" in source
+    assert ".frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)" in source
+    assert ".appHitTarget()" in source
+    assert ".appHitTarget(minWidth: 40, minHeight: 34)" in source
+    assert ".appHitTarget(minWidth: 230, minHeight: 40)" in source
+    assert ".frame(width: 44, height: 40)" in runtime
+    assert ".contentShape(Rectangle())" in runtime
 
 
 def test_web_loader_uses_review_aware_timeline_v3_only():
@@ -135,8 +174,9 @@ def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     identity = read("src/script_organizer/media_identity.py")
     runtime = read("src/script_organizer/device_media_runtime.py")
 
-    assert "绑定 / 重定位本机素材" in source
-    assert "绑定当前项目素材" in source
+    assert "替换并扫描本机素材目录" in source
+    assert 'controller.chooseLocalMediaRoot(replace: true)' in source
+    assert '"--replace"' in source
     assert 'scanAll ? "media-scan-all" : "media-scan"' in source
     assert "workspacePaths" in source
     assert "media-scan-all" in source

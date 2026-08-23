@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from script_organizer.config import ProjectConfig
+from script_organizer.device_runtime_settings import save_project_intelligence_settings
 from script_organizer.perception_index import PerceptionIndexer
 from script_organizer.workspace_db import WorkspaceDatabase
 
@@ -110,6 +111,7 @@ def _write_index(config: ProjectConfig, media: Path) -> None:
 
 def test_tier0_indexes_one_representative_frame_and_reuses_it(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "app-support"))
     media = tmp_path / "media" / "B001.mov"
     media.parent.mkdir()
     media.write_bytes(b"fake-video")
@@ -146,6 +148,7 @@ def test_tier0_indexes_one_representative_frame_and_reuses_it(monkeypatch, tmp_p
 
 def test_semantic_index_upgrades_cached_take_with_three_frames(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "app-support"))
     media = tmp_path / "media" / "B001.mov"
     media.parent.mkdir()
     media.write_bytes(b"fake-video")
@@ -177,3 +180,42 @@ def test_semantic_index_upgrades_cached_take_with_three_frames(monkeypatch, tmp_
     semantic = database.semantic("project-a", "G_001")
     assert semantic["status"] == "ready"
     assert semantic["data"]["location"] == "客厅"
+
+
+def test_sampling_profile_change_rebuilds_only_profile_affected_take(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "app-support"))
+    media = tmp_path / "media" / "B001.mov"
+    media.parent.mkdir()
+    media.write_bytes(b"fake-video")
+    config = _config(tmp_path, media)
+    _write_index(config, media)
+    database = WorkspaceDatabase("ws_demo", tmp_path / "workspace.sqlite3")
+    calls: list[int] = []
+
+    def extract(media_path, source_start, source_end, count, output_dir):
+        del media_path, source_start, source_end
+        calls.append(count)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        rows = []
+        for index in range(count):
+            target = output_dir / f"frame-{index}.jpg"
+            target.write_bytes(b"jpeg")
+            rows.append({"path": str(target), "source_time": float(index)})
+        return rows
+
+    first = PerceptionIndexer("ws_demo", "project-a", config, database=database, frame_extractor=extract)
+    assert first.run(mode="tier0")["processed"] == 1
+    assert calls == [1]
+
+    save_project_intelligence_settings(
+        "ws_demo",
+        "project-a",
+        {"perception_sampling_profile": "detailed"},
+    )
+    changed = PerceptionIndexer("ws_demo", "project-a", config, database=database, frame_extractor=extract)
+    assert changed.run(mode="tier0")["processed"] == 1
+    assert calls == [1, 3]
+
+    cached = PerceptionIndexer("ws_demo", "project-a", config, database=database, frame_extractor=extract)
+    assert cached.run(mode="tier0")["processed"] == 0

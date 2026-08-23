@@ -5,6 +5,7 @@ import re
 import subprocess
 from fractions import Fraction
 from pathlib import Path
+from typing import Iterable
 
 from .fcpxml_reader import stable_clip_id
 from .media_identity import media_identity
@@ -55,17 +56,25 @@ def _camera(path: Path, patterns: dict[str, str]) -> str:
 
 
 def read_media_directory(
-    root: str | Path,
+    root: str | Path | Iterable[str | Path],
     camera_patterns: dict[str, str] | None = None,
     timeline_mode: str = "sequential",
 ) -> list[Clip]:
     """Build clips from ordinary video media without pretending unsynced files overlap."""
-    directory = Path(root)
+    if isinstance(root, (str, Path)):
+        directories = [Path(root)]
+    else:
+        directories = [Path(value) for value in root]
     patterns = camera_patterns or {}
     files = sorted(
-        path
-        for path in directory.rglob("*")
-        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES and not path.name.startswith("._")
+        {
+            path
+            for directory in directories
+            if directory.is_dir()
+            for path in directory.rglob("*")
+            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES and not path.name.startswith("._")
+        },
+        key=lambda path: str(path).casefold(),
     )
     rows = []
     for occurrence, path in enumerate(files):

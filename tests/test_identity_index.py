@@ -4,7 +4,12 @@ import json
 from pathlib import Path
 
 from script_organizer.config import ProjectConfig
-from script_organizer.device_runtime_settings import load_runtime_settings, save_runtime_settings
+from script_organizer.device_runtime_settings import (
+    load_project_intelligence_settings,
+    load_runtime_settings,
+    save_project_intelligence_settings,
+    save_runtime_settings,
+)
 from script_organizer.identity_index import IdentityIndexer
 from script_organizer.identity_library import IdentityLibrary
 from script_organizer.identity_runtime import FACE_DETECTOR, FACE_RECOGNIZER, SPEAKER_EMBEDDER
@@ -229,32 +234,54 @@ def test_identity_library_never_returns_embedding_and_can_merge(tmp_path: Path) 
         database.add_identity_observation(
             "project", group_id, kind="face", identity_id=identity_id,
             confidence=0.9, embedding=b"must-not-leak",
+            metadata={
+                "face_crop_path": "/tmp/representative-face.jpg",
+                "source_frame_path": "/tmp/full-frame.jpg",
+                "camera": "B",
+                "source_time": 2.5,
+            },
         )
     library = IdentityLibrary(database, "project")
     payload = library.list("face")
     assert all("embedding" not in row for row in payload)
+    assert payload[0]["example"]["face_crop_path"] == "/tmp/representative-face.jpg"
+    assert payload[0]["example"]["source_frame_path"] == "/tmp/full-frame.jpg"
+    assert payload[0]["example"]["camera"] == "B"
+    assert payload[0]["occurrences"][0]["group_id"] in {"G1", "G2"}
     merged = library.merge("face_a", ["face_b"])
     assert merged["observation_count"] == 2
     assert {row["identity_id"] for row in library.list("face")} == {"face_a"}
 
 
-def test_identity_runtime_settings_are_device_level_and_optional(monkeypatch, tmp_path: Path) -> None:
+def test_identity_runtime_and_project_intelligence_settings_are_separate(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "app-support"))
     defaults = load_runtime_settings()
     assert defaults["face_identity_enabled"] is False
     assert defaults["speaker_identity_enabled"] is False
-    assert defaults["identity_processing_mode"] == "after_prepare"
+    assert defaults["default_perception_sampling_profile"] == "standard"
+    assert defaults["default_identity_matching_profile"] == "balanced"
 
     saved = save_runtime_settings(
         {
             "face_identity_enabled": True,
             "speaker_identity_enabled": True,
-            "identity_processing_mode": "manual",
         }
     )
     assert saved["face_identity_enabled"] is True
     assert saved["speaker_identity_enabled"] is True
-    assert load_runtime_settings()["identity_processing_mode"] == "manual"
+    assert load_project_intelligence_settings("ws-a", "project")["perception_sampling_profile"] == "standard"
+    saved_project = save_project_intelligence_settings(
+        "ws-a",
+        "project",
+        {
+            "perception_sampling_profile": "adaptive",
+            "identity_matching_profile": "conservative",
+        },
+    )
+    assert saved_project["perception_sampling_profile"] == "adaptive"
+    assert saved_project["identity_matching_profile"] == "conservative"
+    assert load_project_intelligence_settings("ws-b", "project")["perception_sampling_profile"] == "standard"
+    assert load_runtime_settings()["face_identity_enabled"] is True
 
 
 def test_identity_models_are_pinned_and_never_downloaded_by_app_build() -> None:
@@ -271,10 +298,24 @@ def test_identity_models_are_pinned_and_never_downloaded_by_app_build() -> None:
     assert "requirements-local-intelligence.txt" not in build
 
 
-def test_identity_management_api_is_app_local_only() -> None:
+def test_identity_management_keeps_writes_local_and_remote_reads_sanitized() -> None:
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "automation_runtime.py").read_text(encoding="utf-8")
     assert 'parts[4] == "identities"' in runtime
     assert "IdentityLibrary" in runtime
     assert "self._local_only()" in runtime
     assert '"source_identity_ids"' in runtime
+    assert '"intelligence-settings"' in runtime
+    assert "_remote_identity_payload" in runtime
+    assert 'safe_example.pop("face_crop_path", None)' in runtime
+
+
+def test_person_labeling_never_uses_a_full_camera_frame() -> None:
+    root = Path(__file__).resolve().parents[1]
+    indexer = (root / "src" / "script_organizer" / "identity_index_v2.py").read_text(encoding="utf-8")
+    library = (root / "src" / "script_organizer" / "identity_library.py").read_text(encoding="utf-8")
+    app = (root / "macos-app" / "LocalRuntimeSettingsView.swift").read_text(encoding="utf-8")
+    assert '"face_crop_path": face_crop_path' in indexer
+    assert '"source_frame_path": str(frame.get("path", "") or "")' in indexer
+    assert 'let path = identity.example?.face_crop_path' in app
+    assert 'metadata.get("source_frame_path", metadata.get("frame_path", ""))' in library

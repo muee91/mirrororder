@@ -93,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     scan_parser = subparsers.add_parser("media-scan", help="为当前设备扫描并绑定本地素材副本")
     scan_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
     scan_parser.add_argument("project_id", help="项目 ID")
+    scan_parser.add_argument("--replace", action="store_true", help="替换当前项目的本机素材目录和旧绑定")
     scan_parser.add_argument("root", nargs="+", help="一个或多个本机素材目录")
 
     scan_all_parser = subparsers.add_parser("media-scan-all", help="用同一素材目录扫描当前工作区所有项目")
@@ -173,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "media-scan":
         store = DeviceMediaStore()
         index = _project_index(workspace, args.project_id)
+        if args.replace:
+            store.replace_roots(workspace.workspace_id, args.project_id, args.root)
         summary = (
             store.scan(workspace.workspace_id, args.project_id, index, args.root)
             if index

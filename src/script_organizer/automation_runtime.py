@@ -10,7 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from .automation_store import AutomationStore
-from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
+from .device_runtime_settings import (
+    application_support_root,
+    load_project_intelligence_settings,
+    load_runtime_settings,
+    save_project_intelligence_settings,
+    save_runtime_settings,
+)
 from .identity_library import IdentityLibrary
 from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
@@ -106,7 +112,6 @@ def _runtime_payload() -> dict[str, Any]:
         "local_vision_model": str(settings.get("local_vision_model", "") or ""),
         "face_identity_enabled": bool(settings.get("face_identity_enabled")),
         "speaker_identity_enabled": bool(settings.get("speaker_identity_enabled")),
-        "identity_processing_mode": str(settings.get("identity_processing_mode", "after_prepare")),
         "vision": runtime.public(),
         "identity": IdentityRuntime.public(),
         "mlx_cache_bytes": _directory_bytes(root / "huggingface"),
@@ -139,25 +144,26 @@ def _identity_library_for(service: Any, project_id: str) -> IdentityLibrary:
     return IdentityLibrary(WorkspaceDatabase(workspace.workspace_id), project_id)
 
 
-def _queue_identity_jobs(service: Any, kinds: list[str]) -> list[dict[str, Any]]:
-    queued = []
-    for entry in service.registry.list():
-        project_id = str(entry.get("project_id", "") or "")
-        if not project_id:
-            continue
-        for kind in kinds:
-            try:
-                task = service.tasks.submit(
-                    project_id,
-                    "identity_index",
-                    {"kind": kind},
-                    idempotency_key=f"identity-enable:{project_id}:{kind}:{time.time_ns()}",
-                    actor="mirrororder-app",
-                )
-                queued.append({"project_id": project_id, "kind": kind, "task_id": task.get("task_id", "")})
-            except Exception as error:
-                queued.append({"project_id": project_id, "kind": kind, "error": str(error)})
-    return queued
+def _project_intelligence_settings_for(service: Any, project_id: str) -> dict[str, Any]:
+    service.registry.get(project_id)
+    workspace = _workspace_for_service(service)
+    return load_project_intelligence_settings(workspace.workspace_id, project_id)
+
+
+def _remote_identity_payload(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expose cluster names and Take links without leaking Host filesystem paths."""
+
+    payload: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        example = item.get("example", {})
+        if isinstance(example, dict):
+            safe_example = dict(example)
+            safe_example.pop("face_crop_path", None)
+            safe_example.pop("source_frame_path", None)
+            item["example"] = safe_example
+        payload.append(item)
+    return payload
 
 
 def install_automation_runtime() -> None:
@@ -196,6 +202,7 @@ def install_automation_runtime() -> None:
             fresh.input_kind != project.config.input_kind
             or fresh.fcpxml != project.config.fcpxml
             or fresh.media_root != project.config.media_root
+            or fresh.media_roots != project.config.media_roots
             or fresh.script != project.config.script
         ):
             service._projects.pop(project_id, None)
@@ -251,7 +258,16 @@ def install_automation_runtime() -> None:
         return payload
 
     def create_and_prepare(registry: WorkspaceRegistry, payload: dict[str, Any]) -> dict[str, Any]:
+        preflight = registry.preflight_create(payload)
         entry = original_create(registry, payload)
+        detected = preflight.get("detected", {}) if isinstance(preflight, dict) else {}
+        clips = int(detected.get("logical_clips", 0) or 0) if isinstance(detected, dict) else 0
+        available = int(detected.get("available_media", 0) or 0) if isinstance(detected, dict) else 0
+        if str(payload.get("input_kind", "") or "") == "fcpxml" and clips > 0 and available == 0:
+            result = dict(entry)
+            result["prepare_task_id"] = ""
+            result["prepare_required"] = "FCPXML 的源媒体在这台 Mac 上不可达。项目和本机素材目录已保存，但跨路径 XML 媒体重连尚未完成，暂不能开始 ASR"
+            return result
         manager = TaskManager(registry.project_config, registry.config.workspace_id)
         task = manager.submit(
             str(entry["project_id"]),
@@ -287,12 +303,22 @@ def install_automation_runtime() -> None:
                     self._send_json(health)
                     return
                 if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "identities":
-                    self._local_only()
                     project_id = parts[3]
                     query = urllib.parse.parse_qs(parsed.query)
                     kind = str((query.get("kind") or [""])[0] or "")
                     library = _identity_library_for(service, project_id)
-                    self._send_json({"identities": library.list(kind)})
+                    identities = library.list(kind)
+                    if self.client_address[0] not in {"127.0.0.1", "::1"}:
+                        identities = _remote_identity_payload(identities)
+                    self._send_json({"identities": identities})
+                    return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "intelligence-settings"
+                ):
+                    self._local_only()
+                    self._send_json(_project_intelligence_settings_for(service, parts[3]))
                     return
                 return super()._app_get(parsed)
 
@@ -316,20 +342,10 @@ def install_automation_runtime() -> None:
                     self._local_only()
                     payload = web_server._body(self)
                     action = str(payload.get("action", "set") or "set")
-                    queued: list[dict[str, Any]] = []
                     if action == "set":
-                        before = load_runtime_settings()
                         settings = save_runtime_settings(payload)
                         if not settings.get("local_vision_enabled"):
                             LocalVisionRuntime.stop()
-                        if settings.get("identity_processing_mode") == "after_prepare":
-                            newly_enabled = []
-                            if settings.get("face_identity_enabled") and not before.get("face_identity_enabled"):
-                                newly_enabled.append("face")
-                            if settings.get("speaker_identity_enabled") and not before.get("speaker_identity_enabled"):
-                                newly_enabled.append("speaker")
-                            if newly_enabled:
-                                queued = _queue_identity_jobs(service, newly_enabled)
                     elif action == "prepare":
                         settings = save_runtime_settings({
                             "local_vision_enabled": True,
@@ -356,8 +372,6 @@ def install_automation_runtime() -> None:
                     else:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知本机运行时操作")
                     response = _runtime_payload()
-                    if queued:
-                        response["identity_tasks"] = queued
                     self._send_json(response, web_server.HTTPStatus.ACCEPTED)
                     return
                 if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "identities":
@@ -399,6 +413,22 @@ def install_automation_runtime() -> None:
                         self._send_json({"task": task}, web_server.HTTPStatus.ACCEPTED)
                     else:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知身份库操作")
+                    return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "intelligence-settings"
+                ):
+                    self._local_only()
+                    project_id = parts[3]
+                    service.registry.get(project_id)
+                    workspace = _workspace_for_service(service)
+                    settings = save_project_intelligence_settings(
+                        workspace.workspace_id,
+                        project_id,
+                        web_server._body(self),
+                    )
+                    self._send_json(settings)
                     return
                 if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "script":
                     self._local_only()

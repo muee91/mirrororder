@@ -318,6 +318,36 @@ class DeviceMediaStore:
         self._save(payload)
         return self.project_snapshot(workspace_id, project_id, payload)
 
+    def replace_roots(self, workspace_id: str, project_id: str, roots: Iterable[str]) -> dict[str, Any]:
+        """Replace one project's device-local roots and discard stale bindings."""
+        payload = self.load()
+        workspaces = payload.setdefault("workspaces", {})
+        workspace = workspaces.setdefault(workspace_id, {"projects": {}})
+        projects = workspace.setdefault("projects", {})
+        project = projects.setdefault(project_id, self._empty_project())
+        selected: list[str] = []
+        for raw_root in roots:
+            root = str(Path(raw_root).expanduser().resolve())
+            if root and root not in selected:
+                selected.append(root)
+        project["roots"] = selected
+        project["bindings"] = {}
+        project["updated_at"] = _now()
+        self._save(payload)
+        return self.project_snapshot(workspace_id, project_id, payload)
+
+    def remove_project(self, workspace_id: str, project_id: str) -> None:
+        payload = self.load()
+        workspaces = payload.setdefault("workspaces", {})
+        workspace = workspaces.get(workspace_id)
+        if not isinstance(workspace, dict):
+            return
+        projects = workspace.get("projects")
+        if not isinstance(projects, dict) or project_id not in projects:
+            return
+        projects.pop(project_id, None)
+        self._save(payload)
+
     def probe_roots(self, workspace_id: str, project_id: str, roots: Iterable[str]) -> dict[str, Any]:
         """Register and enumerate local media before a project index exists.
 

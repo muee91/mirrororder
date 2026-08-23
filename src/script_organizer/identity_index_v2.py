@@ -23,6 +23,8 @@ from .identity_runtime import (
     SPEAKER_SEGMENTER,
     IdentityRuntime,
 )
+from .device_runtime_settings import load_project_intelligence_settings
+from .local_intelligence_profiles import identity_profile
 from .perception_index import _default_extract_frames
 
 
@@ -54,9 +56,16 @@ def _centroid(vectors: list[list[float]]) -> list[float]:
 class FaceEmbeddingProvider(_LegacyFaceProvider):
     """Sparse per-camera face tracks; output stays anonymous until App review."""
 
-    def __init__(self) -> None:
+    def __init__(self, profile: dict[str, Any] | None = None) -> None:
         super().__init__()
-        self.track_threshold = _threshold("MIRRORORDER_FACE_TRACK_THRESHOLD", 0.50, 0.30, 0.90)
+        profile = profile or {}
+        self.track_threshold = float(profile.get(
+            "face_track_threshold",
+            _threshold("MIRRORORDER_FACE_TRACK_THRESHOLD", 0.50, 0.30, 0.90),
+        ))
+        self.detection_threshold = float(profile.get("face_detection_threshold", 0.80))
+        if hasattr(self.detector, "setScoreThreshold"):
+            self.detector.setScoreThreshold(self.detection_threshold)
 
     def _detections(self, frame: dict[str, Any]) -> list[dict[str, Any]]:
         path = Path(str(frame.get("path", "")))
@@ -71,7 +80,7 @@ class FaceEmbeddingProvider(_LegacyFaceProvider):
         result = []
         for face_index, face in enumerate(faces):
             confidence = float(face[-1])
-            if confidence < 0.80 or min(float(face[2]), float(face[3])) < 36:
+            if confidence < self.detection_threshold or min(float(face[2]), float(face[3])) < 36:
                 continue
             try:
                 aligned = self.recognizer.alignCrop(image, face)
@@ -91,6 +100,44 @@ class FaceEmbeddingProvider(_LegacyFaceProvider):
                     }
                 )
         return result
+
+    def _write_face_crop(self, frame: dict[str, Any], bbox: list[float], face_index: int) -> str:
+        """Persist a padded face crop for human labeling, never a full frame."""
+
+        source = Path(str(frame.get("path", "") or ""))
+        crop_root = Path(str(frame.get("face_crop_dir", "") or ""))
+        if not source.is_file() or not crop_root:
+            return ""
+        image = self.cv.imread(str(source))
+        if image is None or image.size == 0 or len(bbox) < 4:
+            return ""
+        height, width = image.shape[:2]
+        x, y, box_width, box_height = (float(value) for value in bbox[:4])
+        padding = max(box_width, box_height) * 0.28
+        left = max(0, int(x - padding))
+        top = max(0, int(y - padding))
+        right = min(width, int(x + box_width + padding))
+        bottom = min(height, int(y + box_height + padding))
+        if right - left < 24 or bottom - top < 24:
+            return ""
+        crop = image[top:bottom, left:right]
+        if crop.size == 0:
+            return ""
+        digest = hashlib.sha1(
+            (
+                f"{source}|{frame.get('source_time', 0)}|"
+                f"{left}:{top}:{right}:{bottom}|{face_index}"
+            ).encode("utf-8")
+        ).hexdigest()[:16]
+        target = crop_root / f"face-{digest}.jpg"
+        try:
+            crop_root.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or target.stat().st_size == 0:
+                if not self.cv.imwrite(str(target), crop):
+                    return ""
+        except OSError:
+            return ""
+        return str(target)
 
     def extract_with_metadata(self, frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
         tracks: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -132,6 +179,11 @@ class FaceEmbeddingProvider(_LegacyFaceProvider):
             best = max(observations, key=lambda item: float(item["confidence"]))
             frame = best["frame"]
             times = [float(item["frame"].get("source_time", 0) or 0) for item in observations]
+            face_crop_path = self._write_face_crop(
+                frame,
+                list(best["bbox"]),
+                int(best.get("face_index", 0) or 0),
+            )
             result.append(
                 {
                     "embedding": vector,
@@ -144,7 +196,8 @@ class FaceEmbeddingProvider(_LegacyFaceProvider):
                         "track_id": track_id,
                         "camera": str(frame.get("camera", "") or ""),
                         "frame_count": len(observations),
-                        "frame_path": str(frame.get("path", "") or ""),
+                        "face_crop_path": face_crop_path,
+                        "source_frame_path": str(frame.get("path", "") or ""),
                         "source_time": float(frame.get("source_time", 0) or 0),
                         "bbox": best["bbox"],
                         "landmarks": best["landmarks"],
@@ -158,8 +211,9 @@ class FaceEmbeddingProvider(_LegacyFaceProvider):
 class SpeakerEmbeddingProvider(_LegacySpeakerProvider):
     """Offline speaker-turn segmentation plus cross-Take voice clustering."""
 
-    def __init__(self) -> None:
+    def __init__(self, profile: dict[str, Any] | None = None) -> None:
         super().__init__()
+        profile = profile or {}
         models = IdentityRuntime.ensure_models("speaker")
         import sherpa_onnx
 
@@ -183,7 +237,10 @@ class SpeakerEmbeddingProvider(_LegacySpeakerProvider):
             embedding=embedding,
             clustering=sherpa_onnx.FastClusteringConfig(
                 num_clusters=-1,
-                threshold=_threshold("MIRRORORDER_DIARIZATION_THRESHOLD", 0.50, 0.25, 0.90),
+                threshold=float(profile.get(
+                    "diarization_threshold",
+                    _threshold("MIRRORORDER_DIARIZATION_THRESHOLD", 0.50, 0.25, 0.90),
+                )),
             ),
             min_duration_on=0.30,
             min_duration_off=0.35,
@@ -295,8 +352,13 @@ class IdentityIndexer(_LegacyIndexer):
 
     def __init__(self, *args: Any, frame_extractor: Any | None = None, **kwargs: Any):
         super().__init__(*args, **kwargs)
+        self.identity_profile_id, self.identity_profile = identity_profile(
+            load_project_intelligence_settings(self.workspace_id, self.project_id).get("identity_matching_profile")
+        )
+        self.face_threshold = float(self.identity_profile["face_cluster_threshold"])
+        self.speaker_threshold = float(self.identity_profile["speaker_cluster_threshold"])
         self.frame_extractor = frame_extractor or _default_extract_frames
-        self.frames_per_camera = _integer("MIRRORORDER_FACE_FRAMES_PER_CAMERA", 3, 1, 5)
+        self.frames_per_camera = int(self.identity_profile["face_frames_per_camera"])
 
     def _members(self, group: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:
         priority = {camera: index for index, camera in enumerate(self.config.asr_camera_priority)}
@@ -336,6 +398,12 @@ class IdentityIndexer(_LegacyIndexer):
                         "source_time": float(item.get("source_time", 0) or 0),
                         "camera": str(item.get("camera", "") or "?"),
                         "clip_id": str(item.get("clip_id", "") or ""),
+                        "face_crop_dir": str(
+                            self.identity_frame_root
+                            / group_id
+                            / str(item.get("camera", "") or "?")
+                            / "existing-faces"
+                        ),
                     }
                 )
         existing = defaultdict(int)
@@ -370,16 +438,28 @@ class IdentityIndexer(_LegacyIndexer):
                             "source_time": float(item.get("source_time", source_start) or source_start),
                             "camera": camera,
                             "clip_id": clip_id,
+                            "face_crop_dir": str(
+                                self.identity_frame_root / group_id / camera / digest / "faces"
+                            ),
                         }
                     )
         unique = {str(row["path"]): row for row in rows}
-        return sorted(
+        rows = sorted(
             unique.values(),
             key=lambda item: (
                 str(item.get("camera", "")),
                 float(item.get("source_time", 0) or 0),
             ),
-        )[:20]
+        )
+        selected: list[dict[str, Any]] = []
+        per_camera: defaultdict[str, int] = defaultdict(int)
+        for row in rows:
+            camera = str(row.get("camera", "") or "?")
+            if per_camera[camera] >= self.frames_per_camera:
+                continue
+            selected.append(row)
+            per_camera[camera] += 1
+        return selected[:20]
 
     def _existing_clusters(self, kind: str, exclude_group_id: str) -> dict[str, list[list[float]]]:
         clusters: dict[str, list[list[float]]] = defaultdict(list)
@@ -454,19 +534,22 @@ class IdentityIndexer(_LegacyIndexer):
     def _state_version(self, kind: str) -> str:
         if kind == "face":
             return (
-                "face-v2|" + FACE_DETECTOR.sha256[:12] + "|" + FACE_RECOGNIZER.sha256[:12]
-                + f"|{self.face_threshold:.3f}|{self.frames_per_camera}"
+                # v3 adds persisted padded face crops for the human labeling
+                # surface. Existing full-frame-only observations must be
+                # rebuilt before they can be safely displayed as identities.
+                "face-v3|" + FACE_DETECTOR.sha256[:12] + "|" + FACE_RECOGNIZER.sha256[:12]
+                + f"|{self.identity_profile_id}|{self.face_threshold:.3f}|{self.frames_per_camera}"
             )
         return (
             "speaker-v2|" + SPEAKER_SEGMENTER.sha256[:12] + "|" + SPEAKER_EMBEDDER.sha256[:12]
-            + f"|{self.speaker_threshold:.3f}"
+            + f"|{self.identity_profile_id}|{self.speaker_threshold:.3f}"
         )
 
     def run(self, kind: str, **kwargs: Any) -> dict[str, Any]:
         if kind == "face" and self.face_provider is None:
-            self.face_provider = FaceEmbeddingProvider()
+            self.face_provider = FaceEmbeddingProvider(self.identity_profile)
         if kind == "speaker" and self.speaker_provider is None:
-            self.speaker_provider = SpeakerEmbeddingProvider()
+            self.speaker_provider = SpeakerEmbeddingProvider(self.identity_profile)
         result = super().run(kind, **kwargs)
         if int(result.get("observations", 0) or 0) > 0:
             try:

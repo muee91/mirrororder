@@ -105,6 +105,11 @@ def build():
                 files = []
                 if os.path.isdir(base):
                     for fname in os.listdir(base):
+                        # macOS AppleDouble metadata is not media. It often
+                        # carries the original extension (for example
+                        # `._A001.MP4`) and must not reach ffprobe.
+                        if fname.startswith("._"):
+                            continue
                         if os.path.splitext(fname)[1].lower() in EXT:
                             files.append(os.path.join(base, fname))
                 files = sorted(set(files))

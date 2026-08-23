@@ -170,6 +170,62 @@ def _prepare_media_base(source: Path, stage_root: Path) -> tuple[Path, str]:
     return stage_root, "normalized-single-day"
 
 
+def _prepare_multiple_media_roots(
+    roots: tuple[Path, ...],
+    stage_root: Path,
+) -> tuple[Path, str, Path]:
+    """Build a symlink-only engine view for several device-local roots.
+
+    The synchronizer requires one BASE with top-level day folders. We preserve
+    the user's media in place and expose each selected root through symlinks.
+    The returned export boundary is the narrowest common parent of the roots.
+    """
+    if not roots:
+        raise ValueError("媒体目录项目缺少本机素材根目录")
+    if len(roots) == 1:
+        base, layout = _prepare_media_base(roots[0], stage_root)
+        return base, layout, roots[0]
+    if stage_root.exists():
+        shutil.rmtree(stage_root)
+    stage_root.mkdir(parents=True, exist_ok=True)
+    used_names: set[str] = set()
+    day_index = 1
+    for root in roots:
+        if not root.is_dir():
+            continue
+        children = [
+            child for child in root.iterdir()
+            if child.is_dir() and not child.name.startswith(".")
+        ]
+        has_days = any(
+            any(_looks_like_camera_dir(grandchild) for grandchild in child.iterdir() if grandchild.is_dir())
+            for child in children
+            if child.is_dir()
+        )
+        if has_days:
+            candidates = children
+        else:
+            candidates = [root]
+        for candidate in candidates:
+            name = candidate.name or f"day{day_index}"
+            while name in used_names:
+                name = f"{candidate.name}-{day_index}"
+                day_index += 1
+            used_names.add(name)
+            target = stage_root / name
+            if candidate == root:
+                target = stage_root / f"day{day_index}"
+                day_index += 1
+            target.symlink_to(candidate, target_is_directory=True)
+    if not any(path.is_symlink() for path in stage_root.iterdir()):
+        raise ValueError("选中的素材根目录没有可用于同步的内容")
+    try:
+        export_base = Path(os.path.commonpath([str(root) for root in roots]))
+    except ValueError:
+        export_base = Path("/")
+    return stage_root, "normalized-multiple-roots", export_base
+
+
 def _write_config(script_dir: Path, base: Path, export_base: Path, work: Path, output: Path, project_name: str, out_name: str) -> None:
     payload = {
         "BASE": str(base),
@@ -198,48 +254,65 @@ def _refresh_analysis_link(link: Path, target: Path) -> None:
         ) from error
 
 
-def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None = None, compress_gaps: bool = True) -> dict[str, Any]:
-    if not config.is_media_directory or not config.media_root:
+def run_multicam_sync(
+    config: ProjectConfig,
+    log: Callable[[str], None] | None = None,
+    compress_gaps: bool = True,
+    progress: Callable[[int, int], None] | None = None,
+) -> dict[str, Any]:
+    roots = tuple(config.media_roots or ((config.media_root,) if config.media_root else ()))
+    if not config.is_media_directory or not roots:
         if config.fcpxml and config.fcpxml.exists():
             return {"status": "skipped", "reason": "项目已有 FCPXML", "fcpxml": str(config.fcpxml)}
         raise ValueError("multicam_sync 只用于媒体目录项目")
-    if not config.media_root.is_dir():
-        raise FileNotFoundError(f"素材目录不存在: {config.media_root}")
+    missing = [root for root in roots if not root.is_dir()]
+    if missing:
+        raise FileNotFoundError("素材目录不存在: " + "、".join(str(root) for root in missing))
 
     _check_prerequisites()
     runtime = config.output_dir / ".multicam-sync" / "engine"
     work = config.output_dir / ".multicam-sync" / "work"
     stage = config.output_dir / ".multicam-sync" / "media-layout"
     report_dir = config.output_dir / "sync"
-    xml_delivery = config.media_root / "交付"
+    xml_delivery = config.media_root / "交付" if len(roots) == 1 and config.media_root else roots[0] / "交付"
     runtime.parent.mkdir(parents=True, exist_ok=True)
     engine, engine_source = _materialize_engine(runtime)
     script_dir = engine / "scripts"
     work.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
     xml_delivery.mkdir(parents=True, exist_ok=True)
-    media_base, layout = _prepare_media_base(config.media_root, stage)
+    media_base, layout, export_base = _prepare_multiple_media_roots(roots, stage)
 
     def write_builder_config(out_name: str, output: Path = xml_delivery) -> None:
-        _write_config(script_dir, media_base, config.media_root, work, output, config.name, out_name)
+        _write_config(script_dir, media_base, export_base, work, output, config.name, out_name)
 
     def emit(text: str) -> None:
         if log:
             log(text)
 
+    def update_progress(done: int, total: int) -> None:
+        if progress:
+            progress(done, total)
+
     write_builder_config("synchronized.fcpxml")
     emit(f"同步引擎：{engine_source}")
     emit(f"素材布局：{layout}")
     emit("盘点素材与时间码")
+    update_progress(0, 1)
     _run(script_dir, "make_index.py", [], emit)
+    update_progress(1, 1)
     emit("提取同步音频缓存")
     workers = str(max(2, min(10, (os.cpu_count() or 4))))
     _run(script_dir, "extract_parallel.py", [workers], emit)
+    update_progress(2, 2)
     days = _days_from_index(work)
+    total_steps = 2 + len(days) * 3 + 3
+    update_progress(2, total_steps)
     positions = []
-    for day in days:
+    for index, day in enumerate(days, start=1):
         emit(f"音频互相关同步 {day}")
         _run(script_dir, "sync.py", [day], emit)
+        update_progress(2 + (index - 1) * 3 + 1, total_steps)
         raw = work / f"positions_{day}.tsv"
         if not raw.exists():
             raise RuntimeError(f"同步结果缺失: {raw}")
@@ -249,6 +322,7 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
             _run(script_dir, "compress_gaps.py", [str(raw)], emit)
         else:
             shutil.copyfile(raw, compressed)
+        update_progress(2 + (index - 1) * 3 + 2, total_steps)
         if not compressed.exists():
             raise RuntimeError(f"压缩后位置表缺失: {compressed}")
         positions.append(compressed)
@@ -256,11 +330,13 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
     emit("生成标准 FCPXML 1.8 多机位时间线（相对素材路径）")
     write_builder_config("synchronized.fcpxml")
     _run(script_dir, "build_fcpxml.py", [], emit)
+    update_progress(total_steps - 2, total_steps)
     fcpxml = xml_delivery / "synchronized.fcpxml"
     if not fcpxml.is_file():
         raise RuntimeError("同步完成但 synchronized.fcpxml 未生成")
     emit("校验 FCPXML 帧边界、素材引用与结构")
     _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(fcpxml.parent)], emit)
+    update_progress(total_steps - 1, total_steps)
     analysis_link = report_dir / "synchronized.fcpxml"
     _refresh_analysis_link(analysis_link, fcpxml)
 
@@ -280,7 +356,8 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
     report = {
         "status": "completed",
         "engine_source": engine_source,
-        "media_root": str(config.media_root),
+        "media_root": str(roots[0]),
+        "media_roots": [str(root) for root in roots],
         "xml_delivery": str(xml_delivery),
         "normalized_media_base": str(media_base),
         "layout": layout,
@@ -294,4 +371,5 @@ def run_multicam_sync(config: ProjectConfig, log: Callable[[str], None] | None =
         "project_promoted_to_fcpxml": False,
     }
     (report_dir / "sync_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    update_progress(total_steps, total_steps)
     return report

@@ -5,7 +5,7 @@ import os
 import tempfile
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .asr_runtime import ASRRuntime, script_asr_prompt
 from .config import ProjectConfig
@@ -51,7 +51,8 @@ def _clips_for(config: ProjectConfig):
     if config.is_media_directory:
         if not config.media_root:
             raise ValueError("媒体目录项目缺少 media_root")
-        return read_media_directory(config.media_root, config.camera_patterns, config.media_timeline_mode)
+        roots = config.media_roots or (config.media_root,)
+        return read_media_directory(roots, config.camera_patterns, config.media_timeline_mode)
     raise ValueError(f"不支持的 input.kind: {config.input_kind}")
 
 
@@ -80,6 +81,7 @@ def _prefill_transcripts(
     source_config: ProjectConfig,
     analysis_config: ProjectConfig,
     runtime: ASRRuntime,
+    progress: Callable[[int, int, str], None] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     if not runtime.enabled:
         return {"transcribed": 0, "backend": runtime.public()}, []
@@ -92,7 +94,10 @@ def _prefill_transcripts(
     errors: list[str] = []
     count = 0
 
-    for group in groups:
+    total_groups = len(groups)
+    if progress:
+        progress(0, total_groups, "正在检查 ASR 缓存")
+    for group_index, group in enumerate(groups, start=1):
         members = sorted(
             group.members,
             key=lambda member: (priority.get(member.camera, 999), -float(member.duration), member.name),
@@ -105,10 +110,22 @@ def _prefill_transcripts(
         if preferred_cached or (existing_any and not source_config.asr_ensure_preferred_camera):
             continue
         try:
+            if progress:
+                progress(
+                    max(0, group_index - 1),
+                    total_groups,
+                    f"正在转写第 {group_index}/{total_groups} 个逻辑 Take",
+                )
             runtime.transcribe(clip_by_id[preferred.clip_id], store, prompt)
             count += 1
         except Exception as error:
             errors.append(f"{preferred.name}: {error}")
+        if progress and (
+            group_index == total_groups
+            or group_index == 1
+            or group_index % max(1, total_groups // 100) == 0
+        ):
+            progress(group_index, total_groups, f"已检查 ASR {group_index}/{total_groups} 个逻辑 Take")
     return {"transcribed": count, "backend": runtime.public()}, errors
 
 
@@ -117,6 +134,7 @@ def _escalate_ambiguous(
     analysis_config: ProjectConfig,
     runtime: ASRRuntime,
     result: dict[str, Any],
+    progress: Callable[[int, int, str], None] | None = None,
 ) -> tuple[int, list[str]]:
     if not (
         runtime.enabled
@@ -138,8 +156,13 @@ def _escalate_ambiguous(
     attempted_groups = 0
     errors: list[str] = []
     iterable = rows.items() if isinstance(rows, dict) else []
+    total_groups = len(rows) if isinstance(rows, dict) else 0
+    inspected_groups = 0
+    if progress:
+        progress(0, total_groups, "正在检查低置信度候选")
 
     for group_id, row in iterable:
+        inspected_groups += 1
         if attempted_groups >= source_config.asr_max_escalated_groups:
             break
         group = group_by_id.get(str(group_id))
@@ -165,6 +188,16 @@ def _escalate_ambiguous(
                 changed += 1
             except Exception as error:
                 errors.append(f"{member.name}: {error}")
+        if progress and (
+            inspected_groups == total_groups
+            or inspected_groups == 1
+            or inspected_groups % max(1, total_groups // 100) == 0
+        ):
+            progress(
+                inspected_groups,
+                total_groups,
+                f"已检查低置信度候选 {inspected_groups}/{total_groups}",
+            )
     return changed, errors
 
 
@@ -199,7 +232,11 @@ def _restore_source_identity(
     return result
 
 
-def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -> dict[str, Any]:
+def analyze(
+    config: ProjectConfig,
+    affected_group_ids: set[str] | None = None,
+    progress: Callable[[str, int, int, str], None] | None = None,
+) -> dict[str, Any]:
     """Product analysis entrypoint.
 
     ASR is orchestrated outside the deterministic matcher. Apple Silicon uses
@@ -210,13 +247,36 @@ def analyze(config: ProjectConfig, affected_group_ids: set[str] | None = None) -
     config.ensure_output()
     analysis_config = effective_analysis_config(config)
     runtime = ASRRuntime.from_config(config)
-    _prefill, errors = _prefill_transcripts(config, analysis_config, runtime)
+    def report(phase: str, done: int, total: int, message: str) -> None:
+        if progress:
+            progress(phase, done, total, message)
 
-    result = _analyze_core(analysis_config, affected_group_ids)
-    escalated, escalation_errors = _escalate_ambiguous(config, analysis_config, runtime, result)
+    _prefill, errors = _prefill_transcripts(
+        config,
+        analysis_config,
+        runtime,
+        lambda done, total, message: report("asr", done, total, message),
+    )
+
+    result = _analyze_core(
+        analysis_config,
+        affected_group_ids,
+        lambda done, total, message: report("matching", done, total, message),
+    )
+    escalated, escalation_errors = _escalate_ambiguous(
+        config,
+        analysis_config,
+        runtime,
+        result,
+        lambda done, total, message: report("rescue", done, total, message),
+    )
     errors.extend(escalation_errors)
     if escalated:
         # Re-run after new camera transcripts. Existing analysis caches make this
         # cheap while keeping the matching algorithm deterministic.
-        result = _analyze_core(analysis_config, None)
+        result = _analyze_core(
+            analysis_config,
+            None,
+            lambda done, total, message: report("matching", done, total, message),
+        )
     return _restore_source_identity(config, analysis_config, result, runtime, errors)

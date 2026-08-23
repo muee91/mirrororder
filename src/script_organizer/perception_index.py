@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import ProjectConfig
+from .device_runtime_settings import load_project_intelligence_settings
+from .local_intelligence_profiles import sampling_profile
 from .media_identity import DeviceMediaStore
 from .models import Clip
 from .take_semantic_provider import TakeSemanticProvider
@@ -115,6 +117,9 @@ class PerceptionIndexer:
         self.semantic_provider = semantic_provider or TakeSemanticProvider()
         self.frame_extractor = frame_extractor or _default_extract_frames
         self.frame_root = self.database.path.parent / "frames" / project_id
+        self.sampling_profile_id, self.sampling_profile = sampling_profile(
+            load_project_intelligence_settings(workspace_id, project_id).get("perception_sampling_profile")
+        )
 
     def _index(self) -> dict[str, Any]:
         return _read_json(self.config.output_dir / "material_index.json")
@@ -163,7 +168,9 @@ class PerceptionIndexer:
         source_end = float(member["source_end"]) if member.get("source_end") is not None else source_start + float(member.get("duration", 0) or 0)
         group_id = str(group.get("group_id", ""))
         clip_id = str(member.get("clip_id", "") or "")
-        digest = hashlib.sha1(f"{group_id}|{clip_id}|{count}".encode("utf-8")).hexdigest()[:10]
+        digest = hashlib.sha1(
+            f"{group_id}|{clip_id}|{self.sampling_profile_id}|{count}".encode("utf-8")
+        ).hexdigest()[:10]
         output_dir = self.frame_root / group_id / digest
         extracted = self.frame_extractor(media_path, source_start, source_end, count, output_dir)
         frames = []
@@ -201,15 +208,69 @@ class PerceptionIndexer:
             except OSError:
                 pass
 
-    def _tier0_pending(self, groups: dict[str, dict[str, Any]], group_ids: list[str] | None) -> list[str]:
+    def _state_key(self, mode: str, group_id: str) -> str:
+        return f"perception:{self.project_id}:{mode}:{group_id}"
+
+    def _state_version(self, mode: str, group: dict[str, Any]) -> str:
+        count = self._frame_count(mode, group)
+        return f"v2|{self.sampling_profile_id}|{mode}|{count}"
+
+    def _already_indexed(self, mode: str, group: dict[str, Any]) -> bool:
+        group_id = str(group.get("group_id", ""))
+        if not group_id:
+            return False
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT value FROM meta WHERE key=?",
+                (self._state_key(mode, group_id),),
+            ).fetchone()
+        return bool(row and str(row[0]) == self._state_version(mode, group))
+
+    def _mark_indexed(self, mode: str, group: dict[str, Any]) -> None:
+        group_id = str(group.get("group_id", ""))
+        if not group_id:
+            return
+        with self.database.connection() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)",
+                (self._state_key(mode, group_id), self._state_version(mode, group)),
+            )
+            connection.commit()
+
+    def _frame_count(self, mode: str, group: dict[str, Any]) -> int:
+        if mode == "tier0":
+            return int(self.sampling_profile["tier0_frames"])
+        if self.sampling_profile_id == "adaptive":
+            context = self._semantic_context(group)
+            candidates = context.get("existing_candidates", [])
+            uncertain = not candidates or any(
+                str(candidate.get("confidence", "")) != "exact_dialogue"
+                for candidate in candidates[:1]
+            )
+            if uncertain:
+                return int(self.sampling_profile["ambiguous_semantic_frames"])
+        return int(self.sampling_profile["semantic_frames"])
+
+    def _pending_groups(
+        self,
+        groups: dict[str, dict[str, Any]],
+        *,
+        mode: str,
+        group_ids: list[str] | None,
+    ) -> list[str]:
         requested = {str(value) for value in (group_ids or []) if str(value)}
         result = []
-        for group_id in groups:
+        for group_id, group in groups.items():
             if requested and group_id not in requested:
                 continue
-            cached = self.database.frames(self.project_id, group_id)
-            if any(Path(str(item.get("path", ""))).is_file() for item in cached):
+            if self._already_indexed(mode, group):
                 continue
+            if mode == "tier0":
+                cached = self.database.frames(self.project_id, group_id)
+                if any(Path(str(item.get("path", ""))).is_file() for item in cached):
+                    # An old profile exists. Rebuild it only when its settings
+                    # fingerprint differs from the active local profile.
+                    pass
             result.append(group_id)
         return result
 
@@ -275,11 +336,7 @@ class PerceptionIndexer:
             return {"status": "deferred", "reason": "项目尚未生成 material_index.json"}
         structure = self._sync_structure(index)
         groups = self._groups(index)
-        pending = (
-            self._tier0_pending(groups, group_ids)
-            if mode == "tier0"
-            else self.database.pending_groups(self.project_id, semantic=True, group_ids=group_ids)
-        )
+        pending = self._pending_groups(groups, mode=mode, group_ids=group_ids)
         run_id = self.database.start_perception_run(self.project_id, mode)
         processed = 0
         failed = 0
@@ -305,9 +362,14 @@ class PerceptionIndexer:
                     failed += 1
                     continue
                 if mode == "tier0":
-                    frames = self._extract_for_group(group, 1, "midpoint")
+                    frames = self._extract_for_group(
+                        group,
+                        self._frame_count("tier0", group),
+                        "midpoint",
+                    )
                     if frames:
                         self._replace_frames(group_id, frames)
+                        self._mark_indexed(mode, group)
                         processed += 1
                     else:
                         failed += 1
@@ -321,8 +383,9 @@ class PerceptionIndexer:
                             for item in self.database.frames(self.project_id, group_id)
                             if Path(str(item.get("path", ""))).is_file()
                         ]
-                        if len(frames) < 3:
-                            extracted = self._extract_for_group(group, 3, "semantic_sample")
+                        required = self._frame_count("semantic", group)
+                        if len(frames) != required:
+                            extracted = self._extract_for_group(group, required, "semantic")
                             if extracted:
                                 self._replace_frames(group_id, extracted)
                                 frames = extracted
@@ -337,6 +400,7 @@ class PerceptionIndexer:
                                 failed += 1
                             else:
                                 self.database.set_semantic(self.project_id, group_id, result, "ready")
+                                self._mark_indexed(mode, group)
                                 processed += 1
                 if progress:
                     progress(processed + failed + unavailable, total, group_id)

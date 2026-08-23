@@ -87,7 +87,7 @@ def _analysis_inputs_available(config: ProjectConfig) -> bool:
         return bool(config.fcpxml and config.fcpxml.exists())
     if config.is_media_directory:
         return bool(
-            (config.media_root and config.media_root.exists())
+            any(root.exists() for root in (config.media_roots or ((config.media_root,) if config.media_root else ())))
             or generated_sync_fcpxml(config).exists()
         )
     return False
