@@ -13,6 +13,7 @@ from .models import Clip
 
 
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mxf", ".mts", ".avi", ".mkv"}
+_CONVENTIONAL_CAMERAS = ("A", "B", "C")
 
 
 def _probe(path: Path) -> tuple[float, float | None]:
@@ -43,16 +44,63 @@ def _probe(path: Path) -> tuple[float, float | None]:
         return 1.0, None
 
 
-def _camera(path: Path, patterns: dict[str, str]) -> str:
-    candidate = path.name.upper()
-    for camera, pattern in sorted(patterns.items()):
+def _camera_token(value: str) -> str:
+    """Return A/B/C for strong conventional camera tokens only.
+
+    We intentionally do not treat arbitrary occurrences of the letters A/B/C as
+    camera metadata. Accepted industry-style tokens include A, A机, A1, A001,
+    CAM_A, CAMERA-B and equivalent B/C forms.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    upper = text.upper()
+    for camera in _CONVENTIONAL_CAMERAS:
+        patterns = (
+            rf"^{camera}(?:机|CAM|CAMERA)?$",
+            rf"^{camera}\d+$",
+            rf"^(?:CAMERA|CAM)[_\-\s]*{camera}(?:\d+)?$",
+            rf"(?:^|[_\-\s]){camera}(?=\d|[_\-\s]|机|$)",
+        )
+        if any(re.search(pattern, upper, re.IGNORECASE) for pattern in patterns):
+            return camera
+    return ""
+
+
+def infer_camera_label(path: str | Path, patterns: dict[str, str] | None = None) -> str:
+    """Infer a camera label with explicit config first, conventions second.
+
+    Configured patterns are evaluated against the full path as well as filename,
+    so a project can override unconventional folder/file naming. Without config,
+    A/B/C file tokens and A/B/C/A机/B机/C机 camera folders are treated as the
+    conventional default. The result remains editable elsewhere in Production.
+    """
+    candidate = Path(path)
+    configured = patterns or {}
+    full_text = candidate.as_posix()
+    filename = candidate.name
+    for camera, pattern in configured.items():
         try:
-            if re.search(pattern, candidate, re.IGNORECASE):
-                return camera
+            if re.search(pattern, full_text, re.IGNORECASE) or re.search(pattern, filename, re.IGNORECASE):
+                return str(camera).upper()
         except re.error:
             continue
-    match = re.search(r"(?:^|[_\-\s])([A-Z])\d", candidate)
-    return match.group(1) if match else "?"
+
+    # Parent folder is usually stronger evidence than filename. Check nearest
+    # folders first so /shoot/A机/A001.mov resolves A deterministically.
+    for part in reversed(candidate.parent.parts):
+        detected = _camera_token(part)
+        if detected:
+            return detected
+    detected = _camera_token(candidate.stem)
+    if detected:
+        return detected
+    match = re.search(r"(?:^|[_\-\s])([ABC])(?=\d|[_\-\s]|机|$)", candidate.name, re.IGNORECASE)
+    return match.group(1).upper() if match else "?"
+
+
+def _camera(path: Path, patterns: dict[str, str]) -> str:
+    return infer_camera_label(path, patterns)
 
 
 def read_media_directory(
