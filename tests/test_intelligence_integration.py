@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+import script_organizer.tasks as task_module
 from script_organizer.automation_runtime import _project_relative_script, _workspace_for_service
 from script_organizer.config import ProjectConfig
+from script_organizer.resource_scheduler import ResourceCancelled
+from script_organizer.tasks import TaskManager
 
 
 def _config(tmp_path: Path, script: Path) -> ProjectConfig:
@@ -49,6 +55,32 @@ def test_project_payload_only_exposes_project_relative_script_path(tmp_path: Pat
     external.write_text("outside", encoding="utf-8")
     external_project = SimpleNamespace(config=_config(tmp_path / "external-case", external))
     assert _project_relative_script(external_project) == ""
+
+
+def test_perception_cancel_propagates_to_parent_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeIndexer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, **kwargs):
+            return {"status": "cancelled"}
+
+    @contextmanager
+    def resource(*args, **kwargs):
+        yield
+
+    manager = TaskManager(lambda _project_id: None, "ws_demo")
+    monkeypatch.setattr(task_module, "PerceptionIndexer", FakeIndexer)
+    monkeypatch.setattr(manager, "_resource", resource)
+    monkeypatch.setattr(manager, "_update", lambda *args, **kwargs: None)
+    monkeypatch.setattr(manager, "_cancel_requested", lambda *args, **kwargs: False)
+
+    with pytest.raises(ResourceCancelled):
+        manager._perception_best_effort(
+            SimpleNamespace(),
+            {"task_id": "task_demo", "project_id": "project-a"},
+            mode="tier0",
+        )
 
 
 def test_intelligence_database_endpoint_is_local_only() -> None:
