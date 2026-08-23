@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
+from .model_connections import load_model_connections
 from .model_provider import ModelProviderConfig
 from .vision_provider import VisionProviderConfig
 
@@ -32,29 +33,37 @@ class AssistantModelConfig:
             base_url = str(raw_base or "").strip().rstrip("/")
             api_key = str(raw_key or "").strip()
             model = str(raw_model or "").strip()
-            source = "assistant"
+            source = "assistant-env"
         else:
-            rescue = ModelProviderConfig.from_env()
-            if rescue.enabled:
-                provider = rescue.provider
-                base_url = rescue.base_url
-                api_key = rescue.api_key
-                model = rescue.model
-                source = "production-rescue"
+            saved = load_model_connections(include_secrets=True).get("text", {})
+            if isinstance(saved, dict) and saved.get("enabled") and saved.get("base_url") and saved.get("model"):
+                provider = str(saved.get("provider", "openai-compatible") or "openai-compatible").strip().lower()
+                base_url = str(saved.get("base_url", "") or "").strip().rstrip("/")
+                api_key = str(saved.get("api_key", "") or "").strip()
+                model = str(saved.get("model", "") or "").strip()
+                source = "device-model-connection"
             else:
-                vision = VisionProviderConfig.from_env()
-                if vision.enabled and vision.is_local:
-                    provider = "local-vision"
-                    base_url = ""
-                    api_key = ""
-                    model = vision.model
-                    source = "local-vision-text-fallback"
+                rescue = ModelProviderConfig.from_env()
+                if rescue.enabled:
+                    provider = rescue.provider
+                    base_url = rescue.base_url
+                    api_key = rescue.api_key
+                    model = rescue.model
+                    source = "production-rescue"
                 else:
-                    provider = "none"
-                    base_url = ""
-                    api_key = ""
-                    model = ""
-                    source = "none"
+                    vision = VisionProviderConfig.from_env()
+                    if vision.enabled and vision.is_local:
+                        provider = "local-vision"
+                        base_url = ""
+                        api_key = ""
+                        model = vision.model
+                        source = "local-vision-text-fallback"
+                    else:
+                        provider = "none"
+                        base_url = ""
+                        api_key = ""
+                        model = ""
+                        source = "none"
         try:
             timeout = max(10, min(180, int(os.environ.get("MIRRORORDER_ASSISTANT_MODEL_TIMEOUT", "60") or 60)))
         except ValueError:
@@ -95,8 +104,6 @@ class ModelRegistry:
 
     def public(self) -> dict[str, Any]:
         vision = self.vision.public()
-        # Local runtime details are useful in the native Production App but the
-        # public registry still avoids filesystem paths and secrets.
         return {
             "contract": "models.v1",
             "production_rescue": self.rescue.public(),
