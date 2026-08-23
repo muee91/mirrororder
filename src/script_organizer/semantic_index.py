@@ -187,14 +187,30 @@ class ProjectSemanticIndexer:
         return documents
 
     def _speech_documents(self, groups: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+        """Index cached ASR at segment precision without running new ASR.
+
+        Segment times are relative to the logical Take/member source range. When
+        synchronized cameras contain the same sentence at nearly the same time,
+        keep one representative document and prefer the project's B/C/A audio
+        evidence order. Old transcript caches without segments retain a Take-level
+        fallback so semantic search never becomes less capable after this upgrade.
+        """
         transcript_store = TranscriptStore(self.config.transcript_dir)
         documents: list[dict[str, Any]] = []
+        camera_rank = {"B": 0, "C": 1, "A": 2}
         for group_id, group in groups.items():
-            rows: list[tuple[str, str, str, str]] = []
-            seen_text: set[str] = set()
-            for member in _as_list(group.get("members")):
-                if not isinstance(member, dict):
-                    continue
+            members = [row for row in _as_list(group.get("members")) if isinstance(row, dict)]
+            members.sort(
+                key=lambda row: (
+                    camera_rank.get(str(row.get("camera", "") or "").upper(), 9),
+                    float(row.get("timeline_start", 0) or 0),
+                    str(row.get("clip_id", "") or ""),
+                )
+            )
+            group_duration = max(0.0, float(group.get("duration", 0) or 0))
+            seen_segments: list[tuple[str, float, float]] = []
+            seen_fallback: set[str] = set()
+            for member in members:
                 media_path = self.media_store.resolve(self.workspace_id, self.project_id, member)
                 if not media_path:
                     continue
@@ -207,44 +223,82 @@ class ProjectSemanticIndexer:
                     float(member.get("source_start", 0) or 0),
                     float(member["source_end"]) if member.get("source_end") is not None else None,
                 )
+                camera = str(member.get("camera", "") or "")
+                clip_id = str(member.get("clip_id", "") or "")
+                media_id = str(member.get("media_id", "") or "")
+                if sliced.segments:
+                    for segment in sliced.segments:
+                        text = _clean_text(segment.text, 2400)
+                        if not text:
+                            continue
+                        start = max(0.0, float(segment.start or 0))
+                        end = max(start, float(segment.end or start))
+                        if group_duration > 0:
+                            start = min(start, group_duration)
+                            end = min(max(start, end), group_duration)
+                        normalized = text.casefold()
+                        duplicate = any(
+                            normalized == previous_text
+                            and abs(start - previous_start) <= 0.8
+                            and abs(end - previous_end) <= 1.2
+                            for previous_text, previous_start, previous_end in seen_segments
+                        )
+                        if duplicate:
+                            continue
+                        seen_segments.append((normalized, start, end))
+                        metadata = {
+                            "evidence": "speech",
+                            "camera": camera,
+                            "precision": "asr_segment",
+                            "time_basis": "take_relative",
+                            "transcript_backend": str(sliced.backend or "cache"),
+                        }
+                        documents.append(
+                            {
+                                "document_id": _document_id(
+                                    self.project_id,
+                                    "speech",
+                                    f"{group_id}|{clip_id}|{start:.3f}|{end:.3f}",
+                                ),
+                                "group_id": group_id,
+                                "clip_id": clip_id,
+                                "media_id": media_id,
+                                "source": "speech",
+                                "start": start,
+                                "end": end,
+                                "text": text,
+                                "metadata": metadata,
+                                "content_fingerprint": _fingerprint(text, metadata),
+                            }
+                        )
+                    continue
+
                 text = _clean_text(sliced.text, 6000)
                 normalized = text.casefold()
-                if not text or normalized in seen_text:
+                if not text or normalized in seen_fallback:
                     continue
-                seen_text.add(normalized)
-                rows.append(
-                    (
-                        str(member.get("camera", "") or ""),
-                        str(member.get("clip_id", "") or ""),
-                        str(member.get("media_id", "") or ""),
-                        text,
-                    )
-                )
-            if not rows:
-                continue
-            combined = _clean_text(
-                "\n".join(f"{camera or '机位'} 对白：{text}" for camera, _clip, _media, text in rows),
-                12000,
-            )
-            metadata = {
-                "evidence": "speech",
-                "cameras": [camera for camera, _clip, _media, _text in rows if camera],
-                "transcript_sources": len(rows),
-            }
-            documents.append(
-                {
-                    "document_id": _document_id(self.project_id, "speech", group_id),
-                    "group_id": group_id,
-                    "clip_id": rows[0][1],
-                    "media_id": rows[0][2],
-                    "source": "speech",
-                    "start": 0.0,
-                    "end": float(group.get("duration", 0) or 0),
-                    "text": combined,
-                    "metadata": metadata,
-                    "content_fingerprint": _fingerprint(combined, metadata),
+                seen_fallback.add(normalized)
+                metadata = {
+                    "evidence": "speech",
+                    "camera": camera,
+                    "precision": "take_fallback",
+                    "time_basis": "take_relative",
+                    "transcript_backend": str(sliced.backend or "cache"),
                 }
-            )
+                documents.append(
+                    {
+                        "document_id": _document_id(self.project_id, "speech", f"{group_id}|{clip_id}|fallback"),
+                        "group_id": group_id,
+                        "clip_id": clip_id,
+                        "media_id": media_id,
+                        "source": "speech",
+                        "start": 0.0,
+                        "end": group_duration,
+                        "text": text,
+                        "metadata": metadata,
+                        "content_fingerprint": _fingerprint(text, metadata),
+                    }
+                )
         return documents
 
     def _slate_documents(self, group_ids: Sequence[str] | None) -> list[dict[str, Any]]:
