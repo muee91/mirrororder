@@ -2,10 +2,9 @@
 """Generate a JianyingPro (CapCut) importable FCPXML 1.8 from audio-synced positions.
 
 剪映版仍是标准 FCPXML 1.8，只使用剪映当前能识别的 asset-clip 结构。
-素材 src 使用标准相对 URL，并以 XML 所在 OUT_DIR 为基准。
+注意：剪映导入器要求绝对 file:// 素材 URL；不要与 FCP 的相对 URL 策略共用。
 """
 import os, sys
-from urllib.parse import quote
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -14,8 +13,6 @@ from project_config import get_config
 cfg = get_config()
 WORK = cfg.WORK or "/tmp/syncwork"
 BASE = cfg.BASE or "/"
-OUTPUT_BASE = os.path.realpath(cfg.OUT_DIR or ".")
-EXPORT_BASE = os.path.realpath(cfg.manual.get("export_base") or BASE)
 FRAME_DEN = cfg.frame_den
 FRAME_TICKS = cfg.frame_ticks
 FPS = cfg.fps
@@ -36,13 +33,11 @@ def sec_to_ticks(s):
     return cfg.sec_to_ticks(s)
 
 
-def url_export(path):
+def url_abs(path):
+    # 剪映当前导入器依赖绝对 file:// URL；这里仅解析 staging symlink，
+    # 不改成相对 URL。
     physical = os.path.realpath(os.path.join(BASE, path))
-    inside = os.path.commonpath([EXPORT_BASE, physical]) == EXPORT_BASE
-    if not inside:
-        raise RuntimeError(f"素材不在 export_base 内，拒绝写入 XML: {physical}")
-    rel = os.path.relpath(physical, OUTPUT_BASE).replace(os.sep, "/")
-    return quote(rel, safe="/:@-._~")
+    return cfg.url_abs("/", physical.lstrip(os.sep))
 
 
 def asset_block(aid, name, src, dur_ticks, fmt):
@@ -82,7 +77,7 @@ def main():
         aid = [f"day_{day}_asset_{i}" for i in range(len(df))]
         for k, r in df.iterrows():
             name = os.path.splitext(r["file"])[0]
-            src = url_export(os.path.join(r["dir"], r["file"]))
+            src = url_abs(os.path.join(r["dir"], r["file"]))
             asset_parts.append(asset_block(aid[k], name, src, sec_to_ticks(r["dur"]), fmt))
         lane = {c: i + 1 for i, c in enumerate(CAM_LIST)}
         for k, r in df.iterrows():
