@@ -17,15 +17,9 @@
     return Boolean(segmentId) && ids.includes(segmentId);
   }
 
-  // Mapping and editorial review are independent axes. Automatic script
-  // mapping must never impersonate a human Best/Keep decision in the UI.
-  const baseAssignmentState = assignmentState;
-  assignmentState = function automationAssignmentState(segmentId, group) {
-    const manual = baseAssignmentState(segmentId, group);
-    if (manual !== 'unreviewed') return manual;
-    const editorial = String(automationFor(group)?.editorial_state || 'unreviewed');
-    return ['best', 'keep', 'reject'].includes(editorial) ? editorial : 'unreviewed';
-  };
+  // Mapping and creative review are independent axes. Automation deliberately
+  // does not override assignmentState: it may complete script placement, but it
+  // can never manufacture Best / Keep / Reject or a personal opinion.
 
   function segmentHasPendingMapping(segmentId) {
     const candidates = candidateForSegment(segmentId);
