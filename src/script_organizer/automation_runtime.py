@@ -11,6 +11,7 @@ from .automation_store import AutomationStore
 from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .runtime_diagnostics import environment_payload
+from .workspace_db import WorkspaceDatabase
 
 _INSTALLED = False
 _SCRIPT_SUFFIXES = {".docx", ".txt", ".md", ".markdown"}
@@ -105,6 +106,14 @@ def _runtime_payload() -> dict[str, Any]:
     }
 
 
+def _project_relative_script(project: Any) -> str:
+    try:
+        relative = project.config.script.resolve().relative_to(project.config.project_dir.resolve())
+        return "./" + relative.as_posix()
+    except (OSError, ValueError):
+        return ""
+
+
 def install_automation_runtime() -> None:
     """Attach auto-decision state without making it human review authority."""
     global _INSTALLED
@@ -138,13 +147,39 @@ def install_automation_runtime() -> None:
     def project_payload(project: Any) -> dict[str, Any]:
         payload = original_project_payload(project)
         automation = _apply(project)
-        payload["script_path"] = str(project.config.script)
+        payload["script_path"] = _project_relative_script(project)
         payload["automation"] = {
             "updated_at": automation.get("updated_at", ""),
             "analysis_revision": automation.get("analysis_revision", ""),
             "summary": automation.get("summary", {}),
             "model": automation.get("model", {}),
         }
+        workspace_id = str(getattr(project, "workspace_id", "") or "")
+        if workspace_id:
+            try:
+                review = project.review.load()
+                database = WorkspaceDatabase(workspace_id)
+                database.sync_project_summary(
+                    project.project_id,
+                    name=project.config.name,
+                    input_kind=project.config.input_kind,
+                    config_path=str(project.config.config_path),
+                    analysis_revision=str(payload.get("analysis_revision", "") or ""),
+                    review_revision=int(review.get("revision", 0) or 0),
+                    stats=payload.get("stats", {}) if isinstance(payload.get("stats"), dict) else {},
+                )
+                payload["intelligence"] = database.project_intelligence(project.project_id)
+            except Exception:
+                # The local database is a rebuildable acceleration layer. A
+                # damaged or unavailable DB must not make review payloads fail.
+                payload["intelligence"] = {
+                    "takes": 0,
+                    "framed_takes": 0,
+                    "semantic_takes": 0,
+                    "pending_semantic": 0,
+                    "face_observations": 0,
+                    "speaker_observations": 0,
+                }
         return payload
 
     def project_state(project: Any) -> dict[str, Any]:
@@ -181,6 +216,17 @@ def install_automation_runtime() -> None:
                 if parts == ["api", "v1", "local-runtime"]:
                     self._local_only()
                     self._send_json(_runtime_payload())
+                    return
+                if parts == ["api", "v1", "workspace-database"]:
+                    self._local_only()
+                    database = WorkspaceDatabase(service.workspace.workspace_id)
+                    health = database.health()
+                    health["projects"] = {
+                        str(entry.get("project_id", "")): database.project_intelligence(str(entry.get("project_id", "")))
+                        for entry in service.registry.list()
+                        if entry.get("project_id")
+                    }
+                    self._send_json(health)
                     return
                 return super()._app_get(parsed)
 
@@ -249,7 +295,7 @@ def install_automation_runtime() -> None:
                     self._send_json(
                         {
                             "project_id": project_id,
-                            "script": str(script),
+                            "script": _project_relative_script(service.project(project_id)),
                             "task": task,
                         },
                         web_server.HTTPStatus.ACCEPTED,
