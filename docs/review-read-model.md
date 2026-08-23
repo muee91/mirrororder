@@ -212,7 +212,7 @@ expected_revision
 
 如果提交者基于旧 revision 操作，Host 返回 conflict，而不是静默覆盖更新后的决定。
 
-`editorial.json` 的 Editorial Decision **尚未替代 `review.json`** 作为 selection manifest / FCPXML / NLE 交付链的既有状态来源。迁移必须单独完成并验证。
+Editorial Decision 现在已进入 `selection_manifest.json v3 / delivery.v1` 的交付解析层，优先于 legacy `review.json` 创意状态；但它**不会改变剧本归集权威链，也不会直接改写 FCPXML**。没有 Final Decision 的旧项目继续按 legacy review 与旧自动 fallback 兼容导出，Individual Opinion 永远不按票数自动生成交付状态。
 
 ## 8. `review.v1` 中的协作语义
 
@@ -271,7 +271,7 @@ Viewer Inspector 增加“最终编辑决定”：
 - 使用 `expected_revision` 防止 stale overwrite；
 - revision 冲突后必须基于最新团队状态重新确认。
 
-当前最终决定只进入协作状态，**不会静默改变 FCPXML 或导出结果**。
+最终决定会进入 `delivery.v1` selection manifest，但当前 App 仍不会因此直接修改原始 FCPXML 或 multicam 结构。
 
 ## 11. 协作刷新
 
@@ -324,14 +324,14 @@ embedding
 - Editorial Decision stale revision 不得静默覆盖。
 - `editorial.json` 不得写入 `review.json` 或 `auto_decisions.json`。
 - App current-device media resolver 与 AppKit native drag bridge 不改。
-- 当前交付/导出语义在专门迁移之前继续以既有人工审核链为准。
+- Delivery resolver 可以读取 Editorial Decision，但不得改变 `review.json` / `auto_decisions.json` 或原始 FCPXML。
 
-## 14. 下一阶段：Delivery Semantics
+## 14. 下一阶段：NLE Delivery Adapter
 
-Editorial UI Migration 完成后，下一步是定义最终决定如何进入后期交付，而不是再造一套审核状态：
+Delivery Semantics 已进入 `selection_manifest.json v3 / delivery.v1`。下一步不再增加审核状态，而是让剪辑软件安全消费同一交付契约：
 
-1. 定义 Editorial Decision 与 legacy `review.json` 创意状态的过渡优先级；
-2. 让 selection manifest 可选择性消费最终决定；
-3. 定义 Best / Keep / Reject 到 FCPXML / NLE 输出的明确转换规则；
-4. 为没有 `editorial.json` 的旧项目提供兼容行为；
-5. 在测试与真实项目验证后，再考虑收缩 `review.json` 中重叠的创意审核字段。
+1. 定义 Final Cut Pro Rating / Keyword 的安全映射；
+2. 在独立 fixture 上实现结构化 FCPXML 写入与 round-trip 验证；
+3. 输出新的 `mirrororder-delivery.fcpxml`，绝不覆盖用户 source；
+4. 验证 multicam、asset-clip、ref-clip 与 range 语义后，再在 App 暴露“导出到 Final Cut Pro”；
+5. Premiere / Resolve 后续消费同一 `delivery.v1`，不得各自重新解释审核权威。
