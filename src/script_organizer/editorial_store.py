@@ -29,7 +29,7 @@ def _now() -> str:
 
 def empty_editorial() -> dict[str, Any]:
     return {
-        "version": 1,
+        "version": 2,
         "revision": 0,
         "updated_at": "",
         "opinions": {},
@@ -67,6 +67,26 @@ def _state(value: object) -> str:
     return state
 
 
+def _normalize_opinion_row(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    target = value.get("target", {}) if isinstance(value.get("target"), dict) else {}
+    reviewers = value.get("reviewers", {}) if isinstance(value.get("reviewers"), dict) else {}
+    # v1 stored opinions under `actors`. Preserve them as actor-fallback reviewer
+    # identities so an existing collaboration file remains readable.
+    if not reviewers and isinstance(value.get("actors"), dict):
+        for actor, opinion in value["actors"].items():
+            if not isinstance(opinion, dict):
+                continue
+            name = str(opinion.get("actor", actor) or actor)[:80]
+            reviewers[f"actor:{name}"] = {
+                **opinion,
+                "actor": name,
+                "reviewer_id": str(opinion.get("reviewer_id", "") or ""),
+            }
+    return {"target": dict(target), "reviewers": reviewers}
+
+
 def normalize_editorial(raw: object) -> dict[str, Any]:
     result = empty_editorial()
     if not isinstance(raw, dict):
@@ -77,8 +97,13 @@ def normalize_editorial(raw: object) -> dict[str, Any]:
         result["revision"] = 0
     result["updated_at"] = str(raw.get("updated_at", "") or "")
     opinions = raw.get("opinions", {})
+    if isinstance(opinions, dict):
+        result["opinions"] = {
+            str(key): normalized
+            for key, value in opinions.items()
+            if (normalized := _normalize_opinion_row(value))
+        }
     decisions = raw.get("decisions", {})
-    result["opinions"] = opinions if isinstance(opinions, dict) else {}
     result["decisions"] = decisions if isinstance(decisions, dict) else {}
     return result
 
@@ -86,10 +111,10 @@ def normalize_editorial(raw: object) -> dict[str, Any]:
 class EditorialStore:
     """Shared, revision-safe collaboration state separate from legacy review.json.
 
-    Individual opinions merge by reviewer so concurrent collaborators do not
+    Individual opinions merge by stable reviewer identity so concurrent
+    collaborators — including people with the same display nickname — do not
     overwrite each other. Final editorial decisions are a separate axis and
-    require an expected revision, which prevents a stale editor from silently
-    replacing a newer final decision.
+    require an expected revision.
     """
 
     _thread_lock = RLock()
@@ -141,6 +166,11 @@ class EditorialStore:
         return actor
 
     @staticmethod
+    def _reviewer(action: dict[str, Any], actor: str) -> tuple[str, str]:
+        reviewer_id = str(action.get("reviewer_id", "") or "").strip()[:120]
+        return (f"id:{reviewer_id}", reviewer_id) if reviewer_id else (f"actor:{actor}", "")
+
+    @staticmethod
     def _target_from_action(action: dict[str, Any]) -> dict[str, str]:
         return _target(
             str(action.get("target_kind", "") or ""),
@@ -152,6 +182,7 @@ class EditorialStore:
         """Atomically upsert one reviewer's opinion without replacing peers."""
 
         actor = self._actor(action.get("actor"))
+        reviewer_key, reviewer_id = self._reviewer(action, actor)
         state = _state(action.get("state"))
         target = self._target_from_action(action)
         key = _target_key(target)
@@ -159,17 +190,18 @@ class EditorialStore:
             payload = self.load()
             opinions = payload["opinions"]
             row = opinions.get(key, {}) if isinstance(opinions.get(key), dict) else {}
-            actors = row.get("actors", {}) if isinstance(row.get("actors"), dict) else {}
+            reviewers = row.get("reviewers", {}) if isinstance(row.get("reviewers"), dict) else {}
             if state == "unreviewed":
-                actors.pop(actor, None)
+                reviewers.pop(reviewer_key, None)
             else:
-                actors[actor] = {
+                reviewers[reviewer_key] = {
                     "state": state,
                     "actor": actor,
+                    "reviewer_id": reviewer_id,
                     "updated_at": _now(),
                 }
-            if actors:
-                opinions[key] = {"target": target, "actors": actors}
+            if reviewers:
+                opinions[key] = {"target": target, "reviewers": reviewers}
             else:
                 opinions.pop(key, None)
             payload["revision"] = int(payload.get("revision", 0) or 0) + 1
@@ -220,7 +252,8 @@ class EditorialStore:
             if str(target.get("group_id", "")) != group_id:
                 continue
             destination = assignment_opinions if target.get("kind") == "assignment" else group_opinions
-            for opinion in (row.get("actors", {}) or {}).values():
+            reviewers = row.get("reviewers", {}) if isinstance(row.get("reviewers"), dict) else {}
+            for opinion in reviewers.values():
                 if isinstance(opinion, dict):
                     destination.append({"target": dict(target), **opinion})
         group_decision: dict[str, Any] | None = None
@@ -238,6 +271,7 @@ class EditorialStore:
                 group_decision = row
         key = lambda item: (
             str(item.get("target", {}).get("segment_id", "")),
+            str(item.get("reviewer_id", "")),
             str(item.get("actor", "")),
             str(item.get("updated_at", "")),
         )
