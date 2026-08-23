@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import ProjectConfig
+from .media_relink import rewrite_fcpxml_media, rewrite_premiere_media, write_relink_manifest
 
 
 class MulticamSyncUnavailable(RuntimeError):
@@ -190,14 +191,28 @@ def _prepare_media_base(source: Path, stage_root: Path) -> tuple[Path, str]:
     return stage_root, "normalized-single-day"
 
 
-def _write_config(script_dir: Path, base: Path, work: Path, output: Path, project_name: str) -> None:
+def _write_config(
+    script_dir: Path,
+    base: Path,
+    work: Path,
+    output: Path,
+    project_name: str,
+    out_name: str,
+) -> None:
+    """Write one builder-specific output name.
+
+    The upstream scripts historically shared manual.out_name. Reusing one value
+    across FCPXML, CapCut and Premiere lets later builders overwrite an earlier
+    artifact. MirrorOrder rewrites config.json before each builder instead.
+    """
+
     payload = {
         "BASE": str(base),
         "WORK": str(work),
         "OUT_DIR": str(output),
         "manual": {
             "project_name": project_name,
-            "out_name": "synchronized.fcpxml",
+            "out_name": out_name,
         },
     }
     (script_dir / "config.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -226,7 +241,7 @@ def run_multicam_sync(
     work.mkdir(parents=True, exist_ok=True)
     delivery.mkdir(parents=True, exist_ok=True)
     media_base, layout = _prepare_media_base(config.media_root, stage)
-    _write_config(script_dir, media_base, work, delivery, config.name)
+    _write_config(script_dir, media_base, work, delivery, config.name, "synchronized.fcpxml")
 
     def emit(text: str) -> None:
         if log:
@@ -258,22 +273,88 @@ def run_multicam_sync(
         positions.append(compressed)
 
     emit("生成 FCPXML 1.8 多机位时间线")
+    _write_config(script_dir, media_base, work, delivery, config.name, "synchronized.fcpxml")
     _run(script_dir, "build_fcpxml.py", [], emit)
     fcpxml = delivery / "synchronized.fcpxml"
     if not fcpxml.is_file():
         raise RuntimeError("同步完成但 synchronized.fcpxml 未生成")
+
+    emit("规范化 FCPXML 素材路径，移除同步临时目录引用")
+    local_fcpxml = rewrite_fcpxml_media(
+        fcpxml,
+        scan_root=media_base,
+        source_root=config.media_root,
+    )
+    portable_fcpxml_path = delivery / "synchronized_portable.fcpxml"
+    portable_fcpxml = rewrite_fcpxml_media(
+        fcpxml,
+        scan_root=media_base,
+        source_root=config.media_root,
+        output=portable_fcpxml_path,
+        portable=True,
+    )
+
     emit("校验 FCPXML 帧边界、素材引用与结构")
     _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(config.media_root)], emit)
 
+    capcut = ""
+    portable_capcut = ""
+    capcut_report: dict[str, Any] = {}
+    portable_capcut_report: dict[str, Any] = {}
+    if (script_dir / "build_capcut_fcpxml.py").is_file():
+        try:
+            emit("生成剪映 / CapCut FCPXML")
+            # build_capcut_fcpxml.py turns *_final.fcpxml into *_capcut.fcpxml.
+            _write_config(script_dir, media_base, work, delivery, config.name, "synchronized_final.fcpxml")
+            _run(script_dir, "build_capcut_fcpxml.py", [], emit)
+            capcut_path = delivery / "synchronized_capcut.fcpxml"
+            if capcut_path.is_file():
+                capcut_report = rewrite_fcpxml_media(
+                    capcut_path,
+                    scan_root=media_base,
+                    source_root=config.media_root,
+                )
+                portable_capcut_path = delivery / "synchronized_capcut_portable.fcpxml"
+                portable_capcut_report = rewrite_fcpxml_media(
+                    capcut_path,
+                    scan_root=media_base,
+                    source_root=config.media_root,
+                    output=portable_capcut_path,
+                    portable=True,
+                )
+                capcut = str(capcut_path)
+                portable_capcut = str(portable_capcut_path)
+        except Exception as error:
+            emit(f"剪映 / CapCut FCPXML 可选生成失败：{error}")
+
     premiere = ""
+    premiere_report: dict[str, Any] = {}
     if (script_dir / "build_pr_xml.py").is_file():
         try:
             emit("生成 Premiere XML")
+            _write_config(script_dir, media_base, work, delivery, config.name, "synchronized_premiere.xml")
             _run(script_dir, "build_pr_xml.py", [], emit)
-            xmls = sorted(delivery.glob("*.xml"), key=lambda path: path.stat().st_mtime_ns, reverse=True)
-            premiere = str(xmls[0]) if xmls else ""
+            premiere_path = delivery / "synchronized_premiere.xml"
+            if premiere_path.is_file():
+                premiere_report = rewrite_premiere_media(
+                    premiere_path,
+                    scan_root=media_base,
+                    source_root=config.media_root,
+                )
+                premiere = str(premiere_path)
         except Exception as error:
             emit(f"Premiere XML 可选生成失败：{error}")
+
+    manifest_path = delivery / "media_relink_manifest.json"
+    relink_manifest = write_relink_manifest(
+        manifest_path,
+        source_root=config.media_root,
+        local_fcpxml=local_fcpxml,
+        portable_fcpxml=portable_fcpxml,
+        capcut_fcpxml=capcut_report,
+        portable_capcut_fcpxml=portable_capcut_report,
+        premiere_xml=premiere_report,
+    )
 
     # synchronized.fcpxml is a generated artifact. The original project.toml
     # remains media-directory so re-sync/revision history never loses its source.
@@ -286,7 +367,12 @@ def run_multicam_sync(
         "days": days,
         "positions": [str(path) for path in positions],
         "fcpxml": str(fcpxml),
+        "portable_fcpxml": str(portable_fcpxml_path),
+        "capcut_fcpxml": capcut,
+        "portable_capcut_fcpxml": portable_capcut,
         "premiere_xml": premiere,
+        "media_relink_manifest": str(manifest_path),
+        "media_reference_count": len(relink_manifest.get("files", [])),
         "source_kind": "media-directory",
         "project_promoted_to_fcpxml": False,
     }
