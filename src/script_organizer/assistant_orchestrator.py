@@ -14,6 +14,7 @@ from .automation_store import AutomationStore
 from .editorial_store import EditorialStore
 from .model_registry import AssistantLanguageModel, ModelRegistry
 from .review_store import ReviewStore
+from .script_supervisor_store import ScriptSupervisorStore
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -61,12 +62,14 @@ class AssistantOrchestrator:
         review = ReviewStore(self.config.output_dir / "review.json").load()
         editorial = EditorialStore(self.config.output_dir).load()
         audit = AuditStore(self.config.output_dir).load()
+        supervisor = ScriptSupervisorStore(self.config.output_dir).load()
         automatic = _read(self.config.output_dir / "auto_decisions.json")
         raw = {
             "analysis": _analysis_revision(self.config.output_dir),
             "review": int(review.get("revision", 0) or 0),
             "editorial": int(editorial.get("revision", 0) or 0),
             "audit": int(audit.get("revision", 0) or 0),
+            "script_supervisor": int(supervisor.get("revision", 0) or 0),
             "automation_updated_at": str(automatic.get("updated_at", "") or ""),
         }
         return hashlib.sha1(
@@ -202,20 +205,90 @@ class AssistantOrchestrator:
             "actions": ["focus"],
         }
 
+    def _supervisor_notes(self, limit: int = 48) -> list[dict[str, Any]]:
+        board = ScriptSupervisorStore(self.config.output_dir).load()
+        rows = []
+        for group_id, raw in _as_dict(board.get("entries")).items():
+            entry = _as_dict(raw)
+            note = str(entry.get("note", "") or "").strip()
+            status = str(entry.get("status", "unmarked") or "unmarked")
+            usable_range = _as_dict(entry.get("usable_range"))
+            if not note and status == "unmarked" and not usable_range:
+                continue
+            rows.append(
+                {
+                    "group_id": str(group_id),
+                    "scene": str(entry.get("scene", "") or "")[:80],
+                    "shot": str(entry.get("shot", "") or "")[:80],
+                    "take_number": entry.get("take_number"),
+                    "status": status,
+                    "note": note[:1200],
+                    "usable_range": usable_range,
+                    "preferred_clip_id": str(entry.get("preferred_clip_id", "") or ""),
+                    "angles": _as_dict(entry.get("angles")),
+                    "actor": str(entry.get("actor", "") or "")[:80],
+                }
+            )
+        rows.sort(key=lambda item: (item["scene"], item["shot"], item.get("take_number") or 0, item["group_id"]))
+        return rows[: max(1, min(120, int(limit)))]
+
+    def _supervisor_items(self, titles: dict[str, str]) -> list[dict[str, Any]]:
+        items = []
+        for row in self._supervisor_notes(limit=80):
+            group_id = row["group_id"]
+            status = row["status"]
+            note = row["note"]
+            if status == "ng":
+                priority, label = 76, "场记 NG"
+                message = note or "场记已把这条标为 NG。它不会自动改写 Editorial Decision，但粗剪规划会把它当作人工生产约束。"
+            elif status == "partial":
+                priority, label = 72, "部分可用"
+                message = note or "场记标记这条只有部分可用。建议看片并补精确可用范围，避免粗剪误用完整 Take。"
+            elif note:
+                priority, label = 46, "场记备注"
+                message = note
+            else:
+                continue
+            range_text = ""
+            usable_range = _as_dict(row.get("usable_range"))
+            if usable_range:
+                range_text = f"可用范围 {usable_range.get('start', 0)}–{usable_range.get('end', 0)} 秒"
+            items.append(
+                {
+                    "key": f"script-supervisor:{group_id}:{status}",
+                    "group_id": group_id,
+                    "kind": "production",
+                    "priority": priority,
+                    "label": label,
+                    "title": titles.get(group_id, group_id),
+                    "message": message[:1200],
+                    "context": range_text or "场记备注属于人工生产证据；AI可以解释，但不能自行升级成Best或Reject。",
+                    "actions": ["focus"],
+                }
+            )
+        return items
+
     def _build_items(self, attention: list[dict[str, Any]]) -> list[dict[str, Any]]:
         titles = self._group_titles()
         items = [
             self._item_from_attention(row, titles.get(str(row.get("group_id", "")), str(row.get("group_id", ""))))
             for row in attention
         ]
-        items.sort(key=lambda item: (-int(item.get("priority", 0) or 0), str(item.get("title", ""))))
-        return items[:160]
+        items.extend(self._supervisor_items(titles))
+        deduped: dict[str, dict[str, Any]] = {}
+        for item in items:
+            key = str(item.get("key", "") or "")
+            if key:
+                deduped[key] = item
+        result = list(deduped.values())
+        result.sort(key=lambda item: (-int(item.get("priority", 0) or 0), str(item.get("title", ""))))
+        return result[:160]
 
     @staticmethod
     def _summary(items: list[dict[str, Any]]) -> str:
         high = [item for item in items if int(item.get("priority", 0) or 0) >= 80]
         if not high:
-            return "目前没有需要打断看片的高优先问题。我会继续盯着归集冲突、低置信素材、媒体缺失和审计反例。"
+            return "目前没有需要打断看片的高优先问题。我会继续盯着归集冲突、低置信素材、场记约束和审计反例。"
         decisions = sum(1 for item in high if item.get("kind") == "decision")
         production = sum(1 for item in high if item.get("kind") == "production")
         parts = []
@@ -258,6 +331,7 @@ class AssistantOrchestrator:
         return {
             "project": project,
             "attention": attention[:20],
+            "script_supervisor": self._supervisor_notes(limit=32),
             "failure_patterns": self.tools.failure_patterns(limit=6),
             "models": self.models.public(),
             "allowed_tools": [
@@ -271,6 +345,8 @@ class AssistantOrchestrator:
                 "不得写review.json或editorial.json",
                 "不得自动Best或Reject",
                 "不得覆盖人工归集",
+                "场记备注是人工生产证据；可以理解诸如只要前半段、后半段可用、穿帮、保底等语义，但不能自行把备注改写成Final Best/Reject",
+                "场记已给出的可用范围和人工景别高于AI推断；若与Final Best冲突应主动提示而不是静默解决",
                 "多机位画面人物不等于说话角色",
                 "已人工确认的人物或声纹不得要求重复计算",
                 "优先减少危险的高置信误判，而不是追求所有素材都有答案",
@@ -281,8 +357,9 @@ class AssistantOrchestrator:
         if not self.language.enabled:
             return None
         system = (
-            "你是镜序助理的生产编排器。你只能从allowed_tools里选择动作，不能直接修改审核、创意决定、FCPXML或媒体。"
-            "目标是减少剪辑人员寻找问题的时间，同时控制算力。优先处理高风险歧义和算法反例，不要全量重复计算。"
+            "你是镜序助理的生产编排器。你只能从allowed_tools里选择动作，不能直接修改审核、场记事实、创意决定、FCPXML或媒体。"
+            "目标是减少剪辑人员寻找问题的时间，同时控制算力。优先处理高风险歧义、场记备注和算法反例，不要全量重复计算。"
+            "场记备注由人填写，是高价值生产证据。你可以理解其语义并提出自然语言提醒，但不能把备注自行升级成Best/Reject。"
             "人物识别只能针对少量未知身份，不能要求重算已人工确认的身份。"
             "输出严格JSON："
             '{"briefing":"一句制作简报","actions":[{"tool":"run_priority_audit|extract_visual_evidence|index_unknown_identities|collect_learning_cases|noop","arguments":{}}],'
@@ -355,9 +432,6 @@ class AssistantOrchestrator:
                     result = {"status": "failed", "error": str(error)[:500]}
                 action_results.append({"tool": tool, "result": result})
 
-        # A successful model plan owns this cycle. Do not silently append a
-        # third expensive action behind the plan; deterministic auto-audit is a
-        # fallback only when no usable model plan was produced.
         if allow_actions and plan is None:
             visual_enabled = bool(self.models.vision.enabled)
             if visual_enabled:
@@ -413,10 +487,12 @@ class AssistantOrchestrator:
         current = self.store.append_message("user", text, source="user")
         project = self.tools.inspect_project()
         attention = self.tools.list_attention_groups(limit=30)
+        supervisor = self._supervisor_notes(limit=36)
         if self.language.enabled:
             system = (
-                "你是镜序助理，服务短剧后期制作。根据给出的项目事实回答用户，优先帮助用户看片、归集、发现素材问题和理解下一步。"
-                "不要声称已经执行未发生的动作；不要把AI意见说成人工最终结论；不要输出模型/运行时技术宣传。"
+                "你是镜序助理，服务短剧后期制作。根据给出的项目事实和场记备注回答用户，优先帮助用户看片、归集、理解素材可用范围、发现素材问题和准备粗剪。"
+                "场记备注是人工生产证据，可以按语义解释，例如‘只要前半段’表示粗剪应优先考虑局部范围，但除非人工已填写精确范围，否则不得伪造具体秒数。"
+                "不要声称已经执行未发生的动作；不要把AI意见或场记备注说成人工最终创意结论；不要输出模型/运行时技术宣传。"
                 "多机位画面人物可能不是说话人。输出严格JSON：{\"answer\":\"中文回答\"}。"
             )
             raw = self.language.complete_json(
@@ -425,13 +501,14 @@ class AssistantOrchestrator:
                     "question": text,
                     "project": project,
                     "attention": attention[:16],
+                    "script_supervisor": supervisor,
                     "assistant_summary": current.get("summary", ""),
                 },
                 temperature=0.2,
             )
             answer = str(_as_dict(raw).get("answer", "") or "").strip()
         else:
-            answer = "当前没有可用的语言模型。我仍会用确定性规则和本地视觉审计整理问题；启用语言模型后，我可以进一步用自然语言解释和规划。"
+            answer = "当前没有可用的语言模型。我仍会保留场记事实、人工景别和可用范围，并用确定性规则参与Coverage与粗剪规划；启用语言模型后，我可以进一步理解备注语义并主动解释。"
         if not answer:
             answer = str(current.get("summary", "") or "当前没有新的高优先问题。")
         saved = self.store.append_message("assistant", answer, source=self.models.assistant.source)
