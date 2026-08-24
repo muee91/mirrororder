@@ -47,9 +47,9 @@ function mappingSourceLabel(source: string): string {
   return "待处理";
 }
 
-function TakeCard({ take }: { take: ReviewTakeGroup }) {
+function TakeCard({ take, selected, onSelect }: { take: ReviewTakeGroup; selected: boolean; onSelect: () => void }) {
   return (
-    <article className="take-card">
+    <article className={`take-card ${selected ? "is-selected" : ""}`}>
       <header className="take-card-heading">
         <div>
           <div className="take-title-row">
@@ -61,7 +61,10 @@ function TakeCard({ take }: { take: ReviewTakeGroup }) {
           </div>
           <p>{mappingLabel(take)}</p>
         </div>
-        <span className="duration-label">{take.duration.toFixed(1)}s</span>
+        <div className="take-heading-actions">
+          <span className="duration-label">{take.duration.toFixed(1)}s</span>
+          <button type="button" className="take-select" onClick={onSelect}>{selected ? "当前" : "查看"}</button>
+        </div>
       </header>
 
       {take.transcript.text ? <p className="take-transcript">{take.transcript.text}</p> : null}
@@ -141,6 +144,8 @@ export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
   const [model, setModel] = useState<ReviewModelPayload | null>(null);
   const [activeEpisode, setActiveEpisode] = useState<number | null>(null);
   const [visibleTakeCount, setVisibleTakeCount] = useState(TAKE_PAGE_SIZE);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,12 +154,17 @@ export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
     setModel(null);
     setActiveEpisode(null);
     setVisibleTakeCount(TAKE_PAGE_SIZE);
+    setSelectedGroupId(null);
+    setSelectedClipId(null);
 
     void connection
       .reviewModel(project.project_id)
       .then((next) => {
         if (cancelled) return;
         setModel(next);
+        const firstTake = next.take_groups[0] ?? null;
+        setSelectedGroupId(firstTake?.group_id ?? null);
+        setSelectedClipId(firstTake?.angles[0]?.clip_id ?? null);
         setActiveEpisode(next.episodes[0]?.episode ?? null);
         setLoadState("ready");
         setMessage(`review.v1 · analysis ${next.revisions.analysis || "—"} · review r${next.revisions.review}`);
@@ -172,6 +182,14 @@ export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
 
   const selectedEpisode = model?.episodes.find((item) => item.episode === activeEpisode) ?? model?.episodes[0] ?? null;
   const visibleTakes = model?.take_groups.slice(0, visibleTakeCount) ?? [];
+  const selectedTake = model?.take_groups.find((item) => item.group_id === selectedGroupId) ?? model?.take_groups[0] ?? null;
+  const selectedAngle = selectedTake?.angles.find((item) => item.clip_id === selectedClipId) ?? selectedTake?.angles[0] ?? null;
+  const playbackUrl = selectedAngle?.playback.url ? new URL(selectedAngle.playback.url, `${baseUrl}/`).toString() : "";
+
+  function selectTake(take: ReviewTakeGroup): void {
+    setSelectedGroupId(take.group_id);
+    setSelectedClipId(take.angles[0]?.clip_id ?? null);
+  }
 
   return (
     <section className="material-script-workbench">
@@ -215,14 +233,86 @@ export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
             <span>自动状态由 Host 提供</span>
             <span>人工 placement 优先</span>
           </div>
-          <div className="take-list">
-            {visibleTakes.map((take) => <TakeCard key={take.group_id} take={take} />)}
+          <div className="material-layout">
+            <div>
+              <div className="take-list">
+                {visibleTakes.map((take) => (
+                  <TakeCard
+                    key={take.group_id}
+                    take={take}
+                    selected={take.group_id === selectedTake?.group_id}
+                    onSelect={() => selectTake(take)}
+                  />
+                ))}
+              </div>
+              {visibleTakeCount < model.take_groups.length ? (
+                <button className="load-more" type="button" onClick={() => setVisibleTakeCount((value) => value + TAKE_PAGE_SIZE)}>
+                  再显示 {Math.min(TAKE_PAGE_SIZE, model.take_groups.length - visibleTakeCount)} 个 Take
+                </button>
+              ) : null}
+            </div>
+
+            <aside className="take-inspector">
+              {selectedTake ? (
+                <>
+                  <div className="inspector-heading">
+                    <div>
+                      <p className="eyebrow">当前 Take</p>
+                      <h3>{selectedTake.group_id}</h3>
+                    </div>
+                    <span className={`mapping-source source-${selectedTake.effective_mapping.source}`}>
+                      {mappingSourceLabel(selectedTake.effective_mapping.source)}
+                    </span>
+                  </div>
+                  <p className="inspector-mapping">{mappingLabel(selectedTake)}</p>
+                  <div className="inspector-angle-tabs">
+                    {selectedTake.angles.map((angle) => (
+                      <button
+                        type="button"
+                        className={angle.clip_id === selectedAngle?.clip_id ? "is-active" : ""}
+                        key={angle.clip_id}
+                        onClick={() => setSelectedClipId(angle.clip_id)}
+                      >
+                        {angle.camera || "—"}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedAngle?.playback.available === false ? (
+                    <div className="player-empty">当前设备未解析到这条媒体。</div>
+                  ) : selectedAngle && playbackUrl ? (
+                    <video
+                      className="take-player"
+                      controls
+                      preload="metadata"
+                      src={playbackUrl}
+                      onLoadedMetadata={(event) => {
+                        if (selectedAngle.source_start > 0) event.currentTarget.currentTime = selectedAngle.source_start;
+                      }}
+                      onTimeUpdate={(event) => {
+                        if (selectedAngle.source_end !== null && event.currentTarget.currentTime >= selectedAngle.source_end) {
+                          event.currentTarget.pause();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="player-empty">当前 Take 没有可播放机位。</div>
+                  )}
+                  {selectedAngle ? (
+                    <div className="selected-angle-meta">
+                      <strong>{selectedAngle.name}</strong>
+                      <span>{selectedAngle.camera || "—"} · {selectedAngle.duration.toFixed(1)}s</span>
+                    </div>
+                  ) : null}
+                  <div className="dialogue-panel">
+                    <p className="eyebrow">对白 / 证据</p>
+                    <p>{selectedTake.transcript.text || "当前没有可靠对白投影。"}</p>
+                  </div>
+                </>
+              ) : (
+                <div className="player-empty">当前项目没有 Take。</div>
+              )}
+            </aside>
           </div>
-          {visibleTakeCount < model.take_groups.length ? (
-            <button className="load-more" type="button" onClick={() => setVisibleTakeCount((value) => value + TAKE_PAGE_SIZE)}>
-              再显示 {Math.min(TAKE_PAGE_SIZE, model.take_groups.length - visibleTakeCount)} 个 Take
-            </button>
-          ) : null}
         </div>
       ) : (
         <div className="script-workbench">
