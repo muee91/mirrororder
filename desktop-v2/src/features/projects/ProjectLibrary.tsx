@@ -35,7 +35,7 @@ export function ProjectLibrary({ workspace, selectedProjectId, onSelectProject }
               type="button"
               onClick={() => onSelectProject(project)}
             >
-              <strong>{project.project || project.project_id}</strong>
+              <strong>{project.name || project.project_id}</strong>
               <span>{projectSubtitle(project)}</span>
             </button>
           ))

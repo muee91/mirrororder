@@ -127,7 +127,7 @@ export function App() {
                 <div className="workbench-heading">
                   <div>
                     <p className="eyebrow">项目</p>
-                    <h2>{selectedProject.project || selectedProject.project_id}</h2>
+                    <h2>{selectedProject.name || selectedProject.project_id}</h2>
                   </div>
                   <code>{selectedProject.project_id}</code>
                 </div>

@@ -15,12 +15,13 @@ export interface HostPing {
 
 export interface ProjectSummary {
   project_id: string;
-  project: string;
+  name: string;
   input_kind: string;
   analysis_revision?: string;
   stats?: Record<string, unknown>;
   errors?: unknown;
   source?: unknown;
+  local_media?: unknown;
   error?: string;
 }
 
