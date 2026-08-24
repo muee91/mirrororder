@@ -203,7 +203,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
             <label>
               <span>访问范围</span>
               <select value={access} disabled={running} onChange={(event) => setAccess(event.target.value as TeamGatewayAccess)}>
-                <option value="lan">可信局域网</option>
+                <option value="lan">局域网</option>
                 <option value="local">仅本机</option>
               </select>
             </label>
