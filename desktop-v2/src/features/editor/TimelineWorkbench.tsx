@@ -1,5 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload } from "../../api/host";
 import { ProductionClient, type RoughCutPlan } from "../../api/production";
 import {
@@ -7,9 +7,12 @@ import {
   TimelineClient,
   type TimelineClip,
   type TimelineCommand,
+  type TimelineRuntimeStatus,
   type TimelineSnapshot,
   type TimelineTrack,
 } from "../../api/timeline";
+import { EditorMonitors } from "./EditorMonitors";
+import { clampPlayhead } from "./editorPlayback";
 import { buildRoughCutTimelineProposal } from "./timelineSeed";
 
 interface Props {
@@ -54,6 +57,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const [review, setReview] = useState<ReviewModelPayload | null>(null);
   const [plan, setPlan] = useState<RoughCutPlan | null>(null);
   const [snapshot, setSnapshot] = useState<TimelineSnapshot | null>(null);
+  const [persistence, setPersistence] = useState<TimelineRuntimeStatus | null>(null);
   const [selectedClipId, setSelectedClipId] = useState("");
   const [playhead, setPlayhead] = useState(0);
   const [moveStart, setMoveStart] = useState(0);
@@ -61,8 +65,21 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("正在读取 rough_cut_plan.v1…");
 
+  const refreshPersistence = useCallback(async (): Promise<void> => {
+    if (!isTauri()) return;
+    try {
+      setPersistence(await timeline.persistenceStatus());
+    } catch {
+      setPersistence(null);
+    }
+  }, [timeline]);
+
   useEffect(() => {
     let cancelled = false;
+    setSnapshot(null);
+    setPersistence(null);
+    setSelectedClipId("");
+    setPlayhead(0);
     setMessage("正在读取 rough_cut_plan.v1…");
     Promise.all([host.reviewModel(projectId), production.roughCutPlan(projectId)])
       .then(([nextReview, nextPlan]) => {
@@ -76,11 +93,22 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       });
 
     if (isTauri()) {
-      timeline.snapshot().then((current) => {
-        if (cancelled || current.project.project_id !== projectId) return;
+      timeline.openPersisted(projectId).then((current) => {
+        if (cancelled) return;
         setSnapshot(current);
-        setSelectedClipId(activeSequence(current)?.tracks.flatMap((track) => track.clips)[0]?.clip_id ?? "");
-      }).catch(() => undefined);
+        const firstClip = activeSequence(current)?.tracks.flatMap((track) => track.clips)[0] ?? null;
+        setSelectedClipId(firstClip?.clip_id ?? "");
+        setPlayhead(firstClip?.timeline_start ?? 0);
+        void timeline.persistenceStatus().then((status) => {
+          if (!cancelled) setPersistence(status);
+        }).catch(() => undefined);
+      }).catch((error: unknown) => {
+        if (cancelled) return;
+        const text = errorMessage(error);
+        if (!text.includes("还没有持久化 Timeline")) {
+          setMessage(`Timeline 恢复失败：${text}`);
+        }
+      });
     }
 
     return () => { cancelled = true; };
@@ -98,6 +126,18 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     ? snapshot?.project.multicam_groups.find((group) => group.group_id === selectedMulticamGroupId) ?? null
     : null;
 
+  const changePlayhead = useCallback((frame: number) => {
+    if (!sequence) {
+      setPlayhead(Math.max(0, Math.round(frame)));
+      return;
+    }
+    setPlayhead(clampPlayhead(sequence, frame));
+  }, [sequence]);
+
+  const stepPlayhead = useCallback((frames: number) => {
+    setPlayhead((current) => sequence ? clampPlayhead(sequence, current + frames) : Math.max(0, current + frames));
+  }, [sequence]);
+
   async function confirmProposal(): Promise<void> {
     if (!proposal) return;
     if (!isTauri()) {
@@ -109,8 +149,11 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     try {
       const next = await timeline.loadWithCommands(proposal.baseProject, proposal.commands);
       setSnapshot(next);
-      setSelectedClipId(activeSequence(next)?.tracks.flatMap((track) => track.clips)[0]?.clip_id ?? "");
-      setMessage(`Timeline 已建立 · ${proposal.commands.length} 条 human-confirmed insert command · validator 通过`);
+      const firstClip = activeSequence(next)?.tracks.flatMap((track) => track.clips)[0] ?? null;
+      setSelectedClipId(firstClip?.clip_id ?? "");
+      setPlayhead(firstClip?.timeline_start ?? 0);
+      await refreshPersistence();
+      setMessage(`Timeline 已建立并 checkpoint · ${proposal.commands.length} 条 human-confirmed insert command · validator 通过`);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -123,6 +166,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     try {
       const next = await timeline.apply(command);
       setSnapshot(next);
+      await refreshPersistence();
       setMessage(success);
     } catch (error) {
       setMessage(errorMessage(error));
@@ -136,6 +180,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     try {
       const next = await timeline.undo();
       setSnapshot(next);
+      await refreshPersistence();
       setMessage(`Undo · 剩余 ${next.undo_depth}`);
     } catch (error) {
       setMessage(errorMessage(error));
@@ -147,10 +192,25 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     try {
       const next = await timeline.redo();
       setSnapshot(next);
+      await refreshPersistence();
       setMessage(`Redo · 可撤销 ${next.undo_depth}`);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally { setBusy(false); }
+  }
+
+  async function checkpoint(): Promise<void> {
+    setBusy(true);
+    try {
+      const next = await timeline.checkpoint();
+      setSnapshot(next);
+      await refreshPersistence();
+      setMessage("Timeline checkpoint 已原子写入；journal 已折叠。 ");
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function splitSelected(): void {
@@ -173,7 +233,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     <section className="timeline-workbench">
       <header className="production-heading timeline-heading">
         <div>
-          <p className="eyebrow">Phase 4 · Rust Timeline Core</p>
+          <p className="eyebrow">Phase 4–5 · Persistent Timeline + Proxy Edit</p>
           <h2>剪辑 / Timeline</h2>
         </div>
         <span className="production-state">{message}</span>
@@ -207,11 +267,26 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
             <div className="timeline-history">
               <button type="button" className="secondary" disabled={busy || snapshot.undo_depth === 0} onClick={() => void undo()}>Undo {snapshot.undo_depth}</button>
               <button type="button" className="secondary" disabled={busy || snapshot.redo_depth === 0} onClick={() => void redo()}>Redo {snapshot.redo_depth}</button>
+              <button type="button" className="secondary" disabled={busy} onClick={() => void checkpoint()}>Checkpoint</button>
             </div>
-            <label>Playhead <input type="number" min={0} value={playhead} onChange={(event) => setPlayhead(Math.max(0, Number(event.target.value) || 0))} /></label>
+            <label>Playhead <input type="number" min={0} value={playhead} onChange={(event) => changePlayhead(Number(event.target.value) || 0)} /></label>
             <button type="button" className="secondary" disabled={busy} onClick={() => void apply({ type: "set_marker", sequence_id: sequence.sequence_id, marker: { marker_id: `marker:${playhead}`, position: playhead, label: `Marker ${playhead}` } }, `已设置 Marker @ ${frameLabel(playhead)}`)}>Marker</button>
-            <span>{sequence.frame_rate.numerator}/{sequence.frame_rate.denominator} fps · validator {snapshot.validation.length ? `${snapshot.validation.length} issues` : "OK"}</span>
+            <span>
+              {sequence.frame_rate.numerator}/{sequence.frame_rate.denominator} fps · validator {snapshot.validation.length ? `${snapshot.validation.length} issues` : "OK"}
+              {persistence ? ` · journal ${persistence.persistence.journal_operations}${persistence.recovered_operations ? ` · recovered ${persistence.recovered_operations}` : ""}${persistence.used_backup ? " · backup recovery" : ""}` : ""}
+            </span>
           </div>
+
+          <EditorMonitors
+            baseUrl={baseUrl}
+            projectId={projectId}
+            project={snapshot.project}
+            sequence={sequence}
+            selectedClip={selection?.clip ?? null}
+            playhead={playhead}
+            onPlayheadChange={changePlayhead}
+            onStepFrames={stepPlayhead}
+          />
 
           <div className="timeline-stage production-panel">
             {sequence.tracks.map((track) => (
@@ -224,7 +299,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
                       className={`timeline-clip ${clip.clip_id === selectedClipId ? "is-selected" : ""} ${clip.enabled ? "" : "is-disabled"}`}
                       key={clip.clip_id}
                       style={{ left: `${(clip.timeline_start / maxEnd) * 100}%`, width: `${Math.max(1.5, (clip.duration / maxEnd) * 100)}%` }}
-                      onClick={() => { setSelectedClipId(clip.clip_id); setMoveStart(clip.timeline_start); setPlayhead(clip.timeline_start); }}
+                      onClick={() => { setSelectedClipId(clip.clip_id); setMoveStart(clip.timeline_start); changePlayhead(clip.timeline_start); }}
                       title={`${clip.clip_id}\n${clip.timeline_start}–${clip.timeline_start + clip.duration}f`}
                     >
                       <strong>{clip.metadata.segment_id || clip.clip_id}</strong>
@@ -281,7 +356,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       ) : (
         <div className="production-panel timeline-empty">
           <strong>尚未建立 Rust Timeline</strong>
-          <p>上方 proposal 可以在浏览器中审阅；只有明确点击“确认建立时间线”才会调用 Tauri Timeline Core。</p>
+          <p>Tauri 会先尝试恢复本机 checkpoint + journal；没有持久化编辑时，上方 proposal 仍需明确点击“确认建立时间线”。</p>
         </div>
       )}
     </section>
