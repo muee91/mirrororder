@@ -1,10 +1,12 @@
 use serde::Serialize;
 use std::{
     env,
-    net::{TcpListener, UdpSocket},
+    net::{SocketAddr, TcpListener, TcpStream, UdpSocket},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
+    thread,
+    time::{Duration, Instant},
 };
 use tauri::State;
 
@@ -129,6 +131,24 @@ fn ensure_port_available(port: u16, local_only: bool) -> Result<(), String> {
     TcpListener::bind((host, port))
         .map(|listener| drop(listener))
         .map_err(|error| format!("Gateway 端口 {port} 已被占用（{error}）"))
+}
+
+fn wait_until_ready(child: &mut Child, port: u16) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    while Instant::now() < deadline {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("检查 Gateway 启动状态失败：{error}"))?
+        {
+            return Err(format!("Team Web Gateway 在监听端口前退出：{status}"));
+        }
+        if TcpStream::connect_timeout(&address, Duration::from_millis(150)).is_ok() {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(60));
+    }
+    Err(format!("Team Web Gateway 启动超时：15 秒内未监听 127.0.0.1:{port}"))
 }
 
 fn local_lan_address() -> Option<String> {
@@ -291,9 +311,15 @@ pub fn start_team_gateway(
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    let child = command
+    let mut child = command
         .spawn()
         .map_err(|error| format!("无法启动 Team Web Gateway：{error}"))?;
+    if let Err(error) = wait_until_ready(&mut child, config.port) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
+
     let base_url = format!("http://127.0.0.1:{}", config.port);
     let lan_url = lan_url(config.port, config.local_only);
     *slot = Some(ManagedGateway {
