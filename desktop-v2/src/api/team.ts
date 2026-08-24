@@ -68,11 +68,11 @@ export function generatePairingCode(length = 8): string {
 }
 
 export function teamWorkbenchUrl(
-  status: Pick<TeamGatewayStatus | TeamGatewayLaunchResult, "base_url" | "lan_url">,
+  status: Pick<TeamGatewayStatus | TeamGatewayLaunchResult, "base_url" | "lan_url" | "local_only">,
   workspaceId?: string | null,
   projectId?: string | null,
 ): string | null {
-  const root = status.lan_url || status.base_url;
+  const root = status.local_only ? status.base_url : status.lan_url;
   if (!root) return null;
   const url = new URL(root);
   const workspace = workspaceId?.trim();
