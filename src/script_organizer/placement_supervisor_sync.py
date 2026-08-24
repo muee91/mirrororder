@@ -94,8 +94,7 @@ def _merged_attachments(group: dict[str, Any], existing: dict[str, Any]) -> list
 
 def _has_human_slate_detail(record: dict[str, Any]) -> bool:
     if (
-        str(record.get("scene", "") or "").strip()
-        or str(record.get("shot", "") or "").strip()
+        str(record.get("shot", "") or "").strip()
         or record.get("take_number") not in {None, ""}
         or str(record.get("status", "unmarked") or "unmarked") != "unmarked"
         or str(record.get("note", "") or "").strip()
@@ -170,11 +169,15 @@ def mirror_manual_placement_to_supervisor(project: Any, action: dict[str, Any]) 
                     "source_group_id": group_id,
                     "script_scene_id": "",
                     "attachments": _merged_attachments(group, existing),
+                    "episode": None,
                 }
-                # Explicitly clear episode and an auto-projected scene. Human
-                # scene text is preserved because it is independent slate fact.
-                record["episode"] = None
-                if record_id.startswith("placement-") or not str(existing.get("scene", "") or "").strip():
+                # Clear scene text only when it is plainly our generated scene
+                # and no independent human slate detail exists.
+                if (
+                    record_id.startswith("placement-")
+                    and not _has_human_slate_detail(existing)
+                    and str(existing.get("scene", "") or "") == str(existing.get("script_scene_id", "") or "")
+                ):
                     record["scene"] = ""
                 store.apply_record(
                     {
@@ -208,10 +211,14 @@ def mirror_manual_placement_to_supervisor(project: Any, action: dict[str, Any]) 
                 if not existing and scene_id:
                     record["scene"] = scene_id
             else:
-                # Exact -> rough must not leave a stale auto-generated scene in
-                # the slate. A human-typed scene remains untouched.
+                # Exact -> rough must not leave a stale generated scene, but an
+                # actual human slate field always wins over the projection.
                 record["script_scene_id"] = ""
-                if record_id.startswith("placement-") and str(existing.get("scene", "") or "") == str(existing.get("script_scene_id", "") or ""):
+                if (
+                    record_id.startswith("placement-")
+                    and not _has_human_slate_detail(existing)
+                    and str(existing.get("scene", "") or "") == str(existing.get("script_scene_id", "") or "")
+                ):
                     record["scene"] = ""
 
             store.apply_record(
