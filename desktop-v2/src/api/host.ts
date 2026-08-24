@@ -45,6 +45,13 @@ export interface HostLaunchResult {
   already_running: boolean;
 }
 
+export interface HostProcessStatus {
+  running: boolean;
+  pid: number | null;
+  base_url: string | null;
+  workspace_path: string | null;
+}
+
 interface ErrorPayload {
   error?: string;
 }
@@ -72,6 +79,12 @@ function normalizeBaseUrl(value: string): string {
   return normalized;
 }
 
+function requireTauriRuntime(action: string): void {
+  if (!isTauri()) {
+    throw new HostConnectionError(`浏览器预览无法${action}本地 Python Host，请在 Tauri App 中运行`);
+  }
+}
+
 async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
 }
@@ -88,7 +101,7 @@ async function decodeError(response: Response): Promise<string> {
 
 async function requestJson<T>(baseUrl: string, path: string): Promise<T> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await transportFetch(`${baseUrl}${path}`, {
       method: "GET",
@@ -104,12 +117,12 @@ async function requestJson<T>(baseUrl: string, path: string): Promise<T> {
     const message = error instanceof Error ? error.message : String(error);
     throw new HostConnectionError(`无法连接镜序 Host：${message}`, { cause: error });
   } finally {
-    window.clearTimeout(timeout);
+    globalThis.clearTimeout(timeout);
   }
 }
 
 async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => window.setTimeout(resolve, ms));
+  await new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
 export class HostConnection {
@@ -136,6 +149,9 @@ export class HostConnection {
     if (ping.status !== "ok") {
       throw new HostConnectionError(`Host ping 返回异常状态：${ping.status}`);
     }
+    if (!Array.isArray(workspace.projects)) {
+      throw new HostConnectionError("Host workspace 响应缺少 projects 列表");
+    }
     return {
       baseUrl: this.baseUrl,
       ping,
@@ -145,12 +161,13 @@ export class HostConnection {
   }
 
   async startLocal(workspacePath: string, port = 8765): Promise<HostLaunchResult> {
-    if (!isTauri()) {
-      throw new HostConnectionError("浏览器预览无法启动本地 Python Host，请在 Tauri App 中运行");
-    }
+    requireTauriRuntime("启动");
     const path = workspacePath.trim();
     if (!path) {
       throw new HostConnectionError("启动 Host 前需要 workspace.toml 或工作区目录路径");
+    }
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new HostConnectionError("Host 端口必须是 1–65535 的整数");
     }
     try {
       return await invoke<HostLaunchResult>("start_python_host", {
@@ -159,6 +176,24 @@ export class HostConnection {
       });
     } catch (error) {
       throw new HostConnectionError(`启动 Python Host 失败：${String(error)}`, { cause: error });
+    }
+  }
+
+  async managedStatus(): Promise<HostProcessStatus> {
+    requireTauriRuntime("检查");
+    try {
+      return await invoke<HostProcessStatus>("host_process_status");
+    } catch (error) {
+      throw new HostConnectionError(`读取 Python Host 状态失败：${String(error)}`, { cause: error });
+    }
+  }
+
+  async stopLocal(): Promise<void> {
+    requireTauriRuntime("停止");
+    try {
+      await invoke("stop_python_host");
+    } catch (error) {
+      throw new HostConnectionError(`停止 Python Host 失败：${String(error)}`, { cause: error });
     }
   }
 
