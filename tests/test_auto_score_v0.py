@@ -126,6 +126,8 @@ def test_build_music_plan_writes_derived_artifacts_only(tmp_path: Path) -> None:
     assert plan["summary"]["cues"] == 2
     assert plan["summary"]["selected"] == 2
     assert plan["policy"]["license_gate"] is True
-    assert (config.output_dir / "music" / "library_index.json").is_file()
+    assert "library_root" not in plan
+    library_index = json.loads((config.output_dir / "music" / "library_index.json").read_text(encoding="utf-8"))
+    assert "root" not in library_index
     assert (config.output_dir / "music" / "music_plan.json").is_file()
     assert review.read_bytes() == before
