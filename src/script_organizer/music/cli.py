@@ -44,6 +44,42 @@ def _semantic_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _generation_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--generate",
+        choices=("off", "auto", "acestep", "stable-audio3"),
+        default="off",
+        help="低分候选的生成兜底；默认关闭，auto优先本机ACE-Step再尝试Stable Audio 3",
+    )
+    parser.add_argument(
+        "--generation-threshold",
+        type=float,
+        default=0.64,
+        help="最高候选低于此分数才触发生成（0-1）",
+    )
+    parser.add_argument(
+        "--generation-count",
+        type=int,
+        default=2,
+        help="每个需要生成的 cue 产生候选数量（1-4）",
+    )
+    parser.add_argument(
+        "--confirm-generated-rights",
+        action="store_true",
+        help="确认你当前适用的 Provider/模型条款允许这些生成结果用于商业同步；未确认时只展示生成候选，不自动选择",
+    )
+    parser.add_argument(
+        "--acestep-url",
+        default="",
+        help="ACE-Step 1.5 本机 API，例如 http://127.0.0.1:8001；也可用 MIRRORORDER_ACESTEP_URL",
+    )
+    parser.add_argument(
+        "--stable-audio-bin",
+        default="",
+        help="Stable Audio 3 stable-audio CLI 路径；也可用 MIRRORORDER_STABLE_AUDIO_BIN",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mirrororder-auto-score")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -63,10 +99,11 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser.add_argument(
         "--allow-unverified",
         action="store_true",
-        help="开发测试：允许未验证授权音乐进入候选；正式项目不建议使用",
+        help="开发测试：允许未验证授权音乐进入版权库候选；正式项目不建议使用",
     )
     _analysis_args(plan_parser)
     _semantic_args(plan_parser)
+    _generation_args(plan_parser)
 
     args = parser.parse_args(argv)
     if args.command == "index":
@@ -95,6 +132,12 @@ def main(argv: list[str] | None = None) -> int:
         force_analysis=args.force_analysis,
         semantic_mode=args.semantic,
         force_semantic=args.force_semantic,
+        generation_mode=args.generate,
+        generation_threshold=args.generation_threshold,
+        generation_count=args.generation_count,
+        generated_rights_confirmed=args.confirm_generated_rights,
+        acestep_url=args.acestep_url,
+        stable_audio_bin=args.stable_audio_bin,
     )
     print(json.dumps(plan["summary"], ensure_ascii=False, indent=2))
     print(str(config.output_dir / "music" / "music_plan.json"))
