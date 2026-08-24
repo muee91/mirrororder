@@ -1,5 +1,5 @@
 use crate::persistence::{
-    journal_entry, JournalOperation, PersistenceStatus, TimelineStorage,
+    journal_entry, new_generation, JournalOperation, PersistenceStatus, TimelineStorage,
 };
 use mirrororder_timeline_core::{
     validate_project, Command, TimelineEngine, TimelineProject, TimelineSnapshot, ValidationIssue,
@@ -12,7 +12,9 @@ use tauri::State;
 struct ManagedTimeline {
     engine: TimelineEngine,
     storage: TimelineStorage,
+    generation: String,
     next_sequence: u64,
+    checkpoint_sequence: u64,
     recovered_operations: usize,
     used_backup: bool,
     ignored_partial_tail: bool,
@@ -63,6 +65,11 @@ fn lock_manager(
         .map_err(|_| TimelineBridgeError::message("Timeline Core 状态锁已损坏"))
 }
 
+fn clean_engine(project: TimelineProject) -> Result<TimelineEngine, TimelineBridgeError> {
+    TimelineEngine::new(project)
+        .map_err(|issues| TimelineBridgeError::validation("Timeline checkpoint 未通过校验", issues))
+}
+
 fn apply_commands_transactionally(
     engine: &mut TimelineEngine,
     commands: &[Command],
@@ -101,16 +108,25 @@ fn replace_with_checkpoint(
     manager: &State<'_, TimelineManager>,
     engine: TimelineEngine,
 ) -> Result<TimelineSnapshot, TimelineBridgeError> {
-    let project_id = engine.project().project_id.clone();
+    let project = engine.project().clone();
+    let project_id = project.project_id.clone();
     let storage = TimelineStorage::for_project(&project_id).map_err(TimelineBridgeError::message)?;
+    let generation = new_generation(&project_id);
     storage
-        .write_checkpoint(engine.project())
+        .write_checkpoint(&project, &generation, 0)
         .map_err(TimelineBridgeError::message)?;
+
+    // A checkpoint is a durable history boundary. Resetting the snapshot-based
+    // undo stack here guarantees that every later Undo/Redo can be reconstructed
+    // solely from journal rows after this checkpoint.
+    let engine = clean_engine(project)?;
     let snapshot = engine.snapshot();
     *lock_manager(manager)? = Some(ManagedTimeline {
         engine,
         storage,
+        generation,
         next_sequence: 1,
+        checkpoint_sequence: 0,
         recovered_operations: 0,
         used_backup: false,
         ignored_partial_tail: false,
@@ -122,14 +138,14 @@ fn commit_operation(
     managed: &mut ManagedTimeline,
     operation: JournalOperation,
 ) -> Result<TimelineSnapshot, TimelineBridgeError> {
-    // Validate on a clone first. Only a journaled operation is allowed to
+    // Validate on a clone first. Only an fsync'd journal operation is allowed to
     // become the new in-memory authority.
     let mut candidate = managed.engine.clone();
     let snapshot = apply_operation(&mut candidate, &operation)?;
     let sequence = managed.next_sequence;
     managed
         .storage
-        .append(&journal_entry(sequence, operation))
+        .append(&journal_entry(&managed.generation, sequence, operation))
         .map_err(TimelineBridgeError::message)?;
     managed.engine = candidate;
     managed.next_sequence = sequence.saturating_add(1);
@@ -143,14 +159,19 @@ fn recover_managed(project_id: &str) -> Result<ManagedTimeline, TimelineBridgeEr
             "项目 {project_id} 还没有持久化 Timeline"
         )));
     }
-    let (project, used_backup) = storage
+
+    let loaded = storage
         .load_checkpoint()
         .map_err(TimelineBridgeError::message)?;
-    let mut engine = TimelineEngine::new(project)
-        .map_err(|issues| TimelineBridgeError::validation("持久化 Timeline checkpoint 未通过校验", issues))?;
+    let mut engine = clean_engine(loaded.project)?;
     let journal = storage.read_journal().map_err(TimelineBridgeError::message)?;
-    let mut previous_sequence = 0u64;
+    let mut previous_sequence = loaded.journal_sequence;
+    let mut recovered_operations = 0usize;
+
     for entry in &journal.entries {
+        if entry.generation != loaded.generation || entry.sequence <= loaded.journal_sequence {
+            continue;
+        }
         if entry.sequence <= previous_sequence {
             return Err(TimelineBridgeError::message(format!(
                 "Timeline journal sequence 非递增：{} ≤ {}",
@@ -162,13 +183,17 @@ fn recover_managed(project_id: &str) -> Result<ManagedTimeline, TimelineBridgeEr
             issues: error.issues,
         })?;
         previous_sequence = entry.sequence;
+        recovered_operations += 1;
     }
+
     Ok(ManagedTimeline {
         engine,
         storage,
+        generation: loaded.generation,
         next_sequence: previous_sequence.saturating_add(1).max(1),
-        recovered_operations: journal.entries.len(),
-        used_backup,
+        checkpoint_sequence: loaded.journal_sequence,
+        recovered_operations,
+        used_backup: loaded.used_backup,
         ignored_partial_tail: journal.ignored_partial_tail,
     })
 }
@@ -226,8 +251,8 @@ pub fn timeline_load_with_commands(
     let mut next_engine = TimelineEngine::new(project)
         .map_err(|issues| TimelineBridgeError::validation("Timeline proposal base 未通过校验", issues))?;
     apply_commands_transactionally(&mut next_engine, &commands)?;
-    // A human-confirmed proposal becomes a fresh checkpoint only after the
-    // whole batch validates. Existing persisted state remains intact on error.
+    // A human-confirmed proposal becomes a fresh durable history boundary only
+    // after the entire command batch validates.
     replace_with_checkpoint(&manager, next_engine)
 }
 
@@ -295,11 +320,14 @@ pub fn timeline_checkpoint(
     let managed = guard
         .as_mut()
         .ok_or_else(|| TimelineBridgeError::message("尚未创建或加载 Timeline"))?;
+    let project = managed.engine.project().clone();
+    let last_sequence = managed.next_sequence.saturating_sub(1);
     managed
         .storage
-        .write_checkpoint(managed.engine.project())
+        .write_checkpoint(&project, &managed.generation, last_sequence)
         .map_err(TimelineBridgeError::message)?;
-    managed.next_sequence = 1;
+    managed.engine = clean_engine(project)?;
+    managed.checkpoint_sequence = last_sequence;
     managed.recovered_operations = 0;
     managed.used_backup = false;
     managed.ignored_partial_tail = false;
@@ -316,7 +344,10 @@ pub fn timeline_persistence_status(
         .ok_or_else(|| TimelineBridgeError::message("尚未创建或加载 Timeline"))?;
     Ok(TimelineRuntimeStatus {
         project_id: managed.engine.project().project_id.clone(),
-        persistence: managed.storage.status().map_err(TimelineBridgeError::message)?,
+        persistence: managed
+            .storage
+            .status(&managed.generation, managed.checkpoint_sequence)
+            .map_err(TimelineBridgeError::message)?,
         recovered_operations: managed.recovered_operations,
         used_backup: managed.used_backup,
         ignored_partial_tail: managed.ignored_partial_tail,
@@ -366,5 +397,13 @@ mod tests {
         }];
         assert!(apply_commands_transactionally(&mut engine, &commands).is_err());
         assert!(engine.project().sequences[0].tracks[0].clips.is_empty());
+    }
+
+    #[test]
+    fn a_checkpoint_is_an_explicit_history_boundary() {
+        let project = TimelineProject::empty("p1", "main");
+        let engine = clean_engine(project).unwrap();
+        assert_eq!(engine.snapshot().undo_depth, 0);
+        assert_eq!(engine.snapshot().redo_depth, 0);
     }
 }
