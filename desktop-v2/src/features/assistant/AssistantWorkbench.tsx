@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { HostConnectionError } from "../../api/host";
 import { ProductionClient, type AssistantAnswer, type AssistantStatus } from "../../api/production";
+import { AssistantModelsPanel } from "./AssistantModelsPanel";
 
 interface Props {
   baseUrl: string;
@@ -110,6 +111,8 @@ export function AssistantWorkbench({ baseUrl, projectId }: Props) {
           <p className="production-note">小镜可以分析、规划、提交 proposal，但这个页面没有直接 review / Editorial Decision / FCPXML 写权限。</p>
         </aside>
       </div>
+
+      <AssistantModelsPanel baseUrl={baseUrl} projectId={projectId} />
     </section>
   );
 }
