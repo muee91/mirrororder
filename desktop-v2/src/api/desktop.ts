@@ -103,6 +103,17 @@ export interface ProjectCreatePayload {
 }
 export interface ProjectPreflight { ready: boolean; errors: string[]; warnings: string[]; detected?: Record<string, unknown>; project_id?: string; [key: string]: unknown }
 export interface ProjectTask { task_id?: string; status?: string; type?: string; [key: string]: unknown }
+export interface ProjectTaskStatus {
+  task_id: string;
+  type: string;
+  status: string;
+  stage: string;
+  message?: string | null;
+  progress?: Record<string, number> | null;
+  error?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
 export interface ProjectDeleteResult { project_id: string; deleted: boolean; config_path: string }
 
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -166,6 +177,9 @@ export class DesktopClient {
     const value = projectId.trim();
     if (!value) throw new HostConnectionError("删除项目需要 project_id");
     return requestJson(this.baseUrl, `${projectPath(value)}/delete`, { method: "POST", body: JSON.stringify({ confirm_project_id: value }) });
+  }
+  projectTasks(projectId: string): Promise<ProjectTaskStatus[]> {
+    return requestJson<{ tasks: ProjectTaskStatus[] }>(this.baseUrl, `${projectPath(projectId)}/tasks`).then((payload) => payload.tasks);
   }
   prepareProject(projectId: string): Promise<ProjectTask> {
     return requestJson(this.baseUrl, `${projectPath(projectId)}/tasks`, { method: "POST", body: JSON.stringify({ type: "prepare_project", targets: {}, actor: "desktop-v2", idempotency_key: `desktop-v2:prepare:${projectId}` }) });
