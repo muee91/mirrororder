@@ -150,11 +150,13 @@ def install_editorial_runtime() -> None:
 
     # Runtime order is deliberate. Audit adds rebuildable evidence. Script
     # Supervisor, Identity and Media Roles add human/device-local production
-    # facts without gaining editorial authority. Media Roles must install before
-    # Coverage/Rough Cut modules are imported so their module-level projection
-    # bindings include camera overrides and auxiliary media. Rough Placement adds
-    # a Host-local human coarse-placement surface; it writes only episode-level
-    # review authority after explicit confirmation. Assembly remains preview-only.
+    # facts without gaining editorial authority. Waveform is also rebuildable
+    # device-local media evidence for Desktop editing and never gains review or
+    # editorial authority. Media Roles must install before Coverage/Rough Cut
+    # modules are imported so their module-level projection bindings include
+    # camera overrides and auxiliary media. Rough Placement adds a Host-local
+    # human coarse-placement surface; it writes only episode-level review
+    # authority after explicit confirmation. Assembly remains preview-only.
     # Assistant sits on top without gaining review, Editorial Decision, Delivery
     # or FCPXML write authority. Semantic Retrieval installs last because it wraps
     # the finished assistant and task runtime with read-only retrieval grounding.
@@ -162,12 +164,14 @@ def install_editorial_runtime() -> None:
     from .script_supervisor_runtime import install_script_supervisor_runtime
     from .identity_api_runtime import install_identity_api_runtime
     from .media_role_runtime import install_media_role_runtime
+    from .waveform_runtime import install_waveform_runtime
     from .rough_placement_runtime import install_rough_placement_runtime
 
     install_audit_runtime()
     install_script_supervisor_runtime()
     install_identity_api_runtime()
     install_media_role_runtime()
+    install_waveform_runtime()
     install_rough_placement_runtime()
 
     from .coverage_runtime import install_coverage_runtime
