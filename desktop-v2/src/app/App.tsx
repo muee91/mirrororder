@@ -1,3 +1,5 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useMemo, useState } from "react";
 import {
   HostConnection,
@@ -31,6 +33,26 @@ export function App() {
     }
   }, [baseUrl]);
 
+  async function chooseWorkspace(directory: boolean): Promise<void> {
+    if (!isTauri()) {
+      setMessage("浏览器预览不提供原生路径选择；可继续手动填写 Workspace 路径。");
+      return;
+    }
+    try {
+      const selected = await openDialog({
+        directory,
+        multiple: false,
+        title: directory ? "选择 MirrorOrder Workspace 目录" : "选择 MirrorOrder Workspace 文件",
+      });
+      if (typeof selected === "string" && selected.trim()) {
+        setWorkspacePath(selected);
+        setMessage(`已选择 ${directory ? "Workspace 目录" : "Workspace 文件"}。`);
+      }
+    } catch (error) {
+      setMessage(`原生路径选择失败：${errorMessage(error)}`);
+    }
+  }
+
   async function connect(): Promise<void> {
     if (!connection) {
       setState("error");
@@ -59,6 +81,11 @@ export function App() {
     if (!connection) {
       setState("error");
       setMessage("Host 地址无效。");
+      return;
+    }
+    if (!workspacePath.trim()) {
+      setState("error");
+      setMessage("先选择或填写 Workspace 路径。");
       return;
     }
     setState("starting");
@@ -99,10 +126,18 @@ export function App() {
           <input
             value={workspacePath}
             onChange={(event) => setWorkspacePath(event.target.value)}
-            placeholder="/path/to/workspace 或 workspace.toml"
+            placeholder="选择目录 / workspace 文件，或手动填写"
             spellCheck={false}
           />
         </label>
+        <div className="connection-actions workspace-picker-actions">
+          <button type="button" className="secondary" onClick={() => void chooseWorkspace(true)} disabled={!isTauri()}>
+            选择目录
+          </button>
+          <button type="button" className="secondary" onClick={() => void chooseWorkspace(false)} disabled={!isTauri()}>
+            选择文件
+          </button>
+        </div>
         <div className="connection-actions">
           <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>
             连接 Host
@@ -135,9 +170,9 @@ export function App() {
         </section>
       ) : (
         <section className="offline-state">
-          <p className="eyebrow">Phase 1</p>
+          <p className="eyebrow">Phase 1 / Phase 6</p>
           <h2>等待 HostConnection</h2>
-          <p>HostConnection 负责生命周期与 typed localhost API；业务权威仍在 Python Core，剪辑状态由 Rust Timeline Core 管理。</p>
+          <p>HostConnection 负责 Python Core 生命周期；原生路径选择和 Finder/Explorer 能力由跨平台 Tauri adapter 提供，业务权威仍在 Python Core。</p>
         </section>
       )}
     </main>
