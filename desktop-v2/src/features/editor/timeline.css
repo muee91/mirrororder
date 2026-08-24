@@ -1,0 +1,55 @@
+.timeline-heading { margin-bottom: 12px; }
+.timeline-proposal { margin-bottom: 12px; }
+.timeline-proposal-heading { display: flex; align-items: center; gap: 12px; }
+.timeline-proposal-heading > div:first-child { flex: 1 1 auto; min-width: 0; }
+.timeline-proposal-heading strong { display: block; margin-top: 4px; }
+.timeline-fps { display: flex; align-items: center; gap: 6px; color: #778491; font-size: 10px; }
+.timeline-fps input, .timeline-toolbar input, .timeline-move-control input { width: 78px; border: 1px solid #303944; border-radius: 8px; padding: 6px 8px; color: #e7ecf1; background: #11171c; }
+.proposal-warnings { display: grid; gap: 4px; margin-top: 10px; color: #b6a775; font-size: 10px; }
+.timeline-proposal details { margin-top: 10px; color: #7d8996; font-size: 10px; }
+.proposal-skipped { display: grid; gap: 5px; max-height: 180px; margin-top: 8px; overflow-y: auto; }
+.proposal-skipped span { border-left: 2px solid #303944; padding-left: 8px; }
+.timeline-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.timeline-toolbar > span { margin-left: auto; color: #73808d; font-size: 10px; }
+.timeline-toolbar > label { display: flex; align-items: center; gap: 6px; color: #7d8996; font-size: 10px; }
+.timeline-history { display: flex; gap: 6px; }
+.timeline-stage { display: grid; gap: 8px; overflow-x: auto; }
+.timeline-track { display: grid; grid-template-columns: 62px minmax(720px, 1fr); gap: 8px; align-items: center; }
+.track-label { display: grid; gap: 2px; }
+.track-label strong { font-size: 11px; }
+.track-label span { color: #6f7b87; font-size: 9px; }
+.track-lane { position: relative; height: 52px; border: 1px solid #26313a; border-radius: 8px; background: #0a0e12; overflow: hidden; }
+.timeline-clip { position: absolute; top: 5px; bottom: 5px; display: grid; align-content: center; min-width: 18px; overflow: hidden; border: 1px solid #465463; border-radius: 6px; padding: 4px 6px; color: #b9c5d0; background: #1a232b; text-align: left; }
+.timeline-clip.is-selected { border-color: #a7b5c4; box-shadow: inset 0 0 0 1px #68798a; }
+.timeline-clip.is-disabled { opacity: .42; }
+.timeline-clip strong, .timeline-clip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-clip strong { font-size: 9px; }
+.timeline-clip span { color: #83919e; font-size: 8px; }
+.timeline-marker-list { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 0 70px; color: #808d99; font-size: 9px; }
+.timeline-marker-list span { border-radius: 999px; padding: 3px 6px; background: #202832; }
+.timeline-inspector { margin-top: 10px; }
+.timeline-clip-facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; color: #7d8995; font-size: 10px; }
+.timeline-clip-facts span { border-radius: 999px; padding: 4px 7px; background: #171e25; }
+.timeline-edit-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.timeline-edit-actions button { font-size: 10px; }
+.timeline-move-control { display: flex; align-items: flex-end; gap: 7px; margin: 10px 0; }
+.timeline-move-control label { display: grid; gap: 4px; color: #74808d; font-size: 9px; }
+.timeline-validation { margin-top: 10px; color: #db9d9d; font-size: 10px; }
+.timeline-validation p { margin: 4px 0; }
+.timeline-empty { text-align: center; }
+.timeline-empty p { color: #76828e; font-size: 11px; }
+.project-workbench-nav button { display: flex; align-items: center; gap: 6px; }
+.project-workbench-nav small { color: #697682; font-size: 8px; }
+
+@media (max-width: 1180px) {
+  .timeline-proposal-heading, .timeline-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .timeline-toolbar > span { width: 100%; margin-left: 0; }
+}
+
+@media (prefers-color-scheme: light) {
+  .timeline-fps input, .timeline-toolbar input, .timeline-move-control input { border-color: #d5dde5; color: #27313a; background: #f7f9fb; }
+  .track-lane { border-color: #d9e1e8; background: #f5f7f9; }
+  .timeline-clip { border-color: #aab7c3; color: #33404b; background: #e9eef2; }
+  .timeline-clip.is-selected { border-color: #637688; box-shadow: inset 0 0 0 1px #9eabb7; }
+  .timeline-clip-facts span, .timeline-marker-list span { background: #eef2f5; }
+}
