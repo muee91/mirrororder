@@ -1,0 +1,85 @@
+{
+  "contract": "desktop_phase7_parity.v1",
+  "branch": "feat/desktop-v2-tauri",
+  "desktop_primary_candidate": true,
+  "swiftui_retirement_allowed": false,
+  "gates": {
+    "project_lifecycle": {
+      "code_status": "implemented",
+      "evidence": [
+        "desktop-v2/src/features/projects/ProjectLifecyclePanel.tsx",
+        "desktop-v2/src/api/desktop.ts",
+        "src/script_organizer/workspace.py"
+      ],
+      "native_smoke_required": false
+    },
+    "material_script": {
+      "code_status": "implemented",
+      "evidence": ["desktop-v2/src/features/material-script"],
+      "native_smoke_required": false
+    },
+    "slate": {
+      "code_status": "implemented",
+      "evidence": ["desktop-v2/src/features/slate"],
+      "native_smoke_required": false
+    },
+    "identity": {
+      "code_status": "implemented",
+      "evidence": ["desktop-v2/src/features/identity"],
+      "native_smoke_required": false
+    },
+    "assistant": {
+      "code_status": "implemented",
+      "evidence": ["desktop-v2/src/features/assistant", "desktop-v2/src/api/models.ts"],
+      "native_smoke_required": false
+    },
+    "settings_status": {
+      "code_status": "implemented",
+      "evidence": [
+        "desktop-v2/src/features/settings/SettingsStatusWorkbench.tsx",
+        "src/script_organizer/desktop_runtime.py"
+      ],
+      "native_smoke_required": false
+    },
+    "media_binding": {
+      "code_status": "implemented",
+      "evidence": [
+        "desktop-v2/src/features/media/MediaBindingWorkbench.tsx",
+        "src/script_organizer/media_identity.py",
+        "src/script_organizer/desktop_runtime.py"
+      ],
+      "native_smoke_required": true
+    },
+    "macos_fcp_integration": {
+      "code_status": "implemented_native_smoke_required",
+      "evidence": [
+        "desktop-v2/src/features/delivery",
+        "desktop-v2/src-tauri/src/platform/mod.rs",
+        "src/script_organizer/delivery_runtime.py",
+        "src/script_organizer/fcpxml_exporter.py"
+      ],
+      "native_smoke_required": true
+    }
+  },
+  "release_gates": {
+    "typescript_typecheck": "required",
+    "typescript_unit_tests": "required",
+    "python_tests": "required",
+    "timeline_core_cargo_tests": "required",
+    "tauri_cargo_check": "required",
+    "macos_tauri_build": "required",
+    "macos_real_media_playback": "required",
+    "macos_final_cut_open": "required",
+    "macos_codesign_bundle": "required",
+    "windows_tauri_build": "required",
+    "windows_webview2_media_smoke": "required",
+    "windows_installer_smoke": "required"
+  },
+  "retirement_policy": {
+    "swiftui_state": "legacy_frozen_reference",
+    "new_features_allowed_in_swiftui": false,
+    "physical_delete_before_release_gates": false,
+    "team_web_boundary_unchanged": true,
+    "python_core_authority_unchanged": true
+  }
+}
