@@ -5,6 +5,7 @@ export interface PlatformInfo {
   family: string;
   reveal_path: boolean;
   open_path: boolean;
+  open_url: boolean;
   native_dialog: boolean;
   fcp_adapter: boolean;
   security_scoped_media: boolean;
@@ -38,6 +39,12 @@ function requiredPath(path: string, action: string): string {
   return value;
 }
 
+function requiredUrl(url: string): string {
+  const value = url.trim();
+  if (!/^https?:\/\//i.test(value)) throw new PlatformBridgeError("只允许打开 http:// 或 https:// URL。");
+  return value;
+}
+
 export class PlatformClient {
   info(): Promise<PlatformInfo> {
     return callPlatform<PlatformInfo>("platform_info");
@@ -49,6 +56,10 @@ export class PlatformClient {
 
   open(path: string): Promise<void> {
     return callPlatform<void>("open_path", { path: requiredPath(path, "打开路径") });
+  }
+
+  openUrl(url: string): Promise<void> {
+    return callPlatform<void>("open_url", { url: requiredUrl(url) });
   }
 
   openInFinalCut(path: string): Promise<void> {
