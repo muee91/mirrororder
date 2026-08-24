@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Local, script-driven multicamera material organizer for editors"
 requires-python = ">=3.11"
 
+[project.optional-dependencies]
+auto-score-beats = ["beat-this>=1.1,<2"]
+
 [project.scripts]
 script-organizer = "script_organizer.cli:main"
 script-organizer-mcp = "script_organizer.mcp_server:main"
