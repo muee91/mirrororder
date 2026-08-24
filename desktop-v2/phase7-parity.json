@@ -43,6 +43,7 @@
         "desktop-v2/src/features/settings/SettingsStatusWorkbench.tsx",
         "desktop-v2/src/features/settings/LocalRuntimePanel.tsx",
         "desktop-v2/src/features/settings/CollaborationPanel.tsx",
+        "desktop-v2/src/features/settings/TaskStatusPanel.tsx",
         "src/script_organizer/desktop_runtime.py"
       ],
       "native_smoke_required": false
