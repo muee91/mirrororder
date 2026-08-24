@@ -18,6 +18,41 @@ def _as_list(value: object) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_automatic_state(value: object) -> dict[str, Any]:
+    """Keep review.v1 structurally decodable even when automation has no row.
+
+    The native App decodes the whole review model atomically. A single sparse
+    ``{"available": false}`` object must therefore never make the entire
+    project unreadable. Unknown/additional fields are preserved by the Host
+    upstream; this projection only guarantees the stable core fields used by
+    native Production.
+    """
+    raw = _as_dict(value)
+    episode_ids: list[int] = []
+    for item in _as_list(raw.get("episode_ids")):
+        try:
+            number = int(item)
+        except (TypeError, ValueError):
+            continue
+        if number > 0 and number not in episode_ids:
+            episode_ids.append(number)
+    return {
+        **raw,
+        "available": bool(raw.get("available", bool(raw))),
+        "status": str(raw.get("status", "") or ""),
+        "reason": str(raw.get("reason", "") or ""),
+        "confidence": _safe_float(raw.get("confidence"), 0.0),
+        "episode_ids": sorted(episode_ids),
+    }
+
+
 def _safe_entry(value: object) -> dict[str, Any]:
     raw = _as_dict(value)
     if not raw:
@@ -95,7 +130,9 @@ def install_script_supervisor_runtime() -> None:
         entries = board.get("entries", {}) if isinstance(board.get("entries"), dict) else {}
         for take in payload.get("take_groups", []):
             if isinstance(take, dict):
-                group_id = str(take.get("group_id", "") or ""); take["script_supervisor"] = _safe_entry(entries.get(group_id))
+                group_id = str(take.get("group_id", "") or "")
+                take["automatic_state"] = _safe_automatic_state(take.get("automatic_state"))
+                take["script_supervisor"] = _safe_entry(entries.get(group_id))
         payload.setdefault("revisions", {})["script_supervisor"] = int(board.get("revision", 0) or 0)
         payload.setdefault("capabilities", {}).update({"script_supervisor_v2": True, "script_supervisor_record_model": True, "script_supervisor_write_scope": "host_local", "script_supervisor_is_editorial_authority": False})
         payload.setdefault("summary", {})["script_supervisor"] = store.summary()
