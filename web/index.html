@@ -228,8 +228,10 @@
     <div id="identity-library-list" class="identity-library-list"></div>
   </dialog>
 
-  <!-- Boot is intentionally two-phase: app.js may start boot immediately, but
-       API fetches stay gated until every workbench extension has installed. -->
+  <!-- Boot is intentionally split: only the core review workbench participates
+       in first paint. Project-sized optional extensions are replayed lazily by
+       startup_release.js; Team Web receives only a Host-generated Xiaojing
+       projection while the production App keeps the full assistant controls. -->
   <script src="/startup_gate.js"></script>
   <script src="/app.js"></script>
   <script src="/review_model.js"></script>
@@ -245,10 +247,6 @@
   <script src="/script_supervisor_ui.js"></script>
   <script src="/script_supervisor_keyboard.js"></script>
   <script src="/assembly_ui.js"></script>
-  <script src="/assistant_ui.js"></script>
-  <script src="/assistant_control_ui.js"></script>
-  <script src="/semantic_search_ui.js"></script>
-  <script src="/placement_drag_ui.js"></script>
   <script src="/startup_release.js"></script>
 </body>
 </html>
