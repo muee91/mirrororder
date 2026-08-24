@@ -35,10 +35,16 @@ def build_music_plan(
     timeline_seconds: float | None = None,
     top_k: int = 5,
     allow_unverified: bool = False,
+    analysis_mode: str = "auto",
+    force_analysis: bool = False,
 ) -> dict[str, Any]:
     config.ensure_output()
     output_dir = config.output_dir / "music"
-    library = index_music_library(library_root)
+    library = index_music_library(
+        library_root,
+        analysis_mode=analysis_mode,
+        force_analysis=force_analysis,
+    )
     assets = assets_from_index(library)
     briefs = build_music_briefs(config, episode=episode, timeline_seconds=timeline_seconds)
 
@@ -68,13 +74,17 @@ def build_music_plan(
                 "asset_id": asset.asset_id,
                 "path": asset.path,
                 "title": asset.title,
+                "bpm": asset.bpm,
+                "analysis_source": asset.analysis_source,
                 "license": asset.license.to_dict(),
             }
         cues.append(row)
 
+    library_summary = library.get("summary", {}) if isinstance(library.get("summary"), dict) else {}
     plan = {
-        "version": 1,
+        "version": 2,
         "contract": "auto-score.v1",
+        "feature_level": "v0.2",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "project": config.name,
         "episode": episode,
@@ -85,19 +95,28 @@ def build_music_plan(
             "writes_auto_decisions": False,
             "license_gate": not allow_unverified,
             "allow_unverified": bool(allow_unverified),
-            "selection": "local-score+global-continuity-v0",
+            "analysis_mode": analysis_mode,
+            "selection": "local-score+beat-energy-grounding+global-continuity-v0.2",
+            "moment_grounding": "downbeat>beat>section-boundary",
             "timing": "proportional-script-estimate" if timeline_seconds else "script-estimate",
         },
         "summary": {
             "cues": len(cues),
             "selected": sum(1 for item in cues if item["status"] == "selected"),
             "needs_music": sum(1 for item in cues if item["status"] == "needs_music"),
-            "library_tracks": library["summary"]["tracks"],
-            "eligible_tracks": library["summary"]["eligible"],
+            "library_tracks": int(library_summary.get("tracks", 0) or 0),
+            "eligible_tracks": int(library_summary.get("eligible", 0) or 0),
+            "analyzed_tracks": int(library_summary.get("analyzed", 0) or 0),
+            "beat_tracked_tracks": int(library_summary.get("beat_tracked", 0) or 0),
+            "beat_aligned_cues": sum(
+                1 for item in cues if isinstance(item.get("selected"), dict) and item["selected"].get("beat_aligned") is True
+            ),
         },
         "library": {
             "name": library.get("library_name", "music-library"),
             "contract": library.get("contract", ""),
+            "analysis": library.get("analysis", {}),
+            "warnings": library.get("warnings", []),
         },
         "cues": cues,
     }
