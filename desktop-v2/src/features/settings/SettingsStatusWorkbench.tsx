@@ -7,6 +7,7 @@ import { PlatformClient, type PlatformInfo } from "../../api/platform";
 import { TimelineClient, type TimelineRuntimeStatus } from "../../api/timeline";
 import { CollaborationPanel } from "./CollaborationPanel";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
+import { TaskStatusPanel } from "./TaskStatusPanel";
 
 interface Props { baseUrl: string; projectId: string }
 
@@ -120,6 +121,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
         <LocalRuntimePanel baseUrl={baseUrl} />
         <CollaborationPanel baseUrl={baseUrl} />
+        <TaskStatusPanel baseUrl={baseUrl} projectId={projectId} />
 
         <div className="production-panel status-card phase7-gate-card">
           <div className="parse-heading"><div><p className="eyebrow">desktop_phase7_parity.v1</p><h3>{parity.desktop_primary_candidate ? "Desktop primary candidate" : "Parity incomplete"}</h3></div><span>{nativeGateCount} release gates</span></div>
@@ -140,7 +142,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
         <div className="production-panel status-card">
           <p className="eyebrow">Native Platform Adapter</p>
-          {isTauri() && platformInfo ? <div className="status-capabilities"><span className="is-ready">{platformInfo.os}</span><span className={platformInfo.native_dialog ? "is-ready" : "is-missing"}>dialog</span><span className={platformInfo.reveal_path ? "is-ready" : "is-missing"}>reveal</span><span className={platformInfo.open_path ? "is-ready" : "is-missing"}>open</span><span className={platformInfo.fcp_adapter ? "is-ready" : "is-missing"}>FCP adapter</span><span className={platformInfo.security_scoped_media ? "is-ready" : "is-pending"}>security scope</span><span className={platformInfo.resolve_adapter ? "is-ready" : "is-pending"}>Resolve extension</span><span className={platformInfo.premiere_adapter ? "is-ready" : "is-pending"}>Premiere extension</span></div> : <p className="empty-copy">浏览器预览不加载 Tauri native adapter。</p>}
+          {isTauri() && platformInfo ? <div className="status-capabilities"><span className="is-ready">{platformInfo.os}</span><span className={platformInfo.native_dialog ? "is-ready" : "is-missing"}>dialog</span><span className={platformInfo.reveal_path ? "is-ready" : "is-missing"}>reveal</span><span className={platformInfo.open_path ? "is-ready" : "is-missing"}>open</span><span className={platformInfo.open_url ? "is-ready" : "is-missing"}>URL</span><span className={platformInfo.fcp_adapter ? "is-ready" : "is-missing"}>FCP adapter</span><span className={platformInfo.security_scoped_media ? "is-ready" : "is-pending"}>security scope</span><span className={platformInfo.resolve_adapter ? "is-ready" : "is-pending"}>Resolve extension</span><span className={platformInfo.premiere_adapter ? "is-ready" : "is-pending"}>Premiere extension</span></div> : <p className="empty-copy">浏览器预览不加载 Tauri native adapter。</p>}
           <p className="production-note">Host process: {hostProcess ? `${hostProcess.running ? "running" : "stopped"} · pid ${hostProcess.pid ?? "-"}` : "unmanaged / browser preview"}</p>
         </div>
 
