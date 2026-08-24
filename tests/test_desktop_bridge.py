@@ -103,6 +103,8 @@ def test_native_slate_is_editable_multicam_table_not_dashboard_cards():
     assert "AVAssetImageGenerator" in ui
     assert ".scaleProportionallyUpOrDown" in ui
     assert ".scaleAxesIndependently" not in ui
+    assert "let selectedInRun = draft.id == selectedRecordID" in ui
+    assert "selectedInRun ?? attachments.first" in ui
 
 
 def test_desktop_system_features_live_in_settings_and_status_center():
@@ -136,6 +138,31 @@ def test_desktop_project_activity_keeps_active_or_latest_failure():
     assert "task = latestTask" in core
     assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) ?? tasks.first' not in core
     assert "filter(\\.isActive)" in ui
+
+
+def test_first_run_project_has_explicit_preparing_and_failure_states():
+    _core, ui, _native, _build = desktop_sources()
+    assert 'if (project.numericStats["groups"] ?? 0) == 0 {' in ui
+    assert "private struct ProjectPreparingState" in ui
+    assert "private struct ProjectPreparationFailedState" in ui
+    assert 'Text("正在整理项目")' in ui
+    assert 'Text("自动整理未完成")' in ui
+    assert 'Button("取消整理") { controller.cancelProjectTask(activity) }' in ui
+    assert 'Button("重新开始") { controller.startProject(project) }' in ui
+    assert 'Button("查看状态中心", action: onStatus)' in ui
+    assert 'Image(systemName: "exclamationmark.triangle.fill")' in ui
+
+
+def test_native_review_model_tolerates_unavailable_automation_state():
+    core = read("macos-app/MirrorOrderDesktopCore.swift")
+    host = read("src/script_organizer/review_read_model.py")
+    assert 'return {"available": False}' in host
+    assert "struct NativeReviewAutomaticState: Decodable" in core
+    assert "let available: Bool?" in core
+    assert "let status: String?" in core
+    assert "let reason: String?" in core
+    assert "let confidence: Double?" in core
+    assert "let episode_ids: [Int]?" in core
 
 
 def test_native_workspace_reads_versioned_host_projection():
