@@ -1,0 +1,128 @@
+/* Shared post-production material-card contract.
+   A material card describes the clip/angle itself. Matching confidence belongs
+   to the Take-to-script relationship and must not dominate the card. */
+
+.workspace{
+  grid-template-columns:minmax(270px,.64fr) minmax(610px,1.66fr) minmax(320px,.74fr);
+}
+
+.episode-picks{gap:2px;padding-bottom:2px}
+.episode-pick{
+  min-width:46px;
+  height:27px;
+  border-color:transparent;
+  background:transparent;
+  color:var(--muted);
+  font-weight:560;
+}
+.episode-pick:hover{border-color:transparent;background:var(--panel-soft);color:var(--ink)}
+.episode-pick.active{border-color:var(--blue);background:var(--blue);color:#fff;font-weight:680}
+.episode-pick.unassigned-pick{border-color:var(--line);background:var(--panel-soft);color:var(--amber)}
+.episode-pick.unassigned-pick.active{border-color:var(--amber);background:var(--amber);color:#fff}
+
+.take-row{
+  grid-template-columns:42px minmax(178px,.66fr) minmax(0,1.82fr);
+  gap:8px;
+  min-height:94px;
+  padding:8px 10px;
+}
+.confidence-rail{
+  min-height:72px;
+  gap:3px;
+  padding:4px 2px;
+  opacity:.68;
+}
+.confidence-rail strong{font-size:10px;font-weight:700}
+.confidence-rail span{font-size:8px}
+.confidence-rail small{display:none}
+.take-transcript{min-height:29px;font-size:11px;line-height:1.35}
+.take-meta{font-size:9px}
+.take-actions{gap:2px}
+.decision-button,.placement-button{
+  min-height:24px;
+  padding:1px 6px;
+  border-color:transparent;
+  background:transparent;
+  font-size:9px;
+}
+.decision-button:hover,.placement-button:hover{border-color:var(--line);background:var(--panel-soft)}
+.decision-button.selected.best,.decision-button.selected.keep,.decision-button.selected.reject{border-width:1px}
+
+.member-strip{gap:6px;align-items:stretch}
+.camera-run{gap:5px}
+.member-card,
+.camera-run.repeated .member-card{
+  position:relative;
+  flex:0 0 178px;
+  width:178px;
+  min-width:178px;
+  max-width:178px;
+  height:72px;
+  min-height:72px;
+  max-height:72px;
+  gap:5px;
+  padding:8px 9px 7px;
+  border:1px solid var(--card-border);
+  border-top-width:2px;
+  border-radius:6px;
+  background:var(--card);
+  box-shadow:none;
+}
+.member-card:hover:not(:disabled){border-color:var(--line-strong);background:var(--card-hover);box-shadow:none}
+.member-card.active{border-color:var(--blue);background:var(--blue-soft);box-shadow:inset 0 0 0 1px var(--blue)}
+.member-file{
+  max-width:154px;
+  color:var(--card-file,var(--ink));
+  font-size:11.5px;
+  font-weight:660;
+  line-height:1.25;
+}
+.member-bottom{justify-content:flex-start;gap:5px;min-width:0}
+.camera-chip{
+  min-width:23px;
+  min-height:19px;
+  padding:1px 5px;
+  border-radius:4px;
+  font-size:9px;
+}
+.shot-type-chip{
+  display:inline-flex;
+  align-items:center;
+  min-height:19px;
+  max-width:62px;
+  padding:1px 6px;
+  overflow:hidden;
+  border:1px solid color-mix(in srgb,var(--purple) 28%,transparent);
+  border-radius:4px;
+  background:var(--purple-soft);
+  color:var(--purple);
+  font-size:9px;
+  font-weight:650;
+  line-height:1;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.shot-type-chip.unknown{
+  border-color:var(--line);
+  background:var(--panel-soft);
+  color:var(--muted);
+  font-weight:560;
+}
+.member-time{margin-left:auto;font-size:9px}
+.repeat-label{font-size:8px}
+
+/* The player is for monitoring. It must not visually outweigh the material
+   browser on wide editing displays. */
+.inspector{min-width:0}
+#player{max-height:52vh}
+
+@media(max-width:900px){
+  .take-row{grid-template-columns:40px minmax(150px,.58fr) minmax(0,1.42fr)}
+  .member-card,.camera-run.repeated .member-card{flex-basis:168px;width:168px;min-width:168px;max-width:168px}
+}
+
+@media(max-width:680px){
+  .take-row{display:flex}
+  .confidence-rail{min-height:0;opacity:.8}
+  .member-card,.camera-run.repeated .member-card{flex-basis:164px;width:164px;min-width:164px;max-width:164px}
+}
