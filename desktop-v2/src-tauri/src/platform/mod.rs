@@ -26,6 +26,14 @@ fn existing_path(value: &str) -> Result<PathBuf, String> {
     Ok(path.canonicalize().unwrap_or(path))
 }
 
+fn fcpxml_path(value: &str) -> Result<PathBuf, String> {
+    let path = existing_path(value)?;
+    if !path.is_file() || path.extension().and_then(|value| value.to_str()).map(|value| value.eq_ignore_ascii_case("fcpxml")) != Some(true) {
+        return Err("Final Cut adapter 只接受现有 .fcpxml 文件".to_string());
+    }
+    Ok(path)
+}
+
 fn run(mut command: Command, action: &str) -> Result<(), String> {
     let status = command
         .status()
@@ -57,6 +65,13 @@ fn open_impl(path: &Path) -> Result<(), String> {
     run(command, "macOS 打开路径")
 }
 
+#[cfg(target_os = "macos")]
+fn final_cut_impl(path: &Path) -> Result<(), String> {
+    let mut command = Command::new("open");
+    command.arg("-a").arg("Final Cut Pro").arg(path);
+    run(command, "Final Cut Pro 打开 FCPXML")
+}
+
 #[cfg(target_os = "windows")]
 fn reveal_impl(path: &Path) -> Result<(), String> {
     let mut command = Command::new("explorer.exe");
@@ -73,6 +88,11 @@ fn open_impl(path: &Path) -> Result<(), String> {
     let mut command = Command::new("explorer.exe");
     command.arg(path);
     run(command, "Windows 打开路径")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn final_cut_impl(_path: &Path) -> Result<(), String> {
+    Err("Final Cut Pro adapter 仅在 macOS 可用".to_string())
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -99,11 +119,11 @@ pub fn platform_info() -> PlatformInfo {
         open_path: true,
         native_dialog: true,
         fcp_adapter: cfg!(target_os = "macos"),
-        // The adapter boundary exists, but scoped-bookmark persistence is a
-        // separate macOS native gate and must not be claimed before it lands.
+        // Tauri Desktop v2 is not App-Sandboxed today. If sandboxing is enabled
+        // for distribution, persistent security-scoped bookmarks become a
+        // separate native gate and this capability must change only then.
         security_scoped_media: false,
-        // Phase 6 keeps extension points for Windows NLEs without pretending
-        // Resolve/Premiere integration already exists.
+        // Windows NLE adapters intentionally remain extension points in Phase 6.
         resolve_adapter: false,
         premiere_adapter: false,
     }
@@ -119,13 +139,32 @@ pub fn open_path(path: String) -> Result<(), String> {
     open_impl(&existing_path(&path)?)
 }
 
+#[tauri::command]
+pub fn open_in_final_cut_pro(path: String) -> Result<(), String> {
+    final_cut_impl(&fcpxml_path(&path)?)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::existing_path;
+    use super::{existing_path, fcpxml_path};
+    use std::{env, fs};
 
     #[test]
     fn rejects_empty_and_missing_paths() {
         assert!(existing_path("   ").is_err());
         assert!(existing_path("/definitely/mirrororder/not-here").is_err());
+    }
+
+    #[test]
+    fn final_cut_adapter_requires_fcpxml_extension() {
+        let root = env::temp_dir().join(format!("mirrororder-platform-{}", std::process::id()));
+        let _ = fs::create_dir_all(&root);
+        let xml = root.join("demo.fcpxml");
+        let text = root.join("demo.txt");
+        fs::write(&xml, b"<fcpxml/>").unwrap();
+        fs::write(&text, b"not fcpxml").unwrap();
+        assert!(fcpxml_path(xml.to_str().unwrap()).is_ok());
+        assert!(fcpxml_path(text.to_str().unwrap()).is_err());
+        let _ = fs::remove_dir_all(root);
     }
 }
