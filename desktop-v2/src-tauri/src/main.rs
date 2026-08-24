@@ -1,16 +1,21 @@
 mod host;
 mod persistence;
+mod platform;
 mod timeline;
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(host::HostManager::default())
         .manage(timeline::TimelineManager::default())
         .invoke_handler(tauri::generate_handler![
             host::start_python_host,
             host::host_process_status,
             host::stop_python_host,
+            platform::platform_info,
+            platform::reveal_path,
+            platform::open_path,
             timeline::timeline_new,
             timeline::timeline_load,
             timeline::timeline_open_persisted,
