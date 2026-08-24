@@ -252,6 +252,15 @@ export class HostConnection {
     return (await this.workspace()).projects;
   }
 
+  mediaUrl(projectId: string, clipId: string): string {
+    const project = projectId.trim();
+    const clip = clipId.trim();
+    if (!project || !clip) {
+      throw new HostConnectionError("读取媒体需要 project_id 与 clip_id");
+    }
+    return `${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/media/${encodeURIComponent(clip)}`;
+  }
+
   async reviewModel(projectId: string): Promise<ReviewModelPayload> {
     const normalizedProjectId = projectId.trim();
     if (!normalizedProjectId) {
