@@ -101,6 +101,10 @@ def _metadata_for(root: Path, path: Path, manifest: dict[str, dict[str, Any]]) -
     return result
 
 
+def _strict_bool(value: object) -> bool:
+    return value is True
+
+
 def _license(metadata: dict[str, Any]) -> LicenseRecord:
     raw = metadata.get("license", {})
     raw = raw if isinstance(raw, dict) else {}
@@ -109,9 +113,9 @@ def _license(metadata: dict[str, Any]) -> LicenseRecord:
         license_id=str(raw.get("license_id", raw.get("id", "unverified")) or "unverified"),
         source_url=str(raw.get("source_url", "") or ""),
         creator=str(raw.get("creator", "") or ""),
-        commercial_use=bool(raw.get("commercial_use", False)),
-        sync_right=bool(raw.get("sync_right", False)),
-        attribution_required=bool(raw.get("attribution_required", False)),
+        commercial_use=_strict_bool(raw.get("commercial_use", False)),
+        sync_right=_strict_bool(raw.get("sync_right", False)),
+        attribution_required=_strict_bool(raw.get("attribution_required", False)),
         attribution_text=str(raw.get("attribution_text", "") or ""),
     )
 
@@ -192,7 +196,7 @@ def index_music_library(root: str | Path) -> dict[str, Any]:
     return {
         "version": 1,
         "contract": "music-library.v1",
-        "root": str(library_root),
+        "library_name": library_root.name or "music-library",
         "summary": {
             "tracks": len(assets),
             "eligible": sum(1 for item in assets if item.license.eligible),
@@ -238,9 +242,9 @@ def assets_from_index(payload: dict[str, Any]) -> list[MusicAsset]:
                     license_id=str(lic.get("license_id", "unverified")),
                     source_url=str(lic.get("source_url", "")),
                     creator=str(lic.get("creator", "")),
-                    commercial_use=bool(lic.get("commercial_use", False)),
-                    sync_right=bool(lic.get("sync_right", False)),
-                    attribution_required=bool(lic.get("attribution_required", False)),
+                    commercial_use=_strict_bool(lic.get("commercial_use", False)),
+                    sync_right=_strict_bool(lic.get("sync_right", False)),
+                    attribution_required=_strict_bool(lic.get("attribution_required", False)),
                     attribution_text=str(lic.get("attribution_text", "")),
                 ),
             )
