@@ -75,7 +75,7 @@
 - 每台设备自己的 `media_id -> /Volumes/...` 映射保存到设备 Application Support，不得写入共享 workspace。
 - macOS 默认设备状态：`~/Library/Application Support/MirrorOrder/media-bindings.json`。
 - 不得把本机卷名、Finder路径、本机素材根目录写入 `material_index.json`、`review.json`、`audit.json` 或项目共享配置作为权威字段。
-- HTTP媒体播放和原生拖拽必须优先解析当前设备绑定；找不到本机媒体时明确显示缺失，不允许偷偷回退到错误同名文件。
+- HTTP媒体播放必须优先解析当前设备绑定；未来原生拖拽 adapter 也必须消费同一 resolver。找不到本机媒体时明确显示缺失，不允许偷偷回退到错误同名文件。
 - 同内容媒体复制到不同磁盘、目录甚至改名后，正式 `media_id` 应保持一致。
 - 改多设备逻辑前先读 `SYNC_MODEL.md`。
 
@@ -94,13 +94,15 @@
 
 ## Desktop Bridge
 
-- 当前macOS构建入口是 `macos-app/MirrorOrderDesktopApp.swift`；旧App源码只作历史参考。
-- 外部文件拖拽必须继续由 AppKit `NSDraggingSession` / `NSDraggingItem` 完成。
+- 当前 macOS 构建入口是 `macos-app/build_app.sh`。Swift 主程序 `@main` 位于 `macos-app/MirrorOrderDesktopUI.swift`；构建同时编译 `MirrorOrderDesktopCore.swift`、`NativeProjectWorkbench.swift`、`LocalRuntimeSettingsView.swift` 和 `RuntimeOverviewSettingsView.swift`。
+- Production 主画布不得重新嵌 `DesktopWebView` / `WKWebView`；旧 WebKit bridge 与 `web/timeline_v3.js` 只作为迁移残留/参考。
+- 原生外部文件拖拽当前仍是迁移目标；实现时必须由 AppKit `NSDraggingSession` / `NSDraggingItem` 完成，并通过 Host-local `workspace_id + project_id + clip_id/media_id` resolver 获取当前设备真实文件 URL。
 - 禁止用HTML5 `dataTransfer` 假装网页能向FCP/Premiere/Resolve提供本机文件。
-- 拖出的对象是当前设备解析出的真实源文件URL，语义与Finder拖文件一致；不得自动生成代理、临时切片或复制媒体。
-- 时间线和素材页必须保持双向关联：时间线点击定位Take/机位，素材点击反向高亮时间线。
+- 未来拖出的对象必须是当前设备解析出的真实源文件URL，语义与Finder拖文件一致；不得自动生成代理、临时切片或复制媒体。
+- 原生 Production 时间线当前仍是迁移目标；旧 `timeline_v3.js` 不得重新成为 Production 入口。
+- 时间线完成后必须和素材页保持双向关联：时间线点击定位Take/机位，素材点击反向高亮时间线。
 - XML块无法可靠关联当前项目素材时必须显示“未关联”，禁止强猜。
-- 改Desktop Bridge前先读 `DESKTOP_BRIDGE.md` 并保留其真机验收标准。
+- 改Desktop Bridge前先读 `DESKTOP_BRIDGE.md` 并保留其当前/迁移后两阶段真机验收标准。
 
 ## 匹配原则
 
@@ -139,7 +141,7 @@
 - 修改、分析重跑和服务重启后人工审核不得丢失。
 - 测试协作写入后必须恢复，不留下虚假审核结论。
 - 多台电脑同时审核时 `review.json` 必须有单一写入权威；禁止依赖 Dropbox/iCloud 文件级同步让多台机器直接并发写同一 `review.json`。
-- 推荐架构：中央项目状态/review authority + 每台设备本地 media resolver/native drag bridge。
+- 推荐架构：中央项目状态/review authority + 每台设备本地 media resolver；native drag 完成后也只消费本机 resolver。
 - 自动决策与人工审核必须分文件保存；人工 action 生效后界面必须立即覆盖自动状态，即使 `auto_decisions.json` 尚未重算。
 - Shadow Audit 不得因为多数意见或AI判断升级为Editorial Decision；Final Decision仍需要显式人工动作。
 
@@ -182,7 +184,7 @@ python3 -m pytest -q
 - Team Web和外部Agent拿不到App助理聊天记录、模型配置或Host运行时路径。
 - Agent assistant cycle仍需要analyze scope，且不能直接写review/editorial。
 
-涉及前端时还要验证：
+涉及 Team Web 前端时还要验证：
 
 - 1920×1080和1600×900无重叠。
 - 32集按钮两行直接可点。
@@ -191,24 +193,35 @@ python3 -m pytest -q
 - 长素材跳到片内起点并在终点暂停。
 - 剧本、素材和播放器滚动互不影响。
 - 浏览器控制台无错误。
-- 时间线当前项目模式能显示真实拍摄位置。
-- 加载FCPXML后未关联块有明确状态。
-- 时间线与素材卡片双向定位有效。
 - 自动确认/AI确认不会出现在“只看未核对”结果中。
 - “待处理”只聚合 needs_review / unresolved 与真正未人工处理异常。
 - 有Shot Intelligence时A/B/C卡片各自显示正确景别；没有时不伪造标签。
 - 已确认角色与“角色候选”视觉语义明确区分。
 
+原生 Production 时间线迁移完成后再验证：
+
+- 当前项目模式能显示真实拍摄位置。
+- 加载FCPXML后未关联块有明确状态。
+- 时间线与素材卡片双向定位有效。
+- 实现不依赖嵌入 WebView 或恢复 `timeline_v3.js` Production 入口。
+
 涉及macOS App时还要真机验证：
 
 - `zsh macos-app/build_app.sh` 可以完成编译和codesign。
 - 构建日志显示打包 `multicam-audio-sync`，且构建后的 App 不依赖 Codex 才能运行同步。
-- 从素材卡拖到Finder得到当前设备真实文件。
-- 从素材卡拖到Final Cut Pro至少完成普通文件接收测试。
-- 普通点击素材仍然只执行播放/选择，不被拖拽桥接误伤。
-- 第二台Mac选择不同素材目录后，播放与拖拽使用第二台Mac路径。
+- App 启动进入原生项目主页，打开项目后进入原生多机位场记；Production 主画布没有 WKWebView。
+- A/B/C/辅助素材能从当前设备映射正常播放，长素材按 `source_start/source_end` 工作。
+- 场记 Finder 拖入、自然语言录入、人工 I/O、保存和 revision 冲突提示正常。
+- 第二台Mac选择不同素材目录后，播放使用第二台Mac自己的媒体解析结果。
 - 扫描本机素材不得修改共享 `material_index.json` / `matches.json` / `review.json`。
-- Production中的“审计素材”只提交Host任务，不阻塞普通看片；完成后卡片景别/问题可刷新。
+- Production中的高成本审计只提交Host受限任务，不阻塞普通看片。
+
+原生外部文件拖拽 adapter 迁移完成后再验证：
+
+- 从原生素材卡拖到Finder得到当前设备真实文件。
+- 从原生素材卡拖到Final Cut Pro至少完成普通文件接收测试。
+- 普通点击素材仍然只执行播放/选择，不被拖拽手势误伤。
+- 第二台Mac选择不同素材目录后，拖拽使用第二台Mac路径。
 
 涉及导出时还要验证：
 
