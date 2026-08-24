@@ -8,6 +8,7 @@
       "code_status": "implemented",
       "evidence": [
         "desktop-v2/src/features/projects/ProjectLifecyclePanel.tsx",
+        "desktop-v2/src/features/projects/ProjectLibrary.tsx",
         "desktop-v2/src/api/desktop.ts",
         "src/script_organizer/workspace.py"
       ],
@@ -30,13 +31,18 @@
     },
     "assistant": {
       "code_status": "implemented",
-      "evidence": ["desktop-v2/src/features/assistant", "desktop-v2/src/api/models.ts"],
+      "evidence": [
+        "desktop-v2/src/features/assistant",
+        "desktop-v2/src/api/models.ts"
+      ],
       "native_smoke_required": false
     },
     "settings_status": {
       "code_status": "implemented",
       "evidence": [
         "desktop-v2/src/features/settings/SettingsStatusWorkbench.tsx",
+        "desktop-v2/src/features/settings/LocalRuntimePanel.tsx",
+        "desktop-v2/src/features/settings/CollaborationAccessPanel.tsx",
         "src/script_organizer/desktop_runtime.py"
       ],
       "native_smoke_required": false
@@ -47,6 +53,17 @@
         "desktop-v2/src/features/media/MediaBindingWorkbench.tsx",
         "src/script_organizer/media_identity.py",
         "src/script_organizer/desktop_runtime.py"
+      ],
+      "native_smoke_required": true
+    },
+    "team_web_gateway": {
+      "code_status": "implemented_native_smoke_required",
+      "evidence": [
+        "desktop-v2/src/features/team/TeamWebWorkbench.tsx",
+        "desktop-v2/src/api/team.ts",
+        "desktop-v2/src-tauri/src/gateway.rs",
+        "src/script_organizer/web_server.py",
+        "src/script_organizer/cli.py"
       ],
       "native_smoke_required": true
     },
@@ -70,9 +87,11 @@
     "macos_tauri_build": "required",
     "macos_real_media_playback": "required",
     "macos_final_cut_open": "required",
+    "macos_team_gateway_lan_smoke": "required",
     "macos_codesign_bundle": "required",
     "windows_tauri_build": "required",
     "windows_webview2_media_smoke": "required",
+    "windows_team_gateway_lan_smoke": "required",
     "windows_installer_smoke": "required"
   },
   "retirement_policy": {
@@ -81,5 +100,17 @@
     "physical_delete_before_release_gates": false,
     "team_web_boundary_unchanged": true,
     "python_core_authority_unchanged": true
+  },
+  "isolation_policy": {
+    "production_project_tabs_are_parity_surfaces": true,
+    "team_web_is_top_level_workspace": true,
+    "heavy_capabilities_require_isolated_module_or_worktree": true,
+    "examples": [
+      "heavy media processing",
+      "new NLE adapters",
+      "model runtime infrastructure",
+      "experimental automation engines"
+    ],
+    "promotion_rule": "Only promote an isolated capability into the primary production workspace after its contract, ownership boundary, failure isolation and native smoke gate are explicit."
   }
 }
