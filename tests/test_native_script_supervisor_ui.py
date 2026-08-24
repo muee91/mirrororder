@@ -10,49 +10,78 @@ def source(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_project_opens_on_full_native_slate_table() -> None:
-    native = source("macos-app/NativeProjectWorkbench.swift")
-    assert 'case supervisor = "场记"' in native
-    assert '@State private var surface: NativeProjectSurface = .supervisor' in native
-    assert "NativeScriptSupervisorWorkspace(" in native
-    assert "NativeScriptSupervisorSheet" not in native
-    assert "Table(drafts, selection: $selectedRecordID)" in native
-    for column in ("素材", "集", "场", "镜", "次", "状态", "可用范围", "备注"):
-        assert f'TableColumn("{column}")' in native
+def test_project_opens_on_full_native_multicam_slate_table() -> None:
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
+
+    assert "private struct ProjectHomeView" in ui
+    assert "@Published var showProjectHome = true" in ui
+    assert "private struct NativeMulticamSlateProjectWorkbench" in ui
+    assert "NativeMulticamSlateProjectWorkbench(" in ui
+    assert "Table(drafts, selection: $selectedRecordID)" in ui
+    for column in (
+        "序号",
+        "场号",
+        "镜号",
+        "次号",
+        "A 机",
+        "B 机",
+        "C 机",
+        "辅助 / 特殊",
+        "状态",
+        "可用范围",
+        "备注",
+    ):
+        assert f'TableColumn("{column}")' in ui
+    assert 'TableColumn("素材")' not in ui
+
+
+def test_native_media_cards_have_fixed_visual_contract_and_clear_selected_state() -> None:
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
+
+    assert "private struct MCMediaCard" in ui
+    assert "private enum MCMediaCardSize" in ui
+    assert "AVAssetImageGenerator" in ui
+    assert "MCMediaThumbnailView" in ui
+    assert "lineWidth: selected ? 2 : 1" in ui
+    assert "checkmark.circle.fill" in ui
+    assert "video.slash" in ui
+    assert "repeatedCount" in ui
 
 
 def test_slate_write_is_revision_safe_and_never_uses_device_path_as_project_data() -> None:
-    native = source("macos-app/NativeProjectWorkbench.swift")
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
     runtime = source("src/script_organizer/script_supervisor_runtime.py")
     store = source("src/script_organizer/script_supervisor_store.py")
 
-    assert '"expected_revision": board.revision' in native
-    assert '"actor": operatorName' in native
-    assert "场记已在其它窗口更新" in native
-    assert '"source_media_path"' not in native
-    assert '"resolved_media_path"' not in native
-    assert "Path(str(raw.get(\"display_name\"" in runtime
+    assert '"expected_revision": board.revision' in ui
+    assert '"actor": actor' in ui
+    assert "场记已在其它窗口更新" in ui
+    assert '"source_media_path"' not in ui
+    assert '"resolved_media_path"' not in ui
+    assert "Path(_text(raw.get(\"display_name\")" in store
     assert "record_may_exist_without_take" in runtime
     assert "editorial_authority" in runtime
     assert "ScriptSupervisorConflictError" in store
 
 
 def test_slate_refresh_preserves_dirty_rows_and_unsaved_delete_stays_local() -> None:
-    native = source("macos-app/NativeProjectWorkbench.swift")
-    assert "rebuildDraftsFromBoard(preservingDirty: preserveDirty)" in native
-    assert "dirtyIDs.contains(row.id) ? (localByID[row.id] ?? row) : row" in native
-    assert "merged.append(contentsOf: drafts.filter" in native
-    assert "if store.board?.records[selectedRecordID] == nil" in native
-    assert "await store.delete" in native
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
+
+    assert "rebuildDrafts(preserveDirty: preserveDirty)" in ui
+    assert "dirtyIDs.contains($0.id) ? (local[$0.id] ?? $0) : $0" in ui
+    assert "merged.append(contentsOf: drafts.filter" in ui
+    assert "if store.board?.records[id] == nil" in ui
+    assert "await store.delete" in ui
 
 
 def test_slate_quick_entry_inherits_previous_row_without_inventing_seconds() -> None:
-    native = source("macos-app/NativeProjectWorkbench.swift")
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
     parser = source("src/script_organizer/script_supervisor_parser.py")
-    assert "previousContext = drafts[draftIndex - 1].parseContext()" in native
-    assert "parsed.range_hint" in native
-    assert "前半段可用" in native and "后半段可用" in native
-    assert "absoluteSeconds - playback.sourceStart" in native
+
+    assert "drafts[index - 1].parseContext()" in ui
+    assert "parsed.range_hint" in ui
+    assert "前半段可用" in ui and "后半段可用" in ui
+    assert "absolute - playback.sourceStart" in ui
     deterministic = parser.split("def deterministic_parse", 1)[1].split("def _sanitize_model", 1)[0]
     assert 'result["range_hint"] = "first_half"' in deterministic
     assert 'result["range_hint"] = "second_half"' in deterministic
@@ -61,31 +90,34 @@ def test_slate_quick_entry_inherits_previous_row_without_inventing_seconds() -> 
 
 
 def test_slate_take_and_finder_attachment_keep_media_identity() -> None:
-    native = source("macos-app/NativeProjectWorkbench.swift")
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
     identity = source("src/script_organizer/media_identity.py")
-    assert "playback?.mediaID ?? \"\"" in native
-    assert "UTType.fileURL.identifier" in native
-    assert "quickMediaID(for: url)" in native
-    assert 'projectEndpoint(controller, "media-inventory")' in native
-    assert "playbackByClip.values.filter { $0.mediaID == mediaID }" in native
-    assert "Insecure.SHA1()" in native
+
+    assert "playback?.mediaID ?? \"\"" in ui
+    assert "UTType.fileURL.identifier" in ui
+    assert "mcQuickMediaID(url)" in ui
+    assert 'projectEndpoint(controller, "media-inventory")' in ui
+    assert "store.playbackByClip.values.filter { $0.mediaID == mediaID }" in ui
+    assert "Insecure.SHA1()" in ui
     assert "_SAMPLE_BYTES = 1024 * 1024" in identity
     assert 'return "M_" + digest.hexdigest()[:24]' in identity
 
 
 def test_native_playback_uses_take_source_range_for_long_bridge_media() -> None:
-    native = source("macos-app/NativeProjectWorkbench.swift")
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
     review = source("src/script_organizer/review_read_model.py")
-    assert "NativePlaybackDescriptor" in native
-    assert "sourceStart: descriptor?.source_start ?? angle.source_start ?? 0" in native
-    assert "sourceEnd: descriptor?.source_end ?? angle.source_end" in native
-    assert "item.forwardPlaybackEndTime" in native
-    assert "player.seek(to: start" in native
+
+    assert "MCPlaybackDescriptor" in ui
+    assert "sourceStart: descriptor?.source_start ?? angle.source_start ?? 0" in ui
+    assert "sourceEnd: descriptor?.source_end ?? angle.source_end" in ui
+    assert "item.forwardPlaybackEndTime" in ui
+    assert "player.seek(to:" in ui
     assert '"source_start": _float(member.get("source_start"), 0.0)' in review
 
 
 def test_preferred_slate_angle_is_not_editorial_best() -> None:
-    native = source("macos-app/NativeProjectWorkbench.swift")
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
     runtime = source("src/script_organizer/script_supervisor_runtime.py")
-    assert "不是 Editorial Best" in native
+
+    assert "不是 Editorial Best" in ui
     assert '"script_supervisor_is_editorial_authority": False' in runtime
