@@ -49,6 +49,10 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   const [message, setMessage] = useState("正在读取 Desktop 诊断…");
   const [busy, setBusy] = useState(false);
 
+  function patchSettings(patch: Partial<FrontendSettings>): void {
+    setSettings((current) => current ? { ...current, ...patch } : current);
+  }
+
   async function reload(): Promise<void> {
     setBusy(true);
     setMessage("正在读取 Desktop 诊断…");
@@ -140,7 +144,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
             <div className="settings-form-grid">
               <label className="production-field">
                 <span>主题</span>
-                <select value={settings.theme} onChange={(event) => setSettings({ ...settings, theme: event.target.value as FrontendSettings["theme"] })}>
+                <select value={settings.theme} onChange={(event) => patchSettings({ theme: event.target.value as FrontendSettings["theme"] })}>
                   <option value="system">跟随系统</option>
                   <option value="light">浅色</option>
                   <option value="dark">深色</option>
@@ -148,14 +152,14 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
               </label>
               <label className="production-field">
                 <span>密度</span>
-                <select value={settings.density} onChange={(event) => setSettings({ ...settings, density: event.target.value as FrontendSettings["density"] })}>
+                <select value={settings.density} onChange={(event) => patchSettings({ density: event.target.value as FrontendSettings["density"] })}>
                   <option value="comfortable">舒适</option>
                   <option value="compact">紧凑</option>
                 </select>
               </label>
               <label className="production-field">
                 <span>默认工作台</span>
-                <select value={settings.default_mode} onChange={(event) => setSettings({ ...settings, default_mode: event.target.value as FrontendSettings["default_mode"] })}>
+                <select value={settings.default_mode} onChange={(event) => patchSettings({ default_mode: event.target.value as FrontendSettings["default_mode"] })}>
                   <option value="script">剧本</option>
                   <option value="unassigned">待归集</option>
                 </select>
@@ -164,13 +168,13 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
                 <span>默认集数</span>
                 <input
                   value={String(settings.default_episode)}
-                  onChange={(event) => setSettings({ ...settings, default_episode: defaultEpisode(event.target.value) })}
+                  onChange={(event) => patchSettings({ default_episode: defaultEpisode(event.target.value) })}
                   placeholder="first / all / 1"
                 />
               </label>
               <label className="production-field">
                 <span>刷新间隔</span>
-                <select value={settings.poll_interval_ms} onChange={(event) => setSettings({ ...settings, poll_interval_ms: pollInterval(event.target.value) })}>
+                <select value={settings.poll_interval_ms} onChange={(event) => patchSettings({ poll_interval_ms: pollInterval(event.target.value) })}>
                   <option value={1000}>1 秒</option>
                   <option value={2500}>2.5 秒</option>
                   <option value={5000}>5 秒</option>
@@ -178,11 +182,11 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
                 </select>
               </label>
               <label className="settings-check">
-                <input type="checkbox" checked={settings.update_sound} onChange={(event) => setSettings({ ...settings, update_sound: event.target.checked })} />
+                <input type="checkbox" checked={settings.update_sound} onChange={(event) => patchSettings({ update_sound: event.target.checked })} />
                 <span>更新提示音</span>
               </label>
               <label className="settings-check">
-                <input type="checkbox" checked={settings.show_unknown_count} onChange={(event) => setSettings({ ...settings, show_unknown_count: event.target.checked })} />
+                <input type="checkbox" checked={settings.show_unknown_count} onChange={(event) => patchSettings({ show_unknown_count: event.target.checked })} />
                 <span>显示 unknown 数量</span>
               </label>
             </div>
