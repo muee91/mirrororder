@@ -23,6 +23,7 @@ describe("PlatformClient", () => {
       family: "unix",
       reveal_path: true,
       open_path: true,
+      open_url: true,
       native_dialog: true,
       fcp_adapter: true,
       security_scoped_media: false,
@@ -34,13 +35,21 @@ describe("PlatformClient", () => {
     expect(mockedInvoke).toHaveBeenCalledWith("platform_info", undefined);
   });
 
-  it("normalizes reveal and open path arguments", async () => {
+  it("normalizes path and URL arguments", async () => {
     mockedInvoke.mockResolvedValue(undefined as never);
     const client = new PlatformClient();
     await client.reveal(" /tmp/demo.mov ");
     await client.open(" /tmp/export.fcpxml ");
+    await client.openUrl(" https://example.test/review ");
     expect(mockedInvoke).toHaveBeenNthCalledWith(1, "reveal_path", { path: "/tmp/demo.mov" });
     expect(mockedInvoke).toHaveBeenNthCalledWith(2, "open_path", { path: "/tmp/export.fcpxml" });
+    expect(mockedInvoke).toHaveBeenNthCalledWith(3, "open_url", { url: "https://example.test/review" });
+  });
+
+  it("rejects unsafe URL schemes before native invocation", async () => {
+    const client = new PlatformClient();
+    expect(() => client.openUrl("file:///tmp/demo")).toThrow("只允许打开 http:// 或 https://");
+    expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
   it("does not expose native platform commands in browser preview", async () => {
