@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::{
     env,
+    net::TcpListener,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -66,6 +67,23 @@ fn normalize_workspace_path(value: &str) -> Result<PathBuf, String> {
     Ok(path.canonicalize().unwrap_or(path))
 }
 
+fn validate_port(port: u16) -> Result<u16, String> {
+    if port == 0 {
+        return Err("Host 端口不能为 0".to_string());
+    }
+    Ok(port)
+}
+
+fn ensure_loopback_port_available(port: u16) -> Result<(), String> {
+    TcpListener::bind(("127.0.0.1", port))
+        .map(|listener| drop(listener))
+        .map_err(|error| {
+            format!(
+                "本机端口 {port} 已被占用（{error}）。如果已有镜序 Host，请直接连接；不要让 Desktop v2 误连到其它工作区。"
+            )
+        })
+}
+
 fn reap_if_finished(slot: &mut Option<ManagedHost>) -> Result<(), String> {
     let finished = match slot.as_mut() {
         Some(host) => host
@@ -120,7 +138,7 @@ pub fn start_python_host(
     }
 
     let workspace_path = normalize_workspace_path(workspace_path)?;
-    let port = port.unwrap_or(8765);
+    let port = validate_port(port.unwrap_or(8765))?;
     let base_url = format!("http://127.0.0.1:{port}");
     let mut slot = manager
         .child
@@ -142,6 +160,8 @@ pub fn start_python_host(
             already_running: true,
         });
     }
+
+    ensure_loopback_port_available(port)?;
 
     let core = core_root();
     let source_dir = core.join("src");
@@ -211,4 +231,26 @@ pub fn stop_python_host(manager: State<'_, HostManager>) -> Result<(), String> {
         stop_managed_host(host)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_loopback_port_available, validate_port};
+    use std::net::TcpListener;
+
+    #[test]
+    fn rejects_zero_port() {
+        assert!(validate_port(0).is_err());
+        assert_eq!(validate_port(8765).unwrap(), 8765);
+    }
+
+    #[test]
+    fn detects_an_occupied_loopback_port() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let error = ensure_loopback_port_available(port).unwrap_err();
+        assert!(error.contains("已被占用"));
+        drop(listener);
+        assert!(ensure_loopback_port_available(port).is_ok());
+    }
 }
