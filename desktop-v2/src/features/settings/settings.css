@@ -40,20 +40,20 @@
 .collaboration-audit strong { color: #aeb9c3; font-size: 9px; }
 .collaboration-audit span, .collaboration-audit small { color: #71808d; font-size: 8px; }
 .task-active-card { display: grid; gap: 7px; border: 1px solid #355745; border-radius: 9px; padding: 9px; background: #122019; }
-.task-status-line, .task-progress-row, .task-status-row, .task-status-meta { display: flex; align-items: center; gap: 8px; }
-.task-status-line, .task-status-row { justify-content: space-between; }
+.task-status-line, .task-progress-row, .task-status-meta { display: flex; align-items: center; gap: 8px; }
+.task-status-line { justify-content: space-between; }
 .task-status-line strong, .task-status-row strong { color: #bcc8d1; font-size: 10px; }
 .task-status-line span, .task-status-row span, .task-status-row small { color: #778591; font-size: 8px; }
 .task-progress-row progress { flex: 1; min-width: 0; }
 .task-progress-row span { color: #91a39a; font-size: 8px; }
 .task-status-list { display: grid; gap: 0; max-height: 300px; overflow-y: auto; }
-.task-status-row { position: relative; min-width: 0; border-top: 1px solid #252d36; padding: 7px 0; }
-.task-status-row > div:first-child { display: grid; gap: 2px; min-width: 0; }
-.task-status-row > div:first-child strong, .task-status-row > div:first-child span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-status-meta { flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 2px; }
+.task-status-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; min-width: 0; border-top: 1px solid #252d36; padding: 7px 0; }
+.task-status-name { display: grid; gap: 2px; min-width: 0; }
+.task-status-name strong, .task-status-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-status-meta { flex-direction: column; align-items: flex-end; gap: 2px; }
 .task-status-meta span.is-active { color: #9ac4aa; }
 .task-status-meta span.is-complete { color: #7f9b88; }
-.task-error { grid-column: 1 / -1; width: 100%; margin: 3px 0 0; color: #cb9090; font-size: 8px; }
+.task-error { grid-column: 1 / -1; margin: 3px 0 0; color: #cb9090; font-size: 8px; }
 .phase7-gate-list { display: grid; gap: 6px; }
 .phase7-gate-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; border-top: 1px solid #252d36; padding-top: 7px; }
 .phase7-gate-row strong { color: #b9c4ce; font-size: 10px; font-weight: 600; text-transform: capitalize; }
