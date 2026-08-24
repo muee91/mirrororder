@@ -40,7 +40,8 @@ def test_native_production_canvas_never_embeds_team_web():
         assert "WKWebView" not in source
         assert "production_mode.js" not in source
         assert "timeline_v3.js" not in source
-    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
+    assert 'Label("团队审阅", systemImage: "person.3")' in native
+    assert "controller.openInBrowser()" in native
 
 
 def test_desktop_service_start_script_saves_owned_gateway_pid():
@@ -60,7 +61,7 @@ def test_desktop_service_start_script_saves_owned_gateway_pid():
     assert "Task.detached(priority: .utility)" in core
 
 
-def test_desktop_shell_keeps_projects_persistent_in_left_sidebar():
+def test_desktop_shell_keeps_projects_persistent_in_left_sidebar_and_slate_as_home():
     _core, ui, native, _build = desktop_sources()
     assert "private struct ProductionSidebar" in ui
     assert "private struct SidebarProjectRow" in ui
@@ -72,9 +73,31 @@ def test_desktop_shell_keeps_projects_persistent_in_left_sidebar():
     assert "ProjectInspector" not in ui
     assert "ProjectPage" not in ui
     assert "WorkbenchPage" not in ui
-    assert 'Button("场记") { showSupervisor = true }' in native
-    assert 'Button("人物库") { showPeople = true }' in native
-    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
+    assert 'case supervisor = "场记"' in native
+    assert '@State private var surface: NativeProjectSurface = .supervisor' in native
+    assert "NativeScriptSupervisorWorkspace(controller: controller, model: model)" in native
+    assert "NativeScriptSupervisorSheet" not in native
+    assert 'Label("人物", systemImage: "person.2")' in native
+    assert 'Label("团队审阅", systemImage: "person.3")' in native
+
+
+def test_native_slate_is_editable_industry_table_not_dashboard_cards():
+    _core, _ui, native, _build = desktop_sources()
+    assert "Table(drafts, selection: $selectedRecordID)" in native
+    for column in ("素材", "集", "场", "镜", "次", "状态", "可用范围", "备注"):
+        assert f'TableColumn("{column}")' in native
+    assert 'Label("从 Take 加入", systemImage: "film.stack")' in native
+    assert 'Label("新行", systemImage: "plus")' in native
+    assert 'Label(store.isSaving ? "保存中" : "保存", systemImage: "square.and.arrow.down")' in native
+    assert 'projectEndpoint(controller, "script-supervisor")' in native
+    assert 'projectEndpoint(controller, "script-supervisor-parse")' in native
+    assert '"expected_revision": board.revision' in native
+    assert '"actor": operatorName' in native
+    assert "UTType.fileURL.identifier" in native
+    assert "quickMediaID(for:" in native
+    assert 'projectEndpoint(controller, "media-inventory")' in native
+    assert "I 设入点" in native and "O 设出点" in native
+    assert "不是 Editorial Best" in native
 
 
 def test_desktop_system_features_live_in_settings_and_status_center():
@@ -139,11 +162,12 @@ def test_desktop_has_native_project_creation_through_host_authority():
 
 
 def test_desktop_controls_have_stable_hit_targets():
-    _core, ui, _native, _build = desktop_sources()
+    _core, ui, native, _build = desktop_sources()
     runtime = read("macos-app/LocalRuntimeSettingsView.swift")
     assert "struct AppHitTarget: ViewModifier" in ui
     assert "func appHitTarget(minWidth: CGFloat = 40, minHeight: CGFloat = 36)" in ui
     assert ".contentShape(Rectangle())" in ui
+    assert ".appHitTarget(minWidth: 32, minHeight: 32)" in native
     assert ".frame(width: 44, height: 40)" in runtime
 
 
@@ -155,13 +179,15 @@ def test_team_web_remains_separate_review_client():
     assert 'id="project-select"' in html
     assert 'id="production-bar"' not in html
     assert 'id="production-panel"' not in html
-    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
+    assert 'Label("团队审阅", systemImage: "person.3")' in native
+    assert "controller.openInBrowser()" in native
     assert "NSWorkspace.shared.open(workbenchURL(for: projectID))" in core
 
 
 def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     core = read("macos-app/MirrorOrderDesktopCore.swift")
     ui = read("macos-app/MirrorOrderDesktopUI.swift")
+    native = read("macos-app/NativeProjectWorkbench.swift")
     cli = read("src/script_organizer/cli.py")
     identity = read("src/script_organizer/media_identity.py")
     runtime = read("src/script_organizer/device_media_runtime.py")
@@ -174,6 +200,9 @@ def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     assert 'item["source_media_path"]' in runtime
     assert 'item["resolved_media_path"]' in runtime
     assert 'item["media_path"] = resolved or source_path' in runtime
+    assert 'projectEndpoint(controller, "media-inventory")' in native
+    assert '"source_media_path"' not in native
+    assert '"resolved_media_path"' not in native
 
 
 def test_build_packages_complete_runtime_and_team_web_tree():
