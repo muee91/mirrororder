@@ -54,8 +54,9 @@ def test_normal_web_review_keeps_review_surface_without_production_dom() -> None
     assert 'id="production-panel"' not in html
     assert 'id="create-project" type="button" hidden' in html
     assert 'id="task-button" type="button" hidden' in html
-    assert "if (window.webkit?.messageHandlers?.mirrorOrder)" in ux
-    assert "if (!window.webkit?.messageHandlers?.mirrorOrder) return;" in timeline_loader
+    assert "review_model.js" not in ux
+    assert "document.createElement('script')" not in ux
+    assert "window.webkit?.messageHandlers?.mirrorOrder" in timeline_loader
 
 
 def test_native_workspace_preserves_appkit_bridge_and_team_review_exit() -> None:

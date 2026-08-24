@@ -1,4 +1,7 @@
 (() => {
+  if (window.__mirrorOrderDeviceMediaInstalled) return;
+  window.__mirrorOrderDeviceMediaInstalled = true;
+
   function isNativeApp() {
     return Boolean(window.webkit?.messageHandlers?.mirrorOrder);
   }

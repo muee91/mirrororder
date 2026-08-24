@@ -2,41 +2,42 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / "macos-app" / "MirrorOrderDesktopApp.swift"
+CORE = ROOT / "macos-app" / "MirrorOrderDesktopCore.swift"
+UI = ROOT / "macos-app" / "MirrorOrderDesktopUI.swift"
 WEB = ROOT / "web" / "index.html"
 
 
 def test_desktop_is_project_first_production_surface() -> None:
-    source = APP.read_text(encoding="utf-8")
-    assert 'case projects' in source
-    assert '@Published var section: ConsoleSection = .projects' in source
-    assert 'Label("新建项目", systemImage: "plus")' in source
-    assert 'NewProjectSheet(controller: controller' in source
-    assert 'workspaceEndpoint("project-preflight")' in source
-    assert 'workspaceEndpoint("projects")' in source
-    assert '"开始项目整理"' in source
-    assert '"重新开始项目整理"' in source
-    assert 'Label("删除项目", systemImage: "trash")' in source
-    assert '.alert(item: $state.deleteProject)' in source
-    assert 'Text("已有对齐 FCPXML").tag("fcpxml")' in source
-    assert 'Button("选择目录…")' in source
-    assert "整理任务进度" in source
-    assert 'Label("项目智能处理", systemImage: "sparkles")' in source
-    assert "ProjectIntelligenceSheet" in source
-    assert "ProjectIntelligenceSection" in source
-    assert 'case intelligence = "本地智能"' in source
-    assert 'case collaboration = "团队协作"' in source
-    assert 'case diagnostics = "诊断"' in source
+    core = CORE.read_text(encoding="utf-8")
+    ui = UI.read_text(encoding="utf-8")
+
+    assert "private struct ProductionSidebar" in ui
+    assert "private struct SidebarProjectRow" in ui
+    assert "ProjectWorkspace(" in ui
+    assert "controller: controller" in ui
+    assert 'Button(action: onNewProject)' in ui
+    assert "private struct NewProjectSheet" in ui
+    assert 'Text("原始素材").tag("media-directory")' in ui
+    assert 'Text("已有对齐 FCPXML").tag("fcpxml")' in ui
+    assert 'Button("开始自动整理")' in ui
+    assert 'Button("永久删除项目…", role: .destructive)' in ui
+    assert 'case intelligence = "本地智能"' in ui
+    assert 'case collaboration = "团队协作"' in ui
+    assert 'case diagnostics = "诊断"' in ui
+    assert 'workspaceEndpoint("project-preflight")' in core
+    assert 'workspaceEndpoint("projects")' in core
 
 
 def test_web_header_is_review_only() -> None:
     source = WEB.read_text(encoding="utf-8")
     header = source.split('</header>', 1)[0]
+
     assert '<title>镜序 · 团队审阅</title>' in source
-    assert 'AI 建议' in header
     assert '审核人' in header
     assert '>新建项目<' not in header
     assert '>任务<' not in header
+    assert '镜序助理' not in header
+    assert '时间线' not in header
 
 
 def test_web_legacy_production_dom_is_explicitly_hidden() -> None:
