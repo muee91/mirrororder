@@ -7,8 +7,7 @@ import {
   type HostSnapshot,
   type ProjectSummary,
 } from "../api/host";
-import { MaterialScriptWorkbench } from "../features/material-script/MaterialScriptWorkbench";
-import "../features/material-script/material-script.css";
+import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
 
 function errorMessage(error: unknown): string {
@@ -125,7 +124,7 @@ export function App() {
           />
           <section className="workbench-shell">
             {selectedProject ? (
-              <MaterialScriptWorkbench baseUrl={snapshot.baseUrl} project={selectedProject} />
+              <ProjectWorkbench key={selectedProject.project_id} baseUrl={snapshot.baseUrl} project={selectedProject} />
             ) : (
               <div className="phase-placeholder">
                 <strong>选择一个项目</strong>
@@ -138,7 +137,7 @@ export function App() {
         <section className="offline-state">
           <p className="eyebrow">Phase 1</p>
           <h2>等待 HostConnection</h2>
-          <p>当前页面只负责 Host 生命周期与 typed localhost API 接入，不承载 Python 业务权威。</p>
+          <p>HostConnection 负责生命周期与 typed localhost API；业务权威仍在 Python Core，剪辑状态由 Rust Timeline Core 管理。</p>
         </section>
       )}
     </main>
