@@ -39,12 +39,22 @@ pytest
 
 ## Authority boundary
 
-- **Python Core** owns workspace/project lifecycle, Review, Slate, Identity, Assistant, model connections, AI proposals, media identity/binding semantics and FCPXML delivery semantics.
+- **Python Core** owns workspace/project lifecycle, Review, Slate, Identity, Assistant, model connections, AI proposals, media identity/binding semantics, Team Web review/security semantics and FCPXML delivery semantics.
 - **React/TypeScript** owns desktop interaction, workbench layout, typed localhost clients and proposal preview.
-- **Tauri/Rust** owns Python Host lifecycle, native dialogs/filesystem/platform adapters and Rust Timeline state.
+- **Tauri/Rust** owns Python process lifecycle, native dialogs/filesystem/platform adapters and Rust Timeline state.
 - **Rust Timeline Core** owns deterministic edit state, validation, undo/redo, persistence and recovery.
-- **Team Web** remains a lightweight reviewer/projection surface.
+- **Team Web** remains a lightweight reviewer/projection surface; Desktop owns only its isolated launch/lifecycle UX.
 - Video frames/proxy bytes are never transported through Tauri JSON/Base64 IPC.
+
+## Feature-isolation rule
+
+Production project tabs are parity/product surfaces, not generic plugin slots. Capabilities with their own process, network/security boundary or heavy runtime start outside that tab list.
+
+- Team Web Gateway is a top-level **团队协作** workspace.
+- Heavy media processing, new NLE adapters, model-runtime infrastructure and experimental automation should start in an isolated module and, for substantial changes, an isolated branch/worktree.
+- Promotion into the primary production workspace requires an explicit typed contract, ownership boundary, failure isolation and native smoke gate.
+
+The machine-readable rule lives in `phase7-parity.json` under `isolation_policy`.
 
 ## Python Host lifecycle
 
@@ -186,6 +196,7 @@ Tauri platform adapters now expose:
 - native file/folder dialogs;
 - Finder reveal/open on macOS;
 - Explorer reveal/open on Windows;
+- safe native `http/https` URL opening;
 - `xdg-open` fallback on Linux;
 - macOS Final Cut adapter for existing `.fcpxml` files;
 - explicit capability reporting for pending security-scope / Resolve / Premiere extensions.
@@ -240,7 +251,29 @@ Desktop now uses the existing Python `WorkspaceRegistry` for:
 - identity runtime readiness;
 - device media state path.
 
-React combines that with Tauri platform capability state and Rust Timeline persistence state.
+The same compact surface also reuses existing Python contracts for frontend settings, local intelligence runtime, browser users/access audit and a **read-only** project task overview. Active tasks are polled only while queued/running; Desktop does not introduce a task center or new queue semantics.
+
+React combines those facts with Tauri platform capability state and Rust Timeline persistence state.
+
+### Team Web Gateway
+
+Team review keeps the existing Python Workspace Gateway contract, but its process lifecycle is isolated from production:
+
+```text
+Production Host  → localhost / single workspace / default 8765
+Team Web Gateway → separate Tauri manager / multi-workspace / default 8766
+```
+
+The **团队协作** top-level workspace exposes only:
+
+- start / stop / status;
+- workspace scope;
+- LAN vs local-only;
+- pairing vs trusted-LAN;
+- current workspace/project share link;
+- system-browser open.
+
+Pairing, reviewer roles and Review authority remain Python-owned. LAN mode never substitutes localhost when a real LAN address cannot be resolved. Gateway startup is not reported as successful until the child process actually begins listening on loopback.
 
 ### SwiftUI retirement
 
@@ -249,8 +282,8 @@ Current state:
 ```text
 Desktop v2  → primary candidate / Phase 7 RC
 SwiftUI     → legacy frozen regression reference
-Team Web    → unchanged lightweight reviewer
+Team Web    → review/business boundary unchanged; lifecycle moved to isolated Desktop workspace
 Python Core → unchanged authority
 ```
 
-Do not physically delete `macos-app/` until the native release gates in `phase7-parity.json` pass, especially packaged Tauri build, real media playback/binding, Timeline recovery, macOS Final Cut smoke, codesign/bundle, Windows WebView2 and installer smoke.
+Do not physically delete `macos-app/` until the native release gates in `phase7-parity.json` pass, especially packaged Tauri build, real media playback/binding, Timeline recovery, Team Web LAN/pairing smoke, macOS Final Cut smoke, codesign/bundle, Windows WebView2 and installer smoke.
