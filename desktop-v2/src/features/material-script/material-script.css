@@ -11,10 +11,13 @@
 .projection-summary span { border: 1px solid #27303a; border-radius: 999px; padding: 5px 8px; background: #11161b; }
 .take-list { display: grid; gap: 10px; }
 .take-card { min-width: 0; border: 1px solid #252d36; border-radius: 12px; padding: 14px; background: #0d1115; }
+.take-card.is-selected { border-color: #536170; }
 .take-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .take-card-heading p { margin: 5px 0 0; color: #7c8895; font-size: 12px; }
 .take-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.take-heading-actions { display: flex; align-items: center; gap: 6px; }
 .tiny-pill, .mapping-source, .duration-label { border-radius: 999px; padding: 3px 7px; color: #9aa5b1; background: #1b2229; font-size: 10px; }
+.take-select { border-color: #303a44; padding: 4px 7px; color: #aab5c0; background: #171d23; font-size: 10px; }
 .source-human { color: #b8dec7; }
 .source-automatic { color: #c9d1e4; }
 .source-none { color: #d8bd83; }
@@ -31,6 +34,21 @@
 .issue-warning { color: #dfc783; background: #292417; }
 .issue-error { color: #eeaaaa; background: #2b1818; }
 .load-more { display: block; margin: 14px auto 0; }
+.material-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+.take-inspector { position: sticky; top: 14px; min-width: 0; border: 1px solid #252d36; border-radius: 12px; padding: 14px; background: #0d1115; }
+.inspector-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.inspector-heading h3 { margin: 3px 0 0; font-size: 14px; }
+.inspector-mapping { margin: 8px 0 0; color: #8793a0; font-size: 11px; }
+.inspector-angle-tabs { display: flex; gap: 5px; margin: 12px 0 10px; overflow-x: auto; }
+.inspector-angle-tabs button { flex: 0 0 auto; border-color: #303a44; padding: 5px 9px; color: #8e9aa6; background: #171d23; font-size: 10px; }
+.inspector-angle-tabs button.is-active { color: #11151a; background: #eef2f6; }
+.take-player { display: block; width: 100%; max-height: 280px; border-radius: 9px; background: #050607; }
+.player-empty { display: grid; min-height: 180px; place-items: center; border: 1px dashed #303842; border-radius: 9px; color: #73808d; font-size: 12px; text-align: center; }
+.selected-angle-meta { display: grid; gap: 3px; margin-top: 9px; min-width: 0; }
+.selected-angle-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.selected-angle-meta span { color: #74808d; font-size: 10px; }
+.dialogue-panel { margin-top: 12px; border-top: 1px solid #242c34; padding-top: 11px; }
+.dialogue-panel p:last-child { margin: 7px 0 0; color: #a9b4bf; font-size: 11px; line-height: 1.55; }
 .script-workbench { min-width: 0; }
 .episode-strip { display: flex; gap: 5px; padding: 10px 0 12px; overflow-x: auto; }
 .episode-strip button { flex: 0 0 auto; border-color: #2d3742; padding: 6px 10px; color: #8793a0; background: #151b21; font-size: 11px; }
@@ -45,10 +63,19 @@
 .script-block-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #7e8a97; font-size: 10px; }
 .script-block-meta code { color: #687583; }
 
+@media (max-width: 1180px) {
+  .material-layout { grid-template-columns: minmax(0, 1fr); }
+  .take-inspector { position: static; grid-row: 1; }
+}
+
 @media (prefers-color-scheme: light) {
   .projection-summary span, .take-card, .angle-card, .script-scene, .script-block { border-color: #dde3e9; background: #fff; }
   .angle-card, .script-block { background: #f7f9fb; }
+  .take-card.is-selected { border-color: #aebbc7; }
   .camera-label { color: #17202a; }
+  .take-select, .inspector-angle-tabs button { border-color: #d5dde5; color: #5c6875; background: #eef2f6; }
+  .take-inspector { border-color: #dde3e9; background: #fff; }
   .episode-strip button { border-color: #d5dde5; color: #5c6875; background: #eef2f6; }
-  .episode-strip button.is-active { color: #fff; background: #17202a; }
+  .episode-strip button.is-active, .inspector-angle-tabs button.is-active { color: #fff; background: #17202a; }
+  .dialogue-panel { border-top-color: #dde3e9; }
 }
