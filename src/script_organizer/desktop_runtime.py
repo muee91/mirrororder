@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
+from .identity_runtime import IdentityRuntime
+from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .media_identity import DeviceMediaStore
 from .runtime_diagnostics import environment_payload
 
@@ -52,12 +55,69 @@ def _media_summary(service: Any, project: Any) -> dict[str, Any]:
     return store.summary(workspace_id, project.project_id, project.index)
 
 
-def install_desktop_runtime() -> None:
-    """Expose Desktop-only diagnostic and device-local media binding adapters.
+def _local_runtime_payload(service: Any) -> dict[str, Any]:
+    settings = load_runtime_settings()
+    model = str(settings.get("local_vision_model", "") or "")
+    vision = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(model)).public()
+    identity = IdentityRuntime.public()
+    root = _workspace_root(service)
+    return {
+        "contract": "local_runtime.v1",
+        "local_vision_enabled": bool(settings.get("local_vision_enabled", True)),
+        "local_vision_model": model,
+        "face_identity_enabled": bool(settings.get("local_face_identity_enabled", True)),
+        "speaker_identity_enabled": bool(settings.get("local_speaker_identity_enabled", True)),
+        "vision": vision,
+        "identity": identity,
+        # Retain the legacy field name used by the old SwiftUI status surface.
+        # The current runtime uses llama.cpp, so this is simply the device-local
+        # model cache byte count rather than a claim about a specific framework.
+        "mlx_cache_bytes": int(vision.get("cache_bytes", 0) or 0),
+        "model_root": str(application_support_root() / "models"),
+        "environment": environment_payload([root]),
+    }
 
-    The adapter delegates project lifecycle, environment diagnostics and media
-    identity/binding semantics to the existing Python Core. It does not create a
-    second source of business truth and never writes review/editorial authority.
+
+def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    action = str(payload.get("action", "set") or "set").strip().lower()
+    settings = load_runtime_settings()
+    if action == "set":
+        update: dict[str, Any] = {}
+        if "local_vision_enabled" in payload:
+            update["local_vision_enabled"] = bool(payload.get("local_vision_enabled"))
+        if "local_vision_model" in payload:
+            update["local_vision_model"] = str(payload.get("local_vision_model", "") or "").strip()
+        if "face_identity_enabled" in payload:
+            update["local_face_identity_enabled"] = bool(payload.get("face_identity_enabled"))
+        if "speaker_identity_enabled" in payload:
+            update["local_speaker_identity_enabled"] = bool(payload.get("speaker_identity_enabled"))
+        if update:
+            old_model = str(settings.get("local_vision_model", "") or "")
+            settings = save_runtime_settings(update)
+            if not bool(settings.get("local_vision_enabled", True)) or str(settings.get("local_vision_model", "") or "") != old_model:
+                LocalVisionRuntime.stop()
+    elif action == "prepare":
+        model = str(settings.get("local_vision_model", "") or "")
+        LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(model)).prepare_async()
+    elif action == "prepare_identity":
+        kind = str(payload.get("kind", "") or "").strip().lower()
+        if kind not in {"face", "speaker"}:
+            raise ValueError("identity kind 必须是 face 或 speaker")
+        IdentityRuntime.prepare_async(kind)
+    elif action == "stop":
+        LocalVisionRuntime.stop()
+    else:
+        raise ValueError("不支持的 local runtime action")
+    return _local_runtime_payload(service)
+
+
+def install_desktop_runtime() -> None:
+    """Expose Desktop-only parity adapters over existing Python Core stores.
+
+    These routes are Host-local management surfaces. They delegate diagnostics,
+    project lifecycle, runtime preparation, collaboration access and device-local
+    media binding to existing Core implementations and never gain Review or
+    Editorial Decision authority.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -99,6 +159,21 @@ def install_desktop_runtime() -> None:
                         }
                     )
                     return
+                if parts == ["api", "v1", "desktop-local-runtime"]:
+                    self._local_only()
+                    self._send_json(_local_runtime_payload(current))
+                    return
+                if parts == ["api", "v1", "desktop-collaboration"]:
+                    self._local_only()
+                    self._send_json(
+                        {
+                            "contract": "desktop_collaboration.v1",
+                            "workspace_id": _workspace_id(current),
+                            "users": current.collaborators.list_users(),
+                            "audit": current.collaborators.audit(),
+                        }
+                    )
+                    return
                 if (
                     len(parts) == 5
                     and parts[:3] == ["api", "v1", "projects"]
@@ -125,6 +200,27 @@ def install_desktop_runtime() -> None:
                         {
                             "contract": "project_preflight.v1",
                             "preflight": current.registry.preflight_create(web_server._body(self)),
+                        }
+                    )
+                    return
+                if parts == ["api", "v1", "desktop-local-runtime"]:
+                    self._local_only()
+                    self._send_json(_apply_runtime_action(current, web_server._body(self)))
+                    return
+                if (
+                    len(parts) == 4
+                    and parts[:3] == ["api", "v1", "desktop-collaboration"]
+                    and parts[3]
+                ):
+                    self._local_only()
+                    user = current.collaborators.update_user(parts[3], web_server._body(self))
+                    self._send_json(
+                        {
+                            "contract": "desktop_collaboration.v1",
+                            "workspace_id": _workspace_id(current),
+                            "user": user,
+                            "users": current.collaborators.list_users(),
+                            "audit": current.collaborators.audit(),
                         }
                     )
                     return
