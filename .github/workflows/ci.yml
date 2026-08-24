@@ -2,7 +2,7 @@ name: MirrorOrder CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/desktop-v2-tauri]
   pull_request:
 
 jobs:
@@ -40,12 +40,14 @@ jobs:
       - name: Typecheck Desktop
         working-directory: desktop-v2
         run: npm run typecheck
-      - name: Test Desktop HostConnection
+      - name: Test Desktop
         working-directory: desktop-v2
         run: npm test
       - name: Build Desktop frontend
         working-directory: desktop-v2
         run: npm run build
+      - name: Test Timeline Core
+        run: cargo test --manifest-path desktop-v2/src-tauri/crates/timeline-core/Cargo.toml
       - name: Test Tauri Host
         run: cargo test --manifest-path desktop-v2/src-tauri/Cargo.toml
       - name: Check Tauri Host
