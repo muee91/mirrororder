@@ -1,4 +1,13 @@
 (() => {
+  if (!document.querySelector('link[data-mirrororder-material-cards]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/material_card.css';
+    link.dataset.mirrororderMaterialCards = '1';
+    document.head.appendChild(link);
+  }
+  import('/material_card_ui.js').catch(() => undefined);
+
   const gate = window.__mirrorOrderStartupGate;
   if (!gate) return;
   const timelineReady = window.__mirrorOrderTimelineReady;
