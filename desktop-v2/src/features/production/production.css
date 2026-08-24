@@ -1,0 +1,71 @@
+.project-workbench-nav { display: flex; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid #232b33; padding-bottom: 10px; overflow-x: auto; }
+.project-workbench-nav button { flex: 0 0 auto; border-color: #2d3742; padding: 7px 11px; color: #8995a2; background: #141a20; }
+.project-workbench-nav button.is-active { color: #11151a; background: #eef2f6; }
+.phase3-workbench, .timeline-workbench { min-width: 0; }
+.production-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.production-heading h2 { margin: 3px 0 0; }
+.production-state { max-width: 55%; color: #788491; font-size: 11px; text-align: right; }
+.production-grid { display: grid; gap: 14px; align-items: start; }
+.production-panel { min-width: 0; border: 1px solid #252d36; border-radius: 12px; padding: 14px; background: #0d1115; }
+.slate-grid { grid-template-columns: 300px minmax(0, 1fr); }
+.identity-grid { grid-template-columns: minmax(300px, .8fr) minmax(380px, 1.2fr); }
+.assistant-grid { grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr); }
+.production-field { display: grid; gap: 6px; margin-bottom: 12px; color: #778491; font-size: 10px; }
+.production-field input, .production-field select, .slate-capture textarea, .assistant-chat textarea { width: 100%; border: 1px solid #303944; border-radius: 9px; padding: 8px 10px; color: #e7ecf1; background: #11171c; outline: none; }
+.production-field select { min-height: 36px; }
+.slate-capture textarea, .assistant-chat textarea { resize: vertical; line-height: 1.5; }
+.production-actions, .assistant-heading-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.production-actions span { color: #6f7b87; font-size: 10px; }
+.slate-current { border-top: 1px solid #252d36; padding-top: 12px; color: #8793a0; }
+.slate-current strong { display: block; margin: 5px 0; color: #c8d0d9; }
+.slate-current span { font-size: 10px; }
+.slate-current p:last-child { line-height: 1.5; }
+.parse-preview { margin-top: 14px; border: 1px solid #2d3742; border-radius: 10px; padding: 12px; background: #12181e; }
+.parse-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.parse-heading > span { color: #74808d; font-size: 10px; }
+.fact-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.fact-chips span { border-radius: 999px; padding: 4px 7px; color: #b8c6d3; background: #222c35; font-size: 10px; }
+.production-warning { color: #dfc783; font-size: 11px; }
+.production-note { color: #76828f; font-size: 10px; line-height: 1.55; }
+.identity-filter { display: flex; gap: 6px; margin-bottom: 10px; }
+.identity-filter button { border-color: #2d3742; padding: 6px 10px; color: #8793a0; background: #151b21; font-size: 11px; }
+.identity-filter button.is-active { color: #11151a; background: #eef2f6; }
+.identity-list { display: grid; gap: 7px; max-height: 68vh; overflow-y: auto; }
+.identity-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 4px 8px; width: 100%; border: 1px solid #28323b; border-radius: 9px; padding: 9px; color: #8a96a2; background: #12181e; text-align: left; }
+.identity-row.is-selected { border-color: #657586; background: #182027; }
+.identity-row strong { overflow: hidden; color: #c7d0da; text-overflow: ellipsis; white-space: nowrap; }
+.identity-row > span:not(.identity-kind) { font-size: 10px; }
+.identity-row em { grid-column: 2 / 4; color: #88a497; font-size: 9px; font-style: normal; }
+.identity-kind { color: #778491; font-size: 9px; text-transform: uppercase; }
+.identity-inspector { position: sticky; top: 12px; }
+.identity-suggestion { display: grid; gap: 5px; margin: 12px 0; border: 1px solid #2a343d; border-radius: 9px; padding: 10px; }
+.identity-suggestion span { color: #7d8996; font-size: 10px; }
+.identity-suggestion button { justify-self: start; margin-top: 4px; }
+.identity-occurrences { margin-top: 14px; border-top: 1px solid #252d36; padding-top: 12px; }
+.occurrence-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; width: 100%; margin-top: 6px; border-color: #29323b; color: #a7b1bc; background: #12181e; text-align: left; }
+.occurrence-row span { color: #798692; font-size: 10px; }
+.occurrence-row small { grid-column: 1 / -1; overflow: hidden; color: #71808d; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-heading-actions { justify-content: flex-end; }
+.assistant-items { display: grid; gap: 8px; margin-top: 12px; }
+.assistant-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; border: 1px solid #28313a; border-radius: 9px; padding: 10px; background: #12181e; }
+.assistant-item div { display: grid; gap: 3px; }
+.assistant-item span, .assistant-item em { color: #778491; font-size: 9px; font-style: normal; }
+.assistant-item strong { color: #c5ced8; }
+.assistant-item p { grid-column: 1 / -1; margin: 3px 0 0; color: #84909c; font-size: 11px; line-height: 1.5; }
+.assistant-chat { display: grid; gap: 10px; }
+.assistant-answer { max-height: 360px; overflow-y: auto; border: 1px solid #29343e; border-radius: 9px; padding: 11px; color: #c0cad4; background: #11171c; white-space: pre-wrap; line-height: 1.55; }
+
+@media (max-width: 1180px) {
+  .slate-grid, .identity-grid, .assistant-grid { grid-template-columns: minmax(0, 1fr); }
+  .identity-inspector { position: static; }
+  .production-state { max-width: 100%; }
+}
+
+@media (prefers-color-scheme: light) {
+  .project-workbench-nav, .slate-current, .identity-occurrences { border-color: #dde3e9; }
+  .production-panel, .parse-preview, .identity-row, .assistant-item, .occurrence-row { border-color: #dde3e9; background: #fff; }
+  .identity-row.is-selected { border-color: #9aa9b8; background: #f1f5f8; }
+  .production-field input, .production-field select, .slate-capture textarea, .assistant-chat textarea, .assistant-answer { border-color: #d5dde5; color: #27313a; background: #f7f9fb; }
+  .project-workbench-nav button, .identity-filter button { border-color: #d5dde5; color: #5c6875; background: #eef2f6; }
+  .project-workbench-nav button.is-active, .identity-filter button.is-active { color: #fff; background: #17202a; }
+}
