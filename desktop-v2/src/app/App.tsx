@@ -8,6 +8,7 @@ import {
   type ProjectSummary,
 } from "../api/host";
 import { MaterialScriptWorkbench } from "../features/material-script/MaterialScriptWorkbench";
+import "../features/material-script/material-script.css";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
 
 function errorMessage(error: unknown): string {
