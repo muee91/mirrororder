@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
+import "../editor/timeline.css";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
 import { MaterialScriptWorkbench } from "../material-script/MaterialScriptWorkbench";
 import "../material-script/material-script.css";
