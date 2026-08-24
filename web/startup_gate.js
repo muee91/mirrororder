@@ -109,6 +109,7 @@
     }).observe(status, {childList: true, characterData: true, subtree: true});
   }
 
-  // Fail open if the final release script is ever removed or fails to load.
-  window.addEventListener('load', () => window.setTimeout(release, 0), {once: true});
+  // Emergency fail-open only. Normal boot is released by startup_release.js;
+  // leave enough time for native compatibility scripts to finish or fail.
+  window.addEventListener('load', () => window.setTimeout(release, 5000), {once: true});
 })();
