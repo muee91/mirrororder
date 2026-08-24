@@ -10,7 +10,7 @@
 .status-capabilities span.is-ready { border-color: #355745; color: #99c0aa; background: #122019; }
 .status-capabilities span.is-missing { border-color: #644444; color: #d0a0a0; background: #211717; }
 .status-capabilities span.is-pending { border-color: #655a3e; color: #cfbd84; background: #211e14; }
-.frontend-settings-card, .phase7-gate-card, .local-runtime-card, .collaboration-card { grid-column: span 1; }
+.frontend-settings-card, .phase7-gate-card, .local-runtime-card, .collaboration-card, .task-status-card { grid-column: span 1; }
 .settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
 .settings-form-grid .production-field { margin: 0; }
 .settings-check { display: flex; align-items: center; gap: 7px; min-height: 34px; color: #8a96a2; font-size: 10px; }
@@ -39,6 +39,21 @@
 .collaboration-audit p { display: grid; gap: 2px; margin: 0; border-bottom: 1px solid #222b33; padding-bottom: 5px; }
 .collaboration-audit strong { color: #aeb9c3; font-size: 9px; }
 .collaboration-audit span, .collaboration-audit small { color: #71808d; font-size: 8px; }
+.task-active-card { display: grid; gap: 7px; border: 1px solid #355745; border-radius: 9px; padding: 9px; background: #122019; }
+.task-status-line, .task-progress-row, .task-status-row, .task-status-meta { display: flex; align-items: center; gap: 8px; }
+.task-status-line, .task-status-row { justify-content: space-between; }
+.task-status-line strong, .task-status-row strong { color: #bcc8d1; font-size: 10px; }
+.task-status-line span, .task-status-row span, .task-status-row small { color: #778591; font-size: 8px; }
+.task-progress-row progress { flex: 1; min-width: 0; }
+.task-progress-row span { color: #91a39a; font-size: 8px; }
+.task-status-list { display: grid; gap: 0; max-height: 300px; overflow-y: auto; }
+.task-status-row { position: relative; min-width: 0; border-top: 1px solid #252d36; padding: 7px 0; }
+.task-status-row > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.task-status-row > div:first-child strong, .task-status-row > div:first-child span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-status-meta { flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 2px; }
+.task-status-meta span.is-active { color: #9ac4aa; }
+.task-status-meta span.is-complete { color: #7f9b88; }
+.task-error { grid-column: 1 / -1; width: 100%; margin: 3px 0 0; color: #cb9090; font-size: 8px; }
 .phase7-gate-list { display: grid; gap: 6px; }
 .phase7-gate-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; border-top: 1px solid #252d36; padding-top: 7px; }
 .phase7-gate-row strong { color: #b9c4ce; font-size: 10px; font-weight: 600; text-transform: capitalize; }
@@ -56,14 +71,15 @@
 
 @media (prefers-color-scheme: light) {
   .status-card h3 { color: #26313a; }
-  .status-facts div, .phase7-gate-row, .collaboration-audit { border-color: #dde3e9; }
+  .status-facts div, .phase7-gate-row, .collaboration-audit, .task-status-row { border-color: #dde3e9; }
   .status-facts dd { color: #56616d; }
   .status-capabilities span { border-color: #d7dfe6; color: #63707c; background: #f4f7f9; }
   .status-capabilities span.is-ready { border-color: #b7d3c2; color: #37634a; background: #eef8f2; }
   .status-capabilities span.is-missing { border-color: #e0bcbc; color: #8b4f4f; background: #fff3f3; }
   .status-capabilities span.is-pending { border-color: #e2d4a7; color: #79651e; background: #fff9e7; }
   .runtime-status-grid article, .collaboration-user { border-color: #dce3e9; background: #fff; }
-  .runtime-status-grid strong, .collaboration-user-main strong { color: #45515c; }
+  .runtime-status-grid strong, .collaboration-user-main strong, .task-status-row strong { color: #45515c; }
+  .task-active-card { border-color: #b7d3c2; background: #eef8f2; }
   .phase7-gate-row strong { color: #4d5964; }
   .phase7-gate-row > span.is-ready { color: #37634a; background: #eef8f2; }
   .phase7-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
