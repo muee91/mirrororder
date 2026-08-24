@@ -1,7 +1,8 @@
-"""MirrorOrder Auto Score V0.
+"""MirrorOrder Auto Score V0.2.
 
 The music package is intentionally isolated from production review/editorial
-authority. It produces derived music planning artifacts only.
+authority. It produces derived music planning artifacts only. Optional audio
+analysis enriches moment grounding without becoming a core runtime dependency.
 """
 
 from .library import index_music_library
