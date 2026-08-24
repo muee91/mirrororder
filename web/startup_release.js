@@ -7,6 +7,7 @@
     document.head.appendChild(link);
   }
   import('/material_card_ui.js').catch(() => undefined);
+  import('/post_workbench_ui.js').catch(() => undefined);
 
   const gate = window.__mirrorOrderStartupGate;
   if (!gate) return;
