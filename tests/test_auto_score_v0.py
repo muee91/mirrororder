@@ -120,9 +120,11 @@ def test_build_music_plan_writes_derived_artifacts_only(tmp_path: Path) -> None:
         episode=1,
         timeline_seconds=24,
         top_k=3,
+        analysis_mode="off",
     )
 
     assert plan["contract"] == "auto-score.v1"
+    assert plan["feature_level"] == "v0.2"
     assert plan["summary"]["cues"] == 2
     assert plan["summary"]["selected"] == 2
     assert plan["policy"]["license_gate"] is True
