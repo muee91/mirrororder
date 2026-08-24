@@ -9,91 +9,6 @@
     try { return typeof state === 'object' && state ? state : null; } catch (_error) { return null; }
   }
 
-  function compactEpisodeNavigation() {
-    if (APP_CLIENT) return;
-    const target = document.querySelector('#episode-picks');
-    if (!target) return;
-    const episodeButtons = [...target.querySelectorAll(':scope > .episode-pick[data-episode]')];
-    const pendingButton = target.querySelector(':scope > .episode-pick[data-mode="unassigned"]');
-    if (episodeButtons.length <= 8) {
-      target.classList.remove('compact-episode-nav');
-      target.querySelector('.episode-nav-controls')?.remove();
-      delete target.dataset.compactSignature;
-      return;
-    }
-
-    const signature = [
-      ...episodeButtons.map((button) => `${button.dataset.episode}:${button.classList.contains('active') ? 1 : 0}`),
-      `pending:${pendingButton?.textContent || ''}:${pendingButton?.classList.contains('active') ? 1 : 0}`,
-    ].join('|');
-    if (target.dataset.compactSignature === signature && target.querySelector('.episode-nav-controls')) return;
-    target.dataset.compactSignature = signature;
-    target.classList.add('compact-episode-nav');
-    target.querySelector('.episode-nav-controls')?.remove();
-
-    const controls = document.createElement('div');
-    controls.className = 'episode-nav-controls';
-    controls.style.display = 'flex';
-    controls.style.alignItems = 'center';
-    controls.style.gap = '5px';
-
-    const episodeRows = episodeButtons
-      .filter((button) => button.dataset.episode !== 'all')
-      .map((button) => ({button, episode: Number(button.dataset.episode)}))
-      .filter((row) => Number.isFinite(row.episode))
-      .sort((a, b) => a.episode - b.episode);
-    const activeRow = episodeRows.find((row) => row.button.classList.contains('active')) || null;
-    const allButton = episodeButtons.find((button) => button.dataset.episode === 'all') || null;
-
-    const previous = document.createElement('button');
-    previous.type = 'button';
-    previous.className = 'episode-nav-button';
-    previous.textContent = '‹';
-    previous.title = '上一集';
-    previous.disabled = !activeRow || activeRow.episode === episodeRows[0]?.episode;
-    previous.addEventListener('click', () => {
-      if (!activeRow) return;
-      const index = episodeRows.findIndex((row) => row.episode === activeRow.episode);
-      episodeRows[index - 1]?.button.click();
-    });
-
-    const select = document.createElement('select');
-    select.className = 'episode-nav-select';
-    select.setAttribute('aria-label', '切换集数');
-    select.innerHTML = '<option value="all">全部集数</option>' + episodeRows
-      .map((row) => `<option value="${row.episode}">第${row.episode}集</option>`)
-      .join('');
-    select.value = activeRow ? String(activeRow.episode) : 'all';
-    select.addEventListener('change', () => {
-      if (select.value === 'all') allButton?.click();
-      else episodeRows.find((row) => String(row.episode) === select.value)?.button.click();
-    });
-
-    const next = document.createElement('button');
-    next.type = 'button';
-    next.className = 'episode-nav-button';
-    next.textContent = '›';
-    next.title = '下一集';
-    next.disabled = !activeRow || activeRow.episode === episodeRows[episodeRows.length - 1]?.episode;
-    next.addEventListener('click', () => {
-      if (!activeRow) return;
-      const index = episodeRows.findIndex((row) => row.episode === activeRow.episode);
-      episodeRows[index + 1]?.button.click();
-    });
-
-    controls.append(previous, select, next);
-    if (pendingButton) {
-      const pending = document.createElement('button');
-      pending.type = 'button';
-      pending.className = 'episode-nav-pending';
-      pending.textContent = pendingButton.textContent || '待归集';
-      pending.classList.toggle('active', pendingButton.classList.contains('active'));
-      pending.addEventListener('click', () => pendingButton.click());
-      controls.appendChild(pending);
-    }
-    target.prepend(controls);
-  }
-
   function replaceAssistantText(root) {
     if (!root) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -176,7 +91,6 @@
   }
 
   function applyPostWorkbench() {
-    compactEpisodeNavigation();
     brandXiaojing();
     installIdentityRoleTitle();
     decorateIdentitySuggestions();

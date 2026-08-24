@@ -21,7 +21,12 @@ const state = {
   review: {version: 2, revision: 0, assignments: {}, groups: {}, clips: {}, placements: {}},
   groupMap: new Map(),
   segmentMap: new Map(),
+  candidateCache: new Map(),
+  segmentStateCache: new Map(),
+  humanScriptCache: new Map(),
   episode: null,
+  episodeSelectionInitialized: false,
+  explicitEpisodeSelection: false,
   segmentId: null,
   mode: 'script',
   unknownOnly: false,
@@ -36,6 +41,7 @@ const state = {
   analysisRevision: '',
   reviewRevision: 0,
   pollTimer: null,
+  pollInFlight: null,
   searchTimer: null,
   searchController: null,
   audioUnlocked: false,
@@ -87,20 +93,54 @@ function applyWorkbenchDefaults() {
     : null;
   state.selectedGroupId = null;
   state.selectedClipId = null;
+  state.explicitEpisodeSelection = false;
+  state.episodeSelectionInitialized = true;
+}
+
+function invalidateDerivedCaches() {
+  state.candidateCache.clear();
+  state.segmentStateCache.clear();
+  state.humanScriptCache.clear();
 }
 
 async function fetchJson(url, options = {}) {
+  const {timeoutMs = 12000, signal: upstreamSignal, ...requestOptions} = options;
   const headers = {
     ...(state.session ? {'X-MirrorOrder-Session': state.session} : {}),
     ...(state.deviceId ? {'X-MirrorOrder-Device': state.deviceId} : {}),
-    ...(options.headers || {}),
+    ...(requestOptions.headers || {}),
   };
-  const response = await fetch(url, {cache: 'no-store', credentials: 'same-origin', ...options, headers});
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || `请求失败 (${response.status})`);
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort();
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) controller.abort();
+    else upstreamSignal.addEventListener('abort', abortFromCaller, {once: true});
   }
-  return response.json();
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, Math.max(1000, Number(timeoutMs) || 12000));
+  try {
+    const response = await fetch(url, {
+      cache: 'no-store', credentials: 'same-origin', ...requestOptions, headers, signal: controller.signal,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || `请求失败 (${response.status})`);
+    }
+    return response.json();
+  } catch (error) {
+    if (timedOut) {
+      const timeoutError = new Error(`请求超时：${url}`);
+      timeoutError.name = 'TimeoutError';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    upstreamSignal?.removeEventListener('abort', abortFromCaller);
+  }
 }
 
 function allSegments() {
@@ -209,30 +249,145 @@ function automaticCandidatesForSegment(segmentId) {
 
 function candidateForSegment(segmentId) {
   if (state.segmentMap.get(segmentId)?.type === 'scene_heading') return [];
+  if (state.candidateCache.has(segmentId)) return state.candidateCache.get(segmentId);
   const candidates = [...automaticCandidatesForSegment(segmentId)];
-  const known = new Set(candidates.map((candidate) => candidate.group_id));
   for (const group of state.groups) {
-    const placement = placementForGroup(group).entry;
-    if (!placement || !placement.script_segment_ids?.includes(segmentId) || known.has(group.group_id)) continue;
-    candidates.push({
+    const manualIds = humanScriptIds(group);
+    if (!manualIds.includes(segmentId)) continue;
+    const existingIndex = candidates.findIndex((candidate) => candidate.group_id === group.group_id);
+    const existing = existingIndex >= 0 ? candidates[existingIndex] : {};
+    const manual = {
+      ...existing,
       group_id: group.group_id,
       confidence: 'manual',
       total_score: 1,
-      script_segment_ids: placement.script_segment_ids,
-      transcript_text: matchRowForGroup(group.group_id).candidates?.[0]?.transcript_text || '',
+      script_segment_ids: manualIds,
+      transcript_text: existing.transcript_text || matchRowForGroup(group.group_id).candidates?.[0]?.transcript_text || '',
       evidence: ['人工归集到此剧本范围'],
-    });
+    };
+    if (existingIndex >= 0) candidates[existingIndex] = manual;
+    else candidates.push(manual);
   }
-  return candidates.sort((left, right) => {
+  const result = candidates.sort((left, right) => {
     const leftGroup = state.groupMap.get(left.group_id);
     const rightGroup = state.groupMap.get(right.group_id);
-    return Number(leftGroup?.start || 0) - Number(rightGroup?.start || 0);
+    const leftMarker = mappingMarker(leftGroup, left);
+    const rightMarker = mappingMarker(rightGroup, right);
+    return compareMappingMarkers(leftMarker, rightMarker)
+      || String(left.group_id).localeCompare(String(right.group_id));
   });
+  state.candidateCache.set(segmentId, result);
+  return result;
+}
+
+function humanScriptIds(group) {
+  const cacheKey = String(group?.group_id || '');
+  if (state.humanScriptCache.has(cacheKey)) return state.humanScriptCache.get(cacheKey);
+  const placement = placementForGroup(group).entry;
+  const effective = group?.effective_mapping || {};
+  const ids = [
+    ...(placement?.script_segment_ids || []),
+    ...(effective.source === 'human' ? (effective.script_segment_ids || []) : []),
+  ];
+  const result = [...new Set(ids.filter((value) => state.segmentMap.has(value)))];
+  state.humanScriptCache.set(cacheKey, result);
+  return result;
+}
+
+function mappingEpisodeIds(group, candidate = null) {
+  const placement = placementForGroup(group).entry;
+  const effective = group?.effective_mapping || {};
+  const automatic = group?.automatic_state || group?.automation || {};
+  const supervisor = group?.script_supervisor || {};
+  const ids = [
+    ...(placement?.episode_ids || []),
+    ...(effective.episode_ids || []),
+    ...(automatic.episode_ids || []),
+    ...(supervisor.episode === undefined || supervisor.episode === null ? [] : [supervisor.episode]),
+    ...(candidate?.episode_ids || []),
+    ...(candidate?.context_episodes || []),
+  ];
+  return [...new Set(ids.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0))]
+    .sort((left, right) => left - right);
+}
+
+function mappingScriptIds(group, candidate = null) {
+  const placement = placementForGroup(group).entry;
+  const effective = group?.effective_mapping || {};
+  const ids = [
+    ...(placement?.script_segment_ids || []),
+    ...(effective.script_segment_ids || []),
+    ...candidateScriptIds(candidate),
+  ];
+  return [...new Set(ids.filter((value) => state.segmentMap.has(value)))];
+}
+
+function mappingScriptOrder(scriptIds) {
+  const orders = scriptIds
+    .map((id) => Number(state.segmentMap.get(id)?.order))
+    .filter((value) => Number.isFinite(value));
+  return orders.length ? Math.min(...orders) : Number.MAX_SAFE_INTEGER;
+}
+
+function mappingMarker(group, candidate = null) {
+  const placement = placementForGroup(group);
+  const effective = group?.effective_mapping || {};
+  const automatic = group?.automatic_state || group?.automation || {};
+  const candidateConfidence = String(candidate?.confidence || '');
+  const scriptIds = mappingScriptIds(group, candidate);
+  const episodes = mappingEpisodeIds(group, candidate);
+  let rank = 4;
+  let className = 'xml';
+  let label = 'XML待标记';
+  const humanIds = humanScriptIds(group);
+  const humanEpisodeOnly = placement.entry || effective.source === 'human';
+  if (humanIds.length || candidateConfidence === 'manual') {
+    rank = 0;
+    className = 'manual';
+    label = '人工标记';
+  } else if (candidateConfidence === 'exact_dialogue' || (
+    effective.source === 'automatic' && effective.mapping_status === 'confirmed' && scriptIds.length > 0
+    && ['auto_confirmed', 'ai_confirmed'].includes(automatic.status)
+  )) {
+    rank = 1;
+    className = 'exact';
+    label = automatic.status === 'ai_confirmed' ? '剧本AI高' : '剧本高置信';
+  } else if (candidateConfidence === 'possible_dialogue' || effective.source === 'automatic') {
+    rank = 2;
+    className = 'possible';
+    label = '剧本待确认';
+  } else if (humanEpisodeOnly && episodes.length) {
+    rank = 3;
+    className = 'episode';
+    label = '人工集数';
+  } else if (episodes.length) {
+    rank = 3;
+    className = 'episode';
+    label = '剧本集数';
+  }
+  const rangeText = scriptIds.length ? candidateRangeText({script_segment_ids: scriptIds}) : '';
+  const detail = rangeText || (episodes.length ? episodes.map((episode) => `第${episode}集`).join('、') : '按 XML 拍摄顺序');
+  return {
+    rank,
+    className,
+    label,
+    detail,
+    episodeRank: episodes[0] ?? Number.MAX_SAFE_INTEGER,
+    scriptOrder: mappingScriptOrder(scriptIds),
+    xmlOrder: Number(group?.start || 0),
+  };
+}
+
+function compareMappingMarkers(left, right) {
+  return (left.episodeRank - right.episodeRank)
+    || (left.rank - right.rank)
+    || (left.scriptOrder - right.scriptOrder)
+    || (left.xmlOrder - right.xmlOrder);
 }
 
 function inferredEpisodes(group) {
-  const placement = placementForGroup(group).entry;
-  if (placement?.episode_ids?.length) return [...placement.episode_ids];
+  const mapped = mappingEpisodeIds(group);
+  if (mapped.length) return mapped;
   const row = matchRowForGroup(group.group_id);
   const episodes = [...(row.context_episodes || [])];
   for (const candidate of row.candidates || []) {
@@ -246,7 +401,7 @@ function inferredEpisodes(group) {
 
 function isUnassignedGroup(group) {
   const placement = placementForGroup(group).entry;
-  if (placement?.script_segment_ids?.length) return false;
+  if (placement?.script_segment_ids?.length || group?.effective_mapping?.script_segment_ids?.length) return false;
   const candidates = matchRowForGroup(group.group_id).candidates || [];
   return !candidates.length || candidates.every((candidate) => candidate.confidence === 'context_only');
 }
@@ -258,23 +413,29 @@ function visibleUnassignedGroups() {
       if (state.episode === null) return true;
       return inferredEpisodes(group).includes(state.episode);
     })
-    .sort((left, right) => Number(left.start || 0) - Number(right.start || 0));
+    .sort((left, right) => {
+      const leftCandidate = matchRowForGroup(left.group_id).candidates?.[0] || null;
+      const rightCandidate = matchRowForGroup(right.group_id).candidates?.[0] || null;
+      return compareMappingMarkers(mappingMarker(left, leftCandidate), mappingMarker(right, rightCandidate))
+        || String(left.group_id).localeCompare(String(right.group_id));
+    });
 }
 
 function stateForSegment(segmentId) {
+  if (state.segmentStateCache.has(segmentId)) return state.segmentStateCache.get(segmentId);
   const candidates = candidateForSegment(segmentId);
   const states = candidates.map((candidate) => assignmentState(segmentId, state.groupMap.get(candidate.group_id)));
-  if (states.includes('best')) return 'best';
-  if (states.includes('keep')) return 'keep';
-  if (candidates.some((candidate) => ['manual', 'exact_dialogue'].includes(candidate.confidence))) return 'possible';
-  if (candidates.some((candidate) => candidate.confidence === 'possible_dialogue')) return 'possible';
+  if (states.includes('best')) return state.segmentStateCache.set(segmentId, 'best').get(segmentId);
+  if (states.includes('keep')) return state.segmentStateCache.set(segmentId, 'keep').get(segmentId);
+  if (candidates.some((candidate) => ['manual', 'exact_dialogue'].includes(candidate.confidence))) return state.segmentStateCache.set(segmentId, 'possible').get(segmentId);
+  if (candidates.some((candidate) => candidate.confidence === 'possible_dialogue')) return state.segmentStateCache.set(segmentId, 'possible').get(segmentId);
   const contextGroups = Object.entries(state.matches?.groups || {}).filter(([, item]) => (
     item.context_segment_ids || []
   ).includes(segmentId));
-  if (contextGroups.length) return 'context';
-  if (scriptGapForSegment(segmentId)) return 'gap';
-  if (states.length && states.every((value) => value === 'reject')) return 'reject';
-  return 'unknown';
+  if (contextGroups.length) return state.segmentStateCache.set(segmentId, 'context').get(segmentId);
+  if (scriptGapForSegment(segmentId)) return state.segmentStateCache.set(segmentId, 'gap').get(segmentId);
+  if (states.length && states.every((value) => value === 'reject')) return state.segmentStateCache.set(segmentId, 'reject').get(segmentId);
+  return state.segmentStateCache.set(segmentId, 'unknown').get(segmentId);
 }
 
 function visibleSegments() {
@@ -313,7 +474,7 @@ function candidateRangeText(candidate) {
 
 function confidencePresentation(candidate, group) {
   const placement = placementForGroup(group);
-  if (placement.entry || candidate?.confidence === 'manual') {
+  if (candidate?.confidence === 'manual' || humanScriptIds(group).some((id) => candidateScriptIds(candidate).includes(id))) {
     return {className: 'manual', title: '人工确认', detail: placement.inherited ? '继承归集' : '人工归集', percent: ''};
   }
   const score = Number(candidate?.total_score);
@@ -346,6 +507,8 @@ function renderEpisodePicks() {
   target.innerHTML = buttons.join('');
   target.querySelectorAll('[data-episode]').forEach((button) => button.addEventListener('click', () => {
     state.mode = 'script';
+    state.episodeSelectionInitialized = true;
+    state.explicitEpisodeSelection = true;
     state.episode = button.dataset.episode === 'all' ? null : Number(button.dataset.episode);
     state.segmentId = visibleSegments()[0]?.segment_id || null;
     state.selectedGroupId = null;
@@ -404,6 +567,8 @@ function renderScript() {
       html.push(`<div class="script-scene">${esc(scene)}</div>`);
     }
     const lineState = stateForSegment(segment.segment_id);
+    const lineCandidate = candidateForSegment(segment.segment_id)[0];
+    const lineMarker = lineCandidate ? mappingMarker(state.groupMap.get(lineCandidate.group_id), lineCandidate) : null;
     const stateClass = ['best', 'keep', 'possible'].includes(lineState)
       ? 'verified'
       : lineState === 'context'
@@ -416,7 +581,7 @@ function renderScript() {
       + `data-segment-id="${esc(segment.segment_id)}" type="button">`
       + `<span class="line-no">${esc(segment.order)}</span>`
       + `<span class="line-text">${esc(segment.raw_text)}</span>`
-      + `<span class="line-state state-${esc(lineState)}">${esc(labels[lineState] || lineState)}</span>`
+      + `<span class="line-state state-${esc(lineState)}">${esc(labels[lineState] || lineState)}${lineMarker ? ` · ${lineMarker.label}` : ''}</span>`
       + '</button>',
     );
   }
@@ -479,6 +644,7 @@ function renderMemberStrip(group) {
 function renderTakeRow(group, candidate, segmentId, contextOnly = false) {
   const reviewState = assignmentState(segmentId, group);
   const confidence = confidencePresentation(candidate, group);
+  const marker = mappingMarker(group, candidate);
   const rangeText = candidateRangeText(candidate);
   const placement = placementForGroup(group).entry;
   const episodes = placement?.episode_ids?.length ? placement.episode_ids : inferredEpisodes(group);
@@ -491,7 +657,7 @@ function renderTakeRow(group, candidate, segmentId, contextOnly = false) {
   const transcript = candidate?.transcript_text || matchRowForGroup(group.group_id).candidates?.[0]?.transcript_text
     || (contextOnly ? '没有可靠对白，可能是空镜、口令或准备片。' : '当前没有可靠组内对白。');
   const evidence = (candidate?.evidence || []).map((item) => `<li>${esc(item)}</li>`).join('');
-  const scope = rangeText || (episodes.length ? `可能第${episodes.join('、')}集` : '仍无可靠集数线索');
+  const scope = rangeText || (episodes.length ? `可能第${episodes.join('、')}集` : marker.detail);
   const splitText = group.split_reason ? ` · ${group.split_reason}` : '';
   const selected = state.selectedGroupId === group.group_id;
   return `<article class="take-row ${selected ? 'selected' : ''} ${reviewState === 'reject' ? 'rejected' : ''}" `
@@ -501,6 +667,7 @@ function renderTakeRow(group, candidate, segmentId, contextOnly = false) {
     + '</div>'
     + '<div class="take-info">'
     + `<div class="take-info-top"><span class="badge badge-${esc(reviewState)}">${esc(stateLabel)}</span>`
+    + `<span class="badge mapping-marker marker-${esc(marker.className)}" title="${esc(marker.detail)}">${esc(marker.label)}</span>`
     + `<span class="badge badge-range">${esc(scope)}</span></div>`
     + `<div class="take-transcript">${esc(transcript)}</div>`
     + `<div class="take-meta">拍摄 ${formatClock(group.start)}–${formatClock(group.end)} · ${Number(group.duration || 0).toFixed(1)}秒 · ${esc(reviewLabel(segmentId, group))}${esc(splitText)}</div>`
@@ -615,6 +782,20 @@ function restoreScroll(positions) {
 }
 
 function renderContent(options = {}) {
+  // A stale browser setting or an early extension callback must never make
+  // the first paint synchronously build all 1,343 script rows. “全集” stays
+  // available, but it is an explicit user choice rather than an accidental
+  // null episode during boot.
+  if (
+    state.episodeSelectionInitialized
+    && !state.explicitEpisodeSelection
+    && state.frontendSettings.default_episode !== 'all'
+    && state.episode === null
+    && episodeList().length
+  ) {
+    state.episode = episodeList()[0];
+    state.segmentId = visibleSegments().find((segment) => segment.type !== 'scene_heading')?.segment_id || null;
+  }
   const positions = {...captureScroll(), ...options};
   $('#workspace').classList.toggle('unassigned', state.mode === 'unassigned');
   renderEpisodePicks();
@@ -641,13 +822,14 @@ function sortedMembers(group) {
 
 function renderInspector(group, member) {
   const candidate = currentCandidateForGroup(group.group_id);
+  const marker = mappingMarker(group, candidate);
   $('#player-file').textContent = memberFileName(member);
   $('#player-file').title = member.media_path || memberFileName(member);
   const camera = $('#player-camera');
   camera.textContent = member.camera || '—';
   camera.className = `camera-chip camera-${member.camera || 'neutral'}`;
   $('#player-range').textContent = `${memberRangeText(member)} · 素材时长 ${Number(member.duration || 0).toFixed(1)}秒`;
-  $('#player-take').textContent = `${candidateRangeText(candidate) || inferredEpisodes(group).map((episode) => `第${episode}集`).join('、') || '待归集'} · 拍摄 ${formatClock(group.start)}–${formatClock(group.end)}`;
+  $('#player-take').textContent = `${marker.label} · ${marker.detail} · 拍摄 ${formatClock(group.start)}–${formatClock(group.end)}`;
   $('#player-transcript').textContent = candidate?.transcript_text || '没有可靠对白线索。';
   $('#player-members').innerHTML = sortedMembers(group).map((item) => (
     `<button class="player-member-button ${item.clip_id === member.clip_id ? 'active' : ''}" `
@@ -690,6 +872,7 @@ async function postReviewAction(action) {
   });
   state.review = response;
   state.reviewRevision = Number(state.review.revision || 0);
+  invalidateDerivedCaches();
   setCollabStatus('已同步', true);
   return state.review;
 }
@@ -1010,7 +1193,10 @@ function resetProjectView() {
   state.review = {version: 2, revision: 0, assignments: {}, groups: {}, clips: {}, placements: {}};
   state.groupMap = new Map();
   state.segmentMap = new Map();
+  invalidateDerivedCaches();
   state.episode = null;
+  state.episodeSelectionInitialized = false;
+  state.explicitEpisodeSelection = false;
   state.segmentId = null;
   state.mode = 'script';
   state.selectedGroupId = null;
@@ -1261,7 +1447,7 @@ async function reloadAnalysis(showNotice = false) {
   state.groupMap = new Map(groups.map((group) => [group.group_id, group]));
   state.segmentMap = new Map(allSegments().map((segment) => [segment.segment_id, segment]));
   state.analysisRevision = project.analysis_revision || state.analysisRevision;
-  if (!state.episode && state.episode !== null) state.episode = episodeList()[0] ?? null;
+  if (!state.episodeSelectionInitialized) applyWorkbenchDefaults();
   $('#project-name').textContent = project.project;
   $('#analysis-status').textContent = `${project.stats?.groups || 0}组 · ${project.stats?.clips || 0}条素材`;
   renderContent();
@@ -1404,24 +1590,31 @@ async function showIdentityLibrary() {
 }
 
 async function pollState() {
-  try {
-    const next = await fetchJson(projectApi('/state'));
-    if (next.analysis_revision && next.analysis_revision !== state.analysisRevision) {
-      await reloadAnalysis(true);
+  if (state.pollInFlight) return state.pollInFlight;
+  state.pollInFlight = (async () => {
+    try {
+      const next = await fetchJson(projectApi('/state'), {timeoutMs: 8000});
+      if (next.analysis_revision && next.analysis_revision !== state.analysisRevision) {
+        await reloadAnalysis(true);
+      }
+      if (Number(next.review_revision || 0) !== Number(state.reviewRevision || 0)) {
+        try {
+          state.review = await fetchJson(projectApi('/review'), {timeoutMs: 10000});
+          state.reviewRevision = Number(state.review.revision || 0);
+          invalidateDerivedCaches();
+          renderContent();
+          const actor = latestReviewActor(state.review);
+          if (actor && actor !== state.actor) showToast(`${actor} 的修改已同步`);
+        } catch (_error) {}
+      }
+      setCollabStatus('协作已连接', true);
+    } catch (_error) {
+      setCollabStatus('协作连接中断', false);
+    } finally {
+      state.pollInFlight = null;
     }
-    if (Number(next.review_revision || 0) !== Number(state.reviewRevision || 0)) {
-      try {
-        state.review = await fetchJson(projectApi('/review'));
-        state.reviewRevision = Number(state.review.revision || 0);
-        renderContent();
-        const actor = latestReviewActor(state.review);
-        if (actor && actor !== state.actor) showToast(`${actor} 的修改已同步`);
-      } catch (_error) {}
-    }
-    setCollabStatus('协作已连接', true);
-  } catch (_error) {
-    setCollabStatus('协作连接中断', false);
-  }
+  })();
+  return state.pollInFlight;
 }
 
 function playUpdateSound() {
@@ -1633,6 +1826,7 @@ document.addEventListener('keydown', async (event) => {
 });
 
 boot().catch((error) => {
+  setCollabStatus('服务连接失败', false);
   if (String(error.message || '').includes('需要先完成局域网配对')) {
     $('#pairing-dialog').showModal();
     return;

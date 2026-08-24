@@ -1,4 +1,19 @@
 (() => {
+  // All optional workbench modules wrap pollState. Install one outer guard
+  // after those wrappers are in place so a slow request cannot fan out into
+  // overlapping state/review reloads and leave the console visually stuck.
+  if (typeof pollState === 'function' && !window.__mirrorOrderPollGuardInstalled) {
+    const basePollState = pollState;
+    let inFlight = null;
+    pollState = async function guardedPollState() {
+      if (inFlight) return inFlight;
+      inFlight = Promise.resolve()
+        .then(() => basePollState())
+        .finally(() => { inFlight = null; });
+      return inFlight;
+    };
+    window.__mirrorOrderPollGuardInstalled = true;
+  }
   if (!document.querySelector('link[data-mirrororder-material-cards]')) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';

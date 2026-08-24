@@ -72,11 +72,7 @@ async function refreshSlateFacts(force = false) {
   if (!force && identity.key === lastProjectKey && refreshInFlight) return refreshInFlight;
   lastProjectKey = identity.key;
   const endpoint = `/api/v1/workspaces/${encodeURIComponent(identity.workspaceId)}/projects/${encodeURIComponent(identity.projectId)}/script-supervisor`;
-  refreshInFlight = fetch(endpoint, {cache: 'no-store', credentials: 'same-origin'})
-    .then(async (response) => {
-      if (!response.ok) return null;
-      return response.json();
-    })
+  refreshInFlight = fetchJson(endpoint, {timeoutMs: 8000})
     .then((board) => {
       if (board) rebuildShotTypeIndex(board);
       decorateMaterialCards();

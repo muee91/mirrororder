@@ -40,6 +40,7 @@ def test_startup_gate_holds_only_fetch_and_fails_open() -> None:
     assert "const gate = window.__mirrorOrderStartupGate" in release
     assert "timelineReady" in release
     assert "gate.release()" in release
+    assert "__mirrorOrderPollGuardInstalled" in release
 
 
 def test_device_media_can_be_loaded_statically_without_double_wrapping() -> None:
@@ -76,3 +77,23 @@ def test_startup_layer_has_no_production_authority_write_path() -> None:
         'method: "POST"',
     ):
         assert forbidden not in source
+
+
+def test_episode_picker_stays_flat_and_directly_clickable() -> None:
+    app = read("web/app.js")
+    post_workbench = read("web/post_workbench_ui.js")
+    material_css = read("web/material_card.css")
+    index = read("web/index.html")
+
+    assert '<div id="episode-picks" class="episode-picks"' in index
+    assert "function renderEpisodePicks()" in app
+    assert "target.querySelectorAll('[data-episode]')" in app
+    for forbidden in (
+        "compact-episode-nav",
+        "episode-nav-controls",
+        "episode-nav-select",
+        "上一集",
+        "下一集",
+    ):
+        assert forbidden not in post_workbench
+        assert forbidden not in material_css

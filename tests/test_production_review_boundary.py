@@ -74,7 +74,7 @@ def test_native_workspace_reads_host_projection_and_opens_team_review_externally
     assert "JSONDecoder().decode(NativeReviewReadModel.self" in ui
     assert 'Label("团队审阅", systemImage: "person.3")' in ui
     assert "controller.openInBrowser()" in ui
-    assert "NSWorkspace.shared.open(workbenchURL(for: projectID))" in core
+    assert "NSWorkspace.shared.open(lanWorkbenchURL(for: projectID) ?? workbenchURL(for: projectID))" in core
     assert "NativeMulticamSlateProjectWorkbench(" in ui
 
 

@@ -36,6 +36,20 @@ from .workspace import WorkspaceConfig, WorkspaceRegistry
 from .workspace_db import WorkspaceDatabase
 
 
+class MirrorOrderHTTPServer(ThreadingHTTPServer):
+    """Keep the local workbench stable during the browser asset fan-out.
+
+    Team Web intentionally uses small, independently cacheable CSS/JS modules.
+    A browser opens many of them concurrently during boot; the stdlib server's
+    default listen backlog of five can reset requests before handler threads
+    accept them, which presents as a frozen shell.
+    """
+
+    allow_reuse_address = True
+    daemon_threads = True
+    request_queue_size = 128
+
+
 class ApiError(RuntimeError):
     def __init__(self, status: HTTPStatus, message: str):
         super().__init__(message)
@@ -730,6 +744,9 @@ def make_handler(service: WorkspaceService, web_root: Path):
         def _app_get(self, parsed: urllib.parse.ParseResult) -> None:
             parts = _parts(parsed.path)
             query = urllib.parse.parse_qs(parsed.query)
+            if parts == ["api", "v1", "ping"]:
+                self._send_json({"status": "ok", "service": "mirrororder-host"})
+                return
             if parts == ["api", "v1", "workspace"]:
                 self._send_json(service.workspace_payload())
                 return
@@ -928,7 +945,10 @@ def make_handler(service: WorkspaceService, web_root: Path):
             body = candidate.read_bytes()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", mimetypes.guess_type(candidate.name)[0] or "application/octet-stream")
-            self.send_header("Cache-Control", "no-cache")
+            # Frontend JS/CSS/HTML is served from the local App bundle.  Do not
+            # let a previously loaded bundle keep stale workbench behavior
+            # (for example the removed compact episode menu) after a rebuild.
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             if not head_only:
@@ -1178,6 +1198,9 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
                     local = self.client_address[0] in {"127.0.0.1", "::1"}
                     self._send_json(gateway.security.public(local))
                     return
+                if parsed.path == "/api/v1/ping":
+                    self._send_json({"status": "ok", "service": "mirrororder-gateway"})
+                    return
                 if parsed.path.startswith("/api/v1/"):
                     if self._user_get(parsed):
                         return
@@ -1244,7 +1267,7 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
 
 def serve(workspace: WorkspaceConfig, host: str = "0.0.0.0", port: int = 8765) -> None:
     service = WorkspaceService(workspace)
-    server = ThreadingHTTPServer((host, port), make_handler(service, workspace.web_dir))
+    server = MirrorOrderHTTPServer((host, port), make_handler(service, workspace.web_dir))
     print(f"Video Material Platform: http://{host}:{port}/")
     if host in {"0.0.0.0", "::"}:
         addresses = set()
@@ -1279,7 +1302,7 @@ def serve_gateway(
         pairing_code=pairing_code,
     )
     web_root = workspaces[0].web_dir
-    server = ThreadingHTTPServer((host, port), make_gateway_handler(gateway, web_root))
+    server = MirrorOrderHTTPServer((host, port), make_gateway_handler(gateway, web_root))
     print(f"MirrorOrder Workspace Gateway: http://{host}:{port}/")
     if require_pairing:
         print(f"PAIRING_CODE={gateway.security.pairing_code}")

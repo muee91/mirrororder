@@ -72,6 +72,13 @@
   function legacyGroup(take, paths) {
     const members = (take.angles || []).map((angle) => legacyMember(angle, paths));
     const automation = take.automatic_state?.available ? {...take.automatic_state} : undefined;
+    const effectiveMapping = take.effective_mapping ? {
+      ...take.effective_mapping,
+      episode_ids: [...(take.effective_mapping.episode_ids || [])],
+      script_segment_ids: [...(take.effective_mapping.script_segment_ids || [])],
+    } : null;
+    const editorialState = take.editorial_state ? {...take.editorial_state} : null;
+    const supervisor = take.script_supervisor ? {...take.script_supervisor} : null;
     return {
       group_id: take.group_id || '',
       parent_group_id: take.parent_group_id || '',
@@ -87,6 +94,10 @@
       role_suggestions: [...(take.role_suggestions || [])],
       issues: [...(take.issues || [])],
       people: take.people ? {...take.people} : {faces: [], speakers: []},
+      automatic_state: take.automatic_state ? {...take.automatic_state} : {available: false},
+      effective_mapping: effectiveMapping,
+      editorial_state: editorialState,
+      script_supervisor: supervisor,
       ...(automation ? {automation} : {}),
     };
   }
@@ -154,6 +165,7 @@
     };
     state.groupMap = new Map(state.groups.map((group) => [group.group_id, group]));
     state.segmentMap = new Map(allSegments().map((segment) => [segment.segment_id, segment]));
+    invalidateDerivedCaches();
     state.analysisRevision = revisions.analysis || state.analysisRevision;
     state.reviewRevision = Number(state.review.revision || revisions.review || 0);
     state.editorialRevision = Number(revisions.editorial || 0);
@@ -188,7 +200,10 @@
     }
     applyReviewModel(model, paths);
     if (switchingProject) cachedSwitchReview = state.review;
-    if (!state.episode && state.episode !== null) state.episode = episodeList()[0] ?? null;
+    // The review.v1 projection is large. Establish the user's default episode
+    // before the first render so a normal Team Web boot does not render every
+    // episode, then render the full project a second time after switchProject.
+    if (!state.episodeSelectionInitialized) applyWorkbenchDefaults();
     $('#project-name').textContent = state.project.project;
     $('#analysis-status').textContent = `${state.project.stats?.groups || model.summary?.take_groups || 0}组 · ${state.project.stats?.clips || 0}条素材`;
     renderContent();

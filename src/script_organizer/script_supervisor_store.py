@@ -170,6 +170,7 @@ def _legacy_entry(record: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {
         "group_id": group_id,
         "script_scene_id": str(record.get("script_scene_id", "") or ""),
+        "episode": record.get("episode"),
         "scene": str(record.get("scene", "") or ""),
         "shot": str(record.get("shot", "") or ""),
         "take_number": record.get("take_number"),

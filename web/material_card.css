@@ -6,31 +6,6 @@
   grid-template-columns:minmax(270px,.64fr) minmax(620px,1.72fr) minmax(320px,.72fr);
 }
 
-/* Large episode counts must not turn the header into a wall of buttons. The
-   JS projection replaces the full button strip with prev / jump / next. */
-.episode-picks.compact-episode-nav{
-  display:flex;
-  align-items:center;
-  gap:5px;
-  overflow:visible;
-  padding:0;
-}
-.episode-picks.compact-episode-nav>.episode-pick{display:none}
-.episode-nav-button,.episode-nav-select,.episode-nav-pending{
-  height:28px;
-  border:1px solid var(--line);
-  border-radius:5px;
-  background:var(--control);
-  color:var(--control-ink);
-  font:inherit;
-  font-size:11px;
-}
-.episode-nav-button{min-width:30px;padding:0 8px}
-.episode-nav-button:disabled{opacity:.38}
-.episode-nav-select{min-width:112px;padding:0 8px;font-weight:650}
-.episode-nav-pending{padding:0 9px;color:var(--amber);font-weight:650}
-.episode-nav-pending.active{border-color:var(--amber);background:var(--amber);color:#fff}
-
 .take-row{
   grid-template-columns:92px minmax(178px,.66fr) minmax(0,1.82fr);
   gap:9px;

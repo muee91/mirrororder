@@ -84,11 +84,12 @@ def test_desktop_shell_opens_on_project_home_then_native_multicam_slate():
 
 def test_native_slate_is_editable_multicam_table_not_dashboard_cards():
     _core, ui, _native, _build = desktop_sources()
-    assert "Table(drafts, selection: $selectedRecordID)" in ui
+    assert "private func slateTableRows(_ rows: [MCDraft]) -> some View" in ui
+    assert "Table(rows, selection: $selectedRecordID)" in ui
     for column in ("序号", "集", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
         assert f'TableColumn("{column}")' in ui
     assert 'TableColumn("可用范围 / 备注")' not in ui
-    assert 'Label("从 Take 加入", systemImage: "film.stack")' in ui
+    assert 'Label("加入 Take / 镜头", systemImage: "film.stack")' in ui
     assert 'Label("同场下一条", systemImage: "arrow.down.to.line")' in ui
     assert 'Label("同上", systemImage: "doc.on.doc")' in ui
     assert 'Label("空白", systemImage: "plus")' in ui
@@ -137,7 +138,7 @@ def test_desktop_project_activity_keeps_active_or_latest_failure():
     core, ui, _native, _build = desktop_sources()
     assert 'let activeTask = tasks.first(where: { $0.status == "queued" || $0.status == "running" })' in core
     assert "let latestTask = tasks.first" in core
-    assert '["failed", "interrupted"].contains(latestTask.status)' in core
+    assert '["completed", "cancelled", "failed", "interrupted"].contains(latestTask.status)' in core
     assert "task = latestTask" in core
     assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) ?? tasks.first' not in core
     assert "filter(\\.isActive)" in ui
@@ -220,7 +221,8 @@ def test_team_web_remains_separate_review_client():
     assert 'id="production-panel"' not in html
     assert 'Label("团队审阅", systemImage: "person.3")' in ui
     assert "controller.openInBrowser()" in ui
-    assert "NSWorkspace.shared.open(workbenchURL(for: projectID))" in core
+    assert "NSWorkspace.shared.open(lanWorkbenchURL(for: projectID) ?? workbenchURL(for: projectID))" in core
+    assert 'Label("复制协作链接", systemImage: "link")' in ui
 
 
 def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
@@ -248,6 +250,13 @@ def test_build_packages_complete_runtime_and_team_web_tree():
     assert 'rsync -a --exclude \'__pycache__\' --exclude \'*.pyc\' "$ROOT/src/" "$RUNTIME/src/"' in build
     assert 'cp -R "$ROOT/web" "$RUNTIME/web"' in build
     assert 'cp "$INFO" "$APP/Contents/Info.plist"' in build
+
+
+def test_team_web_asset_fanout_uses_a_large_threaded_accept_queue():
+    server = read("src/script_organizer/web_server.py")
+    assert "class MirrorOrderHTTPServer(ThreadingHTTPServer)" in server
+    assert "request_queue_size = 128" in server
+    assert server.count("MirrorOrderHTTPServer((host, port)") == 2
 
 
 def test_sync_contract_keeps_device_paths_outside_shared_workspace():

@@ -61,6 +61,7 @@ def _safe_entry(value: object) -> dict[str, Any]:
     return {
         "group_id": str(raw.get("group_id", "") or ""),
         "script_scene_id": str(raw.get("script_scene_id", "") or "")[:160],
+        "episode": raw.get("episode"),
         "scene": str(raw.get("scene", "") or "")[:80], "shot": str(raw.get("shot", "") or "")[:80],
         "take_number": raw.get("take_number"), "status": str(raw.get("status", "unmarked") or "unmarked"),
         "note": str(raw.get("note", "") or "")[:2000],

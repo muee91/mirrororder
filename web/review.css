@@ -246,6 +246,12 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
 }
 .badge{min-height:19px;padding:1px 5px;border-radius:4px}
 .take-actions{gap:4px}
+.mapping-marker{font-weight:700}
+.mapping-marker.marker-manual{background:var(--purple-soft);color:var(--purple)}
+.mapping-marker.marker-exact{background:var(--green-soft);color:var(--green)}
+.mapping-marker.marker-possible{background:var(--amber-soft);color:var(--amber)}
+.mapping-marker.marker-episode{background:var(--blue-soft);color:var(--blue)}
+.mapping-marker.marker-xml{background:var(--panel-soft);color:var(--muted)}
 .decision-button,.placement-button{
   min-height:26px;
   padding:2px 7px;

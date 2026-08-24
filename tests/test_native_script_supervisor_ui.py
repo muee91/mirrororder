@@ -17,7 +17,8 @@ def test_project_opens_on_full_native_multicam_slate_table() -> None:
     assert "@Published var showProjectHome = true" in ui
     assert "private struct NativeMulticamSlateProjectWorkbench" in ui
     assert "NativeMulticamSlateProjectWorkbench(" in ui
-    assert "Table(drafts, selection: $selectedRecordID)" in ui
+    assert "private func slateTableRows(_ rows: [MCDraft]) -> some View" in ui
+    assert "Table(rows, selection: $selectedRecordID)" in ui
     for column in (
         "序号",
         "集",
@@ -61,7 +62,18 @@ def test_sparse_native_slate_actions_and_episode_only_take_are_first_class() -> 
     assert 'Label("同场下一条"' in ui
     assert 'Label("同上"' in ui
     assert 'Label("空白"' in ui
-    assert "private func createEmptyRow() { appendDraft(MCDraft()) }" in ui
+    assert "@FocusState private var focusedField: MCFocusField?" in ui
+    assert "DispatchQueue.main.async { selectedRecordID = draft.id; focusedField = focus }" in ui
+    assert "private func createEmptyRow() { let draft = MCDraft(); appendDraft(draft, focus: .episode(draft.id)) }" in ui
+    assert "appendDraft(draft, focus: .take(draft.id))" in ui
+    assert "appendDraft(draft, focus: .take(draft.id)); showTakePicker = true" in ui
+    assert "target.sourceGroupID.isEmpty, target.attachments.isEmpty" in ui
+    assert "draft.attachments = attachments" in ui
+    assert 'Label("加入 Take / 镜头", systemImage: "film.stack")' in ui
+    assert ".menuIndicator(.hidden)" in ui
+    assert 'Image(systemName: "trash")' in ui
+    assert "private func deleteDraft(_ id: String) async" in ui
+    assert 'Button("删除场记"' not in ui
     assert "take.effective_mapping?.episode_ids.first ?? link?.episode" in ui
     assert 'scene: "", attachments: attachments' in ui
 
@@ -88,8 +100,9 @@ def test_slate_refresh_preserves_dirty_rows_and_unsaved_delete_stays_local() -> 
     assert "rebuildDrafts(preserveDirty: preserveDirty)" in ui
     assert "dirtyIDs.contains($0.id) ? (local[$0.id] ?? $0) : $0" in ui
     assert "merged.append(contentsOf: drafts.filter" in ui
-    assert "if store.board?.records[id] == nil" in ui
-    assert "await store.delete" in ui
+    assert "if store.board?.records[id] != nil" in ui
+    assert "await store.delete(recordID: id" in ui
+    assert "drafts.removeAll { $0.id == id }" in ui
 
 
 def test_slate_quick_entry_inherits_previous_row_without_inventing_seconds() -> None:

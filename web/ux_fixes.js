@@ -4,7 +4,7 @@
   const baseSavePlacement = savePlacement;
 
   function placementScriptIds(group) {
-    return (placementForGroup(group).entry?.script_segment_ids || [])
+    return humanScriptIds(group)
       .filter((id) => state.segmentMap.get(id)?.type !== 'scene_heading');
   }
 
