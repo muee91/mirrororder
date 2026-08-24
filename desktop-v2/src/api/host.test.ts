@@ -101,6 +101,22 @@ describe("HostConnection", () => {
     await expect(new HostConnection().reviewModel("   ")).rejects.toThrow("读取 review-model 需要 project_id");
   });
 
+  it("rejects an incompatible review-model contract", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          contract_version: "review.v2",
+          project: { project_id: "p1" },
+        }),
+      ),
+    );
+
+    await expect(new HostConnection().reviewModel("p1")).rejects.toThrow(
+      "不支持的 review-model contract：review.v2",
+    );
+  });
+
   it("preserves Host API errors and status codes", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "workspace unavailable" }, 503)));
 
