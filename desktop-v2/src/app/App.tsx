@@ -7,6 +7,7 @@ import {
   type HostSnapshot,
   type ProjectSummary,
 } from "../api/host";
+import { MaterialScriptWorkbench } from "../features/material-script/MaterialScriptWorkbench";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
 
 function errorMessage(error: unknown): string {
@@ -123,23 +124,7 @@ export function App() {
           />
           <section className="workbench-shell">
             {selectedProject ? (
-              <>
-                <div className="workbench-heading">
-                  <div>
-                    <p className="eyebrow">项目</p>
-                    <h2>{selectedProject.name || selectedProject.project_id}</h2>
-                  </div>
-                  <code>{selectedProject.project_id}</code>
-                </div>
-                <nav className="workbench-tabs" aria-label="素材剧本工作台">
-                  <button type="button" className="is-active">素材</button>
-                  <button type="button">剧本</button>
-                </nav>
-                <div className="phase-placeholder">
-                  <strong>Phase 1 shell ready</strong>
-                  <p>项目已由 typed Host API 读取。素材/剧本业务视图将在 Phase 2 接现有 Python Core 数据，不在 React 中复制规则。</p>
-                </div>
-              </>
+              <MaterialScriptWorkbench baseUrl={snapshot.baseUrl} project={selectedProject} />
             ) : (
               <div className="phase-placeholder">
                 <strong>选择一个项目</strong>
