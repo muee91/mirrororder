@@ -31,6 +31,8 @@ class MusicSection:
     end: float
     kind: str = "section"
     tags: tuple[str, ...] = ()
+    energy: float | None = None
+    boundary_source: str = "metadata"
 
     @property
     def duration(self) -> float:
@@ -43,6 +45,8 @@ class MusicSection:
             "duration": round(self.duration, 3),
             "kind": self.kind,
             "tags": list(self.tags),
+            "energy": round(self.energy, 6) if self.energy is not None else None,
+            "boundary_source": self.boundary_source,
         }
 
 
@@ -61,6 +65,11 @@ class MusicAsset:
     energy: float = 0.5
     sections: tuple[MusicSection, ...] = ()
     license: LicenseRecord = field(default_factory=LicenseRecord)
+    beats: tuple[float, ...] = ()
+    downbeats: tuple[float, ...] = ()
+    energy_curve: tuple[tuple[float, float], ...] = ()
+    analysis_source: str = "none"
+    analysis_version: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +86,14 @@ class MusicAsset:
             "energy": round(self.energy, 4),
             "sections": [item.to_dict() for item in self.sections],
             "license": self.license.to_dict(),
+            "beats": [round(value, 6) for value in self.beats],
+            "downbeats": [round(value, 6) for value in self.downbeats],
+            "energy_curve": [
+                {"time": round(time_value, 3), "value": round(value, 6)}
+                for time_value, value in self.energy_curve
+            ],
+            "analysis_source": self.analysis_source,
+            "analysis_version": self.analysis_version,
         }
 
 
@@ -123,6 +140,9 @@ class MusicCandidate:
     scores: dict[str, float]
     eligible: bool
     rejection_reason: str = ""
+    boundary_source: str = "section"
+    beat_aligned: bool = False
+    alignment_error: float | None = None
 
     @property
     def source_duration(self) -> float:
@@ -139,4 +159,7 @@ class MusicCandidate:
             "scores": {key: round(value, 6) for key, value in self.scores.items()},
             "eligible": self.eligible,
             "rejection_reason": self.rejection_reason,
+            "boundary_source": self.boundary_source,
+            "beat_aligned": self.beat_aligned,
+            "alignment_error": round(self.alignment_error, 6) if self.alignment_error is not None else None,
         }
