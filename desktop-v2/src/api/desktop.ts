@@ -105,6 +105,12 @@ export interface ProjectTask {
   [key: string]: unknown;
 }
 
+export interface ProjectDeleteResult {
+  project_id: string;
+  deleted: boolean;
+  config_path: string;
+}
+
 const REQUEST_TIMEOUT_MS = 20_000;
 
 async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -201,10 +207,10 @@ export class DesktopClient {
     });
   }
 
-  deleteProject(projectId: string): Promise<{ project_id: string; deleted: boolean; config_path: string }> {
+  deleteProject(projectId: string): Promise<ProjectDeleteResult> {
     const value = projectId.trim();
     if (!value) throw new HostConnectionError("删除项目需要 project_id");
-    return requestJson(this.baseUrl, `${projectPath(value)}/delete`, {
+    return requestJson<ProjectDeleteResult>(this.baseUrl, `${projectPath(value)}/delete`, {
       method: "POST",
       body: JSON.stringify({ confirm_project_id: value }),
     });
