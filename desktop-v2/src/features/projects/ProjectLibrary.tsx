@@ -1,9 +1,12 @@
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
+import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 
 interface Props {
+  baseUrl: string;
   workspace: WorkspacePayload;
   selectedProjectId: string | null;
   onSelectProject: (project: ProjectSummary) => void;
+  onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
 }
 
 function projectSubtitle(project: ProjectSummary): string {
@@ -13,7 +16,9 @@ function projectSubtitle(project: ProjectSummary): string {
   return `${project.input_kind || "project"}${suffix}`;
 }
 
-export function ProjectLibrary({ workspace, selectedProjectId, onSelectProject }: Props) {
+export function ProjectLibrary({ baseUrl, workspace, selectedProjectId, onSelectProject, onWorkspaceChanged }: Props) {
+  const selectedProject = workspace.projects.find((project) => project.project_id === selectedProjectId) ?? null;
+
   return (
     <aside className="project-library">
       <div className="section-heading">
@@ -23,6 +28,12 @@ export function ProjectLibrary({ workspace, selectedProjectId, onSelectProject }
         </div>
         <span className="count-pill">{workspace.projects.length}</span>
       </div>
+
+      <ProjectLifecyclePanel
+        baseUrl={baseUrl}
+        selectedProject={selectedProject}
+        onWorkspaceChanged={onWorkspaceChanged}
+      />
 
       <div className="project-list">
         {workspace.projects.length === 0 ? (
