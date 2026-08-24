@@ -4,11 +4,13 @@ import hashlib
 import json
 import re
 import shutil
+import statistics
 import subprocess
 import wave
 from pathlib import Path
 from typing import Any
 
+from .analysis import ANALYSIS_VERSION, analyze_audio
 from .models import LicenseRecord, MusicAsset, MusicSection
 
 AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".aif", ".aiff", ".ogg"}
@@ -120,30 +122,42 @@ def _license(metadata: dict[str, Any]) -> LicenseRecord:
     )
 
 
-def _sections(metadata: dict[str, Any], duration: float) -> tuple[MusicSection, ...]:
+def _float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _sections_from_rows(
+    rows: object,
+    duration: float,
+    *,
+    default_source: str,
+) -> tuple[MusicSection, ...]:
     result: list[MusicSection] = []
-    raw = metadata.get("sections", [])
-    if isinstance(raw, list):
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            try:
-                start = max(0.0, float(item.get("start", 0.0) or 0.0))
-                end = min(duration, float(item.get("end", duration) or duration)) if duration else float(item.get("end", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                continue
-            if end <= start:
-                continue
-            result.append(
-                MusicSection(
-                    start=start,
-                    end=end,
-                    kind=str(item.get("kind", "section") or "section"),
-                    tags=_words(item.get("tags", [])),
-                )
+    if not isinstance(rows, list):
+        return ()
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        start = max(0.0, _float(item.get("start"), 0.0))
+        raw_end = _float(item.get("end"), duration)
+        end = min(duration, raw_end) if duration else raw_end
+        if end <= start:
+            continue
+        energy_value = item.get("energy")
+        energy = None if energy_value is None else max(0.0, min(1.0, _float(energy_value, 0.5)))
+        result.append(
+            MusicSection(
+                start=start,
+                end=end,
+                kind=str(item.get("kind", "section") or "section"),
+                tags=_words(item.get("tags", [])),
+                energy=energy,
+                boundary_source=str(item.get("boundary_source", default_source) or default_source),
             )
-    if not result and duration > 0:
-        result.append(MusicSection(0.0, duration, "full", ()))
+        )
     return tuple(result)
 
 
@@ -152,33 +166,107 @@ def _infer_filename_tags(path: Path) -> tuple[str, ...]:
     return _words(stem)
 
 
-def index_music_library(root: str | Path) -> dict[str, Any]:
+def _bpm_from_beats(beats: tuple[float, ...]) -> float | None:
+    if len(beats) < 4:
+        return None
+    intervals = [right - left for left, right in zip(beats, beats[1:]) if 0.2 <= right - left <= 2.0]
+    if not intervals:
+        return None
+    median = statistics.median(intervals)
+    if median <= 0:
+        return None
+    bpm = 60.0 / median
+    while bpm < 70:
+        bpm *= 2
+    while bpm > 180:
+        bpm /= 2
+    return round(bpm, 3)
+
+
+def _curve_from_analysis(analysis: dict[str, Any]) -> tuple[tuple[float, float], ...]:
+    result = []
+    rows = analysis.get("energy_curve", [])
+    if isinstance(rows, list):
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            result.append(
+                (
+                    max(0.0, _float(item.get("time"), 0.0)),
+                    max(0.0, min(1.0, _float(item.get("value"), 0.0))),
+                )
+            )
+    return tuple(result)
+
+
+def index_music_library(
+    root: str | Path,
+    *,
+    analysis_mode: str = "off",
+    force_analysis: bool = False,
+) -> dict[str, Any]:
     library_root = Path(root).expanduser().resolve()
     if not library_root.is_dir():
         raise ValueError(f"音乐库目录不存在：{library_root}")
+    mode = str(analysis_mode or "off").strip().lower()
+    if mode not in {"off", "basic", "auto"}:
+        raise ValueError(f"不支持的音乐分析模式：{mode}")
     manifest = _manifest_rows(library_root)
     assets: list[MusicAsset] = []
+    warnings: list[str] = []
     for path in sorted(library_root.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in AUDIO_SUFFIXES:
             continue
         metadata = _metadata_for(library_root, path, manifest)
         duration = _probe_duration(path)
+        asset_id = _asset_id(path)
+        analysis = analyze_audio(
+            path,
+            asset_id=asset_id,
+            duration=duration,
+            mode=mode,
+            force=force_analysis,
+        )
+        warning = str(analysis.get("warning", "") or "")
+        if warning:
+            warnings.append(f"{path.name}: {warning}")
+
+        beats = tuple(_float(value) for value in analysis.get("beats", []) if _float(value) >= 0)
+        downbeats = tuple(_float(value) for value in analysis.get("downbeats", []) if _float(value) >= 0)
+        curve = _curve_from_analysis(analysis)
+        manual_sections = _sections_from_rows(metadata.get("sections", []), duration, default_source="metadata")
+        analyzed_sections = _sections_from_rows(analysis.get("sections", []), duration, default_source="analysis")
+        sections = manual_sections or analyzed_sections
+        if not sections and duration > 0:
+            sections = (MusicSection(0.0, duration, "full", (), None, "duration"),)
+
         tags = tuple(sorted(set(_infer_filename_tags(path)) | set(_words(metadata.get("tags", [])))))
-        try:
-            bpm_value = float(metadata["bpm"]) if metadata.get("bpm") is not None else None
-        except (TypeError, ValueError):
-            bpm_value = None
-        try:
-            vocal_probability = max(0.0, min(1.0, float(metadata.get("vocal_probability", 0.0) or 0.0)))
-        except (TypeError, ValueError):
-            vocal_probability = 0.0
-        try:
-            energy = max(0.0, min(1.0, float(metadata.get("energy", 0.5) or 0.5)))
-        except (TypeError, ValueError):
+        bpm_value = None
+        if metadata.get("bpm") is not None:
+            candidate = _float(metadata.get("bpm"), 0.0)
+            bpm_value = candidate if candidate > 0 else None
+        if bpm_value is None:
+            bpm_value = _bpm_from_beats(beats)
+
+        vocal_probability = max(0.0, min(1.0, _float(metadata.get("vocal_probability"), 0.0)))
+        if metadata.get("energy") is not None:
+            energy = max(0.0, min(1.0, _float(metadata.get("energy"), 0.5)))
+        elif curve:
+            energy = sum(value for _time, value in curve) / len(curve)
+        else:
             energy = 0.5
+        analysis_source = "+".join(
+            value
+            for value in (
+                str(analysis.get("energy_source", "") or ""),
+                str(analysis.get("beat_source", "") or ""),
+            )
+            if value and value not in {"off", "disabled", "unavailable"}
+        ) or "none"
+
         assets.append(
             MusicAsset(
-                asset_id=_asset_id(path),
+                asset_id=asset_id,
                 path=path.relative_to(library_root).as_posix(),
                 title=str(metadata.get("title", path.stem) or path.stem),
                 duration=duration,
@@ -189,19 +277,33 @@ def index_music_library(root: str | Path) -> dict[str, Any]:
                 musical_key=str(metadata.get("key", metadata.get("musical_key", "")) or ""),
                 vocal_probability=vocal_probability,
                 energy=energy,
-                sections=_sections(metadata, duration),
+                sections=sections,
                 license=_license(metadata),
+                beats=beats,
+                downbeats=downbeats,
+                energy_curve=curve,
+                analysis_source=analysis_source,
+                analysis_version=int(analysis.get("version", 0) or 0),
             )
         )
     return {
-        "version": 1,
-        "contract": "music-library.v1",
+        "version": 2,
+        "contract": "music-library.v2",
         "library_name": library_root.name or "music-library",
+        "analysis": {
+            "mode": mode,
+            "version": ANALYSIS_VERSION,
+            "device_local_cache": True,
+        },
         "summary": {
             "tracks": len(assets),
             "eligible": sum(1 for item in assets if item.license.eligible),
             "unverified_or_restricted": sum(1 for item in assets if not item.license.eligible),
+            "analyzed": sum(1 for item in assets if item.analysis_source != "none"),
+            "beat_tracked": sum(1 for item in assets if item.beats),
+            "auto_sectioned": sum(1 for item in assets if any(section.boundary_source.startswith("energy") for section in item.sections)),
         },
+        "warnings": warnings[:100],
         "assets": [item.to_dict() for item in assets],
     }
 
@@ -212,31 +314,28 @@ def assets_from_index(payload: dict[str, Any]) -> list[MusicAsset]:
         if not isinstance(raw, dict):
             continue
         lic = raw.get("license", {}) if isinstance(raw.get("license"), dict) else {}
-        sections = []
-        for item in raw.get("sections", []):
-            if isinstance(item, dict):
-                sections.append(
-                    MusicSection(
-                        float(item.get("start", 0) or 0),
-                        float(item.get("end", 0) or 0),
-                        str(item.get("kind", "section") or "section"),
-                        tuple(str(value) for value in item.get("tags", []) if value),
-                    )
-                )
+        sections = _sections_from_rows(raw.get("sections", []), _float(raw.get("duration"), 0.0), default_source="index")
+        curve_rows = raw.get("energy_curve", [])
+        curve: list[tuple[float, float]] = []
+        if isinstance(curve_rows, list):
+            for item in curve_rows:
+                if isinstance(item, dict):
+                    curve.append((_float(item.get("time"), 0.0), _float(item.get("value"), 0.0)))
+        bpm_value = _float(raw.get("bpm"), 0.0) if raw.get("bpm") is not None else 0.0
         result.append(
             MusicAsset(
                 asset_id=str(raw.get("asset_id", "")),
                 path=str(raw.get("path", "")),
                 title=str(raw.get("title", "")),
-                duration=float(raw.get("duration", 0) or 0),
+                duration=_float(raw.get("duration"), 0.0),
                 tags=tuple(str(value) for value in raw.get("tags", []) if value),
                 moods=tuple(str(value) for value in raw.get("moods", []) if value),
                 styles=tuple(str(value) for value in raw.get("styles", []) if value),
-                bpm=float(raw["bpm"]) if raw.get("bpm") is not None else None,
+                bpm=bpm_value if bpm_value > 0 else None,
                 musical_key=str(raw.get("musical_key", "")),
-                vocal_probability=float(raw.get("vocal_probability", 0) or 0),
-                energy=float(raw.get("energy", 0.5) or 0.5),
-                sections=tuple(sections),
+                vocal_probability=max(0.0, min(1.0, _float(raw.get("vocal_probability"), 0.0))),
+                energy=max(0.0, min(1.0, _float(raw.get("energy"), 0.5))),
+                sections=sections,
                 license=LicenseRecord(
                     source=str(lic.get("source", "unknown")),
                     license_id=str(lic.get("license_id", "unverified")),
@@ -247,6 +346,11 @@ def assets_from_index(payload: dict[str, Any]) -> list[MusicAsset]:
                     attribution_required=_strict_bool(lic.get("attribution_required", False)),
                     attribution_text=str(lic.get("attribution_text", "")),
                 ),
+                beats=tuple(_float(value) for value in raw.get("beats", []) if _float(value) >= 0),
+                downbeats=tuple(_float(value) for value in raw.get("downbeats", []) if _float(value) >= 0),
+                energy_curve=tuple(curve),
+                analysis_source=str(raw.get("analysis_source", "none") or "none"),
+                analysis_version=int(raw.get("analysis_version", 0) or 0),
             )
         )
     return result
