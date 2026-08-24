@@ -52,10 +52,10 @@ async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Pro
 }
 
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const response = await transportFetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: { "Accept": "application/json", ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}), ...init?.headers },
-  });
+  const headers = new Headers(init?.headers);
+  headers.set("Accept", "application/json");
+  if (init?.body !== undefined) headers.set("Content-Type", "application/json");
+  const response = await transportFetch(`${baseUrl}${path}`, { ...init, headers });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`.trim();
     try {
