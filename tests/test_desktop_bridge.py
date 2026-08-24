@@ -121,19 +121,21 @@ def test_desktop_controls_have_stable_hit_targets():
 
 
 def test_timeline_loader_is_app_only_and_drops_legacy_automation_bundle():
+    html = read("web/index.html")
     loader = read("web/timeline.js")
     timeline = read("web/timeline_v3.js")
     ux = read("web/ux_fixes.js")
     production = read("web/production_mode.js")
     css = read("web/timeline.css")
 
+    assert '<script src="/device_media.js"></script>' in html
+    assert '<script src="/timeline.js"></script>' in html
+    assert "document.createElement('script')" not in ux
     assert "window.webkit?.messageHandlers?.mirrorOrder" in loader
+    assert "window.__mirrorOrderTimelineReady" in loader
     assert "/timeline_v3.js" in loader
     assert "/device_media.js" not in loader
     assert "/automation.js" not in loader
-    assert "/device_media.js" in ux
-    assert "window.webkit?.messageHandlers?.mirrorOrder" in ux
-    assert "/timeline.js" in ux
     assert "['timeline', '时间线']" in production
     assert "timelineToggle" in production
     assert "html.native-production #timeline-toggle" in css
@@ -154,10 +156,10 @@ def test_external_drag_is_native_not_html5_datatransfer():
 
 
 def test_team_web_does_not_activate_production_timeline():
-    ux = read("web/ux_fixes.js")
     loader = read("web/timeline.js")
-    assert "if (window.webkit?.messageHandlers?.mirrorOrder)" in ux
-    assert "if (!window.webkit?.messageHandlers?.mirrorOrder) return;" in loader
+    assert "if (!window.webkit?.messageHandlers?.mirrorOrder)" in loader
+    assert "window.__mirrorOrderTimelineReady = Promise.resolve()" in loader
+    assert "return;" in loader
 
 
 def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
