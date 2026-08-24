@@ -32,7 +32,7 @@ class RoughPlacementPlan:
 
 _TAKE_PREFIX = r"(?:take|t|镜头|素材|序号|条目)?\s*"
 _RANGE = r"(?P<start>\d{1,6})(?:\s*(?:-|~|～|—|–|到|至)\s*(?P<end>\d{1,6}))?"
-_EPISODE = r"(?:第\s*)?(?P<episode>\d{1,4})\s*集"
+_EPISODE = r"(?:(?:第|ep)\s*)?(?P<episode>\d{1,4})\s*集"
 
 # Explicit wording gets first priority. It covers the production phrases most
 # likely to be copied from a handwritten slate or typed while looking at one.
@@ -42,9 +42,9 @@ _EXPLICIT = re.compile(
 )
 
 # Compact notation intentionally requires the first numeric range not to be an
-# episode range itself. Examples: `1-10 第1集`, `T11~20 EP2`.
+# episode range itself. Examples: `1-10 第1集`, `T11~20 EP2集`.
 _COMPACT = re.compile(
-    rf"{_TAKE_PREFIX}{_RANGE}(?!\s*集)\s*(?:[,，;；/|]\s*)?(?:ep\s*)?{_EPISODE}",
+    rf"{_TAKE_PREFIX}{_RANGE}(?!\s*集)\s*(?:[,，;；/|]\s*)?{_EPISODE}",
     re.IGNORECASE,
 )
 
