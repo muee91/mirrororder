@@ -11,8 +11,8 @@ from ..config import ProjectConfig
 from .library import assets_from_index, index_music_library
 from .planner import build_music_briefs
 from .scoring import choose_global_path, rank_candidates
-from .semantic import rank_semantic_windows
 from .semantic_rerank import rerank_candidates
+from .semantic_retriever import SemanticRetriever
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -53,11 +53,12 @@ def build_music_plan(
     briefs = build_music_briefs(config, episode=episode, timeline_seconds=timeline_seconds)
 
     requested_top_k = max(1, min(20, int(top_k)))
-    semantic_backend_used = "off"
-    semantic_cues = 0
-    candidates_by_cue: dict[str, list] = {}
     eligible_assets = [item for item in assets if item.license.eligible or allow_unverified]
     broad_pool = max(requested_top_k, min(40, len(eligible_assets)))
+    retriever = SemanticRetriever(semantic_mode)
+    semantic_backend_used = retriever.name
+    semantic_cues = 0
+    candidates_by_cue: dict[str, list] = {}
 
     for brief in briefs:
         candidates = rank_candidates(
@@ -66,19 +67,16 @@ def build_music_plan(
             top_k=broad_pool,
             allow_unverified=allow_unverified,
         )
-        if semantic_mode != "off" and candidates:
+        if retriever.available and candidates:
             candidate_ids = {item.asset_id for item in candidates}
             semantic_assets = [item for item in eligible_assets if item.asset_id in candidate_ids]
-            semantic_windows, backend_name = rank_semantic_windows(
+            semantic_windows = retriever.rank(
                 brief,
                 semantic_assets,
                 library_root,
-                mode=semantic_mode,
                 top_k_per_asset=3,
                 force=force_semantic,
             )
-            if backend_name != "off":
-                semantic_backend_used = backend_name
             if semantic_windows:
                 semantic_cues += 1
                 candidates = rerank_candidates(
