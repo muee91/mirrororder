@@ -93,8 +93,9 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const sequence = activeSequence(snapshot);
   const selection = findClip(snapshot, selectedClipId);
   const maxEnd = Math.max(1, ...(sequence?.tracks.flatMap((track) => track.clips.map((clip) => clip.timeline_start + clip.duration)) ?? [1]));
-  const selectedMulticam = selection?.clip.multicam_group_id
-    ? snapshot?.project.multicam_groups.find((group) => group.group_id === selection.clip.multicam_group_id) ?? null
+  const selectedMulticamGroupId = selection?.clip.multicam_group_id ?? null;
+  const selectedMulticam = selectedMulticamGroupId
+    ? snapshot?.project.multicam_groups.find((group) => group.group_id === selectedMulticamGroupId) ?? null
     : null;
 
   async function confirmProposal(): Promise<void> {
