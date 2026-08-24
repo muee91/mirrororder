@@ -60,7 +60,16 @@ def build_music_briefs(
     *,
     episode: int | None = None,
     timeline_seconds: float | None = None,
+    scene_windows: dict[tuple[int, str], dict[str, Any]] | None = None,
 ) -> list[MusicBrief]:
+    """Build scene-level music briefs.
+
+    V1 may supply scene_windows derived from assembly_timeline.v1. When a scene
+    has a real assembly window, that timing is authoritative for the music cue.
+    Missing scenes retain the V0 estimated timing so incomplete assemblies remain
+    inspectable without pretending those estimates are production truth.
+    """
+
     segments = _read_script(config)
     grouped: dict[tuple[int, str], list[dict[str, Any]]] = defaultdict(list)
     order: list[tuple[int, str]] = []
@@ -94,6 +103,7 @@ def build_music_briefs(
 
     briefs: list[MusicBrief] = []
     cursor = 0.0
+    windows = scene_windows or {}
     for index, key in enumerate(order):
         ep, scene_id = key
         rows = grouped[key]
@@ -102,20 +112,29 @@ def build_music_briefs(
         density = _dialogue_density(rows)
         if density >= 0.6:
             energy = min(energy, 0.55)
-        duration = durations[index]
+
+        window = windows.get(key, {})
+        if window and float(window.get("duration", 0.0) or 0.0) > 0:
+            start = max(0.0, float(window.get("start", 0.0) or 0.0))
+            end = max(start, float(window.get("end", start) or start))
+        else:
+            duration = durations[index]
+            start = cursor
+            end = cursor + duration
+
         briefs.append(
             MusicBrief(
                 cue_id=f"MUSIC-E{ep:03d}-{index + 1:03d}",
                 episode=ep,
                 scene_id=scene_id,
                 text=text[:1200],
-                start=cursor,
-                end=cursor + duration,
+                start=start,
+                end=end,
                 purpose=purpose,
                 tags=tags,
                 target_energy=energy,
                 dialogue_density=density,
             )
         )
-        cursor += duration
+        cursor = max(cursor, end)
     return briefs
