@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 export type HostConnectionState =
@@ -72,12 +72,8 @@ function normalizeBaseUrl(value: string): string {
   return normalized;
 }
 
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauriRuntime() ? tauriFetch(input, init) : globalThis.fetch(input, init);
+  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
 }
 
 async function decodeError(response: Response): Promise<string> {
@@ -149,7 +145,7 @@ export class HostConnection {
   }
 
   async startLocal(workspacePath: string, port = 8765): Promise<HostLaunchResult> {
-    if (!isTauriRuntime()) {
+    if (!isTauri()) {
       throw new HostConnectionError("浏览器预览无法启动本地 Python Host，请在 Tauri App 中运行");
     }
     const path = workspacePath.trim();
