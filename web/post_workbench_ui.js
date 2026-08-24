@@ -3,18 +3,31 @@
   window.__mirrorOrderPostWorkbenchInstalled = true;
 
   const APP_CLIENT = Boolean(window.webkit?.messageHandlers?.mirrorOrder);
+  let applyScheduled = false;
+
+  function appState() {
+    try { return typeof state === 'object' && state ? state : null; } catch (_error) { return null; }
+  }
 
   function compactEpisodeNavigation() {
     if (APP_CLIENT) return;
     const target = document.querySelector('#episode-picks');
     if (!target) return;
-    const episodeButtons = [...target.querySelectorAll('.episode-pick[data-episode]')];
-    const pendingButton = target.querySelector('.episode-pick[data-mode="unassigned"]');
+    const episodeButtons = [...target.querySelectorAll(':scope > .episode-pick[data-episode]')];
+    const pendingButton = target.querySelector(':scope > .episode-pick[data-mode="unassigned"]');
     if (episodeButtons.length <= 8) {
       target.classList.remove('compact-episode-nav');
       target.querySelector('.episode-nav-controls')?.remove();
+      delete target.dataset.compactSignature;
       return;
     }
+
+    const signature = [
+      ...episodeButtons.map((button) => `${button.dataset.episode}:${button.classList.contains('active') ? 1 : 0}`),
+      `pending:${pendingButton?.textContent || ''}:${pendingButton?.classList.contains('active') ? 1 : 0}`,
+    ].join('|');
+    if (target.dataset.compactSignature === signature && target.querySelector('.episode-nav-controls')) return;
+    target.dataset.compactSignature = signature;
     target.classList.add('compact-episode-nav');
     target.querySelector('.episode-nav-controls')?.remove();
 
@@ -81,38 +94,44 @@
     target.prepend(controls);
   }
 
+  function replaceAssistantText(root) {
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((node) => {
+      if (node.nodeValue?.includes('镜序助理')) node.nodeValue = node.nodeValue.replaceAll('镜序助理', '小镜');
+    });
+  }
+
   function brandXiaojing() {
     const entry = document.querySelector('#mirror-assistant-entry');
     if (entry) {
       const spans = entry.querySelectorAll('span');
-      if (spans[1]) {
-        spans[1].textContent = '小镜';
-        spans[1].classList.add('entry-label');
-      }
+      if (spans[1] && spans[1].textContent !== '小镜') spans[1].textContent = '小镜';
+      if (spans[1]) spans[1].classList.add('entry-label');
       const count = entry.querySelector('.mirror-assistant-count')?.textContent || '0';
-      entry.title = Number(count) > 0 ? `小镜有 ${count} 个优先问题` : '打开小镜';
-      entry.setAttribute('aria-label', entry.title);
+      const title = Number(count) > 0 ? `小镜有 ${count} 个优先问题` : '打开小镜';
+      if (entry.title !== title) entry.title = title;
+      if (entry.getAttribute('aria-label') !== title) entry.setAttribute('aria-label', title);
     }
     const panel = document.querySelector('#mirror-assistant-panel');
     if (panel) {
       panel.setAttribute('aria-label', '小镜');
-      const title = panel.querySelector('.mirror-assistant-identity strong');
-      if (title) title.textContent = '小镜';
       const close = panel.querySelector('.mirror-assistant-close');
       if (close) close.setAttribute('aria-label', '关闭小镜');
-      const empty = panel.querySelector('.mirror-assistant-empty');
-      if (empty) empty.textContent = empty.textContent.replaceAll('镜序助理', '小镜');
+      replaceAssistantText(panel);
     }
     const nudge = document.querySelector('#mirror-assistant-nudge');
     if (nudge) {
-      const title = nudge.querySelector('strong');
-      if (title) title.textContent = '小镜';
+      replaceAssistantText(nudge);
       if (!APP_CLIENT) nudge.hidden = true;
     }
-    document.querySelectorAll('.assistant-control-copy strong').forEach((node) => {
-      if (node.textContent?.includes('镜序助理')) node.textContent = node.textContent.replaceAll('镜序助理', '小镜');
-    });
-    document.querySelectorAll('input[placeholder*="镜序助理"],textarea[placeholder*="镜序助理"]').forEach((node) => {
+    const control = document.querySelector('#assistant-control-root');
+    if (control) replaceAssistantText(control);
+    document.querySelectorAll(
+      '#mirror-assistant-panel input[placeholder*="镜序助理"],#mirror-assistant-panel textarea[placeholder*="镜序助理"],#assistant-control-root input[placeholder*="镜序助理"],#assistant-control-root textarea[placeholder*="镜序助理"]'
+    ).forEach((node) => {
       node.placeholder = node.placeholder.replaceAll('镜序助理', '小镜');
     });
   }
@@ -132,21 +151,26 @@
   }
 
   function decorateIdentitySuggestions() {
-    const identities = window.state?.identityLibrary?.identities;
+    const current = appState();
+    const identities = current?.identityLibrary?.identities;
     if (!Array.isArray(identities)) return;
-    const filter = window.state?.identityLibrary?.filter || 'face';
+    const filter = current?.identityLibrary?.filter || 'face';
     const visible = identities
       .filter((identity) => identity?.kind === filter)
       .filter((identity) => identity.confirmed || Number(identity.take_count || 0) >= 2);
     document.querySelectorAll('.identity-library-card').forEach((card, index) => {
-      card.querySelector('.identity-role-suggestion')?.remove();
       const identity = visible[index];
       const role = String(identity?.suggested_role_name || '').trim();
-      if (!role || String(identity?.role_name || '').trim()) return;
       const confidence = Number(identity?.suggested_role_confidence || 0);
+      const signature = `${identity?.identity_id || index}|${role}|${confidence}|${identity?.role_name || ''}`;
+      if (card.dataset.roleSuggestionSignature === signature) return;
+      card.dataset.roleSuggestionSignature = signature;
+      card.querySelector('.identity-role-suggestion')?.remove();
+      if (!role || String(identity?.role_name || '').trim()) return;
       const hint = document.createElement('span');
       hint.className = 'identity-role-suggestion';
-      hint.innerHTML = `<span>角色推测</span><strong>${role.replace(/[&<>"']/g, '')}</strong><span>${Number.isFinite(confidence) && confidence > 0 ? `${Math.round(confidence * 100)}%` : ''}</span>`;
+      const safeRole = role.replace(/[&<>"']/g, '');
+      hint.innerHTML = `<span>角色推测</span><strong>${safeRole}</strong><span>${Number.isFinite(confidence) && confidence > 0 ? `${Math.round(confidence * 100)}%` : ''}</span>`;
       card.querySelector('.identity-card-body header')?.after(hint);
     });
   }
@@ -158,8 +182,17 @@
     decorateIdentitySuggestions();
   }
 
-  const observer = new MutationObserver(() => requestAnimationFrame(applyPostWorkbench));
+  function scheduleApply() {
+    if (applyScheduled) return;
+    applyScheduled = true;
+    requestAnimationFrame(() => {
+      applyScheduled = false;
+      applyPostWorkbench();
+    });
+  }
+
+  const observer = new MutationObserver(scheduleApply);
   observer.observe(document.body, {childList: true, subtree: true});
-  document.addEventListener('click', () => requestAnimationFrame(applyPostWorkbench), true);
-  applyPostWorkbench();
+  document.addEventListener('click', scheduleApply, true);
+  scheduleApply();
 })();
