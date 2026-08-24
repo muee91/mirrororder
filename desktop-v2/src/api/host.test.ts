@@ -78,6 +78,29 @@ describe("HostConnection", () => {
     expect(browserFetch).toHaveBeenCalledTimes(2);
   });
 
+  it("reads the existing review.v1 projection without deriving business rules", async () => {
+    const reviewModel = {
+      contract_version: "review.v1",
+      project: { project_id: "p/1", name: "Episode 1", input_kind: "fcpxml", stats: {}, local_media: {}, issues: [] },
+      revisions: { analysis: "a1", automation_analysis: "a1", automation_updated_at: "", review: 3 },
+      capabilities: {},
+      summary: { automation: {}, script_gaps: 0, take_groups: 1, episodes: 1 },
+      episodes: [],
+      take_groups: [],
+      script_gaps: [],
+      review_state: {},
+    };
+    const browserFetch = vi.fn(async () => jsonResponse(reviewModel));
+    vi.stubGlobal("fetch", browserFetch);
+
+    await expect(new HostConnection().reviewModel(" p/1 ")).resolves.toEqual(reviewModel);
+    expect(String(browserFetch.mock.calls[0]?.[0])).toEndWith("/api/v1/projects/p%2F1/review-model");
+  });
+
+  it("rejects an empty project id for review-model", async () => {
+    await expect(new HostConnection().reviewModel("   ")).rejects.toThrow("读取 review-model 需要 project_id");
+  });
+
   it("preserves Host API errors and status codes", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "workspace unavailable" }, 503)));
 
