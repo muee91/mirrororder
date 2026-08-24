@@ -1,0 +1,58 @@
+body.placement-dragging .script-line.placement-drop-enabled {
+  cursor: copy;
+}
+
+.placement-draggable {
+  cursor: grab;
+}
+
+.placement-draggable:active,
+.placement-drag-source {
+  cursor: grabbing;
+}
+
+.placement-drag-source {
+  opacity: 0.58;
+  transform: scale(0.992);
+}
+
+.script-line.placement-drop-enabled {
+  position: relative;
+  transition: border-color 100ms ease, background-color 100ms ease, box-shadow 100ms ease, transform 100ms ease;
+}
+
+body.placement-dragging .script-line.placement-drop-enabled::after {
+  content: "放到这里归集";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent, #5b8cff) 35%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--panel, #17191d) 90%, transparent);
+  color: var(--muted, #9ba0aa);
+  font-size: 10px;
+  font-weight: 650;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.script-line.placement-drop-target {
+  border-color: var(--accent, #5b8cff) !important;
+  background: color-mix(in srgb, var(--accent, #5b8cff) 12%, var(--panel, #17191d)) !important;
+  box-shadow: inset 3px 0 0 var(--accent, #5b8cff), 0 0 0 1px color-mix(in srgb, var(--accent, #5b8cff) 38%, transparent);
+  transform: translateX(2px);
+}
+
+.script-line.placement-drop-target::after {
+  opacity: 1 !important;
+  color: var(--accent, #5b8cff) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .script-line.placement-drop-enabled,
+  .placement-drag-source {
+    transition: none;
+  }
+}
