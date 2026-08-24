@@ -111,7 +111,9 @@ class ReviewStore:
             review["revision"] = int(review.get("revision", 0)) + 1
             review["updated_at"] = timestamp
             self._append_history(review, action, timestamp, int(review["revision"]), before)
-            return self._save_unlocked(normalize_review(review))
+            saved = self._save_unlocked(normalize_review(review))
+        self._mirror_placement_actions([action])
+        return saved
 
     def apply_actions(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
         """Apply a validated batch under one lock and one review revision."""
@@ -130,7 +132,28 @@ class ReviewStore:
             revision = int(review["revision"])
             for action, before in snapshots:
                 self._append_history(review, action, timestamp, revision, before)
-            return self._save_unlocked(normalize_review(review))
+            saved = self._save_unlocked(normalize_review(review))
+        self._mirror_placement_actions(actions)
+        return saved
+
+    def _mirror_placement_actions(self, actions: list[dict[str, Any]]) -> None:
+        """Best-effort production projection; review.json remains authoritative."""
+        relevant = [
+            action
+            for action in actions
+            if str(action.get("action", "") or "") in {"set_group_placement", "clear_group_placement"}
+        ]
+        if not relevant:
+            return
+        try:
+            from .placement_supervisor_sync import mirror_review_action_to_supervisor
+
+            for action in relevant:
+                mirror_review_action_to_supervisor(self.path.parent, action)
+        except Exception:
+            # A projection failure must never roll back human review authority.
+            # The projection is deterministic and can be regenerated/replayed.
+            return
 
     def _apply_action_to_review(self, review: dict[str, Any], action: dict[str, Any], timestamp: str) -> None:
         action_type = str(action.get("action", ""))
