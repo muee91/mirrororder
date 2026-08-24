@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - Windows fallback
 
 
 VALID_STATES = {"unreviewed", "keep", "best", "reject"}
+MAX_HISTORY_ROWS = 1000
 
 
 def empty_review() -> dict[str, Any]:
@@ -27,6 +28,7 @@ def empty_review() -> dict[str, Any]:
         "groups": {},
         "clips": {},
         "placements": {},
+        "history": [],
     }
 
 
@@ -37,6 +39,8 @@ def normalize_review(raw: object) -> dict[str, Any]:
     for key in ("assignments", "groups", "clips", "placements"):
         value = raw.get(key, {})
         result[key] = value if isinstance(value, dict) else {}
+    history = raw.get("history", [])
+    result["history"] = [dict(item) for item in history[-MAX_HISTORY_ROWS:] if isinstance(item, dict)] if isinstance(history, list) else []
     result["version"] = 2
     try:
         result["revision"] = max(0, int(raw.get("revision", 0)))
@@ -101,9 +105,12 @@ class ReviewStore:
         """Merge one review action so concurrent LAN editors cannot overwrite each other."""
         with self._write_lock():
             review = self.load()
-            self._apply_action_to_review(review, action, self._now())
+            timestamp = self._now()
+            before = self._audit_snapshot(review, action)
+            self._apply_action_to_review(review, action, timestamp)
             review["revision"] = int(review.get("revision", 0)) + 1
-            review["updated_at"] = self._now()
+            review["updated_at"] = timestamp
+            self._append_history(review, action, timestamp, int(review["revision"]), before)
             return self._save_unlocked(normalize_review(review))
 
     def apply_actions(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
@@ -113,10 +120,16 @@ class ReviewStore:
         with self._write_lock():
             review = self.load()
             timestamp = self._now()
+            snapshots: list[tuple[dict[str, Any], dict[str, Any]]] = []
             for action in actions:
+                before = self._audit_snapshot(review, action)
                 self._apply_action_to_review(review, action, timestamp)
+                snapshots.append((action, before))
             review["revision"] = int(review.get("revision", 0)) + 1
             review["updated_at"] = timestamp
+            revision = int(review["revision"])
+            for action, before in snapshots:
+                self._append_history(review, action, timestamp, revision, before)
             return self._save_unlocked(normalize_review(review))
 
     def _apply_action_to_review(self, review: dict[str, Any], action: dict[str, Any], timestamp: str) -> None:
@@ -157,6 +170,7 @@ class ReviewStore:
                 raise ValueError("set_group_placement 缺少 group_id")
             episode_ids = self._episode_ids(action.get("episode_ids", []))
             segment_ids = self._segment_ids(action.get("script_segment_ids", []))
+            self._validate_placement_targets(group_id, segment_ids)
             if not episode_ids and not segment_ids:
                 review["placements"].pop(group_id, None)
             else:
@@ -168,14 +182,107 @@ class ReviewStore:
                 }
                 if actor:
                     entry["actor"] = actor
+                for key, limit in (
+                    ("interaction", 40),
+                    ("source_surface", 40),
+                    ("source_kind", 24),
+                    ("source_clip_id", 180),
+                ):
+                    value = str(action.get(key, "") or "").strip()[:limit]
+                    if value:
+                        entry[key] = value
                 review["placements"][group_id] = entry
         elif action_type == "clear_group_placement":
             group_id = str(action.get("group_id", ""))
             if not group_id:
                 raise ValueError("clear_group_placement 缺少 group_id")
+            self._validate_placement_targets(group_id, [])
             review["placements"].pop(group_id, None)
         else:
             raise ValueError(f"未知 review action: {action_type}")
+
+    def _validate_placement_targets(self, group_id: str, segment_ids: list[str]) -> None:
+        """Reject stale/forged drag targets when canonical project outputs exist."""
+        material_path = self.path.parent / "material_index.json"
+        script_path = self.path.parent / "script.json"
+        if material_path.is_file():
+            try:
+                with material_path.open(encoding="utf-8") as handle:
+                    material = json.load(handle)
+                known_groups = {
+                    str(item.get("group_id", "") or "")
+                    for item in material.get("groups", [])
+                    if isinstance(item, dict)
+                }
+                if known_groups and group_id not in known_groups:
+                    raise ValueError("归集 Take 已不在当前项目中，请刷新后重试")
+            except json.JSONDecodeError as error:
+                raise ValueError("当前项目素材索引损坏，无法安全写入归集") from error
+        if segment_ids and script_path.is_file():
+            try:
+                with script_path.open(encoding="utf-8") as handle:
+                    script = json.load(handle)
+                known_segments = {
+                    str(item.get("segment_id", "") or "")
+                    for item in script.get("segments", [])
+                    if isinstance(item, dict) and str(item.get("type", "") or "") != "scene_heading"
+                }
+                missing = [segment_id for segment_id in segment_ids if segment_id not in known_segments]
+                if missing:
+                    raise ValueError("目标剧本段已变化，请刷新后重新拖入")
+            except json.JSONDecodeError as error:
+                raise ValueError("当前项目剧本索引损坏，无法安全写入归集") from error
+
+    @staticmethod
+    def _audit_snapshot(review: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+        action_type = str(action.get("action", ""))
+        if action_type in {"set_group_placement", "clear_group_placement"}:
+            group_id = str(action.get("group_id", "") or "")
+            existing = review.get("placements", {}).get(group_id, {})
+            return dict(existing) if isinstance(existing, dict) else {}
+        return {}
+
+    @staticmethod
+    def _append_history(
+        review: dict[str, Any],
+        action: dict[str, Any],
+        timestamp: str,
+        revision: int,
+        before: dict[str, Any],
+    ) -> None:
+        row: dict[str, Any] = {
+            "at": timestamp,
+            "revision": revision,
+            "action": str(action.get("action", "") or "")[:64],
+            "actor": str(action.get("actor", "") or "")[:80],
+        }
+        for key, limit in (
+            ("group_id", 180),
+            ("clip_id", 180),
+            ("segment_id", 180),
+            ("interaction", 40),
+            ("source_surface", 40),
+            ("source_kind", 24),
+            ("source_clip_id", 180),
+        ):
+            value = str(action.get(key, "") or "").strip()[:limit]
+            if value:
+                row[key] = value
+        if isinstance(action.get("script_segment_ids"), list):
+            row["script_segment_ids"] = ReviewStore._segment_ids(action.get("script_segment_ids"))
+        if isinstance(action.get("episode_ids"), list):
+            row["episode_ids"] = ReviewStore._episode_ids(action.get("episode_ids"))
+        if "state" in action:
+            row["state"] = ReviewStore._valid_state(str(action.get("state", "unreviewed")))
+        if before:
+            row["before"] = before
+        if row["action"] in {"set_group_placement", "clear_group_placement"}:
+            group_id = str(action.get("group_id", "") or "")
+            after = review.get("placements", {}).get(group_id, {})
+            row["after"] = dict(after) if isinstance(after, dict) else {}
+        history = review.setdefault("history", [])
+        history.append(row)
+        del history[:-MAX_HISTORY_ROWS]
 
     @staticmethod
     def _review_entry(state: str, timestamp: str, actor: str) -> dict[str, str]:
