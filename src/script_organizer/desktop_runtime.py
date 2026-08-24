@@ -9,14 +9,21 @@ from .runtime_diagnostics import environment_payload
 _INSTALLED = False
 
 
+def _current_service(service: Any) -> Any:
+    current = getattr(service, "current", None)
+    return current if current is not None else service
+
+
 def _workspace_root(service: Any) -> Path:
-    workspace = getattr(service, "workspace", None)
+    current = _current_service(service)
+    workspace = getattr(current, "workspace", None)
     config_path = getattr(workspace, "config_path", None)
     return Path(config_path).parent if config_path else Path.cwd()
 
 
 def _workspace_id(service: Any) -> str:
-    workspace = getattr(service, "workspace", None)
+    current = _current_service(service)
+    workspace = getattr(current, "workspace", None)
     return str(getattr(workspace, "workspace_id", "") or "")
 
 
@@ -66,25 +73,28 @@ def install_desktop_runtime() -> None:
         class Handler(BaseHandler):
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
+                current = _current_service(service)
                 if parts == ["api", "v1", "desktop-status"]:
                     self._local_only()
-                    root = _workspace_root(service)
-                    device = DeviceMediaStore().load()
+                    root = _workspace_root(current)
+                    device_store = DeviceMediaStore()
+                    device = device_store.load()
+                    workspace = getattr(current, "workspace", None)
                     self._send_json(
                         {
                             "contract": "desktop_status.v1",
                             "workspace": {
-                                "workspace_id": _workspace_id(service),
-                                "name": str(getattr(service.workspace, "name", "") or ""),
+                                "workspace_id": _workspace_id(current),
+                                "name": str(getattr(workspace, "name", "") or ""),
                                 "path": str(root),
-                                "projects": len(service.registry.list()),
+                                "projects": len(current.registry.list()),
                             },
                             "environment": environment_payload([root]),
                             "device_media": {
                                 "version": int(device.get("version", 0) or 0),
                                 "device_id": str(device.get("device_id", "") or ""),
                                 "device_name": str(device.get("device_name", "") or ""),
-                                "state_path": str(DeviceMediaStore().path),
+                                "state_path": str(device_store.path),
                             },
                         }
                     )
@@ -95,12 +105,12 @@ def install_desktop_runtime() -> None:
                     and parts[4] == "media-binding"
                 ):
                     self._local_only()
-                    project = service.project(parts[3])
+                    project = current.project(parts[3])
                     self._send_json(
                         {
                             "contract": "media_binding.v1",
                             "project_id": project.project_id,
-                            "summary": _media_summary(service, project),
+                            "summary": _media_summary(current, project),
                         }
                     )
                     return
@@ -108,12 +118,13 @@ def install_desktop_runtime() -> None:
 
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
+                current = _current_service(service)
                 if parts == ["api", "v1", "projects", "preflight"]:
                     self._local_only()
                     self._send_json(
                         {
                             "contract": "project_preflight.v1",
-                            "preflight": service.registry.preflight_create(web_server._body(self)),
+                            "preflight": current.registry.preflight_create(web_server._body(self)),
                         }
                     )
                     return
@@ -123,12 +134,12 @@ def install_desktop_runtime() -> None:
                     and parts[4] == "media-binding"
                 ):
                     self._local_only()
-                    project = service.project(parts[3])
+                    project = current.project(parts[3])
                     payload = web_server._body(self)
                     action = str(payload.get("action", "scan") or "scan").strip().lower()
                     roots = _normalize_roots(payload.get("roots", []))
                     store = DeviceMediaStore()
-                    workspace_id = _workspace_id(service)
+                    workspace_id = _workspace_id(current)
                     if action == "replace_and_scan":
                         store.replace_roots(workspace_id, project.project_id, roots)
                     elif action != "scan":
