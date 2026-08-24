@@ -98,6 +98,25 @@ export function App() {
     }
   }
 
+  async function refreshWorkspace(preferredProjectId?: string): Promise<void> {
+    if (!connection) throw new HostConnectionError("Host 地址无效");
+    const next = await connection.connect();
+    setSnapshot(next);
+    setSelectedProject((current) => {
+      if (preferredProjectId) {
+        const preferred = next.projects.find((item) => item.project_id === preferredProjectId);
+        if (preferred) return preferred;
+      }
+      if (current) {
+        const existing = next.projects.find((item) => item.project_id === current.project_id);
+        if (existing) return existing;
+      }
+      return next.projects[0] ?? null;
+    });
+    setState("connected");
+    setMessage(`项目库已刷新 · ${next.projects.length} projects`);
+  }
+
   async function startHost(): Promise<void> {
     if (!connection) {
       setState("error");
@@ -182,17 +201,19 @@ export function App() {
       {snapshot ? (
         <section className="workspace-shell">
           <ProjectLibrary
+            baseUrl={snapshot.baseUrl}
             workspace={snapshot.workspace}
             selectedProjectId={selectedProject?.project_id ?? null}
             onSelectProject={setSelectedProject}
+            onWorkspaceChanged={refreshWorkspace}
           />
           <section className="workbench-shell">
             {selectedProject ? (
               <ProjectWorkbench key={selectedProject.project_id} baseUrl={snapshot.baseUrl} project={selectedProject} />
             ) : (
               <div className="phase-placeholder">
-                <strong>选择一个项目</strong>
-                <p>项目库来自 `/api/v1/workspace`。</p>
+                <strong>选择或创建一个项目</strong>
+                <p>项目生命周期现在由 Desktop 调用现有 Python WorkspaceRegistry 管理。</p>
               </div>
             )}
           </section>
