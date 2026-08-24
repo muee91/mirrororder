@@ -1,0 +1,29 @@
+.project-lifecycle-panel { margin: 10px 0 14px; border-top: 1px solid #252d36; border-bottom: 1px solid #252d36; padding: 10px 0; }
+.lifecycle-toggle { width: 100%; justify-content: center; }
+.project-lifecycle-body { display: grid; gap: 10px; margin-top: 10px; border: 1px solid #2a333c; border-radius: 10px; padding: 10px; background: #0f151a; }
+.project-lifecycle-message { margin: 0; color: #7c8995; font-size: 10px; line-height: 1.45; }
+.project-lifecycle-body label { display: grid; gap: 5px; color: #768390; font-size: 9px; }
+.project-lifecycle-body input, .project-lifecycle-body textarea { width: 100%; min-width: 0; border: 1px solid #303944; border-radius: 8px; padding: 7px 8px; color: #dbe2e9; background: #11171c; }
+.project-lifecycle-body textarea { resize: vertical; }
+.lifecycle-kind { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.lifecycle-kind button { border-color: #303944; color: #8895a1; background: #151b21; }
+.lifecycle-kind button.is-active { color: #11151a; background: #e8edf2; }
+.lifecycle-path-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.lifecycle-checkbox { display: flex !important; align-items: center; grid-template-columns: auto 1fr; }
+.lifecycle-checkbox input { width: auto; }
+.lifecycle-actions { display: flex; gap: 7px; }
+.lifecycle-actions button { flex: 1; }
+.lifecycle-preflight { display: grid; gap: 4px; border: 1px solid #303944; border-radius: 8px; padding: 8px; color: #a9b5c0; font-size: 9px; }
+.lifecycle-preflight.is-ready { border-color: #3c6653; }
+.lifecycle-preflight.is-error { border-color: #6f4a4a; }
+.lifecycle-delete { display: grid; gap: 7px; margin-top: 3px; border-top: 1px solid #2b343d; padding-top: 10px; }
+.lifecycle-delete p { margin: 0; color: #806f70; font-size: 9px; line-height: 1.45; }
+.lifecycle-delete .danger-quiet { border-color: #6a4141; color: #cf9898; background: #221616; }
+
+@media (prefers-color-scheme: light) {
+  .project-lifecycle-panel, .lifecycle-delete { border-color: #dce3e9; }
+  .project-lifecycle-body { border-color: #d7dfe6; background: #f8fafb; }
+  .project-lifecycle-body input, .project-lifecycle-body textarea { border-color: #d5dde5; color: #27313a; background: #fff; }
+  .lifecycle-kind button { border-color: #d5dde5; color: #5d6975; background: #eef2f6; }
+  .lifecycle-kind button.is-active { color: #fff; background: #17202a; }
+}
