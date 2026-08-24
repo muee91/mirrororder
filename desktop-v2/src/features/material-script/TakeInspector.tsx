@@ -110,12 +110,14 @@ export function TakeInspector({
                 <span>{candidate.episode_ids.map(episodeLabel).join("/") || "未分集"}</span>
                 <strong>{targetIds.join(", ") || "仅集数候选"}</strong>
                 <code>{candidate.total_score.toFixed(3)}</code>
-                <button type="button" className="confirm-candidate" onClick={onShowScript}>
-                  审阅候选
-                </button>
               </div>
             );
           })}
+          <div className="inspector-actions">
+            <button type="button" className="secondary" onClick={onShowScript}>
+              到剧本审阅首选候选
+            </button>
+          </div>
         </div>
       ) : null}
     </aside>
