@@ -92,25 +92,26 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
       return;
     }
 
-    const angles: Record<string, { shot_type: string; note: string }> = {};
+    // Quick notes are sparse patches.  Unmentioned human facts must survive;
+    // only explicit parsed values and camera-specific shot facts overwrite them.
+    const angles: SlateEntry["angles"] = { ...(existing?.angles ?? {}) };
     for (const angle of selectedTake.angles) {
       const camera = angle.camera.trim().toUpperCase().replace(/机/g, "");
       const shotType = parsed.angle_shots[camera];
       if (shotType) {
-        angles[angle.clip_id] = { shot_type: shotType, note: "" };
+        angles[angle.clip_id] = { shot_type: shotType, note: existing?.angles?.[angle.clip_id]?.note ?? "" };
       }
     }
 
     const entry: Partial<SlateEntry> = {
-      episode: parsed.episode,
-      scene: parsed.scene,
-      shot: parsed.shot,
-      take_number: parsed.take_number,
-      status: parsed.status,
       note: parsed.note,
-      preferred_clip_id: existing?.preferred_clip_id ?? "",
       angles,
     };
+    if (parsed.episode !== null) entry.episode = parsed.episode;
+    if (parsed.scene) entry.scene = parsed.scene;
+    if (parsed.shot) entry.shot = parsed.shot;
+    if (parsed.take_number !== null) entry.take_number = parsed.take_number;
+    if (parsed.status !== "unmarked" || !existing) entry.status = parsed.status;
 
     setBusy(true);
     setMessage("正在写入 revision-safe 场记事实…");
