@@ -41,6 +41,26 @@ fn lock_manager(
         .map_err(|_| TimelineBridgeError::message("Timeline Core 状态锁已损坏"))
 }
 
+fn apply_commands_transactionally(
+    engine: &mut TimelineEngine,
+    commands: Vec<Command>,
+) -> Result<TimelineSnapshot, TimelineBridgeError> {
+    if commands.is_empty() {
+        return Ok(engine.snapshot());
+    }
+    let checkpoint = engine.clone();
+    for command in commands {
+        if let Err(issues) = engine.apply(command) {
+            *engine = checkpoint;
+            return Err(TimelineBridgeError::validation(
+                "Timeline command batch 被拒绝；已完整回滚",
+                issues,
+            ));
+        }
+    }
+    Ok(engine.snapshot())
+}
+
 #[tauri::command]
 pub fn timeline_new(
     project_id: String,
@@ -71,6 +91,19 @@ pub fn timeline_load(
         .map_err(|issues| TimelineBridgeError::validation("Timeline project 未通过校验", issues))?;
     let snapshot = engine.snapshot();
     *lock_manager(&manager)? = Some(engine);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+pub fn timeline_load_with_commands(
+    project: TimelineProject,
+    commands: Vec<Command>,
+    manager: State<'_, TimelineManager>,
+) -> Result<TimelineSnapshot, TimelineBridgeError> {
+    let mut next_engine = TimelineEngine::new(project)
+        .map_err(|issues| TimelineBridgeError::validation("Timeline proposal base 未通过校验", issues))?;
+    let snapshot = apply_commands_transactionally(&mut next_engine, commands)?;
+    *lock_manager(&manager)? = Some(next_engine);
     Ok(snapshot)
 }
 
@@ -107,20 +140,7 @@ pub fn timeline_apply_batch(
     let engine = guard
         .as_mut()
         .ok_or_else(|| TimelineBridgeError::message("尚未创建或加载 Timeline"))?;
-    if commands.is_empty() {
-        return Ok(engine.snapshot());
-    }
-    let checkpoint = engine.clone();
-    for command in commands {
-        if let Err(issues) = engine.apply(command) {
-            *engine = checkpoint;
-            return Err(TimelineBridgeError::validation(
-                "Timeline command batch 被拒绝；已完整回滚",
-                issues,
-            ));
-        }
-    }
-    Ok(engine.snapshot())
+    apply_commands_transactionally(engine, commands)
 }
 
 #[tauri::command]
