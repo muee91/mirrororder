@@ -140,6 +140,10 @@ export class TimelineClient {
     return callTimeline<TimelineSnapshot>("timeline_load", { project });
   }
 
+  loadWithCommands(project: TimelineProject, commands: TimelineCommand[]): Promise<TimelineSnapshot> {
+    return callTimeline<TimelineSnapshot>("timeline_load_with_commands", { project, commands });
+  }
+
   snapshot(): Promise<TimelineSnapshot> {
     return callTimeline<TimelineSnapshot>("timeline_snapshot");
   }
