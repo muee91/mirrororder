@@ -1,3 +1,4 @@
+mod gateway;
 mod host;
 mod persistence;
 mod platform;
@@ -7,9 +8,13 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(gateway::GatewayManager::default())
         .manage(host::HostManager::default())
         .manage(timeline::TimelineManager::default())
         .invoke_handler(tauri::generate_handler![
+            gateway::start_team_gateway,
+            gateway::team_gateway_status,
+            gateway::stop_team_gateway,
             host::start_python_host,
             host::host_process_status,
             host::stop_python_host,
