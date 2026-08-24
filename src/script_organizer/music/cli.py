@@ -16,6 +16,14 @@ def _workspace(value: str) -> WorkspaceConfig:
     return ensure_workspace_id(candidate)
 
 
+def _read_json_object(value: str) -> dict:
+    path = Path(value).expanduser().resolve()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"JSON 根节点必须是对象：{path}")
+    return payload
+
+
 def _analysis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--analysis",
@@ -94,7 +102,11 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser.add_argument("project_id", help="项目 ID")
     plan_parser.add_argument("music_root", help="本地音乐库目录")
     plan_parser.add_argument("--episode", type=int, help="只规划指定集")
-    plan_parser.add_argument("--timeline-seconds", type=float, help="该集/计划目标时长；当前按剧本权重分配 cue")
+    plan_parser.add_argument("--timeline-seconds", type=float, help="无真实组接时的估算目标时长")
+    plan_parser.add_argument(
+        "--assembly-json",
+        help="V1：assembly_timeline.v1 JSON；提供后使用真实场景时长并额外生成 music_edit_plan.json",
+    )
     plan_parser.add_argument("--top-k", type=int, default=5, help="每个 cue 保留候选数量")
     plan_parser.add_argument(
         "--allow-unverified",
@@ -121,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
 
     workspace = _workspace(args.workspace)
     config = WorkspaceRegistry(workspace).project_config(args.project_id)
+    assembly = _read_json_object(args.assembly_json) if args.assembly_json else None
     plan = build_music_plan(
         config,
         args.music_root,
@@ -138,9 +151,12 @@ def main(argv: list[str] | None = None) -> int:
         generated_rights_confirmed=args.confirm_generated_rights,
         acestep_url=args.acestep_url,
         stable_audio_bin=args.stable_audio_bin,
+        assembly_timeline=assembly,
     )
     print(json.dumps(plan["summary"], ensure_ascii=False, indent=2))
     print(str(config.output_dir / "music" / "music_plan.json"))
+    if assembly is not None:
+        print(str(config.output_dir / "music" / "music_edit_plan.json"))
     return 0
 
 
