@@ -11,12 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from ..config import ProjectConfig
+from .edit_model import build_music_edit_plan
 from .generation import prepare_generated_tracks, resolve_generation_provider
 from .library import assets_from_index, index_music_library
 from .planner import build_music_briefs
 from .scoring import choose_global_path, rank_candidates
 from .semantic_rerank import rerank_candidates
 from .semantic_retriever import SemanticRetriever
+from .timeline import assembly_timeline_metadata, scene_windows_from_assembly
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -105,6 +107,7 @@ def build_music_plan(
     generated_rights_confirmed: bool = False,
     acestep_url: str = "",
     stable_audio_bin: str = "",
+    assembly_timeline: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     config.ensure_output()
     output_dir = config.output_dir / "music"
@@ -115,7 +118,18 @@ def build_music_plan(
         force_analysis=force_analysis,
     )
     assets = assets_from_index(library)
-    briefs = build_music_briefs(config, episode=episode, timeline_seconds=timeline_seconds)
+
+    scene_windows = (
+        scene_windows_from_assembly(assembly_timeline, episode=episode)
+        if assembly_timeline is not None
+        else None
+    )
+    briefs = build_music_briefs(
+        config,
+        episode=episode,
+        timeline_seconds=timeline_seconds,
+        scene_windows=scene_windows,
+    )
 
     requested_top_k = max(1, min(20, int(top_k)))
     eligible_assets = [item for item in assets if item.license.eligible or allow_unverified]
@@ -186,8 +200,6 @@ def build_music_plan(
                     brief,
                     cue_assets,
                     top_k=max(requested_top_k, count),
-                    # Always score generated alternatives for comparison. They
-                    # only enter the selection pool when rights are confirmed.
                     allow_unverified=True,
                 )
                 cue_candidates, generated_used_semantic = _semantic_rerank(
@@ -241,12 +253,17 @@ def build_music_plan(
     generated_selected = 0
     for brief, chosen in zip(briefs, selected):
         generated_rows = generated_alternatives.get(brief.cue_id, [])
+        window = (scene_windows or {}).get((brief.episode, brief.scene_id), {})
         row: dict[str, Any] = {
             **brief.to_dict(),
             "status": "selected" if chosen is not None else "needs_music",
             "selected": chosen.to_dict() if chosen is not None else None,
             "candidates": [item.to_dict() for item in candidates_by_cue.get(brief.cue_id, [])],
             "generated_alternatives": [item.to_dict() for item in generated_rows],
+            "timeline": {
+                "source": "assembly_timeline.v1" if window else "estimated",
+                "readiness": str(window.get("readiness", "") or "") if window else "estimated",
+            },
         }
         if generated_rows:
             row["generation"] = {
@@ -271,10 +288,12 @@ def build_music_plan(
 
     library_summary = library.get("summary", {}) if isinstance(library.get("summary"), dict) else {}
     provider_name = getattr(provider, "name", "off") if provider is not None else ("unavailable" if generation_mode != "off" else "off")
+    using_assembly = assembly_timeline is not None
+    feature_level = "v1.0-alpha" if using_assembly else "v0.4"
     plan = {
-        "version": 4,
+        "version": 5 if using_assembly else 4,
         "contract": "auto-score.v1",
-        "feature_level": "v0.4",
+        "feature_level": feature_level,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "project": config.name,
         "episode": episode,
@@ -283,6 +302,7 @@ def build_music_plan(
             "writes_review": False,
             "writes_editorial": False,
             "writes_auto_decisions": False,
+            "writes_fcpxml": False,
             "license_gate": not allow_unverified,
             "allow_unverified": bool(allow_unverified),
             "analysis_mode": analysis_mode,
@@ -292,14 +312,15 @@ def build_music_plan(
             "generation_provider": provider_name,
             "generation_threshold": threshold,
             "generated_rights_confirmed": bool(generated_rights_confirmed),
-            "selection": "library-first+generated-fallback+hybrid-semantic+beat-grounding+global-continuity-v0.4",
+            "selection": "library-first+generated-fallback+hybrid-semantic+beat-grounding+global-continuity-v1" if using_assembly else "library-first+generated-fallback+hybrid-semantic+beat-grounding+global-continuity-v0.4",
             "moment_grounding": "semantic-window retrieval + downbeat>beat>section-boundary",
-            "timing": "proportional-script-estimate" if timeline_seconds else "script-estimate",
+            "timing": "assembly_timeline.v1" if using_assembly else ("proportional-script-estimate" if timeline_seconds else "script-estimate"),
         },
         "summary": {
             "cues": len(cues),
             "selected": sum(1 for item in cues if item["status"] == "selected"),
             "needs_music": sum(1 for item in cues if item["status"] == "needs_music"),
+            "real_timeline_cues": sum(1 for item in cues if item["timeline"]["source"] == "assembly_timeline.v1"),
             "library_tracks": int(library_summary.get("tracks", 0) or 0),
             "eligible_tracks": int(library_summary.get("eligible", 0) or 0),
             "analyzed_tracks": int(library_summary.get("analyzed", 0) or 0),
@@ -326,8 +347,19 @@ def build_music_plan(
             "errors": generation_errors,
             "provenance_path": "output/music/provenance.jsonl",
         },
+        "timeline": assembly_timeline_metadata(assembly_timeline) if using_assembly else {"contract": "estimated"},
         "cues": cues,
     }
+
+    if using_assembly:
+        edit_plan = build_music_edit_plan(plan, assembly_timeline, episode=episode)
+        plan["music_edit"] = {
+            "contract": edit_plan["contract"],
+            "path": "output/music/music_edit_plan.json",
+            "summary": edit_plan["summary"],
+        }
+        _write_json(output_dir / "music_edit_plan.json", edit_plan)
+
     _write_json(output_dir / "library_index.json", library)
     _write_jsonl(output_dir / "provenance.jsonl", generation_rows)
     _write_json(output_dir / "music_plan.json", plan)
