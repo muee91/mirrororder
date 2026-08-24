@@ -21,7 +21,7 @@ def test_app_production_is_native_and_does_not_embed_team_web() -> None:
     assert "production_mode.js" not in native
 
 
-def test_native_production_navigation_stays_project_scoped_and_professional() -> None:
+def test_native_production_navigation_stays_project_scoped_and_opens_on_slate() -> None:
     ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
     native = (ROOT / "macos-app" / "NativeProjectWorkbench.swift").read_text(encoding="utf-8")
 
@@ -30,9 +30,24 @@ def test_native_production_navigation_stays_project_scoped_and_professional() ->
     assert "ProjectWorkspace(" in ui
     assert 'Text("项目")' in ui
     assert 'Text("工作台")' not in ui
-    assert 'Button("人物库") { showPeople = true }' in native
-    assert 'Button("场记") { showSupervisor = true }' in native
+    assert 'case supervisor = "场记"' in native
+    assert '@State private var surface: NativeProjectSurface = .supervisor' in native
+    assert "NativeScriptSupervisorWorkspace(controller: controller, model: model)" in native
+    assert "NativeScriptSupervisorSheet" not in native
+    assert 'Label("人物", systemImage: "person.2")' in native
     assert 'Text("AI 控制台")' not in native
+
+
+def test_native_slate_remains_human_evidence_not_editorial_authority() -> None:
+    native = (ROOT / "macos-app" / "NativeProjectWorkbench.swift").read_text(encoding="utf-8")
+    runtime = (ROOT / "src" / "script_organizer" / "script_supervisor_runtime.py").read_text(encoding="utf-8")
+    parser = (ROOT / "src" / "script_organizer" / "script_supervisor_parser.py").read_text(encoding="utf-8")
+
+    assert "不是 Editorial Best" in native
+    assert '"editorial_authority": False' in runtime
+    assert "禁止编造秒数、人物身份、Best/Keep/Reject" in parser
+    assert "range_hint" in parser
+    assert "usable_range" not in parser.split("def deterministic_parse", 1)[1].split("def _sanitize_model", 1)[0]
 
 
 def test_team_web_keeps_review_surface_without_production_dom() -> None:
@@ -59,7 +74,8 @@ def test_native_workspace_reads_host_projection_and_opens_team_review_externally
     assert 'appendingPathComponent("review-model")' in core
     assert "struct NativeProjectWorkbench: View" in native
     assert "JSONDecoder().decode(NativeReviewReadModel.self" in native
-    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
+    assert 'Label("团队审阅", systemImage: "person.3")' in native
+    assert "controller.openInBrowser()" in native
     assert "NSWorkspace.shared.open(workbenchURL(for: projectID))" in core
     assert "NativeProjectWorkbench(" in ui
 
