@@ -21,6 +21,7 @@ fn main() {
             platform::platform_info,
             platform::reveal_path,
             platform::open_path,
+            platform::open_url,
             platform::open_in_final_cut_pro,
             timeline::timeline_new,
             timeline::timeline_load,
