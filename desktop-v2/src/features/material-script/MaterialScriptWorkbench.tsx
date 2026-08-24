@@ -21,6 +21,7 @@ import {
 interface Props {
   baseUrl: string;
   project: ProjectSummary;
+  initialGroupId?: string | null;
 }
 
 type WorkbenchTab = "material" | "script";
@@ -57,7 +58,7 @@ function saveActor(actor: string): void {
   }
 }
 
-export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
+export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = null }: Props) {
   const connection = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const [tab, setTab] = useState<WorkbenchTab>("material");
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -81,7 +82,8 @@ export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
     setWriteMessage("");
     void connection.reviewModel(project.project_id).then((next) => {
       if (cancelled) return;
-      const first = next.take_groups[0] ?? null;
+      const focused = initialGroupId ? next.take_groups.find((item) => item.group_id === initialGroupId) ?? null : null;
+      const first = focused ?? next.take_groups[0] ?? null;
       setModel(next);
       setSelectedGroupId(first?.group_id ?? null);
       setSelectedClipId(first?.angles[0]?.clip_id ?? null);
@@ -96,7 +98,7 @@ export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
       setMessage(errorMessage(error));
     });
     return () => { cancelled = true; };
-  }, [connection, project.project_id]);
+  }, [connection, initialGroupId, project.project_id]);
 
   useEffect(() => {
     if (tab !== "script" || !selectedScriptSegmentId) return;
