@@ -252,15 +252,24 @@ export class HostConnection {
     return (await this.workspace()).projects;
   }
 
-  reviewModel(projectId: string): Promise<ReviewModelPayload> {
+  async reviewModel(projectId: string): Promise<ReviewModelPayload> {
     const normalizedProjectId = projectId.trim();
     if (!normalizedProjectId) {
-      return Promise.reject(new HostConnectionError("读取 review-model 需要 project_id"));
+      throw new HostConnectionError("读取 review-model 需要 project_id");
     }
-    return requestJson<ReviewModelPayload>(
+    const payload = await requestJson<ReviewModelPayload>(
       this.baseUrl,
       `/api/v1/projects/${encodeURIComponent(normalizedProjectId)}/review-model`,
     );
+    if (payload.contract_version !== "review.v1") {
+      throw new HostConnectionError(`不支持的 review-model contract：${payload.contract_version || "missing"}`);
+    }
+    if (payload.project?.project_id && payload.project.project_id !== normalizedProjectId) {
+      throw new HostConnectionError(
+        `review-model project_id 不匹配：请求 ${normalizedProjectId}，返回 ${payload.project.project_id}`,
+      );
+    }
+    return payload;
   }
 
   async connect(): Promise<HostSnapshot> {
