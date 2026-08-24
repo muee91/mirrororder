@@ -4,7 +4,7 @@
 
 > 拿到拍摄混乱的 A/B/C 多机位素材、剧本和可选场记后，快速把实际拍摄 Take 按剧本顺序整理出来，让剪辑人员看片、修正归集、协作审阅、检查覆盖，并把本机素材安全地带入剪辑软件。
 
-项目的工作台与 API 保持原生 HTML/CSS/JavaScript 和 Python 标准库服务，不依赖 React、Vue、云服务或 Docker。媒体目录多机位同步使用仓库内第一方引擎所列的本地 Python 科学计算依赖；视频通过 HTTP Range 读取当前设备的真实媒体文件，不复制视频。
+Production App 使用 SwiftUI / AppKit / AVKit；独立 Team Web 使用原生 HTML/CSS/JavaScript；Host 与 API 以 Python 标准库服务为主，不依赖 React、Vue、云服务或 Docker。媒体目录多机位同步使用仓库内第一方引擎所列的本地 Python 科学计算依赖；视频通过 HTTP Range 读取当前设备的真实媒体文件，不复制视频。
 
 当前版本是本地多项目工作台。每个项目由稳定 `project_id` 注册在 `projects/registry.json`，工作台、CLI 与智能体统一使用版本化项目 API。
 
@@ -64,12 +64,19 @@ open "镜序.app"
 当前 `镜序.app` 是 **Production** 原生工作台：
 
 1. 打开 App 后自动检查并启动本机镜序服务；
-2. 服务就绪后主窗口直接进入项目制作工作台；
-3. App 内素材卡可以通过 AppKit 原生文件拖拽直接拖到 Finder / Final Cut Pro / Premiere / Resolve；
-4. `剪辑 → 时间线` 可以预览当前项目或加载本地 FCPXML / XML，并和素材页双向关联；
-5. `剪辑 → 粗剪 / 组接` 使用同一套人工权威与场记约束；
-6. `镜序助理` 主动提示归集冲突、低置信素材、缺失媒体和人物线索，但不会替用户写审核结论；
-7. 工作区、本机素材绑定、模型连接、服务状态和日志都收在 App 的设置 / 状态中心。
+2. 启动先进入项目主页，打开项目后进入原生多机位场记工作区；
+3. A / B / C / 辅助素材在同一场记行中表达，素材卡使用原生首帧、播放状态和明确选中态；
+4. 场记支持从 Take 带入、Finder 文件拖入场记、自然语言快速录入、可用/部分可用/NG、人工 I/O 范围和 revision-safe 保存；
+5. 原生 AVKit 播放器按项目 `source_start/source_end` 播放，并由当前设备 media resolver 决定媒体可用性；
+6. 工作区、本机素材绑定、模型连接、服务状态和日志收在 App 的设置 / 状态中心；
+7. “团队审阅”打开独立浏览器 Review，不把 Team Web 嵌回 Production 主画布。
+
+当前仍在迁移的两项能力必须按真实状态理解：
+
+- **原生外部文件拖拽**：旧 `EditorDragWebView` / `DesktopWebView` bridge 源码仍在仓库，但新的原生 Production 素材卡尚未接入 AppKit 外部拖拽 adapter；不能把旧 bridge 的存在当成当前已交付能力。
+- **原生 Production 时间线**：旧 `web/timeline_v3.js` 只作为迁移参考；新的 Swift/Host structured timeline 尚未完成，不应重新把旧 Web timeline 接回 App。
+
+对应边界与迁移目标见 [DESKTOP_BRIDGE.md](DESKTOP_BRIDGE.md)。
 
 App 管理的是一个多工作区 gateway，默认使用可配置的 `8766` 端口；它可以同时加载多个带稳定 `workspace_id` 的工作区，不接管已有的 `8765` 实例。
 
@@ -100,7 +107,7 @@ http://局域网地址:8766/?workspace_id=<workspace_id>&project_id=<project_id>
 
 ## 第二台 Mac 使用自己的素材副本（可选）
 
-只有第二台 Mac 需要自己运行镜序、离线使用，或从其本机 App 原生拖拽文件到 FCP / Premiere / Resolve 时，才需要绑定自己的素材副本。假设硬盘名和文件夹不同：
+第二台 Mac 需要自己运行镜序、离线使用或使用自己的一份素材进行原生播放时，应绑定自己的素材副本。未来原生外部拖拽 adapter 完成后，也会复用同一套本机 `media_id` 绑定，而不是共享第一台 Mac 的绝对路径。假设硬盘名和文件夹不同：
 
 ```text
 1. 同步或复制同一个 MirrorOrder workspace
@@ -110,7 +117,7 @@ http://局域网地址:8766/?workspace_id=<workspace_id>&project_id=<project_id>
 5. 点击“为当前项目绑定素材目录”
 6. 选择这台 Mac 上保存素材的根目录
 7. 镜序通过 media_id / 内容指纹建立本机映射
-8. 工作台刷新后，播放器和原生拖拽使用这台 Mac 自己的文件
+8. 工作台刷新后，播放器使用这台 Mac 自己的文件
 ```
 
 App 扫描不会改写共享 `material_index.json`、`matches.json` 或 `review.json` 中的项目事实。
@@ -180,7 +187,7 @@ selection_manifest.json / 导出结果（按需要）
 PID
 本机日志
 临时文件
-原生拖拽时的本机路径
+未来原生拖拽解析出的本机路径
 ```
 
 如果每台设备本来就有视频拷贝，**镜序不需要同步原始视频本身**。
@@ -196,8 +203,10 @@ PID
 ```text
 中央项目状态 / review API
 +
-每台设备自己的 media resolver / native drag bridge
+每台设备自己的 media resolver
 ```
+
+未来 native drag adapter 也只能消费当前设备 resolver 的结果，不能把本机路径写回共享项目。
 
 不要让多台电脑各自运行服务，再单纯依靠 Dropbox / iCloud 同时直接修改同一个 `review.json`；文件同步无法提供可靠的跨机器锁和 revision 冲突控制。
 
@@ -213,15 +222,16 @@ PID
 
 普通 Team Web **不暴露**项目创建、本机路径、生产任务、XML 时间线或原生文件拖拽。
 
-`镜序.app` 是 **Production** 面，额外提供：
+`镜序.app` 是 **Production** 面，当前提供：
 
-- 项目创建与生产任务；
+- 项目主页、项目创建与生产任务；
 - 当前 Mac 的素材目录扫描与绑定；
-- 素材 / Take / 人物 / 场记 / Coverage；
-- 粗剪、组接与 `剪辑 → 时间线`；
-- 本机语义“找素材”入口；
-- AppKit 原生文件拖出到 FCP / Premiere / Resolve / Finder；
+- 原生多机位场记、素材 / Take / 剧本 / 人物等 Production 工作区；
+- 原生 AVKit 播放与场记 I/O；
+- 本机语义“找素材”与受限镜序助理入口；
 - Host-local 最终 Editorial Decision。
+
+原生 AppKit 外部文件拖拽与原生 Production 时间线是后续迁移项，不属于当前完成面。
 
 浏览器远程访问某个 gateway 时，看到的是**gateway 主机**的媒体覆盖率；视频也由该主机读取和发送，不会把主机路径冒充浏览器客户端自己的本机路径。
 
@@ -311,14 +321,19 @@ PYTHONPATH=src python3 -m pytest -q tests
 zsh macos-app/build_app.sh
 ```
 
-第二台 Mac 自己运行镜序时，多设备真机验收至少检查：
+第二台 Mac 自己运行镜序时，**当前**多设备真机验收至少检查：
 
 1. 第二台 Mac 对同一共享项目选择不同素材根目录；
 2. 本机素材覆盖率正确；
 3. 同一素材能够从第二台的文件播放；
-4. 从 App 拖到 Finder / FCP 得到第二台的文件路径；
-5. 在 App `剪辑 → 时间线` 加载第一台导出的 FCPXML，仍能关联到第二台本地素材；
-6. 本机扫描前后共享 `material_index.json` / `matches.json` / `review.json` 不被路径改写。
+4. 场记卡、播放器和 I/O 使用第二台自己的媒体解析结果；
+5. 本机扫描前后共享 `material_index.json` / `matches.json` / `review.json` 不被路径改写。
+
+原生拖拽与原生时间线迁移完成后，再增加以下验收：
+
+1. 从 App 原生素材卡拖到 Finder / FCP / Premiere / Resolve，得到当前设备解析出的真实文件；
+2. 在 App 原生时间线加载/查看 FCPXML 或 edit model，仍能通过 `clip_id/media_id` 关联当前设备素材；
+3. 两项能力都不得依赖嵌入 Team Web 或恢复旧 `timeline_v3.js` Production 入口。
 
 ## 主要目录
 
@@ -327,9 +342,10 @@ src/script_organizer/                    Python 分析、分组、匹配、审�
 src/script_organizer/media_identity.py   media_id 与设备本地绑定
 src/script_organizer/semantic_*.py       本地语义文档、FTS/可选向量检索与 API
 src/script_organizer/mcp_server.py       受限 Agent MCP 入口
-web/                                     Team Review + App Production 扩展
-macos-app/MirrorOrderDesktopCore.swift   原生 Host / WebKit / AppKit 桥接
-macos-app/MirrorOrderDesktopUI.swift     原生项目与设置 UI
+web/                                     独立 Team Review；旧 Production JS 仅为迁移/兼容残留
+macos-app/MirrorOrderDesktopCore.swift   原生 Host 客户端与设备级能力；仍含待删除旧 WebKit bridge 残留
+macos-app/MirrorOrderDesktopUI.swift     原生项目主页、多机位场记与设置 UI
+macos-app/NativeProjectWorkbench.swift   原生二级 Production 工作区
 macos-app/prebuild_check.py              无副作用构建前静态契约检查
 macos-app/build_ready.sh                 preflight → pytest → App build 交接门
 macos-app/build_app.sh                   App 打包、运行时闭包与签名脚本
