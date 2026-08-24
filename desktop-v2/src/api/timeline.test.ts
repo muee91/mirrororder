@@ -36,6 +36,37 @@ describe("TimelineClient", () => {
     expect(mockedInvoke).toHaveBeenCalledWith("timeline_load_with_commands", { project: project(), commands });
   });
 
+  it("opens crash-recovered project state by project id", async () => {
+    const snapshot = { project: project(), undo_depth: 4, redo_depth: 0, validation: [] };
+    mockedInvoke.mockResolvedValueOnce(snapshot as never);
+    await expect(new TimelineClient().openPersisted("p1")).resolves.toEqual(snapshot);
+    expect(mockedInvoke).toHaveBeenCalledWith("timeline_open_persisted", { projectId: "p1" });
+  });
+
+  it("exposes checkpoint and journal status without moving persistence into React", async () => {
+    const snapshot = { project: project(), undo_depth: 0, redo_depth: 0, validation: [] };
+    const status = {
+      project_id: "p1",
+      persistence: {
+        project_id: "p1",
+        checkpoint_path: "/tmp/p1/checkpoint.json",
+        journal_path: "/tmp/p1/journal.jsonl",
+        backup_path: "/tmp/p1/checkpoint.json.bak",
+        journal_operations: 7,
+        ignored_partial_tail: false,
+      },
+      recovered_operations: 3,
+      used_backup: false,
+      ignored_partial_tail: false,
+    };
+    mockedInvoke.mockResolvedValueOnce(snapshot as never).mockResolvedValueOnce(status as never);
+    const client = new TimelineClient();
+    await expect(client.checkpoint()).resolves.toEqual(snapshot);
+    await expect(client.persistenceStatus()).resolves.toEqual(status);
+    expect(mockedInvoke).toHaveBeenNthCalledWith(1, "timeline_checkpoint", undefined);
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "timeline_persistence_status", undefined);
+  });
+
   it("keeps browser preview read-only", async () => {
     mockedIsTauri.mockReturnValue(false);
     await expect(new TimelineClient().snapshot()).rejects.toThrow("Timeline Core 只在 Tauri Desktop 运行");
