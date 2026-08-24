@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { HostConnection, ReviewTakeGroup } from "../../api/host";
+import type { HostConnection, ReviewCandidate, ReviewTakeGroup } from "../../api/host";
 import { episodeLabel, mappingLabel, mappingSourceLabel } from "./VirtualTakeList";
 
 export function TakeInspector({
@@ -10,6 +10,7 @@ export function TakeInspector({
   onSelectClip,
   onShowScript,
   onClearPlacement,
+  onConfirmCandidate,
   writeSaving,
 }: {
   connection: HostConnection;
@@ -19,6 +20,7 @@ export function TakeInspector({
   onSelectClip: (clipId: string) => void;
   onShowScript: () => void;
   onClearPlacement: () => void;
+  onConfirmCandidate: (candidate: ReviewCandidate) => void;
   writeSaving: boolean;
 }) {
   const angle = take?.angles.find((item) => item.clip_id === selectedClipId) ?? take?.angles[0] ?? null;
@@ -98,14 +100,30 @@ export function TakeInspector({
 
       {take.candidates.length > 0 ? (
         <div className="candidate-panel">
-          <p className="eyebrow">候选，不是人工权威</p>
-          {take.candidates.slice(0, 3).map((candidate) => (
-            <div className="candidate-row" key={candidate.candidate_id}>
-              <span>{candidate.episode_ids.map(episodeLabel).join("/") || "未分集"}</span>
-              <strong>{candidate.script_segment_ids.join(", ") || candidate.script_segment_id || "—"}</strong>
-              <code>{candidate.total_score.toFixed(3)}</code>
-            </div>
-          ))}
+          <p className="eyebrow">候选 · 需人工确认</p>
+          {take.candidates.slice(0, 3).map((candidate) => {
+            const targetIds = candidate.script_segment_ids.length > 0
+              ? candidate.script_segment_ids
+              : candidate.script_segment_id
+                ? [candidate.script_segment_id]
+                : [];
+            const canConfirm = targetIds.length > 0 || candidate.episode_ids.length > 0;
+            return (
+              <div className="candidate-row" key={candidate.candidate_id}>
+                <span>{candidate.episode_ids.map(episodeLabel).join("/") || "未分集"}</span>
+                <strong>{targetIds.join(", ") || "仅集数候选"}</strong>
+                <code>{candidate.total_score.toFixed(3)}</code>
+                <button
+                  type="button"
+                  className="confirm-candidate"
+                  disabled={writeSaving || !canConfirm}
+                  onClick={() => onConfirmCandidate(candidate)}
+                >
+                  确认候选
+                </button>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </aside>
