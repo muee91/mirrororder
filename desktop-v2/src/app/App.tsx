@@ -12,13 +12,17 @@ import {
 import { PlatformClient, type PlatformInfo } from "../api/platform";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
+import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
   return error instanceof Error ? error.message : String(error);
 }
 
+type AppWorkspace = "production" | "team";
+
 export function App() {
+  const [appWorkspace, setAppWorkspace] = useState<AppWorkspace>("production");
   const [baseUrl, setBaseUrl] = useState(defaultHostBaseUrl);
   const [workspacePath, setWorkspacePath] = useState("");
   const [state, setState] = useState<HostConnectionState>("idle");
@@ -150,80 +154,98 @@ export function App() {
           <p className="eyebrow">镜序 · MirrorOrder</p>
           <h1>Desktop v2</h1>
         </div>
-        <div className={`status-badge status-${state}`}>
-          <span className="status-dot" />
-          {state}{platformInfo ? ` · ${platformInfo.os}` : ""}
+        <div className="topbar-actions">
+          <div className="app-workspace-switch" aria-label="Desktop workspace">
+            <button type="button" className={appWorkspace === "production" ? "is-active" : ""} onClick={() => setAppWorkspace("production")}>制作</button>
+            <button type="button" className={appWorkspace === "team" ? "is-active" : ""} onClick={() => setAppWorkspace("team")}>团队协作</button>
+          </div>
+          <div className={`status-badge status-${state}`}>
+            <span className="status-dot" />
+            {state}{platformInfo ? ` · ${platformInfo.os}` : ""}
+          </div>
         </div>
       </header>
 
-      <section className="connection-panel">
-        <label>
-          <span>Host</span>
-          <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} />
-        </label>
-        <label className="workspace-field">
-          <span>Workspace 路径</span>
-          <input
-            value={workspacePath}
-            onChange={(event) => setWorkspacePath(event.target.value)}
-            placeholder="选择目录 / workspace 文件，或手动填写"
-            spellCheck={false}
+      {appWorkspace === "team" ? (
+        <section className="standalone-workspace-shell">
+          <TeamWebWorkbench
+            workspacePath={workspacePath}
+            workspaceId={snapshot?.workspace.workspace_id ?? null}
+            projectId={selectedProject?.project_id ?? null}
           />
-        </label>
-        <div className="connection-actions workspace-picker-actions">
-          <button type="button" className="secondary" onClick={() => void chooseWorkspace(true)} disabled={!isTauri()}>
-            选择目录
-          </button>
-          <button type="button" className="secondary" onClick={() => void chooseWorkspace(false)} disabled={!isTauri()}>
-            选择文件
-          </button>
-          <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !workspacePath.trim()}>
-            {platformInfo?.os === "windows" ? "在 Explorer 显示" : platformInfo?.os === "macos" ? "在 Finder 显示" : "在文件管理器显示"}
-          </button>
-        </div>
-        <div className="connection-actions">
-          <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>
-            连接 Host
-          </button>
-          <button type="button" onClick={() => void startHost()} disabled={state === "starting"}>
-            启动并连接
-          </button>
-        </div>
-      </section>
-
-      <p className={`connection-message ${state === "error" ? "is-error" : ""}`}>{message}</p>
-      {platformInfo ? (
-        <p className="connection-message platform-capabilities">
-          Phase 6 · native dialog ✓ · reveal ✓ · FCP adapter {platformInfo.fcp_adapter ? "available on macOS" : "n/a"} · security-scoped media {platformInfo.security_scoped_media ? "✓" : "pending native gate"} · Resolve/Premiere adapters extension-only
-        </p>
-      ) : null}
-
-      {snapshot ? (
-        <section className="workspace-shell">
-          <ProjectLibrary
-            baseUrl={snapshot.baseUrl}
-            workspace={snapshot.workspace}
-            selectedProjectId={selectedProject?.project_id ?? null}
-            onSelectProject={setSelectedProject}
-            onWorkspaceChanged={refreshWorkspace}
-          />
-          <section className="workbench-shell">
-            {selectedProject ? (
-              <ProjectWorkbench key={selectedProject.project_id} baseUrl={snapshot.baseUrl} project={selectedProject} />
-            ) : (
-              <div className="phase-placeholder">
-                <strong>选择或创建一个项目</strong>
-                <p>项目生命周期现在由 Desktop 调用现有 Python WorkspaceRegistry 管理。</p>
-              </div>
-            )}
-          </section>
         </section>
       ) : (
-        <section className="offline-state">
-          <p className="eyebrow">Phase 1 / Phase 6</p>
-          <h2>等待 HostConnection</h2>
-          <p>HostConnection 负责 Python Core 生命周期；原生路径选择和 Finder/Explorer 能力由跨平台 Tauri adapter 提供，业务权威仍在 Python Core。</p>
-        </section>
+        <>
+          <section className="connection-panel">
+            <label>
+              <span>Host</span>
+              <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} />
+            </label>
+            <label className="workspace-field">
+              <span>Workspace 路径</span>
+              <input
+                value={workspacePath}
+                onChange={(event) => setWorkspacePath(event.target.value)}
+                placeholder="选择目录 / workspace 文件，或手动填写"
+                spellCheck={false}
+              />
+            </label>
+            <div className="connection-actions workspace-picker-actions">
+              <button type="button" className="secondary" onClick={() => void chooseWorkspace(true)} disabled={!isTauri()}>
+                选择目录
+              </button>
+              <button type="button" className="secondary" onClick={() => void chooseWorkspace(false)} disabled={!isTauri()}>
+                选择文件
+              </button>
+              <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !workspacePath.trim()}>
+                {platformInfo?.os === "windows" ? "在 Explorer 显示" : platformInfo?.os === "macos" ? "在 Finder 显示" : "在文件管理器显示"}
+              </button>
+            </div>
+            <div className="connection-actions">
+              <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>
+                连接 Host
+              </button>
+              <button type="button" onClick={() => void startHost()} disabled={state === "starting"}>
+                启动并连接
+              </button>
+            </div>
+          </section>
+
+          <p className={`connection-message ${state === "error" ? "is-error" : ""}`}>{message}</p>
+          {platformInfo ? (
+            <p className="connection-message platform-capabilities">
+              Phase 6 · native dialog ✓ · reveal ✓ · URL opener {platformInfo.open_url ? "✓" : "missing"} · FCP adapter {platformInfo.fcp_adapter ? "available on macOS" : "n/a"} · security-scoped media {platformInfo.security_scoped_media ? "✓" : "pending native gate"} · Resolve/Premiere adapters extension-only
+            </p>
+          ) : null}
+
+          {snapshot ? (
+            <section className="workspace-shell">
+              <ProjectLibrary
+                baseUrl={snapshot.baseUrl}
+                workspace={snapshot.workspace}
+                selectedProjectId={selectedProject?.project_id ?? null}
+                onSelectProject={setSelectedProject}
+                onWorkspaceChanged={refreshWorkspace}
+              />
+              <section className="workbench-shell">
+                {selectedProject ? (
+                  <ProjectWorkbench key={selectedProject.project_id} baseUrl={snapshot.baseUrl} project={selectedProject} />
+                ) : (
+                  <div className="phase-placeholder">
+                    <strong>选择或创建一个项目</strong>
+                    <p>项目生命周期现在由 Desktop 调用现有 Python WorkspaceRegistry 管理。</p>
+                  </div>
+                )}
+              </section>
+            </section>
+          ) : (
+            <section className="offline-state">
+              <p className="eyebrow">Phase 1 / Phase 6</p>
+              <h2>等待 HostConnection</h2>
+              <p>HostConnection 负责 Python Core 生命周期；原生路径选择和 Finder/Explorer 能力由跨平台 Tauri adapter 提供，业务权威仍在 Python Core。</p>
+            </section>
+          )}
+        </>
       )}
     </main>
   );
