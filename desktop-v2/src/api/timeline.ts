@@ -86,6 +86,8 @@ export interface TimelinePersistenceFiles {
   checkpoint_path: string;
   journal_path: string;
   backup_path: string;
+  generation: string;
+  checkpoint_sequence: number;
   journal_operations: number;
   ignored_partial_tail: boolean;
 }
