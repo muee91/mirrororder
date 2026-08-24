@@ -1,4 +1,5 @@
 import type { ReviewCandidate } from "../../api/host";
+import "./candidate-evidence.css";
 import { episodeLabel } from "./VirtualTakeList";
 
 function score(value: number): string {
