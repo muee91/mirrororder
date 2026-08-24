@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@tauri-apps/api/core", () => ({ isTauri: vi.fn(() => false) }));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+  isTauri: vi.fn(() => false),
+}));
 vi.mock("@tauri-apps/plugin-http", () => ({ fetch: vi.fn() }));
 
 import { ProductionClient } from "./production";
