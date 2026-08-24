@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   HostConnection,
   HostConnectionError,
@@ -9,6 +9,7 @@ import {
   type HostSnapshot,
   type ProjectSummary,
 } from "../api/host";
+import { PlatformClient, type PlatformInfo } from "../api/platform";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
 
@@ -23,6 +24,7 @@ export function App() {
   const [state, setState] = useState<HostConnectionState>("idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
+  const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [message, setMessage] = useState("连接已运行的 Host，或从本机 workspace 启动。 ");
 
   const connection = useMemo(() => {
@@ -32,6 +34,12 @@ export function App() {
       return null;
     }
   }, [baseUrl]);
+  const platform = useMemo(() => new PlatformClient(), []);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    void platform.info().then(setPlatformInfo).catch(() => setPlatformInfo(null));
+  }, [platform]);
 
   async function chooseWorkspace(directory: boolean): Promise<void> {
     if (!isTauri()) {
@@ -50,6 +58,19 @@ export function App() {
       }
     } catch (error) {
       setMessage(`原生路径选择失败：${errorMessage(error)}`);
+    }
+  }
+
+  async function revealWorkspace(): Promise<void> {
+    if (!workspacePath.trim()) {
+      setMessage("先选择 Workspace 路径。");
+      return;
+    }
+    try {
+      await platform.reveal(workspacePath);
+      setMessage(`${platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器"} 已定位 Workspace。`);
+    } catch (error) {
+      setMessage(errorMessage(error));
     }
   }
 
@@ -112,7 +133,7 @@ export function App() {
         </div>
         <div className={`status-badge status-${state}`}>
           <span className="status-dot" />
-          {state}
+          {state}{platformInfo ? ` · ${platformInfo.os}` : ""}
         </div>
       </header>
 
@@ -137,6 +158,9 @@ export function App() {
           <button type="button" className="secondary" onClick={() => void chooseWorkspace(false)} disabled={!isTauri()}>
             选择文件
           </button>
+          <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !workspacePath.trim()}>
+            {platformInfo?.os === "windows" ? "在 Explorer 显示" : platformInfo?.os === "macos" ? "在 Finder 显示" : "在文件管理器显示"}
+          </button>
         </div>
         <div className="connection-actions">
           <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>
@@ -149,6 +173,11 @@ export function App() {
       </section>
 
       <p className={`connection-message ${state === "error" ? "is-error" : ""}`}>{message}</p>
+      {platformInfo ? (
+        <p className="connection-message platform-capabilities">
+          Phase 6 · native dialog ✓ · reveal ✓ · FCP adapter {platformInfo.fcp_adapter ? "available on macOS" : "n/a"} · security-scoped media {platformInfo.security_scoped_media ? "✓" : "pending native gate"} · Resolve/Premiere adapters extension-only
+        </p>
+      ) : null}
 
       {snapshot ? (
         <section className="workspace-shell">
