@@ -81,6 +81,23 @@ export interface TimelineSnapshot {
   validation: TimelineValidationIssue[];
 }
 
+export interface TimelinePersistenceFiles {
+  project_id: string;
+  checkpoint_path: string;
+  journal_path: string;
+  backup_path: string;
+  journal_operations: number;
+  ignored_partial_tail: boolean;
+}
+
+export interface TimelineRuntimeStatus {
+  project_id: string;
+  persistence: TimelinePersistenceFiles;
+  recovered_operations: number;
+  used_backup: boolean;
+  ignored_partial_tail: boolean;
+}
+
 export type TimelineCommand =
   | { type: "insert"; sequence_id: string; track_id: string; clip: TimelineClip }
   | { type: "overwrite"; sequence_id: string; track_id: string; clip: TimelineClip }
@@ -140,6 +157,10 @@ export class TimelineClient {
     return callTimeline<TimelineSnapshot>("timeline_load", { project });
   }
 
+  openPersisted(projectId: string): Promise<TimelineSnapshot> {
+    return callTimeline<TimelineSnapshot>("timeline_open_persisted", { projectId });
+  }
+
   loadWithCommands(project: TimelineProject, commands: TimelineCommand[]): Promise<TimelineSnapshot> {
     return callTimeline<TimelineSnapshot>("timeline_load_with_commands", { project, commands });
   }
@@ -162,6 +183,14 @@ export class TimelineClient {
 
   redo(): Promise<TimelineSnapshot> {
     return callTimeline<TimelineSnapshot>("timeline_redo");
+  }
+
+  checkpoint(): Promise<TimelineSnapshot> {
+    return callTimeline<TimelineSnapshot>("timeline_checkpoint");
+  }
+
+  persistenceStatus(): Promise<TimelineRuntimeStatus> {
+    return callTimeline<TimelineRuntimeStatus>("timeline_persistence_status");
   }
 
   validate(): Promise<TimelineValidationIssue[]> {
