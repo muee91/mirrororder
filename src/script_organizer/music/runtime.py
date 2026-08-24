@@ -11,6 +11,8 @@ from ..config import ProjectConfig
 from .library import assets_from_index, index_music_library
 from .planner import build_music_briefs
 from .scoring import choose_global_path, rank_candidates
+from .semantic import rank_semantic_windows
+from .semantic_rerank import rerank_candidates
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -37,6 +39,8 @@ def build_music_plan(
     allow_unverified: bool = False,
     analysis_mode: str = "auto",
     force_analysis: bool = False,
+    semantic_mode: str = "auto",
+    force_semantic: bool = False,
 ) -> dict[str, Any]:
     config.ensure_output()
     output_dir = config.output_dir / "music"
@@ -48,15 +52,47 @@ def build_music_plan(
     assets = assets_from_index(library)
     briefs = build_music_briefs(config, episode=episode, timeline_seconds=timeline_seconds)
 
-    candidates_by_cue = {
-        brief.cue_id: rank_candidates(
+    requested_top_k = max(1, min(20, int(top_k)))
+    semantic_backend_used = "off"
+    semantic_cues = 0
+    candidates_by_cue: dict[str, list] = {}
+    eligible_assets = [item for item in assets if item.license.eligible or allow_unverified]
+    broad_pool = max(requested_top_k, min(40, len(eligible_assets)))
+
+    for brief in briefs:
+        candidates = rank_candidates(
             brief,
             assets,
-            top_k=max(1, min(20, int(top_k))),
+            top_k=broad_pool,
             allow_unverified=allow_unverified,
         )
-        for brief in briefs
-    }
+        if semantic_mode != "off" and candidates:
+            candidate_ids = {item.asset_id for item in candidates}
+            semantic_assets = [item for item in eligible_assets if item.asset_id in candidate_ids]
+            semantic_windows, backend_name = rank_semantic_windows(
+                brief,
+                semantic_assets,
+                library_root,
+                mode=semantic_mode,
+                top_k_per_asset=3,
+                force=force_semantic,
+            )
+            if backend_name != "off":
+                semantic_backend_used = backend_name
+            if semantic_windows:
+                semantic_cues += 1
+                candidates = rerank_candidates(
+                    candidates,
+                    semantic_windows,
+                    top_k=requested_top_k,
+                    semantic_weight=0.30,
+                )
+            else:
+                candidates = candidates[:requested_top_k]
+        else:
+            candidates = candidates[:requested_top_k]
+        candidates_by_cue[brief.cue_id] = candidates
+
     selected = choose_global_path(briefs, candidates_by_cue, assets)
     assets_by_id = {item.asset_id: item for item in assets}
 
@@ -82,9 +118,9 @@ def build_music_plan(
 
     library_summary = library.get("summary", {}) if isinstance(library.get("summary"), dict) else {}
     plan = {
-        "version": 2,
+        "version": 3,
         "contract": "auto-score.v1",
-        "feature_level": "v0.2",
+        "feature_level": "v0.3",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "project": config.name,
         "episode": episode,
@@ -96,8 +132,10 @@ def build_music_plan(
             "license_gate": not allow_unverified,
             "allow_unverified": bool(allow_unverified),
             "analysis_mode": analysis_mode,
-            "selection": "local-score+beat-energy-grounding+global-continuity-v0.2",
-            "moment_grounding": "downbeat>beat>section-boundary",
+            "semantic_mode": semantic_mode,
+            "semantic_backend": semantic_backend_used,
+            "selection": "hybrid-local+semantic-window+beat-grounding+global-continuity-v0.3",
+            "moment_grounding": "semantic-window retrieval + downbeat>beat>section-boundary",
             "timing": "proportional-script-estimate" if timeline_seconds else "script-estimate",
         },
         "summary": {
@@ -108,6 +146,8 @@ def build_music_plan(
             "eligible_tracks": int(library_summary.get("eligible", 0) or 0),
             "analyzed_tracks": int(library_summary.get("analyzed", 0) or 0),
             "beat_tracked_tracks": int(library_summary.get("beat_tracked", 0) or 0),
+            "semantic_cues": semantic_cues,
+            "semantic_backend": semantic_backend_used,
             "beat_aligned_cues": sum(
                 1 for item in cues if isinstance(item.get("selected"), dict) and item["selected"].get("beat_aligned") is True
             ),
