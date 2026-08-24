@@ -21,11 +21,19 @@ const TABS: Array<{ id: ProductionTab; label: string; phase: string }> = [
   { id: "slate", label: "场记", phase: "P3" },
   { id: "identity", label: "人物", phase: "P3" },
   { id: "assistant", label: "小镜", phase: "P3" },
-  { id: "timeline", label: "剪辑", phase: "P4" },
+  { id: "timeline", label: "剪辑", phase: "P4–P5" },
 ];
 
 export function ProjectWorkbench({ baseUrl, project }: Props) {
   const [tab, setTab] = useState<ProductionTab>("material");
+  const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
+
+  function openTakeFromEvidence(groupId: string): void {
+    const value = groupId.trim();
+    if (!value) return;
+    setMaterialFocusGroupId(value);
+    setTab("material");
+  }
 
   return (
     <section className="project-production-workbench">
@@ -38,9 +46,9 @@ export function ProjectWorkbench({ baseUrl, project }: Props) {
         ))}
       </nav>
 
-      {tab === "material" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} /> : null}
+      {tab === "material" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} /> : null}
       {tab === "slate" ? <SlateWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-      {tab === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+      {tab === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
       {tab === "assistant" ? <AssistantWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
       {tab === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
     </section>
