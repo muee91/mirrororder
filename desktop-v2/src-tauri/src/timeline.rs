@@ -99,6 +99,31 @@ pub fn timeline_apply(
 }
 
 #[tauri::command]
+pub fn timeline_apply_batch(
+    commands: Vec<Command>,
+    manager: State<'_, TimelineManager>,
+) -> Result<TimelineSnapshot, TimelineBridgeError> {
+    let mut guard = lock_manager(&manager)?;
+    let engine = guard
+        .as_mut()
+        .ok_or_else(|| TimelineBridgeError::message("尚未创建或加载 Timeline"))?;
+    if commands.is_empty() {
+        return Ok(engine.snapshot());
+    }
+    let checkpoint = engine.clone();
+    for command in commands {
+        if let Err(issues) = engine.apply(command) {
+            *engine = checkpoint;
+            return Err(TimelineBridgeError::validation(
+                "Timeline command batch 被拒绝；已完整回滚",
+                issues,
+            ));
+        }
+    }
+    Ok(engine.snapshot())
+}
+
+#[tauri::command]
 pub fn timeline_undo(
     manager: State<'_, TimelineManager>,
 ) -> Result<TimelineSnapshot, TimelineBridgeError> {
