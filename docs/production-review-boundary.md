@@ -2,139 +2,63 @@
 
 镜序把复杂度留在制作端，把清晰、可信、可直接判断的内容交给团队审阅。
 
-这份文档是 `docs/ux-principles.md` 的工程落地补充。发生冲突时，以更严格的数据权威与人工审核规则为准。
+这份文档是 `docs/ux-principles.md` 的工程落地补充。发生冲突时，以更严格的数据权威、人工审核和设备路径规则为准。
 
 ## 1. 产品边界
 
-### App — Production
+### App — Native Production
 
-App 是项目制作与内容治理端，负责：
+`镜序.app` 是唯一的 Production 客户端。主制作画布使用 SwiftUI / AppKit / AVKit 原生实现，负责：
 
 - 项目创建、输入预检、素材目录与当前 Mac 的媒体绑定；
 - 多机位同步、ASR、剧本匹配、自动归集与异常复核；
 - 素材、剧本、Take 的细粒度检查；
-- 人物、声纹和内容证据等可选增强；
-- 生产任务、运行时、日志和诊断；
-- Final Cut Pro / Premiere / Resolve 等本机桥接和交付输出；
-- 把制作结果整理成适合团队消费的审阅数据。
+- 人物、声纹、场记、内容证据与 Coverage；
+- 镜序助理、生产任务、运行时、日志和诊断；
+- 粗剪、组接、时间线、NLE 交付；
+- 当前设备真实文件到 Finder / Final Cut Pro / Premiere / Resolve 的 AppKit 原生拖拽。
 
-项目仍然是 App 的一级对象。进入项目后，制作导航属于该项目，不重新变成全局“工作台”导航。
+项目是 App 的一级对象。项目列表常驻左栏；选中项目后中央直接进入该项目的原生制作工作区。
 
-### Web — Review
+**App 主制作画布不得嵌入 WebView。**
 
-Web 是团队审阅与决策端，负责：
+以下模式禁止重新成为 Production 主链：
+
+```text
+SwiftUI shell
+  -> WKWebView
+  -> production_mode.js / timeline.js / JS wrappers
+  -> Host
+```
+
+原因不是视觉偏好，而是生产可靠性：WebView 导航、JS 加载顺序、动态 wrapper、桥接状态和 SwiftUI 生命周期会制造额外故障面。App 的制作能力必须由原生视图直接调用受约束的 Host API / 本机能力。
+
+### Web — Team Review
+
+Web 是独立的团队审阅客户端，通过浏览器访问 gateway，负责：
 
 - 选择项目与集数；
 - 按剧本查看候选 Take；
 - 播放、切换机位；
 - Best / Keep / Reject 与人工归集；
-- 搜索、人物上下文、分析建议；
-- 审核人身份、团队意见与协作。
+- Individual Opinion / 协作审阅；
+- 搜索、人物上下文和安全的镜序助理审阅提醒。
 
-普通 Web 不承担：
+普通 Team Web 不承担：
 
 - 项目创建与本机素材目录管理；
 - FFmpeg / 模型 / runtime / gateway / 端口设置；
 - 生产任务启动、重跑与诊断；
 - 本机文件拖入外部剪辑软件；
-- 身份聚类拆分、底层匹配参数或算法调参。
+- XML Production 时间线；
+- 身份聚类拆分、底层匹配参数或算法调参；
+- Host-local Final Editorial Decision。
 
-Web 的简洁不是减少能力，而是由 App / Host 先完成制作治理后再呈现。
+App 中的“团队审阅”只是使用 `NSWorkspace` 打开浏览器地址，不在 App 内嵌 Team Web。
 
-## 2. 当前 Phase 1：App-only Production Layer
+## 2. Host 是共享语义层，不是 UI 容器
 
-当前 macOS 项目工作区仍复用成熟的 Web 审阅渲染和 AppKit 原生拖拽桥。为避免一次性重写已验证的看片链，第一阶段在同一页面之上增加 App-only Production Layer：
-
-```text
-镜序 App
-  Native toolbar
-      ↓
-  WKWebView + mirrorOrder AppKit bridge
-      ↓
-  Production Layer
-    审阅 / 概览 / 待处理 / 素材 / 剧本 / Take / 人物
-      ↓
-  已验证的 Review surface
-```
-
-普通 LAN 浏览器没有 `window.webkit.messageHandlers.mirrorOrder`，`production_mode.js` 会立即退出，因此不会注入制作导航或制作详情。
-
-Production Layer 当前只读取已经加载的项目事实与审核状态，不新增独立写入通道。复杂修改仍继续使用已有、受约束的人工审核接口或原生制作操作。
-
-### 制作概览
-
-汇总：
-
-- 当前 Mac 可确认的素材覆盖；
-- Take 总量与存在人工治理记录的 Take；
-- 可匹配剧本段与集数；
-- 明确需要制作人员处理的例外。
-
-### 待处理
-
-只集中展示当前已有数据能够可靠支持的制作异常：
-
-- 没有可靠剧本候选的 Take；
-- `possible_dialogue` 或 top candidates 分差过小的归集歧义；
-- 当前 Mac 明确报告为缺失的媒体；
-- `matches.script_gaps` 中的剧本空档。
-
-这里暂不把客户端推断冒充 `auto_confirmed / ai_confirmed / needs_review` 等正式自动状态。正式状态应由 Host 的权威自动决策数据提供。
-
-### 素材
-
-以 `clip_id` / `media_id` 和当前设备解析结果为基础检查素材。当前设备绝对路径仍是 Device Local，不能回写成共享项目事实。
-
-### 剧本
-
-按集查看可匹配段落、已有候选覆盖和明确 script gaps。点击后回到审阅区定位，不在 Production Layer 中复制一套剧本编辑器。
-
-### Take
-
-按当前已有证据区分：
-
-- 人工：已有人工归集或审核记录；
-- 高可信：首选候选为 `exact_dialogue`；
-- 歧义：`possible_dialogue` 或候选分差不足；
-- 待归集：没有非 context-only 候选；
-- 上下文：主要依赖邻近拍摄上下文。
-
-这些是制作端的可视化分类，不改变 `review.json` 和自动决策权威。
-
-### 人物
-
-人物与声纹仍使用现有身份库与增强流程。Production Layer 提供项目级入口；普通 Web 只消费已整理的人物上下文和必要的查看入口。
-
-## 3. 数据权威不变
-
-必须继续遵守：
-
-```text
-人工 review.json
-    > 自动 auto_decisions.json
-    > 自动候选 / 分析建议
-```
-
-- 自动流程不得写 `review.json`；
-- 不得自动 Reject；
-- 人工 placement / assignment / review 不得被自动结果覆盖；
-- Production Layer 不建立第二套人工结论存储；
-- 原始 FCPXML、原始媒体不可由审阅或展示层修改。
-
-## 4. 多设备边界不变
-
-共享的是项目事实与人工决定，不是某台电脑的绝对媒体路径。
-
-```text
-共享：script / material_index / matches / review / media_id
-设备本地：media-bindings.json / /Volumes/... / Finder 路径 / native drag path
-```
-
-App 可以展示当前 Mac 的本机覆盖和路径诊断，但 Web 不需要、也不应该知道客户端机器的本地素材路径。
-
-## 5. Phase 2：Host Review Read Model
-
-下一阶段应把当前 Web 对多个底层文件的理解进一步收口到 Host，形成面向审阅的只读投影。例如：
+App 与 Web 可以消费同一 Host，但不共享 UI 实现。
 
 ```text
 Canonical Production Data
@@ -143,61 +67,115 @@ Canonical Production Data
   matches
   auto_decisions
   review
-  identity / evidence
+  editorial
+  identities / evidence
+  script_supervisor
         ↓
 MirrorOrder Host
         ↓
-Review Read Model
-        ↓
-Web Review
+versioned read/write APIs
+        ├── Native Production App
+        ├── Team Web Review
+        └── constrained Agent API
 ```
 
-建议的契约方向：
+`review.v1` 是 Host 的版本化只读投影。它可以同时给原生 App 和 Team Web 提供稳定的项目语义，但它不是新的写入权威，也不要求两端共享渲染代码。
+
+原生 App 应优先直接消费结构化 Host API，而不是通过 JavaScript 解释底层文件。
+
+## 3. 数据权威不变
+
+必须继续遵守：
 
 ```text
-review.v1
-  project
-  episodes[]
-    scenes[]
-      script_blocks[]
-      take_groups[]
-        takes[]
-          angles[]
-          transcript
-          people
-          evidence
-          automatic_state
-          editorial_state
-          issues[]
-          playback
+人工 review.json / Final Editorial Decision
+    > 自动 auto_decisions.json
+    > 自动候选 / AI 建议 / Audit evidence
 ```
 
-要求：
+- 自动流程不得写 `review.json`；
+- 不得自动 Reject；
+- 人工 placement / assignment / review 不得被自动结果覆盖；
+- Shadow Audit 不是审核权威；
+- 镜序助理只能读取、分析、调度受限非权威工具和生成 proposal/question；
+- 原始 FCPXML、原始媒体不可由展示层直接修改。
 
-1. Web 不再自行解释底层算法文件的组合语义；
-2. Host 明确区分自动分析、Individual Opinion 与 Editorial Decision；
-3. Review Read Model 是投影，不成为新的写入权威；
-4. 制作端可以看到更完整的 evidence / diagnostics，Web 只拿审阅真正需要的字段；
-5. 版本化契约，避免前端依赖内部文件结构。
+## 4. 多设备边界不变
 
-Phase 2 在 Host API 完成并有契约测试之前，不应删除现有稳定的 `/script`、`/groups`、`/matches` 审阅读取路径。
+共享的是项目事实与人工决定，不是某台电脑的绝对媒体路径。
 
-## 6. UI 约束
+```text
+共享：script / material_index / matches / review / editorial / media_id
+设备本地：media-bindings.json / /Volumes/... / Finder 路径 / native drag path
+```
 
-Production Layer 仍遵守镜序的专业工具视觉语言：
+Native App 可以通过 `clip_id / media_id` 请求 Host-local resolver，拿到当前设备真实文件 URL 后再执行 AppKit 操作。
 
-- 中性 graphite / macOS 后期工具式表面；
+Team Web 只能通过 gateway 的 HTTP media endpoint 播放主机素材，不获得主机 `/Volumes/...` 路径，也不能伪造本机文件拖拽。
+
+## 5. 原生 Production 迁移规则
+
+当前原生化必须按业务语义迁移，而不是把旧网页直接翻译成 SwiftUI。
+
+优先级：
+
+1. 剧本 / Take / 播放 / 异常队列；
+2. 人工归集与审核权威写入；
+3. 本机 `media_id -> file URL` resolver + AppKit drag；
+4. 场记独立大窗口；
+5. 镜序助理 / Audit / 语义找素材；
+6. Coverage / Rough Cut / Assembly；
+7. 原生只读时间线与正式 NLE Delivery Adapter。
+
+旧 `production_mode.js`、`timeline.js`、`timeline_v3.js` 等代码只能作为迁移参考或 Team Web 历史兼容实现，**不得再成为 App Production 的运行依赖**。
+
+当某项原生能力完成后，应删除对应的 App-Web 兼容入口和相关测试，而不是长期保留双实现。
+
+## 6. AppKit / AVKit 原生能力
+
+### 播放
+
+视频播放使用 AVKit / AVFoundation。Host 提供媒体 endpoint 或当前设备 resolver；播放器本身不需要 WebView。
+
+### 外部文件拖拽
+
+目标链路：
+
+```text
+Native Take / 素材卡
+  -> clip_id / media_id
+  -> current-device resolver
+  -> real local file URL
+  -> NSDraggingSession / NSDraggingItem
+  -> NSPasteboard fileURL
+  -> Finder / FCP / Premiere / Resolve
+```
+
+禁止使用 HTML5 `dataTransfer` 冒充外部文件拖拽。
+
+### 时间线
+
+原生时间线只读查看 edit/source structure；不能直接修改用户原始 FCPXML DOM。若未来支持编辑，必须建立独立 edit model。
+
+## 7. UI 约束
+
+Native Production 继续遵守镜序的专业后期工具视觉语言：
+
 - 高信息密度、低视觉噪音；
-- Pane、Divider、List 优先，不堆 Card / Pill / Badge；
-- 蓝色只表示选择/进行中，绿色完成，黄色需要人工注意，红色失败/危险；
-- 模型名、embedding、runtime 等实现术语只进高级设置/诊断；
-- 一个区域只保留一个真正突出的主要动作。
+- Pane / SplitView / Table / Inspector 优先；
+- 项目常驻左栏；
+- 文件名、机位、播放是素材卡主信息；
+- 景别、人物、Audit 是克制的次级信息；
+- 模型名、embedding、runtime 等实现术语只进入高级设置/诊断；
+- 镜序助理是主动生产助理，不是右侧 ChatGPT 控制台。
 
-## 7. 回归红线
+## 8. 回归红线
 
-- 普通浏览器不得因为 Production Layer 增加项目创建、素材绑定、runtime 或生产任务入口；
-- 不得删除 AppKit 原生文件拖拽桥；
-- 不得用 HTML5 `dataTransfer` 冒充外部文件拖拽；
-- 不得让客户端制作分类写回自动或人工权威状态；
-- 不得把 workspace 恢复为日常一级导航；
-- 不得因为 App 功能更细，就把 Web 重新做成制作控制台。
+- App Production UI 不得实例化 `DesktopWebView` / `WKWebView`；
+- App Production 不得依赖 `production_mode.js` / `timeline.js` / JS wrapper 才能渲染；
+- Team Web 不得获得项目创建、本机路径、runtime 或生产任务控制；
+- 不得用 HTML5 `dataTransfer` 伪造外部文件拖拽；
+- 不得把 `/Volumes/...` 或当前设备素材根目录写入共享项目状态；
+- 不得让客户端展示分类写回自动或人工权威状态；
+- 不得自动 Reject；
+- 不得因为 App 原生化，就把 Team Web 重新做成制作控制台。
