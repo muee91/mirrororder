@@ -41,10 +41,12 @@ _EXPLICIT = re.compile(
     re.IGNORECASE,
 )
 
-# Compact notation intentionally requires the first numeric range not to be an
-# episode range itself. Examples: `1-10 第1集`, `T11~20 EP2集`.
+# Compact notation deliberately requires a visible separator between the Take
+# range and the episode. This prevents `1-10集对应镜头1-100` from backtracking
+# into a bogus `T1 -> EP10` placement. Examples accepted: `1-10 第1集`,
+# `T11~20, EP2集`.
 _COMPACT = re.compile(
-    rf"{_TAKE_PREFIX}{_RANGE}(?!\s*集)\s*(?:[,，;；/|]\s*)?{_EPISODE}",
+    rf"{_TAKE_PREFIX}{_RANGE}(?!\s*集)(?:\s+|\s*[,，;；|]\s*){_EPISODE}",
     re.IGNORECASE,
 )
 
