@@ -16,15 +16,19 @@ export function ScriptEpisodeView({
   model,
   selectedSegmentId,
   draggingGroupId,
+  placementGroupId,
   onShowTake,
   onDropPlacement,
+  onClickPlacement,
 }: {
   episode: ReviewEpisode;
   model: ReviewModelPayload;
   selectedSegmentId: string | null;
   draggingGroupId: string | null;
+  placementGroupId: string | null;
   onShowTake: (groupId: string) => void;
   onDropPlacement: (groupId: string, block: ReviewScriptBlock) => void;
+  onClickPlacement: (block: ReviewScriptBlock) => void;
 }) {
   return (
     <div className="script-episode">
@@ -59,6 +63,11 @@ export function ScriptEpisodeView({
                   <div className="script-block-meta">
                     <span>{block.speaker || block.type || "剧本"}</span>
                     <div className="script-block-actions">
+                      {placementGroupId && canPlace ? (
+                        <button type="button" className="place-current" onClick={() => onClickPlacement(block)}>
+                          归集 {placementGroupId}
+                        </button>
+                      ) : null}
                       {linked.length > 0 ? (
                         <button type="button" onClick={() => onShowTake(linked[0])}>素材 {linked.length}</button>
                       ) : null}
