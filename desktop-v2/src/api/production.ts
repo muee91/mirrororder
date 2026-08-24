@@ -229,7 +229,20 @@ export interface RoughCutPlan {
   semantics: Record<string, boolean>;
 }
 
+export interface WaveformPayload {
+  contract: "waveform.v1" | string;
+  clip_id: string;
+  samples: number;
+  requested_samples: number;
+  sample_rate: number;
+  peaks: number[];
+  derived: boolean;
+  editorial_authority: boolean;
+  source_fingerprint: string;
+}
+
 const REQUEST_TIMEOUT_MS = 10_000;
+const WAVEFORM_TIMEOUT_MS = 70_000;
 
 async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
@@ -245,9 +258,9 @@ async function decodeError(response: Response): Promise<string> {
   return `${response.status} ${response.statusText}`.trim();
 }
 
-async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
@@ -389,5 +402,17 @@ export class ProductionClient {
     if (filter?.sceneId?.trim()) query.set("scene_id", filter.sceneId.trim());
     const suffix = query.size ? `?${query.toString()}` : "";
     return requestJson<RoughCutPlan>(this.baseUrl, `${projectPath(projectId)}/rough-cut-plan${suffix}`);
+  }
+
+  waveform(projectId: string, clipId: string, samples = 512): Promise<WaveformPayload> {
+    const value = clipId.trim();
+    if (!value) throw new HostConnectionError("waveform 需要 clip_id");
+    const boundedSamples = Math.max(64, Math.min(4096, Math.round(samples || 512)));
+    return requestJson<WaveformPayload>(
+      this.baseUrl,
+      `${projectPath(projectId)}/waveform/${encodeURIComponent(value)}?samples=${boundedSamples}`,
+      undefined,
+      WAVEFORM_TIMEOUT_MS,
+    );
   }
 }
