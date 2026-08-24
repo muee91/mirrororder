@@ -14,6 +14,7 @@ fn main() {
             timeline::timeline_load,
             timeline::timeline_snapshot,
             timeline::timeline_apply,
+            timeline::timeline_apply_batch,
             timeline::timeline_undo,
             timeline::timeline_redo,
             timeline::timeline_validate,
