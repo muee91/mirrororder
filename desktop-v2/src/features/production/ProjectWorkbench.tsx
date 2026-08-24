@@ -7,6 +7,8 @@ import "../editor/timeline.css";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
 import { MaterialScriptWorkbench } from "../material-script/MaterialScriptWorkbench";
 import "../material-script/material-script.css";
+import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
+import { SettingsStatusWorkbench } from "../settings/SettingsStatusWorkbench";
 import { SlateWorkbench } from "../slate/SlateWorkbench";
 import "./production.css";
 
@@ -15,7 +17,7 @@ interface Props {
   project: ProjectSummary;
 }
 
-type ProductionTab = "material" | "slate" | "identity" | "assistant" | "timeline" | "delivery";
+type ProductionTab = "material" | "slate" | "identity" | "assistant" | "timeline" | "delivery" | "media" | "settings";
 
 const TABS: Array<{ id: ProductionTab; label: string; phase: string }> = [
   { id: "material", label: "素材 / 剧本", phase: "P2" },
@@ -24,6 +26,8 @@ const TABS: Array<{ id: ProductionTab; label: string; phase: string }> = [
   { id: "assistant", label: "小镜", phase: "P3" },
   { id: "timeline", label: "剪辑", phase: "P4–P5" },
   { id: "delivery", label: "交付", phase: "P6" },
+  { id: "media", label: "本机素材", phase: "P7" },
+  { id: "settings", label: "设置 / 状态", phase: "P7" },
 ];
 
 export function ProjectWorkbench({ baseUrl, project }: Props) {
@@ -54,6 +58,8 @@ export function ProjectWorkbench({ baseUrl, project }: Props) {
       {tab === "assistant" ? <AssistantWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
       {tab === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
       {tab === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+      {tab === "media" ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+      {tab === "settings" ? <SettingsStatusWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
     </section>
   );
 }
