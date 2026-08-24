@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
+import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import "../editor/timeline.css";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
@@ -14,7 +15,7 @@ interface Props {
   project: ProjectSummary;
 }
 
-type ProductionTab = "material" | "slate" | "identity" | "assistant" | "timeline";
+type ProductionTab = "material" | "slate" | "identity" | "assistant" | "timeline" | "delivery";
 
 const TABS: Array<{ id: ProductionTab; label: string; phase: string }> = [
   { id: "material", label: "素材 / 剧本", phase: "P2" },
@@ -22,6 +23,7 @@ const TABS: Array<{ id: ProductionTab; label: string; phase: string }> = [
   { id: "identity", label: "人物", phase: "P3" },
   { id: "assistant", label: "小镜", phase: "P3" },
   { id: "timeline", label: "剪辑", phase: "P4–P5" },
+  { id: "delivery", label: "交付", phase: "P6" },
 ];
 
 export function ProjectWorkbench({ baseUrl, project }: Props) {
@@ -51,6 +53,7 @@ export function ProjectWorkbench({ baseUrl, project }: Props) {
       {tab === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
       {tab === "assistant" ? <AssistantWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
       {tab === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+      {tab === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
     </section>
   );
 }
