@@ -1,0 +1,54 @@
+.material-script-workbench { min-width: 0; }
+.phase2-heading { align-items: flex-start; }
+.workbench-revision { display: grid; justify-items: end; gap: 5px; color: #74808d; font-size: 11px; }
+.projection-status { display: flex; align-items: center; gap: 8px; min-height: 36px; color: #7f8a98; font-size: 12px; }
+.projection-status.is-error { color: #ef9b9b; }
+.status-dot-loading, .status-dot-ready, .status-dot-error { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #e8c66a; }
+.status-dot-ready { background: #6ed29a; }
+.status-dot-error { background: #ef7f7f; }
+.compact-placeholder { margin-top: 6px; padding: 20px; }
+.projection-summary { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0 14px; color: #7f8a98; font-size: 11px; }
+.projection-summary span { border: 1px solid #27303a; border-radius: 999px; padding: 5px 8px; background: #11161b; }
+.take-list { display: grid; gap: 10px; }
+.take-card { min-width: 0; border: 1px solid #252d36; border-radius: 12px; padding: 14px; background: #0d1115; }
+.take-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.take-card-heading p { margin: 5px 0 0; color: #7c8895; font-size: 12px; }
+.take-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.tiny-pill, .mapping-source, .duration-label { border-radius: 999px; padding: 3px 7px; color: #9aa5b1; background: #1b2229; font-size: 10px; }
+.source-human { color: #b8dec7; }
+.source-automatic { color: #c9d1e4; }
+.source-none { color: #d8bd83; }
+.take-transcript { margin: 12px 0 0; color: #aab4bf; font-size: 12px; line-height: 1.55; }
+.angle-strip { display: flex; gap: 8px; margin-top: 12px; padding-bottom: 3px; overflow-x: auto; }
+.angle-card { flex: 0 0 220px; min-width: 0; border: 1px solid #252e38; border-radius: 10px; padding: 10px; background: #141a20; }
+.angle-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: #778491; font-size: 10px; }
+.camera-label { color: #eef2f6; font-weight: 800; }
+.angle-card > strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.angle-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; color: #74808d; font-size: 10px; }
+.angle-meta code { max-width: 135px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.issue-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.issue-chip { border-radius: 999px; padding: 4px 7px; color: #c5ced8; background: #242b33; font-size: 10px; }
+.issue-warning { color: #dfc783; background: #292417; }
+.issue-error { color: #eeaaaa; background: #2b1818; }
+.load-more { display: block; margin: 14px auto 0; }
+.script-workbench { min-width: 0; }
+.episode-strip { display: flex; gap: 5px; padding: 10px 0 12px; overflow-x: auto; }
+.episode-strip button { flex: 0 0 auto; border-color: #2d3742; padding: 6px 10px; color: #8793a0; background: #151b21; font-size: 11px; }
+.episode-strip button.is-active { color: #11151a; background: #eef2f6; }
+.script-episode { display: grid; gap: 12px; }
+.script-scene { border: 1px solid #252d36; border-radius: 12px; padding: 14px; background: #0d1115; }
+.script-scene > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.script-scene h3 { margin: 3px 0 0; font-size: 14px; }
+.script-block-list { display: grid; gap: 7px; margin-top: 12px; }
+.script-block { border-left: 2px solid #2d3742; padding: 8px 10px; background: #12171c; }
+.script-block p { margin: 5px 0 0; color: #bdc6cf; font-size: 12px; line-height: 1.55; }
+.script-block-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #7e8a97; font-size: 10px; }
+.script-block-meta code { color: #687583; }
+
+@media (prefers-color-scheme: light) {
+  .projection-summary span, .take-card, .angle-card, .script-scene, .script-block { border-color: #dde3e9; background: #fff; }
+  .angle-card, .script-block { background: #f7f9fb; }
+  .camera-label { color: #17202a; }
+  .episode-strip button { border-color: #d5dde5; color: #5c6875; background: #eef2f6; }
+  .episode-strip button.is-active { color: #fff; background: #17202a; }
+}
