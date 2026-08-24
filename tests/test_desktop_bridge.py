@@ -27,6 +27,7 @@ def test_macos_build_uses_native_production_workspace():
     assert '"$CORE_SOURCE" "$UI_SOURCE" "$NATIVE_WORKBENCH_SOURCE"' in build
     assert 'WindowGroup("镜序")' in ui
     assert "DesktopRootView()" in ui
+    assert "NativeMulticamSlateProjectWorkbench(" in ui
     assert "NativeProjectWorkbench(" in ui
     assert "struct NativeProjectWorkbench: View" in native
     assert "NativeVideoPlayerView(player: player)" in native
@@ -40,8 +41,8 @@ def test_native_production_canvas_never_embeds_team_web():
         assert "WKWebView" not in source
         assert "production_mode.js" not in source
         assert "timeline_v3.js" not in source
-    assert 'Label("团队审阅", systemImage: "person.3")' in native
-    assert "controller.openInBrowser()" in native
+    assert 'Label("团队审阅", systemImage: "person.3")' in ui
+    assert "controller.openInBrowser()" in ui
 
 
 def test_desktop_service_start_script_saves_owned_gateway_pid():
@@ -61,43 +62,45 @@ def test_desktop_service_start_script_saves_owned_gateway_pid():
     assert "Task.detached(priority: .utility)" in core
 
 
-def test_desktop_shell_keeps_projects_persistent_in_left_sidebar_and_slate_as_home():
-    _core, ui, native, _build = desktop_sources()
+def test_desktop_shell_opens_on_project_home_then_native_multicam_slate():
+    _core, ui, _native, _build = desktop_sources()
     assert "private struct ProductionSidebar" in ui
     assert "private struct SidebarProjectRow" in ui
-    assert ".frame(width: 224)" in ui
+    assert "private struct ProjectHomeView" in ui
+    assert "private struct ProjectHomeCard" in ui
+    assert '@Published var showProjectHome = true' in ui
+    assert 'Text("全部项目")' in ui
+    assert 'Text("最近项目")' in ui
+    assert ".frame(width: 216)" in ui
     assert "ProjectWorkspace(" in ui
-    assert "controller: controller" in ui
     assert "StatusCenterSheet" in ui
-    assert "项目常驻左栏" in ui
+    assert "private struct NativeMulticamSlateProjectWorkbench" in ui
+    assert 'Label("场记", systemImage: "tablecells")' in ui
+    assert 'Label("素材 / 剧本", systemImage: "rectangle.split.3x1")' in ui
+    assert 'Label("团队审阅", systemImage: "person.3")' in ui
     assert "ProjectInspector" not in ui
-    assert "ProjectPage" not in ui
     assert "WorkbenchPage" not in ui
-    assert 'case supervisor = "场记"' in native
-    assert '@State private var surface: NativeProjectSurface = .supervisor' in native
-    assert "NativeScriptSupervisorWorkspace(controller: controller, model: model)" in native
-    assert "NativeScriptSupervisorSheet" not in native
-    assert 'Label("人物", systemImage: "person.2")' in native
-    assert 'Label("团队审阅", systemImage: "person.3")' in native
 
 
-def test_native_slate_is_editable_industry_table_not_dashboard_cards():
-    _core, _ui, native, _build = desktop_sources()
-    assert "Table(drafts, selection: $selectedRecordID)" in native
-    for column in ("素材", "集", "场", "镜", "次", "状态", "可用范围", "备注"):
-        assert f'TableColumn("{column}")' in native
-    assert 'Label("从 Take 加入", systemImage: "film.stack")' in native
-    assert 'Label("新行", systemImage: "plus")' in native
-    assert 'Label(store.isSaving ? "保存中" : "保存", systemImage: "square.and.arrow.down")' in native
-    assert 'projectEndpoint(controller, "script-supervisor")' in native
-    assert 'projectEndpoint(controller, "script-supervisor-parse")' in native
-    assert '"expected_revision": board.revision' in native
-    assert '"actor": operatorName' in native
-    assert "UTType.fileURL.identifier" in native
-    assert "quickMediaID(for:" in native
-    assert 'projectEndpoint(controller, "media-inventory")' in native
-    assert "I 设入点" in native and "O 设出点" in native
-    assert "不是 Editorial Best" in native
+def test_native_slate_is_editable_multicam_table_not_dashboard_cards():
+    _core, ui, _native, _build = desktop_sources()
+    assert "Table(drafts, selection: $selectedRecordID)" in ui
+    for column in ("序号", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态", "可用范围", "备注"):
+        assert f'TableColumn("{column}")' in ui
+    assert 'Label("从 Take 加入", systemImage: "film.stack")' in ui
+    assert 'Label("新建场记", systemImage: "plus")' in ui
+    assert 'Label(store.isSaving ? "保存中" : "保存", systemImage: "square.and.arrow.down")' in ui
+    assert 'projectEndpoint(controller, "script-supervisor")' in ui
+    assert 'projectEndpoint(controller, "script-supervisor-parse")' in ui
+    assert '"expected_revision": board.revision' in ui
+    assert '"actor": actor' in ui
+    assert "UTType.fileURL.identifier" in ui
+    assert "quickMediaID(for:" in ui
+    assert 'projectEndpoint(controller, "media-inventory")' in ui
+    assert "I 设入点" in ui and "O 设出点" in ui
+    assert "不是 Editorial Best" in ui
+    assert "private struct MCMediaCard" in ui
+    assert "AVAssetImageGenerator" in ui
 
 
 def test_desktop_system_features_live_in_settings_and_status_center():
@@ -131,9 +134,10 @@ def test_desktop_project_activity_uses_only_current_tasks():
 
 
 def test_native_workspace_reads_versioned_host_projection():
-    core, _ui, native, _build = desktop_sources()
+    core, ui, native, _build = desktop_sources()
     assert 'appendingPathComponent("review-model")' in core
-    assert 'next.contract_version == "review.v1"' in native
+    assert 'nextModel.contract_version == "review.v1"' in ui
+    assert "JSONDecoder().decode(NativeReviewReadModel.self" in ui
     assert "JSONDecoder().decode(NativeReviewReadModel.self" in native
     assert "URLSession.shared.data(for: request)" in native
 
@@ -173,21 +177,20 @@ def test_desktop_controls_have_stable_hit_targets():
 
 def test_team_web_remains_separate_review_client():
     html = read("web/index.html")
-    native = read("macos-app/NativeProjectWorkbench.swift")
+    ui = read("macos-app/MirrorOrderDesktopUI.swift")
     core = read("macos-app/MirrorOrderDesktopCore.swift")
     assert 'id="workspace-select"' in html
     assert 'id="project-select"' in html
     assert 'id="production-bar"' not in html
     assert 'id="production-panel"' not in html
-    assert 'Label("团队审阅", systemImage: "person.3")' in native
-    assert "controller.openInBrowser()" in native
+    assert 'Label("团队审阅", systemImage: "person.3")' in ui
+    assert "controller.openInBrowser()" in ui
     assert "NSWorkspace.shared.open(workbenchURL(for: projectID))" in core
 
 
 def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     core = read("macos-app/MirrorOrderDesktopCore.swift")
     ui = read("macos-app/MirrorOrderDesktopUI.swift")
-    native = read("macos-app/NativeProjectWorkbench.swift")
     cli = read("src/script_organizer/cli.py")
     identity = read("src/script_organizer/media_identity.py")
     runtime = read("src/script_organizer/device_media_runtime.py")
@@ -200,9 +203,9 @@ def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     assert 'item["source_media_path"]' in runtime
     assert 'item["resolved_media_path"]' in runtime
     assert 'item["media_path"] = resolved or source_path' in runtime
-    assert 'projectEndpoint(controller, "media-inventory")' in native
-    assert '"source_media_path"' not in native
-    assert '"resolved_media_path"' not in native
+    assert 'projectEndpoint(controller, "media-inventory")' in ui
+    assert '"source_media_path"' not in ui
+    assert '"resolved_media_path"' not in ui
 
 
 def test_build_packages_complete_runtime_and_team_web_tree():
