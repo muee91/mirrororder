@@ -103,6 +103,109 @@ describe("HostConnection", () => {
     expect(String(browserFetch.mock.calls[0]?.[0])).toEndWith("/api/v1/projects/p%2F1/review-model");
   });
 
+  it("writes episode-only placement through the atomic review action", async () => {
+    const saved = {
+      version: 2,
+      revision: 4,
+      updated_at: "2026-08-25T00:00:00+00:00",
+      assignments: {},
+      groups: {},
+      clips: {},
+      placements: { g1: { episode_ids: [3], script_segment_ids: [] } },
+    };
+    const browserFetch = vi.fn(async () => jsonResponse(saved));
+    vi.stubGlobal("fetch", browserFetch);
+
+    await expect(
+      new HostConnection().setGroupPlacement("p1", {
+        groupId: "g1",
+        actor: "Editor A",
+        episodeIds: [3, 3],
+        interaction: "drag",
+        sourceSurface: "desktop-v2-material",
+      }),
+    ).resolves.toEqual(saved);
+
+    const [url, init] = browserFetch.mock.calls[0] ?? [];
+    expect(String(url)).toEndWith("/api/v1/projects/p1/review");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      action: "set_group_placement",
+      group_id: "g1",
+      episode_ids: [3],
+      script_segment_ids: [],
+      actor: "Editor A",
+      interaction: "drag",
+      source_surface: "desktop-v2-material",
+    });
+  });
+
+  it("writes precise script placement without changing editorial state", async () => {
+    const saved = {
+      version: 2,
+      revision: 5,
+      updated_at: "2026-08-25T00:00:00+00:00",
+      assignments: {},
+      groups: {},
+      clips: {},
+      placements: {},
+    };
+    const browserFetch = vi.fn(async () => jsonResponse(saved));
+    vi.stubGlobal("fetch", browserFetch);
+
+    await new HostConnection().setGroupPlacement("p1", {
+      groupId: "g1",
+      actor: "Editor A",
+      episodeIds: [3],
+      scriptSegmentIds: ["S_12", "S_12"],
+      sourceSurface: "desktop-v2-script",
+    });
+
+    const payload = JSON.parse(String(browserFetch.mock.calls[0]?.[1]?.body));
+    expect(payload).toMatchObject({
+      action: "set_group_placement",
+      group_id: "g1",
+      episode_ids: [3],
+      script_segment_ids: ["S_12"],
+    });
+    expect(payload.state).toBeUndefined();
+  });
+
+  it("rejects placement writes without an actor or target", async () => {
+    const connection = new HostConnection();
+    await expect(connection.setGroupPlacement("p1", { groupId: "g1", actor: "", episodeIds: [1] })).rejects.toThrow(
+      "写入人工归集前需要审核昵称",
+    );
+    await expect(connection.setGroupPlacement("p1", { groupId: "g1", actor: "Editor" })).rejects.toThrow(
+      "人工归集至少需要 episode_id 或 script_segment_id",
+    );
+  });
+
+  it("clears only the manual placement through the matching review action", async () => {
+    const saved = {
+      version: 2,
+      revision: 6,
+      updated_at: "2026-08-25T00:00:00+00:00",
+      assignments: {},
+      groups: {},
+      clips: {},
+      placements: {},
+    };
+    const browserFetch = vi.fn(async () => jsonResponse(saved));
+    vi.stubGlobal("fetch", browserFetch);
+
+    await new HostConnection().clearGroupPlacement("p1", {
+      groupId: "g1",
+      actor: "Editor A",
+    });
+    const payload = JSON.parse(String(browserFetch.mock.calls[0]?.[1]?.body));
+    expect(payload).toMatchObject({
+      action: "clear_group_placement",
+      group_id: "g1",
+      actor: "Editor A",
+    });
+  });
+
   it("rejects an empty project id for review-model", async () => {
     await expect(new HostConnection().reviewModel("   ")).rejects.toThrow("读取 review-model 需要 project_id");
   });
