@@ -76,6 +76,8 @@ export interface ReviewAngle {
   source_start: number;
   source_end: number | null;
   playback: ReviewPlayback;
+  shot_type?: string;
+  coverage_role?: string;
 }
 
 export interface ReviewEffectiveMapping {
@@ -84,6 +86,61 @@ export interface ReviewEffectiveMapping {
   script_segment_ids: string[];
   episode_ids: number[];
   inherited?: boolean;
+}
+
+export interface ReviewCandidate {
+  candidate_id: string;
+  group_id: string;
+  script_segment_id: string;
+  script_segment_ids: string[];
+  episode_ids: number[];
+  confidence: string;
+  total_score: number;
+  dialogue_score: number;
+  sequence_score: number;
+  context_score: number;
+  margin: number;
+  method: string;
+  transcript_text: string;
+  evidence: string[];
+  context_episodes: number[];
+  relative_start?: number;
+  relative_end?: number;
+}
+
+export interface ReviewAutomaticState {
+  available?: boolean;
+  status?: string;
+  mapping_status?: string;
+  mapping_source?: string;
+  candidate_id?: string;
+  script_segment_ids?: string[];
+  episode_ids?: number[];
+  confidence?: number;
+  reason?: string;
+  evidence?: Record<string, unknown>;
+}
+
+export interface ReviewLegacyManualState {
+  effective_state?: string;
+  group?: Record<string, unknown>;
+  group_inherited?: boolean;
+  placement?: {
+    episode_ids?: number[];
+    script_segment_ids?: string[];
+    method?: string;
+    updated_at?: string;
+    actor?: string;
+  };
+  placement_inherited?: boolean;
+  assignments?: unknown[];
+  clips?: unknown[];
+}
+
+export interface ReviewEditorialState {
+  legacy_manual?: ReviewLegacyManualState;
+  individual_opinion?: unknown;
+  editorial_decision?: unknown;
 }
 
 export interface ReviewTakeGroup {
@@ -99,10 +156,10 @@ export interface ReviewTakeGroup {
   angles: ReviewAngle[];
   transcript: { text: string; source: string };
   people: { faces: unknown[]; speakers: unknown[] };
-  candidates: unknown[];
+  candidates: ReviewCandidate[];
   context: { episode_ids: number[]; script_segment_ids: string[] };
-  automatic_state: Record<string, unknown>;
-  editorial_state: Record<string, unknown>;
+  automatic_state: ReviewAutomaticState;
+  editorial_state: ReviewEditorialState;
   effective_mapping: ReviewEffectiveMapping;
   issues: ReviewIssue[];
 }
@@ -131,6 +188,17 @@ export interface ReviewEpisode {
   scenes: ReviewScene[];
 }
 
+export interface LegacyReviewPayload {
+  version: number;
+  revision: number;
+  updated_at: string;
+  assignments: Record<string, unknown>;
+  groups: Record<string, unknown>;
+  clips: Record<string, unknown>;
+  placements: Record<string, unknown>;
+  history?: unknown[];
+}
+
 export interface ReviewModelPayload {
   contract_version: string;
   project: {
@@ -157,7 +225,22 @@ export interface ReviewModelPayload {
   episodes: ReviewEpisode[];
   take_groups: ReviewTakeGroup[];
   script_gaps: unknown[];
-  review_state: Record<string, unknown>;
+  review_state: {
+    legacy_review?: LegacyReviewPayload;
+    individual_opinions?: unknown[];
+    editorial_decisions?: Record<string, unknown>;
+  };
+}
+
+export interface ReviewPlacementWrite {
+  groupId: string;
+  actor: string;
+  episodeIds?: number[];
+  scriptSegmentIds?: string[];
+  interaction?: "drag" | "click" | "keyboard" | string;
+  sourceSurface?: string;
+  sourceKind?: string;
+  sourceClipId?: string;
 }
 
 interface ErrorPayload {
@@ -207,13 +290,19 @@ async function decodeError(response: Response): Promise<string> {
   return `${response.status} ${response.statusText}`.trim();
 }
 
-async function requestJson<T>(baseUrl: string, path: string): Promise<T> {
+async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const headers = new Headers(init?.headers);
+  headers.set("Accept", "application/json");
+  if (init?.body !== undefined && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   try {
     const response = await transportFetch(`${baseUrl}${path}`, {
-      method: "GET",
-      headers: { Accept: "application/json" },
+      ...init,
+      method: init?.method ?? "GET",
+      headers,
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -227,6 +316,24 @@ async function requestJson<T>(baseUrl: string, path: string): Promise<T> {
   } finally {
     globalThis.clearTimeout(timeout);
   }
+}
+
+function normalizedProjectId(projectId: string, action: string): string {
+  const value = projectId.trim();
+  if (!value) throw new HostConnectionError(`${action}需要 project_id`);
+  return value;
+}
+
+function normalizedActor(actor: string): string {
+  const value = actor.trim();
+  if (!value) throw new HostConnectionError("写入人工归集前需要审核昵称");
+  return value.slice(0, 80);
+}
+
+function normalizedGroupId(groupId: string): string {
+  const value = groupId.trim();
+  if (!value) throw new HostConnectionError("写入人工归集需要 group_id");
+  return value;
 }
 
 async function delay(ms: number): Promise<void> {
@@ -262,23 +369,72 @@ export class HostConnection {
   }
 
   async reviewModel(projectId: string): Promise<ReviewModelPayload> {
-    const normalizedProjectId = projectId.trim();
-    if (!normalizedProjectId) {
-      throw new HostConnectionError("读取 review-model 需要 project_id");
-    }
+    const project = normalizedProjectId(projectId, "读取 review-model ");
     const payload = await requestJson<ReviewModelPayload>(
       this.baseUrl,
-      `/api/v1/projects/${encodeURIComponent(normalizedProjectId)}/review-model`,
+      `/api/v1/projects/${encodeURIComponent(project)}/review-model`,
     );
     if (payload.contract_version !== "review.v1") {
       throw new HostConnectionError(`不支持的 review-model contract：${payload.contract_version || "missing"}`);
     }
-    if (payload.project?.project_id && payload.project.project_id !== normalizedProjectId) {
+    if (payload.project?.project_id && payload.project.project_id !== project) {
       throw new HostConnectionError(
-        `review-model project_id 不匹配：请求 ${normalizedProjectId}，返回 ${payload.project.project_id}`,
+        `review-model project_id 不匹配：请求 ${project}，返回 ${payload.project.project_id}`,
       );
     }
     return payload;
+  }
+
+  async setGroupPlacement(projectId: string, write: ReviewPlacementWrite): Promise<LegacyReviewPayload> {
+    const project = normalizedProjectId(projectId, "写入人工归集");
+    const groupId = normalizedGroupId(write.groupId);
+    const actor = normalizedActor(write.actor);
+    const episodeIds = [...new Set(write.episodeIds ?? [])]
+      .filter((value) => Number.isInteger(value) && value > 0 && value < 10000)
+      .sort((left, right) => left - right);
+    const scriptSegmentIds = [...new Set((write.scriptSegmentIds ?? []).map((value) => value.trim()).filter(Boolean))];
+    if (episodeIds.length === 0 && scriptSegmentIds.length === 0) {
+      throw new HostConnectionError("人工归集至少需要 episode_id 或 script_segment_id");
+    }
+    return requestJson<LegacyReviewPayload>(
+      this.baseUrl,
+      `/api/v1/projects/${encodeURIComponent(project)}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: "set_group_placement",
+          group_id: groupId,
+          episode_ids: episodeIds,
+          script_segment_ids: scriptSegmentIds,
+          actor,
+          interaction: write.interaction ?? "click",
+          source_surface: write.sourceSurface ?? "desktop-v2",
+          source_kind: write.sourceKind ?? "take",
+          source_clip_id: write.sourceClipId?.trim() || undefined,
+        }),
+      },
+    );
+  }
+
+  async clearGroupPlacement(projectId: string, write: Pick<ReviewPlacementWrite, "groupId" | "actor" | "interaction" | "sourceSurface">): Promise<LegacyReviewPayload> {
+    const project = normalizedProjectId(projectId, "清除人工归集");
+    const groupId = normalizedGroupId(write.groupId);
+    const actor = normalizedActor(write.actor);
+    return requestJson<LegacyReviewPayload>(
+      this.baseUrl,
+      `/api/v1/projects/${encodeURIComponent(project)}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: "clear_group_placement",
+          group_id: groupId,
+          actor,
+          interaction: write.interaction ?? "click",
+          source_surface: write.sourceSurface ?? "desktop-v2",
+          source_kind: "take",
+        }),
+      },
+    );
   }
 
   async connect(): Promise<HostSnapshot> {
