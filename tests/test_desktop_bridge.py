@@ -95,7 +95,7 @@ def test_native_slate_is_editable_multicam_table_not_dashboard_cards():
     assert '"expected_revision": board.revision' in ui
     assert '"actor": actor' in ui
     assert "UTType.fileURL.identifier" in ui
-    assert "quickMediaID(for:" in ui
+    assert "mcQuickMediaID(" in ui
     assert 'projectEndpoint(controller, "media-inventory")' in ui
     assert "I 设入点" in ui and "O 设出点" in ui
     assert "不是 Editorial Best" in ui
