@@ -17,6 +17,7 @@ from .fcpxml_exporter import export
 from .local_vision_runtime import LocalVisionRuntime
 from .media_identity import DeviceMediaStore
 from .review_read_model import install_review_read_model_runtime
+from .review_shot_runtime import install_review_shot_intelligence_runtime
 from .semantic_search import SemanticSearcher
 from .tasks import TaskManager
 from .web_server import serve, serve_gateway
@@ -151,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         install_device_media_runtime()
         install_automation_runtime()
         install_review_read_model_runtime()
+        install_review_shot_intelligence_runtime()
         install_editorial_runtime()
         previous_sigterm = signal.getsignal(signal.SIGTERM)
 
@@ -177,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
         install_device_media_runtime()
         install_automation_runtime()
         install_review_read_model_runtime()
+        install_review_shot_intelligence_runtime()
         install_editorial_runtime()
         previous_sigterm = signal.getsignal(signal.SIGTERM)
 
