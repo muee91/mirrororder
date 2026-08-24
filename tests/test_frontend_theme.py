@@ -54,21 +54,41 @@ def test_review_room_loads_responsive_professional_surface() -> None:
     assert "box-shadow:inset 3px 0 0 var(--blue)" in css
 
 
-def test_desktop_surface_uses_project_first_hierarchy() -> None:
+def test_review_media_cards_share_fixed_low_noise_visual_contract() -> None:
+    css = (ROOT / "web" / "review.css").read_text(encoding="utf-8")
+
+    assert "flex:0 0 164px" in css
+    assert "width:164px" in css
+    assert "height:64px" in css
+    assert ".member-card.active::after" in css
+    assert 'content:"✓"' in css
+    assert ".member-card:disabled::before" in css
+    assert 'content:"缺失"' in css
+    assert "text-overflow:ellipsis" in css
+    assert ".camera-run.repeated{min-width:0;width:max-content" in css
+
+
+def test_desktop_surface_uses_project_home_and_multicam_slate() -> None:
     ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
-    native = (ROOT / "macos-app" / "NativeProjectWorkbench.swift").read_text(encoding="utf-8")
     build = (ROOT / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
 
     assert "private struct ProductionSidebar" in ui
     assert "private struct SidebarProjectRow" in ui
+    assert "private struct ProjectHomeView" in ui
+    assert "private struct ProjectHomeCard" in ui
     assert "private struct ProjectWorkspace" in ui
-    assert ".frame(width: 224)" in ui
-    assert 'Text("项目")' in ui
-    assert 'Text("工作台")' not in ui
-    assert "ProjectInspector" not in ui
-    assert "WorkbenchPage" not in ui
-    assert 'Button("场记") { showSupervisor = true }' in native
-    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
+    assert '@Published var showProjectHome = true' in ui
+    assert 'Text("全部项目")' in ui
+    assert 'Text("最近项目")' in ui
+    assert ".frame(width: 216)" in ui
+    assert "private struct NativeMulticamSlateProjectWorkbench" in ui
+    assert 'TableColumn("A 机")' in ui
+    assert 'TableColumn("B 机")' in ui
+    assert 'TableColumn("C 机")' in ui
+    assert 'TableColumn("辅助 / 特殊")' in ui
+    assert "private struct MCMediaCard" in ui
+    assert "AVAssetImageGenerator" in ui
+    assert "checkmark.circle.fill" in ui
     assert 'CORE_SOURCE="$ROOT/macos-app/MirrorOrderDesktopCore.swift"' in build
     assert 'UI_SOURCE="$ROOT/macos-app/MirrorOrderDesktopUI.swift"' in build
 
