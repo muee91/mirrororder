@@ -95,7 +95,10 @@ def build_music_plan(
             "library_tracks": library["summary"]["tracks"],
             "eligible_tracks": library["summary"]["eligible"],
         },
-        "library_root": str(Path(library_root).expanduser().resolve()),
+        "library": {
+            "name": library.get("library_name", "music-library"),
+            "contract": library.get("contract", ""),
+        },
         "cues": cues,
     }
     _write_json(output_dir / "library_index.json", library)
