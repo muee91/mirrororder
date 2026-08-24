@@ -52,6 +52,114 @@ export interface HostProcessStatus {
   workspace_path: string | null;
 }
 
+export interface ReviewIssue {
+  code: string;
+  severity: string;
+  label: string;
+}
+
+export interface ReviewPlayback {
+  url: string;
+  source_start: number;
+  source_end: number | null;
+  available?: boolean;
+}
+
+export interface ReviewAngle {
+  clip_id: string;
+  media_id: string;
+  camera: string;
+  name: string;
+  timeline_start: number;
+  timeline_end: number;
+  duration: number;
+  source_start: number;
+  source_end: number | null;
+  playback: ReviewPlayback;
+}
+
+export interface ReviewEffectiveMapping {
+  source: "human" | "automatic" | "none" | string;
+  mapping_status: string;
+  script_segment_ids: string[];
+  episode_ids: number[];
+  inherited?: boolean;
+}
+
+export interface ReviewTakeGroup {
+  group_id: string;
+  parent_group_id: string;
+  kind: string;
+  take_index: number;
+  split_reason: string;
+  start: number;
+  end: number;
+  duration: number;
+  cameras: string[];
+  angles: ReviewAngle[];
+  transcript: { text: string; source: string };
+  people: { faces: unknown[]; speakers: unknown[] };
+  candidates: unknown[];
+  context: { episode_ids: number[]; script_segment_ids: string[] };
+  automatic_state: Record<string, unknown>;
+  editorial_state: Record<string, unknown>;
+  effective_mapping: ReviewEffectiveMapping;
+  issues: ReviewIssue[];
+}
+
+export interface ReviewScriptBlock {
+  segment_id: string;
+  episode: number;
+  scene_id: string;
+  order: number;
+  type: string;
+  speaker: string;
+  text: string;
+  raw_text: string;
+  issues: ReviewIssue[];
+}
+
+export interface ReviewScene {
+  scene_id: string;
+  heading: string;
+  script_blocks: ReviewScriptBlock[];
+  take_group_ids: string[];
+}
+
+export interface ReviewEpisode {
+  episode: number;
+  scenes: ReviewScene[];
+}
+
+export interface ReviewModelPayload {
+  contract_version: string;
+  project: {
+    project_id: string;
+    name: string;
+    input_kind: string;
+    stats: Record<string, unknown>;
+    local_media: Record<string, number>;
+    issues: ReviewIssue[];
+  };
+  revisions: {
+    analysis: string;
+    automation_analysis: string;
+    automation_updated_at: string;
+    review: number;
+  };
+  capabilities: Record<string, boolean>;
+  summary: {
+    automation: Record<string, unknown>;
+    script_gaps: number;
+    take_groups: number;
+    episodes: number;
+  };
+  episodes: ReviewEpisode[];
+  take_groups: ReviewTakeGroup[];
+  script_gaps: unknown[];
+  review_state: Record<string, unknown>;
+}
+
 interface ErrorPayload {
   error?: string;
 }
@@ -142,6 +250,17 @@ export class HostConnection {
 
   async projects(): Promise<ProjectSummary[]> {
     return (await this.workspace()).projects;
+  }
+
+  reviewModel(projectId: string): Promise<ReviewModelPayload> {
+    const normalizedProjectId = projectId.trim();
+    if (!normalizedProjectId) {
+      return Promise.reject(new HostConnectionError("读取 review-model 需要 project_id"));
+    }
+    return requestJson<ReviewModelPayload>(
+      this.baseUrl,
+      `/api/v1/projects/${encodeURIComponent(normalizedProjectId)}/review-model`,
+    );
   }
 
   async connect(): Promise<HostSnapshot> {
