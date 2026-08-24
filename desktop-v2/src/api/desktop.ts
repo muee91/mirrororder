@@ -44,6 +44,17 @@ export interface DesktopStatusPayload {
   };
 }
 
+export interface FrontendSettings {
+  version: number;
+  theme: "system" | "light" | "dark";
+  density: "comfortable" | "compact";
+  default_mode: "script" | "unassigned";
+  default_episode: "first" | "all" | number;
+  poll_interval_ms: 1000 | 2500 | 5000 | 10000;
+  update_sound: boolean;
+  show_unknown_count: boolean;
+}
+
 export interface MediaBindingItem {
   media_id: string;
   verified: boolean;
@@ -173,6 +184,17 @@ export class DesktopClient {
 
   status(): Promise<DesktopStatusPayload> {
     return requestJson<DesktopStatusPayload>(this.baseUrl, "/api/v1/desktop-status");
+  }
+
+  frontendSettings(): Promise<FrontendSettings> {
+    return requestJson<FrontendSettings>(this.baseUrl, "/api/v1/settings");
+  }
+
+  saveFrontendSettings(settings: FrontendSettings): Promise<FrontendSettings> {
+    return requestJson<FrontendSettings>(this.baseUrl, "/api/v1/settings", {
+      method: "POST",
+      body: JSON.stringify(settings),
+    });
   }
 
   mediaBinding(projectId: string): Promise<MediaBindingPayload> {
