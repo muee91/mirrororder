@@ -7,9 +7,16 @@ use std::{
 };
 use tauri::State;
 
+struct ManagedHost {
+    child: Child,
+    workspace_path: PathBuf,
+    base_url: String,
+    port: u16,
+}
+
 #[derive(Default)]
 pub struct HostManager {
-    child: Mutex<Option<Child>>,
+    child: Mutex<Option<ManagedHost>>,
 }
 
 #[derive(Serialize)]
@@ -23,6 +30,8 @@ pub struct HostLaunchResult {
 pub struct HostProcessStatus {
     running: bool,
     pid: Option<u32>,
+    base_url: Option<String>,
+    workspace_path: Option<String>,
 }
 
 fn core_root() -> PathBuf {
@@ -49,9 +58,18 @@ fn python_path_with_core(core: &Path) -> Result<std::ffi::OsString, String> {
     env::join_paths(paths).map_err(|error| format!("无法构造 PYTHONPATH：{error}"))
 }
 
-fn reap_if_finished(slot: &mut Option<Child>) -> Result<(), String> {
+fn normalize_workspace_path(value: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(value);
+    if !path.exists() {
+        return Err(format!("Workspace 不存在：{}", path.display()));
+    }
+    Ok(path.canonicalize().unwrap_or(path))
+}
+
+fn reap_if_finished(slot: &mut Option<ManagedHost>) -> Result<(), String> {
     let finished = match slot.as_mut() {
-        Some(child) => child
+        Some(host) => host
+            .child
             .try_wait()
             .map_err(|error| format!("检查 Host 进程失败：{error}"))?
             .is_some(),
@@ -61,6 +79,33 @@ fn reap_if_finished(slot: &mut Option<Child>) -> Result<(), String> {
         *slot = None;
     }
     Ok(())
+}
+
+fn stop_managed_host(mut host: ManagedHost) -> Result<(), String> {
+    if host
+        .child
+        .try_wait()
+        .map_err(|error| format!("检查 Host 进程失败：{error}"))?
+        .is_none()
+    {
+        host.child
+            .kill()
+            .map_err(|error| format!("停止 Host 进程失败：{error}"))?;
+        host.child
+            .wait()
+            .map_err(|error| format!("等待 Host 进程退出失败：{error}"))?;
+    }
+    Ok(())
+}
+
+impl Drop for HostManager {
+    fn drop(&mut self) {
+        if let Ok(slot) = self.child.get_mut() {
+            if let Some(host) = slot.take() {
+                let _ = stop_managed_host(host);
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -73,10 +118,8 @@ pub fn start_python_host(
     if workspace_path.is_empty() {
         return Err("workspace_path 不能为空".into());
     }
-    if !Path::new(workspace_path).exists() {
-        return Err(format!("Workspace 不存在：{workspace_path}"));
-    }
 
+    let workspace_path = normalize_workspace_path(workspace_path)?;
     let port = port.unwrap_or(8765);
     let base_url = format!("http://127.0.0.1:{port}");
     let mut slot = manager
@@ -85,10 +128,17 @@ pub fn start_python_host(
         .map_err(|_| "Host 进程状态锁已损坏".to_string())?;
     reap_if_finished(&mut slot)?;
 
-    if let Some(child) = slot.as_ref() {
+    if let Some(host) = slot.as_ref() {
+        if host.workspace_path != workspace_path || host.port != port {
+            return Err(format!(
+                "已有 Python Host 正在运行：{} · {}。请先停止它，或直接连接现有 Host。",
+                host.base_url,
+                host.workspace_path.display()
+            ));
+        }
         return Ok(HostLaunchResult {
-            pid: child.id(),
-            base_url,
+            pid: host.child.id(),
+            base_url: host.base_url.clone(),
             already_running: true,
         });
     }
@@ -109,7 +159,7 @@ pub fn start_python_host(
         .arg("-m")
         .arg("script_organizer.cli")
         .arg("serve")
-        .arg(workspace_path)
+        .arg(&workspace_path)
         .arg("--local-only")
         .arg("--port")
         .arg(port.to_string())
@@ -121,7 +171,12 @@ pub fn start_python_host(
         .spawn()
         .map_err(|error| format!("无法启动 Python Host：{error}"))?;
     let pid = child.id();
-    *slot = Some(child);
+    *slot = Some(ManagedHost {
+        child,
+        workspace_path,
+        base_url: base_url.clone(),
+        port,
+    });
 
     Ok(HostLaunchResult {
         pid,
@@ -137,9 +192,12 @@ pub fn host_process_status(manager: State<'_, HostManager>) -> Result<HostProces
         .lock()
         .map_err(|_| "Host 进程状态锁已损坏".to_string())?;
     reap_if_finished(&mut slot)?;
+    let host = slot.as_ref();
     Ok(HostProcessStatus {
-        running: slot.is_some(),
-        pid: slot.as_ref().map(Child::id),
+        running: host.is_some(),
+        pid: host.map(|item| item.child.id()),
+        base_url: host.map(|item| item.base_url.clone()),
+        workspace_path: host.map(|item| item.workspace_path.display().to_string()),
     })
 }
 
@@ -149,19 +207,8 @@ pub fn stop_python_host(manager: State<'_, HostManager>) -> Result<(), String> {
         .child
         .lock()
         .map_err(|_| "Host 进程状态锁已损坏".to_string())?;
-    if let Some(mut child) = slot.take() {
-        if child
-            .try_wait()
-            .map_err(|error| format!("检查 Host 进程失败：{error}"))?
-            .is_none()
-        {
-            child
-                .kill()
-                .map_err(|error| format!("停止 Host 进程失败：{error}"))?;
-            child
-                .wait()
-                .map_err(|error| format!("等待 Host 进程退出失败：{error}"))?;
-        }
+    if let Some(host) = slot.take() {
+        stop_managed_host(host)?;
     }
     Ok(())
 }
