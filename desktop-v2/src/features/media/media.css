@@ -1,0 +1,28 @@
+.media-binding-grid { grid-template-columns: minmax(300px, .7fr) minmax(420px, 1.3fr); }
+.media-binding-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.media-binding-counts strong { display: grid; gap: 2px; border: 1px solid #29323b; border-radius: 9px; padding: 9px; color: #d8e0e8; background: #12181e; font-size: 18px; }
+.media-binding-counts small { color: #778491; font-size: 9px; font-weight: 500; }
+.media-roots-input { width: 100%; border: 1px solid #303944; border-radius: 9px; padding: 8px 10px; color: #e7ecf1; background: #11171c; resize: vertical; }
+.media-binding-actions { flex-wrap: wrap; justify-content: flex-start; }
+.media-state-path { margin-top: 8px; }
+.media-binding-list-panel { min-width: 0; }
+.media-binding-list { display: grid; gap: 7px; max-height: 72vh; margin-top: 10px; overflow-y: auto; }
+.media-binding-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; border: 1px solid #28323b; border-radius: 9px; padding: 10px; background: #12181e; }
+.media-binding-row.is-missing { border-color: #5e4040; }
+.media-binding-row.is-resolved { border-color: #315345; }
+.media-binding-row div { display: grid; gap: 3px; min-width: 0; }
+.media-binding-row strong { overflow: hidden; color: #cbd4dd; text-overflow: ellipsis; white-space: nowrap; }
+.media-binding-row span, .media-binding-row em { color: #7c8996; font-size: 9px; font-style: normal; }
+.media-binding-row code { grid-column: 1 / -1; overflow: hidden; color: #71808d; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.media-binding-row button { justify-self: start; }
+
+@media (max-width: 1180px) {
+  .media-binding-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-color-scheme: light) {
+  .media-binding-counts strong, .media-binding-row { border-color: #dce3e9; color: #27313a; background: #fff; }
+  .media-binding-row.is-missing { border-color: #ddb8b8; }
+  .media-binding-row.is-resolved { border-color: #b8d5c6; }
+  .media-roots-input { border-color: #d5dde5; color: #27313a; background: #f8fafb; }
+}
