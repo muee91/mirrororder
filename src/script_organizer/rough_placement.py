@@ -145,6 +145,7 @@ def resolve_rough_plans(
     assignments: list[dict[str, Any]] = []
     missing: list[int] = []
     seen_group_ids: set[str] = set()
+    ordered_group_ids: list[str] = []
     for plan in plans:
         group_ids: list[str] = []
         plan_missing: list[int] = []
@@ -157,6 +158,7 @@ def resolve_rough_plans(
             for group_id in resolved:
                 if group_id not in seen_group_ids:
                     seen_group_ids.add(group_id)
+                    ordered_group_ids.append(group_id)
                     group_ids.append(group_id)
         assignments.append(
             {
@@ -169,9 +171,9 @@ def resolve_rough_plans(
 
     return {
         "plans": assignments,
-        "resolved_groups": len(seen_group_ids),
+        "resolved_groups": len(ordered_group_ids),
         "missing_take_indices": sorted(set(missing)),
-        "group_ids": list(seen_group_ids),
+        "group_ids": ordered_group_ids,
     }
 
 
