@@ -15,6 +15,11 @@ button { cursor: pointer; }
 .topbar, .section-heading, .workbench-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .topbar h1, .section-heading h2, .workbench-heading h2 { margin: 2px 0 0; }
 .topbar h1 { font-size: 28px; }
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.app-workspace-switch { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid #282f37; border-radius: 10px; background: #11161b; }
+.app-workspace-switch button { border: 0; border-radius: 7px; padding: 7px 10px; color: #7d8995; background: transparent; font-size: 11px; }
+.app-workspace-switch button.is-active { color: #e9eef3; background: #242b33; }
+.standalone-workspace-shell { margin-top: 24px; min-width: 0; }
 .eyebrow { margin: 0; color: #7f8a98; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 
 .status-badge { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #2b3139; border-radius: 999px; padding: 7px 11px; color: #aeb7c2; font-size: 12px; text-transform: uppercase; }
@@ -55,9 +60,19 @@ button:disabled { cursor: default; opacity: .5; }
 .offline-state { margin-top: 18px; }
 .fatal-error { max-width: 720px; margin: 12vh auto; border: 1px solid #3b2b2b; border-radius: 14px; padding: 28px; background: #171111; }
 
+@media (max-width: 1120px) {
+  .topbar { align-items: flex-start; }
+  .topbar-actions { align-items: flex-end; flex-direction: column-reverse; }
+  .connection-panel { grid-template-columns: minmax(0, 1fr); }
+  .connection-actions { align-items: center; }
+}
+
 @media (prefers-color-scheme: light) {
   :root, body { color: #17202a; background: #f4f6f8; }
   .app-shell { background: #f4f6f8; }
+  .app-workspace-switch { border-color: #d9e0e6; background: #fff; }
+  .app-workspace-switch button { color: #6b7782; }
+  .app-workspace-switch button.is-active { color: #17202a; background: #e9edf1; }
   .connection-panel, .workspace-shell, .project-library, .phase-placeholder, .offline-state { background: #fff; border-color: #dde3e9; }
   .connection-panel input { color: #17202a; background: #fff; border-color: #cfd7df; }
   .project-library { border-right-color: #dde3e9; }
