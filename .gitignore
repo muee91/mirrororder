@@ -13,3 +13,6 @@ output/
 # Local project data can contain ASR, analysis output, review decisions, and locks.
 projects/*/cache/
 projects/*/output/
+
+# Host supplies this per-machine sync configuration; it must never enter the repo or App bundle.
+vendor/multicam-audio-sync/scripts/config.json

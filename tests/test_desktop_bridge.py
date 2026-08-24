@@ -85,8 +85,9 @@ def test_desktop_shell_opens_on_project_home_then_native_multicam_slate():
 def test_native_slate_is_editable_multicam_table_not_dashboard_cards():
     _core, ui, _native, _build = desktop_sources()
     assert "Table(drafts, selection: $selectedRecordID)" in ui
-    for column in ("序号", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态", "可用范围", "备注"):
+    for column in ("序号", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
         assert f'TableColumn("{column}")' in ui
+    assert 'TableColumn("可用范围 / 备注")' in ui
     assert 'Label("从 Take 加入", systemImage: "film.stack")' in ui
     assert 'Label("新建场记", systemImage: "plus")' in ui
     assert 'Label(store.isSaving ? "保存中" : "保存", systemImage: "square.and.arrow.down")' in ui

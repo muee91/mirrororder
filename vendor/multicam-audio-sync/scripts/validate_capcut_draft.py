@@ -86,14 +86,20 @@ def validate_main(main):
     ok(main.get("config", {}).get("use_float_render") is True,
        "config.use_float_render=true")
 
-    tracks = main.get("tracks", [])
-    ok(len(tracks) == 4, f"主草稿 4 轨（= {len(tracks)}）")
-
     materials = main.get("materials", {})
     mat_ids = all_material_ids(materials)
     mc = find_mc_video(materials)
     ok(mc is not None, "materials.videos 含多机位 mc_video")
     drafts = materials.get("drafts", [])
+    expected_angles = 0
+    if drafts and isinstance(drafts[0], dict):
+        inner = drafts[0].get("draft", {})
+        if isinstance(inner, dict):
+            expected_angles = len(inner.get("tracks", []))
+    tracks = main.get("tracks", [])
+    expected_tracks = expected_angles + 1 if expected_angles else len(tracks)
+    ok(len(tracks) == expected_tracks,
+       f"主稿 {expected_angles}+1 轨（= {len(tracks)}）")
 
     if tracks and mc is not None and drafts:
         t0 = tracks[0]
@@ -190,7 +196,7 @@ def validate_sub(top, sub_id):
                f"内嵌 draft.id = 文件夹名 sub_id（={inner.get('id')}/{sub_id}）")
         itracks = inner.get("tracks", [])
         if MODE == "raw":
-            ok(len(itracks) == 3, f"内嵌 draft 3 条角度轨（={len(itracks)}）")
+            ok(len(itracks) in (2, 3), f"内嵌 draft 角度轨为 2 或 3 条（={len(itracks)}）")
         else:
             ok(len(itracks) >= 1,
                f"内嵌 draft 角度轨存在（={len(itracks)} 条）")

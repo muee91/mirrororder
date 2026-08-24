@@ -260,7 +260,7 @@ API Key 不得写入 workspace / project.toml / review.json / audit.json。
 
 ## 9. multicam-audio-sync 的第一方集成方式
 
-MirrorOrder Host 直接调用仓库内同步脚本，不通过 Codex，也不在运行时依赖外部 skill。
+MirrorOrder Host 通过项目内 `multicam_sync_engine` API 原地调度仓库内第一方同步实现，不通过 Codex，也不在运行时依赖外部 skill。每个项目只生成自己的 `.multicam-sync/config.json`、音频缓存和位置表，不复制算法源代码。
 
 运行时使用以下来源：
 
@@ -275,7 +275,8 @@ MirrorOrder Host 直接调用仓库内同步脚本，不通过 Codex，也不在
 - `build_fcpxml.py` 输出 FCPXML 1.8 原生多机位时间线；
 - `build_capcut_fcpxml.py` 与 `build_capcut_draft_31.py` 是剪映适配器；
 - `build_pr_xml.py` 输出 Premiere 可导入的 FCP7/xmeml v4；
-- `validate_fcpxml.py` 在 Host 生成交付 FCPXML 后执行帧边界、素材路径、引用和结构校验。
+- `validate_fcpxml.py` 在 Host 生成交付 FCPXML 后执行帧边界、素材路径、引用和结构校验；
+- `validate_capcut_draft.py` 在生成剪映 3+1 草稿后执行结构不变量校验。
 
 媒体目录同步前，Host 会检查 `ffmpeg`、`ffprobe` 和 `numpy`、`pandas`、`scipy`；所需 Python 依赖写在第一方引擎的 `vendor/multicam-audio-sync/requirements.txt`。剪映加密草稿编解码额外使用 `pycryptodome`，但不是普通 FCPXML/Premiere 同步的必需依赖。
 
@@ -286,6 +287,8 @@ output/sync/synchronized.fcpxml
 output/sync/sync_report.json
 output/.multicam-sync/...
 ```
+
+同步报告还会记录剪映 FCPXML、剪映原生 3+1 草稿、Premiere XML 的实际生成和校验结果；这些适配器失败不会伪装成主同步成功以外的状态。
 
 媒体目录项目同步成功后，项目配置会切换到生成的 FCPXML，让后续分析继续使用现有、已验证的 FCPXML 语义读取链，而不是另造一套多机位模型。
 

@@ -124,6 +124,8 @@ def test_desktop_build_can_bundle_sync_engine() -> None:
     assert 'ROOT/vendor/multicam-audio-sync' in build
     assert "first-party multicam-audio-sync" in build
     assert ".agents/skills/multicam-audio-sync" not in build
+    assert "--exclude 'scripts/config.json'" in build
+    assert "scripts/validate_capcut_draft.py" in build
     assert '"prepare_project"' in tasks
     assert '"auto_resolve"' in tasks
     assert "ai_confirmed" in automation
@@ -144,6 +146,7 @@ def test_first_party_multicam_engine_is_complete_and_path_clean() -> None:
         "build_capcut_draft_31.py",
         "build_pr_xml.py",
         "capcut_draft_codec.py",
+        "validate_capcut_draft.py",
         "validate_fcpxml.py",
         "capcut_draft_schema.json",
     }
@@ -154,7 +157,9 @@ def test_first_party_multicam_engine_is_complete_and_path_clean() -> None:
     assert not list(engine.rglob("._*"))
     text = "\n".join(path.read_text(encoding="utf-8", errors="ignore")
                       for path in engine.rglob("*")
-                      if path.is_file() and path.suffix in {".md", ".py", ".json"})
+                      if path.is_file()
+                      and path.name != "config.json"
+                      and path.suffix in {".md", ".py", ".json"})
     assert "/Users/editor/" not in text
     assert "/Volumes/PSSD" not in text
     assert "MIRRORORDER_MULTICAM_SYNC_ROOT" not in text
@@ -167,6 +172,19 @@ def test_host_runtime_does_not_fallback_to_external_skill() -> None:
     assert "zipfile" not in runtime
     assert "validate_fcpxml.py" in runtime
     assert "_check_prerequisites()" in runtime
+    assert "_materialize_engine" not in runtime
+    assert '".multicam-sync" / "engine"' not in runtime
+    assert "MIRRORORDER_MULTICAM_CONFIG" in (root / "vendor" / "multicam-audio-sync" / "scripts" / "project_config.py").read_text(encoding="utf-8")
+
+
+def test_multicam_engine_is_project_first_party_and_runs_in_place() -> None:
+    root = Path(__file__).resolve().parents[1]
+    runtime = (root / "src" / "script_organizer" / "multicam_sync_engine.py").read_text(encoding="utf-8")
+    diagnostics = (root / "src" / "script_organizer" / "runtime_diagnostics.py").read_text(encoding="utf-8")
+    assert "project-first-party" in runtime
+    assert '"engine_execution": "in_place"' in runtime
+    assert '"external_skill_dependency": False' in runtime
+    assert '"execution": "in_place"' in diagnostics
 
 
 def test_multicam_prerequisites_fail_before_sync_work(monkeypatch: pytest.MonkeyPatch) -> None:

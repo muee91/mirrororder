@@ -54,6 +54,20 @@ def load_data():
                 if df.at[i, "clipn"] != df.at[i, "clipn"]:  # NaN 判等
                     df.at[i, "clipn"] = k
     df["clipn"] = df["clipn"].astype(int)
+    # TC is a useful prior, not a hard prerequisite. When a camera has no
+    # usable TC, use its deterministic clip order and cumulative durations as
+    # a local coordinate; cross-camera audio correlation then solves the offset.
+    df["anchor_s"] = np.nan
+    for (day, cam), idx in df.groupby(["day", "cam"]).groups.items():
+        group = df.loc[idx]
+        if group["tc_s"].notna().all():
+            df.loc[idx, "anchor_s"] = group["tc_s"]
+            continue
+        ordered = group.sort_values(["clipn", "file"])
+        cursor = 0.0
+        for row_index, row in ordered.iterrows():
+            df.at[row_index, "anchor_s"] = cursor
+            cursor += float(row["dur"] or 0.0)
     return df
 
 def load_audio(id_):
@@ -106,6 +120,25 @@ def make_candidates(gX, gY, prior_delta, margin):
         cand.append((i, js))
     return cand
 
+
+def make_ordinal_candidates(gX, gY):
+    """Pair clips by deterministic local order when TC is unavailable.
+
+    Audio correlation remains the authority for the actual inter-camera offset;
+    ordinal pairing only limits the expensive correlation search to plausible
+    neighboring clips.
+    """
+    y_by_clip = {}
+    for j, value in enumerate(gY["clipn"].astype(int).tolist()):
+        y_by_clip.setdefault(value, []).append(j)
+    candidates = []
+    for i, value in enumerate(gX["clipn"].astype(int).tolist()):
+        js = []
+        for clip_number in range(value - 1, value + 2):
+            js.extend(y_by_clip.get(clip_number, []))
+        candidates.append((i, np.asarray(sorted(set(js)), dtype=int)))
+    return candidates
+
 def pair_worker(args):
     """Correlate one X clip against one Y clip; return (xid, yid, offset, conf).
 
@@ -146,7 +179,7 @@ def collect_constraints(gX, gY, cand, nproc=8, conf_thresh=5.0, min_dur=5.0):
                 if conf < conf_thresh or off is None:
                     continue
                 i, j = meta[(xid, yid)]
-                tcX = gX.iloc[i]["tc_s"]; tcY = gY.iloc[j]["tc_s"]
+                tcX = gX.iloc[i]["anchor_s"]; tcY = gY.iloc[j]["anchor_s"]
                 if np.isnan(tcX) or np.isnan(tcY):
                     continue
                 delta = tcX - tcY - off
@@ -252,24 +285,30 @@ def run_day(day, order=None):
     counts = " ".join(f"{c}={len(cams[c])}" for c in cams)
     print(f"\n===== {day} ===== 片段数: {counts}")
     for c, g in cams.items():
-        print(f"  {c}: TC范围 {g['tc_s'].min():.1f} -> {g['tc_s'].max():.1f}s")
+        label = "TC/本地锚点"
+        print(f"  {c}: {label} {g['anchor_s'].min():.1f} -> {g['anchor_s'].max():.1f}s")
 
     # priors from TC start values: use FIRST NORMAL-LENGTH clip per cam.
     # (Some days have a stray <1s leftover clip from a previous day whose TC
     # is far off; using it poisons the candidate window, so skip dur<5s.)
     def first_valid(g):
         g2 = g[g["dur"] >= 5.0]
-        return g2["tc_s"].iloc[0] if len(g2) else g["tc_s"].iloc[0]
+        return g2["anchor_s"].iloc[0] if len(g2) else g["anchor_s"].iloc[0]
     t0 = {c: first_valid(cams[c]) for c in cams}
     present = list(cams)
     ref = order[0] if order[0] in cams else present[0]
     pairs = [(present[i], present[j])
              for i in range(len(present)) for j in range(i + 1, len(present))]
     print(f"  参考相机: {ref}  " + "  ".join(
-        f"TC先验 {j}-{i}={t0[j] - t0[i]:.2f}s" for i, j in pairs))
+        f"时间先验 {j}-{i}={t0[j] - t0[i]:.2f}s" for i, j in pairs))
 
-    cands = {p: make_candidates(cams[p[0]], cams[p[1]],
-                                t0[p[1]] - t0[p[0]], CAND_MARGIN) for p in pairs}
+    def pair_candidates(pair):
+        left, right = cams[pair[0]], cams[pair[1]]
+        if left["tc_s"].notna().all() and right["tc_s"].notna().all():
+            return make_candidates(left, right, t0[pair[1]] - t0[pair[0]], CAND_MARGIN)
+        return make_ordinal_candidates(left, right)
+
+    cands = {p: pair_candidates(p) for p in pairs}
     print("  候选数:", " ".join(f"{j}-{i}={len(v)}" for (i, j), v in cands.items()))
 
     cons = {p: collect_constraints(cams[p[0]], cams[p[1]], cands[p]) for p in pairs}
@@ -283,7 +322,7 @@ def run_day(day, order=None):
     # positions
     out = []
     for cam, g in cams.items():
-        t = g["tc_s"].values
+        t = g["anchor_s"].values
         if cam == ref:
             pos = t
         else:

@@ -400,7 +400,11 @@ class Config:
 
 def get_config():
     import json as _json
-    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    # Host tasks provide a per-project config outside the source tree. Keeping
+    # the source-tree fallback preserves direct CLI use of the first-party engine.
+    cfg_path = os.environ.get("MIRRORORDER_MULTICAM_CONFIG", "").strip()
+    if not cfg_path:
+        cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
     data = {}
     if os.path.exists(cfg_path):
         with open(cfg_path, encoding="utf-8") as f:

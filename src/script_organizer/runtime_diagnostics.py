@@ -38,8 +38,28 @@ def _writable(path: Path) -> bool:
 def _engine_status() -> dict[str, Any]:
     for candidate in _engine_candidates():
         if _valid_engine(candidate):
-            return {"available": True, "path": str(candidate)}
-    return {"available": False, "path": ""}
+            resolved = candidate.resolve()
+            override = os.environ.get("MIRRORORDER_MULTICAM_SYNC_ROOT", "").strip()
+            if override and resolved == Path(override).expanduser().resolve():
+                origin = "development-override"
+            elif "/Contents/Resources/runtime/" in str(resolved):
+                origin = "app-bundled"
+            else:
+                origin = "workspace-first-party"
+            return {
+                "available": True,
+                "path": str(resolved),
+                "origin": origin,
+                "execution": "in_place",
+                "external_skill_dependency": False,
+            }
+    return {
+        "available": False,
+        "path": "",
+        "origin": "",
+        "execution": "in_place",
+        "external_skill_dependency": False,
+    }
 
 
 def environment_payload(workspaces: list[Path] | None = None) -> dict[str, Any]:

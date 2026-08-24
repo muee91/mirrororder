@@ -30,6 +30,7 @@ _REQUIRED_SCRIPTS = (
     "build_capcut_draft_31.py",
     "build_pr_xml.py",
     "validate_fcpxml.py",
+    "validate_capcut_draft.py",
 )
 _REQUIRED_FILES = _REQUIRED_SCRIPTS + ("capcut_draft_schema.json",)
 _MEDIA_SUFFIXES = {".mp4", ".mov", ".mxf", ".mts", ".3gp", ".mpg", ".mpeg"}
@@ -74,22 +75,48 @@ def _check_prerequisites() -> None:
     )
 
 
-def _materialize_engine(runtime: Path) -> tuple[Path, str]:
-    if runtime.exists():
-        shutil.rmtree(runtime)
+def _resolve_engine() -> tuple[Path, str]:
     for candidate in _engine_candidates():
         if _valid_engine(candidate):
-            shutil.copytree(candidate, runtime, ignore=shutil.ignore_patterns("__pycache__", "._*"))
-            return runtime, str(candidate)
+            resolved = candidate.resolve()
+            return resolved, str(resolved)
     raise MulticamSyncUnavailable(
         "未找到镜序内置的第一方 multicam-audio-sync。请检查 App runtime 或 "
         "repo vendor/multicam-audio-sync；开发时可显式设置 MIRRORORDER_MULTICAM_SYNC_ROOT。"
     )
 
 
-def _run(script_dir: Path, script: str, args: list[str], log: Callable[[str], None] | None = None, timeout: int = 60 * 60 * 6) -> str:
+def _engine_origin(path: Path) -> str:
+    override = os.environ.get("MIRRORORDER_MULTICAM_SYNC_ROOT", "").strip()
+    if override and path == Path(override).expanduser().resolve():
+        return "development-override"
+    normalized = str(path)
+    if "/Contents/Resources/runtime/" in normalized:
+        return "app-bundled"
+    return "workspace-first-party"
+
+
+def _run(
+    script_dir: Path,
+    script: str,
+    args: list[str],
+    log: Callable[[str], None] | None = None,
+    timeout: int = 60 * 60 * 6,
+    config_path: Path | None = None,
+) -> str:
     command = [sys.executable, str(script_dir / script), *args]
-    process = subprocess.Popen(command, cwd=script_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    environment = os.environ.copy()
+    if config_path is not None:
+        environment["MIRRORORDER_MULTICAM_CONFIG"] = str(config_path)
+    process = subprocess.Popen(
+        command,
+        cwd=script_dir,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
     lines = []
     try:
         assert process.stdout is not None
@@ -269,7 +296,7 @@ def _sync_media_roles(config: ProjectConfig) -> tuple[dict[str, dict[str, str]],
 
 
 def _write_config(
-    script_dir: Path,
+    config_path: Path,
     base: Path,
     export_base: Path,
     work: Path,
@@ -293,7 +320,8 @@ def _write_config(
             "camera_labels": list(camera_labels or []),
         },
     }
-    (script_dir / "config.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _refresh_analysis_link(link: Path, target: Path) -> None:
@@ -326,13 +354,15 @@ def run_multicam_sync(
         raise FileNotFoundError("素材目录不存在: " + "、".join(str(root) for root in missing))
 
     _check_prerequisites()
-    runtime = config.output_dir / ".multicam-sync" / "engine"
+    project_runtime = config.output_dir / ".multicam-sync"
+    project_config = project_runtime / "config.json"
     work = config.output_dir / ".multicam-sync" / "work"
     stage = config.output_dir / ".multicam-sync" / "media-layout"
     report_dir = config.output_dir / "sync"
     xml_delivery = config.media_root / "交付" if len(roots) == 1 and config.media_root else roots[0] / "交付"
-    runtime.parent.mkdir(parents=True, exist_ok=True)
-    engine, engine_source = _materialize_engine(runtime)
+    project_runtime.mkdir(parents=True, exist_ok=True)
+    engine, engine_source = _resolve_engine()
+    engine_origin = _engine_origin(engine)
     script_dir = engine / "scripts"
     work.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -346,7 +376,7 @@ def run_multicam_sync(
 
     def write_builder_config(out_name: str, output: Path = xml_delivery) -> None:
         _write_config(
-            script_dir,
+            project_config,
             media_base,
             export_base,
             work,
@@ -367,7 +397,7 @@ def run_multicam_sync(
             progress(done, total)
 
     write_builder_config("synchronized.fcpxml")
-    emit(f"同步引擎：{engine_source}")
+    emit(f"素材对齐算法引擎：项目内第一方（{engine_origin}）")
     emit(f"素材布局：{layout}")
     if media_role_summary["excluded"]:
         emit(f"辅助素材：{media_role_summary['excluded']} 条已标记为不参与同步")
@@ -375,11 +405,11 @@ def run_multicam_sync(
         emit(f"机位覆盖：{media_role_summary['camera_overrides']} 条人工机位标记")
     emit("盘点素材与时间码")
     update_progress(0, 1)
-    _run(script_dir, "make_index.py", [], emit)
+    _run(script_dir, "make_index.py", [], emit, config_path=project_config)
     update_progress(1, 1)
     emit("提取同步音频缓存")
     workers = str(max(2, min(10, (os.cpu_count() or 4))))
-    _run(script_dir, "extract_parallel.py", [workers], emit)
+    _run(script_dir, "extract_parallel.py", [workers], emit, config_path=project_config)
     update_progress(2, 2)
     days = _days_from_index(work)
     total_steps = 2 + len(days) * 3 + 3
@@ -387,7 +417,7 @@ def run_multicam_sync(
     positions = []
     for index, day in enumerate(days, start=1):
         emit(f"音频互相关同步 {day}")
-        _run(script_dir, "sync.py", [day], emit)
+        _run(script_dir, "sync.py", [day], emit, config_path=project_config)
         update_progress(2 + (index - 1) * 3 + 1, total_steps)
         raw = work / f"positions_{day}.tsv"
         if not raw.exists():
@@ -395,7 +425,7 @@ def run_multicam_sync(
         compressed = work / f"positions_{day}_compressed.tsv"
         if compress_gaps:
             emit(f"压缩全机停机间隙 {day}")
-            _run(script_dir, "compress_gaps.py", [str(raw)], emit)
+            _run(script_dir, "compress_gaps.py", [str(raw)], emit, config_path=project_config)
         else:
             shutil.copyfile(raw, compressed)
         update_progress(2 + (index - 1) * 3 + 2, total_steps)
@@ -405,33 +435,77 @@ def run_multicam_sync(
 
     emit("生成标准 FCPXML 1.8 多机位时间线（相对素材路径）")
     write_builder_config("synchronized.fcpxml")
-    _run(script_dir, "build_fcpxml.py", [], emit)
+    _run(script_dir, "build_fcpxml.py", [], emit, config_path=project_config)
     update_progress(total_steps - 2, total_steps)
     fcpxml = xml_delivery / "synchronized.fcpxml"
     if not fcpxml.is_file():
         raise RuntimeError("同步完成但 synchronized.fcpxml 未生成")
     emit("校验 FCPXML 帧边界、素材引用与结构")
-    _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(fcpxml.parent)], emit)
+    _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(fcpxml.parent)], emit, config_path=project_config)
     update_progress(total_steps - 1, total_steps)
     analysis_link = report_dir / "synchronized.fcpxml"
     _refresh_analysis_link(analysis_link, fcpxml)
 
     capcut = ""
+    capcut_draft = ""
+    capcut_draft_validation = ""
+    premiere = ""
     if (script_dir / "build_capcut_fcpxml.py").is_file():
         try:
             emit("生成标准 FCPXML 1.8 剪映兼容时间线（相对素材路径）")
             write_builder_config("synchronized_final.fcpxml")
-            _run(script_dir, "build_capcut_fcpxml.py", [], emit)
+            _run(script_dir, "build_capcut_fcpxml.py", [], emit, config_path=project_config)
             capcut_path = xml_delivery / "synchronized_capcut.fcpxml"
             if capcut_path.is_file():
-                _run(script_dir, "validate_fcpxml.py", [str(capcut_path), str(capcut_path.parent)], emit)
+                _run(
+                    script_dir,
+                    "validate_fcpxml.py",
+                    [str(capcut_path), str(capcut_path.parent)],
+                    emit,
+                    config_path=project_config,
+                )
                 capcut = str(capcut_path)
         except Exception as error:
             emit(f"剪映 / CapCut FCPXML 可选生成失败：{error}")
 
+    if (script_dir / "build_capcut_draft_31.py").is_file():
+        try:
+            emit("生成剪映原生 3+1 多机位草稿")
+            write_builder_config("synchronized.fcpxml")
+            _run(script_dir, "build_capcut_draft_31.py", [], emit, config_path=project_config)
+            draft_path = xml_delivery / f"{config.name}_音频同步多机位_capcut_draft"
+            if draft_path.is_dir():
+                capcut_draft = str(draft_path)
+                emit("校验剪映 3+1 草稿结构")
+                _run(
+                    script_dir,
+                    "validate_capcut_draft.py",
+                    [str(draft_path), "--mode=raw"],
+                    emit,
+                    config_path=project_config,
+                )
+                capcut_draft_validation = "passed"
+        except Exception as error:
+            capcut_draft_validation = f"failed: {error}"
+            emit(f"剪映 3+1 草稿可选生成或校验失败：{error}")
+
+    if (script_dir / "build_pr_xml.py").is_file():
+        try:
+            emit("生成 Premiere FCP7/xmeml v4 同步 XML")
+            write_builder_config("synchronized_premiere.xml")
+            _run(script_dir, "build_pr_xml.py", [], emit, config_path=project_config)
+            premiere_path = xml_delivery / "synchronized_premiere.xml"
+            if premiere_path.is_file():
+                premiere = str(premiere_path)
+        except Exception as error:
+            emit(f"Premiere XML 可选生成失败：{error}")
+
     report = {
         "status": "completed",
-        "engine_source": engine_source,
+        "engine_source": "project-first-party",
+        "engine_origin": engine_origin,
+        "engine_execution": "in_place",
+        "external_skill_dependency": False,
         "media_root": str(roots[0]),
         "media_roots": [str(root) for root in roots],
         "xml_delivery": str(xml_delivery),
@@ -442,6 +516,9 @@ def run_multicam_sync(
         "fcpxml": str(fcpxml),
         "analysis_fcpxml": str(analysis_link),
         "capcut_fcpxml": capcut,
+        "capcut_draft": capcut_draft,
+        "capcut_draft_validation": capcut_draft_validation,
+        "premiere_xml": premiere,
         "media_reference_mode": "relative-to-xml",
         "source_kind": "media-directory",
         "camera_detection": {

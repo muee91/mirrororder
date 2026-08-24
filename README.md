@@ -269,7 +269,7 @@ PID
 - 媒体目录不伪造多机位同步；只有已登记的 FCPXML 才保留其原始同步关系。
 - 新项目会把剧本复制到 `projects/<project_id>/inputs/`，FCPXML 复制为 `inputs/source.fcpxml`，输出和缓存默认留在项目目录内；共享 `project.toml` 不保存本机素材根目录。
 - 媒体目录项目的素材根目录只进入当前设备的 `media-bindings.json`。创建前会预检剧本段落、FCPXML 逻辑片段、工作区写权限和本机同步环境。
-- 媒体目录项目的多机位同步由仓库内第一方 `vendor/multicam-audio-sync` 引擎完成。它随 App 一起发布，不依赖 Codex 或开发机的 `~/.agents/skills`；生成 FCPXML 后会自动执行内置结构校验。
+- 媒体目录项目的多机位同步由项目内第一方素材对齐引擎完成。算法源代码位于仓库 `vendor/multicam-audio-sync`，Host 只向项目私有 `.multicam-sync/config.json` 写入本次配置并原地调用引擎，不复制算法目录，也不依赖 Codex 或开发机的 `~/.agents/skills`；同步后会生成 FCPXML、剪映兼容产物、Premiere XML，并自动执行结构校验。
 - 媒体目录自动同步在 Host 上需要 `ffmpeg` / `ffprobe` 以及第一方引擎的 `numpy`、`pandas`、`scipy` 依赖；缺失时任务会在开始前给出明确错误。已有 FCPXML 项目不需要这组同步依赖。
 - 全新 Mac 可先运行：
 

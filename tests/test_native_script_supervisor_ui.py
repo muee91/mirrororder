@@ -28,10 +28,9 @@ def test_project_opens_on_full_native_multicam_slate_table() -> None:
         "C 机",
         "辅助 / 特殊",
         "状态",
-        "可用范围",
-        "备注",
     ):
         assert f'TableColumn("{column}")' in ui
+    assert 'TableColumn("可用范围 / 备注")' in ui
     assert 'TableColumn("素材")' not in ui
 
 
