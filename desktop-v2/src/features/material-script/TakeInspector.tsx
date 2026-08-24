@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
-import { episodeLabel, mappingLabel, mappingSourceLabel } from "./VirtualTakeList";
+import { CandidateEvidence } from "./CandidateEvidence";
+import { mappingLabel, mappingSourceLabel } from "./VirtualTakeList";
 
 export function TakeInspector({
   connection,
@@ -98,21 +99,10 @@ export function TakeInspector({
 
       {take.candidates.length > 0 ? (
         <div className="candidate-panel">
-          <p className="eyebrow">候选 · 需人工审阅后确认</p>
-          {take.candidates.slice(0, 3).map((candidate) => {
-            const targetIds = candidate.script_segment_ids.length > 0
-              ? candidate.script_segment_ids
-              : candidate.script_segment_id
-                ? [candidate.script_segment_id]
-                : [];
-            return (
-              <div className="candidate-row" key={candidate.candidate_id}>
-                <span>{candidate.episode_ids.map(episodeLabel).join("/") || "未分集"}</span>
-                <strong>{targetIds.join(", ") || "仅集数候选"}</strong>
-                <code>{candidate.total_score.toFixed(3)}</code>
-              </div>
-            );
-          })}
+          <p className="eyebrow">候选关系 · 需人工审阅后确认</p>
+          {take.candidates.slice(0, 3).map((candidate) => (
+            <CandidateEvidence candidate={candidate} key={candidate.candidate_id} />
+          ))}
           <div className="inspector-actions">
             <button type="button" className="secondary" onClick={onShowScript}>
               到剧本审阅首选候选
