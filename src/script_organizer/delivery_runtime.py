@@ -9,11 +9,21 @@ from .fcpxml_exporter import UnsafeFCPXMLExport, export
 _INSTALLED = False
 
 
+def _decorate_report(report: object) -> dict[str, Any]:
+    payload = dict(report) if isinstance(report, dict) else {}
+    fcpxml = Path(str(payload.get("organized_fcpxml", "") or ""))
+    manifest = Path(str(payload.get("selection_manifest", "") or ""))
+    payload["organized_fcpxml_exists"] = bool(str(fcpxml)) and fcpxml.is_file()
+    payload["selection_manifest_exists"] = bool(str(manifest)) and manifest.is_file()
+    payload["device_paths_exposed"] = True
+    return payload
+
+
 def _existing_report(project: Any) -> dict[str, Any]:
     path = Path(project.config.output_dir) / "export_report.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else {}
+        return _decorate_report(payload)
     except (OSError, ValueError):
         return {}
 
@@ -67,7 +77,7 @@ def install_delivery_runtime() -> None:
                         raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
                     self._send_json({
                         "contract": "delivery_export.v1",
-                        "report": report,
+                        "report": _decorate_report(report),
                     })
                     return
                 return super()._app_post(parsed)
