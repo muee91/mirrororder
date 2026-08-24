@@ -29,7 +29,11 @@ fn existing_path(value: &str) -> Result<PathBuf, String> {
 
 fn safe_url(value: &str) -> Result<String, String> {
     let value = value.trim();
-    if value.starts_with("http://") || value.starts_with("https://") {
+    if value.chars().any(char::is_control) {
+        return Err("URL 包含非法控制字符".to_string());
+    }
+    let lower = value.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
         Ok(value.to_string())
     } else {
         Err("只允许打开 http:// 或 https:// URL".to_string())
@@ -109,8 +113,8 @@ fn open_impl(path: &Path) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn open_url_impl(url: &str) -> Result<(), String> {
-    let mut command = Command::new("cmd");
-    command.arg("/C").arg("start").arg("").arg(url);
+    let mut command = Command::new("rundll32.exe");
+    command.arg("url.dll,FileProtocolHandler").arg(url);
     run(command, "Windows 打开 URL")
 }
 
@@ -195,8 +199,10 @@ mod tests {
     #[test]
     fn accepts_only_http_urls() {
         assert_eq!(safe_url("https://example.com/a").unwrap(), "https://example.com/a");
+        assert_eq!(safe_url("HTTP://example.com/a").unwrap(), "HTTP://example.com/a");
         assert!(safe_url("file:///tmp/demo").is_err());
         assert!(safe_url("javascript:alert(1)").is_err());
+        assert!(safe_url("https://example.com/a\nnext").is_err());
     }
 
     #[test]
