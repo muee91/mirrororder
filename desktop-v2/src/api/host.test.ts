@@ -78,6 +78,12 @@ describe("HostConnection", () => {
     expect(browserFetch).toHaveBeenCalledTimes(2);
   });
 
+  it("builds the single-Host media endpoint without using workspace-local paths", () => {
+    expect(new HostConnection("http://127.0.0.1:8765").mediaUrl(" p/1 ", " c 1 ")).toBe(
+      "http://127.0.0.1:8765/api/v1/projects/p%2F1/media/c%201",
+    );
+  });
+
   it("reads the existing review.v1 projection without deriving business rules", async () => {
     const reviewModel = {
       contract_version: "review.v1",
