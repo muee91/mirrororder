@@ -10,31 +10,41 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def desktop_sources() -> tuple[str, str, str]:
+def desktop_sources() -> tuple[str, str, str, str]:
     return (
         read("macos-app/MirrorOrderDesktopCore.swift"),
         read("macos-app/MirrorOrderDesktopUI.swift"),
+        read("macos-app/NativeProjectWorkbench.swift"),
         read("macos-app/build_app.sh"),
     )
 
 
-def test_macos_build_uses_split_drag_capable_desktop_shell():
-    core, ui, build = desktop_sources()
+def test_macos_build_uses_native_production_workspace():
+    core, ui, native, build = desktop_sources()
     assert 'CORE_SOURCE="$ROOT/macos-app/MirrorOrderDesktopCore.swift"' in build
     assert 'UI_SOURCE="$ROOT/macos-app/MirrorOrderDesktopUI.swift"' in build
-    assert '"$CORE_SOURCE" "$UI_SOURCE"' in build
-    assert "WKScriptMessageHandler" in core
-    assert 'name: "mirrorOrder"' in core
-    assert "NSDraggingSession" in core
-    assert "NSDraggingItem" in core
-    assert ".fileURL" in core
-    assert 'NSFilenamesPboardType' in core
+    assert 'NATIVE_WORKBENCH_SOURCE="$ROOT/macos-app/NativeProjectWorkbench.swift"' in build
+    assert '"$CORE_SOURCE" "$UI_SOURCE" "$NATIVE_WORKBENCH_SOURCE"' in build
     assert 'WindowGroup("镜序")' in ui
     assert "DesktopRootView()" in ui
+    assert "NativeProjectWorkbench(" in ui
+    assert "struct NativeProjectWorkbench: View" in native
+    assert "NativeVideoPlayerView(player: player)" in native
+    assert "struct NativeReviewReadModel: Decodable" in core
+
+
+def test_native_production_canvas_never_embeds_team_web():
+    _core, ui, native, _build = desktop_sources()
+    for source in (ui, native):
+        assert "DesktopWebView(" not in source
+        assert "WKWebView" not in source
+        assert "production_mode.js" not in source
+        assert "timeline_v3.js" not in source
+    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
 
 
 def test_desktop_service_start_script_saves_owned_gateway_pid():
-    core, _ui, _build = desktop_sources()
+    core, _ui, _native, _build = desktop_sources()
     assert "nohup" in core
     assert "pid=$!" in core
     assert 'echo "$pid"' in core
@@ -51,8 +61,7 @@ def test_desktop_service_start_script_saves_owned_gateway_pid():
 
 
 def test_desktop_shell_keeps_projects_persistent_in_left_sidebar():
-    _core, ui, _build = desktop_sources()
-    native = read("macos-app/NativeProjectWorkbench.swift")
+    _core, ui, native, _build = desktop_sources()
     assert "private struct ProductionSidebar" in ui
     assert "private struct SidebarProjectRow" in ui
     assert ".frame(width: 224)" in ui
@@ -64,12 +73,12 @@ def test_desktop_shell_keeps_projects_persistent_in_left_sidebar():
     assert "ProjectPage" not in ui
     assert "WorkbenchPage" not in ui
     assert 'Button("场记") { showSupervisor = true }' in native
+    assert 'Button("人物库") { showPeople = true }' in native
     assert 'Button("团队审阅") { controller.openInBrowser() }' in native
-    assert 'WindowGroup("镜序")' in ui
 
 
 def test_desktop_system_features_live_in_settings_and_status_center():
-    _core, ui, _build = desktop_sources()
+    _core, ui, _native, _build = desktop_sources()
     assert "private enum SettingsTab" in ui
     assert 'case general = "通用"' in ui
     assert 'case runtime = "运行与模型"' in ui
@@ -84,7 +93,7 @@ def test_desktop_system_features_live_in_settings_and_status_center():
 
 
 def test_desktop_gateway_probe_ignores_non_numeric_stats_extensions():
-    core, _ui, _build = desktop_sources()
+    core, _ui, _native, _build = desktop_sources()
     assert "private struct GatewayStats: Decodable" in core
     assert "try? container.decode(Int.self, forKey: key)" in core
     assert "var numericStats: [String: Int]" in core
@@ -92,29 +101,22 @@ def test_desktop_gateway_probe_ignores_non_numeric_stats_extensions():
 
 
 def test_desktop_project_activity_uses_only_current_tasks():
-    core, ui, _build = desktop_sources()
+    core, ui, _native, _build = desktop_sources()
     assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) {' in core
     assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) ?? tasks.first' not in core
     assert "filter(\\.isActive)" in ui
 
 
-def test_desktop_webview_recovers_navigation_failures_and_reports_runtime_errors():
-    core, _ui, _build = desktop_sources()
-    assert "defaultWebpagePreferences.allowsContentJavaScript = true" in core
-    assert "decidePolicyFor navigationAction" in core
-    assert "decisionHandler(.allow, preferences)" in core
-    assert "WKNavigationDelegate" in core
-    assert "didFailProvisionalNavigation" in core
-    assert "reloadFromOrigin()" in core
-    assert "runtimeError" in core
-    assert "unhandledrejection" in core
-    assert "mirrororder-runtime-error" in core
-    assert "var isLoading = false" in core
-    assert "if !context.coordinator.isLoading" in core
+def test_native_workspace_reads_versioned_host_projection():
+    core, _ui, native, _build = desktop_sources()
+    assert 'appendingPathComponent("review-model")' in core
+    assert 'next.contract_version == "review.v1"' in native
+    assert "JSONDecoder().decode(NativeReviewReadModel.self" in native
+    assert "URLSession.shared.data(for: request)" in native
 
 
 def test_desktop_has_native_project_creation_through_host_authority():
-    core, ui, _build = desktop_sources()
+    core, ui, _native, _build = desktop_sources()
     runtime = read("src/script_organizer/automation_runtime.py")
     server = read("src/script_organizer/web_server.py")
     assert "private struct NewProjectSheet" in ui
@@ -137,7 +139,7 @@ def test_desktop_has_native_project_creation_through_host_authority():
 
 
 def test_desktop_controls_have_stable_hit_targets():
-    _core, ui, _build = desktop_sources()
+    _core, ui, _native, _build = desktop_sources()
     runtime = read("macos-app/LocalRuntimeSettingsView.swift")
     assert "struct AppHitTarget: ViewModifier" in ui
     assert "func appHitTarget(minWidth: CGFloat = 40, minHeight: CGFloat = 36)" in ui
@@ -145,46 +147,16 @@ def test_desktop_controls_have_stable_hit_targets():
     assert ".frame(width: 44, height: 40)" in runtime
 
 
-def test_timeline_loader_is_app_only_and_drops_legacy_automation_bundle():
+def test_team_web_remains_separate_review_client():
     html = read("web/index.html")
-    loader = read("web/timeline.js")
-    timeline = read("web/timeline_v3.js")
-    ux = read("web/ux_fixes.js")
-    production = read("web/production_mode.js")
-    css = read("web/timeline.css")
-
-    assert '<script src="/device_media.js"></script>' in html
-    assert '<script src="/timeline.js"></script>' in html
-    assert "document.createElement('script')" not in ux
-    assert "window.webkit?.messageHandlers?.mirrorOrder" in loader
-    assert "window.__mirrorOrderTimelineReady" in loader
-    assert "/timeline_v3.js" in loader
-    assert "/device_media.js" not in loader
-    assert "/automation.js" not in loader
-    assert "['timeline', '时间线']" in production
-    assert "timelineToggle" in production
-    assert "html.native-production #timeline-toggle" in css
-    assert "media-rep" in timeline
-    assert "placementForGroup" in timeline
-    assert "manualScriptIds" in timeline
-    assert "dragPath" in timeline
-    assert "未关联" in timeline
-
-
-def test_external_drag_is_native_not_html5_datatransfer():
-    timeline = read("web/timeline_v3.js")
+    native = read("macos-app/NativeProjectWorkbench.swift")
     core = read("macos-app/MirrorOrderDesktopCore.swift")
-    assert "dataTransfer" not in timeline
-    assert "beginDraggingSession" in core
-    assert "prepareFileDrag" in timeline
-    assert "prepareFileDrag" in core
-
-
-def test_team_web_does_not_activate_production_timeline():
-    loader = read("web/timeline.js")
-    assert "if (!window.webkit?.messageHandlers?.mirrorOrder)" in loader
-    assert "window.__mirrorOrderTimelineReady = Promise.resolve()" in loader
-    assert "return;" in loader
+    assert 'id="workspace-select"' in html
+    assert 'id="project-select"' in html
+    assert 'id="production-bar"' not in html
+    assert 'id="production-panel"' not in html
+    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
+    assert "NSWorkspace.shared.open(workbenchURL(for: projectID))" in core
 
 
 def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
@@ -204,8 +176,8 @@ def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
     assert 'item["media_path"] = resolved or source_path' in runtime
 
 
-def test_build_packages_complete_runtime_and_web_tree():
-    _core, _ui, build = desktop_sources()
+def test_build_packages_complete_runtime_and_team_web_tree():
+    _core, _ui, _native, build = desktop_sources()
     assert 'rsync -a --exclude \'__pycache__\' --exclude \'*.pyc\' "$ROOT/src/" "$RUNTIME/src/"' in build
     assert 'cp -R "$ROOT/web" "$RUNTIME/web"' in build
     assert 'cp "$INFO" "$APP/Contents/Info.plist"' in build
