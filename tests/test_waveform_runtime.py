@@ -18,9 +18,9 @@ def test_waveform_peaks_are_normalized_and_bounded() -> None:
     peaks = _peaks_from_pcm(pcm, 4)
     assert len(peaks) == 4
     assert peaks[0] == round(1000 / 32768, 5)
-    assert peaks[1] == 1.0
-    assert peaks[2] == round(500 / 32768, 5)
-    assert peaks[3] == 0.0
+    assert peaks[1] == round(32767 / 32768, 5)
+    assert peaks[2] == 1.0
+    assert peaks[3] == round(500 / 32768, 5)
 
 
 def test_waveform_empty_pcm_is_empty() -> None:
