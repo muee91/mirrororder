@@ -101,6 +101,8 @@ def test_native_slate_is_editable_multicam_table_not_dashboard_cards():
     assert "不是 Editorial Best" in ui
     assert "private struct MCMediaCard" in ui
     assert "AVAssetImageGenerator" in ui
+    assert ".scaleProportionallyUpOrDown" in ui
+    assert ".scaleAxesIndependently" not in ui
 
 
 def test_desktop_system_features_live_in_settings_and_status_center():
@@ -126,9 +128,12 @@ def test_desktop_gateway_probe_ignores_non_numeric_stats_extensions():
     assert "let stats: [String: Int]?" not in core
 
 
-def test_desktop_project_activity_uses_only_current_tasks():
+def test_desktop_project_activity_keeps_active_or_latest_failure():
     core, ui, _native, _build = desktop_sources()
-    assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) {' in core
+    assert 'let activeTask = tasks.first(where: { $0.status == "queued" || $0.status == "running" })' in core
+    assert "let latestTask = tasks.first" in core
+    assert '["failed", "interrupted"].contains(latestTask.status)' in core
+    assert "task = latestTask" in core
     assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) ?? tasks.first' not in core
     assert "filter(\\.isActive)" in ui
 
