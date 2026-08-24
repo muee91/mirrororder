@@ -20,9 +20,10 @@ function progress(task: ProjectTaskStatus): { done: number; total: number } | nu
   const values = task.progress ?? {};
   const done = values.done ?? values.audit_done ?? values.perception_done ?? values.face_done ?? values.speaker_done;
   const total = values.total ?? values.audit_total ?? values.perception_total ?? values.face_total ?? values.speaker_total;
-  return Number.isFinite(done) && Number.isFinite(total) && Number(total) > 0
-    ? { done: Number(done), total: Number(total) }
-    : null;
+  if (typeof done !== "number" || typeof total !== "number" || !Number.isFinite(done) || !Number.isFinite(total) || total <= 0) {
+    return null;
+  }
+  return { done, total };
 }
 
 function displayTime(value?: string | null): string {
@@ -77,6 +78,7 @@ export function TaskStatusPanel({ baseUrl, projectId }: Props) {
   }, [refresh]);
 
   const active = tasks.find(isActive) ?? null;
+  const activeProgress = active ? progress(active) : null;
   const recent = tasks.slice(0, 8);
 
   return (
@@ -95,10 +97,10 @@ export function TaskStatusPanel({ baseUrl, projectId }: Props) {
             <strong>{active.type || "后台任务"}</strong>
             <span>{active.status} · {active.stage || "-"}</span>
           </div>
-          {progress(active) ? (
+          {activeProgress ? (
             <div className="task-progress-row">
-              <progress value={progress(active)?.done ?? 0} max={progress(active)?.total ?? 1} />
-              <span>{progress(active)?.done} / {progress(active)?.total}</span>
+              <progress value={activeProgress.done} max={activeProgress.total} />
+              <span>{activeProgress.done} / {activeProgress.total}</span>
             </div>
           ) : null}
           {active.message ? <p className="production-note">{active.message}</p> : null}
@@ -111,7 +113,7 @@ export function TaskStatusPanel({ baseUrl, projectId }: Props) {
         <div className="task-status-list">
           {recent.map((task) => (
             <div className="task-status-row" key={task.task_id}>
-              <div>
+              <div className="task-status-name">
                 <strong>{task.type || "后台任务"}</strong>
                 <span>{task.stage || "-"}</span>
               </div>
