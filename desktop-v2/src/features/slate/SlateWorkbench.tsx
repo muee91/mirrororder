@@ -1,0 +1,219 @@
+import { useEffect, useMemo, useState } from "react";
+import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
+import { ProductionClient, type SlateBoard, type SlateEntry, type SlateParseResult } from "../../api/production";
+
+interface Props {
+  baseUrl: string;
+  projectId: string;
+}
+
+const ACTOR_KEY = "mirrororder.desktop-v2.review-actor";
+
+function readActor(): string {
+  try {
+    return globalThis.localStorage?.getItem(ACTOR_KEY)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof HostConnectionError) return error.message;
+  return error instanceof Error ? error.message : String(error);
+}
+
+function takeLabel(take: ReviewTakeGroup): string {
+  const cameras = take.angles.map((angle) => angle.camera).filter(Boolean).join("/");
+  return `${take.group_id}${cameras ? ` · ${cameras}` : ""}`;
+}
+
+function parseSummary(result: SlateParseResult): string {
+  const bits = [
+    result.episode ? `EP${result.episode}` : "",
+    result.scene ? `场 ${result.scene}` : "",
+    result.shot ? `镜 ${result.shot}` : "",
+    result.take_number ? `第 ${result.take_number} 条` : "",
+    result.status !== "unmarked" ? result.status : "",
+  ].filter(Boolean);
+  return bits.join(" · ") || "只记录原始备注";
+}
+
+export function SlateWorkbench({ baseUrl, projectId }: Props) {
+  const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
+  const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
+  const [review, setReview] = useState<ReviewModelPayload | null>(null);
+  const [board, setBoard] = useState<SlateBoard | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [quickText, setQuickText] = useState("");
+  const [parsed, setParsed] = useState<SlateParseResult | null>(null);
+  const [actor, setActor] = useState(readActor);
+  const [message, setMessage] = useState("正在读取电子场记…");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMessage("正在读取电子场记…");
+    Promise.all([host.reviewModel(projectId), production.scriptSupervisor(projectId)])
+      .then(([nextReview, nextBoard]) => {
+        if (cancelled) return;
+        setReview(nextReview);
+        setBoard(nextBoard);
+        setSelectedGroupId((current) => current || nextReview.take_groups[0]?.group_id || "");
+        setMessage(`script_supervisor.v2 · r${nextBoard.revision}`);
+      })
+      .catch((error) => {
+        if (!cancelled) setMessage(errorMessage(error));
+      });
+    return () => { cancelled = true; };
+  }, [host, production, projectId]);
+
+  const selectedTake = review?.take_groups.find((take) => take.group_id === selectedGroupId) ?? null;
+  const existing = board?.entries[selectedGroupId] ?? null;
+
+  async function parseQuickEntry(): Promise<void> {
+    if (!selectedTake) return;
+    setBusy(true);
+    setMessage("正在解析粗场记原话…");
+    try {
+      const response = await production.parseSlate(projectId, quickText, existing ?? undefined);
+      setParsed(response.result);
+      setMessage(`解析完成 · ${response.result.parser}`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmParsed(): Promise<void> {
+    if (!selectedTake || !board || !parsed) return;
+    if (!actor.trim()) {
+      setMessage("写入场记前需要操作者昵称。");
+      return;
+    }
+
+    const angles: Record<string, { shot_type: string; note: string }> = {};
+    for (const angle of selectedTake.angles) {
+      const camera = angle.camera.trim().toUpperCase().replace(/机/g, "");
+      const shotType = parsed.angle_shots[camera];
+      if (shotType) {
+        angles[angle.clip_id] = { shot_type: shotType, note: "" };
+      }
+    }
+
+    const entry: Partial<SlateEntry> = {
+      episode: parsed.episode,
+      scene: parsed.scene,
+      shot: parsed.shot,
+      take_number: parsed.take_number,
+      status: parsed.status,
+      note: parsed.note,
+      preferred_clip_id: existing?.preferred_clip_id ?? "",
+      angles,
+    };
+
+    setBusy(true);
+    setMessage("正在写入 revision-safe 场记事实…");
+    try {
+      globalThis.localStorage?.setItem(ACTOR_KEY, actor.trim());
+      const next = await production.writeSlateEntry(projectId, {
+        groupId: selectedTake.group_id,
+        expectedRevision: board.revision,
+        actor,
+        entry,
+      });
+      setBoard(next);
+      setParsed(null);
+      setQuickText("");
+      setMessage(`已写入场记 · r${next.revision}`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+      if (error instanceof HostConnectionError && error.status === 409) {
+        try {
+          const latest = await production.scriptSupervisor(projectId);
+          setBoard(latest);
+          setMessage(`场记 revision 已变化，已刷新到 r${latest.revision}；请重新确认。`);
+        } catch {
+          // Preserve the original conflict message if refresh also fails.
+        }
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="phase3-workbench">
+      <header className="production-heading">
+        <div>
+          <p className="eyebrow">Phase 3 · Script Supervisor</p>
+          <h2>场记</h2>
+        </div>
+        <span className="production-state">{message}</span>
+      </header>
+
+      <div className="production-grid slate-grid">
+        <aside className="production-panel">
+          <label className="production-field">
+            <span>Take</span>
+            <select value={selectedGroupId} onChange={(event) => { setSelectedGroupId(event.target.value); setParsed(null); }}>
+              {(review?.take_groups ?? []).map((take) => (
+                <option value={take.group_id} key={take.group_id}>{takeLabel(take)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="production-field">
+            <span>操作者昵称</span>
+            <input value={actor} onChange={(event) => setActor(event.target.value)} placeholder="写入时必填" />
+          </label>
+
+          <div className="slate-current">
+            <p className="eyebrow">当前记录</p>
+            {existing ? (
+              <>
+                <strong>{[existing.episode ? `EP${existing.episode}` : "", existing.scene, existing.shot, existing.take_number ? `T${existing.take_number}` : ""].filter(Boolean).join(" · ") || "已记录"}</strong>
+                <span>{existing.status} · {existing.actor || "未知操作者"}</span>
+                <p>{existing.note || "没有备注"}</p>
+              </>
+            ) : <p>这个 Take 还没有人工场记。</p>}
+          </div>
+        </aside>
+
+        <div className="production-panel slate-capture">
+          <p className="eyebrow">粗手写 / 快速录入</p>
+          <textarea
+            value={quickText}
+            onChange={(event) => setQuickText(event.target.value)}
+            placeholder="例如：EP3 12-3-2 B近 前半段可用；或：同场下一条 C特 看片再定"
+            rows={6}
+          />
+          <div className="production-actions">
+            <button type="button" disabled={busy || !quickText.trim() || !selectedTake} onClick={() => void parseQuickEntry()}>解析</button>
+            <span>解析器只提取明确事实；不会猜时间码、人物或剧本归集。</span>
+          </div>
+
+          {parsed ? (
+            <div className="parse-preview">
+              <div className="parse-heading">
+                <div>
+                  <p className="eyebrow">待确认</p>
+                  <strong>{parseSummary(parsed)}</strong>
+                </div>
+                <span>{parsed.parser}</span>
+              </div>
+              <p>{parsed.note}</p>
+              {Object.keys(parsed.angle_shots).length ? (
+                <div className="fact-chips">
+                  {Object.entries(parsed.angle_shots).map(([camera, shot]) => <span key={camera}>{camera} · {shot}</span>)}
+                </div>
+              ) : null}
+              {parsed.generic_shot ? <p className="production-warning">检测到通用景别 {parsed.generic_shot}；不会自动复制到 A/B/C，请按机位明确后再写。</p> : null}
+              {parsed.range_hint ? <p className="production-note">范围提示：{parsed.range_hint}。原话保留在 note，不生成虚构秒数。</p> : null}
+              <button type="button" disabled={busy || !actor.trim()} onClick={() => void confirmParsed()}>确认写入人工场记</button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
