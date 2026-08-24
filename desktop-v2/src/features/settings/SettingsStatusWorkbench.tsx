@@ -1,6 +1,11 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
-import { DesktopClient, type DesktopStatusPayload } from "../../api/desktop";
+import parity from "../../../phase7-parity.json";
+import {
+  DesktopClient,
+  type DesktopStatusPayload,
+  type FrontendSettings,
+} from "../../api/desktop";
 import { HostConnection, HostConnectionError, type HostProcessStatus } from "../../api/host";
 import { PlatformClient, type PlatformInfo } from "../../api/platform";
 import { TimelineClient, type TimelineRuntimeStatus } from "../../api/timeline";
@@ -19,12 +24,24 @@ function yesNo(value: boolean): string {
   return value ? "ready" : "missing";
 }
 
+function pollInterval(value: string): FrontendSettings["poll_interval_ms"] {
+  const parsed = Number(value);
+  return parsed === 1000 || parsed === 5000 || parsed === 10000 ? parsed : 2500;
+}
+
+function defaultEpisode(value: string): FrontendSettings["default_episode"] {
+  if (value === "first" || value === "all") return value;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 9999 ? parsed : "first";
+}
+
 export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   const desktop = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const platform = useMemo(() => new PlatformClient(), []);
   const timeline = useMemo(() => new TimelineClient(), []);
   const [status, setStatus] = useState<DesktopStatusPayload | null>(null);
+  const [settings, setSettings] = useState<FrontendSettings | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [hostProcess, setHostProcess] = useState<HostProcessStatus | null>(null);
   const [timelineStatus, setTimelineStatus] = useState<TimelineRuntimeStatus | null>(null);
@@ -36,8 +53,12 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
     setBusy(true);
     setMessage("正在读取 Desktop 诊断…");
     try {
-      const next = await desktop.status();
+      const [next, nextSettings] = await Promise.all([
+        desktop.status(),
+        desktop.frontendSettings(),
+      ]);
       setStatus(next);
+      setSettings(nextSettings);
       if (isTauri()) {
         const [nextPlatform, nextHost] = await Promise.all([
           platform.info(),
@@ -49,7 +70,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
           const nextTimeline = await timeline.persistenceStatus();
           if (nextTimeline.project_id === projectId) {
             setTimelineStatus(nextTimeline);
-            setTimelineNote(`generation ${nextTimeline.persistence.generation || "-"} · checkpoint #${nextTimeline.persistence.checkpoint_sequence ?? 0}`);
+            setTimelineNote(`generation ${nextTimeline.persistence.generation || "-"} · checkpoint #${nextTimeline.persistence.checkpoint_sequence}`);
           } else {
             setTimelineStatus(null);
             setTimelineNote(`当前 Rust Timeline 属于 ${nextTimeline.project_id}`);
@@ -73,8 +94,25 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktop, projectId]);
 
+  async function saveSettings(): Promise<void> {
+    if (!settings) return;
+    setBusy(true);
+    setMessage("正在保存 Python Core frontend settings…");
+    try {
+      const saved = await desktop.saveFrontendSettings(settings);
+      setSettings(saved);
+      setMessage("Frontend settings 已保存到当前 workspace；没有创建 Desktop 专用业务配置副本。");
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const requiredModules = status?.environment.python_modules.filter((item) => item.required) ?? [];
   const optionalModules = status?.environment.python_modules.filter((item) => !item.required) ?? [];
+  const parityGates = Object.entries(parity.gates);
+  const nativeGateCount = Object.values(parity.release_gates).filter((value) => value === "required").length;
 
   return (
     <section className="phase3-workbench settings-status-workbench">
@@ -90,6 +128,88 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
       </header>
 
       <div className="production-grid settings-status-grid">
+        <div className="production-panel status-card frontend-settings-card">
+          <div className="parse-heading">
+            <div>
+              <p className="eyebrow">Existing Python Frontend Settings</p>
+              <h3>工作区界面偏好</h3>
+            </div>
+            <button type="button" disabled={busy || !settings} onClick={() => void saveSettings()}>保存</button>
+          </div>
+          {settings ? (
+            <div className="settings-form-grid">
+              <label className="production-field">
+                <span>主题</span>
+                <select value={settings.theme} onChange={(event) => setSettings({ ...settings, theme: event.target.value as FrontendSettings["theme"] })}>
+                  <option value="system">跟随系统</option>
+                  <option value="light">浅色</option>
+                  <option value="dark">深色</option>
+                </select>
+              </label>
+              <label className="production-field">
+                <span>密度</span>
+                <select value={settings.density} onChange={(event) => setSettings({ ...settings, density: event.target.value as FrontendSettings["density"] })}>
+                  <option value="comfortable">舒适</option>
+                  <option value="compact">紧凑</option>
+                </select>
+              </label>
+              <label className="production-field">
+                <span>默认工作台</span>
+                <select value={settings.default_mode} onChange={(event) => setSettings({ ...settings, default_mode: event.target.value as FrontendSettings["default_mode"] })}>
+                  <option value="script">剧本</option>
+                  <option value="unassigned">待归集</option>
+                </select>
+              </label>
+              <label className="production-field">
+                <span>默认集数</span>
+                <input
+                  value={String(settings.default_episode)}
+                  onChange={(event) => setSettings({ ...settings, default_episode: defaultEpisode(event.target.value) })}
+                  placeholder="first / all / 1"
+                />
+              </label>
+              <label className="production-field">
+                <span>刷新间隔</span>
+                <select value={settings.poll_interval_ms} onChange={(event) => setSettings({ ...settings, poll_interval_ms: pollInterval(event.target.value) })}>
+                  <option value={1000}>1 秒</option>
+                  <option value={2500}>2.5 秒</option>
+                  <option value={5000}>5 秒</option>
+                  <option value={10000}>10 秒</option>
+                </select>
+              </label>
+              <label className="settings-check">
+                <input type="checkbox" checked={settings.update_sound} onChange={(event) => setSettings({ ...settings, update_sound: event.target.checked })} />
+                <span>更新提示音</span>
+              </label>
+              <label className="settings-check">
+                <input type="checkbox" checked={settings.show_unknown_count} onChange={(event) => setSettings({ ...settings, show_unknown_count: event.target.checked })} />
+                <span>显示 unknown 数量</span>
+              </label>
+            </div>
+          ) : <p className="empty-copy">尚未读取 workspace frontend settings。</p>}
+          <p className="production-note">这里直接读写现有 `/api/v1/settings`；Desktop v2 不另建一套 theme/density/default-mode 业务配置。</p>
+        </div>
+
+        <div className="production-panel status-card phase7-gate-card">
+          <div className="parse-heading">
+            <div>
+              <p className="eyebrow">desktop_phase7_parity.v1</p>
+              <h3>{parity.desktop_primary_candidate ? "Desktop primary candidate" : "Parity incomplete"}</h3>
+            </div>
+            <span>{nativeGateCount} release gates</span>
+          </div>
+          <div className="phase7-gate-list">
+            {parityGates.map(([name, gate]) => (
+              <div className="phase7-gate-row" key={name}>
+                <strong>{name.replaceAll("_", " ")}</strong>
+                <span className={gate.code_status.startsWith("implemented") ? "is-ready" : "is-missing"}>{gate.code_status}</span>
+                <small>{gate.native_smoke_required ? "native smoke required" : "code gate"}</small>
+              </div>
+            ))}
+          </div>
+          <p className="production-warning">SwiftUI physical retirement: {parity.swiftui_retirement_allowed ? "allowed" : "BLOCKED until native release gates pass"}</p>
+        </div>
+
         <div className="production-panel status-card">
           <p className="eyebrow">Python Core / Workspace</p>
           <h3>{status?.workspace.name || "Workspace"}</h3>
