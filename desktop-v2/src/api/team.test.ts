@@ -46,12 +46,25 @@ describe("TeamGatewayClient", () => {
     });
   });
 
-  it("builds a project-scoped Team Web link without inventing routes", () => {
+  it("builds a project-scoped LAN link without inventing routes", () => {
     expect(teamWorkbenchUrl(
-      { base_url: "http://127.0.0.1:8766", lan_url: "http://10.0.0.8:8766" },
+      { base_url: "http://127.0.0.1:8766", lan_url: "http://10.0.0.8:8766", local_only: false },
       "ws one",
       "p/1",
     )).toBe("http://10.0.0.8:8766/?workspace_id=ws+one&project_id=p%2F1");
+  });
+
+  it("does not return localhost as a LAN collaboration link", () => {
+    expect(teamWorkbenchUrl(
+      { base_url: "http://127.0.0.1:8766", lan_url: null, local_only: false },
+      "ws1",
+      "p1",
+    )).toBeNull();
+    expect(teamWorkbenchUrl(
+      { base_url: "http://127.0.0.1:8766", lan_url: null, local_only: true },
+      "ws1",
+      "p1",
+    )).toContain("127.0.0.1:8766");
   });
 
   it("keeps Team Web native-only", async () => {
