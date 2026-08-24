@@ -30,6 +30,20 @@ def _analysis_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _semantic_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--semantic",
+        choices=("off", "auto", "clap"),
+        default="auto",
+        help="off=关闭embedding；auto=可用时启用CLAP；clap=要求CLAP可用否则报错",
+    )
+    parser.add_argument(
+        "--force-semantic",
+        action="store_true",
+        help="忽略设备本地音乐embedding缓存并重新提取",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mirrororder-auto-score")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -52,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         help="开发测试：允许未验证授权音乐进入候选；正式项目不建议使用",
     )
     _analysis_args(plan_parser)
+    _semantic_args(plan_parser)
 
     args = parser.parse_args(argv)
     if args.command == "index":
@@ -78,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
         allow_unverified=args.allow_unverified,
         analysis_mode=args.analysis,
         force_analysis=args.force_analysis,
+        semantic_mode=args.semantic,
+        force_semantic=args.force_semantic,
     )
     print(json.dumps(plan["summary"], ensure_ascii=False, indent=2))
     print(str(config.output_dir / "music" / "music_plan.json"))
