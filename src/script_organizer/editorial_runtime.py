@@ -159,8 +159,9 @@ def install_editorial_runtime() -> None:
     # authority after explicit confirmation. Assembly remains preview-only.
     # Assistant sits on top without gaining review, Editorial Decision, Delivery
     # or FCPXML write authority. Semantic Retrieval stays read-only. Delivery is
-    # installed last as an explicit Host-local human export adapter that reuses
-    # the existing Python exporter rather than moving FCPXML semantics to Tauri.
+    # an explicit Host-local human export adapter. Desktop parity installs last
+    # and only exposes diagnostics, project preflight and device-local media
+    # binding helpers; it does not become a second business authority.
     from .audit_runtime import install_audit_runtime
     from .script_supervisor_runtime import install_script_supervisor_runtime
     from .identity_api_runtime import install_identity_api_runtime
@@ -181,6 +182,7 @@ def install_editorial_runtime() -> None:
     from .assistant_runtime import install_assistant_runtime
     from .semantic_runtime import install_semantic_runtime
     from .delivery_runtime import install_delivery_runtime
+    from .desktop_runtime import install_desktop_runtime
 
     install_coverage_runtime()
     install_rough_cut_runtime()
@@ -188,3 +190,4 @@ def install_editorial_runtime() -> None:
     install_assistant_runtime()
     install_semantic_runtime()
     install_delivery_runtime()
+    install_desktop_runtime()
