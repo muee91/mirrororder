@@ -78,7 +78,7 @@ function TakeCard({ take, selected, onSelect }: { take: ReviewTakeGroup; selecte
             </div>
             <strong title={angle.name}>{angle.name}</strong>
             <div className="angle-meta">
-              <span>{angle.playback.available === false ? "缺媒体" : "可播放"}</span>
+              <span>{angle.playback.available === false ? "缺媒体" : angle.playback.available === true ? "可播放" : "媒体状态未知"}</span>
               {angle.media_id ? <code>{angle.media_id}</code> : null}
             </div>
           </div>
@@ -184,7 +184,7 @@ export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
   const visibleTakes = model?.take_groups.slice(0, visibleTakeCount) ?? [];
   const selectedTake = model?.take_groups.find((item) => item.group_id === selectedGroupId) ?? model?.take_groups[0] ?? null;
   const selectedAngle = selectedTake?.angles.find((item) => item.clip_id === selectedClipId) ?? selectedTake?.angles[0] ?? null;
-  const playbackUrl = selectedAngle?.playback.url ? new URL(selectedAngle.playback.url, `${baseUrl}/`).toString() : "";
+  const playbackUrl = selectedAngle ? connection.mediaUrl(project.project_id, selectedAngle.clip_id) : "";
 
   function selectTake(take: ReviewTakeGroup): void {
     setSelectedGroupId(take.group_id);
@@ -288,7 +288,11 @@ export function MaterialScriptWorkbench({ baseUrl, project }: Props) {
                       onLoadedMetadata={(event) => {
                         if (selectedAngle.source_start > 0) event.currentTarget.currentTime = selectedAngle.source_start;
                       }}
+                      key={selectedAngle.clip_id}
                       onTimeUpdate={(event) => {
+                        if (event.currentTarget.currentTime < selectedAngle.source_start) {
+                          event.currentTarget.currentTime = selectedAngle.source_start;
+                        }
                         if (selectedAngle.source_end !== null && event.currentTarget.currentTime >= selectedAngle.source_end) {
                           event.currentTarget.pause();
                         }
