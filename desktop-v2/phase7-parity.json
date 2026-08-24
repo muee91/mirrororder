@@ -85,6 +85,7 @@
     "python_tests": "required",
     "timeline_core_cargo_tests": "required",
     "tauri_cargo_check": "required",
+    "packaged_python_runtime": "required",
     "macos_tauri_build": "required",
     "macos_real_media_playback": "required",
     "macos_final_cut_open": "required",
@@ -113,5 +114,20 @@
       "experimental automation engines"
     ],
     "promotion_rule": "Only promote an isolated capability into the primary production workspace after its contract, ownership boundary, failure isolation and native smoke gate are explicit."
+  },
+  "isolated_workstreams": {
+    "runtime_packaging": {
+      "branch": "feat/desktop-v2-runtime-packaging",
+      "status": "isolated_blocker",
+      "reason": "The installed Tauri bundle currently has no declared Python Core/interpreter resources; development-relative MIRRORORDER_CORE_ROOT fallback is not a packaged-runtime guarantee.",
+      "blocks": [
+        "packaged_python_runtime",
+        "macos_tauri_build",
+        "macos_codesign_bundle",
+        "windows_tauri_build",
+        "windows_installer_smoke"
+      ],
+      "mainline_rule": "Do not solve interpreter/resource bundling by adding production tabs or duplicating Python business logic."
+    }
   }
 }
