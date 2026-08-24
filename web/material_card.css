@@ -1,40 +1,91 @@
-/* Shared post-production material-card contract.
-   A material card describes the clip/angle itself. Matching confidence belongs
-   to the Take-to-script relationship and must not dominate the card. */
+/* Shared post-production browsing contract.
+   Material cards describe the clip/angle. Match cards describe the relationship
+   between one Take and the selected script segment. Keep those semantics apart. */
 
 .workspace{
-  grid-template-columns:minmax(270px,.64fr) minmax(610px,1.66fr) minmax(320px,.74fr);
+  grid-template-columns:minmax(270px,.64fr) minmax(620px,1.72fr) minmax(320px,.72fr);
 }
 
-.episode-picks{gap:2px;padding-bottom:2px}
-.episode-pick{
-  min-width:46px;
-  height:27px;
-  border-color:transparent;
-  background:transparent;
-  color:var(--muted);
-  font-weight:560;
+/* Large episode counts must not turn the header into a wall of buttons. The
+   JS projection replaces the full button strip with prev / jump / next. */
+.episode-picks.compact-episode-nav{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  overflow:visible;
+  padding:0;
 }
-.episode-pick:hover{border-color:transparent;background:var(--panel-soft);color:var(--ink)}
-.episode-pick.active{border-color:var(--blue);background:var(--blue);color:#fff;font-weight:680}
-.episode-pick.unassigned-pick{border-color:var(--line);background:var(--panel-soft);color:var(--amber)}
-.episode-pick.unassigned-pick.active{border-color:var(--amber);background:var(--amber);color:#fff}
+.episode-picks.compact-episode-nav>.episode-pick{display:none}
+.episode-nav-button,.episode-nav-select,.episode-nav-pending{
+  height:28px;
+  border:1px solid var(--line);
+  border-radius:5px;
+  background:var(--control);
+  color:var(--control-ink);
+  font:inherit;
+  font-size:11px;
+}
+.episode-nav-button{min-width:30px;padding:0 8px}
+.episode-nav-button:disabled{opacity:.38}
+.episode-nav-select{min-width:112px;padding:0 8px;font-weight:650}
+.episode-nav-pending{padding:0 9px;color:var(--amber);font-weight:650}
+.episode-nav-pending.active{border-color:var(--amber);background:var(--amber);color:#fff}
 
 .take-row{
-  grid-template-columns:42px minmax(178px,.66fr) minmax(0,1.82fr);
-  gap:8px;
-  min-height:94px;
+  grid-template-columns:92px minmax(178px,.66fr) minmax(0,1.82fr);
+  gap:9px;
+  min-height:96px;
   padding:8px 10px;
 }
+
+/* Confidence is deliberately a dedicated relationship card, not a faint rail
+   and not a material-card property. */
 .confidence-rail{
-  min-height:72px;
-  gap:3px;
-  padding:4px 2px;
-  opacity:.68;
+  position:relative;
+  min-height:78px;
+  display:grid;
+  grid-template-rows:auto auto 1fr auto;
+  align-content:start;
+  justify-items:start;
+  gap:2px;
+  padding:8px 8px 7px;
+  border:1px solid var(--line-strong);
+  border-radius:7px;
+  background:var(--panel-soft);
+  text-align:left;
+  overflow:hidden;
 }
-.confidence-rail strong{font-size:10px;font-weight:700}
-.confidence-rail span{font-size:8px}
-.confidence-rail small{display:none}
+.confidence-rail::before{
+  content:"剧本匹配";
+  color:var(--muted);
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:.03em;
+}
+.confidence-rail::after{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:3px;
+  background:currentColor;
+  opacity:.9;
+}
+.confidence-rail strong{font-size:13px;font-weight:760;line-height:1.15}
+.confidence-rail span{font-size:9px;font-weight:600;line-height:1.25}
+.confidence-rail small{
+  align-self:end;
+  min-height:15px;
+  color:currentColor;
+  font-size:9px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  opacity:.88;
+}
+.confidence-exact{border-color:color-mix(in srgb,var(--green) 34%,var(--line));background:var(--green-soft);color:var(--green)}
+.confidence-possible{border-color:color-mix(in srgb,var(--amber) 38%,var(--line));background:var(--amber-soft);color:var(--amber)}
+.confidence-context{border-color:color-mix(in srgb,var(--red) 22%,var(--line));background:var(--red-soft);color:var(--red)}
+.confidence-manual{border-color:color-mix(in srgb,var(--purple) 34%,var(--line));background:var(--purple-soft);color:var(--purple)}
+
 .take-transcript{min-height:29px;font-size:11px;line-height:1.35}
 .take-meta{font-size:9px}
 .take-actions{gap:2px}
@@ -48,6 +99,8 @@
 .decision-button:hover,.placement-button:hover{border-color:var(--line);background:var(--panel-soft)}
 .decision-button.selected.best,.decision-button.selected.keep,.decision-button.selected.reject{border-width:1px}
 
+/* Clip / angle material card. Fixed dimensions prevent metadata from making the
+   browser jump while the editor scans hundreds of Takes. */
 .member-strip{gap:6px;align-items:stretch}
 .camera-run{gap:5px}
 .member-card,
@@ -111,18 +164,108 @@
 .member-time{margin-left:auto;font-size:9px}
 .repeat-label{font-size:8px}
 
-/* The player is for monitoring. It must not visually outweigh the material
-   browser on wide editing displays. */
-.inspector{min-width:0}
-#player{max-height:52vh}
+/* Monitor: one screen must contain picture + angles + current Take + dialogue.
+   Portrait media is letterboxed rather than allowed to consume the whole pane. */
+.inspector{
+  min-width:0;
+  gap:6px;
+  padding:10px;
+  overflow:hidden;
+}
+.inspector-head{min-height:35px;flex:0 0 auto}
+#player{
+  flex:1 1 auto;
+  width:100%;
+  height:min(43vh,440px);
+  min-height:210px;
+  max-height:440px;
+  aspect-ratio:auto;
+  object-fit:contain;
+}
+.player-range{flex:0 0 auto;font-size:9px;line-height:1.25}
+.player-members{
+  flex:0 0 auto;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:4px;
+}
+.player-member-button{
+  min-width:0;
+  min-height:34px;
+  grid-template-columns:22px minmax(0,1fr);
+  grid-template-rows:auto auto;
+  gap:1px 5px;
+  padding:4px 5px;
+}
+.player-member-button .camera-chip{grid-row:1 / 3}
+.player-member-name{font-size:9px}
+.player-member-time{grid-column:2;color:#94a3b8;font-size:8px}
+.inspector-section{
+  flex:0 0 auto;
+  min-height:0;
+  padding-top:5px;
+}
+.inspector-section p{
+  margin-top:3px;
+  font-size:10px;
+  line-height:1.4;
+}
+#player-take{
+  display:-webkit-box;
+  overflow:hidden;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+}
+#player-transcript{
+  display:-webkit-box;
+  overflow:hidden;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:3;
+}
+
+/* 小镜 on Team Web is button-only until explicitly opened. No unsolicited
+   lower-right nudge card should cover the editing surface. */
+html:not(.native-production) .mirror-assistant-nudge{display:none!important}
+html:not(.native-production) .mirror-assistant-entry{
+  min-width:58px;
+  height:36px;
+  padding:0 10px;
+  border-radius:18px;
+}
+html:not(.native-production) .mirror-assistant-entry .entry-label{font-size:10px;font-weight:700}
+
+.identity-role-suggestion{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  margin-top:3px;
+  padding:2px 5px;
+  border:1px solid var(--line);
+  border-radius:4px;
+  background:var(--panel-soft);
+  color:var(--muted);
+  font-size:9px;
+}
+.identity-role-suggestion strong{color:var(--ink);font-weight:650}
+
+@media(max-width:1100px){
+  .player-members{grid-template-columns:1fr}
+  .player-member-button{grid-template-columns:24px minmax(0,1fr) auto;grid-template-rows:auto}
+  .player-member-button .camera-chip{grid-row:auto}
+  .player-member-time{grid-column:auto}
+}
 
 @media(max-width:900px){
-  .take-row{grid-template-columns:40px minmax(150px,.58fr) minmax(0,1.42fr)}
+  .take-row{grid-template-columns:84px minmax(150px,.58fr) minmax(0,1.42fr)}
   .member-card,.camera-run.repeated .member-card{flex-basis:168px;width:168px;min-width:168px;max-width:168px}
+  #player{height:min(40vh,380px);min-height:200px}
 }
 
 @media(max-width:680px){
   .take-row{display:flex}
-  .confidence-rail{min-height:0;opacity:.8}
+  .confidence-rail{width:100%;min-height:52px;grid-template-columns:auto auto 1fr auto;grid-template-rows:auto;align-items:center;gap:7px}
+  .confidence-rail::before{content:"匹配"}
+  .confidence-rail small{justify-self:end}
   .member-card,.camera-run.repeated .member-card{flex-basis:164px;width:164px;min-width:164px;max-width:164px}
+  .player-members{grid-template-columns:1fr}
 }
