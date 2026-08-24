@@ -61,12 +61,17 @@ def test_normal_web_review_keeps_review_surface_without_production_dom() -> None
 def test_native_workspace_preserves_appkit_bridge_and_team_review_exit() -> None:
     core = (ROOT / "macos-app" / "MirrorOrderDesktopCore.swift").read_text(encoding="utf-8")
     ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
+    native = (ROOT / "macos-app" / "NativeProjectWorkbench.swift").read_text(encoding="utf-8")
 
     assert "struct DesktopWebView: NSViewRepresentable" in core
     assert 'WKScriptMessageHandler' in core
     assert 'name: "mirrorOrder"' in core
-    assert 'Button("团队审阅") { controller.openInBrowser() }' in ui
-    assert 'DesktopWebView(url: controller.workbenchURL, reloadToken: controller.reloadToken)' in ui
+    assert "struct NativeReviewReadModel: Decodable" in core
+    assert 'appendingPathComponent("review-model")' in core
+    assert "struct NativeProjectWorkbench: View" in native
+    assert "NativeVideoPlayerView(player: player)" in native
+    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
+    assert "NativeProjectWorkbench(" in ui
 
 
 def test_boundary_document_keeps_review_read_model_as_phase_two() -> None:

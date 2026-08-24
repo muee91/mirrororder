@@ -261,14 +261,18 @@ def test_review_v1_projection_preserves_authority_and_hides_host_paths(tmp_path:
     assert "Studio Secret" not in serialized
 
 
-def test_review_v1_web_adapter_is_remote_only_and_loaded_before_wrappers() -> None:
+def test_review_v1_adapter_keeps_team_web_path_free_and_enriches_native_drag_only() -> None:
     root = Path(__file__).resolve().parents[1]
     html = (root / "web" / "index.html").read_text(encoding="utf-8")
     adapter = (root / "web" / "review_model.js").read_text(encoding="utf-8")
     cli = (root / "src" / "script_organizer" / "cli.py").read_text(encoding="utf-8")
     runtime = (root / "src" / "script_organizer" / "review_read_model.py").read_text(encoding="utf-8")
 
-    assert "if (window.webkit?.messageHandlers?.mirrorOrder) return;" in adapter
+    assert "const nativeApp = Boolean(window.webkit?.messageHandlers?.mirrorOrder);" in adapter
+    assert "function nativeMediaPaths(groups)" in adapter
+    assert "nativePath = nativeApp ? paths.get(angle.clip_id) : null" in adapter
+    assert "projectApi('/groups')" in adapter
+    assert "review.v1 stays path-free for Team Web" in adapter
     assert "projectApi('/review-model')" in adapter
     assert "['', '/script', '/groups', '/matches']" not in adapter
     assert html.index('<script src="/review_model.js"></script>') < html.index('<script src="/ux_fixes.js"></script>')

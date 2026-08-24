@@ -1,11 +1,8 @@
 (() => {
-  // The native App keeps the richer production data path because AppKit file
-  // dragging requires device-local resolved paths. Normal Web consumes only
-  // the Host-projected review.v1 contract.
-  if (window.webkit?.messageHandlers?.mirrorOrder) return;
   if (window.__mirrorOrderReviewModelInstalled) return;
   window.__mirrorOrderReviewModelInstalled = true;
 
+  const nativeApp = Boolean(window.webkit?.messageHandlers?.mirrorOrder);
   const legacyFetchJson = fetchJson;
   const legacySwitchProject = switchProject;
   let switchingProject = false;
@@ -26,20 +23,37 @@
     return {segments: rows};
   }
 
-  function legacyMember(angle) {
+  function nativeMediaPaths(groups) {
+    const paths = new Map();
+    for (const group of groups || []) {
+      for (const member of group.members || []) {
+        if (!member?.clip_id) continue;
+        paths.set(member.clip_id, {
+          media_path: member.media_path || '',
+          source_media_path: member.source_media_path || '',
+          resolved_media_path: member.resolved_media_path || '',
+          local_exists: member.local_exists,
+          exists: member.exists,
+        });
+      }
+    }
+    return paths;
+  }
+
+  function legacyMember(angle, paths) {
     const available = angle.playback?.available;
     const exists = available === undefined ? true : Boolean(available);
+    const nativePath = nativeApp ? paths.get(angle.clip_id) : null;
     return {
       clip_id: angle.clip_id || '',
       media_id: angle.media_id || '',
       camera: angle.camera || '',
       name: angle.name || angle.clip_id || '未命名素材',
-      // Review Web deliberately receives no Host absolute path. Keeping only
-      // the display name also prevents timeline helpers from mistaking a Host
-      // filesystem path for a browser-client path.
-      media_path: angle.name || '',
-      source_media_path: '',
-      resolved_media_path: '',
+      // review.v1 stays path-free for Team Web. The native App reads the
+      // current Mac's local resolver projection only to prepare AppKit drags.
+      media_path: nativePath?.media_path || angle.name || '',
+      source_media_path: nativePath?.source_media_path || '',
+      resolved_media_path: nativePath?.resolved_media_path || '',
       timeline_start: Number(angle.timeline_start || 0),
       timeline_end: Number(angle.timeline_end || 0),
       duration: Number(angle.duration || 0),
@@ -50,13 +64,13 @@
       coverage_role: angle.coverage_role || 'unknown',
       visible_people: [...(angle.visible_people || [])],
       technical_issues: [...(angle.technical_issues || [])],
-      local_exists: exists,
-      exists,
+      local_exists: nativePath?.local_exists ?? exists,
+      exists: nativePath?.exists ?? exists,
     };
   }
 
-  function legacyGroup(take) {
-    const members = (take.angles || []).map(legacyMember);
+  function legacyGroup(take, paths) {
+    const members = (take.angles || []).map((angle) => legacyMember(angle, paths));
     const automation = take.automatic_state?.available ? {...take.automatic_state} : undefined;
     return {
       group_id: take.group_id || '',
@@ -104,7 +118,7 @@
     };
   }
 
-  function applyReviewModel(model) {
+  function applyReviewModel(model, paths = new Map()) {
     if (!model || model.contract_version !== 'review.v1') {
       throw new Error(`不支持的审阅数据契约：${model?.contract_version || 'unknown'}`);
     }
@@ -128,7 +142,7 @@
       audit: {...(model.summary?.audit || {})},
     };
     state.script = flattenScript(model);
-    state.groups = (model.take_groups || []).map(legacyGroup);
+    state.groups = (model.take_groups || []).map((take) => legacyGroup(take, paths));
     state.matches = legacyMatches(model);
     state.review = model.review_state?.legacy_review || {
       version: 2,
@@ -163,7 +177,16 @@
 
   reloadAnalysis = async function reviewModelReloadAnalysis(showNotice = false) {
     const model = await legacyFetchJson(projectApi('/review-model'));
-    applyReviewModel(model);
+    let paths = new Map();
+    if (nativeApp) {
+      try {
+        paths = nativeMediaPaths(await legacyFetchJson(projectApi('/groups')));
+      } catch (_error) {
+        // The review model remains usable when the App-local path supplement
+        // is temporarily unavailable; only external file dragging is omitted.
+      }
+    }
+    applyReviewModel(model, paths);
     if (switchingProject) cachedSwitchReview = state.review;
     if (!state.episode && state.episode !== null) state.episode = episodeList()[0] ?? null;
     $('#project-name').textContent = state.project.project;

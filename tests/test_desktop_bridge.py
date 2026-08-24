@@ -52,17 +52,20 @@ def test_desktop_service_start_script_saves_owned_gateway_pid():
 
 def test_desktop_shell_keeps_projects_persistent_in_left_sidebar():
     _core, ui, _build = desktop_sources()
+    native = read("macos-app/NativeProjectWorkbench.swift")
     assert "private struct ProductionSidebar" in ui
     assert "private struct SidebarProjectRow" in ui
     assert ".frame(width: 224)" in ui
-    assert "ProjectWorkspace(controller: controller" in ui
+    assert "ProjectWorkspace(" in ui
+    assert "controller: controller" in ui
     assert "StatusCenterSheet" in ui
     assert "项目常驻左栏" in ui
     assert "ProjectInspector" not in ui
     assert "ProjectPage" not in ui
     assert "WorkbenchPage" not in ui
-    assert 'Button("场记") { controller.openScriptSupervisor() }' in ui
-    assert 'Button("团队审阅") { controller.openInBrowser() }' in ui
+    assert 'Button("场记") { showSupervisor = true }' in native
+    assert 'Button("团队审阅") { controller.openInBrowser() }' in native
+    assert 'WindowGroup("镜序")' in ui
 
 
 def test_desktop_system_features_live_in_settings_and_status_center():
@@ -86,6 +89,28 @@ def test_desktop_gateway_probe_ignores_non_numeric_stats_extensions():
     assert "try? container.decode(Int.self, forKey: key)" in core
     assert "var numericStats: [String: Int]" in core
     assert "let stats: [String: Int]?" not in core
+
+
+def test_desktop_project_activity_uses_only_current_tasks():
+    core, ui, _build = desktop_sources()
+    assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) {' in core
+    assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) ?? tasks.first' not in core
+    assert "filter(\\.isActive)" in ui
+
+
+def test_desktop_webview_recovers_navigation_failures_and_reports_runtime_errors():
+    core, _ui, _build = desktop_sources()
+    assert "defaultWebpagePreferences.allowsContentJavaScript = true" in core
+    assert "decidePolicyFor navigationAction" in core
+    assert "decisionHandler(.allow, preferences)" in core
+    assert "WKNavigationDelegate" in core
+    assert "didFailProvisionalNavigation" in core
+    assert "reloadFromOrigin()" in core
+    assert "runtimeError" in core
+    assert "unhandledrejection" in core
+    assert "mirrororder-runtime-error" in core
+    assert "var isLoading = false" in core
+    assert "if !context.coordinator.isLoading" in core
 
 
 def test_desktop_has_native_project_creation_through_host_authority():
