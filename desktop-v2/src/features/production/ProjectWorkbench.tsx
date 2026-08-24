@@ -8,7 +8,9 @@ import { IdentityWorkbench } from "../identity/IdentityWorkbench";
 import { MaterialScriptWorkbench } from "../material-script/MaterialScriptWorkbench";
 import "../material-script/material-script.css";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
+import "../media/media.css";
 import { SettingsStatusWorkbench } from "../settings/SettingsStatusWorkbench";
+import "../settings/settings.css";
 import { SlateWorkbench } from "../slate/SlateWorkbench";
 import "./production.css";
 
