@@ -14,13 +14,16 @@ def test_confidence_labels_keep_their_light_palette_in_dark_theme() -> None:
     assert ".confidence-possible{border-color:#e9bd64;background:#fff5df;color:#8c5109}" in css
 
 
-def test_desktop_app_exposes_light_system_and_dark_workbench_themes() -> None:
-    settings = (ROOT / "macos-app" / "LocalRuntimeSettingsView.swift").read_text(encoding="utf-8")
+def test_desktop_app_exposes_light_system_and_dark_themes() -> None:
+    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
 
-    assert 'Text("浅色").tag("light")' in settings
-    assert 'Text("跟随系统").tag("system")' in settings
-    assert 'Text("深色").tag("dark")' in settings
-    assert "置信度标签保持浅色模式的原有颜色" in settings
+    assert "private enum NativeThemeMode" in ui
+    assert '"跟随系统"' in ui
+    assert '"浅色"' in ui
+    assert '"深色"' in ui
+    assert "preferredColorScheme(nativeThemeMode.colorScheme)" in ui
+    assert "static var background: Color" in ui
+    assert "static var panel: Color" in ui
 
 
 def test_lan_pairing_uses_cookie_safe_browser_requests() -> None:
@@ -55,36 +58,29 @@ def test_desktop_surface_uses_project_first_hierarchy() -> None:
     ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
     build = (ROOT / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
 
-    assert "NativeThemeMode.system.rawValue" in ui
+    assert "private struct ProductionSidebar" in ui
+    assert "private struct SidebarProjectRow" in ui
+    assert "private struct ProjectWorkspace" in ui
+    assert ".frame(width: 224)" in ui
     assert 'Text("项目")' in ui
     assert 'Text("工作台")' not in ui
-    assert 'Image(systemName: "ellipsis")' in ui
-    assert 'Text("永久删除项目…")' in ui
-    assert 'Text("内容与人物")' in ui
-    assert 'Text("可选增强")' in ui
-    assert 'Label("\\(attention.count) 项需处理"' in ui
-    assert 'case .ready: return stage.kind == .ready' in ui
-    assert 'case .attention: return attention.hasIssues || stage.kind == .failed' in ui
+    assert "ProjectInspector" not in ui
+    assert "WorkbenchPage" not in ui
+    assert 'Button("场记") { controller.openScriptSupervisor() }' in ui
+    assert 'Button("团队审阅") { controller.openInBrowser() }' in ui
     assert 'CORE_SOURCE="$ROOT/macos-app/MirrorOrderDesktopCore.swift"' in build
     assert 'UI_SOURCE="$ROOT/macos-app/MirrorOrderDesktopUI.swift"' in build
 
 
-def test_project_inspector_keeps_one_fixed_active_task_surface() -> None:
+def test_active_work_stays_out_of_the_production_canvas() -> None:
     ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
-    core = (ROOT / "macos-app" / "MirrorOrderDesktopCore.swift").read_text(encoding="utf-8")
-    inspector_start = ui.index("private func inspector")
 
-    assert "private func activeTaskStrip(_ activity: ProjectActivity)" in ui
-    assert ui.index("activeTaskStrip(activity)", inspector_start) < ui.index("ScrollView {", inspector_start)
-    assert 'if let activity = controller.selectedProjectActivity, !activity.isActive {' in ui
-    assert "后台整理正在进行" not in ui
-    assert "日志时间按本机时区显示" in ui
-    assert "displayTaskLogLine" in ui
-    assert "if let activity = selectedProjectActivity, activity.isActive" in core
-    assert "startTaskPolling(projectID: selectedProjectID, taskID: activity.taskID)" in core
-    assert "PYTHONDONTWRITEBYTECODE=1 nohup" in core
-    assert "private var refreshFailureCount = 0" in core
-    assert "refreshFailureCount >= 3" in core
-    active_strip = ui[ui.index("private func activeTaskStrip"):ui.index("private func mediaSection")]
-    assert "Menu {" not in active_strip
-    assert 'Label("取消任务", systemImage: "xmark")' not in active_strip
+    assert "private struct ActiveTaskStrip" in ui
+    assert "private struct StatusCenterSheet" in ui
+    assert "同步、转写、识别和审计任务集中在这里，不占制作画布。" in ui
+    assert "if let activity = controller.selectedProjectActivity, activity.isActive" in ui
+    assert "ActiveTaskStrip(activity: activity)" in ui
+    assert (
+        "DesktopWebView(url: controller.workbenchURL, reloadToken: controller.reloadToken)\n"
+        "                            .frame(maxWidth: .infinity, maxHeight: .infinity)"
+    ) in ui
