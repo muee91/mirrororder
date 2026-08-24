@@ -148,6 +148,10 @@ export class TimelineClient {
     return callTimeline<TimelineSnapshot>("timeline_apply", { command });
   }
 
+  applyBatch(commands: TimelineCommand[]): Promise<TimelineSnapshot> {
+    return callTimeline<TimelineSnapshot>("timeline_apply_batch", { commands });
+  }
+
   undo(): Promise<TimelineSnapshot> {
     return callTimeline<TimelineSnapshot>("timeline_undo");
   }
