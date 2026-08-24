@@ -128,7 +128,7 @@ def install_semantic_runtime() -> None:
 
         if self.language.enabled:
             system = (
-                "你是镜序助理，服务短剧后期制作。回答用户前优先使用 semantic_retrieval 中召回的画面、对白和人工场记证据；"
+                "你是小镜，服务短剧后期制作。回答用户前优先使用 semantic_retrieval 中召回的画面、对白和人工场记证据；"
                 "没有召回证据时明确说证据不足，不要用常识补写素材内容。"
                 "画面描述来自可重建视觉索引；ASR可能有转写误差；场记是人工生产证据，但都不能自行升级成Best/Reject、最终归集或Editorial Decision。"
                 "场记里的‘只要前半段’可以解释为局部可用，但没有人工精确范围时绝不能编造秒数。"

@@ -130,7 +130,7 @@
     const control = document.querySelector('#assistant-control-root');
     if (control) replaceAssistantText(control);
     document.querySelectorAll(
-      '#mirror-assistant-panel input[placeholder*="镜序助理"],#mirror-assistant-panel textarea[placeholder*="镜序助理"],#assistant-control-root input[placeholder*="镜序助理"],#assistant-control-root textarea[placeholder*="镜序助理"]'
+      '#mirror-assistant-panel input[placeholder*="镜序助理"],#mirror-assistant-panel textarea[placeholder*="镜序助理"],#assistant-control-root input[placeholder*="镜序助理"],#assistant-control-root textarea[placeholder*="镜序助理"],#mirror-assistant-panel input[placeholder*="小镜"],#mirror-assistant-panel textarea[placeholder*="小镜"],#assistant-control-root input[placeholder*="小镜"],#assistant-control-root textarea[placeholder*="小镜"]'
     ).forEach((node) => {
       node.placeholder = node.placeholder.replaceAll('镜序助理', '小镜');
     });

@@ -65,7 +65,10 @@ def test_mlx_model_cache_is_device_local(monkeypatch, tmp_path: Path) -> None:
 def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     root = Path(__file__).resolve().parents[1]
     build = (root / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
-    desktop = (root / "macos-app" / "MirrorOrderDesktopApp.swift").read_text(encoding="utf-8")
+    desktop = "\n".join(
+        (root / "macos-app" / name).read_text(encoding="utf-8")
+        for name in ("MirrorOrderDesktopCore.swift", "MirrorOrderDesktopUI.swift")
+    )
     panel = (root / "macos-app" / "LocalRuntimeSettingsView.swift").read_text(encoding="utf-8")
     assert "MIRRORORDER_LLAMA_SERVER" in build
     assert 'cp "$LLAMA_SERVER_SOURCE" "$RUNTIME_BIN"' in build
@@ -76,7 +79,7 @@ def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     assert "external Mach-O dependency" in build
     assert 'codesign --force --sign - "$RUNTIME/bin/llama-server"' in build
     assert 'codesign --force --deep --sign - "$APP"' in build
-    assert '"$SOURCE" "$LOCAL_RUNTIME_SOURCE"' in build
+    assert '"$CORE_SOURCE" "$UI_SOURCE" "$NATIVE_WORKBENCH_SOURCE" "$LOCAL_RUNTIME_SOURCE" "$RUNTIME_OVERVIEW_SOURCE"' in build
     assert "build must NEVER download or embed model weights" in build
     assert "huggingface.co" not in build
     assert "curl " not in build

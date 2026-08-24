@@ -21,9 +21,9 @@ def test_desktop_is_project_first_production_surface() -> None:
     assert 'Text("已有对齐 FCPXML").tag("fcpxml")' in ui
     assert 'Button("开始自动整理")' in ui
     assert 'Button("永久删除项目…", role: .destructive)' in ui
-    assert 'case intelligence = "本地智能"' in ui
-    assert 'case collaboration = "团队协作"' in ui
-    assert 'case diagnostics = "诊断"' in ui
+    assert 'intelligence = "本地智能"' in ui
+    assert 'collaboration = "团队协作"' in ui
+    assert 'diagnostics = "诊断"' in ui
     assert 'workspaceEndpoint("project-preflight")' in core
     assert 'workspaceEndpoint("projects")' in core
 

@@ -45,10 +45,10 @@
         <div class="mirror-assistant-control-actions"><button type="submit">保存连接</button></div>
       </form>
       <form id="mirror-assistant-chat" class="mirror-assistant-chat">
-        <input id="mirror-assistant-chat-input" type="text" maxlength="3000" placeholder="问镜序助理当前项目的问题">
+        <input id="mirror-assistant-chat-input" type="text" maxlength="3000" placeholder="问小镜当前项目的问题">
         <button type="submit">发送</button>
       </form>
-    ` : '<div class="mirror-assistant-status-row"><strong>镜序助理</strong><span>由制作 Host 主动整理问题；Web 只显示可审阅结论和提醒。</span></div>';
+    ` : '<div class="mirror-assistant-status-row"><strong>小镜</strong><span>由制作 Host 主动整理问题；Web 只显示可审阅结论和提醒。</span></div>';
     panel.appendChild(controls);
     bindControls();
   }
@@ -56,6 +56,10 @@
   function renderBackendNudge(payload) {
     const nudge = document.querySelector('#mirror-assistant-nudge');
     if (!nudge || !payload) return;
+    if (!APP_CLIENT) {
+      nudge.hidden = true;
+      return;
+    }
     const items = asArray(payload.items).filter((item) => Number(item?.priority || 0) >= 80);
     if (!items.length) {
       nudge.hidden = true;
@@ -92,7 +96,7 @@
     const list = document.querySelector('#mirror-assistant-list');
     if (!list) return;
     if (!items.length) {
-      list.innerHTML = '<div class="mirror-assistant-empty">没有新的问题。镜序助理会在归集冲突、低置信素材、媒体缺失或审计反例出现时主动提醒。</div>';
+      list.innerHTML = '<div class="mirror-assistant-empty">没有新的问题。小镜会在归集冲突、低置信素材、媒体缺失或审计反例出现时主动提醒。</div>';
       renderBackendNudge(payload);
       return;
     }
@@ -190,7 +194,7 @@
 
   async function runPlan() {
     if (!APP_CLIENT) return;
-    showToast('镜序助理正在检查项目并规划下一步');
+    showToast('小镜正在检查项目并规划下一步');
     const payload = await fetchJson(projectApi('/assistant/cycle'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -251,7 +255,7 @@
       const summary = document.querySelector('#mirror-assistant-summary p');
       if (summary && payload.answer) summary.textContent = payload.answer;
     } catch (error) {
-      showToast(error.message || '镜序助理暂时无法回答');
+      showToast(error.message || '小镜暂时无法回答');
     } finally {
       if (input) input.disabled = false;
     }

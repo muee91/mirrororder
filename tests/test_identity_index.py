@@ -13,9 +13,55 @@ from script_organizer.device_runtime_settings import (
     save_runtime_settings,
 )
 from script_organizer.identity_index import IdentityIndexer
+from script_organizer.identity_index_v3 import _prototype_similarity
 from script_organizer.identity_library import IdentityLibrary
+from script_organizer.identity_role_inference import _role_candidates
 from script_organizer.identity_runtime import FACE_DETECTOR, FACE_RECOGNIZER, SPEAKER_EMBEDDER
 from script_organizer.workspace_db import WorkspaceDatabase
+
+
+def test_face_matching_keeps_a_strong_real_prototype_when_centroid_is_weak() -> None:
+    score = _prototype_similarity(
+        [1.0, 0.0, 0.0],
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+    )
+    assert score > 0.95
+
+
+def test_face_fragment_merge_respects_same_take_same_camera_and_human_target() -> None:
+    left = {
+        "identity_id": "face_human",
+        "confirmed": True,
+        "vectors": [[1.0, 0.0]],
+        "presence": {("G1", "A")},
+        "created_at": "2026-08-01T00:00:00+00:00",
+    }
+    co_visible = {
+        "identity_id": "face_other",
+        "confirmed": False,
+        "vectors": [[0.999, 0.01]],
+        "presence": {("G1", "A")},
+        "created_at": "2026-08-02T00:00:00+00:00",
+    }
+    other_camera = {**co_visible, "presence": {("G1", "B")}}
+
+    assert IdentityIndexer._same_camera_cooccurrence(left, co_visible) is True
+    assert IdentityIndexer._same_camera_cooccurrence(left, other_camera) is False
+    assert IdentityIndexer._merge_target(left, other_camera) == ("face_human", "face_other")
+
+
+def test_face_role_inference_is_candidate_only_and_multiface_evidence_is_weaker() -> None:
+    quality = {"G1": 0.95, "G2": 0.92, "G3": 0.90}
+    relations = {
+        group_id: [("陈大山", 1.0, "human_placement")]
+        for group_id in quality
+    }
+    solo = _role_candidates("face_1", "face", quality, {group_id: 1 for group_id in quality}, relations)[0]
+    multi = _role_candidates("face_1", "face", quality, {group_id: 2 for group_id in quality}, relations)[0]
+
+    assert solo["role_name"] == "陈大山"
+    assert solo["requires_confirmation"] is True
+    assert solo["score"] > multi["score"]
 
 
 def test_identity_worker_reports_initialization_before_inference(monkeypatch, capsys, tmp_path: Path) -> None:

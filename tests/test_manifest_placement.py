@@ -60,7 +60,11 @@ def test_manual_script_placement_removes_stale_automatic_line(tmp_path):
     rows = {row["script_segment"]: row["groups"] for row in manifest["segments"]}
 
     assert rows["old"] == []
-    assert rows["new"] == [{"group_id": "g1", "state": "keep", "automatic_state": "keep"}]
+    assert len(rows["new"]) == 1
+    assert rows["new"][0]["group_id"] == "g1"
+    assert rows["new"][0]["state"] == "keep"
+    assert rows["new"][0]["automatic_state"] == "keep"
+    assert rows["new"][0]["decision_source"] == "automatic_mapping_fallback"
 
 
 def test_episode_only_placement_does_not_claim_manual_script_line(tmp_path):
@@ -106,4 +110,8 @@ def test_episode_only_placement_does_not_claim_manual_script_line(tmp_path):
     manifest = build_selection_manifest(config)
     groups = manifest["segments"][0]["groups"]
 
-    assert groups == [{"group_id": "g1", "state": "keep", "automatic_state": "keep"}]
+    assert len(groups) == 1
+    assert groups[0]["group_id"] == "g1"
+    assert groups[0]["state"] == "keep"
+    assert groups[0]["automatic_state"] == "keep"
+    assert groups[0]["decision_source"] == "automatic_mapping_fallback"

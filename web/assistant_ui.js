@@ -275,14 +275,14 @@
       panel.id = 'mirror-assistant-panel';
       panel.className = 'mirror-assistant-panel';
       panel.hidden = true;
-      panel.setAttribute('aria-label', '镜序助理');
+      panel.setAttribute('aria-label', '小镜');
       panel.innerHTML = `
         <div class="mirror-assistant-head">
           <div class="mirror-assistant-identity">
             <span class="mirror-assistant-mark" aria-hidden="true"></span>
-            <div><strong>镜序助理</strong><span>看片问题 · 素材线索 · 归集判断</span></div>
+            <div><strong>小镜</strong><span>看片问题 · 素材线索 · 归集判断</span></div>
           </div>
-          <button class="mirror-assistant-close" type="button" aria-label="关闭镜序助理">关闭</button>
+          <button class="mirror-assistant-close" type="button" aria-label="关闭小镜">关闭</button>
         </div>
         <div id="mirror-assistant-summary" class="mirror-assistant-summary"></div>
         <div id="mirror-assistant-list" class="mirror-assistant-list"></div>
@@ -296,7 +296,7 @@
       nudge.hidden = true;
       nudge.innerHTML = `
         <span class="mirror-assistant-mark" aria-hidden="true"></span>
-        <div class="mirror-assistant-nudge-main"><strong>镜序助理</strong><p></p><button class="mirror-assistant-nudge-open" type="button">查看问题</button></div>
+        <div class="mirror-assistant-nudge-main"><strong>小镜</strong><p></p><button class="mirror-assistant-nudge-open" type="button">查看问题</button></div>
         <button class="mirror-assistant-nudge-close" type="button" aria-label="本次稍后提醒">稍后</button>
       `;
       document.body.appendChild(nudge);
@@ -314,7 +314,7 @@
     button.id = 'mirror-assistant-entry';
     button.className = 'mirror-assistant-entry';
     button.type = 'button';
-    button.innerHTML = `<span class="mirror-assistant-mark" aria-hidden="true"></span><span>镜序助理</span><span class="mirror-assistant-count">0</span>`;
+    button.innerHTML = `<span class="mirror-assistant-mark" aria-hidden="true"></span><span>小镜</span><span class="mirror-assistant-count">0</span>`;
     if (APP_CLIENT) target.prepend(button);
     else {
       const identity = document.querySelector('#identity-library-button');
@@ -330,7 +330,7 @@
     const list = document.querySelector('#mirror-assistant-list');
     if (!list) return;
     if (!items.length) {
-      list.innerHTML = '<div class="mirror-assistant-empty">没有新的问题。继续看片即可；镜序助理只在有明确风险或需要人工判断时主动打断。</div>';
+      list.innerHTML = '<div class="mirror-assistant-empty">没有新的问题。继续看片即可；小镜只在有明确风险或需要人工判断时主动打断。</div>';
       return;
     }
     const kinds = ['decision', 'production', 'people'];
@@ -384,6 +384,10 @@
   function renderNudge(items) {
     const nudge = document.querySelector('#mirror-assistant-nudge');
     if (!nudge) return;
+    if (!APP_CLIENT) {
+      nudge.hidden = true;
+      return;
+    }
     const attention = attentionItems(items);
     currentFingerprint = fingerprint(items);
     if (!attention.length || nudgeDismissed(currentFingerprint) || !state.projectId) {
@@ -406,7 +410,7 @@
     button.classList.toggle('has-attention', count > 0);
     const counter = button.querySelector('.mirror-assistant-count');
     if (counter) counter.textContent = String(count);
-    button.title = count ? `镜序助理有 ${count} 个优先问题` : '镜序助理没有需要优先处理的问题';
+    button.title = count ? `小镜有 ${count} 个优先问题` : '小镜没有需要优先处理的问题';
   }
 
   function renderAssistant() {

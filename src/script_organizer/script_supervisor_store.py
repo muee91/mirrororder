@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover
 
 SUPERVISOR_VERSION = 2
 SUPERVISOR_CONTRACT = "script_supervisor.v2"
-SHOT_TYPES = {"unknown", "wide", "full", "medium", "medium_closeup", "closeup", "extreme_closeup", "insert"}
+SHOT_TYPES = {"unknown", "wide", "full", "medium", "medium_closeup", "closeup", "extreme_closeup", "big_closeup", "insert"}
 TAKE_STATUSES = {"unmarked", "usable", "partial", "ng"}
 SOURCE_ROLES = {"sync_camera", "aerial", "broll", "gopro", "insert", "custom"}
 

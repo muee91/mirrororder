@@ -259,7 +259,7 @@ def test_static_rough_cut_runtime_and_app_boundary() -> None:
 
     assert "window.webkit?.messageHandlers?.mirrorOrder" in ui
     assert "projectApi('/rough-cut-plan')" in ui
-    assert "不把 Keep 或自动归集升级成 Best" in ui
+    assert "不会自动替你选择 Best" in ui
     assert "不写 Manifest、不生成时间线" in ui
     assert 'data-focus-group=' in ui
     assert "html.native-production" in css

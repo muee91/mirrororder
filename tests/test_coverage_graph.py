@@ -310,7 +310,7 @@ def test_static_coverage_runtime_and_app_boundary() -> None:
     assert "window.webkit?.messageHandlers?.mirrorOrder" in ui
     assert "projectApi('/coverage')" in ui
     assert "不会因为没识别到某种景别就推断" in ui
-    assert "不改变 Selection Manifest、FCPXML" in ui
+    assert "不会变成 Editorial Decision 或 delivery.v1 的 Best" in ui
     assert 'data-focus-group=' in ui
     assert "html.native-production" in css
     assert '/coverage.css' in index

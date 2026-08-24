@@ -365,7 +365,7 @@ class AgentToolRegistry:
         tool = str(name or "")
         args = arguments if isinstance(arguments, dict) else {}
         if tool not in self.SAFE_ACTIONS:
-            raise ValueError("镜序助理不能执行未授权工具")
+            raise ValueError("小镜不能执行未授权工具")
         if tool == "noop":
             return {"status": "noop"}
         raw = args.get("group_ids", [])
@@ -378,4 +378,4 @@ class AgentToolRegistry:
             return self.index_unknown_identities(group_ids, kind=str(args.get("kind", "both") or "both"))
         if tool == "collect_learning_cases":
             return self.collect_learning_cases()
-        raise ValueError("未知镜序助理工具")
+        raise ValueError("未知小镜工具")

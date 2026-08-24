@@ -17,6 +17,7 @@ SHOT_TYPES = {
     "medium_closeup",
     "closeup",
     "extreme_closeup",
+    "big_closeup",
     "insert",
     "unknown",
 }
@@ -94,7 +95,7 @@ class TakeAuditProvider(TakeSemanticProvider):
             '{"verdict":"agree|disagree|insufficient_evidence","confidence":0.0,'
             '"reason":"","issues":[{"code":"","severity":"info|warning|error","detail":""}],'
             '"algorithm_feedback":{"failure_class":"","suspected_missing_feature":"","counterexample":""},'
-            '"angles":[{"clip_id":"","camera":"","shot_type":"wide|full|medium|medium_closeup|closeup|extreme_closeup|insert|unknown",'
+            '"angles":[{"clip_id":"","camera":"","shot_type":"wide|full|medium|medium_closeup|closeup|extreme_closeup|big_closeup|insert|unknown",'
             '"visible_people":[""],"technical_issues":[""],"coverage_role":"master|dialogue|reaction|insert|establishing|transition|unknown"}],'
             '"rough_cut":{"technical_usability":"good|usable_with_caution|poor|unknown",'
             '"take_completeness":"complete|partial|pickup|false_start|unknown",'

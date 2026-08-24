@@ -6,6 +6,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from .automation_store import AutomationStore, COMPLETED_STATUSES
 from .config import ProjectConfig
 from .delivery_semantics import resolve_delivery_state
 from .editorial_store import EditorialStore
@@ -48,6 +49,9 @@ def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
     index = _load(config.output_dir / "material_index.json", {})
     script = _load(config.output_dir / "script.json", {})
     matches = _load(config.output_dir / "matches.json", {})
+    automatic_groups = AutomationStore(config.output_dir).load().get("groups", {})
+    if not isinstance(automatic_groups, dict):
+        automatic_groups = {}
     review = ReviewStore(config.output_dir / "review.json").load()
     editorial = EditorialStore(config.output_dir).load()
     groups_by_id = {
@@ -79,6 +83,31 @@ def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
             if placement_ids and segment_id in placement_ids:
                 candidate["confidence"] = "manual"
             match_row.append(candidate)
+
+        # Completed automation decisions are current production mapping facts.
+        # review/editorial still resolve at higher authority below, and an exact
+        # human placement suppresses stale automatic line assignments.
+        existing_group_ids = {str(item.get("group_id", "") or "") for item in match_row}
+        for group_id, raw_entry in automatic_groups.items():
+            entry = raw_entry if isinstance(raw_entry, dict) else {}
+            if str(entry.get("status", "") or "") not in COMPLETED_STATUSES:
+                continue
+            mapped_ids = [str(value) for value in entry.get("script_segment_ids", []) if value]
+            if str(segment_id or "") not in mapped_ids or str(group_id) in existing_group_ids:
+                continue
+            group = groups_by_id.get(group_id, {})
+            placement = _placement_for_group(review, group)
+            placement_ids = [str(value) for value in placement.get("script_segment_ids", []) if value]
+            if placement_ids and segment_id not in placement_ids:
+                continue
+            match_row.append(
+                {
+                    "group_id": group_id,
+                    "confidence": "manual" if segment_id in placement_ids else "exact_dialogue",
+                    "automation_status": str(entry.get("status", "") or ""),
+                }
+            )
+            existing_group_ids.add(str(group_id))
 
         automatic_group_ids = {item.get("group_id") for item in match_row}
         for group_id, group in groups_by_id.items():

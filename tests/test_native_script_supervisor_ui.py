@@ -20,6 +20,7 @@ def test_project_opens_on_full_native_multicam_slate_table() -> None:
     assert "Table(drafts, selection: $selectedRecordID)" in ui
     for column in (
         "序号",
+        "集",
         "场号",
         "镜号",
         "次号",
@@ -30,7 +31,7 @@ def test_project_opens_on_full_native_multicam_slate_table() -> None:
         "状态",
     ):
         assert f'TableColumn("{column}")' in ui
-    assert 'TableColumn("可用范围 / 备注")' in ui
+    assert 'TableColumn("可用范围 / 备注")' not in ui
     assert 'TableColumn("素材")' not in ui
 
 
@@ -45,6 +46,24 @@ def test_native_media_cards_have_fixed_visual_contract_and_clear_selected_state(
     assert "checkmark.circle.fill" in ui
     assert "video.slash" in ui
     assert "repeatedCount" in ui
+    assert '"景别—"' in ui
+    assert '"时长—"' in ui
+    assert 'preferred ? "首选" : "非首选"' in ui
+    for label in ("未标记", "全景", "全身", "中景", "中近景", "近景", "特写", "大特写", "细节"):
+        assert f'label: "{label}"' in ui
+
+
+def test_sparse_native_slate_actions_and_episode_only_take_are_first_class() -> None:
+    ui = source("macos-app/MirrorOrderDesktopUI.swift")
+
+    assert "!episodeText.isEmpty" in ui
+    assert r'Text("EP \(draft.episodeText.isEmpty ? "—" : draft.episodeText) / 场' in ui
+    assert 'Label("同场下一条"' in ui
+    assert 'Label("同上"' in ui
+    assert 'Label("空白"' in ui
+    assert "private func createEmptyRow() { appendDraft(MCDraft()) }" in ui
+    assert "take.effective_mapping?.episode_ids.first ?? link?.episode" in ui
+    assert 'scene: "", attachments: attachments' in ui
 
 
 def test_slate_write_is_revision_safe_and_never_uses_device_path_as_project_data() -> None:

@@ -103,6 +103,17 @@ def test_precise_then_rough_clears_auto_scene_but_keeps_human_angle_detail(tmp_p
     attachments = [dict(item) for item in record["attachments"]]
     attachments[0]["shot_type"] = "closeup"
     attachments[0]["note"] = "手写：近景"
+    attachments.append(
+        {
+            "clip_id": "",
+            "media_id": "M_INSERT",
+            "camera": "",
+            "display_name": "insert.mov",
+            "shot_type": "insert",
+            "source_role": "insert",
+            "note": "孤立附件：手部细节",
+        }
+    )
     store.apply_record(
         {
             "record_id": record_id,
@@ -113,6 +124,7 @@ def test_precise_then_rough_clears_auto_scene_but_keeps_human_angle_detail(tmp_p
                 "script_scene_id": "12",
                 "episode": 2,
                 "scene": "12",
+                "note": "人工备注：先看片",
                 "attachments": attachments,
             },
         }
@@ -138,3 +150,7 @@ def test_precise_then_rough_clears_auto_scene_but_keeps_human_angle_detail(tmp_p
     assert refreshed["scene"] == "12"
     assert refreshed["attachments"][0]["shot_type"] == "closeup"
     assert refreshed["attachments"][0]["note"] == "手写：近景"
+    assert refreshed["note"] == "人工备注：先看片"
+    orphan = next(item for item in refreshed["attachments"] if item["media_id"] == "M_INSERT")
+    assert orphan["shot_type"] == "insert"
+    assert orphan["note"] == "孤立附件：手部细节"

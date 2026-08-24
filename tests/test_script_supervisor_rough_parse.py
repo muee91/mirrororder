@@ -3,6 +3,15 @@ from __future__ import annotations
 from script_organizer.script_supervisor_parser import deterministic_parse
 
 
+def test_parse_episode_only_note() -> None:
+    parsed = deterministic_parse("EP3")
+    assert parsed["episode"] == 3
+    assert parsed["scene"] == ""
+    assert parsed["shot"] == ""
+    assert parsed["take_number"] is None
+    assert parsed["note"] == "EP3"
+
+
 def test_parse_sparse_episode_scene_and_camera_shot() -> None:
     parsed = deterministic_parse("EP3 12场 B近 可用")
     assert parsed["episode"] == 3
@@ -19,6 +28,11 @@ def test_parse_compact_scene_shot_take_notation() -> None:
     assert parsed["shot"] == "3"
     assert parsed["take_number"] == 2
     assert parsed["angle_shots"] == {"B": "medium_closeup"}
+
+
+def test_big_closeup_is_distinct_from_closeup_and_close_shot() -> None:
+    parsed = deterministic_parse("EP3 12场 B大特写")
+    assert parsed["angle_shots"] == {"B": "big_closeup"}
 
 
 def test_same_scene_next_take_inherits_only_relevant_context() -> None:
@@ -52,3 +66,21 @@ def test_same_scene_does_not_force_previous_shot_or_take() -> None:
     assert parsed["shot"] == ""
     assert parsed["take_number"] is None
     assert parsed["angle_shots"] == {"B": "wide"}
+
+
+def test_same_scene_alone_preserves_only_episode_and_scene() -> None:
+    parsed = deterministic_parse(
+        "同场",
+        {"episode": 5, "scene": "21", "shot": "7", "take_number": 2},
+    )
+    assert parsed["episode"] == 5
+    assert parsed["scene"] == "21"
+    assert parsed["shot"] == ""
+    assert parsed["take_number"] is None
+
+
+def test_needs_viewing_stays_text_evidence_without_fake_seconds() -> None:
+    parsed = deterministic_parse("看片再定")
+    assert parsed["note"] == "看片再定"
+    assert parsed["range_hint"] == "needs_viewing"
+    assert "usable_range" not in parsed

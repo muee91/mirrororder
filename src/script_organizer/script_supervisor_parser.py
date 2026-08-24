@@ -18,7 +18,7 @@ SHOT_ALIASES = {
     "中近景": "medium_closeup",
     "近景": "closeup",
     "特写": "extreme_closeup",
-    "大特写": "extreme_closeup",
+    "大特写": "big_closeup",
     "细节": "insert",
     "插入": "insert",
 }
@@ -34,6 +34,7 @@ CAMERA_SHORT_SHOTS = {
     "近": "closeup",
     "特": "extreme_closeup",
 }
+CHINESE_DIGITS = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 
 
 def _text(value: object, limit: int = 2000) -> str:
@@ -50,6 +51,22 @@ def _positive_int(value: object) -> int | None:
         number = int(value)
     except (TypeError, ValueError):
         return None
+    return number if number > 0 else None
+
+
+def _positive_int_text(value: object) -> int | None:
+    text = _text(value, 16)
+    direct = _positive_int(text)
+    if direct is not None:
+        return direct
+    if not text or any(character not in CHINESE_DIGITS and character != "十" for character in text):
+        return None
+    if "十" not in text:
+        return CHINESE_DIGITS.get(text)
+    left, right = text.split("十", 1)
+    tens = CHINESE_DIGITS.get(left, 1) if left else 1
+    ones = CHINESE_DIGITS.get(right, 0) if right else 0
+    number = tens * 10 + ones
     return number if number > 0 else None
 
 
@@ -92,7 +109,11 @@ def deterministic_parse(text: str, previous: dict[str, Any] | None = None) -> di
     episode = _first(r"(?:第\s*)?(\d{1,4})\s*集", raw) or _first(r"\b(?:EP|E)\s*0*(\d{1,4})\b", raw)
     scene = _first(r"(?:第\s*)?([0-9]+[A-Za-z]?)\s*场", raw) or _first(r"\b(?:SC|S)\s*0*([0-9]+[A-Za-z]?)\b", raw)
     shot = _first(r"(?:第\s*)?([0-9]+[A-Za-z]?)\s*镜", raw)
-    take = _first(r"(?:第\s*)?([0-9]+)\s*(?:次|条|take\b|t\b)", raw) or _first(r"\b(?:TAKE|T)\s*0*(\d+)\b", raw)
+    take = (
+        _first(r"第\s*([0-9]+|[零一二两三四五六七八九十]+)\s*(?:次|条)", raw)
+        or _first(r"([0-9]+)\s*(?:次|条|take\b|t\b)", raw)
+        or _first(r"\b(?:TAKE|T)\s*0*(\d+)\b", raw)
+    )
     if episode:
         result["episode"] = int(episode)
     if scene:
@@ -100,7 +121,7 @@ def deterministic_parse(text: str, previous: dict[str, Any] | None = None) -> di
     if shot:
         result["shot"] = shot
     if take:
-        result["take_number"] = int(take)
+        result["take_number"] = _positive_int_text(take)
 
     if re.search(r"\bNG\b|废条|不能用|不要用|作废|穿帮废", raw, re.IGNORECASE):
         result["status"] = "ng"
@@ -194,7 +215,7 @@ def parse_supervisor_text(
 你是影视后期场记转录器。用户拿到的手写场记可能很粗略；只提取原话明确存在的结构事实，缺失字段必须留空，不要求补齐，不做创意决定。
 返回 JSON：episode(int|null), scene(string), shot(string), take_number(int|null),
 status(unmarked|usable|partial|ng), note(string),
-angle_shots(object: camera -> unknown|wide|full|medium|medium_closeup|closeup|extreme_closeup|insert),
+angle_shots(object: camera -> unknown|wide|full|medium|medium_closeup|closeup|extreme_closeup|big_closeup|insert),
 generic_shot(同上枚举或空), range_hint(""|first_half|second_half|needs_viewing)。
 允许理解常见粗记法，例如 EP3、S12、12-3-2、B近、同场下一条，但不得把猜测写成事实。
 禁止编造秒数、人物身份、Best/Keep/Reject、剧本归集或素材采用结论。

@@ -90,7 +90,7 @@
         const shot = String(angle.shot_type || 'unknown');
         const shotText = {
           wide: '全景', full: '全身', medium: '中景', medium_closeup: '中近景',
-          closeup: '近景', extreme_closeup: '特写', insert: '细节', unknown: '未识别',
+          closeup: '近景', extreme_closeup: '特写', big_closeup: '大特写', insert: '细节', unknown: '未识别',
         }[shot] || '未识别';
         const human = angle.shot_source === 'script_supervisor' ? ' · 人工' : '';
         const cameraOverride = angle.detected_camera && angle.detected_camera !== angle.camera ? ' · 人工机位' : '';

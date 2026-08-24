@@ -85,11 +85,13 @@ def test_desktop_shell_opens_on_project_home_then_native_multicam_slate():
 def test_native_slate_is_editable_multicam_table_not_dashboard_cards():
     _core, ui, _native, _build = desktop_sources()
     assert "Table(drafts, selection: $selectedRecordID)" in ui
-    for column in ("序号", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
+    for column in ("序号", "集", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
         assert f'TableColumn("{column}")' in ui
-    assert 'TableColumn("可用范围 / 备注")' in ui
+    assert 'TableColumn("可用范围 / 备注")' not in ui
     assert 'Label("从 Take 加入", systemImage: "film.stack")' in ui
-    assert 'Label("新建场记", systemImage: "plus")' in ui
+    assert 'Label("同场下一条", systemImage: "arrow.down.to.line")' in ui
+    assert 'Label("同上", systemImage: "doc.on.doc")' in ui
+    assert 'Label("空白", systemImage: "plus")' in ui
     assert 'Label(store.isSaving ? "保存中" : "保存", systemImage: "square.and.arrow.down")' in ui
     assert 'projectEndpoint(controller, "script-supervisor")' in ui
     assert 'projectEndpoint(controller, "script-supervisor-parse")' in ui
@@ -112,10 +114,10 @@ def test_desktop_system_features_live_in_settings_and_status_center():
     _core, ui, _native, _build = desktop_sources()
     assert "private enum SettingsTab" in ui
     assert 'case general = "通用"' in ui
-    assert 'case runtime = "运行与模型"' in ui
-    assert 'case intelligence = "本地智能"' in ui
-    assert 'case collaboration = "团队协作"' in ui
-    assert 'case diagnostics = "诊断"' in ui
+    assert 'runtime = "运行与模型"' in ui
+    assert 'intelligence = "本地智能"' in ui
+    assert 'collaboration = "团队协作"' in ui
+    assert 'diagnostics = "诊断"' in ui
     assert "LocalRuntimeSettingsSection" in ui
     assert "RuntimeOverviewAndModelSettingsSection" in ui
     assert "FrontendSettingsSection" in ui
@@ -204,7 +206,7 @@ def test_desktop_controls_have_stable_hit_targets():
     assert "struct AppHitTarget: ViewModifier" in ui
     assert "func appHitTarget(minWidth: CGFloat = 40, minHeight: CGFloat = 36)" in ui
     assert ".contentShape(Rectangle())" in ui
-    assert ".appHitTarget(minWidth: 32, minHeight: 32)" in native
+    assert ".appHitTarget(minWidth: 30, minHeight: 30)" in native
     assert ".frame(width: 44, height: 40)" in runtime
 
 

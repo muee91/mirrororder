@@ -202,7 +202,7 @@ def _shot_type(value: object) -> str:
         "近景": "closeup",
         "近摄": "closeup",
         "特写": "extreme_closeup",
-        "大特写": "extreme_closeup",
+        "大特写": "big_closeup",
         "细节": "insert",
         "插入": "insert",
     }

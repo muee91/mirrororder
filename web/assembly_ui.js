@@ -10,7 +10,7 @@
 
   const SHOT_LABELS = {
     wide: '全景', full: '全身', medium: '中景', medium_closeup: '中近景',
-    closeup: '近景', extreme_closeup: '特写', insert: '细节', unknown: '景别未知',
+    closeup: '近景', extreme_closeup: '特写', big_closeup: '大特写', insert: '细节', unknown: '景别未知',
   };
   const STATUS_LABELS = {
     ready: '可组接', needs_review: '待核对', blocked: '阻塞', selection_pending: '待选择',

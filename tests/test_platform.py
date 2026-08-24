@@ -319,7 +319,7 @@ def test_agent_tokens_proposals_and_atomic_review_revision(tmp_path):
     index = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
     script = json.loads((config.output_dir / "script.json").read_text(encoding="utf-8"))
     group = index["groups"][0]
-    segment = script["segments"][0]
+    segment = next(row for row in script["segments"] if row.get("type") != "scene_heading")
     tokens = AgentTokenStore(workspace)
     _record, token = tokens.create("test-agent", ["demo"], ["read", "propose"], 1)
     assert tokens.authorize(token, "read", "demo")["name"] == "test-agent"
@@ -589,7 +589,10 @@ def test_mcp_lists_only_gateway_mapped_tools(tmp_path):
         input=request,
         capture_output=True,
         text=True,
-        env={"PYTHONPATH": str(Path(__file__).parents[1] / "src")},
+        env={
+            "PYTHONPATH": str(Path(__file__).parents[1] / "src"),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        },
         check=True,
     )
     payload = json.loads(result.stdout)
@@ -602,6 +605,7 @@ def test_mcp_lists_only_gateway_mapped_tools(tmp_path):
         "get_evidence",
         "submit_task",
         "submit_proposal",
+        "semantic_search",
     }
 
 

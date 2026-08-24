@@ -5,7 +5,7 @@
   const APP_CLIENT = Boolean(window.webkit?.messageHandlers?.mirrorOrder);
   const SHOT_LABELS = {
     unknown: '—', wide: '全景', full: '全身', medium: '中景',
-    medium_closeup: '中近景', closeup: '近景', extreme_closeup: '特写', insert: '细节',
+    medium_closeup: '中近景', closeup: '近景', extreme_closeup: '特写', big_closeup: '大特写', insert: '细节',
   };
   const STATUS_LABELS = {unmarked: '未标记', usable: '可用', partial: '部分可用', ng: 'NG'};
   const ROLE_LABELS = {sync_camera: '同步机位', aerial: '航拍', broll: '空镜', gopro: 'GoPro', insert: '细节', custom: '其它'};
@@ -261,7 +261,7 @@
         <td><input class="slate-cell narrow" data-field="take_number" inputmode="numeric" value="${record.take_number ?? ''}" placeholder="次"></td>
         <td><select class="slate-cell" data-field="status">${Object.entries(STATUS_LABELS).map(([value, label]) => `<option value="${value}"${value === (record.status || 'unmarked') ? ' selected' : ''}>${label}</option>`).join('')}</select></td>
         <td class="slate-range-cell"><input class="slate-cell range" data-field="range_start" type="number" min="0" step="0.1" value="${usable.start ?? ''}" placeholder="入"><span>–</span><input class="slate-cell range" data-field="range_end" type="number" min="0" step="0.1" value="${usable.end ?? ''}" placeholder="出"></td>
-        <td><textarea class="slate-note" data-field="note" rows="2" placeholder="给剪辑、团队和镜序助理看的现场备注">${esc(record.note || '')}</textarea></td>
+        <td><textarea class="slate-note" data-field="note" rows="2" placeholder="给剪辑、团队和小镜看的现场备注">${esc(record.note || '')}</textarea></td>
         <td class="slate-row-actions"><button type="button" data-select-record="${esc(record.record_id)}">选中</button><button type="button" data-delete-record="${esc(record.record_id)}">删除</button></td>
       </tr>`;
   }
@@ -487,7 +487,7 @@
       await postRecord(record, false);
       selectedRecordId = record.record_id;
       renderWorkspace();
-      showToast(result.parser === 'assistant_model' ? '镜序助理已解析，已填入场记' : '已解析场记');
+      showToast(result.parser === 'assistant_model' ? '小镜已解析，已填入场记' : '已解析场记');
     } catch (error) {
       showToast(error.message || '快速录入解析失败');
     }

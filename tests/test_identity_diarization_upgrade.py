@@ -125,7 +125,7 @@ def test_face_index_samples_multiple_cameras_without_dense_video_scan(tmp_path: 
     assert result["observations"] == 1
     with database.connection() as connection:
         version = connection.execute("SELECT value FROM meta WHERE key='identity:project:face:G1'").fetchone()[0]
-    assert str(version).startswith("face-v3|")
+    assert str(version).startswith("face-v4-prototypes|")
 
 
 def test_speaker_index_prefers_true_diarized_turns(tmp_path: Path) -> None:

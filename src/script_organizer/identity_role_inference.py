@@ -232,6 +232,7 @@ def _role_candidates(
                 "unambiguous_takes": len(unambiguous[role]),
                 "human_placement_takes": len(human_placement_support[role]),
                 "source": "script_take_cooccurrence",
+                "requires_confirmation": True,
             }
         )
     return result

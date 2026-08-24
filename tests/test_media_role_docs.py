@@ -18,5 +18,5 @@ def test_media_camera_semantics_document_product_boundaries() -> None:
 
     assert "media_roles.json" in sync
     assert "camera_override" in sync
-    assert "本机绝对路径" in sync
+    assert "绝对素材路径" in sync
     assert "普通 Web 不提供素材目录扫描" in sync

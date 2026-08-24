@@ -14,7 +14,7 @@
     medium: '中景',
     medium_closeup: '中近景',
     closeup: '近景',
-    extreme_closeup: '特写',
+    extreme_closeup: '特写', big_closeup: '大特写',
     insert: '细节',
     unknown: '未识别',
   };
