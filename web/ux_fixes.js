@@ -184,19 +184,8 @@
     rows[next]?.scrollIntoView({block: 'nearest'});
   });
 
-  // Media availability is useful in both Review and Production, but the XML
-  // timeline/native-file layer belongs to the App. Keep the two capabilities
-  // separate instead of letting the legacy timeline bundle leak production UI
-  // into Team Web.
-  const deviceMediaScript = document.createElement('script');
-  deviceMediaScript.src = '/device_media.js';
-  deviceMediaScript.defer = true;
-  document.body.appendChild(deviceMediaScript);
-
-  if (window.webkit?.messageHandlers?.mirrorOrder) {
-    const timelineScript = document.createElement('script');
-    timelineScript.src = '/timeline.js';
-    timelineScript.defer = true;
-    document.body.appendChild(timelineScript);
-  }
+  // device_media.js is loaded exactly once from index.html for both Review and
+  // Production. timeline.js is also a static compatibility loader; it exits
+  // immediately outside the native WKWebView bridge. Keeping both out of this
+  // dynamic injector makes first-project bootstrap order deterministic.
 })();
