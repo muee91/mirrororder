@@ -8,9 +8,12 @@ from .script_supervisor_store import SHOT_TYPES, TAKE_STATUSES
 
 
 SHOT_ALIASES = {
+    "大远景": "wide",
+    "远景": "wide",
     "全景": "wide",
     "大全": "wide",
     "全身": "full",
+    "半身": "medium",
     "中景": "medium",
     "中近景": "medium_closeup",
     "近景": "closeup",
@@ -18,6 +21,18 @@ SHOT_ALIASES = {
     "大特写": "extreme_closeup",
     "细节": "insert",
     "插入": "insert",
+}
+
+# Short forms are only accepted directly after a camera label. Treating a bare
+# “中” or “近” as a generic shot type would create too many false positives in
+# free-form Chinese notes.
+CAMERA_SHORT_SHOTS = {
+    "全": "wide",
+    "远": "wide",
+    "中": "medium",
+    "中近": "medium_closeup",
+    "近": "closeup",
+    "特": "extreme_closeup",
 }
 
 
@@ -30,27 +45,54 @@ def _first(pattern: str, text: str) -> str:
     return (match.group(1).strip() if match else "")
 
 
+def _positive_int(value: object) -> int | None:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
 def deterministic_parse(text: str, previous: dict[str, Any] | None = None) -> dict[str, Any]:
     raw = _text(text)
     prior = previous if isinstance(previous, dict) else {}
-    inherit = bool(re.search(r"(?:同上|上一条|照上条|和上条一样)", raw))
+    inherit_all = bool(re.search(r"(?:同上|上一条|照上条|和上条一样|同前)", raw))
+    same_scene = bool(re.search(r"(?:同场|接上场|还是这场)", raw))
+    next_take = bool(re.search(r"(?:下一条|再一条|再来一条|又一条|下一次)", raw))
+
+    inherit_episode = inherit_all or same_scene or next_take
+    inherit_scene = inherit_all or same_scene or next_take
+    inherit_shot = inherit_all or next_take
+    prior_take = _positive_int(prior.get("take_number"))
+
     result: dict[str, Any] = {
-        "episode": prior.get("episode") if inherit else None,
-        "scene": str(prior.get("scene", "") or "") if inherit else "",
-        "shot": str(prior.get("shot", "") or "") if inherit else "",
-        "take_number": prior.get("take_number") if inherit else None,
-        "status": str(prior.get("status", "unmarked") or "unmarked") if inherit else "unmarked",
+        "episode": prior.get("episode") if inherit_episode else None,
+        "scene": str(prior.get("scene", "") or "") if inherit_scene else "",
+        "shot": str(prior.get("shot", "") or "") if inherit_shot else "",
+        "take_number": (prior_take + 1) if next_take and prior_take is not None else (prior.get("take_number") if inherit_all else None),
+        "status": str(prior.get("status", "unmarked") or "unmarked") if inherit_all else "unmarked",
         "note": raw,
         "angle_shots": {},
         "range_hint": "",
-        "inherit_previous": inherit,
+        "inherit_previous": bool(inherit_all or same_scene or next_take),
         "parser": "deterministic",
     }
 
-    episode = _first(r"(?:第\s*)?(\d{1,4})\s*集", raw)
-    scene = _first(r"(?:第\s*)?([0-9]+[A-Za-z]?)\s*场", raw)
+    # Common handwritten compact form: `12-3-2` => scene 12, shot 3, take 2.
+    compact = re.search(
+        r"(?<!\d)([0-9]+[A-Za-z]?)\s*[-/]\s*([0-9]+[A-Za-z]?)\s*[-/]\s*([0-9]+)(?!\d)",
+        raw,
+        re.IGNORECASE,
+    )
+    if compact:
+        result["scene"] = compact.group(1)
+        result["shot"] = compact.group(2)
+        result["take_number"] = int(compact.group(3))
+
+    episode = _first(r"(?:第\s*)?(\d{1,4})\s*集", raw) or _first(r"\b(?:EP|E)\s*0*(\d{1,4})\b", raw)
+    scene = _first(r"(?:第\s*)?([0-9]+[A-Za-z]?)\s*场", raw) or _first(r"\b(?:SC|S)\s*0*([0-9]+[A-Za-z]?)\b", raw)
     shot = _first(r"(?:第\s*)?([0-9]+[A-Za-z]?)\s*镜", raw)
-    take = _first(r"(?:第\s*)?([0-9]+)\s*(?:次|条|take\b|t\b)", raw)
+    take = _first(r"(?:第\s*)?([0-9]+)\s*(?:次|条|take\b|t\b)", raw) or _first(r"\b(?:TAKE|T)\s*0*(\d+)\b", raw)
     if episode:
         result["episode"] = int(episode)
     if scene:
@@ -60,22 +102,25 @@ def deterministic_parse(text: str, previous: dict[str, Any] | None = None) -> di
     if take:
         result["take_number"] = int(take)
 
-    if re.search(r"\bNG\b|废条|不能用|不要用|作废", raw, re.IGNORECASE):
+    if re.search(r"\bNG\b|废条|不能用|不要用|作废|穿帮废", raw, re.IGNORECASE):
         result["status"] = "ng"
     elif re.search(r"部分可用|前半段|后半段|前面可用|后面可用|只要前|只要后|只用前|只用后", raw):
         result["status"] = "partial"
-    elif re.search(r"\bOK\b|可用|过了|这条过|能用|采用", raw, re.IGNORECASE):
+    elif re.search(r"\bOK\b|可用|过了|这条过|能用|采用|可留", raw, re.IGNORECASE):
         result["status"] = "usable"
 
     if re.search(r"前半段|前面可用|只要前|只用前", raw):
         result["range_hint"] = "first_half"
     elif re.search(r"后半段|后面可用|只要后|只用后", raw):
         result["range_hint"] = "second_half"
+    elif re.search(r"看片再定|看片确认|范围待定|待看片", raw):
+        result["range_hint"] = "needs_viewing"
 
-    camera_pattern = r"([A-Za-z][A-Za-z0-9_-]{0,7}|A机|B机|C机)\s*(?:机位|机)?\s*(大全|大特写|中近景|全景|全身|中景|近景|特写|细节|插入)"
+    long_labels = "|".join(sorted((re.escape(label) for label in SHOT_ALIASES), key=len, reverse=True))
+    camera_pattern = rf"([A-Za-z][A-Za-z0-9_-]{{0,7}}|A机|B机|C机)\s*(?:机位|机)?\s*({long_labels}|中近|全|远|中|近|特)"
     for camera, label in re.findall(camera_pattern, raw, re.IGNORECASE):
         clean_camera = camera.upper().replace("机", "")
-        shot_type = SHOT_ALIASES.get(label, "unknown")
+        shot_type = SHOT_ALIASES.get(label) or CAMERA_SHORT_SHOTS.get(label) or "unknown"
         if shot_type in SHOT_TYPES:
             result["angle_shots"][clean_camera] = shot_type
 
@@ -146,11 +191,12 @@ def parse_supervisor_text(
     if not model.enabled:
         return base
     system = """
-你是影视后期场记转录器。只从用户原话提取结构事实，不做创意决定。
+你是影视后期场记转录器。用户拿到的手写场记可能很粗略；只提取原话明确存在的结构事实，缺失字段必须留空，不要求补齐，不做创意决定。
 返回 JSON：episode(int|null), scene(string), shot(string), take_number(int|null),
 status(unmarked|usable|partial|ng), note(string),
 angle_shots(object: camera -> unknown|wide|full|medium|medium_closeup|closeup|extreme_closeup|insert),
 generic_shot(同上枚举或空), range_hint(""|first_half|second_half|needs_viewing)。
+允许理解常见粗记法，例如 EP3、S12、12-3-2、B近、同场下一条，但不得把猜测写成事实。
 禁止编造秒数、人物身份、Best/Keep/Reject、剧本归集或素材采用结论。
 若用户说“前半段/后半段”，只能输出 range_hint，不得猜时间码。
 """.strip()
