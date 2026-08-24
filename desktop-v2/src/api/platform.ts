@@ -32,20 +32,26 @@ async function callPlatform<T>(command: string, args?: Record<string, unknown>):
   }
 }
 
+function requiredPath(path: string, action: string): string {
+  const value = path.trim();
+  if (!value) throw new PlatformBridgeError(`${action}需要非空 path。`);
+  return value;
+}
+
 export class PlatformClient {
   info(): Promise<PlatformInfo> {
     return callPlatform<PlatformInfo>("platform_info");
   }
 
   reveal(path: string): Promise<void> {
-    const value = path.trim();
-    if (!value) throw new PlatformBridgeError("显示路径需要非空 path。");
-    return callPlatform<void>("reveal_path", { path: value });
+    return callPlatform<void>("reveal_path", { path: requiredPath(path, "显示路径") });
   }
 
   open(path: string): Promise<void> {
-    const value = path.trim();
-    if (!value) throw new PlatformBridgeError("打开路径需要非空 path。");
-    return callPlatform<void>("open_path", { path: value });
+    return callPlatform<void>("open_path", { path: requiredPath(path, "打开路径") });
+  }
+
+  openInFinalCut(path: string): Promise<void> {
+    return callPlatform<void>("open_in_final_cut_pro", { path: requiredPath(path, "Final Cut adapter ") });
   }
 }
