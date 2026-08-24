@@ -201,6 +201,16 @@ def build_music_plan(
                 )
                 if generated_used_semantic:
                     semantic_cues += 1
+
+                if not generated_rights_confirmed:
+                    cue_candidates = [
+                        replace(
+                            item,
+                            eligible=False,
+                            rejection_reason="generated_rights_unconfirmed",
+                        )
+                        for item in cue_candidates
+                    ]
                 generated_alternatives[brief.cue_id] = cue_candidates
 
                 if generated_rights_confirmed:
