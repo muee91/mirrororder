@@ -42,7 +42,7 @@
       "evidence": [
         "desktop-v2/src/features/settings/SettingsStatusWorkbench.tsx",
         "desktop-v2/src/features/settings/LocalRuntimePanel.tsx",
-        "desktop-v2/src/features/settings/CollaborationAccessPanel.tsx",
+        "desktop-v2/src/features/settings/CollaborationPanel.tsx",
         "src/script_organizer/desktop_runtime.py"
       ],
       "native_smoke_required": false
