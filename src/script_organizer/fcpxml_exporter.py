@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections import Counter
+import xml.etree.ElementTree as ET
+from collections import Counter, defaultdict
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -190,6 +192,203 @@ def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
     }
 
 
+def _tag(element: ET.Element) -> str:
+    return element.tag.rsplit("}", 1)[-1]
+
+
+def _parse_time(value: object) -> Fraction | None:
+    raw = str(value or "").strip().rstrip("s")
+    if not raw:
+        return None
+    try:
+        if "/" in raw:
+            numerator, denominator = raw.split("/", 1)
+            result = Fraction(int(numerator), int(denominator))
+        else:
+            result = Fraction(raw)
+    except (ValueError, ZeroDivisionError):
+        return None
+    return result
+
+
+def _seconds(value: object) -> Fraction | None:
+    try:
+        result = Fraction(str(value))
+    except (ValueError, ZeroDivisionError):
+        return None
+    return result if result >= 0 else None
+
+
+def _format_time(value: Fraction) -> str:
+    return f"{value.numerator}s" if value.denominator == 1 else f"{value.numerator}/{value.denominator}s"
+
+
+def _quantize(value: Fraction, frame_duration: Fraction) -> Fraction:
+    frames = round(value / frame_duration)
+    return max(0, frames) * frame_duration
+
+
+def _decision_label(segment: dict[str, Any], group: dict[str, Any]) -> str:
+    state = str(group.get("state", "") or "").lower()
+    display = {"best": "Best", "keep": "Keep", "reject": "Reject"}.get(state, state.title())
+    episode = segment.get("episode")
+    segment_id = str(segment.get("script_segment", "") or "")
+    parts = ["镜序", display]
+    if isinstance(episode, int) and episode > 0:
+        parts.append(f"E{episode}")
+    if segment_id:
+        parts.append(segment_id)
+    return "｜".join(parts)
+
+
+def _decision_targets(index: dict[str, Any], manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    clips = {
+        str(item.get("clip_id", "")): item
+        for item in index.get("clips", [])
+        if isinstance(item, dict) and item.get("clip_id")
+    }
+    groups = {
+        str(item.get("group_id", "")): item
+        for item in index.get("groups", [])
+        if isinstance(item, dict) and item.get("group_id")
+    }
+    targets: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str, str]] = set()
+    for segment in manifest.get("segments", []):
+        if not isinstance(segment, dict):
+            continue
+        for decision in segment.get("groups", []):
+            if not isinstance(decision, dict) or decision.get("state") not in {"best", "keep", "reject"}:
+                continue
+            group_id = str(decision.get("group_id", "") or "")
+            group = groups.get(group_id)
+            if group is None:
+                raise UnsafeFCPXMLExport(f"delivery decision references unknown group: {group_id}")
+            members = [item for item in group.get("members", []) if isinstance(item, dict)]
+            if not members:
+                raise UnsafeFCPXMLExport(f"delivery group has no media members: {group_id}")
+            for member in members:
+                clip_id = str(member.get("clip_id", "") or "")
+                clip = clips.get(clip_id)
+                if clip is None:
+                    raise UnsafeFCPXMLExport(f"delivery member is missing from material index clips: {clip_id}")
+                asset_id = str(clip.get("source_asset_id", "") or "")
+                if not asset_id:
+                    raise UnsafeFCPXMLExport(f"delivery clip has no stable FCPXML source asset id: {clip_id}")
+                start = _seconds(member.get("source_start", clip.get("source_start")))
+                end = _seconds(member.get("source_end", clip.get("source_end")))
+                duration = _seconds(member.get("duration", clip.get("duration")))
+                if start is None:
+                    raise UnsafeFCPXMLExport(f"delivery clip has no safe source start: {clip_id}")
+                if end is not None and end > start:
+                    duration = end - start
+                if duration is None or duration <= 0:
+                    raise UnsafeFCPXMLExport(f"delivery clip has no safe source duration: {clip_id}")
+                label = _decision_label(segment, decision)
+                key = (asset_id, str(start), str(duration), label, group_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                targets.append(
+                    {
+                        "asset_id": asset_id,
+                        "clip_id": clip_id,
+                        "group_id": group_id,
+                        "start": start,
+                        "duration": duration,
+                        "label": label,
+                        "state": decision.get("state"),
+                        "decision_source": decision.get("decision_source", ""),
+                    }
+                )
+    return targets
+
+
+def _inject_selection_keywords(
+    source_fcpxml: Path,
+    output_fcpxml: Path,
+    index: dict[str, Any],
+    manifest: dict[str, Any],
+) -> dict[str, int]:
+    targets = _decision_targets(index, manifest)
+    if not targets:
+        shutil.copyfile(source_fcpxml, output_fcpxml)
+        return {"keywords": 0, "ranges": 0}
+    try:
+        tree = ET.parse(source_fcpxml)
+    except (OSError, ET.ParseError) as error:
+        raise UnsafeFCPXMLExport(f"cannot parse source FCPXML safely: {error}") from error
+    root = tree.getroot()
+
+    formats: dict[str, Fraction] = {}
+    assets: dict[str, ET.Element] = {}
+    for element in root.iter():
+        kind = _tag(element)
+        if kind == "format":
+            format_id = str(element.get("id", "") or "")
+            frame_duration = _parse_time(element.get("frameDuration"))
+            if format_id and frame_duration is not None and frame_duration > 0:
+                formats[format_id] = frame_duration
+        elif kind == "asset":
+            asset_id = str(element.get("id", "") or "")
+            if asset_id:
+                assets[asset_id] = element
+
+    browser_clips: defaultdict[str, list[ET.Element]] = defaultdict(list)
+    for event in root.iter():
+        if _tag(event) != "event":
+            continue
+        for child in list(event):
+            if _tag(child) == "asset-clip" and child.get("ref"):
+                browser_clips[str(child.get("ref"))].append(child)
+
+    keywords = 0
+    for target in targets:
+        asset_id = str(target["asset_id"])
+        asset = assets.get(asset_id)
+        clip_elements = browser_clips.get(asset_id, [])
+        if asset is None or not clip_elements:
+            raise UnsafeFCPXMLExport(
+                f"cannot safely map delivery range to an Event Browser asset-clip: {asset_id}"
+            )
+        format_id = str(asset.get("format", "") or "")
+        frame_duration = formats.get(format_id)
+        if frame_duration is None:
+            raise UnsafeFCPXMLExport(f"asset {asset_id} has no frameDuration-bearing format")
+        start = _quantize(target["start"], frame_duration)
+        duration = _quantize(target["duration"], frame_duration)
+        if duration <= 0:
+            raise UnsafeFCPXMLExport(f"delivery range quantized to zero frames: {target['clip_id']}")
+        start_text = _format_time(start)
+        duration_text = _format_time(duration)
+        label = str(target["label"])
+        for clip_element in clip_elements:
+            duplicate = any(
+                _tag(child) == "keyword"
+                and child.get("value") == label
+                and child.get("start") == start_text
+                and child.get("duration") == duration_text
+                for child in list(clip_element)
+            )
+            if duplicate:
+                continue
+            ET.SubElement(
+                clip_element,
+                "keyword",
+                {"start": start_text, "duration": duration_text, "value": label},
+            )
+            keywords += 1
+
+    output_fcpxml.parent.mkdir(parents=True, exist_ok=True)
+    tree.write(output_fcpxml, encoding="utf-8", xml_declaration=True)
+    try:
+        ET.parse(output_fcpxml)
+    except ET.ParseError as error:
+        output_fcpxml.unlink(missing_ok=True)
+        raise UnsafeFCPXMLExport(f"generated FCPXML failed XML validation: {error}") from error
+    return {"keywords": keywords, "ranges": len(targets)}
+
+
 def export(config: ProjectConfig, preserve_source: bool = True) -> dict[str, Any]:
     manifest = build_selection_manifest(config)
     manifest_path = config.output_dir / "selection_manifest.json"
@@ -204,16 +403,27 @@ def export(config: ProjectConfig, preserve_source: bool = True) -> dict[str, Any
         "selection_manifest_version": manifest.get("version", 0),
         "selection_summary": manifest.get("summary", {}),
         "keywords_written": False,
+        "keyword_count": 0,
+        "decision_ranges_written": 0,
         "multicam_structure_modified": False,
     }
     if preserve_source and config.fcpxml:
-        # The organizer never rewrites a user's synced multicam timeline. The
-        # copied file is intentionally byte-for-byte source preservation.
-        shutil.copyfile(config.fcpxml, output_fcpxml)
-        report["warning"] = (
-            "organized.fcpxml is an unchanged copy; delivery.v1 decisions are "
-            "recorded in selection_manifest.json and are not yet injected into FCPXML."
-        )
+        index = _load(config.output_dir / "material_index.json", {})
+        if not isinstance(index, dict):
+            raise UnsafeFCPXMLExport("material_index.json is not a valid object")
+        injected = _inject_selection_keywords(config.fcpxml, output_fcpxml, index, manifest)
+        report["keywords_written"] = injected["keywords"] > 0
+        report["keyword_count"] = injected["keywords"]
+        report["decision_ranges_written"] = injected["ranges"]
+        if injected["keywords"]:
+            report["warning"] = (
+                "organized.fcpxml preserves the source project/multicam structure and adds only "
+                f"{injected['keywords']} frame-aligned Event Browser decision keywords."
+            )
+        else:
+            report["warning"] = (
+                "organized.fcpxml is an unchanged copy because delivery.v1 contains no Best/Keep/Reject ranges to inject."
+            )
     elif preserve_source:
         report["warning"] = (
             "媒体目录项目没有输入FCPXML；delivery.v1 仅导出 selection_manifest，"
