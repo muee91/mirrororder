@@ -10,260 +10,86 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def desktop_sources() -> tuple[str, str, str, str]:
-    return (
-        read("macos-app/MirrorOrderDesktopCore.swift"),
-        read("macos-app/MirrorOrderDesktopUI.swift"),
-        read("macos-app/NativeProjectWorkbench.swift"),
-        read("macos-app/build_app.sh"),
-    )
+def test_tauri_main_registers_separate_production_and_team_process_managers() -> None:
+    main = read("desktop-v2/src-tauri/src/main.rs")
+
+    assert "mod host;" in main
+    assert "mod gateway;" in main
+    assert ".manage(host::HostManager::default())" in main
+    assert ".manage(gateway::GatewayManager::default())" in main
+    assert "host::start_python_host" in main
+    assert "gateway::start_team_gateway" in main
 
 
-def test_macos_build_uses_native_production_workspace():
-    core, ui, native, build = desktop_sources()
-    assert 'CORE_SOURCE="$ROOT/macos-app/MirrorOrderDesktopCore.swift"' in build
-    assert 'UI_SOURCE="$ROOT/macos-app/MirrorOrderDesktopUI.swift"' in build
-    assert 'NATIVE_WORKBENCH_SOURCE="$ROOT/macos-app/NativeProjectWorkbench.swift"' in build
-    assert '"$CORE_SOURCE" "$UI_SOURCE" "$NATIVE_WORKBENCH_SOURCE"' in build
-    assert 'WindowGroup("镜序")' in ui
-    assert "DesktopRootView()" in ui
-    assert "NativeMulticamSlateProjectWorkbench(" in ui
-    assert "NativeProjectWorkbench(" in ui
-    assert "struct NativeProjectWorkbench: View" in native
-    assert "NativeVideoPlayerView(player: player)" in native
-    assert "struct NativeReviewReadModel: Decodable" in core
+def test_production_host_is_loopback_and_readiness_gated() -> None:
+    host = read("desktop-v2/src-tauri/src/host.rs")
+
+    assert 'format!("http://127.0.0.1:{port}")' in host
+    assert 'arg("serve")' in host
+    assert 'arg("--local-only")' in host
+    assert "wait_until_ready" in host
+    assert "TcpStream::connect_timeout" in host
+    assert "Python Host 在监听端口前退出" in host
 
 
-def test_native_production_canvas_never_embeds_team_web():
-    _core, ui, native, _build = desktop_sources()
-    for source in (ui, native):
-        assert "DesktopWebView(" not in source
-        assert "WKWebView" not in source
-        assert "production_mode.js" not in source
-        assert "timeline_v3.js" not in source
-    assert 'Label("团队审阅", systemImage: "person.3")' in ui
-    assert "controller.openInBrowser()" in ui
+def test_team_gateway_has_separate_network_security_contract() -> None:
+    gateway = read("desktop-v2/src-tauri/src/gateway.rs")
+
+    assert 'arg("gateway")' in gateway
+    assert 'arg("--local-only")' in gateway
+    assert 'arg("--trusted-lan")' in gateway
+    assert 'arg("--pairing-code")' in gateway
+    assert "wait_until_ready" in gateway
+    assert "Team Web Gateway 在监听端口前退出" in gateway
+    assert "local_only_never_exposes_lan_url" in gateway
 
 
-def test_desktop_service_start_script_saves_owned_gateway_pid():
-    core, _ui, _native, _build = desktop_sources()
-    assert "nohup" in core
-    assert "pid=$!" in core
-    assert 'echo "$pid"' in core
-    assert "& &&" not in core
-    assert '@Published var port = "8766"' in core
-    assert "--pairing-code" in core
-    assert 'appendingPathComponent("MirrorOrder/gateway"' in core
-    assert "legacyPidFiles" in core
-    assert 'command.contains("script-organizer gateway")' in core
-    assert 'command.contains("--port \\(portNumber)")' in core
-    assert "allWorkspacePaths.contains" in core
-    assert "preferredProject(in workspace: GatewayWorkspace)" in core
-    assert "Task.detached(priority: .utility)" in core
+def test_team_web_is_not_embedded_in_project_workbench() -> None:
+    app = read("desktop-v2/src/app/App.tsx")
+    project = read("desktop-v2/src/features/production/ProjectWorkbench.tsx")
+
+    assert 'type AppWorkspace = "production" | "team"' in app
+    assert "TeamWebWorkbench" in app
+    assert "TeamWebWorkbench" not in project
+    assert 'label: "团队协作"' not in project
 
 
-def test_desktop_shell_opens_on_project_home_then_native_multicam_slate():
-    _core, ui, _native, _build = desktop_sources()
-    assert "private struct ProductionSidebar" in ui
-    assert "private struct SidebarProjectRow" in ui
-    assert "private struct ProjectHomeView" in ui
-    assert "private struct ProjectHomeCard" in ui
-    assert '@Published var showProjectHome = true' in ui
-    assert 'Text("全部项目")' in ui
-    assert 'Text("最近项目")' in ui
-    assert ".frame(width: 216)" in ui
-    assert "ProjectWorkspace(" in ui
-    assert "StatusCenterSheet" in ui
-    assert "private struct NativeMulticamSlateProjectWorkbench" in ui
-    assert 'Label("场记", systemImage: "tablecells")' in ui
-    assert 'Label("素材 / 剧本", systemImage: "rectangle.split.3x1")' in ui
-    assert 'Label("团队审阅", systemImage: "person.3")' in ui
-    assert "ProjectInspector" not in ui
-    assert "WorkbenchPage" not in ui
+def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
+    ui = read("desktop-v2/src/features/projects/ProjectLifecyclePanel.tsx")
+    client = read("desktop-v2/src/api/desktop.ts")
+    runtime = read("src/script_organizer/desktop_runtime.py")
+
+    assert "client.preflightProject(payload())" in ui
+    assert "client.createProject(payload())" in ui
+    assert "client.prepareProject(created.project_id)" in ui
+    assert "client.deleteProject(selectedProject.project_id)" in ui
+    assert "删除前必须完整输入当前 project_id" in ui
+    assert "project-preflight" in client
+    assert "prepare" in client
+    assert "WorkspaceRegistry" in runtime
 
 
-def test_native_slate_is_editable_multicam_table_not_dashboard_cards():
-    _core, ui, _native, _build = desktop_sources()
-    assert "private func slateTableRows(_ rows: [MCDraft]) -> some View" in ui
-    assert "Table(rows, selection: $selectedRecordID)" in ui
-    for column in ("序号", "集", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
-        assert f'TableColumn("{column}")' in ui
-    assert 'TableColumn("可用范围 / 备注")' not in ui
-    assert 'Label("加入 Take / 镜头", systemImage: "film.stack")' in ui
-    assert 'Label("同场下一条", systemImage: "arrow.down.to.line")' in ui
-    assert 'Label("同上", systemImage: "doc.on.doc")' in ui
-    assert 'Label("空白", systemImage: "plus")' in ui
-    assert 'Label(store.isSaving ? "保存中" : "保存", systemImage: "square.and.arrow.down")' in ui
-    assert 'projectEndpoint(controller, "script-supervisor")' in ui
-    assert 'projectEndpoint(controller, "script-supervisor-parse")' in ui
-    assert '"expected_revision": board.revision' in ui
-    assert '"actor": actor' in ui
-    assert "UTType.fileURL.identifier" in ui
-    assert "mcQuickMediaID(" in ui
-    assert 'projectEndpoint(controller, "media-inventory")' in ui
-    assert "I 设入点" in ui and "O 设出点" in ui
-    assert "不是 Editorial Best" in ui
-    assert "private struct MCMediaCard" in ui
-    assert "AVAssetImageGenerator" in ui
-    assert ".scaleProportionallyUpOrDown" in ui
-    assert ".scaleAxesIndependently" not in ui
-    assert "let selectedInRun = draft.id == selectedRecordID" in ui
-    assert "selectedInRun ?? attachments.first" in ui
+def test_desktop_project_tabs_are_explicit_product_surfaces() -> None:
+    workbench = read("desktop-v2/src/features/production/ProjectWorkbench.tsx")
+
+    for label in ("素材 / 剧本", "场记", "人物", "小镜", "剪辑", "交付", "本机素材", "设置 / 状态"):
+        assert f'label: "{label}"' in workbench
+    assert "onOpenTake={openTakeFromEvidence}" in workbench
+    assert "initialGroupId={materialFocusGroupId}" in workbench
 
 
-def test_desktop_system_features_live_in_settings_and_status_center():
-    _core, ui, _native, _build = desktop_sources()
-    assert "private enum SettingsTab" in ui
-    assert 'case general = "通用"' in ui
-    assert 'runtime = "运行与模型"' in ui
-    assert 'intelligence = "本地智能"' in ui
-    assert 'collaboration = "团队协作"' in ui
-    assert 'diagnostics = "诊断"' in ui
-    assert "LocalRuntimeSettingsSection" in ui
-    assert "RuntimeOverviewAndModelSettingsSection" in ui
-    assert "FrontendSettingsSection" in ui
-    assert "CollaborationAccessSection" in ui
-    assert "同步、转写、识别和审计任务集中在这里" in ui
-
-
-def test_desktop_gateway_probe_ignores_non_numeric_stats_extensions():
-    core, _ui, _native, _build = desktop_sources()
-    assert "private struct GatewayStats: Decodable" in core
-    assert "try? container.decode(Int.self, forKey: key)" in core
-    assert "var numericStats: [String: Int]" in core
-    assert "let stats: [String: Int]?" not in core
-
-
-def test_desktop_project_activity_keeps_active_or_latest_failure():
-    core, ui, _native, _build = desktop_sources()
-    assert 'let activeTask = tasks.first(where: { $0.status == "queued" || $0.status == "running" })' in core
-    assert "let latestTask = tasks.first" in core
-    assert '["completed", "cancelled", "failed", "interrupted"].contains(latestTask.status)' in core
-    assert "task = latestTask" in core
-    assert 'tasks.first(where: { $0.status == "queued" || $0.status == "running" }) ?? tasks.first' not in core
-    assert "filter(\\.isActive)" in ui
-
-
-def test_first_run_project_has_explicit_preparing_and_failure_states():
-    _core, ui, _native, _build = desktop_sources()
-    assert 'if (project.numericStats["groups"] ?? 0) == 0 {' in ui
-    assert "private struct ProjectPreparingState" in ui
-    assert "private struct ProjectPreparationFailedState" in ui
-    assert 'Text("正在整理项目")' in ui
-    assert 'Text("自动整理未完成")' in ui
-    assert 'Button("取消整理") { controller.cancelProjectTask(activity) }' in ui
-    assert 'Button("重新开始") { controller.startProject(project) }' in ui
-    assert 'Button("查看状态中心", action: onStatus)' in ui
-    assert 'Image(systemName: "exclamationmark.triangle.fill")' in ui
-
-
-def test_native_review_model_tolerates_unavailable_automation_state():
-    core = read("macos-app/MirrorOrderDesktopCore.swift")
-    host = read("src/script_organizer/review_read_model.py")
-    assert 'return {"available": False}' in host
-    assert "struct NativeReviewAutomaticState: Decodable" in core
-    assert "let available: Bool?" in core
-    assert "let status: String?" in core
-    assert "let reason: String?" in core
-    assert "let confidence: Double?" in core
-    assert "let episode_ids: [Int]?" in core
-
-
-def test_native_workspace_reads_versioned_host_projection():
-    core, ui, native, _build = desktop_sources()
-    assert 'appendingPathComponent("review-model")' in core
-    assert 'nextModel.contract_version == "review.v1"' in ui
-    assert "JSONDecoder().decode(NativeReviewReadModel.self" in ui
-    assert "JSONDecoder().decode(NativeReviewReadModel.self" in native
-    assert "URLSession.shared.data(for: request)" in native
-
-
-def test_desktop_has_native_project_creation_through_host_authority():
-    core, ui, _native, _build = desktop_sources()
-    runtime = read("src/script_organizer/automation_runtime.py")
-    server = read("src/script_organizer/web_server.py")
-    assert "private struct NewProjectSheet" in ui
-    assert 'Text("原始素材").tag("media-directory")' in ui
-    assert 'Text("已有对齐 FCPXML").tag("fcpxml")' in ui
-    assert "controller.preflightProject" in ui
-    assert "controller.createProject" in ui
-    assert 'workspaceEndpoint("project-preflight")' in core
-    assert 'workspaceEndpoint("projects")' in core
-    assert '"media_roots": roots' in core
-    assert "func startProject(_ project: GatewayProject)" in core
-    assert "func deleteProject(_ project: GatewayProject)" in core
-    assert 'projectEndpoint(project.project_id, "tasks")' in core
-    assert 'projectEndpoint(project.project_id, "delete")' in core
-    assert 'rest == ["delete"]' in server
-    assert 'parts == ["api", "v1", "project-preflight"]' in runtime
-    assert "self._local_only()" in runtime
-    assert "def create_and_prepare" in runtime
-    assert 'result["prepare_task_id"]' in runtime
-
-
-def test_desktop_controls_have_stable_hit_targets():
-    _core, ui, native, _build = desktop_sources()
-    runtime = read("macos-app/LocalRuntimeSettingsView.swift")
-    assert "struct AppHitTarget: ViewModifier" in ui
-    assert "func appHitTarget(minWidth: CGFloat = 40, minHeight: CGFloat = 36)" in ui
-    assert ".contentShape(Rectangle())" in ui
-    assert ".appHitTarget(minWidth: 30, minHeight: 30)" in native
-    assert ".frame(width: 44, height: 40)" in runtime
-
-
-def test_team_web_remains_separate_review_client():
+def test_team_web_remains_a_separate_review_client() -> None:
     html = read("web/index.html")
-    ui = read("macos-app/MirrorOrderDesktopUI.swift")
-    core = read("macos-app/MirrorOrderDesktopCore.swift")
+    app = read("desktop-v2/src/app/App.tsx")
+
     assert 'id="workspace-select"' in html
     assert 'id="project-select"' in html
     assert 'id="production-bar"' not in html
-    assert 'id="production-panel"' not in html
-    assert 'Label("团队审阅", systemImage: "person.3")' in ui
-    assert "controller.openInBrowser()" in ui
-    assert "NSWorkspace.shared.open(lanWorkbenchURL(for: projectID) ?? workbenchURL(for: projectID))" in core
-    assert 'Label("复制协作链接", systemImage: "link")' in ui
+    assert "TeamWebWorkbench" in app
 
 
-def test_desktop_can_scan_this_macs_media_without_writing_shared_paths():
-    core = read("macos-app/MirrorOrderDesktopCore.swift")
-    ui = read("macos-app/MirrorOrderDesktopUI.swift")
-    cli = read("src/script_organizer/cli.py")
-    identity = read("src/script_organizer/media_identity.py")
-    runtime = read("src/script_organizer/device_media_runtime.py")
-    assert "chooseLocalMediaRoot(replace: true)" in ui
-    assert '"--replace"' in core
-    assert 'scanAll ? "media-scan-all" : "media-scan"' in core
-    assert "workspacePaths" in core
-    assert 'subparsers.add_parser("media-scan-all"' in cli
-    assert '"Application Support" / "MirrorOrder"' in identity
-    assert 'item["source_media_path"]' in runtime
-    assert 'item["resolved_media_path"]' in runtime
-    assert 'item["media_path"] = resolved or source_path' in runtime
-    assert 'projectEndpoint(controller, "media-inventory")' in ui
-    assert '"source_media_path"' not in ui
-    assert '"resolved_media_path"' not in ui
-
-
-def test_build_packages_complete_runtime_and_team_web_tree():
-    _core, _ui, _native, build = desktop_sources()
-    assert 'rsync -a --exclude \'__pycache__\' --exclude \'*.pyc\' "$ROOT/src/" "$RUNTIME/src/"' in build
-    assert 'cp -R "$ROOT/web" "$RUNTIME/web"' in build
-    assert 'cp "$INFO" "$APP/Contents/Info.plist"' in build
-
-
-def test_team_web_asset_fanout_uses_a_large_threaded_accept_queue():
-    server = read("src/script_organizer/web_server.py")
-    assert "class MirrorOrderHTTPServer(ThreadingHTTPServer)" in server
-    assert "request_queue_size = 128" in server
-    assert server.count("MirrorOrderHTTPServer((host, port)") == 2
-
-
-def test_sync_contract_keeps_device_paths_outside_shared_workspace():
-    sync = read("SYNC_MODEL.md")
-    agents = read("AGENTS.md")
-    assert "media-bindings.json" in sync
-    assert "不得放进共享 workspace" in sync
-    assert "review.json" in sync
-    assert "单一写入权威" in sync
-    assert "绝对路径不是共享身份" in agents
+def test_swiftui_build_chain_is_no_longer_part_of_main() -> None:
+    assert not (ROOT / "macos-app").exists()
+    ci = read(".github/workflows/ci.yml")
+    assert "macos-app-smoke" not in ci
+    assert "macos-app/build_app.sh" not in ci
