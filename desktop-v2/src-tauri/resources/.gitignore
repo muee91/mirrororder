@@ -1,0 +1,7 @@
+mirrororder-core/*
+!mirrororder-core/.gitkeep
+mirrororder-python/*
+!mirrororder-python/.gitkeep
+mirrororder-tools/*
+!mirrororder-tools/.gitkeep
+mirrororder-runtime-manifest.json
