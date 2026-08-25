@@ -87,9 +87,6 @@ export function retryTaskBody(task: ProjectTaskRecord): Record<string, unknown> 
     type: task.type,
     targets: task.targets && typeof task.targets === "object" ? task.targets : {},
     actor: "desktop",
-    // The durable TaskManager deliberately permits the same idempotency key
-    // after failed/cancelled/interrupted states while still deduplicating
-    // queued/running/completed tasks.
     idempotency_key: task.idempotency_key || `desktop:retry:${task.task_id}`,
   };
 }
@@ -109,14 +106,14 @@ export class ProjectTaskClient {
   cancel(projectId: string, taskId: string): Promise<ProjectTaskRecord> {
     const value = taskId.trim();
     if (!value) throw new HostConnectionError("取消任务需要 task_id");
-    return requestJson(this.baseUrl, `${projectPath(projectId)}/tasks/${encodeURIComponent(value)}`, {
+    return requestJson<ProjectTaskRecord>(this.baseUrl, `${projectPath(projectId)}/tasks/${encodeURIComponent(value)}`, {
       method: "POST",
       body: JSON.stringify({ action: "cancel" }),
     });
   }
 
   retry(projectId: string, task: ProjectTaskRecord): Promise<ProjectTaskRecord> {
-    return requestJson(this.baseUrl, `${projectPath(projectId)}/tasks`, {
+    return requestJson<ProjectTaskRecord>(this.baseUrl, `${projectPath(projectId)}/tasks`, {
       method: "POST",
       body: JSON.stringify(retryTaskBody(task)),
     });
