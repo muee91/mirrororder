@@ -25,8 +25,8 @@ def test_production_host_is_loopback_and_readiness_gated() -> None:
     host = read("desktop-v2/src-tauri/src/host.rs")
 
     assert 'format!("http://127.0.0.1:{port}")' in host
-    assert 'arg("serve")' in host
-    assert 'arg("--local-only")' in host
+    assert '.arg("serve")' in host
+    assert '.arg("--local-only")' in host
     assert "wait_until_ready" in host
     assert "TcpStream::connect_timeout" in host
     assert "Python Host 在监听端口前退出" in host
@@ -35,10 +35,10 @@ def test_production_host_is_loopback_and_readiness_gated() -> None:
 def test_team_gateway_has_separate_network_security_contract() -> None:
     gateway = read("desktop-v2/src-tauri/src/gateway.rs")
 
-    assert 'arg("gateway")' in gateway
-    assert 'arg("--local-only")' in gateway
-    assert 'arg("--trusted-lan")' in gateway
-    assert 'arg("--pairing-code")' in gateway
+    assert '.arg("gateway")' in gateway
+    assert '.arg("--local-only")' in gateway
+    assert '.arg("--trusted-lan")' in gateway
+    assert '.arg("--pairing-code")' in gateway
     assert "wait_until_ready" in gateway
     assert "Team Web Gateway 在监听端口前退出" in gateway
     assert "local_only_never_exposes_lan_url" in gateway
@@ -66,7 +66,9 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
     assert "删除前必须完整输入当前 project_id" in ui
     assert "project-preflight" in client
     assert "prepare" in client
-    assert "WorkspaceRegistry" in runtime
+    assert "current.registry.preflight_create" in runtime
+    assert "current.registry.create" in runtime
+    assert "current.registry.delete" in runtime
 
 
 def test_desktop_project_tabs_are_explicit_product_surfaces() -> None:
