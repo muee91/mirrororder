@@ -157,7 +157,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
     <section className="team-web-workbench">
       <header className="team-web-heading">
         <div>
-          <p className="eyebrow">Phase 7 · Isolated Collaboration Workspace</p>
+          <p className="eyebrow">Isolated Collaboration Workspace</p>
           <h2>团队协作 / Team Web</h2>
           <p>只管理现有 Python Workspace Gateway。它不承载剪辑、分析、模型下载或 Review 权威。</p>
         </div>
