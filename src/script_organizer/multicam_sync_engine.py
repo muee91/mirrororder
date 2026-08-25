@@ -174,6 +174,51 @@ def _has_day_layout(source: Path, patterns: dict[str, str] | None = None) -> boo
     return False
 
 
+def _clear_link_target(path: Path) -> None:
+    """Remove a staging entry without ever deleting the linked source tree."""
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+        return
+    if not path.exists():
+        return
+    # On Python 3.11+ Windows, rmtree removes a directory junction itself and
+    # does not recurse into the junction target. On POSIX this branch is only
+    # used for a real staging directory created by MirrorOrder.
+    shutil.rmtree(path)
+
+
+def _link_directory(link: Path, target: Path) -> str:
+    """Create an unprivileged directory link for the normalized sync view.
+
+    POSIX uses a normal symlink. Windows uses an NTFS directory junction, which
+    does not require Developer Mode or Administrator elevation and can point to
+    another local volume. No media bytes are copied.
+    """
+    target = target.expanduser().resolve()
+    if not target.is_dir():
+        raise FileNotFoundError(f"同步目录不存在: {target}")
+    link.parent.mkdir(parents=True, exist_ok=True)
+    _clear_link_target(link)
+    if os.name != "nt":
+        link.symlink_to(target, target_is_directory=True)
+        return "symlink"
+
+    result = subprocess.run(
+        ["cmd", "/d", "/c", "mklink", "/J", str(link), str(target)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode != 0 or not link.exists():
+        detail = (result.stderr or result.stdout or "mklink /J failed").strip()
+        raise MulticamSyncUnavailable(
+            "Windows 无法创建多机位同步目录 junction。镜序不会复制媒体作为降级方案。"
+            f"请确认素材与项目位于本机可读文件系统。详情: {detail}"
+        )
+    return "junction"
+
+
 def _prepare_media_base(
     source: Path,
     stage_root: Path,
@@ -193,15 +238,14 @@ def _prepare_media_base(
         direct_media = []
     if not direct_cameras and not direct_media:
         return source, "engine-detect"
-    if stage_root.exists():
-        shutil.rmtree(stage_root)
-    day = stage_root / "day1"
-    day.mkdir(parents=True, exist_ok=True)
-    for camera_dir in direct_cameras:
-        (day / camera_dir.name).symlink_to(camera_dir, target_is_directory=True)
-    for media in direct_media:
-        (day / media.name).symlink_to(media)
-    return stage_root, "normalized-single-day"
+    if stage_root.exists() or stage_root.is_symlink():
+        _clear_link_target(stage_root)
+    stage_root.mkdir(parents=True, exist_ok=True)
+    # The engine wants a day directory. Link the whole source root as day1
+    # instead of linking every camera/media item. This is both cheaper and avoids
+    # Windows per-file symlink privileges while preserving the original layout.
+    link_kind = _link_directory(stage_root / "day1", source)
+    return stage_root, f"normalized-single-day-{link_kind}"
 
 
 def _prepare_multiple_media_roots(
@@ -209,17 +253,19 @@ def _prepare_multiple_media_roots(
     stage_root: Path,
     camera_patterns: dict[str, str] | None = None,
 ) -> tuple[Path, str, Path]:
-    """Build a symlink-only engine view for several device-local roots."""
+    """Build a link-only engine view for several device-local roots."""
     if not roots:
         raise ValueError("媒体目录项目缺少本机素材根目录")
     if len(roots) == 1:
         base, layout = _prepare_media_base(roots[0], stage_root, camera_patterns)
         return base, layout, roots[0]
-    if stage_root.exists():
-        shutil.rmtree(stage_root)
+    if stage_root.exists() or stage_root.is_symlink():
+        _clear_link_target(stage_root)
     stage_root.mkdir(parents=True, exist_ok=True)
     used_names: set[str] = set()
     day_index = 1
+    link_kinds: set[str] = set()
+    linked = 0
     for root in roots:
         if not root.is_dir():
             continue
@@ -246,14 +292,21 @@ def _prepare_multiple_media_roots(
             if candidate == root:
                 target = stage_root / f"day{day_index}"
                 day_index += 1
-            target.symlink_to(candidate, target_is_directory=True)
-    if not any(path.is_symlink() for path in stage_root.iterdir()):
+            link_kinds.add(_link_directory(target, candidate))
+            linked += 1
+    if not linked:
         raise ValueError("选中的素材根目录没有可用于同步的内容")
     try:
-        export_base = Path(os.path.commonpath([str(root) for root in roots]))
-    except ValueError:
-        export_base = Path("/")
-    return stage_root, "normalized-multiple-roots", export_base
+        export_base = Path(os.path.commonpath([str(root.resolve()) for root in roots]))
+    except ValueError as error:
+        # Relative FCPXML media URLs cannot cross Windows drive letters. Do not
+        # silently emit paths relative to an unrelated drive/root.
+        raise MulticamSyncUnavailable(
+            "多个素材根目录没有共同的本机路径基准（常见于 Windows 跨盘符）。"
+            "当前相对路径 FCPXML 导出无法安全表示这种布局；请先将本次同步素材放到同一盘符/共同根目录。"
+        ) from error
+    layout_kind = "+".join(sorted(link_kinds)) or "link"
+    return stage_root, f"normalized-multiple-roots-{layout_kind}", export_base
 
 
 def _sync_media_roles(config: ProjectConfig) -> tuple[dict[str, dict[str, str]], list[str], dict[str, int]]:
@@ -324,18 +377,27 @@ def _write_config(
     config_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _refresh_analysis_link(link: Path, target: Path) -> None:
-    """Keep one internal symlink for old analysis paths without duplicating XML."""
+def _refresh_analysis_reference(link: Path, target: Path) -> tuple[Path, str]:
+    """Preserve relative-URL semantics while keeping the legacy alias when safe.
+
+    A copied or hard-linked FCPXML would be byte-identical but resolve relative
+    media URLs against the wrong directory. Therefore Windows without symlink
+    capability falls back to the real delivery XML path instead of duplicating
+    the file under the project output directory.
+    """
     link.parent.mkdir(parents=True, exist_ok=True)
+    if link.is_symlink() or link.exists():
+        _clear_link_target(link)
     try:
-        if link.is_symlink() or link.exists():
-            link.unlink()
         link.symlink_to(target.resolve())
-    except OSError as error:
+        return link, "symlink"
+    except OSError:
+        if os.name == "nt":
+            return target.resolve(), "delivery-source"
         raise RuntimeError(
             "无法创建项目内部 synchronized.fcpxml 链接；为避免相对素材路径基准错误，"
             "镜序不会复制一份到其他目录。请确认项目磁盘支持符号链接。"
-        ) from error
+        )
 
 
 def run_multicam_sync(
@@ -443,8 +505,10 @@ def run_multicam_sync(
     emit("校验 FCPXML 帧边界、素材引用与结构")
     _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(fcpxml.parent)], emit, config_path=project_config)
     update_progress(total_steps - 1, total_steps)
-    analysis_link = report_dir / "synchronized.fcpxml"
-    _refresh_analysis_link(analysis_link, fcpxml)
+    analysis_path, analysis_reference_mode = _refresh_analysis_reference(
+        report_dir / "synchronized.fcpxml",
+        fcpxml,
+    )
 
     capcut = ""
     capcut_draft = ""
@@ -514,7 +578,8 @@ def run_multicam_sync(
         "days": days,
         "positions": [str(path) for path in positions],
         "fcpxml": str(fcpxml),
-        "analysis_fcpxml": str(analysis_link),
+        "analysis_fcpxml": str(analysis_path),
+        "analysis_reference_mode": analysis_reference_mode,
         "capcut_fcpxml": capcut,
         "capcut_draft": capcut_draft,
         "capcut_draft_validation": capcut_draft_validation,
