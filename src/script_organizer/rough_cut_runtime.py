@@ -5,9 +5,16 @@ from typing import Any
 
 from .coverage_runtime import _filters
 from .rough_cut_plan import ROUGH_CUT_CONTRACT, build_rough_cut_plan
+from .timebase import project_timebase
 
 
 _INSTALLED = False
+
+
+def _plan_with_timebase(project: Any, *, scene_id: str | None, episode: int | None) -> dict[str, Any]:
+    payload = build_rough_cut_plan(project, scene_id=scene_id, episode=episode)
+    payload["timebase"] = project_timebase(project.config)
+    return payload
 
 
 def install_rough_cut_runtime() -> None:
@@ -50,7 +57,7 @@ def install_rough_cut_runtime() -> None:
                         scene_id, episode = _filters(parsed)
                     except ValueError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
-                    self._send_json(build_rough_cut_plan(project, scene_id=scene_id, episode=episode))
+                    self._send_json(_plan_with_timebase(project, scene_id=scene_id, episode=episode))
                     return
                 return super()._app_get(parsed)
 
@@ -68,7 +75,7 @@ def install_rough_cut_runtime() -> None:
                         scene_id, episode = _filters(parsed)
                     except ValueError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
-                    response = build_rough_cut_plan(project, scene_id=scene_id, episode=episode)
+                    response = _plan_with_timebase(project, scene_id=scene_id, episode=episode)
                     service.tokens.audit(agent, "read:rough-cut-plan", project_id)
                     self._send_json(response)
                     return
