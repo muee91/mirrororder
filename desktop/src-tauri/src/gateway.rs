@@ -1,8 +1,8 @@
 use crate::runtime::{path_with_tools, python_path_with_source, resolve_python_runtime, RuntimeOrigin};
-use crate::service_health::probe_service;
+use crate::service_health::{probe_service, probe_service_at};
 use serde::Serialize;
 use std::{
-    net::{TcpListener, UdpSocket},
+    net::{IpAddr, TcpListener, UdpSocket},
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -140,22 +140,60 @@ fn wait_until_ready(child: &mut Child, port: u16) -> Result<(), String> {
     ))
 }
 
-fn local_lan_address() -> Option<String> {
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect("8.8.8.8:80").ok()?;
-    let address = socket.local_addr().ok()?.ip();
-    if address.is_loopback() || address.is_unspecified() {
-        None
-    } else {
-        Some(address.to_string())
+fn local_lan_addresses() -> Vec<IpAddr> {
+    let mut addresses = Vec::new();
+    if cfg!(target_os = "macos") {
+        if let Ok(output) = Command::new("ifconfig").arg("-a").output() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                let Some(value) = line.trim().strip_prefix("inet ") else {
+                    continue;
+                };
+                let Some(value) = value.split_whitespace().next() else {
+                    continue;
+                };
+                let Ok(address) = value.parse::<IpAddr>() else {
+                    continue;
+                };
+                if !address.is_loopback()
+                    && !address.is_unspecified()
+                    && !addresses.contains(&address)
+                {
+                    addresses.push(address);
+                }
+            }
+        }
     }
+    if addresses.is_empty() {
+        if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(address) = socket.local_addr().map(|value| value.ip()) {
+                    if !address.is_loopback() && !address.is_unspecified() {
+                        addresses.push(address);
+                    }
+                }
+            }
+        }
+    }
+    addresses
 }
 
-fn lan_url(port: u16, local_only: bool) -> Option<String> {
+fn verified_lan_url_for(
+    port: u16,
+    addresses: impl IntoIterator<Item = IpAddr>,
+) -> Option<String> {
+    addresses.into_iter().find_map(|address| {
+        probe_service_at(address, port, GATEWAY_SERVICE, Duration::from_millis(400))
+            .ok()
+            .map(|()| format!("http://{address}:{port}"))
+    })
+}
+
+fn verified_lan_url(port: u16, local_only: bool) -> Option<String> {
     if local_only {
         return None;
     }
-    local_lan_address().map(|address| format!("http://{address}:{port}"))
+    verified_lan_url_for(port, local_lan_addresses())
 }
 
 fn reap_if_finished(slot: &mut Option<ManagedGateway>) -> Result<(), String> {
@@ -328,7 +366,7 @@ pub fn start_team_gateway(
     }
 
     let base_url = format!("http://127.0.0.1:{}", config.port);
-    let lan_url = lan_url(config.port, config.local_only);
+    let lan_url = verified_lan_url(config.port, config.local_only);
     *slot = Some(ManagedGateway {
         child,
         config,
@@ -392,8 +430,17 @@ pub fn shutdown(manager: &GatewayManager) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{lan_url, shutdown, validate_port, GatewayConfig, GatewayManager, ManagedGateway};
-    use std::{path::PathBuf, process::Command};
+    use super::{
+        shutdown, validate_port, verified_lan_url, verified_lan_url_for, GatewayConfig,
+        GatewayManager, ManagedGateway,
+    };
+    use std::{
+        io::Write,
+        net::{IpAddr, Ipv4Addr, TcpListener},
+        path::PathBuf,
+        process::Command,
+        thread,
+    };
 
     #[test]
     fn rejects_zero_gateway_port() {
@@ -403,7 +450,29 @@ mod tests {
 
     #[test]
     fn local_only_never_exposes_lan_url() {
-        assert_eq!(lan_url(8766, true), None);
+        assert_eq!(verified_lan_url(8766, true), None);
+    }
+
+    #[test]
+    fn lan_share_requires_verified_gateway_identity() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let body = r#"{"status":"ok","service":"mirrororder-host"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+
+        assert_eq!(
+            verified_lan_url_for(port, [IpAddr::V4(Ipv4Addr::LOCALHOST)]),
+            None
+        );
+        server.join().unwrap();
     }
 
     #[cfg(unix)]

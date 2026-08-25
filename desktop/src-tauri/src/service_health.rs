@@ -1,16 +1,25 @@
 use serde_json::Value;
 use std::{
     io::{Read, Write},
-    net::{SocketAddr, TcpStream},
+    net::{IpAddr, SocketAddr, TcpStream},
     time::Duration,
 };
 
 const MAX_RESPONSE_BYTES: usize = 16 * 1024;
 
 pub fn probe_service(port: u16, expected_service: &str, timeout: Duration) -> Result<(), String> {
-    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    probe_service_at(IpAddr::from([127, 0, 0, 1]), port, expected_service, timeout)
+}
+
+pub fn probe_service_at(
+    ip: IpAddr,
+    port: u16,
+    expected_service: &str,
+    timeout: Duration,
+) -> Result<(), String> {
+    let address = SocketAddr::new(ip, port);
     let mut stream = TcpStream::connect_timeout(&address, timeout)
-        .map_err(|error| format!("无法连接 127.0.0.1:{port}：{error}"))?;
+        .map_err(|error| format!("无法连接 {address}：{error}"))?;
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|error| format!("无法设置健康检查读取超时：{error}"))?;
@@ -19,7 +28,7 @@ pub fn probe_service(port: u16, expected_service: &str, timeout: Duration) -> Re
         .map_err(|error| format!("无法设置健康检查写入超时：{error}"))?;
 
     let request = format!(
-        "GET /api/v1/ping HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
+        "GET /api/v1/ping HTTP/1.1\r\nHost: {address}\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
     );
     stream
         .write_all(request.as_bytes())
