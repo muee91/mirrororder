@@ -73,7 +73,7 @@ export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
     <section className="phase3-workbench delivery-workbench">
       <header className="production-heading">
         <div>
-          <p className="eyebrow">Phase 6 · Delivery / Platform Adapter</p>
+          <p className="eyebrow">Delivery / Platform Adapter</p>
           <h2>交付 / NLE</h2>
         </div>
         <span className="production-state">{message}</span>
