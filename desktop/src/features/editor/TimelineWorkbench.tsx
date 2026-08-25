@@ -233,7 +233,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     <section className="timeline-workbench">
       <header className="production-heading timeline-heading">
         <div>
-          <p className="eyebrow">Phase 4–5 · Persistent Timeline + Proxy Edit</p>
+          <p className="eyebrow">Persistent Timeline + Proxy Edit</p>
           <h2>剪辑 / Timeline</h2>
         </div>
         <span className="production-state">{message}</span>
