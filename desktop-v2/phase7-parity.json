@@ -85,6 +85,8 @@
     "python_tests": "required",
     "timeline_core_cargo_tests": "required",
     "tauri_cargo_check": "required",
+    "packaged_python_runtime": "required",
+    "packaged_media_toolchain": "required",
     "macos_tauri_build": "required",
     "macos_real_media_playback": "required",
     "macos_final_cut_open": "required",
@@ -113,5 +115,21 @@
       "experimental automation engines"
     ],
     "promotion_rule": "Only promote an isolated capability into the primary production workspace after its contract, ownership boundary, failure isolation and native smoke gate are explicit."
+  },
+  "isolated_workstreams": {
+    "runtime_packaging": {
+      "branch": "feat/desktop-v2-runtime-packaging",
+      "status": "isolated_blocker",
+      "reason": "A distributable Desktop build must carry the Python Core, a Python 3.11+ runtime with numpy/pandas/scipy, and ffmpeg/ffprobe. Development-relative source paths or system tools are not packaged-runtime guarantees.",
+      "blocks": [
+        "packaged_python_runtime",
+        "packaged_media_toolchain",
+        "macos_tauri_build",
+        "macos_codesign_bundle",
+        "windows_tauri_build",
+        "windows_installer_smoke"
+      ],
+      "mainline_rule": "Do not solve interpreter/tool/resource bundling by adding production tabs, shipping model weights by default, or duplicating Python business logic."
+    }
   }
 }
