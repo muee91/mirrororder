@@ -152,7 +152,7 @@ export function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">镜序 · MirrorOrder</p>
-          <h1>Desktop v2</h1>
+          <h1>Desktop</h1>
         </div>
         <div className="topbar-actions">
           <div className="app-workspace-switch" aria-label="Desktop workspace">
@@ -214,7 +214,7 @@ export function App() {
           <p className={`connection-message ${state === "error" ? "is-error" : ""}`}>{message}</p>
           {platformInfo ? (
             <p className="connection-message platform-capabilities">
-              Phase 6 · native dialog ✓ · reveal ✓ · URL opener {platformInfo.open_url ? "✓" : "missing"} · FCP adapter {platformInfo.fcp_adapter ? "available on macOS" : "n/a"} · security-scoped media {platformInfo.security_scoped_media ? "✓" : "pending native gate"} · Resolve/Premiere adapters extension-only
+              native dialog ✓ · reveal ✓ · URL opener {platformInfo.open_url ? "✓" : "missing"} · FCP adapter {platformInfo.fcp_adapter ? "available on macOS" : "n/a"} · security-scoped media {platformInfo.security_scoped_media ? "✓" : "pending native gate"} · Resolve/Premiere adapters extension-only
             </p>
           ) : null}
 
@@ -233,14 +233,14 @@ export function App() {
                 ) : (
                   <div className="phase-placeholder">
                     <strong>选择或创建一个项目</strong>
-                    <p>项目生命周期现在由 Desktop 调用现有 Python WorkspaceRegistry 管理。</p>
+                    <p>项目生命周期由 Desktop 调用现有 Python WorkspaceRegistry 管理。</p>
                   </div>
                 )}
               </section>
             </section>
           ) : (
             <section className="offline-state">
-              <p className="eyebrow">Phase 1 / Phase 6</p>
+              <p className="eyebrow">Local Production Host</p>
               <h2>等待 HostConnection</h2>
               <p>HostConnection 负责 Python Core 生命周期；原生路径选择和 Finder/Explorer 能力由跨平台 Tauri adapter 提供，业务权威仍在 Python Core。</p>
             </section>
