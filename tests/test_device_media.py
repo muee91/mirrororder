@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from fractions import Fraction
 from pathlib import Path
 
@@ -50,7 +51,7 @@ def test_device_media_store_binds_verified_copy_without_shared_path_change(tmp_p
     assert index["clips"][0]["media_path"] == "/Volumes/OTHER/A001.mov"
 
 
-def test_legacy_project_can_relink_unique_filename_before_reanalysis(tmp_path: Path) -> None:
+def test_legacy_project_unique_filename_requires_confirmation_before_relink(tmp_path: Path) -> None:
     local = tmp_path / "copies" / "A003C012.mov"
     local.parent.mkdir()
     local.write_bytes(b"legacy-copy")
@@ -68,8 +69,86 @@ def test_legacy_project_can_relink_unique_filename_before_reanalysis(tmp_path: P
 
     key = provisional_media_id("A003C012.mov")
     assert key.startswith("MP_")
-    assert summary["resolved"] == 1
+    assert summary["resolved"] == 0
+    assert summary["missing"] == 1
+    assert summary["scan"]["provisional_name_matches"] == 0
+    assert summary["scan"]["provisional_name_candidates"] == 1
+    assert summary["items"][0]["candidate_path"] == str(local)
+    assert summary["items"][0]["needs_confirmation"] is True
+    assert store.resolve("ws_beef", "beef", index["clips"][0]) == ""
+
+    store.confirm_provisional("ws_beef", "beef", key, str(local))
+    confirmed = store.summary("ws_beef", "beef", index)
+    assert confirmed["resolved"] == 1
+    assert confirmed["items"][0]["needs_confirmation"] is False
     assert store.resolve("ws_beef", "beef", index["clips"][0]) == str(local)
+
+
+def test_version_two_filename_binding_is_not_trusted_after_upgrade(tmp_path: Path) -> None:
+    local = tmp_path / "copies" / "A003C012.mov"
+    local.parent.mkdir()
+    local.write_bytes(b"wrong-or-unverified-copy")
+    state_path = tmp_path / "state" / "media-bindings.json"
+    state_path.parent.mkdir()
+    key = provisional_media_id("A003C012.mov")
+    state_path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "device_id": "device-old",
+                "device_name": "old",
+                "workspaces": {
+                    "ws_beef": {
+                        "projects": {
+                            "beef": {
+                                "roots": [str(local.parent)],
+                                "bindings": {key: str(local)},
+                                "updated_at": "",
+                            }
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    index = {
+        "clips": [
+            {
+                "clip_id": "C_old",
+                "name": "A003C012",
+                "media_path": "/Volumes/PSSD/A003C012.mov",
+            }
+        ]
+    }
+
+    store = DeviceMediaStore(state_path)
+    assert store.resolve("ws_beef", "beef", index["clips"][0]) == ""
+
+    summary = store.scan("ws_beef", "beef", index, [str(local.parent)])
+    assert summary["resolved"] == 0
+    assert summary["items"][0]["needs_confirmation"] is True
+    snapshot = store.project_snapshot("ws_beef", "beef")
+    assert key not in snapshot["bindings"]
+
+
+def test_verified_identity_rejects_replaced_file_at_same_path(tmp_path: Path) -> None:
+    source = tmp_path / "source" / "A001.mov"
+    source.parent.mkdir()
+    source.write_bytes(b"original-media" * 1000)
+    media_id = media_id_for_path(source)
+    index_item = {
+        "clip_id": "C_verified",
+        "media_id": media_id,
+        "name": "A001",
+        "media_path": str(source),
+    }
+    store = DeviceMediaStore(tmp_path / "state" / "media-bindings.json")
+
+    assert store.resolve("ws_demo", "demo", index_item) == str(source)
+    source.write_bytes(b"different-media" * 1000)
+
+    assert store.resolve("ws_demo", "demo", index_item) == ""
 
 
 def test_replace_roots_discards_stale_project_bindings(tmp_path: Path) -> None:
@@ -99,6 +178,8 @@ def test_replace_roots_discards_stale_project_bindings(tmp_path: Path) -> None:
 
     assert snapshot["roots"] == [str(correct.parent.resolve())]
     assert snapshot["bindings"] == {}
+    assert snapshot["candidates"] == {}
+    assert snapshot["confirmed_provisional"] == {}
 
     summary = store.scan("ws_demo", "demo", index, [str(correct.parent)])
     assert summary["resolved"] == 1
