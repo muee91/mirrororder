@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,11 @@ def application_support_root() -> Path:
     override = os.environ.get("MIRRORORDER_DATA_DIR", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return Path.home() / "Library" / "Application Support" / "MirrorOrder"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "MirrorOrder"
+    if os.name == "nt":
+        return Path(os.environ.get("APPDATA", Path.home())) / "MirrorOrder"
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mirrororder"
 
 
 def settings_path() -> Path:
@@ -112,7 +117,7 @@ def save_runtime_settings(raw: object) -> dict[str, Any]:
 
 
 def load_project_intelligence_settings(workspace_id: str, project_id: str) -> dict[str, Any]:
-    """Read project-local analysis preferences from this Mac only.
+    """Read project-local analysis preferences from this device only.
 
     These controls tune rebuildable local evidence. They intentionally do not
     belong in project.toml or any shared project artifact.
@@ -183,6 +188,5 @@ def save_project_intelligence_settings(
     }
     projects[workspace] = workspace_entries
     payload["project_intelligence"] = projects
-    payload["version"] = 4
     _write(payload)
     return load_project_intelligence_settings(workspace, project)
