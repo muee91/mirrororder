@@ -8,7 +8,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 struct ManagedHost {
     child: Child,
@@ -178,8 +178,16 @@ pub fn start_python_host(
         command.env("PATH", path);
     }
     if runtime.origin == RuntimeOrigin::PackagedResource {
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|error| format!("无法解析 Desktop app-data 目录：{error}"))?;
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|error| format!("无法创建 Desktop app-data 目录 {}：{error}", data_dir.display()))?;
         command
             .env("MIRRORORDER_PACKAGED_RUNTIME", "1")
+            .env("MIRRORORDER_DATA_DIR", &data_dir)
+            .env("MIRRORORDER_DEVICE_STATE_DIR", &data_dir)
             .env(
                 "MIRRORORDER_MULTICAM_SYNC_ROOT",
                 runtime.core_root.join("vendor").join("multicam-audio-sync"),
