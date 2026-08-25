@@ -173,9 +173,6 @@ pub fn start_python_host(
         }
     }
 
-    // A child may still exist while its HTTP service is no longer healthy. Do
-    // not report that stale process as already_running; reap it and restart on
-    // the configured port instead of asking operators to drift to 8767/8768.
     if let Some(stale) = slot.take() {
         stop_managed_host(stale)?;
     }
@@ -249,11 +246,8 @@ pub fn host_process_status(manager: State<'_, HostManager>) -> Result<HostProces
     reap_if_finished(&mut slot)?;
     let host = slot.as_ref();
     let health_result = host.map(|item| health(item.port));
-    let healthy = matches!(health_result, Some(Ok(())));
-    let health_error = match health_result {
-        Some(Err(error)) => Some(error),
-        _ => None,
-    };
+    let healthy = health_result.as_ref().is_some_and(|result| result.is_ok());
+    let health_error = health_result.and_then(Result::err);
     Ok(HostProcessStatus {
         running: host.is_some(),
         healthy,
