@@ -1,7 +1,8 @@
 use crate::runtime::{path_with_tools, python_path_with_source, resolve_python_runtime, RuntimeOrigin};
+use crate::service_health::probe_service;
 use serde::Serialize;
 use std::{
-    net::{SocketAddr, TcpListener, TcpStream, UdpSocket},
+    net::{TcpListener, UdpSocket},
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -9,6 +10,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager, State};
+
+const GATEWAY_SERVICE: &str = "mirrororder-gateway";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct GatewayConfig {
@@ -47,6 +50,8 @@ pub struct GatewayLaunchResult {
 #[derive(Serialize)]
 pub struct GatewayProcessStatus {
     running: bool,
+    healthy: bool,
+    health_error: Option<String>,
     pid: Option<u32>,
     base_url: Option<String>,
     lan_url: Option<String>,
@@ -109,22 +114,30 @@ fn ensure_port_available(port: u16, local_only: bool) -> Result<(), String> {
         .map_err(|error| format!("Gateway 端口 {port} 已被占用（{error}）"))
 }
 
+fn health(port: u16) -> Result<(), String> {
+    probe_service(port, GATEWAY_SERVICE, Duration::from_millis(400))
+}
+
 fn wait_until_ready(child: &mut Child, port: u16) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(15);
-    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut last_error = String::new();
     while Instant::now() < deadline {
         if let Some(status) = child
             .try_wait()
             .map_err(|error| format!("检查 Gateway 启动状态失败：{error}"))?
         {
-            return Err(format!("Team Web Gateway 在监听端口前退出：{status}"));
+            return Err(format!("Team Web Gateway 在健康检查通过前退出：{status}"));
         }
-        if TcpStream::connect_timeout(&address, Duration::from_millis(150)).is_ok() {
-            return Ok(());
+        match health(port) {
+            Ok(()) => return Ok(()),
+            Err(error) => last_error = error,
         }
-        thread::sleep(Duration::from_millis(60));
+        thread::sleep(Duration::from_millis(80));
     }
-    Err(format!("Team Web Gateway 启动超时：15 秒内未监听 127.0.0.1:{port}"))
+    Err(format!(
+        "Team Web Gateway 启动超时：15 秒内未通过 {GATEWAY_SERVICE} 健康检查{}",
+        if last_error.is_empty() { String::new() } else { format!("（最后错误：{last_error}）") }
+    ))
 }
 
 fn local_lan_address() -> Option<String> {
@@ -251,10 +264,19 @@ pub fn start_team_gateway(
                 gateway.base_url
             ));
         }
-        return Ok(public_result(gateway, true));
+        if health(gateway.config.port).is_ok() {
+            return Ok(public_result(gateway, true));
+        }
     }
 
-    ensure_port_available(port, local_only)?;
+    // The child process can outlive a broken HTTP listener. Restart the same
+    // managed port instead of treating a stale PID as healthy or drifting to a
+    // temporary port such as 8767.
+    if let Some(stale) = slot.take() {
+        stop_managed_gateway(stale)?;
+    }
+
+    ensure_port_available(config.port, config.local_only)?;
     let runtime = resolve_python_runtime(&app)?;
     let mut command = Command::new(&runtime.python_executable);
     command
@@ -329,8 +351,16 @@ pub fn team_gateway_status(
         .map_err(|_| "Gateway 进程状态锁已损坏".to_string())?;
     reap_if_finished(&mut slot)?;
     let gateway = slot.as_ref();
+    let health_result = gateway.map(|item| health(item.config.port));
+    let healthy = matches!(health_result, Some(Ok(())));
+    let health_error = match health_result {
+        Some(Err(error)) => Some(error),
+        _ => None,
+    };
     Ok(GatewayProcessStatus {
         running: gateway.is_some(),
+        healthy,
+        health_error,
         pid: gateway.map(|item| item.child.id()),
         base_url: gateway.map(|item| item.base_url.clone()),
         lan_url: gateway.and_then(|item| item.lan_url.clone()),
