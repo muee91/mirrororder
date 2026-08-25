@@ -19,7 +19,7 @@ def test_desktop_v2_shell_fills_available_canvas() -> None:
     assert ".app-shell { min-height: 100vh" in styles
     assert ".workspace-shell { display: grid" in styles
     assert "min-height: 620px" in styles
-    assert ".project-production-workbench" in production
+    assert ".project-workbench-nav" in production
 
 
 def test_top_level_workspace_switch_stays_outside_project_tabs() -> None:
@@ -27,8 +27,8 @@ def test_top_level_workspace_switch_stays_outside_project_tabs() -> None:
     workbench = read("desktop-v2/src/features/production/ProjectWorkbench.tsx")
 
     assert 'className="app-workspace-switch"' in app
-    assert '>制作<' in app
-    assert '>团队协作<' in app
+    assert ">制作<" in app
+    assert ">团队协作<" in app
     assert "TeamWebWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
 
