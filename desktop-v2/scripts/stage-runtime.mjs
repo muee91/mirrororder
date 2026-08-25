@@ -45,6 +45,35 @@ function run(executable, args, label) {
   return (result.stdout || "").trim();
 }
 
+function isInside(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
+function assertSelfContainedSymlinks(root, label) {
+  const realRoot = fs.realpathSync(root);
+  const visit = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const item = path.join(current, entry.name);
+      const stat = fs.lstatSync(item);
+      if (stat.isSymbolicLink()) {
+        let target;
+        try {
+          target = fs.realpathSync(item);
+        } catch (error) {
+          fail(`${label} contains a broken symlink: ${item} (${error.message})`);
+        }
+        if (!isInside(realRoot, target)) {
+          fail(`${label} symlink escapes runtime root: ${item} -> ${target}`);
+        }
+        continue;
+      }
+      if (stat.isDirectory()) visit(item);
+    }
+  };
+  visit(root);
+}
+
 function cleanTarget(target) {
   fs.mkdirSync(target, { recursive: true });
   for (const entry of fs.readdirSync(target)) {
@@ -70,6 +99,8 @@ const mediaToolsRoot = requireDirectory(
   process.env.MIRRORORDER_MEDIA_TOOLS_ROOT,
   "MIRRORORDER_MEDIA_TOOLS_ROOT",
 );
+assertSelfContainedSymlinks(portablePythonRoot, "portable Python runtime");
+assertSelfContainedSymlinks(mediaToolsRoot, "media tools runtime");
 
 const windows = process.platform === "win32";
 const pythonExecutable = firstFile(
@@ -78,6 +109,7 @@ const pythonExecutable = firstFile(
     : executableCandidates(portablePythonRoot, [path.join("bin", "python3"), path.join("bin", "python")]),
   "portable Python executable",
 );
+const pythonRelativeExecutable = path.relative(portablePythonRoot, pythonExecutable);
 const toolBin = path.join(mediaToolsRoot, "bin");
 const ffmpegName = windows ? "ffmpeg.exe" : "ffmpeg";
 const ffprobeName = windows ? "ffprobe.exe" : "ffprobe";
@@ -87,15 +119,16 @@ const ffprobeExecutable = firstFile([path.join(toolBin, ffprobeName)], "ffprobe"
 const pythonProbe = run(
   pythonExecutable,
   [
+    "-I",
     "-c",
     [
       "import json, sys",
       "assert sys.version_info >= (3, 11), sys.version",
       "import numpy, pandas, scipy",
-      "print(json.dumps({'version': sys.version.split()[0], 'modules': ['numpy','pandas','scipy']}))",
+      "print(json.dumps({'version': sys.version.split()[0], 'modules': ['numpy','pandas','scipy'], 'executable': sys.executable, 'prefix': sys.prefix}))",
     ].join("; "),
   ],
-  "portable Python prerequisite probe",
+  "portable Python isolated prerequisite probe",
 );
 let pythonInfo;
 try {
@@ -103,6 +136,24 @@ try {
 } catch {
   fail(`portable Python prerequisite probe returned invalid JSON: ${pythonProbe}`);
 }
+for (const [label, candidate] of [["sys.executable", pythonInfo.executable], ["sys.prefix", pythonInfo.prefix]]) {
+  if (!candidate || !fs.existsSync(candidate)) fail(`portable Python ${label} does not exist: ${String(candidate)}`);
+  if (!isInside(fs.realpathSync(portablePythonRoot), fs.realpathSync(candidate))) {
+    fail(`portable Python ${label} escapes MIRRORORDER_PORTABLE_PYTHON_ROOT: ${candidate}`);
+  }
+}
+
+const sourcePathLiteral = JSON.stringify(path.join(repoRoot, "src"));
+run(
+  pythonExecutable,
+  [
+    "-I",
+    "-c",
+    `import sys; sys.path.insert(0, ${sourcePathLiteral}); import script_organizer.cli; print('mirrororder-core-import-ok')`,
+  ],
+  "MirrorOrder Core import probe",
+);
+
 const ffmpegVersion = run(ffmpegExecutable, ["-version"], "ffmpeg probe").split(/\r?\n/)[0] || "ffmpeg";
 const ffprobeVersion = run(ffprobeExecutable, ["-version"], "ffprobe probe").split(/\r?\n/)[0] || "ffprobe";
 
@@ -117,6 +168,25 @@ for (const [source, label] of [
   if (!fs.existsSync(source)) fail(`repository source missing: ${label}`);
 }
 
+const requiredMulticamFiles = [
+  "project_config.py",
+  "make_index.py",
+  "extract_parallel.py",
+  "sync.py",
+  "compress_gaps.py",
+  "build_fcpxml.py",
+  "build_capcut_fcpxml.py",
+  "build_capcut_draft_31.py",
+  "build_pr_xml.py",
+  "validate_fcpxml.py",
+  "validate_capcut_draft.py",
+  "capcut_draft_schema.json",
+];
+for (const name of requiredMulticamFiles) {
+  const candidate = path.join(multicamSource, "scripts", name);
+  if (!fs.existsSync(candidate)) fail(`first-party multicam engine missing scripts/${name}`);
+}
+
 fs.mkdirSync(resourcesRoot, { recursive: true });
 cleanTarget(coreTarget);
 cleanTarget(pythonTarget);
@@ -129,7 +199,7 @@ copyDirectory(portablePythonRoot, pythonTarget);
 copyDirectory(mediaToolsRoot, toolsTarget);
 
 for (const executable of [
-  windows ? path.join(pythonTarget, "python.exe") : path.join(pythonTarget, "bin", "python3"),
+  path.join(pythonTarget, pythonRelativeExecutable),
   path.join(toolsTarget, "bin", ffmpegName),
   path.join(toolsTarget, "bin", ffprobeName),
 ]) {
@@ -145,13 +215,20 @@ const manifest = {
   },
   python: {
     version: pythonInfo.version,
+    executable: pythonRelativeExecutable,
     required_modules: pythonInfo.modules,
+    isolated_probe: true,
     source: "MIRRORORDER_PORTABLE_PYTHON_ROOT",
   },
   tools: {
     ffmpeg: ffmpegVersion,
     ffprobe: ffprobeVersion,
     source: "MIRRORORDER_MEDIA_TOOLS_ROOT",
+  },
+  safety: {
+    external_symlinks_allowed: false,
+    system_python_fallback_in_packaged_mode: false,
+    system_ffmpeg_fallback_in_packaged_mode: false,
   },
   optional_not_bundled_by_this_gate: [
     "llama-server",
