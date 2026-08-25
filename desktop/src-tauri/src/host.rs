@@ -1,14 +1,14 @@
+use crate::runtime::{path_with_tools, python_path_with_source, resolve_python_runtime, RuntimeOrigin};
 use serde::Serialize;
 use std::{
-    env,
     net::{SocketAddr, TcpListener, TcpStream},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 struct ManagedHost {
     child: Child,
@@ -37,30 +37,6 @@ pub struct HostProcessStatus {
     workspace_path: Option<String>,
 }
 
-fn core_root() -> PathBuf {
-    env::var_os("MIRRORORDER_CORE_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
-}
-
-fn python_executable() -> String {
-    env::var("MIRRORORDER_PYTHON").unwrap_or_else(|_| {
-        if cfg!(target_os = "windows") {
-            "python".to_string()
-        } else {
-            "python3".to_string()
-        }
-    })
-}
-
-fn python_path_with_core(core: &Path) -> Result<std::ffi::OsString, String> {
-    let mut paths = vec![core.join("src")];
-    if let Some(existing) = env::var_os("PYTHONPATH") {
-        paths.extend(env::split_paths(&existing));
-    }
-    env::join_paths(paths).map_err(|error| format!("无法构造 PYTHONPATH：{error}"))
-}
-
 fn normalize_workspace_path(value: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(value);
     if !path.exists() {
@@ -81,7 +57,7 @@ fn ensure_loopback_port_available(port: u16) -> Result<(), String> {
         .map(|listener| drop(listener))
         .map_err(|error| {
             format!(
-                "本机端口 {port} 已被占用（{error}）。如果已有镜序 Host，请直接连接；不要让 Desktop v2 误连到其它工作区。"
+                "本机端口 {port} 已被占用（{error}）。如果已有镜序服务，请直接连接；不要误连到其它工作区。"
             )
         })
 }
@@ -148,6 +124,7 @@ impl Drop for HostManager {
 
 #[tauri::command]
 pub fn start_python_host(
+    app: AppHandle,
     manager: State<'_, HostManager>,
     workspace_path: String,
     port: Option<u16>,
@@ -182,20 +159,11 @@ pub fn start_python_host(
     }
 
     ensure_loopback_port_available(port)?;
-
-    let core = core_root();
-    let source_dir = core.join("src");
-    if !source_dir.join("script_organizer").is_dir() {
-        return Err(format!(
-            "找不到 MirrorOrder Python Core：{}；可用 MIRRORORDER_CORE_ROOT 覆盖",
-            source_dir.display()
-        ));
-    }
-
-    let mut command = Command::new(python_executable());
+    let runtime = resolve_python_runtime(&app)?;
+    let mut command = Command::new(&runtime.python_executable);
     command
-        .current_dir(&core)
-        .env("PYTHONPATH", python_path_with_core(&core)?)
+        .current_dir(&runtime.core_root)
+        .env("PYTHONPATH", python_path_with_source(&runtime.source_dir)?)
         .arg("-m")
         .arg("script_organizer.cli")
         .arg("serve")
@@ -206,6 +174,25 @@ pub fn start_python_host(
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+    if let Some(path) = path_with_tools(runtime.tool_bin.as_deref())? {
+        command.env("PATH", path);
+    }
+    if runtime.origin == RuntimeOrigin::PackagedResource {
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|error| format!("无法解析 Desktop app-data 目录：{error}"))?;
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|error| format!("无法创建 Desktop app-data 目录 {}：{error}", data_dir.display()))?;
+        command
+            .env("MIRRORORDER_PACKAGED_RUNTIME", "1")
+            .env("MIRRORORDER_DATA_DIR", &data_dir)
+            .env("MIRRORORDER_DEVICE_STATE_DIR", &data_dir)
+            .env(
+                "MIRRORORDER_MULTICAM_SYNC_ROOT",
+                runtime.core_root.join("vendor").join("multicam-audio-sync"),
+            );
+    }
 
     let mut child = command
         .spawn()
