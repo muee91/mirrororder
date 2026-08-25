@@ -5,6 +5,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -21,7 +22,11 @@ def _application_support_root() -> Path:
     override = os.environ.get("MIRRORORDER_DATA_DIR", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return Path.home() / "Library" / "Application Support" / "MirrorOrder"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "MirrorOrder"
+    if os.name == "nt":
+        return Path(os.environ.get("APPDATA", Path.home())) / "MirrorOrder"
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mirrororder"
 
 
 def _runtime_root() -> Path:
