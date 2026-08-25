@@ -3,6 +3,7 @@ mod host;
 mod persistence;
 mod platform;
 mod runtime;
+mod service_health;
 mod timeline;
 
 fn main() {
