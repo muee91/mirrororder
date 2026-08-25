@@ -51,6 +51,7 @@ function plan(): RoughCutPlan {
     readiness: "needs_review",
     summary: {},
     semantics: {},
+    timebase: { status: "confirmed", source: "fcpxml_sequence", numerator: 24000, denominator: 1001 },
     scenes: [
       {
         scene_id: "scene1",
@@ -99,9 +100,11 @@ function plan(): RoughCutPlan {
   };
 }
 
+const ntsc23976 = { numerator: 24000, denominator: 1001 };
+
 describe("buildRoughCutTimelineProposal", () => {
   it("only converts explicit human Best rows and preserves skipped conflicts for review", () => {
-    const result = buildRoughCutTimelineProposal(review(), plan(), 24);
+    const result = buildRoughCutTimelineProposal(review(), plan(), ntsc23976);
     expect(result.commands).toHaveLength(1);
     expect(result.included).toHaveLength(1);
     expect(result.skipped).toEqual([
@@ -109,16 +112,18 @@ describe("buildRoughCutTimelineProposal", () => {
     ]);
   });
 
-  it("uses supervisor usable range and preferred clip without inventing a generic angle", () => {
-    const result = buildRoughCutTimelineProposal(review(), plan(), 24);
+  it("preserves 24000/1001 timebase while quantizing seconds to frames", () => {
+    const result = buildRoughCutTimelineProposal(review(), plan(), ntsc23976);
     const command = result.commands[0];
     expect(command.type).toBe("insert");
     if (command.type !== "insert") throw new Error("expected insert");
     expect(command.clip.source_id).toBe("source:b");
-    expect(command.clip.source_in).toBe(22 * 24);
-    expect(command.clip.duration).toBe(4 * 24);
+    expect(command.clip.source_in).toBe(Math.round(22 * 24000 / 1001));
+    expect(command.clip.duration).toBe(Math.round(4 * 24000 / 1001));
     expect(command.clip.selected_angle_source_id).toBe("source:b");
     expect(command.clip.metadata.trim_basis).toBe("script_supervisor_usable_range");
+    expect(command.clip.metadata.frame_rate).toBe("24000/1001");
+    expect(result.baseProject.sequences[0].frame_rate).toEqual(ntsc23976);
     expect(result.baseProject.multicam_groups[0].angle_source_ids).toEqual(["source:a", "source:b"]);
   });
 
@@ -126,6 +131,12 @@ describe("buildRoughCutTimelineProposal", () => {
     const next = plan();
     next.scenes[0].segments[0].selection_status = "needs_editorial_choice";
     next.scenes[0].segments[0].primary_group_id = "";
-    expect(buildRoughCutTimelineProposal(review(), next).commands).toHaveLength(0);
+    expect(buildRoughCutTimelineProposal(review(), next, { numerator: 25, denominator: 1 }).commands).toHaveLength(0);
+  });
+
+  it("fails closed when no valid timebase is supplied", () => {
+    expect(() => buildRoughCutTimelineProposal(review(), plan(), { numerator: 0, denominator: 1 })).toThrow(
+      "需要明确、有效的有理数时间基",
+    );
   });
 });
