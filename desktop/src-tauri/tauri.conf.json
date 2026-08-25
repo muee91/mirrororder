@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run stage:runtime && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -26,6 +26,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "resources": {
+      "resources/mirrororder-core/": "mirrororder-core/",
+      "resources/mirrororder-python/": "mirrororder-python/",
+      "resources/mirrororder-tools/": "mirrororder-tools/",
+      "resources/mirrororder-runtime/": "mirrororder-runtime/"
+    }
   }
 }
