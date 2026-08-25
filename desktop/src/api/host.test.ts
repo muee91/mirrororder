@@ -10,6 +10,7 @@ vi.mock("@tauri-apps/plugin-http", () => ({
 }));
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import {
   HostConnection,
   HostConnectionError,
@@ -20,6 +21,7 @@ import {
 
 const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
+const mockedTauriFetch = vi.mocked(tauriFetch);
 
 const workspace: WorkspacePayload = {
   workspace_id: "ws_demo",
@@ -47,6 +49,7 @@ describe("HostConnection", () => {
     vi.unstubAllGlobals();
     mockedIsTauri.mockReturnValue(false);
     mockedInvoke.mockReset();
+    mockedTauriFetch.mockReset();
   });
 
   it("normalizes a trailing slash from the base URL", () => {
@@ -288,5 +291,51 @@ describe("HostConnection", () => {
       workspacePath: "workspace.toml",
       port: 8765,
     });
+  });
+
+  it("does not retry a failed workspace projection after Rust verified the managed Host", async () => {
+    mockedIsTauri.mockReturnValueOnce(true).mockReturnValue(false);
+    mockedInvoke.mockResolvedValueOnce({
+      pid: 42,
+      base_url: "http://127.0.0.1:8765",
+      already_running: false,
+    } as never);
+    const browserFetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/api/v1/ping")) {
+        return jsonResponse({ status: "ok", service: "mirrororder-host" });
+      }
+      return jsonResponse({ error: "workspace unavailable" }, 503);
+    });
+    vi.stubGlobal("fetch", browserFetch);
+
+    await expect(new HostConnection().startAndConnect("workspace.toml")).rejects.toMatchObject({
+      message: "workspace unavailable",
+      status: 503,
+    });
+    expect(browserFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not use tauri-plugin-http AbortSignal cancellation for a managed Host read", async () => {
+    mockedIsTauri.mockReturnValue(true);
+    mockedInvoke.mockResolvedValueOnce({
+      pid: 42,
+      base_url: "http://127.0.0.1:8765",
+      already_running: false,
+    } as never);
+    mockedTauriFetch.mockImplementation(async (input, init) =>
+      String(input).endsWith("/api/v1/ping")
+        ? jsonResponse({ status: "ok", service: "mirrororder-host" })
+        : jsonResponse(workspace),
+    );
+
+    await expect(new HostConnection().startAndConnect("workspace.toml")).resolves.toMatchObject({
+      ping: { service: "mirrororder-host" },
+      workspace,
+    });
+    expect(mockedTauriFetch).toHaveBeenCalledTimes(2);
+    for (const [, init] of mockedTauriFetch.mock.calls) {
+      expect(init?.signal).toBeUndefined();
+      expect((init as RequestInit & { connectTimeout?: number })?.connectTimeout).toBe(20_000);
+    }
   });
 });

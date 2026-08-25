@@ -260,7 +260,10 @@ export class HostConnectionError extends Error {
 }
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
-const REQUEST_TIMEOUT_MS = 5000;
+// A real workspace can take several seconds to materialize its first project
+// summaries on a cold packaged runtime. Keep this bounded, but do not let the
+// startup path cancel a valid response and then amplify the work with retries.
+const REQUEST_TIMEOUT_MS = 20_000;
 
 function normalizeBaseUrl(value: string): string {
   const normalized = value.trim().replace(/\/+$/, "");
@@ -276,8 +279,10 @@ function requireTauriRuntime(action: string): void {
   }
 }
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
+type TauriRequestInit = RequestInit & { connectTimeout?: number };
+
+async function transportFetch(input: RequestInfo | URL, init?: TauriRequestInit, tauriRuntime = isTauri()): Promise<Response> {
+  return tauriRuntime ? tauriFetch(input, init) : globalThis.fetch(input, init);
 }
 
 async function decodeError(response: Response): Promise<string> {
@@ -291,20 +296,38 @@ async function decodeError(response: Response): Promise<string> {
 }
 
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+  const tauriRuntime = isTauri();
   const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
+  const requestInit: TauriRequestInit = {
+    ...init,
+    method: init?.method ?? "GET",
+    headers,
+  };
+  if (tauriRuntime) {
+    // tauri-plugin-http's AbortSignal cancellation can leave a cold managed
+    // localhost request pending. Use its bounded connect window and a JS
+    // deadline instead; browser fetch keeps native AbortSignal semantics.
+    requestInit.connectTimeout = REQUEST_TIMEOUT_MS;
+  } else {
+    requestInit.signal = controller.signal;
+  }
   try {
-    const response = await transportFetch(`${baseUrl}${path}`, {
-      ...init,
-      method: init?.method ?? "GET",
-      headers,
-      signal: controller.signal,
+    const deadline = new Promise<never>((_, reject) => {
+      timeout = globalThis.setTimeout(() => {
+        if (!tauriRuntime) controller.abort();
+        reject(new HostConnectionError(`Host 请求超过 ${REQUEST_TIMEOUT_MS / 1000} 秒未响应`));
+      }, REQUEST_TIMEOUT_MS);
     });
+    const response = await Promise.race([
+      transportFetch(`${baseUrl}${path}`, requestInit, tauriRuntime),
+      deadline,
+    ]);
     if (!response.ok) {
       throw new HostConnectionError(await decodeError(response), { status: response.status });
     }
@@ -314,7 +337,7 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
     const message = error instanceof Error ? error.message : String(error);
     throw new HostConnectionError(`无法连接镜序 Host：${message}`, { cause: error });
   } finally {
-    globalThis.clearTimeout(timeout);
+    if (timeout !== undefined) globalThis.clearTimeout(timeout);
   }
 }
 
@@ -334,10 +357,6 @@ function normalizedGroupId(groupId: string): string {
   const value = groupId.trim();
   if (!value) throw new HostConnectionError("写入人工归集需要 group_id");
   return value;
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
 export class HostConnection {
@@ -438,10 +457,11 @@ export class HostConnection {
   }
 
   async connect(): Promise<HostSnapshot> {
-    const [ping, workspace] = await Promise.all([this.ping(), this.workspace()]);
+    const ping = await this.ping();
     if (ping.status !== "ok") {
       throw new HostConnectionError(`Host ping 返回异常状态：${ping.status}`);
     }
+    const workspace = await this.workspace();
     if (!Array.isArray(workspace.projects)) {
       throw new HostConnectionError("Host workspace 响应缺少 projects 列表");
     }
@@ -493,16 +513,11 @@ export class HostConnection {
   async startAndConnect(workspacePath: string, port = 8765): Promise<HostSnapshot> {
     const launched = await this.startLocal(workspacePath, port);
     const connection = new HostConnection(launched.base_url);
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 24; attempt += 1) {
-      try {
-        return await connection.connect();
-      } catch (error) {
-        lastError = error;
-        await delay(250);
-      }
-    }
-    throw new HostConnectionError("Python Host 已启动，但在就绪窗口内未通过 ping", { cause: lastError });
+    // startLocal() already returns only after Rust has verified the managed
+    // child as mirrororder-host. One bounded read is enough here; retrying the
+    // full workspace projection after an AbortSignal timeout can pile up
+    // expensive real-project reads and leave the UI stuck in "starting".
+    return await connection.connect();
   }
 }
 
