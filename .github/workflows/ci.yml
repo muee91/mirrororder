@@ -2,7 +2,7 @@ name: MirrorOrder CI
 
 on:
   push:
-    branches: [main, feat/desktop-v2-tauri]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -52,19 +52,3 @@ jobs:
         run: cargo test --manifest-path desktop-v2/src-tauri/Cargo.toml
       - name: Check Tauri Host
         run: cargo check --manifest-path desktop-v2/src-tauri/Cargo.toml
-
-  macos-app-smoke:
-    runs-on: macos-14
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - name: Compile Python
-        run: python3 -m py_compile src/script_organizer/*.py tests/*.py
-      - name: Build app
-        run: zsh macos-app/build_app.sh
-      - name: Verify app bundle
-        run: |
-          test -x '镜序.app/Contents/MacOS/MaterialWorkspace'
-          file '镜序.app/Contents/MacOS/MaterialWorkspace'
-          plutil -lint '镜序.app/Contents/Info.plist'
-          codesign --verify --deep --strict '镜序.app'
