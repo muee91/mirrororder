@@ -106,7 +106,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
     <section className="phase3-workbench media-binding-workbench">
       <header className="production-heading">
         <div>
-          <p className="eyebrow">Phase 7 · Device-local Media Binding</p>
+          <p className="eyebrow">Device-local Media Binding</p>
           <h2>本机素材</h2>
         </div>
         <span className="production-state">{message}</span>
