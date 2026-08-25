@@ -90,11 +90,21 @@ export interface CollaborationPayload {
   audit: CollaborationAuditRow[];
   user?: CollaborationUser;
 }
-export interface MediaBindingItem { media_id: string; verified: boolean; name: string; source_media_path: string; clip_ids: string[]; resolved_path: string; local_exists: boolean }
+export interface MediaBindingItem {
+  media_id: string;
+  verified: boolean;
+  name: string;
+  source_media_path: string;
+  clip_ids: string[];
+  resolved_path: string;
+  local_exists: boolean;
+  candidate_path?: string;
+  needs_confirmation?: boolean;
+}
 export interface MediaBindingSummary {
   version: number; device_id: string; device_name: string; state_path: string; roots: string[];
   total: number; resolved: number; missing: number; items: MediaBindingItem[]; pending_analysis?: boolean;
-  scan?: { files_seen: number; verified_matches: number; provisional_name_matches: number };
+  scan?: { files_seen: number; verified_matches: number; provisional_name_matches: number; provisional_name_candidates?: number };
 }
 export interface MediaBindingPayload { contract: "media_binding.v1" | string; project_id: string; summary: MediaBindingSummary }
 export interface ProjectCreatePayload {
@@ -167,6 +177,16 @@ export class DesktopClient {
     const normalized = [...new Set(roots.map((root) => root.trim()).filter(Boolean))];
     if (!normalized.length) throw new HostConnectionError("扫描本机素材至少需要一个目录");
     return requestJson(this.baseUrl, `${projectPath(projectId)}/media-binding`, { method: "POST", body: JSON.stringify({ action: replace ? "replace_and_scan" : "scan", roots: normalized }) });
+  }
+  confirmProvisionalMediaBinding(projectId: string, mediaId: string, candidatePath: string): Promise<MediaBindingPayload> {
+    const media_id = mediaId.trim();
+    const candidate_path = candidatePath.trim();
+    if (!media_id.startsWith("MP_")) throw new HostConnectionError("只有 provisional media identity 需要确认");
+    if (!candidate_path) throw new HostConnectionError("确认本机素材需要候选路径");
+    return requestJson(this.baseUrl, `${projectPath(projectId)}/media-binding`, {
+      method: "POST",
+      body: JSON.stringify({ action: "confirm_provisional", media_id, candidate_path }),
+    });
   }
   async preflightProject(payload: ProjectCreatePayload): Promise<ProjectPreflight> {
     const response = await requestJson<{ contract: string; preflight: ProjectPreflight }>(this.baseUrl, "/api/v1/projects/preflight", { method: "POST", body: JSON.stringify(payload) });
