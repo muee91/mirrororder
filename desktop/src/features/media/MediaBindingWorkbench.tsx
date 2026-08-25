@@ -32,7 +32,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       const payload = await client.mediaBinding(projectId);
       setSummary(payload.summary);
       setRootsText(payload.summary.roots.join("\n"));
-      setMessage(`media_binding.v1 · ${payload.summary.resolved}/${payload.summary.total} 已解析`);
+      setMessage(`${payload.summary.resolved}/${payload.summary.total} 个媒体身份已在本机解析`);
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -72,15 +72,29 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       return;
     }
     setBusy(true);
-    setMessage(replace ? "正在替换本机 roots 并重新绑定…" : "正在扫描并追加本机绑定…");
+    setMessage(replace ? "正在替换本机素材目录并重新扫描…" : "正在扫描本机素材…");
     try {
       const payload = await client.scanMediaBinding(projectId, roots, replace);
       setSummary(payload.summary);
       setRootsText(payload.summary.roots.join("\n"));
       const scanText = payload.summary.scan
-        ? ` · 扫描 ${payload.summary.scan.files_seen} 文件 · verified ${payload.summary.scan.verified_matches} · name ${payload.summary.scan.provisional_name_matches}`
+        ? ` · 扫描 ${payload.summary.scan.files_seen} 文件 · 内容匹配 ${payload.summary.scan.verified_matches} · 待确认 ${payload.summary.scan.provisional_name_candidates ?? 0}`
         : "";
-      setMessage(`绑定完成 · ${payload.summary.resolved}/${payload.summary.total} 已解析${scanText}`);
+      setMessage(`扫描完成 · ${payload.summary.resolved}/${payload.summary.total} 已解析${scanText}`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm(mediaId: string, candidatePath: string): Promise<void> {
+    setBusy(true);
+    setMessage("正在确认旧项目素材候选…");
+    try {
+      const payload = await client.confirmProvisionalMediaBinding(projectId, mediaId, candidatePath);
+      setSummary(payload.summary);
+      setMessage(`已确认 ${candidatePath}；该确认只保存在当前设备。`);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -106,7 +120,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
     <section className="phase3-workbench media-binding-workbench">
       <header className="production-heading">
         <div>
-          <p className="eyebrow">Device-local Media Binding</p>
+          <p className="eyebrow">本机素材恢复</p>
           <h2>本机素材</h2>
         </div>
         <span className="production-state">{message}</span>
@@ -120,7 +134,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
             <strong>{summary?.total ?? 0}<small>媒体身份</small></strong>
           </div>
           <label className="production-field">
-            <span>本机素材 roots · 每行一个目录</span>
+            <span>本机素材目录 · 每行一个</span>
             <textarea
               className="media-roots-input"
               rows={6}
@@ -133,10 +147,10 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
           <div className="production-actions media-binding-actions">
             <button type="button" className="secondary" disabled={busy || !isTauri()} onClick={() => void chooseRoots()}>选择目录</button>
             <button type="button" className="secondary" disabled={busy} onClick={() => void scan(false)}>追加并扫描</button>
-            <button type="button" disabled={busy} onClick={() => void scan(true)}>替换 roots 并重绑</button>
+            <button type="button" disabled={busy} onClick={() => void scan(true)}>替换目录并重扫</button>
           </div>
           <p className="production-note">
-            绑定写入当前设备的 <code>media-bindings.json</code>，不会修改共享 workspace 或 Review authority。verified 内容身份优先，旧工程才使用唯一文件名回退。
+            正式媒体身份会用内容校验自动恢复。旧项目只有文件名线索时只会生成候选，不会静默绑定；需要在右侧逐项确认。所有绑定都只保存在当前设备，不修改共享项目或人工审核结果。
           </p>
           {summary?.state_path ? (
             <button type="button" className="secondary media-state-path" disabled={!isTauri()} onClick={() => void reveal(summary.state_path)}>
@@ -148,25 +162,31 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
         <div className="production-panel media-binding-list-panel">
           <div className="parse-heading">
             <div>
-              <p className="eyebrow">Binding inventory</p>
+              <p className="eyebrow">素材恢复清单</p>
               <strong>{summary?.device_name || "当前设备"}</strong>
             </div>
-            {summary?.pending_analysis ? <span>等待首次 analysis 建立 clip identity</span> : null}
+            {summary?.pending_analysis ? <span>等待首次分析建立媒体身份</span> : null}
           </div>
           <div className="media-binding-list">
             {items.length ? items.slice(0, 300).map((item) => (
               <article className={`media-binding-row ${item.local_exists ? "is-resolved" : "is-missing"}`} key={item.media_id}>
                 <div>
                   <strong>{item.name || item.media_id}</strong>
-                  <span>{item.verified ? "verified media_id" : "provisional media_id"} · {item.clip_ids.length} clips</span>
+                  <span>{item.verified ? "内容身份已校验" : "旧项目临时身份"} · {item.clip_ids.length} clips</span>
                 </div>
-                <em>{item.local_exists ? "resolved" : "missing"}</em>
-                <code>{item.resolved_path || item.source_media_path || item.media_id}</code>
+                <em>{item.local_exists ? "已解析" : item.needs_confirmation ? "待确认" : "缺失"}</em>
+                <code>{item.resolved_path || item.candidate_path || item.source_media_path || item.media_id}</code>
                 {item.local_exists && item.resolved_path ? (
                   <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void reveal(item.resolved_path)}>Finder / Explorer</button>
                 ) : null}
+                {item.needs_confirmation && item.candidate_path ? (
+                  <div className="production-actions">
+                    <button type="button" className="secondary" disabled={busy || !isTauri()} onClick={() => void reveal(item.candidate_path!)}>查看候选</button>
+                    <button type="button" disabled={busy} onClick={() => void confirm(item.media_id, item.candidate_path!)}>确认这是该素材</button>
+                  </div>
+                ) : null}
               </article>
-            )) : <p className="empty-copy">当前项目还没有可枚举的媒体身份；媒体目录项目在首次 analysis 前会显示 root 扫描结果。</p>}
+            )) : <p className="empty-copy">当前项目还没有可枚举的媒体身份；媒体目录项目在首次分析前会显示目录扫描结果。</p>}
           </div>
         </div>
       </div>
