@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "build": "npm run typecheck && vite build",
     "check:phase7": "node scripts/check-phase7.mjs",
+    "verify:rc": "node scripts/verify-local-rc.mjs",
     "smoke:host": "node scripts/host-smoke.mjs",
     "tauri": "tauri"
   },
