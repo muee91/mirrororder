@@ -44,7 +44,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
     setWorkspacePaths((current) => uniquePaths([...current, workspacePath]));
   }, [workspacePath]);
 
-  async function refresh(): Promise<void> {
+  async function refresh(quiet = false): Promise<void> {
     if (!isTauri()) return;
     try {
       const next = await gateway.status();
@@ -55,14 +55,20 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
         setSecurity(next.trusted_lan ? "trusted" : "pairing");
         if (next.pairing_code) setPairingCode(next.pairing_code);
         if (next.workspace_paths.length) setWorkspacePaths(next.workspace_paths);
+        if (!next.healthy && !quiet) {
+          setMessage(`Gateway 进程仍在，但 HTTP 健康检查失败：${next.health_error || "服务未响应"}。可点击“重启 Gateway”。`);
+        }
       }
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (!quiet) setMessage(errorMessage(error));
     }
   }
 
   useEffect(() => {
-    void refresh();
+    if (!isTauri()) return undefined;
+    void refresh(false);
+    const timer = globalThis.setInterval(() => { void refresh(true); }, 2000);
+    return () => globalThis.clearInterval(timer);
     // Stable native client.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gateway]);
@@ -87,7 +93,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
 
   async function start(): Promise<void> {
     setBusy(true);
-    setMessage("正在启动独立 Team Web Gateway…");
+    setMessage(status?.running && !status.healthy ? "正在重启失去健康响应的 Team Web Gateway…" : "正在启动独立 Team Web Gateway…");
     try {
       const parsedPort = Number(port);
       const result = await gateway.start({
@@ -100,7 +106,11 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
       setPairingCode(result.pairing_code);
       const next = await gateway.status();
       setStatus(next);
-      setMessage(result.already_running ? "Team Web Gateway 已在运行。" : "Team Web Gateway 已启动。生产 Host 未受影响。");
+      if (!next.healthy) {
+        setMessage(`Gateway 子进程已启动，但健康检查未通过：${next.health_error || "服务未响应"}`);
+      } else {
+        setMessage(result.already_running ? "Team Web Gateway 已在运行且健康。" : "Team Web Gateway 已启动并通过健康检查。Production Host 未受影响。");
+      }
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -112,7 +122,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
     setBusy(true);
     try {
       await gateway.stop();
-      await refresh();
+      await refresh(true);
       setMessage("Team Web Gateway 已停止；Production Host 保持运行。");
     } catch (error) {
       setMessage(errorMessage(error));
@@ -121,13 +131,15 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
     }
   }
 
-  const shareUrl = status?.running
-    ? teamWorkbenchUrl(status, workspaceId, projectId)
+  const processRunning = Boolean(status?.running);
+  const healthy = Boolean(status?.running && status.healthy);
+  const shareUrl = healthy
+    ? teamWorkbenchUrl(status!, workspaceId, projectId)
     : null;
 
   async function copyLink(): Promise<void> {
     if (!shareUrl) {
-      setMessage(access === "lan" ? "当前没有可用 LAN 地址；未生成 localhost 伪协作链接。" : "Gateway 尚未启动。");
+      setMessage(access === "lan" ? "当前没有健康且可用的 LAN 地址；不会生成 localhost 伪协作链接。" : "Gateway 尚未健康就绪。");
       return;
     }
     try {
@@ -140,7 +152,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
 
   async function openTeamWeb(): Promise<void> {
     if (!shareUrl) {
-      setMessage("当前没有可打开的 Team Web 地址。");
+      setMessage("当前没有健康且可打开的 Team Web 地址。");
       return;
     }
     try {
@@ -151,8 +163,6 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
     }
   }
 
-  const running = Boolean(status?.running);
-
   return (
     <section className="team-web-workbench">
       <header className="team-web-heading">
@@ -162,8 +172,10 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
           <p>只管理现有 Python Workspace Gateway。它不承载剪辑、分析、模型下载或 Review 权威。</p>
         </div>
         <div className="team-web-state">
-          <span className={running ? "is-running" : "is-stopped"}>{running ? `running · pid ${status?.pid ?? "-"}` : "stopped"}</span>
-          <button type="button" className="secondary" disabled={!isTauri() || busy} onClick={() => void refresh()}>刷新</button>
+          <span className={healthy ? "is-running" : "is-stopped"}>
+            {healthy ? `healthy · pid ${status?.pid ?? "-"}` : processRunning ? `unhealthy · pid ${status?.pid ?? "-"}` : "stopped"}
+          </span>
+          <button type="button" className="secondary" disabled={!isTauri() || busy} onClick={() => void refresh(false)}>刷新</button>
         </div>
       </header>
 
@@ -174,7 +186,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
               <p className="eyebrow">Gateway Scope</p>
               <h3>Workspace</h3>
             </div>
-            <button type="button" className="secondary" disabled={running || !isTauri()} onClick={() => void addWorkspaces()}>添加 Workspace</button>
+            <button type="button" className="secondary" disabled={processRunning || !isTauri()} onClick={() => void addWorkspaces()}>添加 Workspace</button>
           </div>
           <div className="team-workspace-list">
             {workspacePaths.length ? workspacePaths.map((path) => (
@@ -183,7 +195,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
                 <button
                   type="button"
                   className="secondary"
-                  disabled={running || workspacePaths.length <= 1}
+                  disabled={processRunning || workspacePaths.length <= 1}
                   onClick={() => setWorkspacePaths((current) => current.filter((value) => value !== path))}
                 >移除</button>
               </div>
@@ -198,18 +210,18 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
           <div className="team-web-options">
             <label>
               <span>端口</span>
-              <input value={port} disabled={running} inputMode="numeric" onChange={(event) => setPort(event.target.value)} />
+              <input value={port} disabled={processRunning} inputMode="numeric" onChange={(event) => setPort(event.target.value)} />
             </label>
             <label>
               <span>访问范围</span>
-              <select value={access} disabled={running} onChange={(event) => setAccess(event.target.value as TeamGatewayAccess)}>
+              <select value={access} disabled={processRunning} onChange={(event) => setAccess(event.target.value as TeamGatewayAccess)}>
                 <option value="lan">局域网</option>
                 <option value="local">仅本机</option>
               </select>
             </label>
             <label>
               <span>安全模式</span>
-              <select value={security} disabled={running} onChange={(event) => setSecurity(event.target.value as TeamGatewaySecurity)}>
+              <select value={security} disabled={processRunning} onChange={(event) => setSecurity(event.target.value as TeamGatewaySecurity)}>
                 <option value="pairing">首次配对</option>
                 <option value="trusted">可信 LAN 免配对</option>
               </select>
@@ -219,7 +231,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
                 <span>Pairing code</span>
                 <input
                   value={pairingCode}
-                  disabled={running}
+                  disabled={processRunning}
                   onChange={(event) => setPairingCode(event.target.value.replace(/\s+/g, "").slice(0, 80))}
                   placeholder="留空则安全随机生成"
                 />
@@ -227,16 +239,20 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
             ) : null}
           </div>
           <div className="team-web-actions">
-            <button type="button" disabled={running || busy || !isTauri() || workspacePaths.length === 0} onClick={() => void start()}>启动 Gateway</button>
-            <button type="button" className="secondary" disabled={!running || busy} onClick={() => void stop()}>停止</button>
+            <button type="button" disabled={healthy || busy || !isTauri() || workspacePaths.length === 0} onClick={() => void start()}>
+              {processRunning && !healthy ? "重启 Gateway" : "启动 Gateway"}
+            </button>
+            <button type="button" className="secondary" disabled={!processRunning || busy} onClick={() => void stop()}>停止</button>
           </div>
+          {processRunning && !healthy ? <p className="production-warning">{status?.health_error || "Gateway 进程存在，但服务健康检查失败。"}</p> : null}
         </section>
 
         <section className="team-web-panel team-share-panel">
           <p className="eyebrow">Current Project Link</p>
           <h3>团队审阅入口</h3>
-          {running ? (
+          {processRunning ? (
             <dl className="team-web-facts">
+              <div><dt>health</dt><dd>{healthy ? "ok" : "unhealthy"}</dd></div>
               <div><dt>local</dt><dd>{status?.base_url || "-"}</dd></div>
               <div><dt>LAN</dt><dd>{status?.lan_url || (status?.local_only ? "仅本机模式" : "未解析到局域网地址")}</dd></div>
               <div><dt>workspace</dt><dd>{workspaceId || "未定位"}</dd></div>
