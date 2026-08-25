@@ -44,9 +44,23 @@ fn main() {
         .expect("error while building MirrorOrder Desktop");
 
     app.run(|app_handle, event| {
-        if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+        if should_shutdown_managed_services(&event) {
             let _ = host::shutdown(&app_handle.state::<host::HostManager>());
             let _ = gateway::shutdown(&app_handle.state::<gateway::GatewayManager>());
         }
     });
+}
+
+fn should_shutdown_managed_services(event: &tauri::RunEvent) -> bool {
+    matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_shutdown_managed_services;
+
+    #[test]
+    fn final_exit_event_also_triggers_managed_service_shutdown() {
+        assert!(should_shutdown_managed_services(&tauri::RunEvent::Exit));
+    }
 }
