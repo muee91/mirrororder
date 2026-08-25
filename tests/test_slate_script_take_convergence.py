@@ -186,9 +186,12 @@ def test_slate_angle_edit_is_projected_to_web_without_becoming_mapping_authority
 
     runtime = (ROOT / "src" / "script_organizer" / "script_supervisor_runtime.py").read_text(encoding="utf-8")
     adapter = (ROOT / "web" / "review_model.js").read_text(encoding="utf-8")
+    cards = (ROOT / "web" / "material_card_ui.js").read_text(encoding="utf-8")
     assert 'take["script_supervisor"] = _safe_entry(entries.get(group_id))' in runtime
-    assert "const supervisorAngles = take.script_supervisor?.angles || {};" in adapter
-    assert "shot_type: angle.shot_type || 'unknown'" in adapter
+    assert "script_supervisor: supervisor" in adapter
+    assert "group?.script_supervisor?.angles || {}" in cards
+    assert "supervisorAngles?.[clipId]?.shot_type" in cards
+    assert "supervisorType || member?.shot_type" in cards
 
 
 def test_web_mapping_order_is_episode_first_then_authority_confidence_then_xml() -> None:
