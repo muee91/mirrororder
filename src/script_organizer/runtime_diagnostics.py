@@ -36,11 +36,14 @@ def _writable(path: Path) -> bool:
 
 
 def _engine_status() -> dict[str, Any]:
+    packaged_runtime = os.environ.get("MIRRORORDER_PACKAGED_RUNTIME", "").strip() == "1"
     for candidate in _engine_candidates():
         if _valid_engine(candidate):
             resolved = candidate.resolve()
             override = os.environ.get("MIRRORORDER_MULTICAM_SYNC_ROOT", "").strip()
-            if override and resolved == Path(override).expanduser().resolve():
+            if packaged_runtime:
+                origin = "app-bundled"
+            elif override and resolved == Path(override).expanduser().resolve():
                 origin = "development-override"
             elif "/Contents/Resources/runtime/" in str(resolved):
                 origin = "app-bundled"
@@ -110,4 +113,5 @@ def environment_payload(workspaces: list[Path] | None = None) -> dict[str, Any]:
         "host": socket.gethostname(),
         "platform": sys.platform,
         "data_root": os.environ.get("MIRRORORDER_DATA_DIR", ""),
+        "packaged_runtime": os.environ.get("MIRRORORDER_PACKAGED_RUNTIME", "").strip() == "1",
     }
