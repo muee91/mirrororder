@@ -19,10 +19,12 @@ function assert(condition, message) {
 const parity = JSON.parse(fs.readFileSync(parityPath, "utf8"));
 
 assert(parity.contract === "desktop_phase7_parity.v1", `unexpected contract ${String(parity.contract)}`);
-assert(parity.desktop_primary_candidate === true, "Desktop must remain marked as the primary candidate");
-assert(parity.swiftui_retirement_allowed === false, "SwiftUI deletion must remain blocked until release gates are actually verified");
-assert(parity.retirement_policy?.new_features_allowed_in_swiftui === false, "SwiftUI must stay feature-frozen");
-assert(parity.retirement_policy?.physical_delete_before_release_gates === false, "SwiftUI physical deletion cannot precede release gates");
+assert(parity.branch === "main", "Phase 7 cutover contract must target main");
+assert(parity.desktop_primary_candidate === true, "Desktop v2 must remain the primary desktop implementation");
+assert(parity.swiftui_retirement_allowed === true, "SwiftUI retirement should stay recorded as completed by owner cutover");
+assert(parity.retirement_policy?.swiftui_state === "removed_by_owner_cutover", "SwiftUI state must record the owner-directed cutover");
+assert(parity.retirement_policy?.owner_cutover_override === true, "owner cutover override must remain explicit");
+assert(!fs.existsSync(path.join(repoRoot, "macos-app")), "legacy macos-app directory must not return after cutover");
 
 for (const [name, gate] of Object.entries(parity.gates ?? {})) {
   assert(String(gate.code_status ?? "").startsWith("implemented"), `${name} is not code-complete: ${String(gate.code_status)}`);
@@ -37,6 +39,7 @@ for (const [name, value] of Object.entries(parity.release_gates ?? {})) {
   assert(value === "required", `release gate ${name} must remain required until verified`);
 }
 
+assert(parity.retirement_policy?.release_gates_still_required_for_desktop_quality === true, "native release gates must remain quality gates after SwiftUI removal");
 assert(parity.isolation_policy?.production_project_tabs_are_parity_surfaces === true, "production project tabs must remain parity/product surfaces");
 assert(parity.isolation_policy?.team_web_is_top_level_workspace === true, "Team Web must remain a top-level isolated workspace");
 assert(parity.isolation_policy?.heavy_capabilities_require_isolated_module_or_worktree === true, "heavy capabilities must remain isolated before promotion");
@@ -51,5 +54,5 @@ assert(runtimePackaging?.blocks?.includes("packaged_media_toolchain"), "runtime 
 
 if (!process.exitCode) {
   console.log(`Phase 7 contract OK: ${Object.keys(parity.gates).length} parity gates, ${Object.keys(parity.release_gates).length} release gates.`);
-  console.log("SwiftUI retirement remains blocked; packaged Python/media runtime remains isolated.");
+  console.log("Desktop v2 is the sole desktop implementation; native release gates remain required for distributable quality.");
 }
