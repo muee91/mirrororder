@@ -219,8 +219,7 @@ def test_web_mapping_order_is_episode_first_then_authority_confidence_then_xml()
 
 def test_default_first_episode_remains_a_performance_policy_with_explicit_all_option() -> None:
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     assert "default_episode: 'first'" in app
     assert "if (preference === 'all')" in app
     assert "state.episode = null;" in app
-    assert 'data-episode="all"' in html or "全部" in html
+    assert 'data-episode="all"' in app
