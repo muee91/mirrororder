@@ -2,6 +2,7 @@ mod gateway;
 mod host;
 mod persistence;
 mod platform;
+mod runtime;
 mod timeline;
 
 fn main() {
@@ -37,5 +38,5 @@ fn main() {
             timeline::timeline_validate,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running MirrorOrder Desktop v2");
+        .expect("error while running MirrorOrder Desktop");
 }
