@@ -22,12 +22,16 @@ function rebuildShotTypeIndexFromReviewModel() {
   const next = new Map();
   // `state.groups` is populated by review_model.js from the path-free
   // review.v1 projection. Team Web must never call Host-only script-supervisor
-  // endpoints merely to decorate material cards.
+  // endpoints merely to decorate material cards. Human Script Supervisor shot
+  // evidence is already embedded on each take as `script_supervisor.angles`;
+  // prefer it for display without turning Slate into Review mapping authority.
   for (const group of state?.groups || []) {
+    const supervisorAngles = group?.script_supervisor?.angles || {};
     for (const member of group?.members || []) {
       const clipId = String(member?.clip_id || '').trim();
       if (!clipId) continue;
-      next.set(clipId, normalizeShotType(member?.shot_type));
+      const supervisorType = supervisorAngles?.[clipId]?.shot_type;
+      next.set(clipId, normalizeShotType(supervisorType || member?.shot_type));
     }
   }
   shotTypesByClip = next;
