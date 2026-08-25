@@ -21,7 +21,7 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
-  desktop-v2-linux:
+  desktop-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -35,20 +35,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Install Desktop dependencies
-        working-directory: desktop-v2
+        working-directory: desktop
         run: npm install --no-audit --no-fund
+      - name: Check development baseline
+        working-directory: desktop
+        run: npm run check:baseline
       - name: Typecheck Desktop
-        working-directory: desktop-v2
+        working-directory: desktop
         run: npm run typecheck
       - name: Test Desktop
-        working-directory: desktop-v2
+        working-directory: desktop
         run: npm test
       - name: Build Desktop frontend
-        working-directory: desktop-v2
+        working-directory: desktop
         run: npm run build
       - name: Test Timeline Core
-        run: cargo test --manifest-path desktop-v2/src-tauri/crates/timeline-core/Cargo.toml
+        run: cargo test --manifest-path desktop/src-tauri/crates/timeline-core/Cargo.toml
       - name: Test Tauri Host
-        run: cargo test --manifest-path desktop-v2/src-tauri/Cargo.toml
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
       - name: Check Tauri Host
-        run: cargo check --manifest-path desktop-v2/src-tauri/Cargo.toml
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
