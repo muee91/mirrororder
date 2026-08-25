@@ -19,6 +19,7 @@ describe("Phase 7 parity gate", () => {
       expect(parity.gates[gate].code_status).toMatch(/^implemented/);
       expect(parity.gates[gate].evidence.length).toBeGreaterThan(0);
     }
+    expect(parity.branch).toBe("main");
     expect(parity.desktop_primary_candidate).toBe(true);
   });
 
@@ -32,22 +33,24 @@ describe("Phase 7 parity gate", () => {
     expect(parity.isolated_workstreams.runtime_packaging.blocks).toContain("packaged_media_toolchain");
   });
 
-  it("does not allow physical SwiftUI retirement before native release gates", () => {
-    expect(parity.swiftui_retirement_allowed).toBe(false);
-    expect(parity.retirement_policy.swiftui_state).toBe("legacy_frozen_reference");
-    expect(parity.retirement_policy.new_features_allowed_in_swiftui).toBe(false);
-    expect(parity.retirement_policy.physical_delete_before_release_gates).toBe(false);
+  it("records the owner-directed SwiftUI cutover without weakening release quality gates", () => {
+    expect(parity.swiftui_retirement_allowed).toBe(true);
+    expect(parity.retirement_policy.swiftui_state).toBe("removed_by_owner_cutover");
+    expect(parity.retirement_policy.owner_cutover_override).toBe(true);
+    expect(parity.retirement_policy.release_gates_still_required_for_desktop_quality).toBe(true);
 
     const requiredNativeGates = [
       "packaged_python_runtime",
       "packaged_media_toolchain",
       "macos_tauri_build",
       "macos_real_media_playback",
+      "macos_multicam_sync_smoke",
       "macos_final_cut_open",
       "macos_team_gateway_lan_smoke",
       "macos_codesign_bundle",
       "windows_tauri_build",
       "windows_webview2_media_smoke",
+      "windows_multicam_sync_smoke",
       "windows_team_gateway_lan_smoke",
       "windows_installer_smoke",
     ] as const;
