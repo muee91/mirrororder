@@ -10,21 +10,48 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_workbench_boot_waits_until_static_extensions_are_installed() -> None:
+def test_workbench_boot_keeps_core_static_and_project_sized_extensions_lazy() -> None:
     html = read("web/index.html")
+    release_source = read("web/startup_release.js")
 
     gate = html.index('<script src="/startup_gate.js"></script>')
     app = html.index('<script src="/app.js"></script>')
+    review_model = html.index('<script src="/review_model.js"></script>')
     production = html.index('<script src="/production_mode.js"></script>')
     device_media = html.index('<script src="/device_media.js"></script>')
     timeline = html.index('<script src="/timeline.js"></script>')
-    assistant = html.index('<script src="/assistant_control_ui.js"></script>')
-    semantic = html.index('<script src="/semantic_search_ui.js"></script>')
+    supervisor = html.index('<script src="/script_supervisor_ui.js"></script>')
     release = html.index('<script src="/startup_release.js"></script>')
 
-    assert gate < app < production < device_media < timeline < assistant < semantic < release
+    assert gate < app < review_model < production < device_media < timeline < supervisor < release
     assert html.count('<script src="/device_media.js"></script>') == 1
     assert html.count('<script src="/timeline.js"></script>') == 1
+
+    # These project-sized decorators intentionally moved out of static first
+    # paint. Tests must follow startup_release.js instead of pinning the removed
+    # pre-release loading topology.
+    for lazy in (
+        "/material_card_ui.js",
+        "/post_workbench_ui.js",
+        "/placement_drag_ui.js",
+        "/assistant_ui.js",
+        "/assistant_control_ui.js",
+        "/semantic_search_ui.js",
+        "/assistant_projection_ui.js",
+    ):
+        assert f'<script src="{lazy}"></script>' not in html
+        assert f"loadScript('{lazy}')" in release_source
+
+
+def test_startup_release_separates_native_assistant_controls_from_team_projection() -> None:
+    release = read("web/startup_release.js")
+
+    assert "const APP_CLIENT = Boolean(window.webkit?.messageHandlers?.mirrorOrder);" in release
+    assert "if (APP_CLIENT)" in release
+    assert "await loadScript('/assistant_ui.js')" in release
+    assert "await loadScript('/assistant_control_ui.js')" in release
+    assert "await loadScript('/semantic_search_ui.js')" in release
+    assert "await loadScript('/assistant_projection_ui.js')" in release
 
 
 def test_startup_gate_holds_only_fetch_and_fails_open() -> None:
@@ -39,7 +66,7 @@ def test_startup_gate_holds_only_fetch_and_fails_open() -> None:
     assert "工作台启动超过 12 秒仍未完成" in gate
     assert "const gate = window.__mirrorOrderStartupGate" in release
     assert "timelineReady" in release
-    assert "gate.release()" in release
+    assert "gate?.release?.()" in release
     assert "__mirrorOrderPollGuardInstalled" in release
 
 
