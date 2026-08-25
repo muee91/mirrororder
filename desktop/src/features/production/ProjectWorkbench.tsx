@@ -21,15 +21,15 @@ interface Props {
 
 type ProductionTab = "material" | "slate" | "identity" | "assistant" | "timeline" | "delivery" | "media" | "settings";
 
-const TABS: Array<{ id: ProductionTab; label: string; phase: string }> = [
-  { id: "material", label: "素材 / 剧本", phase: "P2" },
-  { id: "slate", label: "场记", phase: "P3" },
-  { id: "identity", label: "人物", phase: "P3" },
-  { id: "assistant", label: "小镜", phase: "P3" },
-  { id: "timeline", label: "剪辑", phase: "P4–P5" },
-  { id: "delivery", label: "交付", phase: "P6" },
-  { id: "media", label: "本机素材", phase: "P7" },
-  { id: "settings", label: "设置 / 状态", phase: "P7" },
+const TABS: Array<{ id: ProductionTab; label: string }> = [
+  { id: "material", label: "素材 / 剧本" },
+  { id: "slate", label: "场记" },
+  { id: "identity", label: "人物" },
+  { id: "assistant", label: "小镜" },
+  { id: "timeline", label: "剪辑" },
+  { id: "delivery", label: "交付" },
+  { id: "media", label: "本机素材" },
+  { id: "settings", label: "设置 / 状态" },
 ];
 
 export function ProjectWorkbench({ baseUrl, project }: Props) {
@@ -45,11 +45,10 @@ export function ProjectWorkbench({ baseUrl, project }: Props) {
 
   return (
     <section className="project-production-workbench">
-      <nav className="project-workbench-nav" aria-label="Desktop v2 制作工作台">
+      <nav className="project-workbench-nav" aria-label="镜序制作工作台">
         {TABS.map((item) => (
           <button type="button" className={tab === item.id ? "is-active" : ""} key={item.id} onClick={() => setTab(item.id)}>
             <span>{item.label}</span>
-            <small>{item.phase}</small>
           </button>
         ))}
       </nav>
