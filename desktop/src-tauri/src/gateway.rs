@@ -211,6 +211,16 @@ fn reap_if_finished(slot: &mut Option<ManagedGateway>) -> Result<(), String> {
     Ok(())
 }
 
+fn managed_gateway_health(child: &mut Child, port: u16) -> Result<(), String> {
+    if let Some(status) = child
+        .try_wait()
+        .map_err(|error| format!("检查 Gateway 进程失败：{error}"))?
+    {
+        return Err(format!("managed Gateway child 已退出：{status}"));
+    }
+    health(port)
+}
+
 fn stop_managed_gateway(mut gateway: ManagedGateway) -> Result<(), String> {
     if gateway
         .child
@@ -384,9 +394,10 @@ pub fn team_gateway_status(
         .child
         .lock()
         .map_err(|_| "Gateway 进程状态锁已损坏".to_string())?;
-    reap_if_finished(&mut slot)?;
+    let health_result = slot
+        .as_mut()
+        .map(|gateway| managed_gateway_health(&mut gateway.child, gateway.config.port));
     let gateway = slot.as_ref();
-    let health_result = gateway.map(|item| health(item.config.port));
     let healthy = health_result.as_ref().is_some_and(|result| result.is_ok());
     let health_error = health_result.and_then(Result::err);
     Ok(GatewayProcessStatus {
@@ -495,5 +506,18 @@ mod tests {
 
         shutdown(&manager).unwrap();
         assert!(manager.child.lock().unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exited_gateway_child_is_reported_as_unhealthy_before_restart() {
+        let mut child = Command::new("sh")
+            .args(["-c", "exit 7"])
+            .spawn()
+            .unwrap();
+        child.wait().unwrap();
+
+        let error = super::managed_gateway_health(&mut child, 8766).unwrap_err();
+        assert!(error.contains("managed Gateway child 已退出"));
     }
 }
