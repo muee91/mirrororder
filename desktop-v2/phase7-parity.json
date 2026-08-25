@@ -86,6 +86,7 @@
     "timeline_core_cargo_tests": "required",
     "tauri_cargo_check": "required",
     "packaged_python_runtime": "required",
+    "packaged_media_toolchain": "required",
     "macos_tauri_build": "required",
     "macos_real_media_playback": "required",
     "macos_final_cut_open": "required",
@@ -119,15 +120,16 @@
     "runtime_packaging": {
       "branch": "feat/desktop-v2-runtime-packaging",
       "status": "isolated_blocker",
-      "reason": "The installed Tauri bundle currently has no declared Python Core/interpreter resources; development-relative MIRRORORDER_CORE_ROOT fallback is not a packaged-runtime guarantee.",
+      "reason": "A distributable Desktop build must carry the Python Core, a Python 3.11+ runtime with numpy/pandas/scipy, and ffmpeg/ffprobe. Development-relative source paths or system tools are not packaged-runtime guarantees.",
       "blocks": [
         "packaged_python_runtime",
+        "packaged_media_toolchain",
         "macos_tauri_build",
         "macos_codesign_bundle",
         "windows_tauri_build",
         "windows_installer_smoke"
       ],
-      "mainline_rule": "Do not solve interpreter/resource bundling by adding production tabs or duplicating Python business logic."
+      "mainline_rule": "Do not solve interpreter/tool/resource bundling by adding production tabs, shipping model weights by default, or duplicating Python business logic."
     }
   }
 }
