@@ -122,7 +122,7 @@ class DeviceMediaStore:
 
     def _default(self) -> dict[str, Any]:
         return {
-            "version": 2,
+            "version": 3,
             "device_id": str(uuid.uuid4()),
             "device_name": platform.node() or "MirrorOrder Device",
             "workspaces": {},
@@ -139,7 +139,7 @@ class DeviceMediaStore:
             with self.path.open(encoding="utf-8") as handle:
                 payload = json.load(handle)
             if isinstance(payload, dict):
-                payload["version"] = max(2, int(payload.get("version", 1) or 1))
+                payload["version"] = max(3, int(payload.get("version", 1) or 1))
                 payload.setdefault("device_id", str(uuid.uuid4()))
                 payload.setdefault("device_name", platform.node() or "MirrorOrder Device")
                 payload.setdefault("workspaces", {})
@@ -149,12 +149,19 @@ class DeviceMediaStore:
         return self._default()
 
     def _save(self, payload: dict[str, Any]) -> None:
+        payload["version"] = max(3, int(payload.get("version", 3) or 3))
         payload["updated_at"] = _now()
         _atomic_json(self.path, payload)
 
     @staticmethod
     def _empty_project() -> dict[str, Any]:
-        return {"roots": [], "bindings": {}, "updated_at": ""}
+        return {
+            "roots": [],
+            "bindings": {},
+            "candidates": {},
+            "confirmed_provisional": {},
+            "updated_at": "",
+        }
 
     @staticmethod
     def _media_files(roots: Iterable[str]) -> list[Path]:
@@ -205,16 +212,42 @@ class DeviceMediaStore:
         return {
             "roots": [str(value) for value in raw.get("roots", []) if str(value)],
             "bindings": dict(raw.get("bindings", {})) if isinstance(raw.get("bindings", {}), dict) else {},
+            "candidates": dict(raw.get("candidates", {})) if isinstance(raw.get("candidates", {}), dict) else {},
+            "confirmed_provisional": (
+                dict(raw.get("confirmed_provisional", {}))
+                if isinstance(raw.get("confirmed_provisional", {}), dict)
+                else {}
+            ),
             "updated_at": str(raw.get("updated_at", "") or ""),
         }
 
     @staticmethod
     def resolve_from_snapshot(project: dict[str, Any], item: dict[str, Any]) -> str:
         key = binding_key(item)
-        bound = str(project.get("bindings", {}).get(key, "") or "")
+        bindings = project.get("bindings", {}) if isinstance(project.get("bindings", {}), dict) else {}
+        bound = str(bindings.get(key, "") or "")
+        if key.startswith("MP_"):
+            confirmed = (
+                project.get("confirmed_provisional", {})
+                if isinstance(project.get("confirmed_provisional", {}), dict)
+                else {}
+            )
+            if bound and str(confirmed.get(key, "") or "") == bound and Path(bound).is_file():
+                return bound
+            # A provisional identity is filename-derived. Even the original path
+            # is not safe evidence of content identity after files move or are
+            # replaced, so it must be explicitly confirmed on this device.
+            return ""
+        if key.startswith("M_"):
+            if bound and Path(bound).is_file() and media_id_for_path(bound) == key:
+                return bound
+            original = str(item.get("source_media_path", "") or item.get("media_path", "") or "")
+            if original and Path(original).is_file() and media_id_for_path(original) == key:
+                return original
+            return ""
+        original = str(item.get("source_media_path", "") or item.get("media_path", "") or "")
         if bound and Path(bound).is_file():
             return bound
-        original = str(item.get("source_media_path", "") or item.get("media_path", "") or "")
         if original and Path(original).is_file():
             return original
         return ""
@@ -228,9 +261,19 @@ class DeviceMediaStore:
         inventory = iter_project_media(index)
         resolved = []
         missing = []
+        candidates = project.get("candidates", {}) if isinstance(project.get("candidates", {}), dict) else {}
         for item in inventory:
             path = self.resolve_from_snapshot(project, item)
-            row = {**item, "resolved_path": path, "local_exists": bool(path)}
+            candidate = str(candidates.get(str(item.get("media_id", "")), "") or "")
+            if candidate and not Path(candidate).is_file():
+                candidate = ""
+            row = {
+                **item,
+                "resolved_path": path,
+                "local_exists": bool(path),
+                "candidate_path": candidate,
+                "needs_confirmation": bool(candidate and not item.get("verified", False) and not path),
+            }
             (resolved if path else missing).append(row)
         return {
             "version": 1,
@@ -261,6 +304,9 @@ class DeviceMediaStore:
             legacy = legacy_projects.pop(project_id, None) if isinstance(legacy_projects, dict) else None
             project = legacy if isinstance(legacy, dict) else self._empty_project()
             projects[project_id] = project
+        project.setdefault("bindings", {})
+        project.setdefault("candidates", {})
+        project.setdefault("confirmed_provisional", {})
         stored_roots = [str(value) for value in project.get("roots", []) if str(value)]
         for raw_root in roots:
             root = str(Path(raw_root).expanduser())
@@ -269,37 +315,101 @@ class DeviceMediaStore:
         project["roots"] = stored_roots
 
         inventory = iter_project_media(index)
-        expected_by_id = {str(item["media_id"]): item for item in inventory if str(item.get("media_id", "")).startswith("M_")}
+        expected_by_id = {
+            str(item["media_id"]): item
+            for item in inventory
+            if str(item.get("media_id", "")).startswith("M_")
+        }
         provisional_by_name: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
         for item in inventory:
             if not str(item.get("media_id", "")).startswith("M_"):
                 provisional_by_name[str(item.get("name", "")).casefold()].append(item)
 
         files = self._media_files(stored_roots)
+        files_by_name: defaultdict[str, list[Path]] = defaultdict(list)
+        for path in files:
+            files_by_name[path.name.casefold()].append(path)
 
         bindings = dict(project.get("bindings", {}))
+        confirmed = dict(project.get("confirmed_provisional", {}))
+        # Version-2 stores could contain provisional bindings created solely by
+        # a filename match. Ignore and remove every unconfirmed MP_ binding so
+        # upgrading immediately closes the unsafe path instead of waiting for a
+        # manual re-scan.
+        bindings = {
+            key: value
+            for key, value in bindings.items()
+            if not str(key).startswith("MP_") or str(confirmed.get(str(key), "") or "") == str(value)
+        }
+        candidates: dict[str, str] = {}
         matched_verified = 0
-        matched_provisional = 0
+        provisional_candidates = 0
+
+        for name, rows in provisional_by_name.items():
+            paths = files_by_name.get(name, [])
+            if len(rows) == 1 and len(paths) == 1:
+                media_id = str(rows[0]["media_id"])
+                path = str(paths[0])
+                candidates[media_id] = path
+                provisional_candidates += 1
+
         for path in files:
-            rows = provisional_by_name.get(path.name.casefold(), [])
-            if len(rows) == 1:
-                bindings[str(rows[0]["media_id"])] = str(path)
-                matched_provisional += 1
             media_id = media_id_for_path(path)
             if media_id and media_id in expected_by_id:
                 bindings[media_id] = str(path)
                 matched_verified += 1
 
         project["bindings"] = bindings
+        project["candidates"] = candidates
+        project["confirmed_provisional"] = {
+            key: value
+            for key, value in confirmed.items()
+            if str(key).startswith("MP_") and Path(str(value)).is_file()
+        }
         project["updated_at"] = _now()
         self._save(payload)
         summary = self.summary(workspace_id, project_id, index)
         summary["scan"] = {
             "files_seen": len(files),
             "verified_matches": matched_verified,
-            "provisional_name_matches": matched_provisional,
+            "provisional_name_matches": 0,
+            "provisional_name_candidates": provisional_candidates,
         }
         return summary
+
+    def confirm_provisional(
+        self,
+        workspace_id: str,
+        project_id: str,
+        media_id: str,
+        candidate_path: str,
+    ) -> dict[str, Any]:
+        """Confirm one filename-derived media candidate on this device.
+
+        Confirmation is deliberately device-local. It does not promote an MP_
+        identity into a shared content identity and never mutates project JSON.
+        """
+        key = str(media_id or "").strip()
+        if not key.startswith("MP_"):
+            raise ValueError("只有 provisional media identity 需要人工确认")
+        payload = self.load()
+        workspaces = payload.setdefault("workspaces", {})
+        workspace = workspaces.setdefault(workspace_id, {"projects": {}})
+        project = workspace.setdefault("projects", {}).setdefault(project_id, self._empty_project())
+        candidates = project.setdefault("candidates", {})
+        expected = str(candidates.get(key, "") or "")
+        path = Path(str(candidate_path or "")).expanduser()
+        if not expected or str(path) != expected:
+            raise ValueError("候选素材已变化，请重新扫描后再确认")
+        if not path.is_file():
+            raise ValueError("候选素材已离线，请重新扫描")
+        if provisional_media_id(path.name) != key:
+            raise ValueError("候选文件名与 provisional media identity 不一致")
+        project.setdefault("bindings", {})[key] = str(path)
+        project.setdefault("confirmed_provisional", {})[key] = str(path)
+        project["updated_at"] = _now()
+        self._save(payload)
+        return self.project_snapshot(workspace_id, project_id, payload)
 
     def add_roots(self, workspace_id: str, project_id: str, roots: Iterable[str]) -> dict[str, Any]:
         """Register host-local roots before the first analysis creates an index."""
@@ -332,6 +442,8 @@ class DeviceMediaStore:
                 selected.append(root)
         project["roots"] = selected
         project["bindings"] = {}
+        project["candidates"] = {}
+        project["confirmed_provisional"] = {}
         project["updated_at"] = _now()
         self._save(payload)
         return self.project_snapshot(workspace_id, project_id, payload)
@@ -376,6 +488,7 @@ class DeviceMediaStore:
                 "files_seen": count,
                 "verified_matches": 0,
                 "provisional_name_matches": 0,
+                "provisional_name_candidates": 0,
             },
         }
 
@@ -384,5 +497,15 @@ class DeviceMediaStore:
         workspace = payload.setdefault("workspaces", {}).setdefault(workspace_id, {"projects": {}})
         project = workspace.setdefault("projects", {}).setdefault(project_id, self._empty_project())
         bindings = project.setdefault("bindings", {})
+        confirmed = project.setdefault("confirmed_provisional", {})
+        candidates = project.setdefault("candidates", {})
         project["bindings"] = {key: value for key, value in bindings.items() if Path(str(value)).is_file()}
+        project["confirmed_provisional"] = {
+            key: value
+            for key, value in confirmed.items()
+            if Path(str(value)).is_file() and project["bindings"].get(key) == value
+        }
+        project["candidates"] = {
+            key: value for key, value in candidates.items() if Path(str(value)).is_file()
+        }
         self._save(payload)
