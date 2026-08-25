@@ -1,0 +1,61 @@
+{
+  "contract": "desktop_development_baseline.v1",
+  "branch": "main",
+  "state": "active_development_baseline",
+  "desktop_path": "desktop",
+  "architecture": {
+    "ui": "react_typescript",
+    "desktop_host": "tauri2_rust",
+    "timeline_authority": "rust_timeline_core",
+    "business_authority": "python_mirrororder_core",
+    "team_web": "separate_review_projection_surface"
+  },
+  "capabilities": {
+    "project_lifecycle": {"code_status": "implemented", "native_smoke_required": false},
+    "material_script": {"code_status": "implemented", "native_smoke_required": false},
+    "slate": {"code_status": "implemented", "native_smoke_required": false},
+    "identity": {"code_status": "implemented", "native_smoke_required": false},
+    "assistant": {"code_status": "implemented", "native_smoke_required": false},
+    "settings_status": {"code_status": "implemented", "native_smoke_required": false},
+    "media_binding": {"code_status": "implemented", "native_smoke_required": true},
+    "timeline": {"code_status": "implemented", "native_smoke_required": true},
+    "team_web_gateway": {"code_status": "implemented", "native_smoke_required": true},
+    "macos_fcp_integration": {"code_status": "implemented", "native_smoke_required": true}
+  },
+  "release_gates": {
+    "typescript_typecheck": "required",
+    "typescript_unit_tests": "required",
+    "python_tests": "required",
+    "timeline_core_cargo_tests": "required",
+    "tauri_cargo_check": "required",
+    "packaged_python_runtime": "required",
+    "packaged_media_toolchain": "required",
+    "macos_tauri_build": "required",
+    "macos_real_media_playback": "required",
+    "macos_multicam_sync_smoke": "required",
+    "macos_final_cut_open": "required",
+    "macos_team_gateway_lan_smoke": "required",
+    "macos_codesign_bundle": "required",
+    "windows_tauri_build": "required",
+    "windows_webview2_media_smoke": "required",
+    "windows_multicam_sync_smoke": "required",
+    "windows_team_gateway_lan_smoke": "required",
+    "windows_installer_smoke": "required"
+  },
+  "isolation_policy": {
+    "production_project_tabs_are_product_surfaces": true,
+    "team_web_is_top_level_workspace": true,
+    "heavy_capabilities_require_isolated_module_or_worktree": true,
+    "promotion_rule": "Promote an isolated capability only after its typed contract, authority boundary, failure isolation and native smoke gate are explicit."
+  },
+  "active_workstreams": {
+    "runtime_packaging": {
+      "branch": "work/runtime-packaging",
+      "status": "isolated_release_workstream"
+    },
+    "auto_score": {
+      "branch": "work/auto-score",
+      "status": "isolated_feature_workstream"
+    }
+  }
+}
