@@ -14,6 +14,8 @@ export interface TeamGatewayStartOptions {
 
 export interface TeamGatewayStatus {
   running: boolean;
+  healthy: boolean;
+  health_error: string | null;
   pid: number | null;
   base_url: string | null;
   lan_url: string | null;
