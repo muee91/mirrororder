@@ -89,11 +89,13 @@
     "packaged_media_toolchain": "required",
     "macos_tauri_build": "required",
     "macos_real_media_playback": "required",
+    "macos_multicam_sync_smoke": "required",
     "macos_final_cut_open": "required",
     "macos_team_gateway_lan_smoke": "required",
     "macos_codesign_bundle": "required",
     "windows_tauri_build": "required",
     "windows_webview2_media_smoke": "required",
+    "windows_multicam_sync_smoke": "required",
     "windows_team_gateway_lan_smoke": "required",
     "windows_installer_smoke": "required"
   },
@@ -125,8 +127,10 @@
         "packaged_python_runtime",
         "packaged_media_toolchain",
         "macos_tauri_build",
+        "macos_multicam_sync_smoke",
         "macos_codesign_bundle",
         "windows_tauri_build",
+        "windows_multicam_sync_smoke",
         "windows_installer_smoke"
       ],
       "mainline_rule": "Do not solve interpreter/tool/resource bundling by adding production tabs, shipping model weights by default, or duplicating Python business logic."
