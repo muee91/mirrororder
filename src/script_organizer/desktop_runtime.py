@@ -63,10 +63,10 @@ def _local_runtime_payload(service: Any) -> dict[str, Any]:
     root = _workspace_root(service)
     return {
         "contract": "local_runtime.v1",
-        "local_vision_enabled": bool(settings.get("local_vision_enabled", True)),
+        "local_vision_enabled": bool(settings.get("local_vision_enabled", False)),
         "local_vision_model": model,
-        "face_identity_enabled": bool(settings.get("local_face_identity_enabled", True)),
-        "speaker_identity_enabled": bool(settings.get("local_speaker_identity_enabled", True)),
+        "face_identity_enabled": bool(settings.get("face_identity_enabled", False)),
+        "speaker_identity_enabled": bool(settings.get("speaker_identity_enabled", False)),
         "vision": vision,
         "identity": identity,
         # Retain the legacy field name used by the old SwiftUI status surface.
@@ -88,13 +88,13 @@ def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, An
         if "local_vision_model" in payload:
             update["local_vision_model"] = str(payload.get("local_vision_model", "") or "").strip()
         if "face_identity_enabled" in payload:
-            update["local_face_identity_enabled"] = bool(payload.get("face_identity_enabled"))
+            update["face_identity_enabled"] = bool(payload.get("face_identity_enabled"))
         if "speaker_identity_enabled" in payload:
-            update["local_speaker_identity_enabled"] = bool(payload.get("speaker_identity_enabled"))
+            update["speaker_identity_enabled"] = bool(payload.get("speaker_identity_enabled"))
         if update:
             old_model = str(settings.get("local_vision_model", "") or "")
             settings = save_runtime_settings(update)
-            if not bool(settings.get("local_vision_enabled", True)) or str(settings.get("local_vision_model", "") or "") != old_model:
+            if not bool(settings.get("local_vision_enabled", False)) or str(settings.get("local_vision_model", "") or "") != old_model:
                 LocalVisionRuntime.stop()
     elif action == "prepare":
         model = str(settings.get("local_vision_model", "") or "")
@@ -233,20 +233,29 @@ def install_desktop_runtime() -> None:
                     project = current.project(parts[3])
                     payload = web_server._body(self)
                     action = str(payload.get("action", "scan") or "scan").strip().lower()
-                    roots = _normalize_roots(payload.get("roots", []))
                     store = DeviceMediaStore()
                     workspace_id = _workspace_id(current)
-                    if action == "replace_and_scan":
-                        store.replace_roots(workspace_id, project.project_id, roots)
-                    elif action != "scan":
-                        raise web_server.ApiError(
-                            web_server.HTTPStatus.BAD_REQUEST,
-                            "不支持的 media binding action",
+                    if action == "confirm_provisional":
+                        store.confirm_provisional(
+                            workspace_id,
+                            project.project_id,
+                            str(payload.get("media_id", "") or ""),
+                            str(payload.get("candidate_path", "") or ""),
                         )
-                    if project.index.get("clips"):
-                        summary = store.scan(workspace_id, project.project_id, project.index, roots)
+                        summary = store.summary(workspace_id, project.project_id, project.index)
                     else:
-                        summary = store.probe_roots(workspace_id, project.project_id, roots)
+                        roots = _normalize_roots(payload.get("roots", []))
+                        if action == "replace_and_scan":
+                            store.replace_roots(workspace_id, project.project_id, roots)
+                        elif action != "scan":
+                            raise web_server.ApiError(
+                                web_server.HTTPStatus.BAD_REQUEST,
+                                "不支持的 media binding action",
+                            )
+                        if project.index.get("clips"):
+                            summary = store.scan(workspace_id, project.project_id, project.index, roots)
+                        else:
+                            summary = store.probe_roots(workspace_id, project.project_id, roots)
                     # Re-apply device-local bindings immediately so subsequent
                     # media/review-model reads observe the new device state.
                     project.reload()
