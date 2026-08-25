@@ -1,5 +1,5 @@
 [package]
-name = "mirrororder-desktop-v2"
+name = "mirrororder-desktop"
 version = "0.1.0"
 description = "MirrorOrder cross-platform desktop host"
 authors = ["MirrorOrder"]
