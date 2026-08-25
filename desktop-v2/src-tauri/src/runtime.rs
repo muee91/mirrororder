@@ -8,6 +8,7 @@ use tauri::{path::BaseDirectory, AppHandle, Manager};
 const PACKAGED_CORE_DIR: &str = "mirrororder-core";
 const PACKAGED_PYTHON_DIR: &str = "mirrororder-python";
 const PACKAGED_TOOLS_DIR: &str = "mirrororder-tools";
+const PACKAGED_MANIFEST: &str = "mirrororder-runtime-manifest.json";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeOrigin {
@@ -49,6 +50,13 @@ fn packaged_core_root(app: &AppHandle) -> Option<PathBuf> {
         .resolve(PACKAGED_CORE_DIR, BaseDirectory::Resource)
         .ok()
         .and_then(valid_core_root)
+}
+
+fn packaged_manifest(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .resolve(PACKAGED_MANIFEST, BaseDirectory::Resource)
+        .ok()
+        .filter(|path| path.is_file())
 }
 
 fn development_core_root() -> Option<PathBuf> {
@@ -118,6 +126,12 @@ pub fn resolve_python_runtime(app: &AppHandle) -> Result<PythonRuntimeLayout, St
     }
 
     if let Some(core_root) = packaged_core_root(app) {
+        if packaged_manifest(app).is_none() {
+            return Err(
+                "安装包发现 mirrororder-core，但缺少 mirrororder-runtime-manifest.json。该 bundle 没有通过 runtime staging gate。"
+                    .to_string(),
+            );
+        }
         let python_executable = match env::var_os("MIRRORORDER_PYTHON").or_else(|| packaged_python(app)) {
             Some(value) => value,
             None => {
