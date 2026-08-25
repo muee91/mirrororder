@@ -45,8 +45,11 @@ const runtimePackaging = parity.isolated_workstreams?.runtime_packaging;
 assert(runtimePackaging?.branch === "feat/desktop-v2-runtime-packaging", "runtime packaging must point to the isolated workstream branch");
 assert(runtimePackaging?.status === "isolated_blocker", "runtime packaging must stay an explicit blocker until it is actually solved");
 assert(parity.release_gates?.packaged_python_runtime === "required", "packaged Python runtime must stay a release gate");
+assert(parity.release_gates?.packaged_media_toolchain === "required", "packaged ffmpeg/ffprobe toolchain must stay a release gate");
+assert(runtimePackaging?.blocks?.includes("packaged_python_runtime"), "runtime packaging must block packaged Python release readiness");
+assert(runtimePackaging?.blocks?.includes("packaged_media_toolchain"), "runtime packaging must block packaged media-tool release readiness");
 
 if (!process.exitCode) {
   console.log(`Phase 7 contract OK: ${Object.keys(parity.gates).length} parity gates, ${Object.keys(parity.release_gates).length} release gates.`);
-  console.log("SwiftUI retirement remains blocked; heavy runtime packaging remains isolated.");
+  console.log("SwiftUI retirement remains blocked; packaged Python/media runtime remains isolated.");
 }
