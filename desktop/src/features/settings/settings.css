@@ -10,7 +10,7 @@
 .status-capabilities span.is-ready { border-color: #355745; color: #99c0aa; background: #122019; }
 .status-capabilities span.is-missing { border-color: #644444; color: #d0a0a0; background: #211717; }
 .status-capabilities span.is-pending { border-color: #655a3e; color: #cfbd84; background: #211e14; }
-.frontend-settings-card, .phase7-gate-card, .local-runtime-card, .collaboration-card, .task-status-card { grid-column: span 1; }
+.frontend-settings-card, .baseline-gate-card, .local-runtime-card, .collaboration-card, .task-status-card { grid-column: span 1; }
 .settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
 .settings-form-grid .production-field { margin: 0; }
 .settings-check { display: flex; align-items: center; gap: 7px; min-height: 34px; color: #8a96a2; font-size: 10px; }
@@ -54,13 +54,13 @@
 .task-status-meta span.is-active { color: #9ac4aa; }
 .task-status-meta span.is-complete { color: #7f9b88; }
 .task-error { grid-column: 1 / -1; margin: 3px 0 0; color: #cb9090; font-size: 8px; }
-.phase7-gate-list { display: grid; gap: 6px; }
-.phase7-gate-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; border-top: 1px solid #252d36; padding-top: 7px; }
-.phase7-gate-row strong { color: #b9c4ce; font-size: 10px; font-weight: 600; text-transform: capitalize; }
-.phase7-gate-row > span { border-radius: 999px; padding: 3px 6px; font-size: 8px; }
-.phase7-gate-row > span.is-ready { color: #99c0aa; background: #17271e; }
-.phase7-gate-row > span.is-missing { color: #d0a0a0; background: #281a1a; }
-.phase7-gate-row small { grid-column: 1 / -1; color: #71808d; font-size: 8px; }
+.baseline-gate-list { display: grid; gap: 6px; }
+.baseline-gate-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; border-top: 1px solid #252d36; padding-top: 7px; }
+.baseline-gate-row strong { color: #b9c4ce; font-size: 10px; font-weight: 600; text-transform: capitalize; }
+.baseline-gate-row > span { border-radius: 999px; padding: 3px 6px; font-size: 8px; }
+.baseline-gate-row > span.is-ready { color: #99c0aa; background: #17271e; }
+.baseline-gate-row > span.is-missing { color: #d0a0a0; background: #281a1a; }
+.baseline-gate-row small { grid-column: 1 / -1; color: #71808d; font-size: 8px; }
 
 @media (max-width: 1180px) {
   .settings-status-grid { grid-template-columns: minmax(0, 1fr); }
@@ -71,7 +71,7 @@
 
 @media (prefers-color-scheme: light) {
   .status-card h3 { color: #26313a; }
-  .status-facts div, .phase7-gate-row, .collaboration-audit, .task-status-row { border-color: #dde3e9; }
+  .status-facts div, .baseline-gate-row, .collaboration-audit, .task-status-row { border-color: #dde3e9; }
   .status-facts dd { color: #56616d; }
   .status-capabilities span { border-color: #d7dfe6; color: #63707c; background: #f4f7f9; }
   .status-capabilities span.is-ready { border-color: #b7d3c2; color: #37634a; background: #eef8f2; }
@@ -80,7 +80,7 @@
   .runtime-status-grid article, .collaboration-user { border-color: #dce3e9; background: #fff; }
   .runtime-status-grid strong, .collaboration-user-main strong, .task-status-row strong { color: #45515c; }
   .task-active-card { border-color: #b7d3c2; background: #eef8f2; }
-  .phase7-gate-row strong { color: #4d5964; }
-  .phase7-gate-row > span.is-ready { color: #37634a; background: #eef8f2; }
-  .phase7-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
+  .baseline-gate-row strong { color: #4d5964; }
+  .baseline-gate-row > span.is-ready { color: #37634a; background: #eef8f2; }
+  .baseline-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
 }
