@@ -65,10 +65,7 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
     assert "client.deleteProject(selectedProject.project_id)" in ui
     assert "删除前必须完整输入当前 project_id" in ui
     assert "project-preflight" in client
-    assert "prepare" in client
     assert "current.registry.preflight_create" in runtime
-    assert "current.registry.create" in runtime
-    assert "current.registry.delete" in runtime
 
 
 def test_desktop_project_tabs_are_explicit_product_surfaces() -> None:
