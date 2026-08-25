@@ -14,7 +14,9 @@ _INSTALLED = False
 _CONTRACT = "waveform.v1"
 _MIN_SAMPLES = 64
 _MAX_SAMPLES = 4096
-_PCM_RATE = 1000
+_MIN_PCM_RATE = 4
+_MAX_PCM_RATE = 1000
+_OVERSAMPLE_FACTOR = 12
 
 
 def _sample_count(value: object) -> int:
@@ -25,9 +27,45 @@ def _sample_count(value: object) -> int:
     return max(_MIN_SAMPLES, min(_MAX_SAMPLES, parsed))
 
 
-def _fingerprint(path: Path, samples: int) -> str:
+def _target_pcm_rate(duration: float, samples: int) -> int:
+    """Choose a decode rate that keeps overview PCM bounded for long media."""
+    if not math.isfinite(duration) or duration <= 0:
+        return _MAX_PCM_RATE
+    target_values = max(_MIN_SAMPLES, samples) * _OVERSAMPLE_FACTOR
+    return max(_MIN_PCM_RATE, min(_MAX_PCM_RATE, int(math.ceil(target_values / duration))))
+
+
+def _decode_timeout(duration: float) -> int:
+    """Scale the guardrail for long media without allowing an unbounded worker."""
+    if not math.isfinite(duration) or duration <= 0:
+        return 60
+    return max(60, min(600, int(math.ceil(duration / 30.0)) + 30))
+
+
+def _probe_duration(path: Path) -> float:
+    command = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(path),
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=20, check=True)
+        value = float(result.stdout.strip() or 0)
+        return value if math.isfinite(value) and value > 0 else 0.0
+    except FileNotFoundError as error:
+        raise RuntimeError("本机未安装 ffprobe，无法生成 waveform") from error
+    except (ValueError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        return 0.0
+
+
+def _fingerprint(path: Path, samples: int, pcm_rate: int) -> str:
     stat = path.stat()
-    raw = f"{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}|{samples}|{_PCM_RATE}"
+    raw = f"{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}|{samples}|{pcm_rate}|adaptive-v2"
     return hashlib.sha256(raw.encode("utf-8", errors="replace")).hexdigest()[:24]
 
 
@@ -53,9 +91,10 @@ def _peaks_from_pcm(data: bytes, samples: int) -> list[float]:
     return peaks
 
 
-def _decode_pcm(path: Path) -> bytes:
+def _decode_pcm(path: Path, pcm_rate: int, timeout: int) -> bytes:
     command = [
         "ffmpeg",
+        "-nostdin",
         "-v",
         "error",
         "-i",
@@ -64,17 +103,17 @@ def _decode_pcm(path: Path) -> bytes:
         "-ac",
         "1",
         "-ar",
-        str(_PCM_RATE),
+        str(pcm_rate),
         "-f",
         "s16le",
         "pipe:1",
     ]
     try:
-        result = subprocess.run(command, capture_output=True, timeout=60, check=True)
+        result = subprocess.run(command, capture_output=True, timeout=timeout, check=True)
     except FileNotFoundError as error:
         raise RuntimeError("本机未安装 ffmpeg，无法生成 waveform") from error
     except subprocess.TimeoutExpired as error:
-        raise RuntimeError("waveform 生成超时") from error
+        raise RuntimeError(f"waveform 生成超时（{timeout}s）") from error
     except subprocess.CalledProcessError as error:
         detail = (error.stderr or b"").decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"ffmpeg waveform 失败：{detail[:400] or error.returncode}") from error
@@ -94,7 +133,10 @@ def _payload(project: Any, clip_id: str, samples: int) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(path)
 
-    fingerprint = _fingerprint(path, samples)
+    duration = _probe_duration(path)
+    pcm_rate = _target_pcm_rate(duration, samples)
+    timeout = _decode_timeout(duration)
+    fingerprint = _fingerprint(path, samples, pcm_rate)
     cache = _cache_path(project, clip_id, fingerprint)
     if cache.is_file():
         try:
@@ -104,13 +146,15 @@ def _payload(project: Any, clip_id: str, samples: int) -> dict[str, Any]:
         except (OSError, ValueError):
             pass
 
-    peaks = _peaks_from_pcm(_decode_pcm(path), samples)
+    peaks = _peaks_from_pcm(_decode_pcm(path, pcm_rate, timeout), samples)
     payload = {
         "contract": _CONTRACT,
         "clip_id": str(clip_id),
         "samples": len(peaks),
         "requested_samples": samples,
-        "sample_rate": _PCM_RATE,
+        "sample_rate": pcm_rate,
+        "duration": duration,
+        "decode_timeout_seconds": timeout,
         "peaks": peaks,
         "derived": True,
         "editorial_authority": False,
@@ -171,4 +215,10 @@ def install_waveform_runtime() -> None:
     _INSTALLED = True
 
 
-__all__ = ["install_waveform_runtime", "_peaks_from_pcm", "_sample_count"]
+__all__ = [
+    "install_waveform_runtime",
+    "_decode_timeout",
+    "_peaks_from_pcm",
+    "_sample_count",
+    "_target_pcm_rate",
+]
