@@ -269,9 +269,6 @@ pub fn start_team_gateway(
         }
     }
 
-    // The child process can outlive a broken HTTP listener. Restart the same
-    // managed port instead of treating a stale PID as healthy or drifting to a
-    // temporary port such as 8767.
     if let Some(stale) = slot.take() {
         stop_managed_gateway(stale)?;
     }
@@ -352,11 +349,8 @@ pub fn team_gateway_status(
     reap_if_finished(&mut slot)?;
     let gateway = slot.as_ref();
     let health_result = gateway.map(|item| health(item.config.port));
-    let healthy = matches!(health_result, Some(Ok(())));
-    let health_error = match health_result {
-        Some(Err(error)) => Some(error),
-        _ => None,
-    };
+    let healthy = health_result.as_ref().is_some_and(|result| result.is_ok());
+    let health_error = health_result.and_then(Result::err);
     Ok(GatewayProcessStatus {
         running: gateway.is_some(),
         healthy,
