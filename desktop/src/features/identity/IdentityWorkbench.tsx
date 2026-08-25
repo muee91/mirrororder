@@ -77,7 +77,7 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
     <section className="phase3-workbench">
       <header className="production-heading">
         <div>
-          <p className="eyebrow">Phase 3 · Identity</p>
+          <p className="eyebrow">Identity</p>
           <h2>人物 / 声音身份</h2>
         </div>
         <span className="production-state">{message}</span>
