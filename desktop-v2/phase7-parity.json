@@ -1,8 +1,8 @@
 {
   "contract": "desktop_phase7_parity.v1",
-  "branch": "feat/desktop-v2-tauri",
+  "branch": "main",
   "desktop_primary_candidate": true,
-  "swiftui_retirement_allowed": false,
+  "swiftui_retirement_allowed": true,
   "gates": {
     "project_lifecycle": {
       "code_status": "implemented",
@@ -100,9 +100,10 @@
     "windows_installer_smoke": "required"
   },
   "retirement_policy": {
-    "swiftui_state": "legacy_frozen_reference",
+    "swiftui_state": "removed_by_owner_cutover",
     "new_features_allowed_in_swiftui": false,
-    "physical_delete_before_release_gates": false,
+    "owner_cutover_override": true,
+    "release_gates_still_required_for_desktop_quality": true,
     "team_web_boundary_unchanged": true,
     "python_core_authority_unchanged": true
   },
