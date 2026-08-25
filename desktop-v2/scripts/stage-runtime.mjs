@@ -36,8 +36,12 @@ function firstFile(candidates, label) {
   return found;
 }
 
-function run(executable, args, label) {
-  const result = spawnSync(executable, args, { encoding: "utf8", windowsHide: true });
+function run(executable, args, label, options = {}) {
+  const result = spawnSync(executable, args, {
+    encoding: "utf8",
+    windowsHide: true,
+    ...options,
+  });
   if (result.error) fail(`${label}: ${result.error.message}`);
   if (result.status !== 0) {
     fail(`${label} exited ${result.status}: ${(result.stderr || result.stdout || "").trim()}`);
@@ -198,13 +202,60 @@ fs.copyFileSync(pyprojectSource, path.join(coreTarget, "pyproject.toml"));
 copyDirectory(portablePythonRoot, pythonTarget);
 copyDirectory(mediaToolsRoot, toolsTarget);
 
-for (const executable of [
-  path.join(pythonTarget, pythonRelativeExecutable),
-  path.join(toolsTarget, "bin", ffmpegName),
-  path.join(toolsTarget, "bin", ffprobeName),
-]) {
+const stagedPython = path.join(pythonTarget, pythonRelativeExecutable);
+const stagedFfmpeg = path.join(toolsTarget, "bin", ffmpegName);
+const stagedFfprobe = path.join(toolsTarget, "bin", ffprobeName);
+for (const executable of [stagedPython, stagedFfmpeg, stagedFfprobe]) {
   if (fs.existsSync(executable) && !windows) fs.chmodSync(executable, 0o755);
 }
+
+assertSelfContainedSymlinks(pythonTarget, "staged portable Python runtime");
+assertSelfContainedSymlinks(toolsTarget, "staged media tools runtime");
+const stagedPythonProbe = run(
+  stagedPython,
+  [
+    "-I",
+    "-c",
+    [
+      "import json, sys",
+      "assert sys.version_info >= (3, 11), sys.version",
+      "import numpy, pandas, scipy",
+      "print(json.dumps({'version': sys.version.split()[0], 'executable': sys.executable, 'prefix': sys.prefix}))",
+    ].join("; "),
+  ],
+  "staged Python relocation probe",
+);
+let stagedPythonInfo;
+try {
+  stagedPythonInfo = JSON.parse(stagedPythonProbe.split(/\r?\n/).at(-1));
+} catch {
+  fail(`staged Python relocation probe returned invalid JSON: ${stagedPythonProbe}`);
+}
+for (const [label, candidate] of [["sys.executable", stagedPythonInfo.executable], ["sys.prefix", stagedPythonInfo.prefix]]) {
+  if (!candidate || !fs.existsSync(candidate)) fail(`staged Python ${label} does not exist: ${String(candidate)}`);
+  if (!isInside(fs.realpathSync(pythonTarget), fs.realpathSync(candidate))) {
+    fail(`staged Python ${label} escapes staged runtime: ${candidate}`);
+  }
+}
+const stagedCorePathLiteral = JSON.stringify(path.join(coreTarget, "src"));
+run(
+  stagedPython,
+  [
+    "-I",
+    "-c",
+    `import sys; sys.path.insert(0, ${stagedCorePathLiteral}); import script_organizer.cli; print('staged-core-import-ok')`,
+  ],
+  "staged MirrorOrder Core import probe",
+  {
+    env: {
+      ...process.env,
+      PATH: `${path.dirname(stagedFfmpeg)}${path.delimiter}${process.env.PATH || ""}`,
+      MIRRORORDER_MULTICAM_SYNC_ROOT: path.join(coreTarget, "vendor", "multicam-audio-sync"),
+    },
+  },
+);
+run(stagedFfmpeg, ["-version"], "staged ffmpeg relocation probe");
+run(stagedFfprobe, ["-version"], "staged ffprobe relocation probe");
 
 const manifest = {
   contract: "mirrororder_packaged_runtime.v1",
@@ -214,15 +265,17 @@ const manifest = {
     multicam_engine: "vendor/multicam-audio-sync",
   },
   python: {
-    version: pythonInfo.version,
+    version: stagedPythonInfo.version,
     executable: pythonRelativeExecutable,
     required_modules: pythonInfo.modules,
     isolated_probe: true,
+    relocation_probe: true,
     source: "MIRRORORDER_PORTABLE_PYTHON_ROOT",
   },
   tools: {
     ffmpeg: ffmpegVersion,
     ffprobe: ffprobeVersion,
+    relocation_probe: true,
     source: "MIRRORORDER_MEDIA_TOOLS_ROOT",
   },
   safety: {
