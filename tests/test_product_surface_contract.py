@@ -2,42 +2,43 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE = ROOT / "macos-app" / "MirrorOrderDesktopCore.swift"
-UI = ROOT / "macos-app" / "MirrorOrderDesktopUI.swift"
+APP = ROOT / "desktop-v2" / "src" / "app" / "App.tsx"
+WORKBENCH = ROOT / "desktop-v2" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
-def test_desktop_is_project_first_production_surface() -> None:
-    core = CORE.read_text(encoding="utf-8")
-    ui = UI.read_text(encoding="utf-8")
+def test_desktop_v2_is_project_first_production_surface() -> None:
+    app = APP.read_text(encoding="utf-8")
+    workbench = WORKBENCH.read_text(encoding="utf-8")
 
-    assert "private struct ProductionSidebar" in ui
-    assert "private struct SidebarProjectRow" in ui
-    assert "ProjectWorkspace(" in ui
-    assert "controller: controller" in ui
-    assert 'Button(action: onNewProject)' in ui
-    assert "private struct NewProjectSheet" in ui
-    assert 'Text("原始素材").tag("media-directory")' in ui
-    assert 'Text("已有对齐 FCPXML").tag("fcpxml")' in ui
-    assert 'Button("开始自动整理")' in ui
-    assert 'Button("永久删除项目…", role: .destructive)' in ui
-    assert 'intelligence = "本地智能"' in ui
-    assert 'collaboration = "团队协作"' in ui
-    assert 'diagnostics = "诊断"' in ui
-    assert 'workspaceEndpoint("project-preflight")' in core
-    assert 'workspaceEndpoint("projects")' in core
+    assert "ProjectLibrary" in app
+    assert "ProjectWorkbench" in app
+    assert 'setAppWorkspace("production")' in app
+    assert 'setAppWorkspace("team")' in app
+    for label in ("素材 / 剧本", "场记", "人物", "小镜", "剪辑", "交付", "本机素材", "设置 / 状态"):
+        assert f'label: "{label}"' in workbench
+
+
+def test_team_web_is_top_level_and_not_a_project_tab() -> None:
+    app = APP.read_text(encoding="utf-8")
+    workbench = WORKBENCH.read_text(encoding="utf-8")
+
+    assert "TeamWebWorkbench" in app
+    assert 'type AppWorkspace = "production" | "team"' in app
+    assert "TeamWebWorkbench" not in workbench
+    assert 'label: "团队协作"' not in workbench
 
 
 def test_web_header_is_review_only() -> None:
     source = WEB.read_text(encoding="utf-8")
-    header = source.split('</header>', 1)[0]
+    header = source.split("</header>", 1)[0]
 
     assert '<title>镜序 · 团队审阅</title>' in source
-    assert '审核人' in header
-    assert '>新建项目<' not in header
-    assert '>任务<' not in header
-    assert '镜序助理' not in header
-    assert '时间线' not in header
+    assert "审核人" in header
+    assert ">新建项目<" not in header
+    assert ">任务<" not in header
+    assert "镜序助理" not in header
+    assert "时间线" not in header
 
 
 def test_web_legacy_production_dom_is_explicitly_hidden() -> None:
@@ -46,3 +47,7 @@ def test_web_legacy_production_dom_is_explicitly_hidden() -> None:
     assert '<button id="task-button" type="button" hidden>' in source
     assert '<dialog id="project-dialog" hidden>' in source
     assert '<dialog id="task-dialog" hidden>' in source
+
+
+def test_swiftui_client_is_physically_removed() -> None:
+    assert not (ROOT / "macos-app").exists()
