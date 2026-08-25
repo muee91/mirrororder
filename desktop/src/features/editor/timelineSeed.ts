@@ -1,6 +1,6 @@
 import type { ReviewAngle, ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import type { RoughCutCandidate, RoughCutPlan, RoughCutSegmentPlan } from "../../api/production";
-import type { TimelineCommand, TimelineMulticamGroup, TimelineProject, TimelineSource } from "../../api/timeline";
+import type { FrameRate, TimelineCommand, TimelineMulticamGroup, TimelineProject, TimelineSource } from "../../api/timeline";
 
 export interface TimelineSeedProposal {
   baseProject: TimelineProject;
@@ -10,8 +10,21 @@ export interface TimelineSeedProposal {
   warnings: string[];
 }
 
-function secondsToFrames(seconds: number, fps: number): number {
-  return Math.max(0, Math.round(seconds * fps));
+export function normalizeFrameRate(rate: FrameRate): FrameRate {
+  const numerator = Math.round(Number(rate.numerator));
+  const denominator = Math.round(Number(rate.denominator));
+  if (!Number.isSafeInteger(numerator) || !Number.isSafeInteger(denominator) || numerator <= 0 || denominator <= 0) {
+    throw new Error("Timeline proposal 需要明确、有效的有理数时间基");
+  }
+  return { numerator, denominator };
+}
+
+function framesPerSecond(rate: FrameRate): number {
+  return rate.numerator / rate.denominator;
+}
+
+function secondsToFrames(seconds: number, rate: FrameRate): number {
+  return Math.max(0, Math.round(seconds * framesPerSecond(rate)));
 }
 
 function sourceId(clipId: string): string {
@@ -49,7 +62,7 @@ function usableRange(candidate: RoughCutCandidate | null, take: ReviewTakeGroup)
 
 function ensureSources(
   take: ReviewTakeGroup,
-  fps: number,
+  rate: FrameRate,
   sources: Map<string, TimelineSource>,
   multicam: Map<string, TimelineMulticamGroup>,
 ): void {
@@ -64,7 +77,7 @@ function ensureSources(
         media_id: angle.media_id,
         name: angle.name,
         duration_frames: angle.source_end !== null
-          ? secondsToFrames(Math.max(angle.source_end, angle.source_start + Math.max(angle.duration, 0)), fps)
+          ? secondsToFrames(Math.max(angle.source_end, angle.source_start + Math.max(angle.duration, 0)), rate)
           : null,
       });
     }
@@ -77,10 +90,9 @@ function ensureSources(
 export function buildRoughCutTimelineProposal(
   review: ReviewModelPayload,
   plan: RoughCutPlan,
-  fps = 24,
+  frameRate: FrameRate,
 ): TimelineSeedProposal {
-  if (!Number.isFinite(fps) || fps <= 0) throw new Error("Timeline proposal fps 必须大于 0");
-  const roundedFps = Math.max(1, Math.round(fps));
+  const rate = normalizeFrameRate(frameRate);
   const sources = new Map<string, TimelineSource>();
   const multicam = new Map<string, TimelineMulticamGroup>();
   const commands: TimelineCommand[] = [];
@@ -113,14 +125,14 @@ export function buildRoughCutTimelineProposal(
         continue;
       }
 
-      ensureSources(take, roundedFps, sources, multicam);
+      ensureSources(take, rate, sources, multicam);
       const range = usableRange(candidate, take);
       const sourceOffset = range?.start ?? 0;
       const durationSeconds = range
         ? range.end - range.start
         : Math.max(0, angle.source_end !== null ? angle.source_end - angle.source_start : take.duration || angle.duration);
-      const durationFrames = Math.max(1, secondsToFrames(durationSeconds, roundedFps));
-      const sourceInFrames = secondsToFrames(angle.source_start + sourceOffset, roundedFps);
+      const durationFrames = Math.max(1, secondsToFrames(durationSeconds, rate));
+      const sourceInFrames = secondsToFrames(angle.source_start + sourceOffset, rate);
       const clipId = `rough:${segmentId}:${take.group_id}`;
       const trimBasis = range ? "script_supervisor_usable_range" : "full_take_range";
 
@@ -145,6 +157,7 @@ export function buildRoughCutTimelineProposal(
             source_clip_id: angle.clip_id,
             decision_source: candidate?.decision_source ?? "explicit_best",
             trim_basis: trimBasis,
+            frame_rate: `${rate.numerator}/${rate.denominator}`,
           },
         },
       });
@@ -154,12 +167,12 @@ export function buildRoughCutTimelineProposal(
   }
 
   if (included.some((item) => item.trimBasis === "full_take_range")) {
-    warnings.push("没有场记精确可用范围的段落按完整 Take 范围提议；确认后仍可用 Trim 命令精修。 ");
+    warnings.push("没有场记精确可用范围的段落按完整 Take 范围提议；确认后仍可继续精修。 ");
   }
   if (skipped.length) {
-    warnings.push(`${skipped.length} 个剧本段因缺少单一显式 Best / 存在冲突而未进入 Timeline proposal。`);
+    warnings.push(`${skipped.length} 个剧本段因缺少单一显式 Best / 存在冲突而未进入时间线提议。`);
   }
-  warnings.push(`Phase 4 proposal 当前使用 ${roundedFps}/1 fps 整数 frame 时间基；后续平台媒体适配器可替换为项目原生 timebase。`);
+  warnings.push(`时间基 ${rate.numerator}/${rate.denominator} fps；所有秒级范围会在提交前量化到整数帧。`);
 
   const baseProject: TimelineProject = {
     version: 1,
@@ -170,7 +183,7 @@ export function buildRoughCutTimelineProposal(
       {
         sequence_id: "main",
         name: "MirrorOrder Rough Cut",
-        frame_rate: { numerator: roundedFps, denominator: 1 },
+        frame_rate: rate,
         tracks: [
           { track_id: "V1", kind: "video", clips: [] },
           { track_id: "A1", kind: "audio", clips: [] },
