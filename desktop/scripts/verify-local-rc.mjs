@@ -34,13 +34,13 @@ function run(label, command, args, cwd) {
 }
 
 if (!fs.existsSync(path.join(desktopRoot, "node_modules"))) {
-  fail("desktop-v2/node_modules 不存在；先在 desktop-v2 执行 npm install。验证脚本不会自动联网安装依赖。");
+  fail("desktop/node_modules 不存在；先在 desktop/ 执行 npm install。验证脚本不会自动联网安装依赖。");
 }
 if (!commandAvailable(npm)) fail("npm 不可用");
 if (!commandAvailable(python, ["--version"])) fail(`Python 不可用：${python}`);
 if (!commandAvailable(cargo)) fail("cargo 不可用；Rust/Tauri release gate 不能被跳过或伪装成通过");
 
-run("Phase 7 machine-readable gate", npm, ["run", "check:phase7"], desktopRoot);
+run("Development baseline gate", npm, ["run", "check:baseline"], desktopRoot);
 run("TypeScript strict typecheck", npm, ["run", "typecheck"], desktopRoot);
 run("Vitest", npm, ["test"], desktopRoot);
 run("Vite production build", npm, ["run", "build"], desktopRoot);
@@ -65,5 +65,5 @@ run(
 run("Python compileall", python, ["-m", "compileall", "-q", "src/script_organizer"], repoRoot);
 run("Python pytest", python, ["-m", "pytest", "-q"], repoRoot);
 
-console.log("\nDesktop v2 local RC source gates passed.");
-console.log("Packaged macOS/Windows runtime, real media, LAN and FCP/installer smoke gates are still separate native requirements.");
+console.log("\nDesktop local RC source gates passed.");
+console.log("Packaged macOS/Windows runtime, real media, LAN and FCP/installer smoke gates remain separate native requirements.");
