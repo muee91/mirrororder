@@ -76,7 +76,7 @@ export function AssistantWorkbench({ baseUrl, projectId }: Props) {
     <section className="phase3-workbench">
       <header className="production-heading">
         <div>
-          <p className="eyebrow">Phase 3 · Assistant</p>
+          <p className="eyebrow">Assistant</p>
           <h2>小镜</h2>
         </div>
         <div className="assistant-heading-actions">
