@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
 import { ProductionClient, type SlateBoard, type SlateEntry, type SlateParseResult } from "../../api/production";
 
@@ -49,6 +49,7 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
   const [actor, setActor] = useState(readActor);
   const [message, setMessage] = useState("正在读取电子场记…");
   const [busy, setBusy] = useState(false);
+  const quickInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +60,8 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
         setReview(nextReview);
         setBoard(nextBoard);
         setSelectedGroupId((current) => current || nextReview.take_groups[0]?.group_id || "");
-        setMessage(`script_supervisor.v2 · r${nextBoard.revision}`);
+        setMessage(`场记已同步 · r${nextBoard.revision}`);
+        globalThis.requestAnimationFrame(() => quickInputRef.current?.focus());
       })
       .catch((error) => {
         if (!cancelled) setMessage(errorMessage(error));
@@ -67,17 +69,35 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
     return () => { cancelled = true; };
   }, [host, production, projectId]);
 
-  const selectedTake = review?.take_groups.find((take) => take.group_id === selectedGroupId) ?? null;
+  const takes = review?.take_groups ?? [];
+  const selectedIndex = takes.findIndex((take) => take.group_id === selectedGroupId);
+  const selectedTake = selectedIndex >= 0 ? takes[selectedIndex] : null;
   const existing = board?.entries[selectedGroupId] ?? null;
 
+  function selectTakeAt(index: number): void {
+    const next = takes[index];
+    if (!next) return;
+    setSelectedGroupId(next.group_id);
+    setParsed(null);
+    setQuickText("");
+    globalThis.requestAnimationFrame(() => quickInputRef.current?.focus());
+  }
+
+  function moveTake(delta: -1 | 1): void {
+    if (!takes.length) return;
+    const origin = selectedIndex >= 0 ? selectedIndex : 0;
+    const next = Math.max(0, Math.min(takes.length - 1, origin + delta));
+    if (next !== origin) selectTakeAt(next);
+  }
+
   async function parseQuickEntry(): Promise<void> {
-    if (!selectedTake) return;
+    if (!selectedTake || !quickText.trim()) return;
     setBusy(true);
-    setMessage("正在解析粗场记原话…");
+    setMessage("正在解析场记原话…");
     try {
       const response = await production.parseSlate(projectId, quickText, existing ?? undefined);
       setParsed(response.result);
-      setMessage(`解析完成 · ${response.result.parser}`);
+      setMessage("解析完成，请确认后写入。");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -111,8 +131,9 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
     if (parsed.take_number !== null) entry.take_number = parsed.take_number;
     if (parsed.status !== "unmarked" || !existing) entry.status = parsed.status;
 
+    const completedIndex = selectedIndex;
     setBusy(true);
-    setMessage("正在写入 revision-safe 场记事实…");
+    setMessage("正在写入人工场记…");
     try {
       globalThis.localStorage?.setItem(ACTOR_KEY, actor.trim());
       const next = await production.writeSlateEntry(projectId, {
@@ -124,14 +145,21 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
       setBoard(next);
       setParsed(null);
       setQuickText("");
-      setMessage(`已写入场记 · r${next.revision}`);
+      const nextTake = takes[completedIndex + 1];
+      if (nextTake) {
+        setSelectedGroupId(nextTake.group_id);
+        setMessage(`已写入 · r${next.revision} · 已进入下一条 Take`);
+      } else {
+        setMessage(`已写入 · r${next.revision} · 已到最后一条 Take`);
+      }
+      globalThis.requestAnimationFrame(() => quickInputRef.current?.focus());
     } catch (error) {
       setMessage(errorMessage(error));
       if (error instanceof HostConnectionError && error.status === 409) {
         try {
           const latest = await production.scriptSupervisor(projectId);
           setBoard(latest);
-          setMessage(`场记 revision 已变化，已刷新到 r${latest.revision}；请重新确认。`);
+          setMessage(`场记已被其他操作更新，已刷新到 r${latest.revision}；请重新确认。`);
         } catch {
           // Preserve the original conflict message if refresh also fails.
         }
@@ -141,11 +169,30 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
     }
   }
 
+  function handleQuickKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.altKey && event.key === "ArrowUp") {
+      event.preventDefault();
+      moveTake(-1);
+      return;
+    }
+    if (event.altKey && event.key === "ArrowDown") {
+      event.preventDefault();
+      moveTake(1);
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      if (busy) return;
+      if (parsed) void confirmParsed();
+      else if (quickText.trim()) void parseQuickEntry();
+    }
+  }
+
   return (
     <section className="phase3-workbench">
       <header className="production-heading">
         <div>
-          <p className="eyebrow">Script Supervisor</p>
+          <p className="eyebrow">现场记录</p>
           <h2>场记</h2>
         </div>
         <span className="production-state">{message}</span>
@@ -155,12 +202,16 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
         <aside className="production-panel">
           <label className="production-field">
             <span>Take</span>
-            <select value={selectedGroupId} onChange={(event) => { setSelectedGroupId(event.target.value); setParsed(null); }}>
-              {(review?.take_groups ?? []).map((take) => (
+            <select value={selectedGroupId} onChange={(event) => { setSelectedGroupId(event.target.value); setParsed(null); setQuickText(""); globalThis.requestAnimationFrame(() => quickInputRef.current?.focus()); }}>
+              {takes.map((take) => (
                 <option value={take.group_id} key={take.group_id}>{takeLabel(take)}</option>
               ))}
             </select>
           </label>
+          <div className="production-actions">
+            <button type="button" className="secondary" disabled={busy || selectedIndex <= 0} onClick={() => moveTake(-1)}>上一条 · ⌥↑</button>
+            <button type="button" className="secondary" disabled={busy || selectedIndex < 0 || selectedIndex >= takes.length - 1} onClick={() => moveTake(1)}>下一条 · ⌥↓</button>
+          </div>
           <label className="production-field">
             <span>操作者昵称</span>
             <input value={actor} onChange={(event) => setActor(event.target.value)} placeholder="写入时必填" />
@@ -179,16 +230,18 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
         </aside>
 
         <div className="production-panel slate-capture">
-          <p className="eyebrow">粗手写 / 快速录入</p>
+          <p className="eyebrow">快速录入</p>
           <textarea
+            ref={quickInputRef}
             value={quickText}
-            onChange={(event) => setQuickText(event.target.value)}
+            onChange={(event) => { setQuickText(event.target.value); if (parsed) setParsed(null); }}
+            onKeyDown={handleQuickKeyDown}
             placeholder="例如：EP3 12-3-2 B近 前半段可用；或：同场下一条 C特 看片再定"
             rows={6}
           />
           <div className="production-actions">
-            <button type="button" disabled={busy || !quickText.trim() || !selectedTake} onClick={() => void parseQuickEntry()}>解析</button>
-            <span>解析器只提取明确事实；不会猜时间码、人物或剧本归集。</span>
+            <button type="button" disabled={busy || !quickText.trim() || !selectedTake} onClick={() => void parseQuickEntry()}>解析 · ⌘/Ctrl+Enter</button>
+            <span>⌥↑/⌥↓ 切 Take；解析后再次 ⌘/Ctrl+Enter 确认写入并自动进入下一条。</span>
           </div>
 
           {parsed ? (
@@ -198,7 +251,7 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
                   <p className="eyebrow">待确认</p>
                   <strong>{parseSummary(parsed)}</strong>
                 </div>
-                <span>{parsed.parser}</span>
+                <span>已解析</span>
               </div>
               <p>{parsed.note}</p>
               {Object.keys(parsed.angle_shots).length ? (
@@ -208,7 +261,7 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
               ) : null}
               {parsed.generic_shot ? <p className="production-warning">检测到通用景别 {parsed.generic_shot}；不会自动复制到 A/B/C，请按机位明确后再写。</p> : null}
               {parsed.range_hint ? <p className="production-note">范围提示：{parsed.range_hint}。原话保留在 note，不生成虚构秒数。</p> : null}
-              <button type="button" disabled={busy || !actor.trim()} onClick={() => void confirmParsed()}>确认写入人工场记</button>
+              <button type="button" disabled={busy || !actor.trim()} onClick={() => void confirmParsed()}>确认写入 · ⌘/Ctrl+Enter</button>
             </div>
           ) : null}
         </div>
