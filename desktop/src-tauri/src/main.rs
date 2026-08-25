@@ -6,8 +6,10 @@ mod runtime;
 mod service_health;
 mod timeline;
 
+use tauri::Manager;
+
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(gateway::GatewayManager::default())
@@ -38,6 +40,13 @@ fn main() {
             timeline::timeline_persistence_status,
             timeline::timeline_validate,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running MirrorOrder Desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building MirrorOrder Desktop");
+
+    app.run(|app_handle, event| {
+        if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+            let _ = host::shutdown(&app_handle.state::<host::HostManager>());
+            let _ = gateway::shutdown(&app_handle.state::<gateway::GatewayManager>());
+        }
+    });
 }

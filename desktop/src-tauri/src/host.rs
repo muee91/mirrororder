@@ -260,6 +260,10 @@ pub fn host_process_status(manager: State<'_, HostManager>) -> Result<HostProces
 
 #[tauri::command]
 pub fn stop_python_host(manager: State<'_, HostManager>) -> Result<(), String> {
+    shutdown(&manager)
+}
+
+pub fn shutdown(manager: &HostManager) -> Result<(), String> {
     let mut slot = manager
         .child
         .lock()
@@ -272,8 +276,14 @@ pub fn stop_python_host(manager: State<'_, HostManager>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_loopback_port_available, validate_port};
-    use std::net::TcpListener;
+    use super::{ensure_loopback_port_available, shutdown, validate_port, HostManager, ManagedHost};
+    use std::{
+        net::TcpListener,
+        path::PathBuf,
+        process::Command,
+        thread,
+        time::Duration,
+    };
 
     #[test]
     fn rejects_zero_port() {
@@ -288,6 +298,30 @@ mod tests {
         let error = ensure_loopback_port_available(port).unwrap_err();
         assert!(error.contains("已被占用"));
         drop(listener);
-        assert!(ensure_loopback_port_available(port).is_ok());
+        let mut released = false;
+        for _ in 0..20 {
+            if ensure_loopback_port_available(port).is_ok() {
+                released = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(released);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shutdown_stops_the_managed_host_child() {
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let manager = HostManager::default();
+        *manager.child.lock().unwrap() = Some(ManagedHost {
+            child,
+            workspace_path: PathBuf::from("/tmp/workspace"),
+            base_url: "http://127.0.0.1:8765".to_string(),
+            port: 8765,
+        });
+
+        shutdown(&manager).unwrap();
+        assert!(manager.child.lock().unwrap().is_none());
     }
 }

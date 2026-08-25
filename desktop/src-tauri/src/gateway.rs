@@ -376,6 +376,10 @@ pub fn team_gateway_status(
 
 #[tauri::command]
 pub fn stop_team_gateway(manager: State<'_, GatewayManager>) -> Result<(), String> {
+    shutdown(&manager)
+}
+
+pub fn shutdown(manager: &GatewayManager) -> Result<(), String> {
     let mut slot = manager
         .child
         .lock()
@@ -388,7 +392,8 @@ pub fn stop_team_gateway(manager: State<'_, GatewayManager>) -> Result<(), Strin
 
 #[cfg(test)]
 mod tests {
-    use super::{lan_url, validate_port};
+    use super::{lan_url, shutdown, validate_port, GatewayConfig, GatewayManager, ManagedGateway};
+    use std::{path::PathBuf, process::Command};
 
     #[test]
     fn rejects_zero_gateway_port() {
@@ -399,5 +404,27 @@ mod tests {
     #[test]
     fn local_only_never_exposes_lan_url() {
         assert_eq!(lan_url(8766, true), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shutdown_stops_the_managed_gateway_child() {
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let manager = GatewayManager::default();
+        *manager.child.lock().unwrap() = Some(ManagedGateway {
+            child,
+            config: GatewayConfig {
+                workspace_paths: vec![PathBuf::from("/tmp/workspace.toml")],
+                port: 8766,
+                local_only: false,
+                trusted_lan: true,
+                pairing_code: String::new(),
+            },
+            base_url: "http://127.0.0.1:8766".to_string(),
+            lan_url: Some("http://192.168.1.2:8766".to_string()),
+        });
+
+        shutdown(&manager).unwrap();
+        assert!(manager.child.lock().unwrap().is_none());
     }
 }
