@@ -7,7 +7,7 @@ interface Props {
   projectId: string;
 }
 
-const ACTOR_KEY = "mirrororder.desktop-v2.review-actor";
+const ACTOR_KEY = "mirrororder.desktop.review-actor";
 
 function readActor(): string {
   try {
@@ -92,8 +92,6 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
       return;
     }
 
-    // Quick notes are sparse patches.  Unmentioned human facts must survive;
-    // only explicit parsed values and camera-specific shot facts overwrite them.
     const angles: SlateEntry["angles"] = { ...(existing?.angles ?? {}) };
     for (const angle of selectedTake.angles) {
       const camera = angle.camera.trim().toUpperCase().replace(/机/g, "");
@@ -147,7 +145,7 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
     <section className="phase3-workbench">
       <header className="production-heading">
         <div>
-          <p className="eyebrow">Phase 3 · Script Supervisor</p>
+          <p className="eyebrow">Script Supervisor</p>
           <h2>场记</h2>
         </div>
         <span className="production-state">{message}</span>
