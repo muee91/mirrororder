@@ -2,6 +2,7 @@ mod gateway;
 mod host;
 mod persistence;
 mod platform;
+mod runtime;
 mod timeline;
 
 fn main() {
