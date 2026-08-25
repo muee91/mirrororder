@@ -14,7 +14,7 @@ describe("provisional media confirmation", () => {
 
   it("sends an explicit confirmation without media roots", async () => {
     const browserFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toEndWith("/api/v1/projects/demo/media-binding");
+      expect(String(input)).toMatch(/\/api\/v1\/projects\/demo\/media-binding$/);
       expect(JSON.parse(String(init?.body))).toEqual({
         action: "confirm_provisional",
         media_id: "MP_123",

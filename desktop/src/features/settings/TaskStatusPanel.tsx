@@ -66,7 +66,7 @@ export function TaskStatusPanel({ baseUrl, projectId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    let timer: number | undefined;
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
     async function monitor(): Promise<void> {
       const next = await refresh(true);

@@ -96,11 +96,11 @@ describe("HostConnection", () => {
       script_gaps: [],
       review_state: {},
     };
-    const browserFetch = vi.fn(async () => jsonResponse(reviewModel));
+    const browserFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(reviewModel));
     vi.stubGlobal("fetch", browserFetch);
 
     await expect(new HostConnection().reviewModel(" p/1 ")).resolves.toEqual(reviewModel);
-    expect(String(browserFetch.mock.calls[0]?.[0])).toEndWith("/api/v1/projects/p%2F1/review-model");
+    expect(String(browserFetch.mock.calls[0]?.[0])).toMatch(/\/api\/v1\/projects\/p%2F1\/review-model$/);
   });
 
   it("writes episode-only placement through the atomic review action", async () => {
@@ -113,7 +113,7 @@ describe("HostConnection", () => {
       clips: {},
       placements: { g1: { episode_ids: [3], script_segment_ids: [] } },
     };
-    const browserFetch = vi.fn(async () => jsonResponse(saved));
+    const browserFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(saved));
     vi.stubGlobal("fetch", browserFetch);
 
     await expect(
@@ -127,7 +127,7 @@ describe("HostConnection", () => {
     ).resolves.toEqual(saved);
 
     const [url, init] = browserFetch.mock.calls[0] ?? [];
-    expect(String(url)).toEndWith("/api/v1/projects/p1/review");
+    expect(String(url)).toMatch(/\/api\/v1\/projects\/p1\/review$/);
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toMatchObject({
       action: "set_group_placement",
@@ -150,7 +150,7 @@ describe("HostConnection", () => {
       clips: {},
       placements: {},
     };
-    const browserFetch = vi.fn(async () => jsonResponse(saved));
+    const browserFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(saved));
     vi.stubGlobal("fetch", browserFetch);
 
     await new HostConnection().setGroupPlacement("p1", {
@@ -191,7 +191,7 @@ describe("HostConnection", () => {
       clips: {},
       placements: {},
     };
-    const browserFetch = vi.fn(async () => jsonResponse(saved));
+    const browserFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(saved));
     vi.stubGlobal("fetch", browserFetch);
 
     await new HostConnection().clearGroupPlacement("p1", {

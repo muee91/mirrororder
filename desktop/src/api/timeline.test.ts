@@ -78,7 +78,7 @@ describe("TimelineClient", () => {
     await expect(new TimelineClient().undo()).rejects.toMatchObject({
       name: "TimelineBridgeError",
       message: "Timeline Command 被拒绝",
-      issues: [{ code: "track_overlap" }],
+      issues: [{ code: "track_overlap", path: "V1", message: "overlap" }],
     } satisfies Partial<TimelineBridgeError>);
   });
 });

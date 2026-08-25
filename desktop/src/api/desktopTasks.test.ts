@@ -17,7 +17,7 @@ describe("DesktopClient project task status", () => {
 
   it("reads the existing Python TaskManager projection without mutations", async () => {
     const browserFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toEndWith("/api/v1/projects/p%2F1/tasks");
+      expect(String(input)).toMatch(/\/api\/v1\/projects\/p%2F1\/tasks$/);
       expect(init?.method).toBe("GET");
       expect(init?.body).toBeUndefined();
       return jsonResponse({
