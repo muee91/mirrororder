@@ -193,7 +193,7 @@ def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     vendor_sync = (root / "vendor" / "multicam-audio-sync" / "scripts" / "sync.py").read_text(encoding="utf-8")
     ui = (root / "web" / "media_role_ui.js").read_text(encoding="utf-8")
     index = (root / "web" / "index.html").read_text(encoding="utf-8")
-    build = (root / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
+    stage = (root / "desktop/scripts/stage-runtime.mjs").read_text(encoding="utf-8")
 
     assert editorial.index("install_media_role_runtime()") < editorial.index("from .coverage_runtime import install_coverage_runtime")
     assert editorial.index("install_media_role_runtime()") < editorial.index("install_coverage_runtime()")
@@ -218,7 +218,8 @@ def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     assert '<script src="/media_role_ui.js"></script>' in index
     assert '<link rel="stylesheet" href="/media_roles.css">' in index
 
-    # Release builds copy the whole Python source tree and whole web directory,
-    # so newly added runtime modules and App-only assets are not an allowlist gap.
-    assert 'rsync -a --exclude \'__pycache__\' --exclude \'*.pyc\' "$ROOT/src/" "$RUNTIME/src/"' in build
-    assert 'cp -R "$ROOT/web" "$RUNTIME/web"' in build
+    # The current Tauri release stages the Python Core and first-party sync
+    # engine as resources; Team Web remains served by that Core.
+    assert 'const organizerSource = path.join(repoRoot, "src", "script_organizer")' in stage
+    assert 'const multicamSource = path.join(repoRoot, "vendor", "multicam-audio-sync")' in stage
+    assert 'copyDirectory(organizerSource, path.join(coreTarget, "src", "script_organizer"))' in stage

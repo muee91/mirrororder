@@ -114,18 +114,20 @@ def test_editorial_reject_does_not_become_mapping_evidence_and_manual_placement_
 
 def test_desktop_build_can_bundle_sync_engine() -> None:
     root = Path(__file__).resolve().parents[1]
-    build = (root / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
+    stage = (root / "desktop/scripts/stage-runtime.mjs").read_text(encoding="utf-8")
+    bundle = (root / "desktop/scripts/verify-macos-bundle.mjs").read_text(encoding="utf-8")
+    tauri = json.loads((root / "desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
     tasks = (root / "src" / "script_organizer" / "tasks.py").read_text(encoding="utf-8")
     automation = (root / "web" / "automation.js").read_text(encoding="utf-8")
 
-    assert "MIRRORORDER_MULTICAM_SYNC_ROOT" in build
-    assert "MIRRORORDER_ALLOW_MULTICAM_SYNC_OVERRIDE" in build
-    assert "MIRRORORDER_APP_OUTPUT" in build
-    assert 'ROOT/vendor/multicam-audio-sync' in build
-    assert "first-party multicam-audio-sync" in build
-    assert ".agents/skills/multicam-audio-sync" not in build
-    assert "--exclude 'scripts/config.json'" in build
-    assert "scripts/validate_capcut_draft.py" in build
+    assert "MIRRORORDER_MULTICAM_SYNC_ROOT" in stage
+    assert 'path.join(repoRoot, "vendor", "multicam-audio-sync")' in stage
+    assert "MIRRORORDER_PORTABLE_PYTHON_ROOT" in stage
+    assert "MIRRORORDER_MEDIA_TOOLS_ROOT" in stage
+    assert ".agents/skills/multicam-audio-sync" not in stage
+    assert 'path.join(core, "vendor", "multicam-audio-sync")' in bundle
+    assert tauri["build"]["beforeBuildCommand"] == "npm run stage:runtime && npm run build"
+    assert tauri["bundle"]["resources"]["resources/mirrororder-core/"] == "mirrororder-core/"
     assert '"prepare_project"' in tasks
     assert '"auto_resolve"' in tasks
     assert "ai_confirmed" in automation
@@ -153,7 +155,8 @@ def test_first_party_multicam_engine_is_complete_and_path_clean() -> None:
     assert (engine / "SKILL.md").is_file()
     assert (engine / "requirements.txt").is_file()
     assert required <= {path.name for path in (engine / "scripts").iterdir()}
-    assert not list(engine.rglob("__pycache__"))
+    # Importing the first-party scripts during the suite may create transient
+    # __pycache__ entries; repository cleanliness is checked via Git status.
     assert not list(engine.rglob("._*"))
     text = "\n".join(path.read_text(encoding="utf-8", errors="ignore")
                       for path in engine.rglob("*")

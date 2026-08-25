@@ -312,6 +312,7 @@ def test_static_semantic_runtime_stays_read_only_and_is_installed_last() -> None
     indexer = (root / "src" / "script_organizer" / "semantic_index.py").read_text(encoding="utf-8")
     provider = (root / "src" / "script_organizer" / "take_semantic_provider.py").read_text(encoding="utf-8")
     web = (root / "web" / "index.html").read_text(encoding="utf-8")
+    release = (root / "web" / "startup_release.js").read_text(encoding="utf-8")
 
     assert 'parts[4] == "semantic-search"' in runtime
     assert 'self._agent("read", project_id)' in runtime
@@ -325,4 +326,5 @@ def test_static_semantic_runtime_stays_read_only_and_is_installed_last() -> None
     assert '"tags"' in provider
     assert editorial.index("install_assistant_runtime()") < editorial.index("install_semantic_runtime()")
     assert '/semantic_search.css' in web
-    assert '/semantic_search_ui.js' in web
+    assert '/startup_release.js' in web
+    assert "loadScript('/semantic_search_ui.js')" in release

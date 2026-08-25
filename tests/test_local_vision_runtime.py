@@ -64,35 +64,20 @@ def test_mlx_model_cache_is_device_local(monkeypatch, tmp_path: Path) -> None:
 
 def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     root = Path(__file__).resolve().parents[1]
-    build = (root / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
-    desktop = "\n".join(
-        (root / "macos-app" / name).read_text(encoding="utf-8")
-        for name in ("MirrorOrderDesktopCore.swift", "MirrorOrderDesktopUI.swift")
-    )
-    panel = (root / "macos-app" / "LocalRuntimeSettingsView.swift").read_text(encoding="utf-8")
-    assert "MIRRORORDER_LLAMA_SERVER" in build
-    assert 'cp "$LLAMA_SERVER_SOURCE" "$RUNTIME_BIN"' in build
-    assert 'install_name_tool -id "@rpath/$name"' in build
-    assert 'RUNTIME_LIB_SOURCES=(' in build
-    assert 'llama-runtime.lock' in build
-    assert "validate_macho_closure" in build
-    assert "external Mach-O dependency" in build
-    assert 'codesign --force --sign - "$RUNTIME/bin/llama-server"' in build
-    assert 'codesign --force --deep --sign - "$APP"' in build
-    assert '"$CORE_SOURCE" "$UI_SOURCE" "$NATIVE_WORKBENCH_SOURCE" "$LOCAL_RUNTIME_SOURCE" "$RUNTIME_OVERVIEW_SOURCE"' in build
-    assert "build must NEVER download or embed model weights" in build
-    assert "huggingface.co" not in build
-    assert "curl " not in build
-    assert "wget " not in build
-    assert "LocalRuntimeSettingsSection(" in desktop
-    assert "workspaceID: controller.selectedWorkspaceID" in desktop
-    assert '@Published var port = "8766"' in desktop
-    assert 'private let selectedWorkspaceKey = "selectedWorkspaceID"' in desktop
-    assert 'private let selectedProjectKey = "selectedProjectID"' in desktop
-    assert "persistSelection()" in desktop
-    assert 'appendingPathComponent("local-runtime")' in panel
-    assert "首次下载并准备模型" in panel
-    assert 'appendingPathComponent("api/v1/workspaces")' in panel
+    stage = (root / "desktop/scripts/stage-runtime.mjs").read_text(encoding="utf-8")
+    verifier = (root / "desktop/scripts/verify-macos-bundle.mjs").read_text(encoding="utf-8")
+    runtime = (root / "desktop/src-tauri/src/runtime.rs").read_text(encoding="utf-8")
+    panel = (root / "desktop/src/features/settings/LocalRuntimePanel.tsx").read_text(encoding="utf-8")
+    assert "MIRRORORDER_PORTABLE_PYTHON_ROOT" in stage
+    assert "MIRRORORDER_MEDIA_TOOLS_ROOT" in stage
+    assert "model weights" in stage
+    assert "runtime manifest" in verifier
+    assert "PACKAGED_RUNTIME_CONTRACT" in runtime
+    assert "resolve_python_runtime" in runtime
+    assert "本地模型 / 身份运行时" in panel
+    assert "准备 / 启动" in panel
+    assert "准备人脸模型" in panel and "准备说话人模型" in panel
+    assert "React 不下载模型、不保存 embedding" in panel
 
 
 def test_local_runtime_control_api_is_host_local() -> None:

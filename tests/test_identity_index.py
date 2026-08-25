@@ -423,11 +423,14 @@ def test_identity_models_are_pinned_and_never_downloaded_by_app_build() -> None:
         assert artifact.size_bytes > 0
         assert artifact.url.startswith("https://")
     root = Path(__file__).resolve().parents[1]
-    build = (root / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
-    assert "face_detection_yunet" not in build
-    assert "face_recognition_sface" not in build
-    assert "wespeaker_zh_cnceleb_resnet34" not in build
-    assert "requirements-local-intelligence.txt" not in build
+    stage = (root / "desktop/scripts/stage-runtime.mjs").read_text(encoding="utf-8")
+    manifest = (root / "desktop/scripts/verify-macos-bundle.mjs").read_text(encoding="utf-8")
+    assert "face_detection_yunet" not in stage
+    assert "face_recognition_sface" not in stage
+    assert "wespeaker_zh_cnceleb_resnet34" not in stage
+    assert "requirements-local-intelligence.txt" not in stage
+    assert "model weights" in stage and "optional_not_bundled_by_this_gate" in stage
+    assert "Final Cut import" in manifest
 
 
 def test_identity_management_keeps_writes_local_and_remote_reads_sanitized() -> None:
@@ -435,7 +438,7 @@ def test_identity_management_keeps_writes_local_and_remote_reads_sanitized() -> 
     runtime = (root / "src" / "script_organizer" / "automation_runtime.py").read_text(encoding="utf-8")
     tasks = (root / "src" / "script_organizer" / "tasks.py").read_text(encoding="utf-8")
     worker = (root / "src" / "script_organizer" / "identity_worker.py").read_text(encoding="utf-8")
-    app = (root / "macos-app" / "LocalRuntimeSettingsView.swift").read_text(encoding="utf-8")
+    app = (root / "desktop/src/features/settings/LocalRuntimePanel.tsx").read_text(encoding="utf-8")
     assert 'parts[4] == "identities"' in runtime
     assert "IdentityLibrary" in runtime
     assert "self._local_only()" in runtime
@@ -450,17 +453,16 @@ def test_identity_management_keeps_writes_local_and_remote_reads_sanitized() -> 
     assert "cancelled.is_set" in worker
     assert "_pending_total" in worker
     assert '"done": 0' in worker
-    assert "IdentityIndexActivity" in app
-    assert "refreshActivity" in app
-    assert "identityProgress" in app
+    assert "face_identity_enabled" in app
+    assert "speaker_identity_enabled" in app
+    assert "prepare_identity" in app
 
 
 def test_person_labeling_never_uses_a_full_camera_frame() -> None:
     root = Path(__file__).resolve().parents[1]
     indexer = (root / "src" / "script_organizer" / "identity_index_v2.py").read_text(encoding="utf-8")
     library = (root / "src" / "script_organizer" / "identity_library.py").read_text(encoding="utf-8")
-    app = (root / "macos-app" / "LocalRuntimeSettingsView.swift").read_text(encoding="utf-8")
     assert '"face_crop_path": face_crop_path' in indexer
     assert '"source_frame_path": str(frame.get("path", "") or "")' in indexer
-    assert 'let path = identity.example?.face_crop_path' in app
+    assert "never fall back to the complete" in library
     assert 'metadata.get("source_frame_path", metadata.get("frame_path", ""))' in library

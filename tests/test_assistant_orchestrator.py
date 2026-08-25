@@ -379,6 +379,7 @@ def test_static_runtime_and_ui_contracts() -> None:
     orchestrator = (root / "src" / "script_organizer" / "assistant_orchestrator.py").read_text(encoding="utf-8")
     tools = (root / "src" / "script_organizer" / "agent_tools.py").read_text(encoding="utf-8")
     index = (root / "web" / "index.html").read_text(encoding="utf-8")
+    release = (root / "web" / "startup_release.js").read_text(encoding="utf-8")
     control = (root / "web" / "assistant_control_ui.js").read_text(encoding="utf-8")
     css = (root / "web" / "assistant.css").read_text(encoding="utf-8")
     editorial = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
@@ -415,7 +416,9 @@ def test_static_runtime_and_ui_contracts() -> None:
     assert "_apply_shot_intelligence(take, row)" in audit_runtime
     assert '/assistant.css' in index
     assert '/assistant_control.css' in index
-    assert index.index('/assistant_ui.js') < index.index('/assistant_control_ui.js')
+    assert "loadScript('/assistant_ui.js')" in release
+    assert "loadScript('/assistant_control_ui.js')" in release
+    assert release.index("loadScript('/assistant_ui.js')") < release.index("loadScript('/assistant_control_ui.js')")
     assert '/assistant/models' in control
     assert '/assistant/message' in control
     assert '/assistant/cycle' in control

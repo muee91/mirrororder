@@ -5,6 +5,7 @@ from pathlib import Path
 
 from script_organizer.config import ProjectConfig
 from script_organizer.device_runtime_settings import save_project_intelligence_settings
+from script_organizer.media_identity import media_id_for_path
 from script_organizer.perception_index import PerceptionIndexer
 from script_organizer.workspace_db import WorkspaceDatabase
 
@@ -53,6 +54,7 @@ def _config(tmp_path: Path, media: Path) -> ProjectConfig:
 
 
 def _write_index(config: ProjectConfig, media: Path) -> None:
+    media_id = media_id_for_path(media)
     payload = {
         "stats": {"clips": 1, "groups": 1},
         "clips": [
@@ -62,7 +64,7 @@ def _write_index(config: ProjectConfig, media: Path) -> None:
                 "camera": "B",
                 "media_path": str(media),
                 "source_media_path": str(media),
-                "media_id": "M_demo",
+                "media_id": media_id,
                 "duration": 3.0,
                 "timeline_start": 0.0,
                 "timeline_end": 3.0,
@@ -85,7 +87,7 @@ def _write_index(config: ProjectConfig, media: Path) -> None:
                         "camera": "B",
                         "media_path": str(media),
                         "source_media_path": str(media),
-                        "media_id": "M_demo",
+                        "media_id": media_id,
                         "duration": 3.0,
                         "timeline_start": 0.0,
                         "timeline_end": 3.0,
