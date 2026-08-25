@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
-import parity from "../../../phase7-parity.json";
+import baseline from "../../../development-baseline.json";
 import { DesktopClient, type DesktopStatusPayload, type FrontendSettings } from "../../api/desktop";
 import { HostConnection, HostConnectionError, type HostProcessStatus } from "../../api/host";
 import { PlatformClient, type PlatformInfo } from "../../api/platform";
@@ -92,13 +92,13 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
   const requiredModules = status?.environment.python_modules.filter((item) => item.required) ?? [];
   const optionalModules = status?.environment.python_modules.filter((item) => !item.required) ?? [];
-  const parityGates = Object.entries(parity.gates);
-  const nativeGateCount = Object.values(parity.release_gates).filter((value) => value === "required").length;
+  const baselineCapabilities = Object.entries(baseline.capabilities);
+  const nativeGateCount = Object.values(baseline.release_gates).filter((value) => value === "required").length;
 
   return (
     <section className="phase3-workbench settings-status-workbench">
       <header className="production-heading">
-        <div><p className="eyebrow">Phase 7 · Desktop Primary Readiness</p><h2>设置 / 状态</h2></div>
+        <div><p className="eyebrow">Desktop Readiness</p><h2>设置 / 状态</h2></div>
         <div className="assistant-heading-actions"><span className="production-state">{message}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>重新诊断</button></div>
       </header>
 
@@ -116,17 +116,17 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
               <label className="settings-check"><input type="checkbox" checked={settings.show_unknown_count} onChange={(event) => patchSettings({ show_unknown_count: event.target.checked })} /><span>显示 unknown 数量</span></label>
             </div>
           ) : <p className="empty-copy">尚未读取 workspace frontend settings。</p>}
-          <p className="production-note">这里直接读写现有 `/api/v1/settings`；Desktop v2 不另建一套 theme/density/default-mode 业务配置。</p>
+          <p className="production-note">这里直接读写现有 `/api/v1/settings`；Desktop 不另建一套 theme/density/default-mode 业务配置。</p>
         </div>
 
         <LocalRuntimePanel baseUrl={baseUrl} />
         <CollaborationPanel baseUrl={baseUrl} />
         <TaskStatusPanel baseUrl={baseUrl} projectId={projectId} />
 
-        <div className="production-panel status-card phase7-gate-card">
-          <div className="parse-heading"><div><p className="eyebrow">desktop_phase7_parity.v1</p><h3>{parity.desktop_primary_candidate ? "Desktop primary candidate" : "Parity incomplete"}</h3></div><span>{nativeGateCount} release gates</span></div>
-          <div className="phase7-gate-list">{parityGates.map(([name, gate]) => <div className="phase7-gate-row" key={name}><strong>{name.replaceAll("_", " ")}</strong><span className={gate.code_status.startsWith("implemented") ? "is-ready" : "is-missing"}>{gate.code_status}</span><small>{gate.native_smoke_required ? "native smoke required" : "code gate"}</small></div>)}</div>
-          <p className="production-warning">SwiftUI physical retirement: {parity.swiftui_retirement_allowed ? "allowed" : "BLOCKED until native release gates pass"}</p>
+        <div className="production-panel status-card baseline-gate-card">
+          <div className="parse-heading"><div><p className="eyebrow">desktop_development_baseline.v1</p><h3>Active development baseline</h3></div><span>{nativeGateCount} release gates</span></div>
+          <div className="baseline-gate-list">{baselineCapabilities.map(([name, capability]) => <div className="baseline-gate-row" key={name}><strong>{name.replaceAll("_", " ")}</strong><span className={capability.code_status === "implemented" ? "is-ready" : "is-missing"}>{capability.code_status}</span><small>{capability.native_smoke_required ? "native smoke required" : "code gate"}</small></div>)}</div>
+          <p className="production-warning">Release quality gates remain required until they are actually verified on source and packaged builds.</p>
         </div>
 
         <div className="production-panel status-card">
