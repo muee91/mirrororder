@@ -26,6 +26,10 @@ describe("Phase 7 parity gate", () => {
     expect(parity.isolation_policy.production_project_tabs_are_parity_surfaces).toBe(true);
     expect(parity.isolation_policy.team_web_is_top_level_workspace).toBe(true);
     expect(parity.isolation_policy.heavy_capabilities_require_isolated_module_or_worktree).toBe(true);
+    expect(parity.isolated_workstreams.runtime_packaging.branch).toBe("feat/desktop-v2-runtime-packaging");
+    expect(parity.isolated_workstreams.runtime_packaging.status).toBe("isolated_blocker");
+    expect(parity.isolated_workstreams.runtime_packaging.blocks).toContain("packaged_python_runtime");
+    expect(parity.isolated_workstreams.runtime_packaging.blocks).toContain("packaged_media_toolchain");
   });
 
   it("does not allow physical SwiftUI retirement before native release gates", () => {
@@ -35,6 +39,8 @@ describe("Phase 7 parity gate", () => {
     expect(parity.retirement_policy.physical_delete_before_release_gates).toBe(false);
 
     const requiredNativeGates = [
+      "packaged_python_runtime",
+      "packaged_media_toolchain",
       "macos_tauri_build",
       "macos_real_media_playback",
       "macos_final_cut_open",
