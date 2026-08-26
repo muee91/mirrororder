@@ -23,10 +23,11 @@ def test_native_production_navigation_starts_at_project_home_then_multicam_slate
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
     assert 'useState<AppWorkspace>("production")' in app
-    assert 'label: "素材 / 剧本"' in workbench
+    for label in ("素材", "剧本", "剪辑", "审阅"):
+        assert f'label: "{label}"' in workbench
     assert 'label: "场记"' in workbench
     assert '>团队协作</button>' in app
-    assert 'label: "小镜"' in workbench
+    assert '>小镜</button>' in workbench
 
 
 def test_native_slate_remains_human_evidence_not_editorial_authority() -> None:
@@ -63,7 +64,8 @@ def test_native_workspace_reads_host_projection_and_opens_team_review_externally
     assert "teamWorkbenchUrl" in client
     assert "const shareUrl = healthy" in team
     assert "platform.openUrl(shareUrl)" in team
-    assert "不会生成 localhost 伪协作链接" in team
+    assert 'const root = status.local_only ? status.base_url : status.lan_url' in client
+    assert "if (!root) return null" in client
 
 
 def test_boundary_document_defines_native_production_and_web_review() -> None:
