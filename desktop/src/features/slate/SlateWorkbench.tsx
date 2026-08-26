@@ -241,8 +241,8 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
           <div><span>待确认</span><strong>{parseSummary(parsed)}</strong><p>{parsed.note}</p></div>
           <div className="slate-parse-facts">
             {Object.entries(parsed.angle_shots).map(([camera, shot]) => <span key={camera}>{camera} · {shot}</span>)}
-            {parsed.range_hint ? <span>范围：{parsed.range_hint}</span> : null}
-            {parsed.generic_shot ? <em>通用景别 {parsed.generic_shot} 不会自动复制到所有机位</em> : null}
+            {parsed.range_hint ? <span>范围：{parsed.range_hint} · 原话保留，不生成虚构秒数</span> : null}
+            {parsed.generic_shot ? <em>通用景别 {parsed.generic_shot} 不会自动复制到 A/B/C</em> : null}
           </div>
         </section>
       ) : null}
