@@ -5,6 +5,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from script_organizer.media_identity import DeviceMediaStore, media_id_for_path, provisional_media_id
+from script_organizer.device_media_runtime import _attach_project_media_runtime, _resolve_project_media_path
 from script_organizer.models import Clip
 from script_organizer.transcript import TranscriptStore, transcript_fingerprint
 
@@ -149,6 +150,28 @@ def test_verified_identity_rejects_replaced_file_at_same_path(tmp_path: Path) ->
     source.write_bytes(b"different-media" * 1000)
 
     assert store.resolve("ws_demo", "demo", index_item) == ""
+
+
+def test_project_media_runtime_defers_content_hash_until_playback(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "source" / "A001.mov"
+    source.parent.mkdir()
+    source.write_bytes(b"verified-media" * 1000)
+    media_id = media_id_for_path(source)
+    item = {
+        "clip_id": "C_lazy",
+        "media_id": media_id,
+        "name": "A001",
+        "media_path": str(source),
+    }
+    store = DeviceMediaStore(tmp_path / "state" / "media-bindings.json")
+    project = type("Project", (), {"project_id": "demo"})()
+
+    def fail_if_eagerly_hashed(_path):
+        raise AssertionError("project construction must not hash all media")
+
+    monkeypatch.setattr("script_organizer.device_media_runtime._apply_project", fail_if_eagerly_hashed)
+    _attach_project_media_runtime(store, project, "ws_demo")
+    assert _resolve_project_media_path(project, item) == str(source)
 
 
 def test_replace_roots_discards_stale_project_bindings(tmp_path: Path) -> None:

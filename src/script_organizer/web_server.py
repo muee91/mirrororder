@@ -202,6 +202,15 @@ class ProjectService:
             "source": self.index.get("source", {}),
         }
 
+    def resolve_media_path(self, clip: dict[str, Any]) -> str:
+        """Return the media path used for a playback request.
+
+        Device-local media runtimes may override this method to validate a
+        content identity before opening a file. The default keeps the
+        historical FCPXML/local-project behavior.
+        """
+        return str(clip.get("media_path", "") or "")
+
     def state(self) -> dict[str, Any]:
         self.reload_if_changed()
         review = self.review.load()
@@ -963,7 +972,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
             clip = project.clips.get(clip_id)
             if not clip:
                 raise ApiError(HTTPStatus.NOT_FOUND, "unknown clip")
-            path = Path(clip.get("media_path", ""))
+            path = Path(project.resolve_media_path(clip))
             if not path.exists() or not path.is_file():
                 raise ApiError(HTTPStatus.NOT_FOUND, "media missing")
             size = path.stat().st_size
