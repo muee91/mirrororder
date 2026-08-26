@@ -31,7 +31,7 @@ function summaryRows(summary: Record<string, unknown> | undefined): Array<[strin
   return Object.entries(summary)
     .filter(([, value]) => ["string", "number", "boolean"].includes(typeof value))
     .slice(0, 8)
-    .map(([key, value]) => [labels[key] || key.replaceAll("_", " "), String(value)]);
+    .map(([key, value]) => [labels[key] || key.replaceAll("_", " "), String(value)] as [string, string]);
 }
 
 export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
