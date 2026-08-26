@@ -160,9 +160,21 @@
   font-size: 10px;
 }
 
+.team-review-primary-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 12px; }
+.team-review-primary-grid .team-share-panel { grid-column: auto; }
+.team-pairing-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #303a44; border-radius: 8px; padding: 9px 10px; background: #0d1216; }
+.team-pairing-card span { color: #71808c; font-size: 9px; }
+.team-pairing-card strong { letter-spacing: .14em; color: #d6dde4; font-size: 15px; }
+.team-review-boundary-card ul { display: grid; gap: 7px; margin: 0; padding-left: 18px; color: #86939f; font-size: 10px; line-height: 1.55; }
+.team-advanced-settings { border: 1px solid #29323a; border-radius: 10px; background: #0e1318; }
+.team-advanced-settings > summary { cursor: pointer; padding: 10px 12px; color: #7c8995; font-size: 10px; user-select: none; }
+.team-advanced-settings[open] > summary { border-bottom: 1px solid #29323a; color: #a9b4be; }
+.team-advanced-settings > .team-web-grid { padding: 12px; }
+
 @media (max-width: 1050px) {
   .team-web-grid,
-  .team-web-options {
+  .team-web-options,
+  .team-review-primary-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .team-share-panel {
@@ -202,4 +214,8 @@
   .team-share-url {
     background: #f5f7f8;
   }
+  .team-pairing-card { border-color: #d8e0e6; background: #f6f8fa; }
+  .team-pairing-card strong { color: #26323b; }
+  .team-advanced-settings { border-color: #dce3e9; background: #f8fafb; }
+  .team-advanced-settings[open] > summary { border-bottom-color: #dce3e9; }
 }
