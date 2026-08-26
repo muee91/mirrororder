@@ -18,13 +18,16 @@ import {
   type TakeStatusFilter,
 } from "./model";
 
+type WorkbenchTab = "material" | "script";
+
 interface Props {
   baseUrl: string;
   project: ProjectSummary;
   initialGroupId?: string | null;
+  initialTab?: WorkbenchTab;
+  showEditorial?: boolean;
 }
 
-type WorkbenchTab = "material" | "script";
 type LoadState = "loading" | "ready" | "error";
 type WriteState = "idle" | "saving" | "error";
 
@@ -58,9 +61,15 @@ function saveActor(actor: string): void {
   }
 }
 
-export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = null }: Props) {
+export function MaterialScriptWorkbench({
+  baseUrl,
+  project,
+  initialGroupId = null,
+  initialTab = "material",
+  showEditorial = false,
+}: Props) {
   const connection = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
-  const [tab, setTab] = useState<WorkbenchTab>("material");
+  const [tab, setTab] = useState<WorkbenchTab>(initialTab);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [writeState, setWriteState] = useState<WriteState>("idle");
   const [message, setMessage] = useState("");
@@ -74,6 +83,10 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
   const [selectedScriptSegmentId, setSelectedScriptSegmentId] = useState<string | null>(null);
   const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
   const [actor, setActor] = useState(storedActor);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab, project.project_id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -285,7 +298,17 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
                 <VirtualTakeList takes={filteredTakes} selectedGroupId={selectedGroupId} onSelect={selectTake} onDragBegin={setDraggingGroupId} onDragFinish={() => setDraggingGroupId(null)} />
               ) : <div className="phase-placeholder compact-placeholder">当前筛选没有 Take。</div>}
             </div>
-            <TakeInspector connection={connection} projectId={project.project_id} take={selectedTake} selectedClipId={selectedClipId} onSelectClip={setSelectedClipId} onShowScript={() => selectedTake && showTakeInScript(selectedTake)} onClearPlacement={() => void clearPlacement()} writeSaving={writeState === "saving"} />
+            <TakeInspector
+              connection={connection}
+              projectId={project.project_id}
+              take={selectedTake}
+              selectedClipId={selectedClipId}
+              onSelectClip={setSelectedClipId}
+              onShowScript={() => selectedTake && showTakeInScript(selectedTake)}
+              onClearPlacement={() => void clearPlacement()}
+              writeSaving={writeState === "saving"}
+              showEditorial={showEditorial}
+            />
           </div>
         </div>
       ) : (
@@ -322,7 +345,7 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
               placementGroupId={selectedTake?.group_id ?? null}
               onShowTake={showScriptTake}
               onDropPlacement={(groupId, block) => { setSelectedScriptSegmentId(block.segment_id); void placeTake(groupId, block.episode > 0 ? [block.episode] : [], [block.segment_id], "drag", "desktop-v2-script-segment"); }}
-              onClickPlacement={(block) => { if (!selectedTake) return; setSelectedScriptSegmentId(block.segment_id); void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "desktop-v2-script-segment"); }}
+              onClickPlacement={(block: ReviewScriptBlock) => { if (!selectedTake) return; setSelectedScriptSegmentId(block.segment_id); void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "desktop-v2-script-segment"); }}
             />
           ) : <p className="empty-copy">当前项目没有剧本段。</p>}
         </div>
