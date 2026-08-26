@@ -121,6 +121,9 @@ export function MaterialScriptWorkbench({
     return () => globalThis.cancelAnimationFrame(frame);
   }, [activeEpisode, selectedScriptSegmentId, tab]);
 
+  // Episode controls are horizontally scrollable in material-script.css, so
+  // every episode stays reachable even for 100+ episode productions. Never
+  // truncate this authority-bearing navigation for presentation convenience.
   const episodeButtons = model?.episodes ?? [];
   const selectedEpisode = model?.episodes.find((item) => item.episode === activeEpisode) ?? model?.episodes[0] ?? null;
   const filteredTakes = useMemo(
@@ -277,15 +280,35 @@ export function MaterialScriptWorkbench({
           <div className="episode-filter">
             <button type="button" className={materialEpisode === null ? "is-active" : ""} onClick={() => setMaterialEpisode(null)}>全部集</button>
             {episodeButtons.map((episode) => (
-              <button type="button" className={`${materialEpisode === episode.episode ? "is-active" : ""} ${draggingGroupId ? "is-drop-target" : ""}`} key={episode.episode} onClick={() => setMaterialEpisode(episode.episode)} onDragOver={(event) => { if (draggingGroupId) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => { event.preventDefault(); const groupId = dragGroupId(event); if (groupId) void placeTake(groupId, [episode.episode], [], "drag", "desktop-v2-material-episode"); }} title="拖入 Take：只归集到该集（episode-only）">{episodeLabel(episode.episode)}</button>
+              <button
+                type="button"
+                className={`${materialEpisode === episode.episode ? "is-active" : ""} ${draggingGroupId ? "is-drop-target" : ""}`}
+                key={episode.episode}
+                onClick={() => setMaterialEpisode(episode.episode)}
+                onDragOver={(event) => { if (draggingGroupId) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
+                onDrop={(event) => { event.preventDefault(); const groupId = dragGroupId(event); if (groupId) void placeTake(groupId, [episode.episode], [], "drag", "desktop-v2-material-episode"); }}
+                title="拖入 Take：只归集到该集（episode-only）"
+              >{episodeLabel(episode.episode)}</button>
             ))}
           </div>
           <div className={`write-status write-${writeState}`}>{writeMessage || "拖到集数=粗归集；剧本页可精确归集。"}</div>
           <div className="material-layout">
             <div className="take-list-column">
-              {filteredTakes.length ? <VirtualTakeList takes={filteredTakes} selectedGroupId={selectedGroupId} onSelect={selectTake} onDragBegin={setDraggingGroupId} onDragFinish={() => setDraggingGroupId(null)} /> : <div className="phase-placeholder compact-placeholder">当前筛选没有 Take。</div>}
+              {filteredTakes.length ? (
+                <VirtualTakeList takes={filteredTakes} selectedGroupId={selectedGroupId} onSelect={selectTake} onDragBegin={setDraggingGroupId} onDragFinish={() => setDraggingGroupId(null)} />
+              ) : <div className="phase-placeholder compact-placeholder">当前筛选没有 Take。</div>}
             </div>
-            <TakeInspector connection={connection} projectId={project.project_id} take={selectedTake} selectedClipId={selectedClipId} onSelectClip={setSelectedClipId} onShowScript={() => selectedTake && showTakeInScript(selectedTake)} onClearPlacement={() => void clearPlacement()} writeSaving={writeState === "saving"} showEditorial={showEditorial} />
+            <TakeInspector
+              connection={connection}
+              projectId={project.project_id}
+              take={selectedTake}
+              selectedClipId={selectedClipId}
+              onSelectClip={setSelectedClipId}
+              onShowScript={() => selectedTake && showTakeInScript(selectedTake)}
+              onClearPlacement={() => void clearPlacement()}
+              writeSaving={writeState === "saving"}
+              showEditorial={showEditorial}
+            />
           </div>
         </div>
       ) : (
@@ -293,16 +316,38 @@ export function MaterialScriptWorkbench({
           <div className="script-toolbar">
             <div className="episode-strip">
               {episodeButtons.map((episode) => (
-                <button type="button" className={`${episode.episode === selectedEpisode?.episode ? "is-active" : ""} ${draggingGroupId ? "is-drop-target" : ""}`} key={episode.episode} onClick={() => setActiveEpisode(episode.episode)} onDragOver={(event) => { if (draggingGroupId) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => { event.preventDefault(); const groupId = dragGroupId(event); if (groupId) void placeTake(groupId, [episode.episode], [], "drag", "desktop-v2-script-episode"); }}>{episodeLabel(episode.episode)}</button>
+                <button
+                  type="button"
+                  className={`${episode.episode === selectedEpisode?.episode ? "is-active" : ""} ${draggingGroupId ? "is-drop-target" : ""}`}
+                  key={episode.episode}
+                  onClick={() => setActiveEpisode(episode.episode)}
+                  onDragOver={(event) => { if (draggingGroupId) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
+                  onDrop={(event) => { event.preventDefault(); const groupId = dragGroupId(event); if (groupId) void placeTake(groupId, [episode.episode], [], "drag", "desktop-v2-script-episode"); }}
+                >{episodeLabel(episode.episode)}</button>
               ))}
             </div>
             <label className="review-actor-field compact-actor"><span>审核昵称</span><input value={actor} placeholder="写入时必填" onChange={(event) => setActor(event.target.value)} /></label>
           </div>
           <div className="script-placement-tray">
-            {selectedTake ? <div className="selected-take-drag" draggable onDragStart={(event) => beginDrag(event, selectedTake.group_id)} onDragEnd={() => setDraggingGroupId(null)}>当前 Take · <strong>{selectedTake.group_id}</strong> <span>拖到集数或剧本段</span></div> : <span>先在素材页选择一个 Take。</span>}
+            {selectedTake ? (
+              <div className="selected-take-drag" draggable onDragStart={(event) => beginDrag(event, selectedTake.group_id)} onDragEnd={() => setDraggingGroupId(null)}>
+                当前 Take · <strong>{selectedTake.group_id}</strong> <span>拖到集数或剧本段</span>
+              </div>
+            ) : <span>先在素材页选择一个 Take。</span>}
           </div>
           <div className={`write-status write-${writeState}`}>{writeMessage || "放到集数=episode-only；放到非场景标题剧本段=精确 placement。"}</div>
-          {selectedEpisode ? <ScriptEpisodeView episode={selectedEpisode} model={model} selectedSegmentId={selectedScriptSegmentId} draggingGroupId={draggingGroupId} placementGroupId={selectedTake?.group_id ?? null} onShowTake={showScriptTake} onDropPlacement={(groupId, block) => { setSelectedScriptSegmentId(block.segment_id); void placeTake(groupId, block.episode > 0 ? [block.episode] : [], [block.segment_id], "drag", "desktop-v2-script-segment"); }} onClickPlacement={(block: ReviewScriptBlock) => { if (!selectedTake) return; setSelectedScriptSegmentId(block.segment_id); void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "desktop-v2-script-segment"); }} /> : <p className="empty-copy">当前项目没有剧本段。</p>}
+          {selectedEpisode ? (
+            <ScriptEpisodeView
+              episode={selectedEpisode}
+              model={model}
+              selectedSegmentId={selectedScriptSegmentId}
+              draggingGroupId={draggingGroupId}
+              placementGroupId={selectedTake?.group_id ?? null}
+              onShowTake={showScriptTake}
+              onDropPlacement={(groupId, block) => { setSelectedScriptSegmentId(block.segment_id); void placeTake(groupId, block.episode > 0 ? [block.episode] : [], [block.segment_id], "drag", "desktop-v2-script-segment"); }}
+              onClickPlacement={(block: ReviewScriptBlock) => { if (!selectedTake) return; setSelectedScriptSegmentId(block.segment_id); void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "desktop-v2-script-segment"); }}
+            />
+          ) : <p className="empty-copy">当前项目没有剧本段。</p>}
         </div>
       )}
     </section>
