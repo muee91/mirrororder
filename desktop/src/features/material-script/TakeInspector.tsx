@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
+import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { CandidateEvidence } from "./CandidateEvidence";
 import { AuditEvidencePanel, EditorialDecisionPanel } from "./TakeEvidencePanels";
 import { mappingLabel, mappingSourceLabel } from "./VirtualTakeList";
@@ -54,16 +55,14 @@ export function TakeInspector({
         ) : null}
       </div>
 
-      <div className="inspector-angle-tabs">
+      <div className="inspector-angle-cards" aria-label={`${take.group_id} 机位选择`}>
         {take.angles.map((item) => (
-          <button
-            type="button"
-            className={item.clip_id === angle?.clip_id ? "is-active" : ""}
+          <AngleEvidenceCard
+            angle={item}
+            selected={item.clip_id === angle?.clip_id}
+            onSelect={onSelectClip}
             key={item.clip_id}
-            onClick={() => onSelectClip(item.clip_id)}
-          >
-            {item.camera || "—"}{item.shot_type && item.shot_type !== "unknown" ? ` · ${item.shot_type}` : ""}
-          </button>
+          />
         ))}
       </div>
 
