@@ -16,6 +16,7 @@ import { SettingsStatusWorkbench } from "../settings/SettingsStatusWorkbench";
 import "../settings/settings.css";
 import { SlateWorkbench } from "../slate/SlateWorkbench";
 import "./production.css";
+import "./assistant-drawer.css";
 
 interface Props {
   baseUrl: string;
