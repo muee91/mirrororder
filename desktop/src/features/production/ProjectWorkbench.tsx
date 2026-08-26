@@ -11,6 +11,7 @@ import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
 import "../media/media.css";
 import { AssemblyWorkbench, CoverageWorkbench, RoughCutWorkbench } from "../planning/PlanningWorkbenches";
 import { ProjectOverviewWorkbench, ReviewAttentionWorkbench } from "../review/ReviewWorkbenches";
+import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
 import { SettingsStatusWorkbench } from "../settings/SettingsStatusWorkbench";
 import "../settings/settings.css";
 import { SlateWorkbench } from "../slate/SlateWorkbench";
@@ -36,7 +37,6 @@ type ProductionPage =
   | "watch"
   | "attention"
   | "overview";
-type UtilityPage = "assistant" | "settings";
 
 interface PageDefinition {
   id: ProductionPage;
@@ -99,7 +99,8 @@ function firstPage(area: ProductionArea): ProductionPage {
 
 export function ProjectWorkbench({ baseUrl, project }: Props) {
   const [page, setPage] = useState<ProductionPage>("takes");
-  const [utility, setUtility] = useState<UtilityPage | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
   const activeArea = areaForPage(page);
   const secondaryPages = useMemo(() => AREAS.find((area) => area.id === activeArea)?.pages ?? [], [activeArea]);
@@ -108,41 +109,38 @@ export function ProjectWorkbench({ baseUrl, project }: Props) {
     const value = groupId.trim();
     if (!value) return;
     setMaterialFocusGroupId(value);
-    setUtility(null);
+    setSettingsOpen(false);
     setPage("watch");
   }
 
   function chooseArea(area: ProductionArea): void {
-    setUtility(null);
+    setSettingsOpen(false);
     setPage(firstPage(area));
   }
 
   function choosePage(next: ProductionPage): void {
-    setUtility(null);
+    setSettingsOpen(false);
     setPage(next);
   }
 
-  function openUtility(next: UtilityPage): void {
-    setUtility((current) => current === next ? null : next);
-  }
-
   return (
-    <section className="project-production-workbench">
+    <section className={`project-production-workbench ${assistantOpen ? "has-assistant-drawer" : ""}`}>
       <div className="project-workbench-navigation">
         <nav className="project-workbench-nav project-workbench-primary" aria-label="项目制作区">
           {AREAS.map((area) => (
-            <button type="button" className={!utility && activeArea === area.id ? "is-active" : ""} key={area.id} onClick={() => chooseArea(area.id)}>
+            <button type="button" className={!settingsOpen && activeArea === area.id ? "is-active" : ""} key={area.id} onClick={() => chooseArea(area.id)}>
               <span>{area.label}</span>
             </button>
           ))}
         </nav>
         <div className="project-workbench-utility" aria-label="项目工具">
-          <button type="button" className={utility === "assistant" ? "is-active" : ""} onClick={() => openUtility("assistant")}>小镜</button>
-          <button type="button" className={utility === "settings" ? "is-active" : ""} onClick={() => openUtility("settings")}>设置 / 状态</button>
+          <SemanticSearchPalette baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} />
+          <button type="button" className={assistantOpen ? "is-active" : ""} aria-expanded={assistantOpen} onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
+          <button type="button" className={settingsOpen ? "is-active" : ""} onClick={() => setSettingsOpen((value) => !value)}>设置</button>
         </div>
       </div>
 
-      {!utility ? (
+      {!settingsOpen ? (
         <nav className="project-workbench-secondary" aria-label="当前制作区工具">
           {secondaryPages.map((item) => (
             <button type="button" className={page === item.id ? "is-active" : ""} key={item.id} onClick={() => choosePage(item.id)}>{item.label}</button>
@@ -150,25 +148,38 @@ export function ProjectWorkbench({ baseUrl, project }: Props) {
         </nav>
       ) : null}
 
-      {utility === "assistant" ? <AssistantWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-      {utility === "settings" ? <SettingsStatusWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+      <div className="project-workbench-canvas">
+        <div className="project-workbench-main">
+          {settingsOpen ? <SettingsStatusWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
 
-      {!utility && page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-      {!utility && page === "takes" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial={false} /> : null}
-      {!utility && page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-      {!utility && page === "slate" ? <SlateWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+          {!settingsOpen && page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+          {!settingsOpen && page === "takes" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial={false} /> : null}
+          {!settingsOpen && page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
+          {!settingsOpen && page === "slate" ? <SlateWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
 
-      {!utility && page === "script" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="script" showEditorial={false} /> : null}
-      {!utility && page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
+          {!settingsOpen && page === "script" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="script" showEditorial={false} /> : null}
+          {!settingsOpen && page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
 
-      {!utility && page === "rough-cut" ? <RoughCutWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-      {!utility && page === "assembly" ? <AssemblyWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-      {!utility && page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-      {!utility && page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+          {!settingsOpen && page === "rough-cut" ? <RoughCutWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
+          {!settingsOpen && page === "assembly" ? <AssemblyWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
+          {!settingsOpen && page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+          {!settingsOpen && page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
 
-      {!utility && page === "watch" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial /> : null}
-      {!utility && page === "attention" ? <ReviewAttentionWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-      {!utility && page === "overview" ? <ProjectOverviewWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
+          {!settingsOpen && page === "watch" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial /> : null}
+          {!settingsOpen && page === "attention" ? <ReviewAttentionWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
+          {!settingsOpen && page === "overview" ? <ProjectOverviewWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
+        </div>
+
+        {assistantOpen ? (
+          <aside className="assistant-context-drawer" aria-label="小镜上下文助手">
+            <div className="assistant-drawer-heading">
+              <div><p className="eyebrow">当前项目</p><strong>小镜</strong></div>
+              <button type="button" className="secondary" onClick={() => setAssistantOpen(false)} aria-label="关闭小镜">关闭</button>
+            </div>
+            <AssistantWorkbench baseUrl={baseUrl} projectId={project.project_id} />
+          </aside>
+        ) : null}
+      </div>
     </section>
   );
 }
