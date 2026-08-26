@@ -1,5 +1,5 @@
 import type { MediaInventoryItem } from "../../api/mediaRoles";
-import type { ReviewTakeGroup } from "../../api/host";
+import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 
 export const SLATE_TAKE_MIME = "application/x-mirrororder-slate-take";
 
@@ -9,6 +9,31 @@ export interface SlateTakeDragPayload {
   groupId: string;
   sourceKind: "take";
   sourceClipId?: string;
+}
+
+export interface SlateSceneTarget {
+  key: string;
+  episode: number;
+  sceneId: string;
+  heading: string;
+  segmentIds: string[];
+}
+
+export function buildSlateSceneTargets(review: ReviewModelPayload | null): SlateSceneTarget[] {
+  return (review?.episodes ?? []).flatMap((episode) =>
+    episode.scenes.map((scene) => ({
+      key: `${episode.episode}:${scene.scene_id}`,
+      episode: episode.episode,
+      sceneId: scene.scene_id,
+      heading: scene.heading,
+      segmentIds: Array.from(new Set(
+        scene.script_blocks
+          .filter((block) => block.type !== "scene_heading")
+          .map((block) => block.segment_id.trim())
+          .filter(Boolean),
+      )),
+    })),
+  );
 }
 
 export interface SlatePools {

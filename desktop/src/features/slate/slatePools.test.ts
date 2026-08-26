@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { ReviewTakeGroup } from "../../api/host";
+import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import type { MediaInventoryItem } from "../../api/mediaRoles";
 import {
   buildSlatePools,
+  buildSlateSceneTargets,
   createSlateTakeDragPayload,
   decodeSlateTakeDragPayload,
   hasHumanPlacement,
@@ -80,6 +81,38 @@ describe("slate intake pools", () => {
     expect(decodeSlateTakeDragPayload("not arbitrary JSON")).toBeNull();
   });
 
+  it("keeps every non-heading segment in a scene in stable script order", () => {
+    const review = {
+      episodes: [{
+        episode: 2,
+        scenes: [{
+          scene_id: "2-1",
+          heading: "室内",
+          script_blocks: [
+            { type: "scene_heading", segment_id: "heading" },
+            { type: "dialogue", segment_id: "seg-1" },
+            { type: "action", segment_id: "seg-2" },
+            { type: "dialogue", segment_id: "seg-3" },
+            { type: "dialogue", segment_id: "seg-2" },
+          ],
+        }],
+      }],
+    } as unknown as ReviewModelPayload;
+
+    expect(buildSlateSceneTargets(review)[0]?.segmentIds).toEqual(["seg-1", "seg-2", "seg-3"]);
+  });
+
+  it("represents an empty scene without inventing an episode-only target", () => {
+    const review = {
+      episodes: [{
+        episode: 2,
+        scenes: [{ scene_id: "2-2", heading: "空场", script_blocks: [{ type: "scene_heading", segment_id: "heading" }] }],
+      }],
+    } as unknown as ReviewModelPayload;
+
+    expect(buildSlateSceneTargets(review)[0]?.segmentIds).toEqual([]);
+  });
+
   it("keeps the four pools and Review drag actions on the main Slate workbench", () => {
     const source = readFileSync(fileURLToPath(new URL("./SlateWorkbench.tsx", import.meta.url)), "utf8");
     for (const label of ["待归集", "已归集", "已排除", "孤立素材"]) expect(source).toContain(label);
@@ -88,6 +121,14 @@ describe("slate intake pools", () => {
     expect(source).toContain("host.setGroupPlacement");
     expect(source).toContain("host.clearGroupPlacement");
     expect(source).toContain("host.setGroupExclusion");
+    expect(source).toContain("scriptSegmentIds: target.segmentIds");
+    expect(source).toContain("target.segmentIds.length === 0");
+    expect(source).toContain("本场没有可归集剧本段");
+    expect(source.indexOf("if (target.segmentIds.length === 0)")).toBeLessThan(source.indexOf("await host.setGroupPlacement"));
+    expect(source).not.toContain("scriptSegmentIds: target.segmentId ? [target.segmentId]");
+    const materialSource = readFileSync(fileURLToPath(new URL("../material-script/MaterialScriptWorkbench.tsx", import.meta.url)), "utf8");
+    expect(materialSource).toContain("[block.segment_id]");
+    expect(materialSource).toContain('"desktop-v2-script-segment"');
     expect(source).not.toContain("production.writeSlateEntry(projectId, {\n        groupId: payload.groupId");
   });
 });

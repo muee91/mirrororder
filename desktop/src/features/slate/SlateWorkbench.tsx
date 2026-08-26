@@ -3,12 +3,14 @@ import { HostConnection, HostConnectionError, type ReviewModelPayload, type Revi
 import { MediaRoleClient, type MediaInventoryItem } from "../../api/mediaRoles";
 import { ProductionClient, type SlateBoard, type SlateEntry, type SlateParseResult } from "../../api/production";
 import {
+  buildSlateSceneTargets,
   buildSlatePools,
   createSlateTakeDragPayload,
   decodeSlateTakeDragPayload,
   hasHumanPlacement,
   isReviewExcluded,
   SLATE_TAKE_MIME,
+  type SlateSceneTarget,
   type SlateTakeDragPayload,
 } from "./slatePools";
 import "./slate-table.css";
@@ -69,26 +71,6 @@ function reviewWriteNeedsRefresh(error: unknown): boolean {
   return error instanceof HostConnectionError && (error.status === 409 || error.message.includes("请刷新"));
 }
 
-interface SlateSceneTarget {
-  key: string;
-  episode: number;
-  sceneId: string;
-  heading: string;
-  segmentId: string | null;
-}
-
-function sceneTargets(review: ReviewModelPayload | null): SlateSceneTarget[] {
-  return (review?.episodes ?? []).flatMap((episode) =>
-    episode.scenes.map((scene) => ({
-      key: `${episode.episode}:${scene.scene_id}`,
-      episode: episode.episode,
-      sceneId: scene.scene_id,
-      heading: scene.heading,
-      segmentId: scene.script_blocks.find((block) => block.type !== "scene_heading")?.segment_id ?? null,
-    })),
-  );
-}
-
 function PoolCard({
   take,
   detail,
@@ -124,12 +106,19 @@ function PoolCard({
 function placementLabel(take: ReviewTakeGroup, targets: SlateSceneTarget[]): string {
   const placement = take.editorial_state.legacy_manual?.placement;
   if (!placement) return "已归集";
-  const segmentId = placement.script_segment_ids?.[0] ?? "";
-  const target = segmentId ? targets.find((item) => item.segmentId === segmentId) : undefined;
+  const segmentIds = placement.script_segment_ids?.filter(Boolean) ?? [];
   const episode = placement.episode_ids?.[0];
-  if (target) return `EP${target.episode} · ${target.sceneId} · ${segmentId}`;
+  const target = segmentIds.length && episode
+    ? targets.find((item) => (
+      item.episode === episode &&
+      item.segmentIds.length === segmentIds.length &&
+      item.segmentIds.every((segmentId, index) => segmentId === segmentIds[index])
+    ))
+    : undefined;
+  if (target) return `EP${target.episode} · ${target.sceneId} · ${target.segmentIds.length}段`;
+  if (episode && segmentIds.length) return `EP${episode} · ${segmentIds.length}段`;
   if (episode) return `EP${episode} · episode-only`;
-  return segmentId || "已归集";
+  return segmentIds.length ? `${segmentIds.length}段` : "已归集";
 }
 
 function PoolSection({ title, count, children, dropTarget, onDrop }: { title: string; count: number; children: ReactNode; dropTarget?: boolean; onDrop?: (event: DragEvent<HTMLDivElement>) => void }) {
@@ -177,7 +166,7 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
 
   const takes = review?.take_groups ?? [];
   const pools = useMemo(() => buildSlatePools(takes, mediaItems), [mediaItems, takes]);
-  const targets = useMemo(() => sceneTargets(review), [review]);
+  const targets = useMemo(() => buildSlateSceneTargets(review), [review]);
   const selectedIndex = takes.findIndex((take) => take.group_id === selectedGroupId);
   const selectedTake = selectedIndex >= 0 ? takes[selectedIndex] : null;
   const existing = board?.entries[selectedGroupId] ?? null;
@@ -206,6 +195,10 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
   }
 
   async function placeDraggedTake(payload: SlateTakeDragPayload, target: SlateSceneTarget): Promise<void> {
+    if (target.segmentIds.length === 0) {
+      setMessage("本场没有可归集剧本段。");
+      return;
+    }
     const take = takes.find((item) => item.group_id === payload.groupId);
     if (!take || isReviewExcluded(take)) {
       setMessage("该 Take 已排除或已不在当前项目，请刷新后重试。恢复排除项后才能归集。");
@@ -226,7 +219,7 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
         actor,
         expectedRevision,
         episodeIds: [target.episode],
-        scriptSegmentIds: target.segmentId ? [target.segmentId] : [],
+        scriptSegmentIds: target.segmentIds,
         interaction: "drag",
         sourceSurface: "slate-table",
         sourceKind: payload.sourceKind,
@@ -529,11 +522,11 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
             </PoolSection>
           </aside>
           <div className="slate-scene-targets" aria-label="场记场景目标">
-            <header><strong>场景目标</strong><span>放到场景行 = episode + 首个剧本段；无剧本段时只写 episode-only</span></header>
+            <header><strong>场景目标</strong><span>放到场景行 = 该场全部剧本段；没有剧本段的场景不可归集</span></header>
             <div className="slate-scene-target-list">
               {targets.length ? targets.map((target) => (
-                <button type="button" className="slate-scene-target" key={target.key} disabled={busy} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => handleSceneDrop(event, target)}>
-                  <strong>EP{target.episode} · {target.sceneId}</strong><span>{target.heading}</span><small>{target.segmentId ? `剧本段 ${target.segmentId}` : "episode-only 目标"}</small>
+                <button type="button" className="slate-scene-target" key={target.key} disabled={busy || target.segmentIds.length === 0} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => handleSceneDrop(event, target)}>
+                  <strong>EP{target.episode} · {target.sceneId}</strong><span>{target.heading}</span><small>{target.segmentIds.length ? `${target.segmentIds.length} 个可归集剧本段` : "本场没有可归集剧本段"}</small>
                 </button>
               )) : <span className="slate-pool-empty">当前项目没有可用场景目标</span>}
             </div>
