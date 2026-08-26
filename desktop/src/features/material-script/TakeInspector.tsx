@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { CandidateEvidence } from "./CandidateEvidence";
+import { AuditEvidencePanel, EditorialDecisionPanel } from "./TakeEvidencePanels";
 import { mappingLabel, mappingSourceLabel } from "./VirtualTakeList";
 
 export function TakeInspector({
@@ -12,6 +13,7 @@ export function TakeInspector({
   onShowScript,
   onClearPlacement,
   writeSaving,
+  showEditorial = false,
 }: {
   connection: HostConnection;
   projectId: string;
@@ -21,6 +23,7 @@ export function TakeInspector({
   onShowScript: () => void;
   onClearPlacement: () => void;
   writeSaving: boolean;
+  showEditorial?: boolean;
 }) {
   const angle = take?.angles.find((item) => item.clip_id === selectedClipId) ?? take?.angles[0] ?? null;
   const playbackUrl = useMemo(
@@ -97,6 +100,8 @@ export function TakeInspector({
         <p>{take.transcript.text || "当前没有可靠对白投影。"}</p>
       </div>
 
+      <AuditEvidencePanel take={take} selectedAngle={angle} />
+
       {take.candidates.length > 0 ? (
         <div className="candidate-panel">
           <p className="eyebrow">候选关系 · 需人工审阅后确认</p>
@@ -110,6 +115,8 @@ export function TakeInspector({
           </div>
         </div>
       ) : null}
+
+      {showEditorial ? <EditorialDecisionPanel baseUrl={connection.baseUrl} projectId={projectId} groupId={take.group_id} /> : null}
     </aside>
   );
 }
