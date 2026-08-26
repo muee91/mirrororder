@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { ReviewTakeGroup } from "../../api/host";
+import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { TAKE_ROW_HEIGHT, takeStatus, virtualRange } from "./model";
 
 export const DRAG_TAKE_MIME = "application/x-mirrororder-take";
@@ -86,19 +87,7 @@ function TakeCard({
       </p>
 
       <div className="angle-strip" aria-label={`${take.group_id} 机位`}>
-        {take.angles.map((angle) => (
-          <div className="angle-card" key={angle.clip_id}>
-            <div className="angle-card-heading">
-              <span className="camera-label">{angle.camera || "—"}</span>
-              <span>{angle.duration.toFixed(1)}s</span>
-            </div>
-            <strong title={angle.name}>{angle.name}</strong>
-            <div className="angle-meta">
-              <span>{angle.playback.available === false ? "缺媒体" : angle.playback.available === true ? "可播放" : "媒体状态未知"}</span>
-              <span className="shot-type">{angle.shot_type && angle.shot_type !== "unknown" ? angle.shot_type : "景别—"}</span>
-            </div>
-          </div>
-        ))}
+        {take.angles.map((angle) => <AngleEvidenceCard angle={angle} compact key={angle.clip_id} />)}
       </div>
 
       {take.issues.length > 0 ? (
