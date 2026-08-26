@@ -4,6 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "desktop" / "src" / "app" / "App.tsx"
 WORKBENCH = ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
+PROJECT_LIBRARY = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx"
+STATUS_CENTER = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenterWorkbench.tsx"
+SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
@@ -55,6 +58,22 @@ def test_frontend_parity_surfaces_are_reachable_from_product_ia() -> None:
     assert "ReviewAttentionWorkbench" in workbench
     assert "ProjectOverviewWorkbench" in workbench
     assert "showEditorial" in workbench
+
+
+def test_background_tasks_have_one_global_status_center_home() -> None:
+    app = APP.read_text(encoding="utf-8")
+    library = PROJECT_LIBRARY.read_text(encoding="utf-8")
+    status_center = STATUS_CENTER.read_text(encoding="utf-8")
+    settings = SETTINGS.read_text(encoding="utf-8")
+
+    assert "StatusCenterWorkbench" in app
+    assert "statusCenterOpen" in app
+    assert "状态中心" in library
+    assert "ProjectTaskClient" in status_center
+    assert "canCancelTask" in status_center
+    assert "canRetryTask" in status_center
+    assert "TaskStatusPanel" not in settings
+    assert "后台任务的进度、取消与重试统一放在左侧“状态中心”" in settings
 
 
 def test_team_web_is_top_level_and_not_a_project_tab() -> None:
