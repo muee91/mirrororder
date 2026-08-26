@@ -15,8 +15,46 @@ def test_desktop_is_project_first_production_surface() -> None:
     assert "ProjectWorkbench" in app
     assert 'setAppWorkspace("production")' in app
     assert 'setAppWorkspace("team")' in app
-    for label in ("素材 / 剧本", "场记", "人物", "小镜", "剪辑", "交付", "本机素材", "设置 / 状态"):
+
+    # Product navigation is organized by production objects/stages, not by
+    # backend module count. These four areas are the stable top-level contract.
+    for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
+
+    # Capabilities live under a clear production home instead of becoming
+    # additional primary tabs as the backend grows.
+    for label in (
+        "素材库",
+        "Take",
+        "人物",
+        "场记",
+        "覆盖",
+        "粗剪",
+        "组接",
+        "时间线",
+        "交付",
+        "看片",
+        "待处理",
+        "概览",
+    ):
+        assert f'label: "{label}"' in workbench
+
+    assert 'label: "素材 / 剧本"' not in workbench
+    assert 'label: "本机素材"' not in workbench
+    assert 'label: "设置 / 状态"' not in workbench
+    assert 'label: "小镜"' not in workbench
+
+
+def test_frontend_parity_surfaces_are_reachable_from_product_ia() -> None:
+    workbench = WORKBENCH.read_text(encoding="utf-8")
+
+    assert "MediaLibraryWorkbench" in workbench
+    assert "CoverageWorkbench" in workbench
+    assert "RoughCutWorkbench" in workbench
+    assert "AssemblyWorkbench" in workbench
+    assert "ReviewAttentionWorkbench" in workbench
+    assert "ProjectOverviewWorkbench" in workbench
+    assert "showEditorial" in workbench
 
 
 def test_team_web_is_top_level_and_not_a_project_tab() -> None:
