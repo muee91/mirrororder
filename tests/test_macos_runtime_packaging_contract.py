@@ -40,12 +40,21 @@ def test_packaged_runtime_is_fail_closed_and_used_by_host_and_gateway() -> None:
 def test_stager_requires_relocatable_python_and_media_tools() -> None:
     stager = read("desktop/scripts/stage-runtime.mjs")
     verifier = read("desktop/scripts/verify-macos-bundle.mjs")
+    tool_policy = read("desktop/scripts/runtime-tools.mjs")
 
     assert "MIRRORORDER_PORTABLE_PYTHON_ROOT" in stager
     assert "MIRRORORDER_MEDIA_TOOLS_ROOT" in stager
     assert "assertSelfContainedSymlinks" in stager
     assert "staged Python relocation probe" in stager
+    assert "parseToolVersionOutput" in stager
+    assert "./runtime-tools.mjs" in stager
+    assert "--enable-nonfree" in tool_policy
+    assert "license_classification" in stager
+    assert "sha256" in tool_policy
     assert 'contract: "mirrororder_packaged_runtime.v1"' in stager
     assert "otool" in verifier
+    assert "assertManifestToolMatches" in verifier
+    assert "license classification" in verifier
+    assert "version_output" in tool_policy
     assert "/opt/homebrew" not in verifier  # generic external-dylib policy, not path-specific allowlisting
     assert "MIRRORORDER_REQUIRE_CODESIGN" in verifier

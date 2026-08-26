@@ -41,6 +41,7 @@ if (!commandAvailable(python, ["--version"])) fail(`Python 不可用：${python}
 if (!commandAvailable(cargo)) fail("cargo 不可用；Rust/Tauri release gate 不能被跳过或伪装成通过");
 
 run("Development baseline gate", npm, ["run", "check:baseline"], desktopRoot);
+run("Runtime media tool policy tests", npm, ["run", "test:runtime-tools"], desktopRoot);
 run("TypeScript strict typecheck", npm, ["run", "typecheck"], desktopRoot);
 run("Vitest", npm, ["test"], desktopRoot);
 run("Vite production build", npm, ["run", "build"], desktopRoot);

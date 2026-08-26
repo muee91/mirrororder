@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { buildToolMetadata, parseToolVersionOutput } from "./runtime-tools.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(here, "..");
@@ -115,6 +116,17 @@ const pythonRelativeExecutable = path.relative(portablePythonRoot, pythonExecuta
 const toolBin = path.join(mediaToolsRoot, "bin");
 const ffmpegExecutable = firstFile([path.join(toolBin, "ffmpeg")], "ffmpeg");
 const ffprobeExecutable = firstFile([path.join(toolBin, "ffprobe")], "ffprobe");
+const mediaToolsSource = process.env.MIRRORORDER_MEDIA_TOOLS_SOURCE?.trim();
+const mediaToolsLicense = process.env.MIRRORORDER_MEDIA_TOOLS_LICENSE?.trim();
+if (!mediaToolsSource) fail("MIRRORORDER_MEDIA_TOOLS_SOURCE is required; media tool provenance cannot be implicit");
+if (!mediaToolsLicense) fail("MIRRORORDER_MEDIA_TOOLS_LICENSE is required; media tool license classification cannot be implicit");
+
+try {
+  parseToolVersionOutput("ffmpeg", run(ffmpegExecutable, ["-version"], "ffmpeg source policy probe"));
+  parseToolVersionOutput("ffprobe", run(ffprobeExecutable, ["-version"], "ffprobe source policy probe"));
+} catch (error) {
+  fail(`media tool redistribution policy: ${error.message}`);
+}
 
 const pythonProbe = run(
   pythonExecutable,
@@ -221,8 +233,28 @@ run(
     },
   },
 );
-run(stagedFfmpeg, ["-version"], "staged ffmpeg relocation probe");
-run(stagedFfprobe, ["-version"], "staged ffprobe relocation probe");
+const stagedFfmpegVersionOutput = run(stagedFfmpeg, ["-version"], "staged ffmpeg relocation probe");
+const stagedFfprobeVersionOutput = run(stagedFfprobe, ["-version"], "staged ffprobe relocation probe");
+let ffmpegMetadata;
+let ffprobeMetadata;
+try {
+  ffmpegMetadata = buildToolMetadata({
+    toolName: "ffmpeg",
+    output: stagedFfmpegVersionOutput,
+    filePath: stagedFfmpeg,
+    source: mediaToolsSource,
+    licenseClassification: mediaToolsLicense,
+  });
+  ffprobeMetadata = buildToolMetadata({
+    toolName: "ffprobe",
+    output: stagedFfprobeVersionOutput,
+    filePath: stagedFfprobe,
+    source: mediaToolsSource,
+    licenseClassification: mediaToolsLicense,
+  });
+} catch (error) {
+  fail(`staged media tool redistribution policy: ${error.message}`);
+}
 
 const manifest = {
   contract: "mirrororder_packaged_runtime.v1",
@@ -242,10 +274,15 @@ const manifest = {
     source: "MIRRORORDER_PORTABLE_PYTHON_ROOT",
   },
   tools: {
-    ffmpeg: ffmpegVersion,
-    ffprobe: ffprobeVersion,
+    ffmpeg: ffmpegMetadata,
+    ffprobe: ffprobeMetadata,
+    source: mediaToolsSource,
+    provenance: mediaToolsSource,
+    license: mediaToolsLicense,
+    license_classification: mediaToolsLicense,
+    redistributable: true,
     relocation_probe: true,
-    source: "MIRRORORDER_MEDIA_TOOLS_ROOT",
+    input_root: "MIRRORORDER_MEDIA_TOOLS_ROOT",
   },
   safety: {
     external_symlinks_allowed: false,

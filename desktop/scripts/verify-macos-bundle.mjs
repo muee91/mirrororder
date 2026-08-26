@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { assertManifestToolMatches, buildToolMetadata } from "./runtime-tools.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(here, "..");
@@ -69,6 +70,10 @@ try {
 if (manifest.contract !== "mirrororder_packaged_runtime.v1") fail(`unexpected runtime contract: ${manifest.contract}`);
 if (manifest.platform !== "darwin") fail(`runtime was staged for ${manifest.platform}, not darwin`);
 if (!manifest.python?.executable) fail("runtime manifest has no python executable");
+if (typeof manifest.tools?.source !== "string" || !manifest.tools.source.trim()) fail("runtime manifest has no media tool source/provenance");
+if (typeof manifest.tools?.provenance !== "string" || !manifest.tools.provenance.trim()) fail("runtime manifest has no media tool provenance");
+if (typeof manifest.tools?.license_classification !== "string" || !manifest.tools.license_classification.trim()) fail("runtime manifest has no media tool license classification");
+if (manifest.tools.redistributable !== true) fail("runtime manifest does not mark media tools redistributable");
 
 const python = path.join(pythonRoot, manifest.python.executable);
 const ffmpeg = path.join(tools, "ffmpeg");
@@ -97,8 +102,28 @@ const pythonOutput = run(python, ["-I", "-c", probe], "bundled Python/Core probe
     MIRRORORDER_MULTICAM_SYNC_ROOT: multicam,
   },
 });
-run(ffmpeg, ["-version"], "bundled ffmpeg probe");
-run(ffprobe, ["-version"], "bundled ffprobe probe");
+let ffmpegMetadata;
+let ffprobeMetadata;
+try {
+  ffmpegMetadata = buildToolMetadata({
+    toolName: "ffmpeg",
+    output: run(ffmpeg, ["-version"], "bundled ffmpeg probe"),
+    filePath: ffmpeg,
+    source: manifest.tools.source,
+    licenseClassification: manifest.tools.license_classification,
+  });
+  ffprobeMetadata = buildToolMetadata({
+    toolName: "ffprobe",
+    output: run(ffprobe, ["-version"], "bundled ffprobe probe"),
+    filePath: ffprobe,
+    source: manifest.tools.source,
+    licenseClassification: manifest.tools.license_classification,
+  });
+  assertManifestToolMatches("ffmpeg", manifest.tools.ffmpeg, ffmpegMetadata);
+  assertManifestToolMatches("ffprobe", manifest.tools.ffprobe, ffprobeMetadata);
+} catch (error) {
+  fail(`media tool redistribution policy: ${error.message}`);
+}
 
 inspectMachO(python, app);
 inspectMachO(ffmpeg, app);
@@ -115,5 +140,8 @@ if (process.env.MIRRORORDER_REQUIRE_CODESIGN === "1") {
 
 console.log(`macOS bundle gate passed: ${app}`);
 console.log(`runtime: ${pythonOutput}`);
+console.log(`ffmpeg: ${ffmpegMetadata.version} · configuration=${ffmpegMetadata.configuration} · sha256=${ffmpegMetadata.sha256}`);
+console.log(`ffprobe: ${ffprobeMetadata.version} · configuration=${ffprobeMetadata.configuration} · sha256=${ffprobeMetadata.sha256}`);
+console.log(`media tools: source=${manifest.tools.source} · license=${manifest.tools.license_classification} · redistributable=true`);
 console.log(`codesign gate: ${process.env.MIRRORORDER_REQUIRE_CODESIGN === "1" ? "required and passed" : "not required for this local build"}`);
 console.log("Final Cut import, real-media playback, multicam sync and LAN second-device smoke remain explicit native gates.");
