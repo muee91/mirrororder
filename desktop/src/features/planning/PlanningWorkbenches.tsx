@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { HostConnectionError } from "../../api/host";
 import {
   PlanningClient,
@@ -30,7 +30,7 @@ function readinessLabel(value: string): string {
     ready: "已准备",
     needs_review: "需要处理",
     blocked: "阻塞",
-  }[value] ?? value || "未知";
+  }[value] ?? (value || "未知");
 }
 
 function selectionLabel(value: string): string {
@@ -40,7 +40,7 @@ function selectionLabel(value: string): string {
     no_eligible_take: "无可用 Take",
     conflict_multiple_best: "多个 Best 冲突",
     conflict_supervisor_vs_best: "Best 与场记 NG 冲突",
-  }[value] ?? value || "待处理";
+  }[value] ?? (value || "待处理");
 }
 
 function formatDuration(seconds: number): string {
@@ -67,7 +67,7 @@ function EpisodeToolbar({ episodes, value, onChange }: { episodes: number[]; val
   );
 }
 
-function PlanningHeader({ eyebrow, title, state, action }: { eyebrow: string; title: string; state: string; action?: React.ReactNode }) {
+function PlanningHeader({ eyebrow, title, state, action }: { eyebrow: string; title: string; state: string; action?: ReactNode }) {
   return (
     <header className="planning-heading">
       <div>
