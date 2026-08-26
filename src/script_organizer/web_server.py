@@ -411,6 +411,7 @@ class WorkspaceService:
         )
         self.collaborators = CollaborationAccessStore(collaboration_scope)
         self._projects: dict[str, ProjectService] = {}
+        self._projects_lock = threading.RLock()
 
     def project_config(self, project_id: str) -> ProjectConfig:
         return self.registry.project_config(project_id)
@@ -418,13 +419,17 @@ class WorkspaceService:
     def project(self, project_id: str) -> ProjectService:
         entry = self.registry.get(project_id)
         config_path = self.registry.project_config(project_id).config_path
-        current = self._projects.get(project_id)
-        if current and current.config.config_path == config_path:
-            return current
-        project = ProjectService(project_id, ProjectConfig.from_file(config_path))
-        project.workspace_id = self.workspace.workspace_id
-        self._projects[project_id] = project
-        return project
+        # ProjectService.reload() reads the potentially large index/script/
+        # matches files. The HTTP server is threaded, so concurrent App reads
+        # must not materialize the same project repeatedly during first paint.
+        with self._projects_lock:
+            current = self._projects.get(project_id)
+            if current and current.config.config_path == config_path:
+                return current
+            project = ProjectService(project_id, ProjectConfig.from_file(config_path))
+            project.workspace_id = self.workspace.workspace_id
+            self._projects[project_id] = project
+            return project
 
     @staticmethod
     def _lightweight_project_summary(entry: dict[str, Any]) -> dict[str, Any]:
