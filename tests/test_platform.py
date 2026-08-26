@@ -121,6 +121,49 @@ def _head_request(base: str, path: str, headers: dict[str, str] | None = None) -
         return error.code, dict(error.headers.items()), error.read()
 
 
+def test_workspace_payload_uses_registry_only_without_materializing_projects(tmp_path, monkeypatch):
+    workspace = _workspace(tmp_path).with_workspace_id("ws_lightweight")
+    workspace.registry_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "projects": [
+                    {
+                        "project_id": "demo",
+                        "name": "Demo",
+                        "config_path": "projects/demo/project.toml",
+                        "input_kind": "fcpxml",
+                        "analysis_revision": "analysis-1",
+                        "stats": {"clips": 3},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = WorkspaceService(workspace)
+
+    def fail_if_materialized(_project_id):
+        raise AssertionError("workspace discovery must not construct ProjectService")
+
+    monkeypatch.setattr(service, "project", fail_if_materialized)
+    payload = service.workspace_payload()
+
+    assert payload["workspace_id"] == "ws_lightweight"
+    assert payload["projects"] == [
+        {
+            "project_id": "demo",
+            "name": "Demo",
+            "input_kind": "fcpxml",
+            "analysis_revision": "analysis-1",
+            "stats": {"clips": 3},
+            "source": {},
+            "local_media": {},
+        }
+    ]
+    assert service._projects == {}
+
+
 def test_workspace_registry_preflights_fcpxml_and_media_directory(tmp_path, monkeypatch):
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
     workspace = _workspace(tmp_path)

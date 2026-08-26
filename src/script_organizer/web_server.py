@@ -426,32 +426,32 @@ class WorkspaceService:
         self._projects[project_id] = project
         return project
 
+    @staticmethod
+    def _lightweight_project_summary(entry: dict[str, Any]) -> dict[str, Any]:
+        """Return the registry-only project row used by workspace discovery.
+
+        Opening a workspace should not synchronously construct every
+        ProjectService. Its constructor reloads material_index, script and
+        matches, which can be a large cold-start operation. Detailed project
+        routes still call ``project()`` and materialize their own payload on
+        demand.
+        """
+        project_id = str(entry.get("project_id", "") or "").strip()
+        stats = entry.get("stats", {})
+        return {
+            "project_id": project_id,
+            "name": str(entry.get("name", "") or project_id),
+            "input_kind": str(entry.get("input_kind", "") or ""),
+            "analysis_revision": str(entry.get("analysis_revision", "") or ""),
+            "stats": dict(stats) if isinstance(stats, dict) else {},
+            "source": dict(entry.get("source", {})) if isinstance(entry.get("source"), dict) else {},
+            "local_media": dict(entry.get("local_media", {})) if isinstance(entry.get("local_media"), dict) else {},
+        }
+
     def workspace_payload(self) -> dict[str, Any]:
-        projects = []
-        for entry in self.registry.list():
-            project_id = str(entry.get("project_id", ""))
-            try:
-                payload = self.project(project_id).project_payload()
-                projects.append(
-                    {
-                        "project_id": project_id,
-                        "name": payload["project"],
-                        "input_kind": payload["input_kind"],
-                        "stats": payload["stats"],
-                        "analysis_revision": payload["analysis_revision"],
-                        "source": payload.get("source", {}),
-                        "local_media": payload.get("local_media", {}),
-                    }
-                )
-            except Exception as error:
-                projects.append(
-                    {
-                        "project_id": project_id,
-                        "name": entry.get("name", project_id),
-                        "input_kind": entry.get("input_kind", ""),
-                        "error": str(error),
-                    }
-                )
+        # Keep workspace discovery bounded by the small registry. A project
+        # is materialized only after the user opens its project route.
+        projects = [self._lightweight_project_summary(entry) for entry in self.registry.list()]
         return {
             "workspace_id": self.workspace.workspace_id,
             "workspace": self.workspace.name,
