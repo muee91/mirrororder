@@ -16,7 +16,7 @@ describe("PlanningClient", () => {
   });
 
   it("keeps coverage, rough cut and assembly on read-only first-party Host routes", async () => {
-    const browserFetch = vi.fn(async (input: RequestInfo | URL) => {
+    const browserFetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/coverage")) return jsonResponse({ contract: "coverage.v1", revision: "c1", project_id: "p/1", filters: {}, summary: { scenes: 0, mapped_take_groups: 0, angles: 0, known_shots: 0, unknown_shots: 0, continuity_risks: 0, unobserved_scenes: 0, unplaced_groups: 0, episode_only_groups: 0, script_supervisor_groups: 0 }, scenes: [], episode_only_groups: [], unplaced_group_ids: [], semantics: {} });
       if (url.includes("/rough-cut-plan")) return jsonResponse({ contract: "rough_cut_plan.v1", revision: "r1", project_id: "p/1", coverage_revision: "c1", filters: {}, readiness: "ready", summary: {}, scenes: [], semantics: {} });
