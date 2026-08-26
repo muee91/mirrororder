@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
 import { ProductionClient, type SlateBoard, type SlateEntry, type SlateParseResult } from "../../api/production";
+import "./slate-table.css";
 
 interface Props {
   baseUrl: string;
