@@ -217,6 +217,16 @@ export interface RoughCutScenePlan {
   segments: RoughCutSegmentPlan[];
 }
 
+export interface RoughCutTimebase {
+  status: "confirmed" | "unknown" | string;
+  source: string;
+  numerator?: number;
+  denominator?: number;
+  frame_duration?: string;
+  format_id?: string;
+  reason?: string;
+}
+
 export interface RoughCutPlan {
   contract: "rough_cut_plan.v1" | string;
   revision: string;
@@ -227,6 +237,7 @@ export interface RoughCutPlan {
   summary: Record<string, unknown>;
   scenes: RoughCutScenePlan[];
   semantics: Record<string, boolean>;
+  timebase?: RoughCutTimebase;
 }
 
 export interface WaveformPayload {
@@ -235,6 +246,8 @@ export interface WaveformPayload {
   samples: number;
   requested_samples: number;
   sample_rate: number;
+  duration?: number;
+  decode_timeout_seconds?: number;
   peaks: number[];
   derived: boolean;
   editorial_authority: boolean;
@@ -242,7 +255,10 @@ export interface WaveformPayload {
 }
 
 const REQUEST_TIMEOUT_MS = 10_000;
-const WAVEFORM_TIMEOUT_MS = 70_000;
+// The server adaptively lowers PCM rate for long media and caps decode work at
+// ten minutes. Keep the client guardrail slightly above that cap so it does not
+// abort a valid first-time waveform build while the server is still decoding.
+const WAVEFORM_TIMEOUT_MS = 620_000;
 
 async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);

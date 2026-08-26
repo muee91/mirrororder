@@ -2,12 +2,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / "desktop-v2" / "src" / "app" / "App.tsx"
-WORKBENCH = ROOT / "desktop-v2" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
+APP = ROOT / "desktop" / "src" / "app" / "App.tsx"
+WORKBENCH = ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
-def test_desktop_v2_is_project_first_production_surface() -> None:
+def test_desktop_is_project_first_production_surface() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
 
@@ -27,6 +27,17 @@ def test_team_web_is_top_level_and_not_a_project_tab() -> None:
     assert 'type AppWorkspace = "production" | "team"' in app
     assert "TeamWebWorkbench" not in workbench
     assert 'label: "团队协作"' not in workbench
+
+
+def test_product_shell_hides_runtime_diagnostics_from_primary_surface() -> None:
+    app = APP.read_text(encoding="utf-8")
+
+    assert "高级连接选项" in app
+    assert "本机服务地址" in app
+    assert "platform-capabilities" not in app
+    assert "Python Core" not in app
+    assert "API ${" not in app
+    assert "Local Production Host" not in app
 
 
 def test_web_header_is_review_only() -> None:

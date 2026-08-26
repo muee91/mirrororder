@@ -30,6 +30,7 @@ from script_organizer.web_server import (
     make_gateway_handler,
     make_handler,
 )
+from script_organizer import web_server
 from script_organizer.workspace import WorkspaceConfig, WorkspaceRegistry
 
 
@@ -119,6 +120,117 @@ def _head_request(base: str, path: str, headers: dict[str, str] | None = None) -
             return response.status, dict(response.headers.items()), response.read()
     except urllib.error.HTTPError as error:
         return error.code, dict(error.headers.items()), error.read()
+
+
+def test_workspace_payload_uses_registry_only_without_materializing_projects(tmp_path, monkeypatch):
+    workspace = _workspace(tmp_path).with_workspace_id("ws_lightweight")
+    workspace.registry_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "projects": [
+                    {
+                        "project_id": "demo",
+                        "name": "Demo",
+                        "config_path": "projects/demo/project.toml",
+                        "input_kind": "fcpxml",
+                        "analysis_revision": "analysis-1",
+                        "stats": {"clips": 3},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = WorkspaceService(workspace)
+
+    def fail_if_materialized(_project_id):
+        raise AssertionError("workspace discovery must not construct ProjectService")
+
+    monkeypatch.setattr(service, "project", fail_if_materialized)
+    payload = service.workspace_payload()
+
+    assert payload["workspace_id"] == "ws_lightweight"
+    assert payload["projects"] == [
+        {
+            "project_id": "demo",
+            "name": "Demo",
+            "input_kind": "fcpxml",
+            "analysis_revision": "analysis-1",
+            "stats": {"clips": 3},
+            "source": {},
+            "local_media": {},
+        }
+    ]
+    assert service._projects == {}
+
+
+def test_workspace_service_deduplicates_concurrent_project_materialization(tmp_path, monkeypatch):
+    workspace = _workspace(tmp_path).with_workspace_id("ws_project_lock")
+    project_dir = workspace.registry_path.parent / "demo"
+    project_dir.mkdir()
+    config = project_dir / "project.toml"
+    config.write_text(
+        """[project]
+name = "Demo"
+[input]
+kind = "fcpxml"
+[output]
+directory = "./output"
+""",
+        encoding="utf-8",
+    )
+    workspace.registry_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "projects": [
+                    {
+                        "project_id": "demo",
+                        "name": "Demo",
+                        "config_path": "projects/demo/project.toml",
+                        "input_kind": "fcpxml",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = WorkspaceService(workspace)
+    original_init = web_server.ProjectService.__init__
+    init_started = threading.Event()
+    release_init = threading.Event()
+    init_count = 0
+    init_count_lock = threading.Lock()
+
+    def slowed_init(project, project_id, project_config):
+        nonlocal init_count
+        with init_count_lock:
+            init_count += 1
+        init_started.set()
+        assert release_init.wait(timeout=5)
+        original_init(project, project_id, project_config)
+
+    monkeypatch.setattr(web_server.ProjectService, "__init__", slowed_init)
+    results: list[web_server.ProjectService] = []
+
+    def load_project() -> None:
+        results.append(service.project("demo"))
+
+    first = threading.Thread(target=load_project)
+    second = threading.Thread(target=load_project)
+    first.start()
+    assert init_started.wait(timeout=5)
+    second.start()
+    release_init.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert init_count == 1
+    assert len(results) == 2
+    assert results[0] is results[1]
 
 
 def test_workspace_registry_preflights_fcpxml_and_media_directory(tmp_path, monkeypatch):

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import ProjectConfig
+from .device_runtime_settings import application_support_root
 from .models import Clip, Transcript, TranscriptSegment
 from .script_parser import parse_script
 from .transcript import TranscriptStore, transcript_fingerprint
@@ -27,16 +28,9 @@ def _is_apple_silicon() -> bool:
     return platform.system() == "Darwin" and platform.machine().lower() in {"arm64", "aarch64"}
 
 
-def _application_support_root() -> Path:
-    override = os.environ.get("MIRRORORDER_DATA_DIR", "").strip()
-    if override:
-        return Path(override).expanduser().resolve()
-    return Path.home() / "Library" / "Application Support" / "MirrorOrder"
-
-
 def _configure_model_cache() -> Path:
     """Keep downloaded MLX/Hugging Face weights in MirrorOrder device state."""
-    root = _application_support_root() / "models" / "huggingface"
+    root = application_support_root() / "models" / "huggingface"
     root.mkdir(parents=True, exist_ok=True)
     # Respect an explicit operator cache. Otherwise prevent project/workspace
     # paths or a developer checkout from becoming an accidental model store.
@@ -110,7 +104,7 @@ class ASRRuntime:
             "model": self.model,
             "language": self.language,
             "apple_silicon": _is_apple_silicon(),
-            "model_cache": str(_application_support_root() / "models"),
+            "model_cache": str(application_support_root() / "models"),
         }
 
     def transcribe(self, clip: Clip, store: TranscriptStore, initial_prompt: str = "") -> Transcript:

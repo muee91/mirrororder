@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .media_identity import DeviceMediaStore
+from .media_identity import DeviceMediaStore, iter_project_media
 
 _INSTALLED = False
 
@@ -43,6 +43,31 @@ def _apply_project(store: DeviceMediaStore, project: Any, workspace_id: str) -> 
     }
 
 
+def _attach_project_media_runtime(store: DeviceMediaStore, project: Any, workspace_id: str) -> None:
+    """Attach lazy device-media resolution without scanning every media file.
+
+    The project index can contain hundreds of large files. Resolving every
+    content identity while constructing a project blocks the first review
+    projection, especially when the media lives on an external volume. The
+    playback boundary still calls ``resolve_media_path`` and performs the
+    exact media_id check for the one clip being opened.
+    """
+    project._device_media_store = store
+    project._device_media_workspace_id = workspace_id
+
+
+def _resolve_project_media_path(project: Any, clip: dict[str, Any]) -> str:
+    store = getattr(project, "_device_media_store", None)
+    workspace_id = str(getattr(project, "_device_media_workspace_id", "") or "")
+    if not isinstance(store, DeviceMediaStore) or not workspace_id:
+        return str(clip.get("media_path", "") or "")
+    source_path = str(clip.get("source_media_path", "") or clip.get("media_path", "") or "")
+    lookup = dict(clip)
+    lookup["media_path"] = source_path
+    snapshot = store.project_snapshot(workspace_id, str(project.project_id))
+    return store.resolve_from_snapshot(snapshot, lookup)
+
+
 def install_device_media_runtime() -> None:
     """Patch runtime paths while leaving synchronized project files untouched."""
     global _INSTALLED
@@ -59,12 +84,12 @@ def install_device_media_runtime() -> None:
         original_reload(project)
         workspace_id = str(getattr(project, "workspace_id", "") or "")
         if workspace_id:
-            _apply_project(store, project, workspace_id)
+            _attach_project_media_runtime(store, project, workspace_id)
 
     def workspace_project_with_local_media(service: Any, project_id: str) -> Any:
         project = original_workspace_project(service, project_id)
         project.workspace_id = service.workspace.workspace_id
-        _apply_project(store, project, service.workspace.workspace_id)
+        _attach_project_media_runtime(store, project, service.workspace.workspace_id)
         return project
 
     def payload_with_local_media(project: Any) -> dict[str, Any]:
@@ -72,15 +97,25 @@ def install_device_media_runtime() -> None:
         workspace_id = str(getattr(project, "workspace_id", "") or "")
         if not workspace_id:
             return payload
-        _apply_project(store, project, workspace_id)
-        summary = store.summary(workspace_id, project.project_id, project.index)
+        # Keep project/review-model first paint bounded. The explicit
+        # ``media-status`` command remains the full verification surface;
+        # playback resolves and verifies one clip on demand.
+        snapshot = store.project_snapshot(workspace_id, project.project_id)
+        device_payload = store.load()
         payload["local_media"] = {
-            key: summary[key]
-            for key in ("device_id", "device_name", "roots", "total", "resolved", "missing")
+            "device_id": device_payload.get("device_id", ""),
+            "device_name": device_payload.get("device_name", ""),
+            "roots": snapshot["roots"],
+            "total": len(iter_project_media(project.index)),
+            "verification": "on-demand",
         }
         return payload
 
+    def resolve_media_path(project: Any, clip: dict[str, Any]) -> str:
+        return _resolve_project_media_path(project, clip)
+
     web_server.ProjectService.reload = reload_with_local_media
     web_server.ProjectService.project_payload = payload_with_local_media
+    web_server.ProjectService.resolve_media_path = resolve_media_path
     web_server.WorkspaceService.project = workspace_project_with_local_media
     _INSTALLED = True

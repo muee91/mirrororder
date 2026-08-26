@@ -1,14 +1,17 @@
+use crate::runtime::{path_with_tools, python_path_with_source, resolve_python_runtime, RuntimeOrigin};
+use crate::service_health::{probe_service, probe_service_at};
 use serde::Serialize;
 use std::{
-    env,
-    net::{SocketAddr, TcpListener, TcpStream, UdpSocket},
-    path::{Path, PathBuf},
+    net::{IpAddr, TcpListener, UdpSocket},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
+
+const GATEWAY_SERVICE: &str = "mirrororder-gateway";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct GatewayConfig {
@@ -47,6 +50,8 @@ pub struct GatewayLaunchResult {
 #[derive(Serialize)]
 pub struct GatewayProcessStatus {
     running: bool,
+    healthy: bool,
+    health_error: Option<String>,
     pid: Option<u32>,
     base_url: Option<String>,
     lan_url: Option<String>,
@@ -55,30 +60,6 @@ pub struct GatewayProcessStatus {
     local_only: Option<bool>,
     trusted_lan: Option<bool>,
     pairing_code: Option<String>,
-}
-
-fn core_root() -> PathBuf {
-    env::var_os("MIRRORORDER_CORE_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
-}
-
-fn python_executable() -> String {
-    env::var("MIRRORORDER_PYTHON").unwrap_or_else(|_| {
-        if cfg!(target_os = "windows") {
-            "python".to_string()
-        } else {
-            "python3".to_string()
-        }
-    })
-}
-
-fn python_path_with_core(core: &Path) -> Result<std::ffi::OsString, String> {
-    let mut paths = vec![core.join("src")];
-    if let Some(existing) = env::var_os("PYTHONPATH") {
-        paths.extend(env::split_paths(&existing));
-    }
-    env::join_paths(paths).map_err(|error| format!("无法构造 PYTHONPATH：{error}"))
 }
 
 fn normalize_workspace_path(value: &str) -> Result<PathBuf, String> {
@@ -133,40 +114,86 @@ fn ensure_port_available(port: u16, local_only: bool) -> Result<(), String> {
         .map_err(|error| format!("Gateway 端口 {port} 已被占用（{error}）"))
 }
 
+fn health(port: u16) -> Result<(), String> {
+    probe_service(port, GATEWAY_SERVICE, Duration::from_millis(400))
+}
+
 fn wait_until_ready(child: &mut Child, port: u16) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(15);
-    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut last_error = String::new();
     while Instant::now() < deadline {
         if let Some(status) = child
             .try_wait()
             .map_err(|error| format!("检查 Gateway 启动状态失败：{error}"))?
         {
-            return Err(format!("Team Web Gateway 在监听端口前退出：{status}"));
+            return Err(format!("Team Web Gateway 在健康检查通过前退出：{status}"));
         }
-        if TcpStream::connect_timeout(&address, Duration::from_millis(150)).is_ok() {
-            return Ok(());
+        match health(port) {
+            Ok(()) => return Ok(()),
+            Err(error) => last_error = error,
         }
-        thread::sleep(Duration::from_millis(60));
+        thread::sleep(Duration::from_millis(80));
     }
-    Err(format!("Team Web Gateway 启动超时：15 秒内未监听 127.0.0.1:{port}"))
+    Err(format!(
+        "Team Web Gateway 启动超时：15 秒内未通过 {GATEWAY_SERVICE} 健康检查{}",
+        if last_error.is_empty() { String::new() } else { format!("（最后错误：{last_error}）") }
+    ))
 }
 
-fn local_lan_address() -> Option<String> {
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect("8.8.8.8:80").ok()?;
-    let address = socket.local_addr().ok()?.ip();
-    if address.is_loopback() || address.is_unspecified() {
-        None
-    } else {
-        Some(address.to_string())
+fn local_lan_addresses() -> Vec<IpAddr> {
+    let mut addresses = Vec::new();
+    if cfg!(target_os = "macos") {
+        if let Ok(output) = Command::new("ifconfig").arg("-a").output() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                let Some(value) = line.trim().strip_prefix("inet ") else {
+                    continue;
+                };
+                let Some(value) = value.split_whitespace().next() else {
+                    continue;
+                };
+                let Ok(address) = value.parse::<IpAddr>() else {
+                    continue;
+                };
+                if !address.is_loopback()
+                    && !address.is_unspecified()
+                    && !addresses.contains(&address)
+                {
+                    addresses.push(address);
+                }
+            }
+        }
     }
+    if addresses.is_empty() {
+        if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(address) = socket.local_addr().map(|value| value.ip()) {
+                    if !address.is_loopback() && !address.is_unspecified() {
+                        addresses.push(address);
+                    }
+                }
+            }
+        }
+    }
+    addresses
 }
 
-fn lan_url(port: u16, local_only: bool) -> Option<String> {
+fn verified_lan_url_for(
+    port: u16,
+    addresses: impl IntoIterator<Item = IpAddr>,
+) -> Option<String> {
+    addresses.into_iter().find_map(|address| {
+        probe_service_at(address, port, GATEWAY_SERVICE, Duration::from_millis(400))
+            .ok()
+            .map(|()| format!("http://{address}:{port}"))
+    })
+}
+
+fn verified_lan_url(port: u16, local_only: bool) -> Option<String> {
     if local_only {
         return None;
     }
-    local_lan_address().map(|address| format!("http://{address}:{port}"))
+    verified_lan_url_for(port, local_lan_addresses())
 }
 
 fn reap_if_finished(slot: &mut Option<ManagedGateway>) -> Result<(), String> {
@@ -182,6 +209,16 @@ fn reap_if_finished(slot: &mut Option<ManagedGateway>) -> Result<(), String> {
         *slot = None;
     }
     Ok(())
+}
+
+fn managed_gateway_health(child: &mut Child, port: u16) -> Result<(), String> {
+    if let Some(status) = child
+        .try_wait()
+        .map_err(|error| format!("检查 Gateway 进程失败：{error}"))?
+    {
+        return Err(format!("managed Gateway child 已退出：{status}"));
+    }
+    health(port)
 }
 
 fn stop_managed_gateway(mut gateway: ManagedGateway) -> Result<(), String> {
@@ -234,6 +271,7 @@ impl Drop for GatewayManager {
 
 #[tauri::command]
 pub fn start_team_gateway(
+    app: AppHandle,
     manager: State<'_, GatewayManager>,
     workspace_paths: Vec<String>,
     port: Option<u16>,
@@ -274,23 +312,21 @@ pub fn start_team_gateway(
                 gateway.base_url
             ));
         }
-        return Ok(public_result(gateway, true));
+        if health(gateway.config.port).is_ok() {
+            return Ok(public_result(gateway, true));
+        }
     }
 
-    ensure_port_available(port, local_only)?;
-    let core = core_root();
-    let source_dir = core.join("src");
-    if !source_dir.join("script_organizer").is_dir() {
-        return Err(format!(
-            "找不到 MirrorOrder Python Core：{}；可用 MIRRORORDER_CORE_ROOT 覆盖",
-            source_dir.display()
-        ));
+    if let Some(stale) = slot.take() {
+        stop_managed_gateway(stale)?;
     }
 
-    let mut command = Command::new(python_executable());
+    ensure_port_available(config.port, config.local_only)?;
+    let runtime = resolve_python_runtime(&app)?;
+    let mut command = Command::new(&runtime.python_executable);
     command
-        .current_dir(&core)
-        .env("PYTHONPATH", python_path_with_core(&core)?)
+        .current_dir(&runtime.core_root)
+        .env("PYTHONPATH", python_path_with_source(&runtime.source_dir)?)
         .arg("-m")
         .arg("script_organizer.cli")
         .arg("gateway");
@@ -310,6 +346,25 @@ pub fn start_team_gateway(
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+    if let Some(path) = path_with_tools(runtime.tool_bin.as_deref())? {
+        command.env("PATH", path);
+    }
+    if runtime.origin == RuntimeOrigin::PackagedResource {
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|error| format!("无法解析 Desktop app-data 目录：{error}"))?;
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|error| format!("无法创建 Desktop app-data 目录 {}：{error}", data_dir.display()))?;
+        command
+            .env("MIRRORORDER_PACKAGED_RUNTIME", "1")
+            .env("MIRRORORDER_DATA_DIR", &data_dir)
+            .env("MIRRORORDER_DEVICE_STATE_DIR", &data_dir)
+            .env(
+                "MIRRORORDER_MULTICAM_SYNC_ROOT",
+                runtime.core_root.join("vendor").join("multicam-audio-sync"),
+            );
+    }
 
     let mut child = command
         .spawn()
@@ -321,7 +376,7 @@ pub fn start_team_gateway(
     }
 
     let base_url = format!("http://127.0.0.1:{}", config.port);
-    let lan_url = lan_url(config.port, config.local_only);
+    let lan_url = verified_lan_url(config.port, config.local_only);
     *slot = Some(ManagedGateway {
         child,
         config,
@@ -339,10 +394,16 @@ pub fn team_gateway_status(
         .child
         .lock()
         .map_err(|_| "Gateway 进程状态锁已损坏".to_string())?;
-    reap_if_finished(&mut slot)?;
+    let health_result = slot
+        .as_mut()
+        .map(|gateway| managed_gateway_health(&mut gateway.child, gateway.config.port));
     let gateway = slot.as_ref();
+    let healthy = health_result.as_ref().is_some_and(|result| result.is_ok());
+    let health_error = health_result.and_then(Result::err);
     Ok(GatewayProcessStatus {
         running: gateway.is_some(),
+        healthy,
+        health_error,
         pid: gateway.map(|item| item.child.id()),
         base_url: gateway.map(|item| item.base_url.clone()),
         lan_url: gateway.and_then(|item| item.lan_url.clone()),
@@ -364,6 +425,10 @@ pub fn team_gateway_status(
 
 #[tauri::command]
 pub fn stop_team_gateway(manager: State<'_, GatewayManager>) -> Result<(), String> {
+    shutdown(&manager)
+}
+
+pub fn shutdown(manager: &GatewayManager) -> Result<(), String> {
     let mut slot = manager
         .child
         .lock()
@@ -376,7 +441,17 @@ pub fn stop_team_gateway(manager: State<'_, GatewayManager>) -> Result<(), Strin
 
 #[cfg(test)]
 mod tests {
-    use super::{lan_url, validate_port};
+    use super::{
+        shutdown, validate_port, verified_lan_url, verified_lan_url_for, GatewayConfig,
+        GatewayManager, ManagedGateway,
+    };
+    use std::{
+        io::Write,
+        net::{IpAddr, Ipv4Addr, TcpListener},
+        path::PathBuf,
+        process::Command,
+        thread,
+    };
 
     #[test]
     fn rejects_zero_gateway_port() {
@@ -386,6 +461,63 @@ mod tests {
 
     #[test]
     fn local_only_never_exposes_lan_url() {
-        assert_eq!(lan_url(8766, true), None);
+        assert_eq!(verified_lan_url(8766, true), None);
+    }
+
+    #[test]
+    fn lan_share_requires_verified_gateway_identity() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let body = r#"{"status":"ok","service":"mirrororder-host"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+
+        assert_eq!(
+            verified_lan_url_for(port, [IpAddr::V4(Ipv4Addr::LOCALHOST)]),
+            None
+        );
+        server.join().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shutdown_stops_the_managed_gateway_child() {
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let manager = GatewayManager::default();
+        *manager.child.lock().unwrap() = Some(ManagedGateway {
+            child,
+            config: GatewayConfig {
+                workspace_paths: vec![PathBuf::from("/tmp/workspace.toml")],
+                port: 8766,
+                local_only: false,
+                trusted_lan: true,
+                pairing_code: String::new(),
+            },
+            base_url: "http://127.0.0.1:8766".to_string(),
+            lan_url: Some("http://192.168.1.2:8766".to_string()),
+        });
+
+        shutdown(&manager).unwrap();
+        assert!(manager.child.lock().unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exited_gateway_child_is_reported_as_unhealthy_before_restart() {
+        let mut child = Command::new("sh")
+            .args(["-c", "exit 7"])
+            .spawn()
+            .unwrap();
+        child.wait().unwrap();
+
+        let error = super::managed_gateway_health(&mut child, 8766).unwrap_err();
+        assert!(error.contains("managed Gateway child 已退出"));
     }
 }

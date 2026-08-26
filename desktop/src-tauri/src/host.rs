@@ -1,14 +1,17 @@
+use crate::runtime::{path_with_tools, python_path_with_source, resolve_python_runtime, RuntimeOrigin};
+use crate::service_health::probe_service;
 use serde::Serialize;
 use std::{
-    env,
-    net::{SocketAddr, TcpListener, TcpStream},
-    path::{Path, PathBuf},
+    net::TcpListener,
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
+
+const HOST_SERVICE: &str = "mirrororder-host";
 
 struct ManagedHost {
     child: Child,
@@ -32,33 +35,11 @@ pub struct HostLaunchResult {
 #[derive(Serialize)]
 pub struct HostProcessStatus {
     running: bool,
+    healthy: bool,
+    health_error: Option<String>,
     pid: Option<u32>,
     base_url: Option<String>,
     workspace_path: Option<String>,
-}
-
-fn core_root() -> PathBuf {
-    env::var_os("MIRRORORDER_CORE_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
-}
-
-fn python_executable() -> String {
-    env::var("MIRRORORDER_PYTHON").unwrap_or_else(|_| {
-        if cfg!(target_os = "windows") {
-            "python".to_string()
-        } else {
-            "python3".to_string()
-        }
-    })
-}
-
-fn python_path_with_core(core: &Path) -> Result<std::ffi::OsString, String> {
-    let mut paths = vec![core.join("src")];
-    if let Some(existing) = env::var_os("PYTHONPATH") {
-        paths.extend(env::split_paths(&existing));
-    }
-    env::join_paths(paths).map_err(|error| format!("无法构造 PYTHONPATH：{error}"))
 }
 
 fn normalize_workspace_path(value: &str) -> Result<PathBuf, String> {
@@ -81,27 +62,35 @@ fn ensure_loopback_port_available(port: u16) -> Result<(), String> {
         .map(|listener| drop(listener))
         .map_err(|error| {
             format!(
-                "本机端口 {port} 已被占用（{error}）。如果已有镜序 Host，请直接连接；不要让 Desktop v2 误连到其它工作区。"
+                "本机端口 {port} 已被占用（{error}）。如果已有镜序服务，请直接连接；不要误连到其它工作区。"
             )
         })
 }
 
+fn health(port: u16) -> Result<(), String> {
+    probe_service(port, HOST_SERVICE, Duration::from_millis(400))
+}
+
 fn wait_until_ready(child: &mut Child, port: u16) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(15);
-    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut last_error = String::new();
     while Instant::now() < deadline {
         if let Some(status) = child
             .try_wait()
             .map_err(|error| format!("检查 Python Host 启动状态失败：{error}"))?
         {
-            return Err(format!("Python Host 在监听端口前退出：{status}"));
+            return Err(format!("Python Host 在健康检查通过前退出：{status}"));
         }
-        if TcpStream::connect_timeout(&address, Duration::from_millis(150)).is_ok() {
-            return Ok(());
+        match health(port) {
+            Ok(()) => return Ok(()),
+            Err(error) => last_error = error,
         }
-        thread::sleep(Duration::from_millis(60));
+        thread::sleep(Duration::from_millis(80));
     }
-    Err(format!("Python Host 启动超时：15 秒内未监听 127.0.0.1:{port}"))
+    Err(format!(
+        "Python Host 启动超时：15 秒内未通过 {HOST_SERVICE} 健康检查{}",
+        if last_error.is_empty() { String::new() } else { format!("（最后错误：{last_error}）") }
+    ))
 }
 
 fn reap_if_finished(slot: &mut Option<ManagedHost>) -> Result<(), String> {
@@ -148,6 +137,7 @@ impl Drop for HostManager {
 
 #[tauri::command]
 pub fn start_python_host(
+    app: AppHandle,
     manager: State<'_, HostManager>,
     workspace_path: String,
     port: Option<u16>,
@@ -174,28 +164,25 @@ pub fn start_python_host(
                 host.workspace_path.display()
             ));
         }
-        return Ok(HostLaunchResult {
-            pid: host.child.id(),
-            base_url: host.base_url.clone(),
-            already_running: true,
-        });
+        if health(host.port).is_ok() {
+            return Ok(HostLaunchResult {
+                pid: host.child.id(),
+                base_url: host.base_url.clone(),
+                already_running: true,
+            });
+        }
+    }
+
+    if let Some(stale) = slot.take() {
+        stop_managed_host(stale)?;
     }
 
     ensure_loopback_port_available(port)?;
-
-    let core = core_root();
-    let source_dir = core.join("src");
-    if !source_dir.join("script_organizer").is_dir() {
-        return Err(format!(
-            "找不到 MirrorOrder Python Core：{}；可用 MIRRORORDER_CORE_ROOT 覆盖",
-            source_dir.display()
-        ));
-    }
-
-    let mut command = Command::new(python_executable());
+    let runtime = resolve_python_runtime(&app)?;
+    let mut command = Command::new(&runtime.python_executable);
     command
-        .current_dir(&core)
-        .env("PYTHONPATH", python_path_with_core(&core)?)
+        .current_dir(&runtime.core_root)
+        .env("PYTHONPATH", python_path_with_source(&runtime.source_dir)?)
         .arg("-m")
         .arg("script_organizer.cli")
         .arg("serve")
@@ -206,6 +193,25 @@ pub fn start_python_host(
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+    if let Some(path) = path_with_tools(runtime.tool_bin.as_deref())? {
+        command.env("PATH", path);
+    }
+    if runtime.origin == RuntimeOrigin::PackagedResource {
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|error| format!("无法解析 Desktop app-data 目录：{error}"))?;
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|error| format!("无法创建 Desktop app-data 目录 {}：{error}", data_dir.display()))?;
+        command
+            .env("MIRRORORDER_PACKAGED_RUNTIME", "1")
+            .env("MIRRORORDER_DATA_DIR", &data_dir)
+            .env("MIRRORORDER_DEVICE_STATE_DIR", &data_dir)
+            .env(
+                "MIRRORORDER_MULTICAM_SYNC_ROOT",
+                runtime.core_root.join("vendor").join("multicam-audio-sync"),
+            );
+    }
 
     let mut child = command
         .spawn()
@@ -239,8 +245,13 @@ pub fn host_process_status(manager: State<'_, HostManager>) -> Result<HostProces
         .map_err(|_| "Host 进程状态锁已损坏".to_string())?;
     reap_if_finished(&mut slot)?;
     let host = slot.as_ref();
+    let health_result = host.map(|item| health(item.port));
+    let healthy = health_result.as_ref().is_some_and(|result| result.is_ok());
+    let health_error = health_result.and_then(Result::err);
     Ok(HostProcessStatus {
         running: host.is_some(),
+        healthy,
+        health_error,
         pid: host.map(|item| item.child.id()),
         base_url: host.map(|item| item.base_url.clone()),
         workspace_path: host.map(|item| item.workspace_path.display().to_string()),
@@ -249,6 +260,10 @@ pub fn host_process_status(manager: State<'_, HostManager>) -> Result<HostProces
 
 #[tauri::command]
 pub fn stop_python_host(manager: State<'_, HostManager>) -> Result<(), String> {
+    shutdown(&manager)
+}
+
+pub fn shutdown(manager: &HostManager) -> Result<(), String> {
     let mut slot = manager
         .child
         .lock()
@@ -261,8 +276,14 @@ pub fn stop_python_host(manager: State<'_, HostManager>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_loopback_port_available, validate_port};
-    use std::net::TcpListener;
+    use super::{ensure_loopback_port_available, shutdown, validate_port, HostManager, ManagedHost};
+    use std::{
+        net::TcpListener,
+        path::PathBuf,
+        process::Command,
+        thread,
+        time::Duration,
+    };
 
     #[test]
     fn rejects_zero_port() {
@@ -277,6 +298,30 @@ mod tests {
         let error = ensure_loopback_port_available(port).unwrap_err();
         assert!(error.contains("已被占用"));
         drop(listener);
-        assert!(ensure_loopback_port_available(port).is_ok());
+        let mut released = false;
+        for _ in 0..20 {
+            if ensure_loopback_port_available(port).is_ok() {
+                released = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(released);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shutdown_stops_the_managed_host_child() {
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let manager = HostManager::default();
+        *manager.child.lock().unwrap() = Some(ManagedHost {
+            child,
+            workspace_path: PathBuf::from("/tmp/workspace"),
+            base_url: "http://127.0.0.1:8765".to_string(),
+            port: 8765,
+        });
+
+        shutdown(&manager).unwrap();
+        assert!(manager.child.lock().unwrap().is_none());
     }
 }

@@ -14,16 +14,17 @@ def test_confidence_labels_keep_their_light_palette_in_dark_theme() -> None:
     assert ".confidence-possible{border-color:#e9bd64;background:#fff5df;color:#8c5109}" in css
 
 
-def test_desktop_app_exposes_light_system_and_dark_themes() -> None:
-    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
+def test_active_desktop_exposes_system_light_and_dark_preferences() -> None:
+    settings = (ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx").read_text(encoding="utf-8")
+    api = (ROOT / "desktop" / "src" / "api" / "desktop.ts").read_text(encoding="utf-8")
+    styles = (ROOT / "desktop" / "src" / "styles.css").read_text(encoding="utf-8")
 
-    assert "private enum NativeThemeMode" in ui
-    assert '"跟随系统"' in ui
-    assert '"浅色"' in ui
-    assert '"深色"' in ui
-    assert "preferredColorScheme(nativeThemeMode.colorScheme)" in ui
-    assert "static var background: Color" in ui
-    assert "static var panel: Color" in ui
+    assert 'theme: "system" | "light" | "dark"' in api
+    assert '<option value="system">跟随系统</option>' in settings
+    assert '<option value="light">浅色</option>' in settings
+    assert '<option value="dark">深色</option>' in settings
+    assert "@media (prefers-color-scheme: light)" in styles
+    assert not (ROOT / "macos-app").exists()
 
 
 def test_lan_pairing_uses_cookie_safe_browser_requests() -> None:
@@ -68,37 +69,24 @@ def test_review_media_cards_share_fixed_low_noise_visual_contract() -> None:
     assert ".camera-run.repeated{min-width:0;width:max-content" in css
 
 
-def test_desktop_surface_uses_project_home_and_multicam_slate() -> None:
-    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
-    build = (ROOT / "macos-app" / "build_app.sh").read_text(encoding="utf-8")
+def test_active_desktop_surface_uses_project_home_and_production_workbenches() -> None:
+    app = (ROOT / "desktop" / "src" / "app" / "App.tsx").read_text(encoding="utf-8")
+    library = (ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx").read_text(encoding="utf-8")
+    workbench = (ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
-    assert "private struct ProductionSidebar" in ui
-    assert "private struct SidebarProjectRow" in ui
-    assert "private struct ProjectHomeView" in ui
-    assert "private struct ProjectHomeCard" in ui
-    assert "private struct ProjectWorkspace" in ui
-    assert '@Published var showProjectHome = true' in ui
-    assert 'Text("全部项目")' in ui
-    assert 'Text("最近项目")' in ui
-    assert ".frame(width: 216)" in ui
-    assert "private struct NativeMulticamSlateProjectWorkbench" in ui
-    assert 'TableColumn("A 机")' in ui
-    assert 'TableColumn("B 机")' in ui
-    assert 'TableColumn("C 机")' in ui
-    assert 'TableColumn("辅助 / 特殊")' in ui
-    assert "private struct MCMediaCard" in ui
-    assert "AVAssetImageGenerator" in ui
-    assert "checkmark.circle.fill" in ui
-    assert 'CORE_SOURCE="$ROOT/macos-app/MirrorOrderDesktopCore.swift"' in build
-    assert 'UI_SOURCE="$ROOT/macos-app/MirrorOrderDesktopUI.swift"' in build
+    assert "ProjectLibrary" in app
+    assert "ProjectWorkbench" in app
+    assert "project-list" in library
+    assert 'label: "场记"' in workbench
+    assert 'label: "剪辑"' in workbench
+    assert 'label: "交付"' in workbench
 
 
-def test_active_work_stays_out_of_the_production_canvas() -> None:
-    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
+def test_active_work_stays_in_status_surface_not_primary_app_shell() -> None:
+    app = (ROOT / "desktop" / "src" / "app" / "App.tsx").read_text(encoding="utf-8")
+    settings = (ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx").read_text(encoding="utf-8")
 
-    assert "private struct ActiveTaskStrip" in ui
-    assert "private struct StatusCenterSheet" in ui
-    assert "同步、转写、识别和审计任务集中在这里，不占制作画布。" in ui
-    assert "if let activity = controller.selectedProjectActivity, activity.isActive" in ui
-    assert "ActiveTaskStrip(activity: activity)" in ui
-    assert "NativeProjectWorkbench(" in ui
+    assert "TaskStatusPanel" not in app
+    assert "TaskStatusPanel" in settings
+    assert "platform-capabilities" not in app
+    assert "runtime diagnostics" not in app.lower()

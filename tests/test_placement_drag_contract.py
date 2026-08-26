@@ -11,11 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_web_drag_surface_uses_manual_group_placement() -> None:
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    startup = (ROOT / "web" / "startup_release.js").read_text(encoding="utf-8")
     js = (ROOT / "web" / "placement_drag_ui.js").read_text(encoding="utf-8")
     css = (ROOT / "web" / "placement_drag.css").read_text(encoding="utf-8")
 
     assert "/placement_drag.css" in html
-    assert "/placement_drag_ui.js" in html
+    assert "/startup_release.js" in html
+    assert "loadScript('/placement_drag_ui.js')" in startup
     assert "application/x-mirrororder-placement" in js
     assert "set_group_placement" in js
     assert "script_segment_ids: [segmentId]" in js

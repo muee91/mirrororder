@@ -204,8 +204,9 @@ def test_static_supervisor_and_assembly_runtime_ui_boundaries() -> None:
     ui = (root / "web/script_supervisor_ui.js").read_text(encoding="utf-8")
     css = (root / "web/script_supervisor.css").read_text(encoding="utf-8")
     production = (root / "web/production_mode.js").read_text(encoding="utf-8")
-    info = (root / "macos-app/Info.plist").read_text(encoding="utf-8")
     index = (root / "web/index.html").read_text(encoding="utf-8")
+    tauri = json.loads((root / "desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+    tauri_macos = json.loads((root / "desktop/src-tauri/tauri.macos.conf.json").read_text(encoding="utf-8"))
     assert 'parts[4] == "script-supervisor"' in runtime
     assert 'parts[4] == "script-supervisor-parse"' in runtime
     assert "self._local_only()" in runtime and '"agent_write": False' in runtime
@@ -216,5 +217,7 @@ def test_static_supervisor_and_assembly_runtime_ui_boundaries() -> None:
     assert "supervisor-mode" in css and ".slate-table" in css
     for group in ("素材", "剧本", "剪辑", "审阅"):
         assert group in production
-    assert "NSMicrophoneUsageDescription" in info
     assert '/script_supervisor.css' in index and '/script_supervisor_ui.js' in index
+    assert tauri["build"]["beforeBuildCommand"] == "npm run stage:runtime && npm run build"
+    assert tauri["bundle"]["resources"]["resources/mirrororder-runtime/"] == "mirrororder-runtime/"
+    assert tauri_macos["bundle"]["targets"] == ["app", "dmg"]

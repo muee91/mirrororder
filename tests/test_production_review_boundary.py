@@ -7,43 +7,32 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_app_production_is_native_and_does_not_embed_team_web() -> None:
-    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
-    native = (ROOT / "macos-app" / "NativeProjectWorkbench.swift").read_text(encoding="utf-8")
+    app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
+    workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
-    assert "private struct NativeMulticamSlateProjectWorkbench" in ui
-    assert "NativeMulticamSlateProjectWorkbench(" in ui
-    assert "struct NativeProjectWorkbench: View" in native
-    assert "NativeVideoPlayerView(player: player)" in native
-    assert "DesktopWebView(" not in ui
-    assert "DesktopWebView(" not in native
-    assert "WKWebView" not in ui
-    assert "WKWebView" not in native
-    assert "production_mode.js" not in ui
-    assert "production_mode.js" not in native
+    assert 'type AppWorkspace = "production" | "team"' in app
+    assert "TeamWebWorkbench" in app
+    assert "ProjectWorkbench" in app
+    assert "TeamWebWorkbench" not in workbench
+    assert "SlateWorkbench" in workbench
+    assert "TimelineWorkbench" in workbench
 
 
 def test_native_production_navigation_starts_at_project_home_then_multicam_slate() -> None:
-    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
+    app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
+    workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
-    assert "private struct ProductionSidebar" in ui
-    assert "private struct SidebarProjectRow" in ui
-    assert "private struct ProjectHomeView" in ui
-    assert "private struct ProjectHomeCard" in ui
-    assert "@Published var showProjectHome = true" in ui
-    assert 'sidebarButton("项目", icon: "square.grid.2x2"' in ui
-    assert "NativeMulticamSlateProjectWorkbench(" in ui
-    assert 'Label("场记", systemImage: "tablecells")' in ui
-    assert 'Label("素材 / 剧本", systemImage: "rectangle.split.3x1")' in ui
-    assert 'Label("团队审阅", systemImage: "person.3")' in ui
-    assert 'Text("AI 控制台")' not in ui
+    assert 'useState<AppWorkspace>("production")' in app
+    assert 'label: "素材 / 剧本"' in workbench
+    assert 'label: "场记"' in workbench
+    assert '>团队协作</button>' in app
+    assert 'label: "小镜"' in workbench
 
 
 def test_native_slate_remains_human_evidence_not_editorial_authority() -> None:
-    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
     runtime = (ROOT / "src" / "script_organizer" / "script_supervisor_runtime.py").read_text(encoding="utf-8")
     parser = (ROOT / "src" / "script_organizer" / "script_supervisor_parser.py").read_text(encoding="utf-8")
 
-    assert "不是 Editorial Best" in ui
     assert '"editorial_authority": False' in runtime
     assert "禁止编造秒数、人物身份、Best/Keep/Reject" in parser
     assert "range_hint" in parser
@@ -66,16 +55,15 @@ def test_team_web_keeps_review_surface_without_production_dom() -> None:
 
 
 def test_native_workspace_reads_host_projection_and_opens_team_review_externally() -> None:
-    core = (ROOT / "macos-app" / "MirrorOrderDesktopCore.swift").read_text(encoding="utf-8")
-    ui = (ROOT / "macos-app" / "MirrorOrderDesktopUI.swift").read_text(encoding="utf-8")
+    app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
+    team = (ROOT / "desktop/src/features/team/TeamWebWorkbench.tsx").read_text(encoding="utf-8")
+    client = (ROOT / "desktop/src/api/team.ts").read_text(encoding="utf-8")
 
-    assert "struct NativeReviewReadModel: Decodable" in core
-    assert 'appendingPathComponent("review-model")' in core
-    assert "JSONDecoder().decode(NativeReviewReadModel.self" in ui
-    assert 'Label("团队审阅", systemImage: "person.3")' in ui
-    assert "controller.openInBrowser()" in ui
-    assert "NSWorkspace.shared.open(lanWorkbenchURL(for: projectID) ?? workbenchURL(for: projectID))" in core
-    assert "NativeMulticamSlateProjectWorkbench(" in ui
+    assert "TeamWebWorkbench" in app
+    assert "teamWorkbenchUrl" in client
+    assert "const shareUrl = healthy" in team
+    assert "platform.openUrl(shareUrl)" in team
+    assert "不会生成 localhost 伪协作链接" in team
 
 
 def test_boundary_document_defines_native_production_and_web_review() -> None:

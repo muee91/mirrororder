@@ -202,6 +202,15 @@ class ProjectService:
             "source": self.index.get("source", {}),
         }
 
+    def resolve_media_path(self, clip: dict[str, Any]) -> str:
+        """Return the media path used for a playback request.
+
+        Device-local media runtimes may override this method to validate a
+        content identity before opening a file. The default keeps the
+        historical FCPXML/local-project behavior.
+        """
+        return str(clip.get("media_path", "") or "")
+
     def state(self) -> dict[str, Any]:
         self.reload_if_changed()
         review = self.review.load()
@@ -411,6 +420,7 @@ class WorkspaceService:
         )
         self.collaborators = CollaborationAccessStore(collaboration_scope)
         self._projects: dict[str, ProjectService] = {}
+        self._projects_lock = threading.RLock()
 
     def project_config(self, project_id: str) -> ProjectConfig:
         return self.registry.project_config(project_id)
@@ -418,40 +428,44 @@ class WorkspaceService:
     def project(self, project_id: str) -> ProjectService:
         entry = self.registry.get(project_id)
         config_path = self.registry.project_config(project_id).config_path
-        current = self._projects.get(project_id)
-        if current and current.config.config_path == config_path:
-            return current
-        project = ProjectService(project_id, ProjectConfig.from_file(config_path))
-        project.workspace_id = self.workspace.workspace_id
-        self._projects[project_id] = project
-        return project
+        # ProjectService.reload() reads the potentially large index/script/
+        # matches files. The HTTP server is threaded, so concurrent App reads
+        # must not materialize the same project repeatedly during first paint.
+        with self._projects_lock:
+            current = self._projects.get(project_id)
+            if current and current.config.config_path == config_path:
+                return current
+            project = ProjectService(project_id, ProjectConfig.from_file(config_path))
+            project.workspace_id = self.workspace.workspace_id
+            self._projects[project_id] = project
+            return project
+
+    @staticmethod
+    def _lightweight_project_summary(entry: dict[str, Any]) -> dict[str, Any]:
+        """Return the registry-only project row used by workspace discovery.
+
+        Opening a workspace should not synchronously construct every
+        ProjectService. Its constructor reloads material_index, script and
+        matches, which can be a large cold-start operation. Detailed project
+        routes still call ``project()`` and materialize their own payload on
+        demand.
+        """
+        project_id = str(entry.get("project_id", "") or "").strip()
+        stats = entry.get("stats", {})
+        return {
+            "project_id": project_id,
+            "name": str(entry.get("name", "") or project_id),
+            "input_kind": str(entry.get("input_kind", "") or ""),
+            "analysis_revision": str(entry.get("analysis_revision", "") or ""),
+            "stats": dict(stats) if isinstance(stats, dict) else {},
+            "source": dict(entry.get("source", {})) if isinstance(entry.get("source"), dict) else {},
+            "local_media": dict(entry.get("local_media", {})) if isinstance(entry.get("local_media"), dict) else {},
+        }
 
     def workspace_payload(self) -> dict[str, Any]:
-        projects = []
-        for entry in self.registry.list():
-            project_id = str(entry.get("project_id", ""))
-            try:
-                payload = self.project(project_id).project_payload()
-                projects.append(
-                    {
-                        "project_id": project_id,
-                        "name": payload["project"],
-                        "input_kind": payload["input_kind"],
-                        "stats": payload["stats"],
-                        "analysis_revision": payload["analysis_revision"],
-                        "source": payload.get("source", {}),
-                        "local_media": payload.get("local_media", {}),
-                    }
-                )
-            except Exception as error:
-                projects.append(
-                    {
-                        "project_id": project_id,
-                        "name": entry.get("name", project_id),
-                        "input_kind": entry.get("input_kind", ""),
-                        "error": str(error),
-                    }
-                )
+        # Keep workspace discovery bounded by the small registry. A project
+        # is materialized only after the user opens its project route.
+        projects = [self._lightweight_project_summary(entry) for entry in self.registry.list()]
         return {
             "workspace_id": self.workspace.workspace_id,
             "workspace": self.workspace.name,
@@ -958,7 +972,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
             clip = project.clips.get(clip_id)
             if not clip:
                 raise ApiError(HTTPStatus.NOT_FOUND, "unknown clip")
-            path = Path(clip.get("media_path", ""))
+            path = Path(project.resolve_media_path(clip))
             if not path.exists() or not path.is_file():
                 raise ApiError(HTTPStatus.NOT_FOUND, "media missing")
             size = path.stat().st_size

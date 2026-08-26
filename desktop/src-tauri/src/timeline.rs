@@ -56,9 +56,9 @@ impl TimelineBridgeError {
     }
 }
 
-fn lock_manager(
-    manager: &State<'_, TimelineManager>,
-) -> Result<std::sync::MutexGuard<'_, Option<ManagedTimeline>>, TimelineBridgeError> {
+fn lock_manager<'a>(
+    manager: &'a State<'a, TimelineManager>,
+) -> Result<std::sync::MutexGuard<'a, Option<ManagedTimeline>>, TimelineBridgeError> {
     manager
         .current
         .lock()

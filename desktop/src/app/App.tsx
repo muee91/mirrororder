@@ -19,6 +19,16 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function connectionLabel(state: HostConnectionState): string {
+  return {
+    idle: "未打开",
+    connecting: "正在连接",
+    starting: "正在打开",
+    connected: "已就绪",
+    error: "需要处理",
+  }[state] ?? state;
+}
+
 type AppWorkspace = "production" | "team";
 
 export function App() {
@@ -29,7 +39,7 @@ export function App() {
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
-  const [message, setMessage] = useState("连接已运行的 Host，或从本机 workspace 启动。 ");
+  const [message, setMessage] = useState("选择一个本机工作区开始制作。");
 
   const connection = useMemo(() => {
     try {
@@ -47,32 +57,32 @@ export function App() {
 
   async function chooseWorkspace(directory: boolean): Promise<void> {
     if (!isTauri()) {
-      setMessage("浏览器预览不提供原生路径选择；可继续手动填写 Workspace 路径。");
+      setMessage("浏览器预览不能打开系统目录选择器；可在高级连接选项中手动填写路径。");
       return;
     }
     try {
       const selected = await openDialog({
         directory,
         multiple: false,
-        title: directory ? "选择 MirrorOrder Workspace 目录" : "选择 MirrorOrder Workspace 文件",
+        title: directory ? "选择镜序工作区目录" : "选择镜序工作区文件",
       });
       if (typeof selected === "string" && selected.trim()) {
         setWorkspacePath(selected);
-        setMessage(`已选择 ${directory ? "Workspace 目录" : "Workspace 文件"}。`);
+        setMessage("工作区已选择，点击“打开工作区”继续。");
       }
     } catch (error) {
-      setMessage(`原生路径选择失败：${errorMessage(error)}`);
+      setMessage(`选择工作区失败：${errorMessage(error)}`);
     }
   }
 
   async function revealWorkspace(): Promise<void> {
     if (!workspacePath.trim()) {
-      setMessage("先选择 Workspace 路径。");
+      setMessage("先选择工作区。");
       return;
     }
     try {
       await platform.reveal(workspacePath);
-      setMessage(`${platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器"} 已定位 Workspace。`);
+      setMessage(`${platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器"} 已定位当前工作区。`);
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -81,11 +91,11 @@ export function App() {
   async function connect(): Promise<void> {
     if (!connection) {
       setState("error");
-      setMessage("Host 地址无效。");
+      setMessage("高级连接地址无效。");
       return;
     }
     setState("connecting");
-    setMessage("正在读取 Host 与 workspace…");
+    setMessage("正在连接已有的本机服务…");
     try {
       const next = await connection.connect();
       setSnapshot(next);
@@ -93,7 +103,7 @@ export function App() {
         current ? next.projects.find((item) => item.project_id === current.project_id) ?? null : next.projects[0] ?? null,
       );
       setState("connected");
-      setMessage(`已连接 ${next.ping.service} · API ${next.workspace.api_version}`);
+      setMessage(`工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       setSnapshot(null);
       setSelectedProject(null);
@@ -103,7 +113,7 @@ export function App() {
   }
 
   async function refreshWorkspace(preferredProjectId?: string): Promise<void> {
-    if (!connection) throw new HostConnectionError("Host 地址无效");
+    if (!connection) throw new HostConnectionError("本机服务地址无效");
     const next = await connection.connect();
     setSnapshot(next);
     setSelectedProject((current) => {
@@ -118,29 +128,29 @@ export function App() {
       return next.projects[0] ?? null;
     });
     setState("connected");
-    setMessage(`项目库已刷新 · ${next.projects.length} projects`);
+    setMessage(`项目库已刷新 · ${next.projects.length} 个项目`);
   }
 
   async function startHost(): Promise<void> {
     if (!connection) {
       setState("error");
-      setMessage("Host 地址无效。");
+      setMessage("本机服务地址无效。");
       return;
     }
     if (!workspacePath.trim()) {
       setState("error");
-      setMessage("先选择或填写 Workspace 路径。");
+      setMessage("先选择工作区目录或文件。");
       return;
     }
     setState("starting");
-    setMessage("正在启动现有 Python Core Host…");
+    setMessage("正在打开工作区…");
     try {
       const next = await connection.startAndConnect(workspacePath);
       setBaseUrl(next.baseUrl);
       setSnapshot(next);
       setSelectedProject(next.projects[0] ?? null);
       setState("connected");
-      setMessage(`Host 已就绪 · ${next.workspace.workspace}`);
+      setMessage(`工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       setState("error");
       setMessage(errorMessage(error));
@@ -152,16 +162,16 @@ export function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">镜序 · MirrorOrder</p>
-          <h1>Desktop</h1>
+          <h1>制作台</h1>
         </div>
         <div className="topbar-actions">
-          <div className="app-workspace-switch" aria-label="Desktop workspace">
+          <div className="app-workspace-switch" aria-label="工作空间">
             <button type="button" className={appWorkspace === "production" ? "is-active" : ""} onClick={() => setAppWorkspace("production")}>制作</button>
             <button type="button" className={appWorkspace === "team" ? "is-active" : ""} onClick={() => setAppWorkspace("team")}>团队协作</button>
           </div>
           <div className={`status-badge status-${state}`}>
             <span className="status-dot" />
-            {state}{platformInfo ? ` · ${platformInfo.os}` : ""}
+            {connectionLabel(state)}{platformInfo ? ` · ${platformInfo.os === "macos" ? "macOS" : platformInfo.os === "windows" ? "Windows" : platformInfo.os}` : ""}
           </div>
         </div>
       </header>
@@ -177,16 +187,12 @@ export function App() {
       ) : (
         <>
           <section className="connection-panel">
-            <label>
-              <span>Host</span>
-              <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} />
-            </label>
             <label className="workspace-field">
-              <span>Workspace 路径</span>
+              <span>本机工作区</span>
               <input
                 value={workspacePath}
                 onChange={(event) => setWorkspacePath(event.target.value)}
-                placeholder="选择目录 / workspace 文件，或手动填写"
+                placeholder="选择项目工作区目录"
                 spellCheck={false}
               />
             </label>
@@ -195,28 +201,30 @@ export function App() {
                 选择目录
               </button>
               <button type="button" className="secondary" onClick={() => void chooseWorkspace(false)} disabled={!isTauri()}>
-                选择文件
+                选择工作区文件
+              </button>
+              <button type="button" onClick={() => void startHost()} disabled={state === "starting" || !workspacePath.trim()}>
+                打开工作区
               </button>
               <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !workspacePath.trim()}>
                 {platformInfo?.os === "windows" ? "在 Explorer 显示" : platformInfo?.os === "macos" ? "在 Finder 显示" : "在文件管理器显示"}
               </button>
             </div>
-            <div className="connection-actions">
-              <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>
-                连接 Host
-              </button>
-              <button type="button" onClick={() => void startHost()} disabled={state === "starting"}>
-                启动并连接
-              </button>
-            </div>
+            <details className="advanced-connection-options">
+              <summary>高级连接选项</summary>
+              <label>
+                <span>本机服务地址</span>
+                <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} />
+              </label>
+              <div className="connection-actions">
+                <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>
+                  连接已运行服务
+                </button>
+              </div>
+            </details>
           </section>
 
           <p className={`connection-message ${state === "error" ? "is-error" : ""}`}>{message}</p>
-          {platformInfo ? (
-            <p className="connection-message platform-capabilities">
-              native dialog ✓ · reveal ✓ · URL opener {platformInfo.open_url ? "✓" : "missing"} · FCP adapter {platformInfo.fcp_adapter ? "available on macOS" : "n/a"} · security-scoped media {platformInfo.security_scoped_media ? "✓" : "pending native gate"} · Resolve/Premiere adapters extension-only
-            </p>
-          ) : null}
 
           {snapshot ? (
             <section className="workspace-shell">
@@ -233,16 +241,16 @@ export function App() {
                 ) : (
                   <div className="phase-placeholder">
                     <strong>选择或创建一个项目</strong>
-                    <p>项目生命周期由 Desktop 调用现有 Python WorkspaceRegistry 管理。</p>
+                    <p>从左侧项目库进入素材、场记、人物、剪辑和交付工作流。</p>
                   </div>
                 )}
               </section>
             </section>
           ) : (
             <section className="offline-state">
-              <p className="eyebrow">Local Production Host</p>
-              <h2>等待 HostConnection</h2>
-              <p>HostConnection 负责 Python Core 生命周期；原生路径选择和 Finder/Explorer 能力由跨平台 Tauri adapter 提供，业务权威仍在 Python Core。</p>
+              <p className="eyebrow">本机制作</p>
+              <h2>选择工作区开始</h2>
+              <p>镜序会在本机读取项目与素材；连接和运行环境的详细信息集中在项目设置与状态页。</p>
             </section>
           )}
         </>

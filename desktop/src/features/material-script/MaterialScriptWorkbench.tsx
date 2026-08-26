@@ -108,7 +108,10 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
     return () => globalThis.cancelAnimationFrame(frame);
   }, [activeEpisode, selectedScriptSegmentId, tab]);
 
-  const episodeButtons = model?.episodes.slice(0, 32) ?? [];
+  // Episode controls are horizontally scrollable in material-script.css, so
+  // every episode stays reachable even for 100+ episode productions. Never
+  // truncate this authority-bearing navigation for presentation convenience.
+  const episodeButtons = model?.episodes ?? [];
   const selectedEpisode = model?.episodes.find((item) => item.episode === activeEpisode) ?? model?.episodes[0] ?? null;
   const filteredTakes = useMemo(
     () => model?.take_groups.filter((take) => takeMatchesFilters(take, statusFilter, materialEpisode)) ?? [],

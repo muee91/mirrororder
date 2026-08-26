@@ -19,11 +19,11 @@ describe("ProductionClient", () => {
   });
 
   it("reads the revision-safe script supervisor board", async () => {
-    const browserFetch = vi.fn(async () => jsonResponse({ contract: "script_supervisor.v2", revision: 4, records: {}, entries: {}, semantics: {} }));
+    const browserFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({ contract: "script_supervisor.v2", revision: 4, records: {}, entries: {}, semantics: {} }));
     vi.stubGlobal("fetch", browserFetch);
     const board = await new ProductionClient("http://127.0.0.1:8765/").scriptSupervisor("p/1");
     expect(board.revision).toBe(4);
-    expect(String(browserFetch.mock.calls[0]?.[0])).toEndWith("/api/v1/projects/p%2F1/script-supervisor");
+    expect(String(browserFetch.mock.calls[0]?.[0])).toMatch(/\/api\/v1\/projects\/p%2F1\/script-supervisor$/);
   });
 
   it("sends quick slate text and previous human context to the existing parser", async () => {
