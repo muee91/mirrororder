@@ -38,6 +38,22 @@ function parseSummary(result: SlateParseResult): string {
   return bits.join(" · ") || "只记录原始备注";
 }
 
+function entryAngles(take: ReviewTakeGroup, entry: SlateEntry | null): string[] {
+  return take.angles.map((angle) => {
+    const shot = entry?.angles?.[angle.clip_id]?.shot_type || "—";
+    return `${angle.camera || "—"}:${shot}`;
+  });
+}
+
+function statusLabel(value: string): string {
+  return {
+    usable: "可用",
+    partial: "部分可用",
+    ng: "NG",
+    unmarked: "未标记",
+  }[value] ?? value;
+}
+
 export function SlateWorkbench({ baseUrl, projectId }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
@@ -83,6 +99,11 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
     globalThis.requestAnimationFrame(() => quickInputRef.current?.focus());
   }
 
+  function selectTake(groupId: string): void {
+    const nextIndex = takes.findIndex((take) => take.group_id === groupId);
+    if (nextIndex >= 0) selectTakeAt(nextIndex);
+  }
+
   function moveTake(delta: -1 | 1): void {
     if (!takes.length) return;
     const origin = selectedIndex >= 0 ? selectedIndex : 0;
@@ -121,10 +142,7 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
       }
     }
 
-    const entry: Partial<SlateEntry> = {
-      note: parsed.note,
-      angles,
-    };
+    const entry: Partial<SlateEntry> = { note: parsed.note, angles };
     if (parsed.episode !== null) entry.episode = parsed.episode;
     if (parsed.scene) entry.scene = parsed.scene;
     if (parsed.shot) entry.shot = parsed.shot;
@@ -189,83 +207,82 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
   }
 
   return (
-    <section className="phase3-workbench">
-      <header className="production-heading">
-        <div>
-          <p className="eyebrow">现场记录</p>
-          <h2>场记</h2>
-        </div>
-        <span className="production-state">{message}</span>
+    <section className="phase3-workbench slate-table-workbench">
+      <header className="production-heading slate-heading">
+        <div><p className="eyebrow">现场记录</p><h2>电子场记</h2></div>
+        <div className="slate-heading-status"><strong>{selectedTake ? takeLabel(selectedTake) : "未选择 Take"}</strong><span>{message}</span></div>
       </header>
 
-      <div className="production-grid slate-grid">
-        <aside className="production-panel">
-          <label className="production-field">
-            <span>Take</span>
-            <select value={selectedGroupId} onChange={(event) => { setSelectedGroupId(event.target.value); setParsed(null); setQuickText(""); globalThis.requestAnimationFrame(() => quickInputRef.current?.focus()); }}>
-              {takes.map((take) => (
-                <option value={take.group_id} key={take.group_id}>{takeLabel(take)}</option>
-              ))}
-            </select>
-          </label>
-          <div className="production-actions">
-            <button type="button" className="secondary" disabled={busy || selectedIndex <= 0} onClick={() => moveTake(-1)}>上一条 · ⌥↑</button>
-            <button type="button" className="secondary" disabled={busy || selectedIndex < 0 || selectedIndex >= takes.length - 1} onClick={() => moveTake(1)}>下一条 · ⌥↓</button>
-          </div>
-          <label className="production-field">
-            <span>操作者昵称</span>
-            <input value={actor} onChange={(event) => setActor(event.target.value)} placeholder="写入时必填" />
-          </label>
-
-          <div className="slate-current">
-            <p className="eyebrow">当前记录</p>
-            {existing ? (
-              <>
-                <strong>{[existing.episode ? `EP${existing.episode}` : "", existing.scene, existing.shot, existing.take_number ? `T${existing.take_number}` : ""].filter(Boolean).join(" · ") || "已记录"}</strong>
-                <span>{existing.status} · {existing.actor || "未知操作者"}</span>
-                <p>{existing.note || "没有备注"}</p>
-              </>
-            ) : <p>这个 Take 还没有人工场记。</p>}
-          </div>
-        </aside>
-
-        <div className="production-panel slate-capture">
-          <p className="eyebrow">快速录入</p>
-          <textarea
-            ref={quickInputRef}
-            value={quickText}
-            onChange={(event) => { setQuickText(event.target.value); if (parsed) setParsed(null); }}
-            onKeyDown={handleQuickKeyDown}
-            placeholder="例如：EP3 12-3-2 B近 前半段可用；或：同场下一条 C特 看片再定"
-            rows={6}
-          />
-          <div className="production-actions">
-            <button type="button" disabled={busy || !quickText.trim() || !selectedTake} onClick={() => void parseQuickEntry()}>解析 · ⌘/Ctrl+Enter</button>
-            <span>⌥↑/⌥↓ 切 Take；解析后再次 ⌘/Ctrl+Enter 确认写入并自动进入下一条。</span>
-          </div>
-
-          {parsed ? (
-            <div className="parse-preview">
-              <div className="parse-heading">
-                <div>
-                  <p className="eyebrow">待确认</p>
-                  <strong>{parseSummary(parsed)}</strong>
-                </div>
-                <span>已解析</span>
-              </div>
-              <p>{parsed.note}</p>
-              {Object.keys(parsed.angle_shots).length ? (
-                <div className="fact-chips">
-                  {Object.entries(parsed.angle_shots).map(([camera, shot]) => <span key={camera}>{camera} · {shot}</span>)}
-                </div>
-              ) : null}
-              {parsed.generic_shot ? <p className="production-warning">检测到通用景别 {parsed.generic_shot}；不会自动复制到 A/B/C，请按机位明确后再写。</p> : null}
-              {parsed.range_hint ? <p className="production-note">范围提示：{parsed.range_hint}。原话保留在 note，不生成虚构秒数。</p> : null}
-              <button type="button" disabled={busy || !actor.trim()} onClick={() => void confirmParsed()}>确认写入 · ⌘/Ctrl+Enter</button>
-            </div>
-          ) : null}
+      <section className="slate-entry-bar" aria-label="场记快速录入">
+        <div className="slate-entry-context">
+          <button type="button" className="secondary" disabled={busy || selectedIndex <= 0} onClick={() => moveTake(-1)}>⌥↑</button>
+          <select value={selectedGroupId} onChange={(event) => selectTake(event.target.value)} aria-label="当前 Take">
+            {takes.map((take) => <option value={take.group_id} key={take.group_id}>{takeLabel(take)}</option>)}
+          </select>
+          <button type="button" className="secondary" disabled={busy || selectedIndex < 0 || selectedIndex >= takes.length - 1} onClick={() => moveTake(1)}>⌥↓</button>
+          <input className="slate-actor-input" value={actor} onChange={(event) => setActor(event.target.value)} placeholder="场记员" aria-label="操作者昵称" />
         </div>
+        <textarea
+          ref={quickInputRef}
+          value={quickText}
+          onChange={(event) => { setQuickText(event.target.value); if (parsed) setParsed(null); }}
+          onKeyDown={handleQuickKeyDown}
+          placeholder="快速录入：EP3 12-3-2 B近 前半段可用；同场下一条 C特 看片再定"
+          rows={2}
+        />
+        <button type="button" className="slate-primary-action" disabled={busy || (!parsed && !quickText.trim()) || !selectedTake || (Boolean(parsed) && !actor.trim())} onClick={() => parsed ? void confirmParsed() : void parseQuickEntry()}>
+          {parsed ? "确认写入 ⌘↵" : "解析 ⌘↵"}
+        </button>
+      </section>
+
+      {parsed ? (
+        <section className="slate-parse-inline">
+          <div><span>待确认</span><strong>{parseSummary(parsed)}</strong><p>{parsed.note}</p></div>
+          <div className="slate-parse-facts">
+            {Object.entries(parsed.angle_shots).map(([camera, shot]) => <span key={camera}>{camera} · {shot}</span>)}
+            {parsed.range_hint ? <span>范围：{parsed.range_hint}</span> : null}
+            {parsed.generic_shot ? <em>通用景别 {parsed.generic_shot} 不会自动复制到所有机位</em> : null}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="slate-table-shell">
+        <table className="slate-table">
+          <thead>
+            <tr>
+              <th className="slate-col-take">Take</th>
+              <th>集</th>
+              <th>场</th>
+              <th>镜</th>
+              <th>条</th>
+              <th className="slate-col-angle">机位 / 景别</th>
+              <th>状态</th>
+              <th className="slate-col-note">备注</th>
+              <th>记录人</th>
+            </tr>
+          </thead>
+          <tbody>
+            {takes.map((take) => {
+              const entry = board?.entries[take.group_id] ?? null;
+              const selected = take.group_id === selectedGroupId;
+              return (
+                <tr className={selected ? "is-selected" : ""} key={take.group_id} onClick={() => selectTake(take.group_id)}>
+                  <td className="slate-col-take"><strong>{take.group_id}</strong><small>{take.angles.map((angle) => angle.camera).filter(Boolean).join("/") || "—"}</small></td>
+                  <td>{entry?.episode ? `EP${entry.episode}` : "—"}</td>
+                  <td>{entry?.scene || "—"}</td>
+                  <td>{entry?.shot || "—"}</td>
+                  <td>{entry?.take_number ?? "—"}</td>
+                  <td className="slate-col-angle"><div className="slate-angle-values">{entryAngles(take, entry).map((value) => <span key={`${take.group_id}-${value}`}>{value}</span>)}</div></td>
+                  <td><span className={`slate-status slate-status-${entry?.status || "unmarked"}`}>{statusLabel(entry?.status || "unmarked")}</span></td>
+                  <td className="slate-col-note" title={entry?.note || ""}>{entry?.note || "—"}</td>
+                  <td>{entry?.actor || "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
+      <p className="production-note slate-keyboard-note">⌥↑ / ⌥↓ 切换 Take；⌘/Ctrl+Enter 解析，再按一次确认并自动进入下一条。场记只记录生产事实，不改写 Review placement 或最终 Editorial Decision。</p>
     </section>
   );
 }
