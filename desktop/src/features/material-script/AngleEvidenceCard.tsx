@@ -1,4 +1,5 @@
 import type { ReviewAngle } from "../../api/host";
+import "./fixed-evidence-cards.css";
 
 export interface AngleEvidenceCardProps {
   angle: ReviewAngle;
