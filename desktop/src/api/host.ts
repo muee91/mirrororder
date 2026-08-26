@@ -235,11 +235,22 @@ export interface ReviewModelPayload {
 export interface ReviewPlacementWrite {
   groupId: string;
   actor: string;
+  expectedRevision?: number;
   episodeIds?: number[];
   scriptSegmentIds?: string[];
   interaction?: "drag" | "click" | "keyboard" | string;
   sourceSurface?: string;
   sourceKind?: string;
+  sourceClipId?: string;
+}
+
+export interface ReviewExclusionWrite {
+  groupId: string;
+  actor: string;
+  excluded: boolean;
+  expectedRevision?: number;
+  interaction?: "drag" | "click" | "keyboard" | string;
+  sourceSurface?: string;
   sourceClipId?: string;
 }
 
@@ -359,6 +370,14 @@ function normalizedGroupId(groupId: string): string {
   return value;
 }
 
+function normalizedExpectedRevision(value: number | undefined, action: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 0) {
+    throw new HostConnectionError(`${action}需要有效 expected_revision`);
+  }
+  return value;
+}
+
 export class HostConnection {
   readonly baseUrl: string;
 
@@ -408,6 +427,7 @@ export class HostConnection {
     const project = normalizedProjectId(projectId, "写入人工归集");
     const groupId = normalizedGroupId(write.groupId);
     const actor = normalizedActor(write.actor);
+    const expectedRevision = normalizedExpectedRevision(write.expectedRevision, "写入人工归集");
     const episodeIds = [...new Set(write.episodeIds ?? [])]
       .filter((value) => Number.isInteger(value) && value > 0 && value < 10000)
       .sort((left, right) => left - right);
@@ -430,15 +450,17 @@ export class HostConnection {
           source_surface: write.sourceSurface ?? "desktop-v2",
           source_kind: write.sourceKind ?? "take",
           source_clip_id: write.sourceClipId?.trim() || undefined,
+          ...(expectedRevision === undefined ? {} : { expected_revision: expectedRevision }),
         }),
       },
     );
   }
 
-  async clearGroupPlacement(projectId: string, write: Pick<ReviewPlacementWrite, "groupId" | "actor" | "interaction" | "sourceSurface">): Promise<LegacyReviewPayload> {
+  async clearGroupPlacement(projectId: string, write: Pick<ReviewPlacementWrite, "groupId" | "actor" | "expectedRevision" | "interaction" | "sourceSurface" | "sourceKind" | "sourceClipId">): Promise<LegacyReviewPayload> {
     const project = normalizedProjectId(projectId, "清除人工归集");
     const groupId = normalizedGroupId(write.groupId);
     const actor = normalizedActor(write.actor);
+    const expectedRevision = normalizedExpectedRevision(write.expectedRevision, "清除人工归集");
     return requestJson<LegacyReviewPayload>(
       this.baseUrl,
       `/api/v1/projects/${encodeURIComponent(project)}/review`,
@@ -450,7 +472,34 @@ export class HostConnection {
           actor,
           interaction: write.interaction ?? "click",
           source_surface: write.sourceSurface ?? "desktop-v2",
+          source_kind: write.sourceKind ?? "take",
+          source_clip_id: write.sourceClipId?.trim() || undefined,
+          ...(expectedRevision === undefined ? {} : { expected_revision: expectedRevision }),
+        }),
+      },
+    );
+  }
+
+  async setGroupExclusion(projectId: string, write: ReviewExclusionWrite): Promise<LegacyReviewPayload> {
+    const project = normalizedProjectId(projectId, "写入素材排除状态");
+    const groupId = normalizedGroupId(write.groupId);
+    const actor = normalizedActor(write.actor);
+    const expectedRevision = normalizedExpectedRevision(write.expectedRevision, "写入素材排除状态");
+    return requestJson<LegacyReviewPayload>(
+      this.baseUrl,
+      `/api/v1/projects/${encodeURIComponent(project)}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: "set_group",
+          group_id: groupId,
+          state: write.excluded ? "reject" : "unreviewed",
+          actor,
+          interaction: write.interaction ?? "click",
+          source_surface: write.sourceSurface ?? "desktop-v2-slate-table",
           source_kind: "take",
+          source_clip_id: write.sourceClipId?.trim() || undefined,
+          ...(expectedRevision === undefined ? {} : { expected_revision: expectedRevision }),
         }),
       },
     );

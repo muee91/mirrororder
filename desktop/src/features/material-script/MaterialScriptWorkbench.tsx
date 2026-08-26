@@ -45,6 +45,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function reviewWriteNeedsRefresh(error: unknown): boolean {
+  return error instanceof HostConnectionError && (error.status === 409 || error.message.includes("请刷新"));
+}
+
 function storedActor(): string {
   try {
     return globalThis.localStorage?.getItem(ACTOR_STORAGE_KEY)?.trim() ?? "";
@@ -192,6 +196,7 @@ export function MaterialScriptWorkbench({
   }
 
   async function placeTake(groupId: string, episodeIds: number[], segmentIds: string[], interaction: "drag" | "click", surface: string): Promise<void> {
+    if (!model) return;
     if (!actor.trim()) {
       setWriteState("error");
       setWriteMessage("先填写审核昵称，再写入人工归集。");
@@ -204,6 +209,7 @@ export function MaterialScriptWorkbench({
       await connection.setGroupPlacement(project.project_id, {
         groupId,
         actor,
+        expectedRevision: model.revisions.review,
         episodeIds,
         scriptSegmentIds: segmentIds,
         interaction,
@@ -216,14 +222,24 @@ export function MaterialScriptWorkbench({
       await refreshAfterWrite(groupId, summary);
     } catch (error) {
       setWriteState("error");
-      setWriteMessage(errorMessage(error));
+      if (reviewWriteNeedsRefresh(error)) {
+        try {
+          const latest = await connection.reviewModel(project.project_id);
+          setModel(latest);
+          setWriteMessage(`Review 已变化，已刷新到 r${latest.revisions.review}；请重新拖放。`);
+        } catch {
+          setWriteMessage(errorMessage(error));
+        }
+      } else {
+        setWriteMessage(errorMessage(error));
+      }
     } finally {
       setDraggingGroupId(null);
     }
   }
 
   async function clearPlacement(): Promise<void> {
-    if (!selectedTake) return;
+    if (!selectedTake || !model) return;
     if (!actor.trim()) {
       setWriteState("error");
       setWriteMessage("先填写审核昵称，再清除人工归集。");
@@ -235,12 +251,23 @@ export function MaterialScriptWorkbench({
       await connection.clearGroupPlacement(project.project_id, {
         groupId: selectedTake.group_id,
         actor,
+        expectedRevision: model.revisions.review,
         sourceSurface: "desktop-v2-material",
       });
       await refreshAfterWrite(selectedTake.group_id, `已清除 ${selectedTake.group_id} 的人工 placement；自动状态未改动。`);
     } catch (error) {
       setWriteState("error");
-      setWriteMessage(errorMessage(error));
+      if (reviewWriteNeedsRefresh(error)) {
+        try {
+          const latest = await connection.reviewModel(project.project_id);
+          setModel(latest);
+          setWriteMessage(`Review 已变化，已刷新到 r${latest.revisions.review}；请重新操作。`);
+        } catch {
+          setWriteMessage(errorMessage(error));
+        }
+      } else {
+        setWriteMessage(errorMessage(error));
+      }
     }
   }
 

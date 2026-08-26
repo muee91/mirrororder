@@ -29,7 +29,7 @@ from .agent_store import (
 from .collaboration_access import CollaborationAccessStore
 from .config import ProjectConfig
 from .media_identity import DeviceMediaStore
-from .review_store import ReviewStore
+from .review_store import ReviewConflictError, ReviewStore
 from .tasks import TaskManager
 from .transcript import TranscriptStore, slice_transcript
 from .workspace import WorkspaceConfig, WorkspaceRegistry
@@ -748,6 +748,8 @@ def make_handler(service: WorkspaceService, web_root: Path):
                 self._send_json({"error": str(error)}, error.status)
             except KeyError:
                 self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+            except ReviewConflictError as error:
+                self._send_json({"error": str(error)}, HTTPStatus.CONFLICT)
             except ValueError as error:
                 self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
             except (BrokenPipeError, ConnectionResetError):

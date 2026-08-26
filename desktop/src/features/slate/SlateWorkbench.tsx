@@ -1,6 +1,16 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
+import { MediaRoleClient, type MediaInventoryItem } from "../../api/mediaRoles";
 import { ProductionClient, type SlateBoard, type SlateEntry, type SlateParseResult } from "../../api/production";
+import {
+  buildSlatePools,
+  createSlateTakeDragPayload,
+  decodeSlateTakeDragPayload,
+  hasHumanPlacement,
+  isReviewExcluded,
+  SLATE_TAKE_MIME,
+  type SlateTakeDragPayload,
+} from "./slatePools";
 import "./slate-table.css";
 
 interface Props {
@@ -55,11 +65,89 @@ function statusLabel(value: string): string {
   }[value] ?? value;
 }
 
+function reviewWriteNeedsRefresh(error: unknown): boolean {
+  return error instanceof HostConnectionError && (error.status === 409 || error.message.includes("请刷新"));
+}
+
+interface SlateSceneTarget {
+  key: string;
+  episode: number;
+  sceneId: string;
+  heading: string;
+  segmentId: string | null;
+}
+
+function sceneTargets(review: ReviewModelPayload | null): SlateSceneTarget[] {
+  return (review?.episodes ?? []).flatMap((episode) =>
+    episode.scenes.map((scene) => ({
+      key: `${episode.episode}:${scene.scene_id}`,
+      episode: episode.episode,
+      sceneId: scene.scene_id,
+      heading: scene.heading,
+      segmentId: scene.script_blocks.find((block) => block.type !== "scene_heading")?.segment_id ?? null,
+    })),
+  );
+}
+
+function PoolCard({
+  take,
+  detail,
+  action,
+  actionLabel,
+  onSelect,
+  onDragStart,
+}: {
+  take: ReviewTakeGroup;
+  detail?: string;
+  action?: () => void;
+  actionLabel?: string;
+  onSelect: () => void;
+  onDragStart: (event: DragEvent<HTMLElement>, take: ReviewTakeGroup) => void;
+}) {
+  return (
+    <div
+      className="slate-pool-item"
+      draggable
+      onClick={onSelect}
+      onDragStart={(event) => onDragStart(event, take)}
+      title="拖到场景目标以人工归集；拖回待归集以清除人工归集"
+    >
+      <div className="slate-pool-item-main">
+        <strong>{take.group_id}</strong>
+        <span>{detail || take.angles.map((angle) => angle.camera).filter(Boolean).join("/") || "无机位"}</span>
+      </div>
+      {action && actionLabel ? <button type="button" className="slate-pool-action" onClick={(event) => { event.stopPropagation(); action(); }}>{actionLabel}</button> : null}
+    </div>
+  );
+}
+
+function placementLabel(take: ReviewTakeGroup, targets: SlateSceneTarget[]): string {
+  const placement = take.editorial_state.legacy_manual?.placement;
+  if (!placement) return "已归集";
+  const segmentId = placement.script_segment_ids?.[0] ?? "";
+  const target = segmentId ? targets.find((item) => item.segmentId === segmentId) : undefined;
+  const episode = placement.episode_ids?.[0];
+  if (target) return `EP${target.episode} · ${target.sceneId} · ${segmentId}`;
+  if (episode) return `EP${episode} · episode-only`;
+  return segmentId || "已归集";
+}
+
+function PoolSection({ title, count, children, dropTarget, onDrop }: { title: string; count: number; children: ReactNode; dropTarget?: boolean; onDrop?: (event: DragEvent<HTMLDivElement>) => void }) {
+  return (
+    <section className={`slate-pool ${dropTarget ? "slate-pool-drop-target" : ""}`} onDragOver={dropTarget ? (event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } : undefined} onDrop={dropTarget ? onDrop : undefined}>
+      <header><strong>{title}</strong><span>{count}</span></header>
+      <div className="slate-pool-list">{children}</div>
+    </section>
+  );
+}
+
 export function SlateWorkbench({ baseUrl, projectId }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
+  const media = useMemo(() => new MediaRoleClient(baseUrl), [baseUrl]);
   const [review, setReview] = useState<ReviewModelPayload | null>(null);
   const [board, setBoard] = useState<SlateBoard | null>(null);
+  const [mediaItems, setMediaItems] = useState<MediaInventoryItem[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [quickText, setQuickText] = useState("");
   const [parsed, setParsed] = useState<SlateParseResult | null>(null);
@@ -71,11 +159,12 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
   useEffect(() => {
     let cancelled = false;
     setMessage("正在读取电子场记…");
-    Promise.all([host.reviewModel(projectId), production.scriptSupervisor(projectId)])
-      .then(([nextReview, nextBoard]) => {
+    Promise.all([host.reviewModel(projectId), production.scriptSupervisor(projectId), media.inventory(projectId)])
+      .then(([nextReview, nextBoard, nextInventory]) => {
         if (cancelled) return;
         setReview(nextReview);
         setBoard(nextBoard);
+        setMediaItems(nextInventory.items);
         setSelectedGroupId((current) => current || nextReview.take_groups[0]?.group_id || "");
         setMessage(`场记已同步 · r${nextBoard.revision}`);
         globalThis.requestAnimationFrame(() => quickInputRef.current?.focus());
@@ -84,12 +173,173 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
         if (!cancelled) setMessage(errorMessage(error));
       });
     return () => { cancelled = true; };
-  }, [host, production, projectId]);
+  }, [host, media, production, projectId]);
 
   const takes = review?.take_groups ?? [];
+  const pools = useMemo(() => buildSlatePools(takes, mediaItems), [mediaItems, takes]);
+  const targets = useMemo(() => sceneTargets(review), [review]);
   const selectedIndex = takes.findIndex((take) => take.group_id === selectedGroupId);
   const selectedTake = selectedIndex >= 0 ? takes[selectedIndex] : null;
   const existing = board?.entries[selectedGroupId] ?? null;
+
+  async function reloadSlate(): Promise<void> {
+    const [nextReview, nextBoard, nextInventory] = await Promise.all([
+      host.reviewModel(projectId),
+      production.scriptSupervisor(projectId),
+      media.inventory(projectId),
+    ]);
+    setReview(nextReview);
+    setBoard(nextBoard);
+    setMediaItems(nextInventory.items);
+    setSelectedGroupId((current) => current && nextReview.take_groups.some((take) => take.group_id === current) ? current : nextReview.take_groups[0]?.group_id || "");
+    setMessage(`场记已同步 · Review r${nextReview.revisions.review} · Slate r${nextBoard.revision}`);
+  }
+
+  function beginSlateDrag(event: DragEvent<HTMLElement>, take: ReviewTakeGroup): void {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(SLATE_TAKE_MIME, JSON.stringify(createSlateTakeDragPayload(take)));
+    event.dataTransfer.setData("text/plain", take.group_id);
+  }
+
+  function readSlateDrag(event: DragEvent<HTMLElement>): SlateTakeDragPayload | null {
+    return decodeSlateTakeDragPayload(event.dataTransfer.getData(SLATE_TAKE_MIME));
+  }
+
+  async function placeDraggedTake(payload: SlateTakeDragPayload, target: SlateSceneTarget): Promise<void> {
+    const take = takes.find((item) => item.group_id === payload.groupId);
+    if (!take || isReviewExcluded(take)) {
+      setMessage("该 Take 已排除或已不在当前项目，请刷新后重试。恢复排除项后才能归集。");
+      return;
+    }
+    if (!review) return;
+    if (!actor.trim()) {
+      setMessage("拖放归集前需要操作者昵称。");
+      return;
+    }
+    const expectedRevision = review.revisions.review;
+    setBusy(true);
+    setMessage(`正在将 ${payload.groupId} 拖入 EP${target.episode} · ${target.sceneId}…`);
+    try {
+      globalThis.localStorage?.setItem(ACTOR_KEY, actor.trim());
+      await host.setGroupPlacement(projectId, {
+        groupId: payload.groupId,
+        actor,
+        expectedRevision,
+        episodeIds: [target.episode],
+        scriptSegmentIds: target.segmentId ? [target.segmentId] : [],
+        interaction: "drag",
+        sourceSurface: "slate-table",
+        sourceKind: payload.sourceKind,
+        sourceClipId: payload.sourceClipId,
+      });
+      await reloadSlate();
+      setMessage(`已人工归集 ${payload.groupId} → EP${target.episode} · ${target.sceneId}`);
+    } catch (error) {
+      if (reviewWriteNeedsRefresh(error)) {
+        await reloadSlate().catch(() => undefined);
+        setMessage("Review 已被其他操作更新，已刷新到最新 revision；请重新拖放。");
+      } else {
+        setMessage(errorMessage(error));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearOrRestoreDraggedTake(payload: SlateTakeDragPayload): Promise<void> {
+    const take = takes.find((item) => item.group_id === payload.groupId);
+    if (!take || !review) {
+      setMessage("拖放的 Take 已不在当前项目，请刷新后重试。");
+      return;
+    }
+    if (!actor.trim()) {
+      setMessage("清除归集或恢复排除前需要操作者昵称。");
+      return;
+    }
+    const expectedRevision = review.revisions.review;
+    setBusy(true);
+    setMessage(isReviewExcluded(take) ? `正在恢复 ${payload.groupId}…` : `正在清除 ${payload.groupId} 的人工归集…`);
+    try {
+      globalThis.localStorage?.setItem(ACTOR_KEY, actor.trim());
+      if (isReviewExcluded(take)) {
+        await host.setGroupExclusion(projectId, {
+          groupId: payload.groupId,
+          actor,
+          excluded: false,
+          expectedRevision,
+          interaction: "drag",
+          sourceSurface: "slate-table",
+          sourceClipId: payload.sourceClipId,
+        });
+      } else if (hasHumanPlacement(take)) {
+        await host.clearGroupPlacement(projectId, {
+          groupId: payload.groupId,
+          actor,
+          expectedRevision,
+          interaction: "drag",
+          sourceSurface: "slate-table",
+          sourceKind: payload.sourceKind,
+          sourceClipId: payload.sourceClipId,
+        });
+      } else {
+        setMessage("只有已归集或已排除的 Take 可以拖回待归集。");
+        return;
+      }
+      await reloadSlate();
+      setMessage(isReviewExcluded(take) ? `已恢复 ${payload.groupId}，现在位于待归集` : `已清除 ${payload.groupId} 的人工归集，场记事实保留`);
+    } catch (error) {
+      if (reviewWriteNeedsRefresh(error)) {
+        await reloadSlate().catch(() => undefined);
+        setMessage("Review 已被其他操作更新，已刷新到最新 revision；请重新拖放。");
+      } else {
+        setMessage(errorMessage(error));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setExcluded(take: ReviewTakeGroup, excluded: boolean): Promise<void> {
+    if (!review || !actor.trim()) {
+      setMessage("排除或恢复前需要操作者昵称。");
+      return;
+    }
+    setBusy(true);
+    try {
+      globalThis.localStorage?.setItem(ACTOR_KEY, actor.trim());
+      await host.setGroupExclusion(projectId, {
+        groupId: take.group_id,
+        actor,
+        excluded,
+        expectedRevision: review.revisions.review,
+        sourceSurface: "slate-table",
+        sourceClipId: take.angles[0]?.clip_id,
+      });
+      await reloadSlate();
+      setMessage(excluded ? `已排除 ${take.group_id}；这是 Review 排除状态，不是场记 NG` : `已恢复 ${take.group_id} 到待归集`);
+    } catch (error) {
+      if (reviewWriteNeedsRefresh(error)) {
+        await reloadSlate().catch(() => undefined);
+        setMessage("Review 已被其他操作更新，已刷新到最新 revision；请重新操作。");
+      } else {
+        setMessage(errorMessage(error));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleSceneDrop(event: DragEvent<HTMLButtonElement>, target: SlateSceneTarget): void {
+    event.preventDefault();
+    const payload = readSlateDrag(event);
+    if (payload) void placeDraggedTake(payload, target);
+  }
+
+  function handlePendingDrop(event: DragEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    const payload = readSlateDrag(event);
+    if (payload) void clearOrRestoreDraggedTake(payload);
+  }
 
   function selectTakeAt(index: number): void {
     const next = takes[index];
@@ -247,6 +497,50 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
         </section>
       ) : null}
 
+      <section className="slate-intake" aria-label="场记素材归集池">
+        <header className="slate-intake-heading">
+          <div><strong>场记归集池</strong><span>拖 Take 到右侧场景直接写入 Review placement；场记表仍是生产事实。</span></div>
+          <small>Review r{review?.revisions.review ?? "—"}</small>
+        </header>
+        <div className="slate-intake-layout">
+          <aside className="slate-pools" aria-label="四个场记素材池">
+            <PoolSection title="待归集" count={pools.pending.length} dropTarget onDrop={handlePendingDrop}>
+              {pools.pending.length ? pools.pending.map((take) => (
+                <PoolCard key={take.group_id} take={take} onSelect={() => selectTake(take.group_id)} onDragStart={beginSlateDrag} action={() => void setExcluded(take, true)} actionLabel="排除" />
+              )) : <span className="slate-pool-empty">没有待归集 Take</span>}
+            </PoolSection>
+            <PoolSection title="已归集" count={pools.placed.length}>
+              {pools.placed.length ? pools.placed.map((take) => (
+                <PoolCard key={take.group_id} take={take} detail={placementLabel(take, targets)} onSelect={() => selectTake(take.group_id)} onDragStart={beginSlateDrag} />
+              )) : <span className="slate-pool-empty">没有人工归集 Take</span>}
+            </PoolSection>
+            <PoolSection title="已排除" count={pools.excluded.length}>
+              {pools.excluded.length ? pools.excluded.map((take) => (
+                <PoolCard key={take.group_id} take={take} onSelect={() => selectTake(take.group_id)} onDragStart={beginSlateDrag} action={() => void setExcluded(take, false)} actionLabel="恢复" />
+              )) : <span className="slate-pool-empty">没有 Review 排除项</span>}
+            </PoolSection>
+            <PoolSection title="孤立素材" count={pools.orphan.length}>
+              {pools.orphan.length ? pools.orphan.map((item) => (
+                <div className="slate-pool-item slate-orphan-item" key={item.media_id}>
+                  <div className="slate-pool-item-main"><strong>{item.display_name || item.media_id}</strong><span>{item.folder_label || "未分组"} · {item.inferred_camera || "未知机位"}</span></div>
+                  <small>{item.indexed ? "已索引" : "未索引"}</small>
+                </div>
+              )) : <span className="slate-pool-empty">没有未关联媒体</span>}
+            </PoolSection>
+          </aside>
+          <div className="slate-scene-targets" aria-label="场记场景目标">
+            <header><strong>场景目标</strong><span>放到场景行 = episode + 首个剧本段；无剧本段时只写 episode-only</span></header>
+            <div className="slate-scene-target-list">
+              {targets.length ? targets.map((target) => (
+                <button type="button" className="slate-scene-target" key={target.key} disabled={busy} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => handleSceneDrop(event, target)}>
+                  <strong>EP{target.episode} · {target.sceneId}</strong><span>{target.heading}</span><small>{target.segmentId ? `剧本段 ${target.segmentId}` : "episode-only 目标"}</small>
+                </button>
+              )) : <span className="slate-pool-empty">当前项目没有可用场景目标</span>}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="slate-table-shell">
         <table className="slate-table">
           <thead>
@@ -267,7 +561,14 @@ export function SlateWorkbench({ baseUrl, projectId }: Props) {
               const entry = board?.entries[take.group_id] ?? null;
               const selected = take.group_id === selectedGroupId;
               return (
-                <tr className={selected ? "is-selected" : ""} key={take.group_id} onClick={() => selectTake(take.group_id)}>
+                <tr
+                  className={selected ? "is-selected" : ""}
+                  key={take.group_id}
+                  onClick={() => selectTake(take.group_id)}
+                  draggable={hasHumanPlacement(take) || isReviewExcluded(take)}
+                  onDragStart={(event) => { if (hasHumanPlacement(take) || isReviewExcluded(take)) beginSlateDrag(event, take); }}
+                  title={hasHumanPlacement(take) ? "拖回左侧待归集以清除人工归集；场记表事实保留" : isReviewExcluded(take) ? "拖回待归集以恢复 Review" : undefined}
+                >
                   <td className="slate-col-take"><strong>{take.group_id}</strong><small>{take.angles.map((angle) => angle.camera).filter(Boolean).join("/") || "—"}</small></td>
                   <td>{entry?.episode ? `EP${entry.episode}` : "—"}</td>
                   <td>{entry?.scene || "—"}</td>
