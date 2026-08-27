@@ -1,24 +1,30 @@
-.candidate-evidence-card { display: grid; gap: 9px; margin-top: 9px; border: 1px solid #28323c; border-radius: 10px; padding: 10px; background: #11171c; }
-.candidate-evidence-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.candidate-evidence-card > header > div:first-child { display: grid; min-width: 0; gap: 3px; color: #75818e; font-size: 9px; }
-.candidate-evidence-card > header strong { overflow: hidden; color: #b7c1cb; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.candidate-total { display: grid; flex: 0 0 auto; justify-items: end; gap: 2px; }
-.candidate-total small { color: #6f7b87; font-size: 8px; text-transform: uppercase; }
-.candidate-total code { color: #d5dce4; font-size: 12px; }
-.candidate-score-grid { display: grid; gap: 5px; }
+.candidate-evidence-card { display: grid; grid-template-rows: 48px 57px 22px 26px 38px 24px; gap: 8px; height: 263px; min-height: 263px; max-height: 263px; margin-top: 9px; overflow: hidden; border: 1px solid #28323c; border-radius: 10px; padding: 10px; background: #11171c; }
+.candidate-card-header { display: grid; grid-template-columns: minmax(0, 1fr) 82px; gap: 10px; min-height: 0; }
+.candidate-target { display: grid; align-content: start; min-width: 0; gap: 4px; color: #75818e; font-size: 9px; }
+.candidate-target strong { overflow: hidden; color: #c3cbd3; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.candidate-total { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; align-items: end; min-width: 82px; border-left: 1px solid #27313a; padding-left: 9px; }
+.candidate-total small { grid-column: 1 / -1; color: #6f7b87; font-size: 8px; }
+.candidate-total strong { overflow: hidden; color: #b9c5d0; font-size: 9px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.candidate-total code { color: #e1e6eb; font-size: 12px; text-align: right; }
+.candidate-score-grid { display: grid; align-content: center; gap: 5px; min-height: 0; }
 .candidate-score-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; gap: 7px; align-items: center; color: #778491; font-size: 9px; }
 .candidate-score-track { height: 5px; overflow: hidden; border-radius: 999px; background: #252e37; }
 .candidate-score-track i { display: block; height: 100%; border-radius: inherit; background: currentColor; opacity: .72; }
 .candidate-score-row code { color: #909ca8; text-align: right; }
-.candidate-relation-meta { display: flex; flex-wrap: wrap; gap: 5px 9px; color: #6f7b87; font-size: 8px; }
+.candidate-relation-meta { display: grid; grid-template-columns: 72px minmax(0, 1fr) 96px; gap: 7px; align-items: center; min-width: 0; color: #6f7b87; font-size: 8px; }
+.candidate-relation-meta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .candidate-relation-meta code { color: #929eaa; }
-.candidate-evidence-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.candidate-evidence-chips span { border-radius: 999px; padding: 3px 6px; color: #9da9b5; background: #202932; font-size: 8px; }
-.candidate-transcript { margin: 0; color: #9da8b3; font-size: 9px; line-height: 1.45; }
-.candidate-authority-note { margin: 0; color: #6d7985; font-size: 8px; line-height: 1.4; }
+.candidate-card-evidence-slot { min-height: 26px; overflow: hidden; }
+.candidate-evidence-chips { display: flex; flex-wrap: nowrap; gap: 4px; overflow: hidden; }
+.candidate-evidence-chips span { flex: 0 1 auto; min-width: 0; overflow: hidden; border-radius: 999px; padding: 3px 6px; color: #9da9b5; background: #202932; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.candidate-empty-evidence { color: #65717c; font-size: 8px; line-height: 26px; }
+.candidate-transcript { display: -webkit-box; height: 38px; margin: 0; overflow: hidden; color: #9da8b3; font-size: 9px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.candidate-transcript.is-empty { color: #66727e; }
+.candidate-authority-note { height: 24px; margin: 0; overflow: hidden; color: #6d7985; font-size: 8px; line-height: 1.4; }
 
 @media (prefers-color-scheme: light) {
   .candidate-evidence-card { border-color: #dce3e9; background: #f7f9fb; }
+  .candidate-total { border-left-color: #dce3e9; }
   .candidate-score-track { background: #dfe5eb; }
   .candidate-evidence-chips span { color: #56626f; background: #e8edf2; }
 }

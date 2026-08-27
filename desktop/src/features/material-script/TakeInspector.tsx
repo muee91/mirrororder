@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
+import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { CandidateEvidence } from "./CandidateEvidence";
+import { AuditEvidencePanel, EditorialDecisionPanel } from "./TakeEvidencePanels";
 import { mappingLabel, mappingSourceLabel } from "./VirtualTakeList";
 
 export function TakeInspector({
@@ -12,6 +14,7 @@ export function TakeInspector({
   onShowScript,
   onClearPlacement,
   writeSaving,
+  showEditorial = false,
 }: {
   connection: HostConnection;
   projectId: string;
@@ -21,6 +24,7 @@ export function TakeInspector({
   onShowScript: () => void;
   onClearPlacement: () => void;
   writeSaving: boolean;
+  showEditorial?: boolean;
 }) {
   const angle = take?.angles.find((item) => item.clip_id === selectedClipId) ?? take?.angles[0] ?? null;
   const playbackUrl = useMemo(
@@ -51,16 +55,14 @@ export function TakeInspector({
         ) : null}
       </div>
 
-      <div className="inspector-angle-tabs">
+      <div className="inspector-angle-cards" aria-label={`${take.group_id} 机位选择`}>
         {take.angles.map((item) => (
-          <button
-            type="button"
-            className={item.clip_id === angle?.clip_id ? "is-active" : ""}
+          <AngleEvidenceCard
+            angle={item}
+            selected={item.clip_id === angle?.clip_id}
+            onSelect={onSelectClip}
             key={item.clip_id}
-            onClick={() => onSelectClip(item.clip_id)}
-          >
-            {item.camera || "—"}{item.shot_type && item.shot_type !== "unknown" ? ` · ${item.shot_type}` : ""}
-          </button>
+          />
         ))}
       </div>
 
@@ -97,6 +99,8 @@ export function TakeInspector({
         <p>{take.transcript.text || "当前没有可靠对白投影。"}</p>
       </div>
 
+      <AuditEvidencePanel take={take} selectedAngle={angle} />
+
       {take.candidates.length > 0 ? (
         <div className="candidate-panel">
           <p className="eyebrow">候选关系 · 需人工审阅后确认</p>
@@ -110,6 +114,8 @@ export function TakeInspector({
           </div>
         </div>
       ) : null}
+
+      {showEditorial ? <EditorialDecisionPanel baseUrl={connection.baseUrl} projectId={projectId} groupId={take.group_id} /> : null}
     </aside>
   );
 }

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from script_organizer.review_store import ReviewStore
+from script_organizer.review_store import ReviewConflictError, ReviewStore
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,3 +115,26 @@ def test_review_store_rejects_stale_drag_targets(tmp_path: Path) -> None:
         assert "剧本段" in str(error)
     else:
         raise AssertionError("stale script target must be rejected")
+
+
+def test_review_store_rejects_stale_revision_without_overwriting_review(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+    (output / "material_index.json").write_text(json.dumps({"groups": [{"group_id": "take-1"}]}), encoding="utf-8")
+    store = ReviewStore(output / "review.json")
+
+    first = store.apply_action({"action": "set_group", "group_id": "take-1", "state": "keep", "actor": "A", "expected_revision": 0})
+    assert first["revision"] == 1
+
+    try:
+        store.apply_action({"action": "set_group_placement", "group_id": "take-1", "episode_ids": [2], "actor": "B", "expected_revision": 0})
+    except ReviewConflictError as error:
+        assert "当前 r1" in str(error)
+        assert "请刷新后重试" in str(error)
+    else:
+        raise AssertionError("stale Review revision must fail closed")
+
+    current = store.load()
+    assert current["revision"] == 1
+    assert current["placements"] == {}
+    assert current["groups"]["take-1"]["state"] == "keep"

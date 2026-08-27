@@ -12,6 +12,7 @@ import {
 import { PlatformClient, type PlatformInfo } from "../api/platform";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
+import { StatusCenterWorkbench } from "../features/status/StatusCenterWorkbench";
 import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
 
 function errorMessage(error: unknown): string {
@@ -38,6 +39,7 @@ export function App() {
   const [state, setState] = useState<HostConnectionState>("idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
+  const [statusCenterOpen, setStatusCenterOpen] = useState(false);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [message, setMessage] = useState("选择一个本机工作区开始制作。");
 
@@ -107,6 +109,7 @@ export function App() {
     } catch (error) {
       setSnapshot(null);
       setSelectedProject(null);
+      setStatusCenterOpen(false);
       setState("error");
       setMessage(errorMessage(error));
     }
@@ -149,12 +152,25 @@ export function App() {
       setBaseUrl(next.baseUrl);
       setSnapshot(next);
       setSelectedProject(next.projects[0] ?? null);
+      setStatusCenterOpen(false);
       setState("connected");
       setMessage(`工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       setState("error");
       setMessage(errorMessage(error));
     }
+  }
+
+  function selectProject(project: ProjectSummary): void {
+    setSelectedProject(project);
+    setStatusCenterOpen(false);
+  }
+
+  function openProjectFromStatus(projectId: string): void {
+    const project = snapshot?.projects.find((item) => item.project_id === projectId) ?? null;
+    if (!project) return;
+    setSelectedProject(project);
+    setStatusCenterOpen(false);
   }
 
   return (
@@ -232,16 +248,20 @@ export function App() {
                 baseUrl={snapshot.baseUrl}
                 workspace={snapshot.workspace}
                 selectedProjectId={selectedProject?.project_id ?? null}
-                onSelectProject={setSelectedProject}
+                statusCenterActive={statusCenterOpen}
+                onSelectProject={selectProject}
+                onOpenStatusCenter={() => setStatusCenterOpen(true)}
                 onWorkspaceChanged={refreshWorkspace}
               />
               <section className="workbench-shell">
-                {selectedProject ? (
+                {statusCenterOpen ? (
+                  <StatusCenterWorkbench baseUrl={snapshot.baseUrl} projects={snapshot.projects} onOpenProject={openProjectFromStatus} />
+                ) : selectedProject ? (
                   <ProjectWorkbench key={selectedProject.project_id} baseUrl={snapshot.baseUrl} project={selectedProject} />
                 ) : (
                   <div className="phase-placeholder">
                     <strong>选择或创建一个项目</strong>
-                    <p>从左侧项目库进入素材、场记、人物、剪辑和交付工作流。</p>
+                    <p>从左侧项目库进入素材、剧本、剪辑和审阅工作流。</p>
                   </div>
                 )}
               </section>
@@ -250,7 +270,7 @@ export function App() {
             <section className="offline-state">
               <p className="eyebrow">本机制作</p>
               <h2>选择工作区开始</h2>
-              <p>镜序会在本机读取项目与素材；连接和运行环境的详细信息集中在项目设置与状态页。</p>
+              <p>镜序会在本机读取项目与素材；连接和运行环境的详细信息集中在低频设置与诊断区域。</p>
             </section>
           )}
         </>

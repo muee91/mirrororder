@@ -19,11 +19,21 @@
 .lifecycle-delete { display: grid; gap: 7px; margin-top: 3px; border-top: 1px solid #2b343d; padding-top: 10px; }
 .lifecycle-delete p { margin: 0; color: #806f70; font-size: 9px; line-height: 1.45; }
 .lifecycle-delete .danger-quiet { border-color: #6a4141; color: #cf9898; background: #221616; }
+.project-library { display: flex; min-height: 0; flex-direction: column; }
+.project-list { min-height: 0; overflow-y: auto; }
+.project-library-global-tools { margin-top: auto; border-top: 1px solid #252d36; padding-top: 10px; }
+.project-library-global-tools button { display: grid; width: 100%; gap: 2px; border-color: transparent; padding: 8px 9px; color: #82909c; background: transparent; text-align: left; }
+.project-library-global-tools button:hover { background: #12181e; }
+.project-library-global-tools button.is-active { border-color: #34414d; color: #d0d8df; background: #182027; }
+.project-library-global-tools button span { font-size: 10px; font-weight: 650; }
+.project-library-global-tools button small { color: #6f7c88; font-size: 8px; font-weight: 400; }
 
 @media (prefers-color-scheme: light) {
-  .project-lifecycle-panel, .lifecycle-delete { border-color: #dce3e9; }
+  .project-lifecycle-panel, .lifecycle-delete, .project-library-global-tools { border-color: #dce3e9; }
   .project-lifecycle-body { border-color: #d7dfe6; background: #f8fafb; }
   .project-lifecycle-body input, .project-lifecycle-body textarea { border-color: #d5dde5; color: #27313a; background: #fff; }
   .lifecycle-kind button { border-color: #d5dde5; color: #5d6975; background: #eef2f6; }
   .lifecycle-kind button.is-active { color: #fff; background: #17202a; }
+  .project-library-global-tools button:hover { background: #f5f7f9; }
+  .project-library-global-tools button.is-active { border-color: #bcc8d2; color: #24303a; background: #edf2f5; }
 }

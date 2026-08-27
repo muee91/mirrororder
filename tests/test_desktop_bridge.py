@@ -76,8 +76,10 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
 def test_desktop_project_tabs_are_explicit_product_surfaces() -> None:
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
-    for label in ("素材 / 剧本", "场记", "人物", "小镜", "剪辑", "交付", "本机素材", "设置 / 状态"):
+    for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
+    assert "project-workbench-primary" in workbench
+    assert ">小镜</button>" in workbench
     assert "onOpenTake={openTakeFromEvidence}" in workbench
     assert "initialGroupId={materialFocusGroupId}" in workbench
 

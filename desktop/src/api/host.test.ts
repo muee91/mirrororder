@@ -123,6 +123,7 @@ describe("HostConnection", () => {
       new HostConnection().setGroupPlacement("p1", {
         groupId: "g1",
         actor: "Editor A",
+        expectedRevision: 3,
         episodeIds: [3, 3],
         interaction: "drag",
         sourceSurface: "desktop-v2-material",
@@ -140,6 +141,7 @@ describe("HostConnection", () => {
       actor: "Editor A",
       interaction: "drag",
       source_surface: "desktop-v2-material",
+      expected_revision: 3,
     });
   });
 
@@ -172,6 +174,50 @@ describe("HostConnection", () => {
       script_segment_ids: ["S_12"],
     });
     expect(payload.state).toBeUndefined();
+  });
+
+  it("uses the existing Review group state action for exclusion and restore", async () => {
+    const saved = { version: 2, revision: 7, updated_at: "", assignments: {}, groups: {}, clips: {}, placements: {} };
+    const browserFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(saved));
+    vi.stubGlobal("fetch", browserFetch);
+
+    const connection = new HostConnection();
+    await connection.setGroupExclusion("p1", {
+      groupId: "g1",
+      actor: "Editor A",
+      excluded: true,
+      expectedRevision: 6,
+      interaction: "drag",
+      sourceSurface: "slate-table",
+      sourceClipId: "clip-1",
+    });
+    await connection.setGroupExclusion("p1", {
+      groupId: "g1",
+      actor: "Editor A",
+      excluded: false,
+      expectedRevision: 7,
+      sourceSurface: "slate-table",
+    });
+
+    expect(browserFetch).toHaveBeenCalledTimes(2);
+    const excluded = JSON.parse(String(browserFetch.mock.calls[0]?.[1]?.body));
+    expect(excluded).toMatchObject({
+      action: "set_group",
+      group_id: "g1",
+      state: "reject",
+      expected_revision: 6,
+      source_surface: "slate-table",
+      source_clip_id: "clip-1",
+    });
+    expect(excluded.editorial_decision).toBeUndefined();
+    const restored = JSON.parse(String(browserFetch.mock.calls[1]?.[1]?.body));
+    expect(restored).toMatchObject({ action: "set_group", group_id: "g1", state: "unreviewed", expected_revision: 7 });
+  });
+
+  it("validates expected Review revisions before sending a write", async () => {
+    const connection = new HostConnection();
+    await expect(connection.setGroupPlacement("p1", { groupId: "g1", actor: "Editor", expectedRevision: -1, episodeIds: [1] })).rejects.toThrow("有效 expected_revision");
+    await expect(connection.clearGroupPlacement("p1", { groupId: "g1", actor: "Editor", expectedRevision: Number.NaN })).rejects.toThrow("有效 expected_revision");
   });
 
   it("rejects placement writes without an actor or target", async () => {

@@ -1,0 +1,55 @@
+.review-production-workbench { min-width: 0; }
+.review-attention-summary { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: baseline; gap: 7px; margin-bottom: 10px; border-bottom: 1px solid #27313a; padding-bottom: 10px; }
+.review-attention-summary strong { color: #d7dee5; font-size: 22px; }
+.review-attention-summary span { color: #9da8b2; font-size: 11px; }
+.review-attention-summary p { justify-self: end; margin: 0; color: #737f8b; font-size: 9px; }
+.review-attention-list { display: grid; gap: 6px; }
+.review-attention-row { display: grid; grid-template-columns: minmax(160px, .6fr) minmax(240px, 1.2fr) minmax(180px, 1fr) auto; align-items: center; gap: 9px; border: 1px solid #28313a; border-radius: 8px; padding: 9px 10px; background: #10161b; }
+.review-attention-name { display: grid; gap: 2px; }
+.review-attention-name strong { color: #c8d1da; font-size: 11px; }
+.review-attention-name span { color: #74818d; font-size: 9px; }
+.review-attention-issues { display: grid; gap: 2px; }
+.review-attention-issues span { color: #d4bd78; font-size: 9px; }
+.review-attention-row > p { margin: 0; color: #87939e; font-size: 9px; line-height: 1.4; }
+.review-overview-strip { display: flex; gap: 1px; margin-bottom: 10px; border: 1px solid #28313a; border-radius: 9px; overflow: hidden; background: #28313a; }
+.review-overview-strip span { display: grid; min-width: 105px; flex: 1 1 0; gap: 2px; padding: 9px 10px; color: #788591; background: #0f1419; font-size: 9px; }
+.review-overview-strip strong { color: #d2dae2; font-size: 14px; }
+.review-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 9px; }
+.review-overview-pane { border: 1px solid #28313a; border-radius: 9px; padding: 11px; background: #0f1419; }
+.review-state-bars { display: grid; gap: 5px; margin-top: 9px; }
+.review-state-bars span { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #232c34; padding-bottom: 5px; color: #7b8894; font-size: 10px; }
+.review-state-bars strong { color: #cbd4dc; }
+.review-fact-list { display: grid; gap: 6px; margin: 9px 0 0; }
+.review-fact-list div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #232c34; padding-bottom: 5px; }
+.review-fact-list dt { color: #778490; font-size: 9px; }
+.review-fact-list dd { margin: 0; color: #c0cad3; font-size: 10px; }
+.review-pane-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.review-pane-heading h3 { margin: 3px 0 0; }
+.review-pane-heading > span { color: #75818d; font-size: 9px; }
+.review-overview-takes { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 5px; margin-top: 9px; }
+.review-overview-takes button { display: grid; gap: 2px; border-color: #2b3540; color: #aab5bf; background: #141a20; text-align: left; }
+.review-overview-takes button strong { color: #bec8d1; font-size: 10px; }
+.review-overview-takes button span { color: #d2bb78; font-size: 9px; }
+
+@media (max-width: 980px) {
+  .review-attention-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .review-attention-issues, .review-attention-row > p { grid-column: 1 / -1; }
+  .review-attention-summary { grid-template-columns: auto minmax(0, 1fr); }
+  .review-attention-summary p { grid-column: 1 / -1; justify-self: start; }
+}
+
+@media (max-width: 760px) {
+  .review-overview-strip { overflow-x: auto; }
+  .review-overview-strip span { flex: 0 0 105px; }
+  .review-overview-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-color-scheme: light) {
+  .review-attention-summary { border-color: #dce3e9; }
+  .review-attention-summary strong, .review-overview-strip strong, .review-state-bars strong, .review-fact-list dd, .review-overview-takes button strong { color: #2c363f; }
+  .review-attention-row, .review-overview-pane { border-color: #dce3e9; background: #fff; }
+  .review-overview-strip { border-color: #dce3e9; background: #dce3e9; }
+  .review-overview-strip span { background: #fff; }
+  .review-state-bars span, .review-fact-list div { border-color: #e4e9ed; }
+  .review-overview-takes button { border-color: #d8dfe6; color: #56636f; background: #f6f8fa; }
+}

@@ -6,7 +6,9 @@ interface Props {
   baseUrl: string;
   workspace: WorkspacePayload;
   selectedProjectId: string | null;
+  statusCenterActive?: boolean;
   onSelectProject: (project: ProjectSummary) => void;
+  onOpenStatusCenter?: () => void;
   onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
 }
 
@@ -17,14 +19,22 @@ function projectSubtitle(project: ProjectSummary): string {
   return `${project.input_kind || "project"}${suffix}`;
 }
 
-export function ProjectLibrary({ baseUrl, workspace, selectedProjectId, onSelectProject, onWorkspaceChanged }: Props) {
+export function ProjectLibrary({
+  baseUrl,
+  workspace,
+  selectedProjectId,
+  statusCenterActive = false,
+  onSelectProject,
+  onOpenStatusCenter,
+  onWorkspaceChanged,
+}: Props) {
   const selectedProject = workspace.projects.find((project) => project.project_id === selectedProjectId) ?? null;
 
   return (
     <aside className="project-library">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">工作区</p>
+          <p className="eyebrow">项目</p>
           <h2>{workspace.workspace}</h2>
         </div>
         <span className="count-pill">{workspace.projects.length}</span>
@@ -42,7 +52,7 @@ export function ProjectLibrary({ baseUrl, workspace, selectedProjectId, onSelect
         ) : (
           workspace.projects.map((project) => (
             <button
-              className={`project-row ${selectedProjectId === project.project_id ? "is-selected" : ""}`}
+              className={`project-row ${!statusCenterActive && selectedProjectId === project.project_id ? "is-selected" : ""}`}
               key={project.project_id}
               type="button"
               onClick={() => onSelectProject(project)}
@@ -52,6 +62,13 @@ export function ProjectLibrary({ baseUrl, workspace, selectedProjectId, onSelect
             </button>
           ))
         )}
+      </div>
+
+      <div className="project-library-global-tools">
+        <button type="button" className={statusCenterActive ? "is-active" : ""} onClick={onOpenStatusCenter}>
+          <span>状态中心</span>
+          <small>后台工作与失败恢复</small>
+        </button>
       </div>
     </aside>
   );

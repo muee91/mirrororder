@@ -4,6 +4,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "desktop" / "src" / "app" / "App.tsx"
 WORKBENCH = ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
+PROJECT_LIBRARY = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx"
+STATUS_CENTER = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenterWorkbench.tsx"
+SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
+SEARCH = ROOT / "desktop" / "src" / "features" / "search" / "SemanticSearchPalette.tsx"
+SLATE = ROOT / "desktop" / "src" / "features" / "slate" / "SlateWorkbench.tsx"
+ANGLE_CARD = ROOT / "desktop" / "src" / "features" / "material-script" / "AngleEvidenceCard.tsx"
+ANGLE_CARD_CSS = ROOT / "desktop" / "src" / "features" / "material-script" / "fixed-evidence-cards.css"
+CONFIDENCE_CARD = ROOT / "desktop" / "src" / "features" / "material-script" / "CandidateEvidence.tsx"
+CONFIDENCE_CSS = ROOT / "desktop" / "src" / "features" / "material-script" / "candidate-evidence.css"
+TAKE_LIST = ROOT / "desktop" / "src" / "features" / "material-script" / "VirtualTakeList.tsx"
+TAKE_INSPECTOR = ROOT / "desktop" / "src" / "features" / "material-script" / "TakeInspector.tsx"
+TEAM = ROOT / "desktop" / "src" / "features" / "team" / "TeamWebWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
@@ -15,18 +27,135 @@ def test_desktop_is_project_first_production_surface() -> None:
     assert "ProjectWorkbench" in app
     assert 'setAppWorkspace("production")' in app
     assert 'setAppWorkspace("team")' in app
-    for label in ("素材 / 剧本", "场记", "人物", "小镜", "剪辑", "交付", "本机素材", "设置 / 状态"):
+
+    for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
 
+    for label in (
+        "素材库",
+        "Take",
+        "人物",
+        "场记",
+        "覆盖",
+        "粗剪",
+        "组接",
+        "时间线",
+        "交付",
+        "看片",
+        "待处理",
+        "概览",
+    ):
+        assert f'label: "{label}"' in workbench
 
-def test_team_web_is_top_level_and_not_a_project_tab() -> None:
+    assert 'label: "素材 / 剧本"' not in workbench
+    assert 'label: "本机素材"' not in workbench
+    assert 'label: "设置 / 状态"' not in workbench
+    assert 'label: "小镜"' not in workbench
+
+
+def test_frontend_parity_surfaces_are_reachable_from_product_ia() -> None:
+    workbench = WORKBENCH.read_text(encoding="utf-8")
+
+    assert "MediaLibraryWorkbench" in workbench
+    assert "CoverageWorkbench" in workbench
+    assert "RoughCutWorkbench" in workbench
+    assert "AssemblyWorkbench" in workbench
+    assert "ReviewAttentionWorkbench" in workbench
+    assert "ProjectOverviewWorkbench" in workbench
+    assert "showEditorial" in workbench
+
+
+def test_project_search_and_assistant_are_contextual_tools_not_new_tabs() -> None:
+    workbench = WORKBENCH.read_text(encoding="utf-8")
+    search = SEARCH.read_text(encoding="utf-8")
+
+    assert "SemanticSearchPalette" in workbench
+    assert "onOpenTake={openTakeFromEvidence}" in workbench
+    assert 'event.key.toLowerCase() === "k"' in search
+    assert "画面、对白和人工场记证据" in search
+    assert "assistant-context-drawer" in workbench
+    assert "has-assistant-drawer" in workbench
+    assert "setAssistantOpen" in workbench
+    assert 'label: "小镜"' not in workbench
+
+
+def test_slate_is_dense_table_and_preserves_keyboard_flow() -> None:
+    slate = SLATE.read_text(encoding="utf-8")
+
+    assert '<table className="slate-table">' in slate
+    for column in ("Take", "集", "场", "镜", "条", "机位 / 景别", "状态", "备注", "记录人"):
+        assert f">{column}<" in slate
+    assert 'event.altKey && event.key === "ArrowUp"' in slate
+    assert 'event.altKey && event.key === "ArrowDown"' in slate
+    assert '(event.metaKey || event.ctrlKey) && event.key === "Enter"' in slate
+    assert "expectedRevision: board.revision" in slate
+
+
+def test_fixed_angle_card_is_one_shared_geometry_contract() -> None:
+    component = ANGLE_CARD.read_text(encoding="utf-8")
+    css = ANGLE_CARD_CSS.read_text(encoding="utf-8")
+    take_list = TAKE_LIST.read_text(encoding="utf-8")
+    inspector = TAKE_INSPECTOR.read_text(encoding="utf-8")
+
+    assert "fixed-angle-card" in component
+    assert "width: 220px" in css
+    assert "min-width: 220px" in css
+    assert "max-width: 220px" in css
+    assert "height: 76px" in css
+    assert "min-height: 76px" in css
+    assert "max-height: 76px" in css
+    assert "AngleEvidenceCard" in take_list
+    assert "AngleEvidenceCard" in inspector
+    assert "inspector-angle-cards" in inspector
+
+
+def test_fixed_confidence_card_cannot_expand_with_content() -> None:
+    component = CONFIDENCE_CARD.read_text(encoding="utf-8")
+    css = CONFIDENCE_CSS.read_text(encoding="utf-8")
+
+    assert "fixed-confidence-card" in component
+    assert ">置信度<" in component
+    assert 'ScoreRow label="对白"' in component
+    assert 'ScoreRow label="时序"' in component
+    assert 'ScoreRow label="上下文"' in component
+    assert "height: 263px" in css
+    assert "min-height: 263px" in css
+    assert "max-height: 263px" in css
+    assert "-webkit-line-clamp: 2" in css
+    assert "candidate.evidence.slice(0, 4)" in component
+
+
+def test_background_tasks_have_one_global_status_center_home() -> None:
+    app = APP.read_text(encoding="utf-8")
+    library = PROJECT_LIBRARY.read_text(encoding="utf-8")
+    status_center = STATUS_CENTER.read_text(encoding="utf-8")
+    settings = SETTINGS.read_text(encoding="utf-8")
+
+    assert "StatusCenterWorkbench" in app
+    assert "statusCenterOpen" in app
+    assert "状态中心" in library
+    assert "ProjectTaskClient" in status_center
+    assert "canCancelTask" in status_center
+    assert "canRetryTask" in status_center
+    assert "TaskStatusPanel" not in settings
+    assert "后台任务的进度、取消与重试统一放在左侧“状态中心”" in settings
+
+
+def test_team_web_is_user_facing_with_network_details_advanced() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
+    team = TEAM.read_text(encoding="utf-8")
 
     assert "TeamWebWorkbench" in app
     assert 'type AppWorkspace = "production" | "team"' in app
     assert "TeamWebWorkbench" not in workbench
     assert 'label: "团队协作"' not in workbench
+    assert "团队审阅" in team
+    assert "高级连接设置" in team
+    primary = team.split('<details className="team-advanced-settings">', 1)[0]
+    assert "Gateway Scope" not in primary
+    assert "Network Boundary" not in primary
+    assert "Isolated Collaboration Workspace" not in primary
 
 
 def test_product_shell_hides_runtime_diagnostics_from_primary_surface() -> None:

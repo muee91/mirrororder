@@ -7,7 +7,6 @@ import { PlatformClient, type PlatformInfo } from "../../api/platform";
 import { TimelineClient, type TimelineRuntimeStatus } from "../../api/timeline";
 import { CollaborationPanel } from "./CollaborationPanel";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
-import { TaskStatusPanel } from "./TaskStatusPanel";
 
 interface Props { baseUrl: string; projectId: string }
 
@@ -37,7 +36,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   const [hostProcess, setHostProcess] = useState<HostProcessStatus | null>(null);
   const [timelineStatus, setTimelineStatus] = useState<TimelineRuntimeStatus | null>(null);
   const [timelineNote, setTimelineNote] = useState("未读取");
-  const [message, setMessage] = useState("正在读取 Desktop 诊断…");
+  const [message, setMessage] = useState("正在读取本机设置与诊断…");
   const [busy, setBusy] = useState(false);
 
   function patchSettings(patch: Partial<FrontendSettings>): void {
@@ -46,7 +45,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
   async function reload(): Promise<void> {
     setBusy(true);
-    setMessage("正在读取 Desktop 诊断…");
+    setMessage("正在读取本机设置与诊断…");
     try {
       const [next, nextSettings] = await Promise.all([desktop.status(), desktop.frontendSettings()]);
       setStatus(next);
@@ -62,14 +61,14 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
             setTimelineNote(`generation ${nextTimeline.persistence.generation || "-"} · checkpoint #${nextTimeline.persistence.checkpoint_sequence}`);
           } else {
             setTimelineStatus(null);
-            setTimelineNote(`当前 Rust Timeline 属于 ${nextTimeline.project_id}`);
+            setTimelineNote(`当前 Timeline 持久化状态属于 ${nextTimeline.project_id}`);
           }
         } catch {
           setTimelineStatus(null);
-          setTimelineNote("当前项目尚未加载 Rust Timeline；打开“剪辑”后会建立/恢复持久化状态。");
+          setTimelineNote("当前项目尚未加载时间线；打开“剪辑 → 时间线”后会建立或恢复持久化状态。");
         }
       }
-      setMessage(`desktop_status.v1 · ${next.environment.platform} · Python ${next.environment.python.version}`);
+      setMessage(`诊断已更新 · ${next.environment.platform} · Python ${next.environment.python.version}`);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally { setBusy(false); }
@@ -80,11 +79,11 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   async function saveSettings(): Promise<void> {
     if (!settings) return;
     setBusy(true);
-    setMessage("正在保存 Python Core frontend settings…");
+    setMessage("正在保存工作区界面偏好…");
     try {
       const saved = await desktop.saveFrontendSettings(settings);
       setSettings(saved);
-      setMessage("Frontend settings 已保存到当前 workspace；没有创建 Desktop 专用业务配置副本。");
+      setMessage("工作区界面偏好已保存。");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally { setBusy(false); }
@@ -98,13 +97,15 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   return (
     <section className="phase3-workbench settings-status-workbench">
       <header className="production-heading">
-        <div><p className="eyebrow">Desktop Readiness</p><h2>设置 / 状态</h2></div>
+        <div><p className="eyebrow">本机 / Advanced</p><h2>设置与诊断</h2></div>
         <div className="assistant-heading-actions"><span className="production-state">{message}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>重新诊断</button></div>
       </header>
 
+      <p className="production-note">后台任务的进度、取消与重试统一放在左侧“状态中心”；这里仅保留界面偏好、本地运行时和低频诊断。</p>
+
       <div className="production-grid settings-status-grid">
         <div className="production-panel status-card frontend-settings-card">
-          <div className="parse-heading"><div><p className="eyebrow">Existing Python Frontend Settings</p><h3>工作区界面偏好</h3></div><button type="button" disabled={busy || !settings} onClick={() => void saveSettings()}>保存</button></div>
+          <div className="parse-heading"><div><p className="eyebrow">界面偏好</p><h3>工作区显示</h3></div><button type="button" disabled={busy || !settings} onClick={() => void saveSettings()}>保存</button></div>
           {settings ? (
             <div className="settings-form-grid">
               <label className="production-field"><span>主题</span><select value={settings.theme} onChange={(event) => patchSettings({ theme: event.target.value as FrontendSettings["theme"] })}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
@@ -115,44 +116,43 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
               <label className="settings-check"><input type="checkbox" checked={settings.update_sound} onChange={(event) => patchSettings({ update_sound: event.target.checked })} /><span>更新提示音</span></label>
               <label className="settings-check"><input type="checkbox" checked={settings.show_unknown_count} onChange={(event) => patchSettings({ show_unknown_count: event.target.checked })} /><span>显示 unknown 数量</span></label>
             </div>
-          ) : <p className="empty-copy">尚未读取 workspace frontend settings。</p>}
-          <p className="production-note">这里直接读写现有 `/api/v1/settings`；Desktop 不另建一套 theme/density/default-mode 业务配置。</p>
+          ) : <p className="empty-copy">尚未读取工作区界面偏好。</p>}
+          <p className="production-note">这里直接读写当前工作区已有的前端偏好，不创建 Desktop 专用业务配置副本。</p>
         </div>
 
         <LocalRuntimePanel baseUrl={baseUrl} />
         <CollaborationPanel baseUrl={baseUrl} />
-        <TaskStatusPanel baseUrl={baseUrl} projectId={projectId} />
 
         <div className="production-panel status-card baseline-gate-card">
-          <div className="parse-heading"><div><p className="eyebrow">desktop_development_baseline.v1</p><h3>Active development baseline</h3></div><span>{nativeGateCount} release gates</span></div>
+          <div className="parse-heading"><div><p className="eyebrow">开发 / 发布诊断</p><h3>当前能力基线</h3></div><span>{nativeGateCount} release gates</span></div>
           <div className="baseline-gate-list">{baselineCapabilities.map(([name, capability]) => <div className="baseline-gate-row" key={name}><strong>{name.replaceAll("_", " ")}</strong><span className={capability.code_status === "implemented" ? "is-ready" : "is-missing"}>{capability.code_status}</span><small>{capability.native_smoke_required ? "native smoke required" : "code gate"}</small></div>)}</div>
-          <p className="production-warning">Release quality gates remain required until they are actually verified on source and packaged builds.</p>
+          <p className="production-warning">发布质量门仍需在源码构建和打包 App 上实际验证后才能视为通过。</p>
         </div>
 
         <div className="production-panel status-card">
-          <p className="eyebrow">Python Core / Workspace</p><h3>{status?.workspace.name || "Workspace"}</h3>
+          <p className="eyebrow">Workspace / Python</p><h3>{status?.workspace.name || "Workspace"}</h3>
           <dl className="status-facts"><div><dt>workspace</dt><dd>{status?.workspace.path || "-"}</dd></div><div><dt>projects</dt><dd>{status?.workspace.projects ?? "-"}</dd></div><div><dt>Python</dt><dd>{status ? `${status.environment.python.version} · ${status.environment.python.executable}` : "-"}</dd></div><div><dt>Host</dt><dd>{status ? `${status.environment.host} · ${status.environment.platform}` : "-"}</dd></div><div><dt>writable</dt><dd>{yesNo(Boolean(status?.environment.workspaces[0]?.writable))}</dd></div></dl>
         </div>
 
         <div className="production-panel status-card">
-          <p className="eyebrow">Media / Analysis Runtime</p>
+          <p className="eyebrow">媒体 / 分析运行环境</p>
           <div className="status-capabilities">{(status?.environment.commands ?? []).map((item) => <span className={item.available ? "is-ready" : "is-missing"} key={item.name}>{item.name} · {yesNo(item.available)}</span>)}<span className={status?.environment.media_directory_sync_ready ? "is-ready" : "is-missing"}>media sync · {yesNo(Boolean(status?.environment.media_directory_sync_ready))}</span><span className={status?.environment.identity_runtime.face ? "is-ready" : "is-missing"}>face · {yesNo(Boolean(status?.environment.identity_runtime.face))}</span><span className={status?.environment.identity_runtime.speaker ? "is-ready" : "is-missing"}>speaker · {yesNo(Boolean(status?.environment.identity_runtime.speaker))}</span></div>
           <p className="production-note">Required Python modules: {requiredModules.map((item) => `${item.name}:${yesNo(item.available)}`).join(" · ") || "-"}</p><p className="production-note">Optional: {optionalModules.map((item) => `${item.name}:${yesNo(item.available)}`).join(" · ") || "-"}</p>
         </div>
 
         <div className="production-panel status-card">
-          <p className="eyebrow">Native Platform Adapter</p>
-          {isTauri() && platformInfo ? <div className="status-capabilities"><span className="is-ready">{platformInfo.os}</span><span className={platformInfo.native_dialog ? "is-ready" : "is-missing"}>dialog</span><span className={platformInfo.reveal_path ? "is-ready" : "is-missing"}>reveal</span><span className={platformInfo.open_path ? "is-ready" : "is-missing"}>open</span><span className={platformInfo.open_url ? "is-ready" : "is-missing"}>URL</span><span className={platformInfo.fcp_adapter ? "is-ready" : "is-missing"}>FCP adapter</span><span className={platformInfo.security_scoped_media ? "is-ready" : "is-pending"}>security scope</span><span className={platformInfo.resolve_adapter ? "is-ready" : "is-pending"}>Resolve extension</span><span className={platformInfo.premiere_adapter ? "is-ready" : "is-pending"}>Premiere extension</span></div> : <p className="empty-copy">浏览器预览不加载 Tauri native adapter。</p>}
+          <p className="eyebrow">原生平台适配</p>
+          {isTauri() && platformInfo ? <div className="status-capabilities"><span className="is-ready">{platformInfo.os}</span><span className={platformInfo.native_dialog ? "is-ready" : "is-missing"}>dialog</span><span className={platformInfo.reveal_path ? "is-ready" : "is-missing"}>reveal</span><span className={platformInfo.open_path ? "is-ready" : "is-missing"}>open</span><span className={platformInfo.open_url ? "is-ready" : "is-missing"}>URL</span><span className={platformInfo.fcp_adapter ? "is-ready" : "is-missing"}>FCP adapter</span><span className={platformInfo.security_scoped_media ? "is-ready" : "is-pending"}>security scope</span><span className={platformInfo.resolve_adapter ? "is-ready" : "is-pending"}>Resolve extension</span><span className={platformInfo.premiere_adapter ? "is-ready" : "is-pending"}>Premiere extension</span></div> : <p className="empty-copy">浏览器预览不加载原生平台适配。</p>}
           <p className="production-note">Host process: {hostProcess ? `${hostProcess.running ? "running" : "stopped"} · pid ${hostProcess.pid ?? "-"}` : "unmanaged / browser preview"}</p>
         </div>
 
         <div className="production-panel status-card">
-          <p className="eyebrow">Rust Timeline Persistence v2</p><h3>{timelineStatus ? `${timelineStatus.persistence.journal_operations} journal ops` : "当前未挂载"}</h3><p className="production-note">{timelineNote}</p>
+          <p className="eyebrow">时间线恢复状态</p><h3>{timelineStatus ? `${timelineStatus.persistence.journal_operations} journal ops` : "当前未挂载"}</h3><p className="production-note">{timelineNote}</p>
           {timelineStatus ? <dl className="status-facts"><div><dt>checkpoint</dt><dd>{timelineStatus.persistence.checkpoint_path}</dd></div><div><dt>journal</dt><dd>{timelineStatus.persistence.journal_path}</dd></div><div><dt>recovered</dt><dd>{timelineStatus.recovered_operations}</dd></div><div><dt>backup</dt><dd>{timelineStatus.used_backup ? "used" : "primary"}</dd></div><div><dt>partial tail</dt><dd>{timelineStatus.ignored_partial_tail ? "ignored safely" : "none"}</dd></div></dl> : null}
         </div>
 
         <div className="production-panel status-card">
-          <p className="eyebrow">Device-local State</p><dl className="status-facts"><div><dt>device</dt><dd>{status?.device_media.device_name || "-"}</dd></div><div><dt>media binding</dt><dd>{status?.device_media.state_path || "-"}</dd></div><div><dt>multicam engine</dt><dd>{String(status?.environment.multicam_engine.available ?? false)}</dd></div><div><dt>engine origin</dt><dd>{String(status?.environment.multicam_engine.origin ?? "-")}</dd></div></dl><p className="production-note">模型连接的密钥仍保存在 Python device secret store；此状态页不读取或回显密钥。</p>
+          <p className="eyebrow">当前设备</p><dl className="status-facts"><div><dt>device</dt><dd>{status?.device_media.device_name || "-"}</dd></div><div><dt>media binding</dt><dd>{status?.device_media.state_path || "-"}</dd></div><div><dt>multicam engine</dt><dd>{String(status?.environment.multicam_engine.available ?? false)}</dd></div><div><dt>engine origin</dt><dd>{String(status?.environment.multicam_engine.origin ?? "-")}</dd></div></dl><p className="production-note">模型连接的密钥仍保存在 device secret store；此页面不读取或回显密钥。</p>
         </div>
       </div>
     </section>

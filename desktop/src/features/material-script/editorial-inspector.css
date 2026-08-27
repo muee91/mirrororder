@@ -1,0 +1,48 @@
+.take-evidence-section, .editorial-decision-section { border-top: 1px solid #26303a; padding-top: 12px; }
+.take-evidence-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.take-evidence-heading strong { color: #cbd4dd; font-size: 11px; }
+.take-evidence-heading > span { color: #74818d; font-size: 9px; text-align: right; }
+.evidence-alert { margin: 0 0 9px; border-left: 2px solid #5f6871; padding: 6px 8px; color: #98a4af; background: #141a20; font-size: 10px; line-height: 1.45; }
+.evidence-alert.is-stale { border-color: #9a8242; color: #d8c17e; background: #1d1a12; }
+.evidence-block { display: grid; gap: 5px; margin-top: 8px; border: 1px solid #29333d; border-radius: 8px; padding: 8px; background: #11171c; }
+.compact-evidence-block { padding-block: 7px; }
+.evidence-label { color: #71808d; font-size: 9px; text-transform: uppercase; letter-spacing: .02em; }
+.evidence-facts { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.evidence-facts strong { color: #c8d1da; font-size: 10px; }
+.evidence-facts span, .opinion-counts span { border: 1px solid #2d3741; border-radius: 999px; padding: 3px 6px; color: #9ba7b2; background: #172029; font-size: 9px; }
+.evidence-warning-list { display: grid; gap: 3px; margin-top: 6px; }
+.evidence-warning-list span { color: #d7bf78; font-size: 9px; line-height: 1.4; }
+.evidence-muted { margin: 4px 0 0; color: #778491; font-size: 9px; line-height: 1.45; }
+.evidence-judge { display: flex; align-items: baseline; gap: 7px; }
+.evidence-judge strong { color: #cbd4dd; font-size: 11px; }
+.evidence-judge span { color: #89a798; font-size: 9px; }
+.evidence-block > p { margin: 0; color: #929eaa; font-size: 10px; line-height: 1.5; }
+.evidence-authority-note { margin: 8px 0 0; color: #697681; font-size: 9px; line-height: 1.5; }
+.editorial-decision-section { margin-top: 2px; }
+.team-opinion-summary { display: grid; gap: 6px; margin-bottom: 9px; }
+.opinion-counts { display: flex; gap: 5px; flex-wrap: wrap; }
+.opinion-details { color: #788591; font-size: 9px; }
+.opinion-details summary { cursor: pointer; }
+.opinion-details > div { display: grid; gap: 3px; margin-top: 6px; border-left: 1px solid #2b353f; padding-left: 8px; }
+.opinion-details p { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; color: #8894a0; }
+.opinion-details strong { color: #b7c1ca; font-weight: 550; }
+.editorial-actor-field { display: grid; gap: 4px; margin: 8px 0; color: #73808c; font-size: 9px; }
+.editorial-actor-field input { width: 100%; border: 1px solid #303a44; border-radius: 7px; padding: 7px 8px; color: #dbe2e9; background: #11171c; outline: none; }
+.editorial-decision-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.editorial-decision-actions button { border-color: #303a44; color: #a4afb9; background: #151c22; }
+.editorial-decision-actions button.is-selected { border-color: #788896; color: #f3f6f8; background: #28323b; }
+.editorial-decision-actions button.is-selected.state-best { border-color: #557564; color: #bce0ca; background: #17231c; }
+.editorial-decision-actions button.is-selected.state-keep { border-color: #566d80; color: #bfd3e2; background: #17212a; }
+.editorial-decision-actions button.is-selected.state-reject { border-color: #7a5454; color: #e3b8b8; background: #281919; }
+.editorial-current-decision { margin: 8px 0 0; color: #7c8995; font-size: 9px; line-height: 1.45; }
+.editorial-current-decision strong { color: #cbd4dd; }
+
+@media (prefers-color-scheme: light) {
+  .take-evidence-section, .editorial-decision-section { border-color: #dde4ea; }
+  .take-evidence-heading strong, .evidence-facts strong, .evidence-judge strong, .editorial-current-decision strong { color: #2d3740; }
+  .evidence-block, .editorial-actor-field input { border-color: #d9e0e6; color: #2e3841; background: #f8fafb; }
+  .evidence-facts span, .opinion-counts span { border-color: #d8e0e6; color: #60707d; background: #f1f5f8; }
+  .evidence-alert { background: #f4f6f8; }
+  .evidence-alert.is-stale { background: #fff9eb; }
+  .editorial-decision-actions button { border-color: #d7dfe6; color: #5d6a76; background: #f1f4f7; }
+}

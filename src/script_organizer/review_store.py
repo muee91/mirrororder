@@ -19,6 +19,10 @@ VALID_STATES = {"unreviewed", "keep", "best", "reject"}
 MAX_HISTORY_ROWS = 1000
 
 
+class ReviewConflictError(RuntimeError):
+    """Raised when a client writes against a stale Review revision."""
+
+
 def empty_review() -> dict[str, Any]:
     return {
         "version": 2,
@@ -105,6 +109,7 @@ class ReviewStore:
         """Merge one review action so concurrent LAN editors cannot overwrite each other."""
         with self._write_lock():
             review = self.load()
+            self._check_expected_revision(review, action)
             timestamp = self._now()
             before = self._audit_snapshot(review, action)
             self._apply_action_to_review(review, action, timestamp)
@@ -121,6 +126,8 @@ class ReviewStore:
             raise ValueError("审核批次不能为空")
         with self._write_lock():
             review = self.load()
+            for action in actions:
+                self._check_expected_revision(review, action)
             timestamp = self._now()
             snapshots: list[tuple[dict[str, Any], dict[str, Any]]] = []
             for action in actions:
@@ -135,6 +142,23 @@ class ReviewStore:
             saved = self._save_unlocked(normalize_review(review))
         self._mirror_placement_actions(actions)
         return saved
+
+    @staticmethod
+    def _check_expected_revision(review: dict[str, Any], action: dict[str, Any]) -> None:
+        if "expected_revision" not in action or action.get("expected_revision") is None:
+            return
+        raw_expected = action.get("expected_revision")
+        try:
+            expected = int(raw_expected)
+        except (TypeError, ValueError) as error:
+            raise ValueError("expected_revision 必须是整数") from error
+        if expected < 0:
+            raise ValueError("expected_revision 必须是非负整数")
+        current = int(review.get("revision", 0))
+        if expected != current:
+            raise ReviewConflictError(
+                f"Review revision 已变化：当前 r{current}，请求 r{expected}；请刷新后重试"
+            )
 
     def _mirror_placement_actions(self, actions: list[dict[str, Any]]) -> None:
         """Best-effort production projection; review.json remains authoritative."""

@@ -1,0 +1,48 @@
+.project-search-trigger { display: inline-flex; align-items: center; gap: 6px; border-color: #2b3540; padding: 5px 8px; color: #8b97a2; background: #12181e; font-size: 9px; }
+.project-search-trigger kbd { border: 1px solid #34404b; border-radius: 4px; padding: 1px 4px; color: #aab4bd; background: #0d1216; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; font-weight: 500; }
+.semantic-search-backdrop { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: start center; padding: min(15vh, 140px) 24px 24px; background: rgb(5 8 11 / 62%); backdrop-filter: blur(4px); }
+.semantic-search-palette { display: grid; width: min(760px, 100%); max-height: min(70vh, 720px); grid-template-rows: auto auto auto minmax(0, 1fr) auto; border: 1px solid #34404b; border-radius: 12px; box-shadow: 0 22px 70px rgb(0 0 0 / 42%); background: #0f1419; overflow: hidden; }
+.semantic-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; border-bottom: 1px solid #27313a; padding: 11px; }
+.semantic-search-form input { min-width: 0; border: 1px solid #36414c; border-radius: 8px; padding: 9px 11px; color: #e5ebf0; background: #141b21; outline: none; font-size: 12px; }
+.semantic-search-form input:focus { border-color: #788897; }
+.semantic-search-filters { display: flex; gap: 4px; padding: 8px 11px 0; overflow-x: auto; }
+.semantic-search-filters button { border-color: #2d3741; padding: 4px 8px; color: #7e8b97; background: #13191f; font-size: 9px; }
+.semantic-search-filters button.is-active { color: #11161b; background: #e9eef2; }
+.semantic-search-message { margin: 0; padding: 8px 11px; color: #75828e; font-size: 9px; line-height: 1.4; }
+.semantic-search-results { min-height: 0; overflow-y: auto; border-top: 1px solid #222b33; }
+.semantic-search-result { display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px; align-items: start; gap: 9px; width: 100%; border: 0; border-bottom: 1px solid #222b33; border-radius: 0; padding: 10px 11px; color: #8e9aa5; background: transparent; text-align: left; }
+.semantic-search-result:hover:not(:disabled) { background: #151c22; }
+.semantic-search-result:disabled { cursor: default; opacity: .72; }
+.semantic-result-source { border-radius: 999px; padding: 3px 6px; color: #95a4b1; background: #1b242c; font-size: 8px; text-align: center; }
+.semantic-result-main { display: grid; min-width: 0; gap: 3px; }
+.semantic-result-main strong { color: #c8d1da; font-size: 10px; }
+.semantic-result-main small { color: #7f8c98; font-size: 10px; line-height: 1.45; white-space: normal; }
+.semantic-result-time { color: #6f7d89; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; text-align: right; }
+.semantic-search-empty { padding: 28px 12px; color: #75828e; font-size: 10px; text-align: center; }
+.semantic-search-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #27313a; padding: 8px 11px; }
+.semantic-search-footer > span { color: #687581; font-size: 8px; line-height: 1.4; }
+.semantic-search-footer button { flex: 0 0 auto; }
+
+@media (max-width: 640px) {
+  .semantic-search-backdrop { padding: 48px 10px 10px; }
+  .semantic-search-palette { max-height: calc(100vh - 58px); }
+  .semantic-search-result { grid-template-columns: 46px minmax(0, 1fr); }
+  .semantic-result-time { grid-column: 2; text-align: left; }
+  .semantic-search-footer { align-items: stretch; flex-direction: column; }
+  .semantic-search-footer button { align-self: flex-end; }
+}
+
+@media (prefers-color-scheme: light) {
+  .project-search-trigger { border-color: #d7dfe6; color: #5f6c78; background: #eef2f5; }
+  .project-search-trigger kbd { border-color: #cbd4dc; color: #596672; background: #fff; }
+  .semantic-search-backdrop { background: rgb(24 31 38 / 35%); }
+  .semantic-search-palette { border-color: #cbd5de; background: #fff; }
+  .semantic-search-form, .semantic-search-results, .semantic-search-footer { border-color: #e0e6eb; }
+  .semantic-search-form input { border-color: #cfd8e0; color: #29343d; background: #f7f9fb; }
+  .semantic-search-filters button { border-color: #d7dfe6; color: #5f6d79; background: #eef2f5; }
+  .semantic-search-filters button.is-active { color: #fff; background: #1c2730; }
+  .semantic-search-result { border-color: #e5eaee; }
+  .semantic-search-result:hover:not(:disabled) { background: #f5f7f9; }
+  .semantic-result-source { color: #60707d; background: #edf2f5; }
+  .semantic-result-main strong { color: #2d3740; }
+}

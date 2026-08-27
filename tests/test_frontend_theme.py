@@ -82,11 +82,15 @@ def test_active_desktop_surface_uses_project_home_and_production_workbenches() -
     assert 'label: "交付"' in workbench
 
 
-def test_active_work_stays_in_status_surface_not_primary_app_shell() -> None:
+def test_active_work_has_one_global_status_center_not_settings_task_panel() -> None:
     app = (ROOT / "desktop" / "src" / "app" / "App.tsx").read_text(encoding="utf-8")
+    library = (ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx").read_text(encoding="utf-8")
+    status_center = (ROOT / "desktop" / "src" / "features" / "status" / "StatusCenterWorkbench.tsx").read_text(encoding="utf-8")
     settings = (ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx").read_text(encoding="utf-8")
 
-    assert "TaskStatusPanel" not in app
-    assert "TaskStatusPanel" in settings
+    assert "StatusCenterWorkbench" in app
+    assert "状态中心" in library
+    assert "ProjectTaskClient" in status_center
+    assert "TaskStatusPanel" not in settings
     assert "platform-capabilities" not in app
     assert "runtime diagnostics" not in app.lower()

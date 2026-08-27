@@ -18,13 +18,16 @@ import {
   type TakeStatusFilter,
 } from "./model";
 
+type WorkbenchTab = "material" | "script";
+
 interface Props {
   baseUrl: string;
   project: ProjectSummary;
   initialGroupId?: string | null;
+  initialTab?: WorkbenchTab;
+  showEditorial?: boolean;
 }
 
-type WorkbenchTab = "material" | "script";
 type LoadState = "loading" | "ready" | "error";
 type WriteState = "idle" | "saving" | "error";
 
@@ -40,6 +43,10 @@ const STATUS_OPTIONS: Array<{ value: TakeStatusFilter; label: string }> = [
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
   return error instanceof Error ? error.message : String(error);
+}
+
+function reviewWriteNeedsRefresh(error: unknown): boolean {
+  return error instanceof HostConnectionError && (error.status === 409 || error.message.includes("请刷新"));
 }
 
 function storedActor(): string {
@@ -58,9 +65,15 @@ function saveActor(actor: string): void {
   }
 }
 
-export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = null }: Props) {
+export function MaterialScriptWorkbench({
+  baseUrl,
+  project,
+  initialGroupId = null,
+  initialTab = "material",
+  showEditorial = false,
+}: Props) {
   const connection = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
-  const [tab, setTab] = useState<WorkbenchTab>("material");
+  const [tab, setTab] = useState<WorkbenchTab>(initialTab);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [writeState, setWriteState] = useState<WriteState>("idle");
   const [message, setMessage] = useState("");
@@ -74,6 +87,10 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
   const [selectedScriptSegmentId, setSelectedScriptSegmentId] = useState<string | null>(null);
   const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
   const [actor, setActor] = useState(storedActor);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab, project.project_id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,6 +196,7 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
   }
 
   async function placeTake(groupId: string, episodeIds: number[], segmentIds: string[], interaction: "drag" | "click", surface: string): Promise<void> {
+    if (!model) return;
     if (!actor.trim()) {
       setWriteState("error");
       setWriteMessage("先填写审核昵称，再写入人工归集。");
@@ -191,6 +209,7 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
       await connection.setGroupPlacement(project.project_id, {
         groupId,
         actor,
+        expectedRevision: model.revisions.review,
         episodeIds,
         scriptSegmentIds: segmentIds,
         interaction,
@@ -203,14 +222,24 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
       await refreshAfterWrite(groupId, summary);
     } catch (error) {
       setWriteState("error");
-      setWriteMessage(errorMessage(error));
+      if (reviewWriteNeedsRefresh(error)) {
+        try {
+          const latest = await connection.reviewModel(project.project_id);
+          setModel(latest);
+          setWriteMessage(`Review 已变化，已刷新到 r${latest.revisions.review}；请重新拖放。`);
+        } catch {
+          setWriteMessage(errorMessage(error));
+        }
+      } else {
+        setWriteMessage(errorMessage(error));
+      }
     } finally {
       setDraggingGroupId(null);
     }
   }
 
   async function clearPlacement(): Promise<void> {
-    if (!selectedTake) return;
+    if (!selectedTake || !model) return;
     if (!actor.trim()) {
       setWriteState("error");
       setWriteMessage("先填写审核昵称，再清除人工归集。");
@@ -222,12 +251,23 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
       await connection.clearGroupPlacement(project.project_id, {
         groupId: selectedTake.group_id,
         actor,
+        expectedRevision: model.revisions.review,
         sourceSurface: "desktop-v2-material",
       });
       await refreshAfterWrite(selectedTake.group_id, `已清除 ${selectedTake.group_id} 的人工 placement；自动状态未改动。`);
     } catch (error) {
       setWriteState("error");
-      setWriteMessage(errorMessage(error));
+      if (reviewWriteNeedsRefresh(error)) {
+        try {
+          const latest = await connection.reviewModel(project.project_id);
+          setModel(latest);
+          setWriteMessage(`Review 已变化，已刷新到 r${latest.revisions.review}；请重新操作。`);
+        } catch {
+          setWriteMessage(errorMessage(error));
+        }
+      } else {
+        setWriteMessage(errorMessage(error));
+      }
     }
   }
 
@@ -285,7 +325,17 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
                 <VirtualTakeList takes={filteredTakes} selectedGroupId={selectedGroupId} onSelect={selectTake} onDragBegin={setDraggingGroupId} onDragFinish={() => setDraggingGroupId(null)} />
               ) : <div className="phase-placeholder compact-placeholder">当前筛选没有 Take。</div>}
             </div>
-            <TakeInspector connection={connection} projectId={project.project_id} take={selectedTake} selectedClipId={selectedClipId} onSelectClip={setSelectedClipId} onShowScript={() => selectedTake && showTakeInScript(selectedTake)} onClearPlacement={() => void clearPlacement()} writeSaving={writeState === "saving"} />
+            <TakeInspector
+              connection={connection}
+              projectId={project.project_id}
+              take={selectedTake}
+              selectedClipId={selectedClipId}
+              onSelectClip={setSelectedClipId}
+              onShowScript={() => selectedTake && showTakeInScript(selectedTake)}
+              onClearPlacement={() => void clearPlacement()}
+              writeSaving={writeState === "saving"}
+              showEditorial={showEditorial}
+            />
           </div>
         </div>
       ) : (
@@ -322,7 +372,7 @@ export function MaterialScriptWorkbench({ baseUrl, project, initialGroupId = nul
               placementGroupId={selectedTake?.group_id ?? null}
               onShowTake={showScriptTake}
               onDropPlacement={(groupId, block) => { setSelectedScriptSegmentId(block.segment_id); void placeTake(groupId, block.episode > 0 ? [block.episode] : [], [block.segment_id], "drag", "desktop-v2-script-segment"); }}
-              onClickPlacement={(block) => { if (!selectedTake) return; setSelectedScriptSegmentId(block.segment_id); void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "desktop-v2-script-segment"); }}
+              onClickPlacement={(block: ReviewScriptBlock) => { if (!selectedTake) return; setSelectedScriptSegmentId(block.segment_id); void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "desktop-v2-script-segment"); }}
             />
           ) : <p className="empty-copy">当前项目没有剧本段。</p>}
         </div>
