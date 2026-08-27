@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
+import { readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
@@ -21,7 +22,6 @@ import "./assistant-drawer.css";
 interface Props { baseUrl: string; project: ProjectSummary }
 
 type ProductionArea = "material" | "script" | "edit" | "review";
-type ProductionPage = "media-library" | "takes" | "identity" | "slate" | "script" | "coverage" | "rough-cut" | "assembly" | "timeline" | "delivery" | "watch" | "attention" | "overview";
 interface PageDefinition { id: ProductionPage; label: string }
 interface AreaDefinition { id: ProductionArea; label: string; pages: PageDefinition[] }
 
@@ -33,25 +33,30 @@ const AREAS: AreaDefinition[] = [
 ];
 
 function areaForPage(page: ProductionPage): ProductionArea { return AREAS.find((area) => area.pages.some((item) => item.id === page))?.id ?? "material"; }
-function firstPage(area: ProductionArea): ProductionPage { return AREAS.find((item) => item.id === area)?.pages[0]?.id ?? "takes"; }
+function firstPage(area: ProductionArea): ProductionPage { return AREAS.find((item) => item.id === area)?.pages[0]?.id ?? "media-library"; }
 
 export function ProjectWorkbench({ baseUrl, project }: Props) {
-  const [page, setPage] = useState<ProductionPage>("takes");
+  const [page, setPage] = useState<ProductionPage>(() => readProjectPage(project.project_id));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
   const activeArea = areaForPage(page);
   const secondaryPages = useMemo(() => AREAS.find((area) => area.id === activeArea)?.pages ?? [], [activeArea]);
 
+  function navigate(next: ProductionPage): void {
+    rememberProjectPage(project.project_id, next);
+    setPage(next);
+  }
+
   function openTakeFromEvidence(groupId: string): void {
     const value = groupId.trim();
     if (!value) return;
     setMaterialFocusGroupId(value);
     setSettingsOpen(false);
-    setPage("watch");
+    navigate("watch");
   }
-  function chooseArea(area: ProductionArea): void { setSettingsOpen(false); setPage(firstPage(area)); }
-  function choosePage(next: ProductionPage): void { setSettingsOpen(false); setPage(next); }
+  function chooseArea(area: ProductionArea): void { setSettingsOpen(false); navigate(firstPage(area)); }
+  function choosePage(next: ProductionPage): void { setSettingsOpen(false); navigate(next); }
 
   return (
     <section className={`project-production-workbench ${assistantOpen ? "has-assistant-drawer" : ""}`}>
