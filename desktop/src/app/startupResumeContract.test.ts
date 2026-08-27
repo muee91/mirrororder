@@ -28,6 +28,23 @@ describe("startup and resume product contract", () => {
     expect(source).toContain("请选择项目继续");
   });
 
+  it("trusts only startAndConnect as an automatic workspace resume source", () => {
+    const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
+    const connectBlock = source.slice(source.indexOf("async function connect()"), source.indexOf("async function refreshWorkspace"));
+    const openBlock = source.slice(source.indexOf("async function openWorkspacePath"), source.indexOf("async function chooseWorkspace"));
+    expect(connectBlock).not.toContain("rememberWorkspace(");
+    expect(connectBlock).not.toContain("rememberProject(");
+    expect(openBlock).toContain("await connection.startAndConnect(normalizedPath)");
+    expect(openBlock.indexOf("await connection.startAndConnect(normalizedPath)")).toBeLessThan(openBlock.indexOf("rememberWorkspace(normalizedPath)"));
+  });
+
+  it("preserves the existing product canvas when a workspace switch fails", () => {
+    const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
+    expect(source).toContain("const previousSnapshot = snapshot");
+    expect(source).toContain("setSnapshot(previousSnapshot)");
+    expect(source).toContain("当前工作区保持打开");
+  });
+
   it("restores a project page and defaults new projects to the media library", () => {
     const workbench = readFileSync(fileURLToPath(new URL("../features/production/ProjectWorkbench.tsx", import.meta.url)), "utf8");
     const resume = readFileSync(fileURLToPath(new URL("./resumeState.ts", import.meta.url)), "utf8");
