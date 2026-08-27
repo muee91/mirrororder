@@ -198,9 +198,7 @@ export function App() {
     setMessage("正在连接已有的本机服务…");
     try {
       const next = await connection.connect();
-      const remembered = loadAppResume();
-      const currentProject = selectedProject ? projectById(next, selectedProject.project_id) : null;
-      const project = currentProject ?? projectById(next, remembered.projectId);
+      const project = selectedProject ? projectById(next, selectedProject.project_id) : null;
       setSnapshot(next);
       setSelectedProject(project);
       setStatusCenterOpen(false);
