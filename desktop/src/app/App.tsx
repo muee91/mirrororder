@@ -48,13 +48,14 @@ export function App() {
   const [appWorkspace, setAppWorkspace] = useState<AppWorkspace>("production");
   const [baseUrl, setBaseUrl] = useState(defaultHostBaseUrl);
   const [workspacePath, setWorkspacePath] = useState(launchResume.workspacePath);
-  const [state, setState] = useState<HostConnectionState>(launchResume.workspacePath ? "starting" : "idle");
+  const [state, setState] = useState<HostConnectionState>("idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [statusCenterOpen, setStatusCenterOpen] = useState(false);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
-  const [message, setMessage] = useState(launchResume.workspacePath ? "正在恢复上次工作现场…" : "打开一个工作区开始制作。");
-  const resumeAttemptedRef = useRef(false);
+  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作现场…" : "打开一个工作区开始制作。");
+  const [resumeEnabledForSession, setResumeEnabledForSession] = useState(false);
+  const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
 
   const connection = useMemo(() => {
     try {
@@ -71,19 +72,21 @@ export function App() {
   }, [platform]);
 
   useEffect(() => {
-    if (!isTauri() || !launchResume.workspacePath || resumeAttemptedRef.current) return;
-    resumeAttemptedRef.current = true;
-    let cancelled = false;
-    const resumeConnection = new HostConnection(defaultHostBaseUrl);
+    if (!isTauri() || !launchResume.workspacePath) return;
+    let active = true;
     setState("starting");
     setMessage("正在恢复上次工作现场…");
-    void resumeConnection.startAndConnect(launchResume.workspacePath).then((next) => {
-      if (cancelled) return;
+    const task = resumeTaskRef.current ?? new HostConnection(defaultHostBaseUrl).startAndConnect(launchResume.workspacePath);
+    resumeTaskRef.current = task;
+    void task.then((next) => {
+      if (!active) return;
       const project = projectById(next, launchResume.projectId);
       setBaseUrl(next.baseUrl);
+      setWorkspacePath(launchResume.workspacePath);
       setSnapshot(next);
       setSelectedProject(project);
       setStatusCenterOpen(false);
+      setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(launchResume.workspacePath);
       if (project) rememberProject(project.project_id);
@@ -91,14 +94,15 @@ export function App() {
         ? `已恢复 ${project.name || project.project_id}`
         : `工作区已就绪 · ${next.projects.length} 个项目 · 请选择项目继续`);
     }).catch((error: unknown) => {
-      if (cancelled) return;
+      if (!active) return;
       setSnapshot(null);
       setSelectedProject(null);
       setStatusCenterOpen(false);
+      setResumeEnabledForSession(false);
       setState("error");
       setMessage(`无法恢复上次工作区：${errorMessage(error)}`);
     });
-    return () => { cancelled = true; };
+    return () => { active = false; };
   }, [launchResume.projectId, launchResume.workspacePath]);
 
   async function openWorkspacePath(path: string): Promise<void> {
@@ -113,6 +117,9 @@ export function App() {
       setMessage("先选择工作区目录或文件。");
       return;
     }
+    const previousSnapshot = snapshot;
+    const previousProject = selectedProject;
+    const previousPath = resumeEnabledForSession ? loadAppResume().workspacePath || workspacePath : workspacePath;
     const remembered = loadAppResume();
     const preferredProjectId = remembered.workspacePath === normalizedPath ? remembered.projectId : "";
     setWorkspacePath(normalizedPath);
@@ -122,9 +129,11 @@ export function App() {
       const next = await connection.startAndConnect(normalizedPath);
       const project = projectById(next, preferredProjectId);
       setBaseUrl(next.baseUrl);
+      setWorkspacePath(normalizedPath);
       setSnapshot(next);
       setSelectedProject(project);
       setStatusCenterOpen(false);
+      setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(normalizedPath);
       if (project) rememberProject(project.project_id);
@@ -132,11 +141,20 @@ export function App() {
         ? `已恢复 ${project.name || project.project_id}`
         : `工作区已就绪 · ${next.projects.length} 个项目 · 请选择项目继续`);
     } catch (error) {
-      setSnapshot(null);
-      setSelectedProject(null);
-      setStatusCenterOpen(false);
-      setState("error");
-      setMessage(errorMessage(error));
+      if (previousSnapshot) {
+        setWorkspacePath(previousPath);
+        setSnapshot(previousSnapshot);
+        setSelectedProject(previousProject);
+        setState("error");
+        setMessage(`未能切换工作区：${errorMessage(error)} · 当前工作区保持打开`);
+      } else {
+        setSnapshot(null);
+        setSelectedProject(null);
+        setStatusCenterOpen(false);
+        setResumeEnabledForSession(false);
+        setState("error");
+        setMessage(errorMessage(error));
+      }
     }
   }
 
@@ -186,9 +204,8 @@ export function App() {
       setSnapshot(next);
       setSelectedProject(project);
       setStatusCenterOpen(false);
+      setResumeEnabledForSession(false);
       setState("connected");
-      if (workspacePath.trim()) rememberWorkspace(workspacePath);
-      if (project) rememberProject(project.project_id);
       setMessage(project
         ? `已连接 · ${project.name || project.project_id}`
         : `工作区已就绪 · ${next.projects.length} 个项目 · 请选择项目继续`);
@@ -196,6 +213,7 @@ export function App() {
       setSnapshot(null);
       setSelectedProject(null);
       setStatusCenterOpen(false);
+      setResumeEnabledForSession(false);
       setState("error");
       setMessage(errorMessage(error));
     }
@@ -209,7 +227,7 @@ export function App() {
     const project = preferred ?? existing;
     setSnapshot(next);
     setSelectedProject(project);
-    if (project) rememberProject(project.project_id);
+    if (project && resumeEnabledForSession) rememberProject(project.project_id);
     setState("connected");
     setMessage(project
       ? `项目库已刷新 · ${project.name || project.project_id}`
@@ -219,7 +237,7 @@ export function App() {
   function selectProject(project: ProjectSummary): void {
     setSelectedProject(project);
     setStatusCenterOpen(false);
-    rememberProject(project.project_id);
+    if (resumeEnabledForSession) rememberProject(project.project_id);
     setMessage(`已打开 ${project.name || project.project_id}`);
   }
 
@@ -228,12 +246,13 @@ export function App() {
     if (!project) return;
     setSelectedProject(project);
     setStatusCenterOpen(false);
-    rememberProject(project.project_id);
+    if (resumeEnabledForSession) rememberProject(project.project_id);
     setMessage(`已打开 ${project.name || project.project_id}`);
   }
 
   function disableAutomaticResume(): void {
     forgetWorkspaceResume();
+    setResumeEnabledForSession(false);
     setMessage("已关闭自动恢复；当前工作区仍保持打开。下次启动将停在“打开工作区”。");
   }
 
@@ -295,7 +314,7 @@ export function App() {
                   <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
                   <div className="connection-actions">
                     <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>连接已运行服务</button>
-                    <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动打开</button>
+                    {resumeEnabledForSession ? <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动打开</button> : null}
                   </div>
                 </details>
               </div>
@@ -341,7 +360,7 @@ export function App() {
             <div className="startup-actions">
               <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>{recoveryFailed ? "重新定位工作区" : "打开工作区"}</button>
               <button type="button" className="secondary" onClick={() => void chooseWorkspace(false)} disabled={!isTauri() || state === "starting"}>打开工作区文件</button>
-              {recoveryFailed ? <button type="button" className="secondary" onClick={() => { forgetWorkspaceResume(); setWorkspacePath(""); setState("idle"); setMessage("已清除自动恢复记录。选择工作区继续。"); }}>不再自动打开</button> : null}
+              {recoveryFailed ? <button type="button" className="secondary" onClick={() => { forgetWorkspaceResume(); setWorkspacePath(""); setResumeEnabledForSession(false); setState("idle"); setMessage("已清除自动恢复记录。选择工作区继续。"); }}>不再自动打开</button> : null}
             </div>
             <p className={`startup-message ${state === "error" ? "is-error" : ""}`}>{message}</p>
           </div>
