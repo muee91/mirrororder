@@ -123,5 +123,5 @@ def test_desktop_contract_exposes_semantic_profile_without_model_download_action
     assert 'tasks.submit(' in panel
     assert '"semantic_index"' in panel
     assert '<LocalRuntimePanel baseUrl={baseUrl} projectId={projectId} />' in settings
-    assert "sentence-transformers==5.4.0" in requirements
+    assert "sentence-transformers[image]==5.4.0" in requirements
     assert "never pip-install at App launch" in requirements

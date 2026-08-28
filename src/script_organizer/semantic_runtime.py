@@ -341,29 +341,6 @@ def install_semantic_runtime() -> None:
         except Exception:
             return
 
-    def maybe_schedule_bootstrap(service: Any, project_id: str, payload: dict[str, Any]) -> None:
-        summary = _as_dict(payload.get("summary"))
-        documents = int(summary.get("documents", 0) or 0)
-        vectors = int(summary.get("vectors", 0) or 0)
-        encoder = ManagedSemanticEncoder(allow_prepare=False)
-        needs_documents = documents <= 0
-        needs_vectors = encoder.enabled and (vectors < documents or not encoder.prepared)
-        if not needs_documents and not needs_vectors:
-            return
-        project = service.project(project_id)
-        revision = str(getattr(project, "analysis_revision", "") or "")
-        suffix = f"{revision}:{documents}:{vectors}:{encoder.identity}:{int(encoder.prepared)}"
-        try:
-            service.tasks.submit(
-                project_id,
-                SEMANTIC_TASK_TYPE,
-                targets={"sources": sorted(SEMANTIC_SOURCES)},
-                idempotency_key=_semantic_task_key(project_id, reason="search-bootstrap", suffix=suffix),
-                actor="system",
-            )
-        except Exception:
-            return
-
     def make_handler_with_semantic(service: Any, web_root):
         BaseHandler = original_make_handler(service, web_root)
 
@@ -389,7 +366,6 @@ def install_semantic_runtime() -> None:
                     if not text:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "语义搜索内容不能为空")
                     payload = _searcher(service, project_id).search(text, limit=limit, sources=sources, refresh=False)
-                    maybe_schedule_bootstrap(service, project_id, payload)
                     self._send_json(payload)
                     return
                 return super()._app_get(parsed)

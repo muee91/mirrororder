@@ -77,7 +77,18 @@ class _FakeIndexer:
 
 
 def _database(tmp_path: Path) -> WorkspaceDatabase:
-    return WorkspaceDatabase("semantic-frame-test", path=tmp_path / "workspace.sqlite3")
+    database = WorkspaceDatabase("semantic-frame-test", path=tmp_path / "workspace.sqlite3")
+    # frames have an intentional FK to the indexed Take. Seed the disposable
+    # parent so this helper exercises frame-path handling rather than violating
+    # the workspace database ownership contract.
+    database.sync_take_index(
+        "demo",
+        name="semantic frame fixture",
+        input_kind="fcpxml",
+        config_path="",
+        index={"groups": [{"group_id": "G1"}]},
+    )
+    return database
 
 
 def test_legacy_all_text_sources_expand_to_frame_but_scoped_refresh_does_not(tmp_path: Path) -> None:
