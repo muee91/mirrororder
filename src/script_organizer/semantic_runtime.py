@@ -7,6 +7,7 @@ from .semantic_encoder import SemanticEmbeddingConfig
 from .semantic_index import ProjectSemanticIndexer, SEMANTIC_SOURCES
 from .semantic_profiles import semantic_profiles_public
 from .semantic_search import SemanticSearcher, safe_search_payload
+from .semantic_task_indexer import refresh_semantic_index_background
 
 
 _INSTALLED = False
@@ -84,15 +85,11 @@ def _semantic_task_key(project_id: str, *, reason: str, groups: list[str] | None
 def install_semantic_runtime() -> None:
     """Install read-only semantic retrieval above existing production evidence.
 
-    The runtime adds no review/editorial/automation authority. It indexes only
-    already-produced VLM descriptions, cached ASR and human slate facts, then
-    grounds assistant answers and read-only API search in that evidence.
-
-    Search requests deliberately do not rebuild or embed the project inline.
-    Expensive refresh work is represented by a durable ``semantic_index`` task,
-    so enabling a local embedding model cannot turn Cmd/Ctrl+K into an implicit
-    whole-project indexing request and editors can cancel/retry indexing from
-    the existing Status Center.
+    Search requests never rebuild or embed the project inline. Expensive work is
+    represented by a durable ``semantic_index`` task so enabling a local model
+    cannot turn Cmd/Ctrl+K into an implicit whole-project indexing request.
+    Embedding work is bounded and cancellation-aware between batches; completed
+    vectors remain rebuildable device-local evidence only.
     """
 
     global _INSTALLED
@@ -128,14 +125,8 @@ def install_semantic_runtime() -> None:
         limit: int = 12,
         sources: list[str] | None = None,
     ) -> dict[str, Any]:
-        searcher = SemanticSearcher(
-            tools.workspace_id,
-            tools.project_id,
-            tools.config,
-        )
-        return safe_search_payload(
-            searcher.search(query, limit=limit, sources=sources, refresh=False)
-        )
+        searcher = SemanticSearcher(tools.workspace_id, tools.project_id, tools.config)
+        return safe_search_payload(searcher.search(query, limit=limit, sources=sources, refresh=False))
 
     def answer_with_semantic(self: AssistantOrchestrator, message: str) -> dict[str, Any]:
         text = str(message or "").strip()[:3000]
@@ -147,11 +138,11 @@ def install_semantic_runtime() -> None:
         attention = self.tools.list_attention_groups(limit=30)
         supervisor = self._supervisor_notes(limit=36)
         try:
-            retrieval = SemanticSearcher(
-                self.workspace_id,
-                self.project_id,
-                self.config,
-            ).search(text, limit=14, refresh=False)
+            retrieval = SemanticSearcher(self.workspace_id, self.project_id, self.config).search(
+                text,
+                limit=14,
+                refresh=False,
+            )
             safe_retrieval = safe_search_payload(retrieval)
         except Exception:
             safe_retrieval = {
@@ -190,11 +181,7 @@ def install_semantic_runtime() -> None:
         if not answer:
             answer = _deterministic_answer(text, safe_retrieval)
         saved = self.store.append_message("assistant", answer, source=self.models.assistant.source)
-        return {
-            "answer": answer,
-            "assistant": saved,
-            "retrieval": safe_retrieval,
-        }
+        return {"answer": answer, "assistant": saved, "retrieval": safe_retrieval}
 
     def capabilities_with_semantic(service: Any, agent: dict[str, Any]) -> dict[str, Any]:
         payload = original_capabilities(service, agent)
@@ -227,60 +214,66 @@ def install_semantic_runtime() -> None:
                 manager._update(config, task_id, status="cancelled", stage="cancelled", message="语义索引任务已取消")
                 return
             group_ids, sources = _semantic_task_targets(task)
-            reports: dict[str, Any] = {}
+            indexer = ProjectSemanticIndexer(
+                str(getattr(manager, "workspace_id", "") or ""),
+                project_id,
+                config,
+            )
+            last_progress = {"done": -1, "source": ""}
+
+            def report(done: int, total: int, source: str) -> None:
+                if done == last_progress["done"] and source == last_progress["source"]:
+                    return
+                last_progress["done"] = done
+                last_progress["source"] = source
+                label = {
+                    "visual": "画面",
+                    "speech": "对白",
+                    "slate": "场记",
+                    "preparing": "准备",
+                }.get(source, source or "索引")
+                manager._update(
+                    config,
+                    task_id,
+                    stage="semantic_index",
+                    progress={"done": done, "total": total},
+                    message=f"语义索引 {done}/{total} · {label}",
+                )
+
+            def execute() -> dict[str, Any]:
+                return refresh_semantic_index_background(
+                    indexer,
+                    group_ids=group_ids,
+                    sources=sources,
+                    progress=report,
+                    cancelled=lambda: manager._cancel_requested(config, task_id),
+                )
+
             resource = getattr(manager, "_resource", None)
-
-            def run_sources() -> None:
-                for index, source in enumerate(sources, start=1):
-                    if manager._cancel_requested(config, task_id):
-                        return
-                    manager._update(
-                        config,
-                        task_id,
-                        stage="semantic_index",
-                        progress={"done": index - 1, "total": len(sources)},
-                        message=f"正在更新语义索引 {index}/{len(sources)} · {source}",
-                    )
-                    report = ProjectSemanticIndexer(
-                        str(getattr(manager, "workspace_id", "") or ""),
-                        project_id,
-                        config,
-                    ).refresh(group_ids=group_ids, sources=[source])
-                    reports[source] = _as_dict(report.get("sources")).get(source, {})
-                    manager._update(
-                        config,
-                        task_id,
-                        progress={"done": index, "total": len(sources)},
-                        message=f"语义索引已完成 {index}/{len(sources)} · {source}",
-                    )
-
             if callable(resource):
                 with resource(config, task, "embedding", "semantic_index", "语义索引"):
-                    run_sources()
+                    result = execute()
             else:
-                run_sources()
+                result = execute()
 
-            if manager._cancel_requested(config, task_id):
+            if result.get("cancelled") or manager._cancel_requested(config, task_id):
                 manager._update(
                     config,
                     task_id,
                     status="cancelled",
                     stage="cancelled",
-                    result={"sources": reports, "cancelled": True},
-                    message="语义索引任务已取消；已完成的索引保留可用",
+                    result=result,
+                    message="语义索引已取消；已完成的文本索引和向量继续可用",
                 )
                 return
-            summary = ProjectSemanticIndexer(
-                str(getattr(manager, "workspace_id", "") or ""),
-                project_id,
-                config,
-            ).store.summary(project_id)
+            if result.get("embedding_failed"):
+                raise RuntimeError("语义向量编码失败；文本索引仍可用，可在状态中心重试")
             manager._update(
                 config,
                 task_id,
                 status="completed",
                 stage="completed",
-                result={"sources": reports, "index": summary, "cancelled": False},
+                result=result,
                 message="语义索引任务完成",
             )
         except Exception as error:
