@@ -3,8 +3,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "desktop" / "src" / "app" / "App.tsx"
+RESUME = ROOT / "desktop" / "src" / "app" / "resumeState.ts"
 WORKBENCH = ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
 PROJECT_LIBRARY = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx"
+PROJECT_LIFECYCLE = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLifecyclePanel.tsx"
 STATUS_CENTER = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenterWorkbench.tsx"
 SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
 SEARCH = ROOT / "desktop" / "src" / "features" / "search" / "SemanticSearchPalette.tsx"
@@ -22,20 +24,24 @@ WEB = ROOT / "web" / "index.html"
 def test_desktop_is_project_first_production_surface() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
+    library = PROJECT_LIBRARY.read_text(encoding="utf-8")
 
     assert "ProjectLibrary" in app
     assert "ProjectWorkbench" in app
-    assert 'setAppWorkspace("production")' in app
-    assert 'setAppWorkspace("team")' in app
+    assert 'type AppSurface = "production" | "status" | "team" | "settings"' in app
+    assert 'className="global-sidebar"' in app
+    assert 'className="main-stage"' in app
+    assert "制作台" not in app
+    assert "app-workspace-switch" not in app
 
     for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
 
     for label in (
+        "场记",
         "素材库",
         "Take",
         "人物",
-        "场记",
         "覆盖",
         "粗剪",
         "组接",
@@ -47,10 +53,21 @@ def test_desktop_is_project_first_production_surface() -> None:
     ):
         assert f'label: "{label}"' in workbench
 
-    assert 'label: "素材 / 剧本"' not in workbench
-    assert 'label: "本机素材"' not in workbench
-    assert 'label: "设置 / 状态"' not in workbench
+    assert "状态中心" in library
+    assert "团队审阅" in library
+    assert ">设置<" in library
     assert 'label: "小镜"' not in workbench
+
+
+def test_project_resume_restores_last_canvas_and_defaults_to_slate() -> None:
+    resume = RESUME.read_text(encoding="utf-8")
+    workbench = WORKBENCH.read_text(encoding="utf-8")
+
+    assert 'const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"' in resume
+    assert "readProjectPage(project.project_id)" in workbench
+    assert "rememberProjectPage(project.project_id, page)" in workbench
+    material_area = workbench.split('{ id: "material"', 1)[1].split("},", 1)[0]
+    assert material_area.index('id: "slate"') < material_area.index('id: "media-library"')
 
 
 def test_frontend_parity_surfaces_are_reachable_from_product_ia() -> None:
@@ -89,6 +106,17 @@ def test_slate_is_dense_table_and_preserves_keyboard_flow() -> None:
     assert 'event.altKey && event.key === "ArrowDown"' in slate
     assert '(event.metaKey || event.ctrlKey) && event.key === "Enter"' in slate
     assert "expectedRevision: board.revision" in slate
+
+
+def test_project_creation_is_low_frequency_modal_not_sidebar_form() -> None:
+    lifecycle = PROJECT_LIFECYCLE.read_text(encoding="utf-8")
+
+    assert 'className="project-new-button"' in lifecycle
+    assert 'className="project-lifecycle-overlay"' in lifecycle
+    assert 'role="dialog"' in lifecycle
+    assert "创建后在后台自动整理素材、转写并匹配剧本" in lifecycle
+    assert "Python WorkspaceRegistry" not in lifecycle
+    assert "prepare task" not in lifecycle
 
 
 def test_fixed_angle_card_is_one_shared_geometry_contract() -> None:
@@ -132,7 +160,7 @@ def test_background_tasks_have_one_global_status_center_home() -> None:
     settings = SETTINGS.read_text(encoding="utf-8")
 
     assert "StatusCenterWorkbench" in app
-    assert "statusCenterOpen" in app
+    assert 'setSurface("status")' in app
     assert "状态中心" in library
     assert "ProjectTaskClient" in status_center
     assert "canCancelTask" in status_center
@@ -141,15 +169,18 @@ def test_background_tasks_have_one_global_status_center_home() -> None:
     assert "后台任务的进度、取消与重试统一放在左侧“状态中心”" in settings
 
 
-def test_team_web_is_user_facing_with_network_details_advanced() -> None:
+def test_team_web_and_settings_are_global_utilities_not_project_tabs() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
+    library = PROJECT_LIBRARY.read_text(encoding="utf-8")
     team = TEAM.read_text(encoding="utf-8")
 
     assert "TeamWebWorkbench" in app
-    assert 'type AppWorkspace = "production" | "team"' in app
+    assert "SettingsStatusWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
-    assert 'label: "团队协作"' not in workbench
+    assert "SettingsStatusWorkbench" not in workbench
+    assert "团队审阅" in library
+    assert ">设置<" in library
     assert "团队审阅" in team
     assert "高级连接设置" in team
     primary = team.split('<details className="team-advanced-settings">', 1)[0]
@@ -158,14 +189,16 @@ def test_team_web_is_user_facing_with_network_details_advanced() -> None:
     assert "Isolated Collaboration Workspace" not in primary
 
 
-def test_product_shell_hides_runtime_diagnostics_from_primary_surface() -> None:
+def test_product_shell_hides_runtime_connection_chrome_from_primary_surface() -> None:
     app = APP.read_text(encoding="utf-8")
 
-    assert "高级连接选项" in app
-    assert "本机服务地址" in app
+    assert 'className="workspace-control"' in app
+    assert 'className="workspace-advanced"' in app
+    assert "connection-panel" not in app
+    assert "topbar" not in app
+    assert "app-workspace-switch" not in app
     assert "platform-capabilities" not in app
     assert "Python Core" not in app
-    assert "API ${" not in app
     assert "Local Production Host" not in app
 
 
