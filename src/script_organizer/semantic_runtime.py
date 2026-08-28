@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import parse_qs
 
-from .semantic_encoder import SemanticEmbeddingConfig
 from .semantic_index import ProjectSemanticIndexer, SEMANTIC_SOURCES
+from .semantic_managed_encoder import ManagedSemanticEncoder
 from .semantic_profiles import semantic_profiles_public
 from .semantic_search import SemanticSearcher, safe_search_payload
 from .semantic_task_indexer import refresh_semantic_index_background
@@ -42,7 +42,12 @@ def _workspace_for_service(service: Any) -> Any:
 def _searcher(service: Any, project_id: str) -> SemanticSearcher:
     project = service.project(project_id)
     workspace = _workspace_for_service(service)
-    return SemanticSearcher(workspace.workspace_id, project_id, project.config)
+    return SemanticSearcher(
+        workspace.workspace_id,
+        project_id,
+        project.config,
+        encoder=ManagedSemanticEncoder(allow_prepare=False),
+    )
 
 
 def _deterministic_answer(query: str, retrieval: dict[str, Any]) -> str:
@@ -85,11 +90,10 @@ def _semantic_task_key(project_id: str, *, reason: str, groups: list[str] | None
 def install_semantic_runtime() -> None:
     """Install read-only semantic retrieval above existing production evidence.
 
-    Search requests never rebuild or embed the project inline. Expensive work is
-    represented by a durable ``semantic_index`` task so enabling a local model
-    cannot turn Cmd/Ctrl+K into an implicit whole-project indexing request.
-    Embedding work is bounded and cancellation-aware between batches; completed
-    vectors remain rebuildable device-local evidence only.
+    Search requests never rebuild, load or download a model inline. Expensive
+    work is represented by a durable ``semantic_index`` task. The task alone may
+    prepare the selected device-local model, processes embeddings in bounded
+    cancellation-aware batches, and leaves Review/Editorial authority untouched.
     """
 
     global _INSTALLED
@@ -114,7 +118,13 @@ def install_semantic_runtime() -> None:
 
     def models_public_with_semantic(registry: Any) -> dict[str, Any]:
         payload = original_models_public(registry)
-        payload["semantic_embedding"] = SemanticEmbeddingConfig.from_env().public()
+        encoder = ManagedSemanticEncoder(allow_prepare=False)
+        payload["semantic_embedding"] = {
+            **encoder.config.public(),
+            "prepared": encoder.prepared,
+            "identity": encoder.identity,
+            "last_error": encoder.last_error,
+        }
         payload["semantic_embedding_profiles"] = semantic_profiles_public()
         return payload
 
@@ -125,7 +135,12 @@ def install_semantic_runtime() -> None:
         limit: int = 12,
         sources: list[str] | None = None,
     ) -> dict[str, Any]:
-        searcher = SemanticSearcher(tools.workspace_id, tools.project_id, tools.config)
+        searcher = SemanticSearcher(
+            tools.workspace_id,
+            tools.project_id,
+            tools.config,
+            encoder=ManagedSemanticEncoder(allow_prepare=False),
+        )
         return safe_search_payload(searcher.search(query, limit=limit, sources=sources, refresh=False))
 
     def answer_with_semantic(self: AssistantOrchestrator, message: str) -> dict[str, Any]:
@@ -138,11 +153,12 @@ def install_semantic_runtime() -> None:
         attention = self.tools.list_attention_groups(limit=30)
         supervisor = self._supervisor_notes(limit=36)
         try:
-            retrieval = SemanticSearcher(self.workspace_id, self.project_id, self.config).search(
-                text,
-                limit=14,
-                refresh=False,
-            )
+            retrieval = SemanticSearcher(
+                self.workspace_id,
+                self.project_id,
+                self.config,
+                encoder=ManagedSemanticEncoder(allow_prepare=False),
+            ).search(text, limit=14, refresh=False)
             safe_retrieval = safe_search_payload(retrieval)
         except Exception:
             safe_retrieval = {
@@ -185,13 +201,14 @@ def install_semantic_runtime() -> None:
 
     def capabilities_with_semantic(service: Any, agent: dict[str, Any]) -> dict[str, Any]:
         payload = original_capabilities(service, agent)
-        embedding = SemanticEmbeddingConfig.from_env()
+        encoder = ManagedSemanticEncoder(allow_prepare=False)
         payload["semantic_search"] = {
             "contract": "semantic_search.v1",
             "read": True,
             "sources": ["visual", "speech", "slate"],
             "keyword_fallback": True,
-            "vector_enabled": embedding.enabled,
+            "vector_enabled": encoder.enabled,
+            "vector_prepared": encoder.prepared,
             "device_local_index": True,
             "editorial_authority": False,
             "inline_index_refresh": False,
@@ -214,10 +231,14 @@ def install_semantic_runtime() -> None:
                 manager._update(config, task_id, status="cancelled", stage="cancelled", message="语义索引任务已取消")
                 return
             group_ids, sources = _semantic_task_targets(task)
+            encoder = ManagedSemanticEncoder(allow_prepare=True)
+            if encoder.enabled and not encoder.prepare():
+                raise RuntimeError(encoder.last_error or "无法准备语义模型")
             indexer = ProjectSemanticIndexer(
                 str(getattr(manager, "workspace_id", "") or ""),
                 project_id,
                 config,
+                encoder=encoder,
             )
             last_progress = {"done": -1, "source": ""}
 
@@ -226,12 +247,7 @@ def install_semantic_runtime() -> None:
                     return
                 last_progress["done"] = done
                 last_progress["source"] = source
-                label = {
-                    "visual": "画面",
-                    "speech": "对白",
-                    "slate": "场记",
-                    "preparing": "准备",
-                }.get(source, source or "索引")
+                label = {"visual": "画面", "speech": "对白", "slate": "场记", "preparing": "准备"}.get(source, source or "索引")
                 manager._update(
                     config,
                     task_id,
@@ -268,23 +284,9 @@ def install_semantic_runtime() -> None:
                 return
             if result.get("embedding_failed"):
                 raise RuntimeError("语义向量编码失败；文本索引仍可用，可在状态中心重试")
-            manager._update(
-                config,
-                task_id,
-                status="completed",
-                stage="completed",
-                result=result,
-                message="语义索引任务完成",
-            )
+            manager._update(config, task_id, status="completed", stage="completed", result=result, message="语义索引任务完成")
         except Exception as error:
-            manager._update(
-                config,
-                task_id,
-                status="failed",
-                stage="failed",
-                error=str(error),
-                message="语义索引任务失败",
-            )
+            manager._update(config, task_id, status="failed", stage="failed", error=str(error), message="语义索引任务失败")
         finally:
             try:
                 manager._threads.pop(task_id, None)
@@ -333,12 +335,7 @@ def install_semantic_runtime() -> None:
                 project_id,
                 SEMANTIC_TASK_TYPE,
                 targets={"group_ids": group_ids, "sources": sorted(SEMANTIC_SOURCES)},
-                idempotency_key=_semantic_task_key(
-                    project_id,
-                    reason="after-task",
-                    groups=group_ids or None,
-                    suffix=task_id,
-                ),
+                idempotency_key=_semantic_task_key(project_id, reason="after-task", groups=group_ids or None, suffix=task_id),
                 actor="system",
             )
         except Exception:
@@ -348,14 +345,14 @@ def install_semantic_runtime() -> None:
         summary = _as_dict(payload.get("summary"))
         documents = int(summary.get("documents", 0) or 0)
         vectors = int(summary.get("vectors", 0) or 0)
-        embedding = SemanticEmbeddingConfig.from_env()
+        encoder = ManagedSemanticEncoder(allow_prepare=False)
         needs_documents = documents <= 0
-        needs_vectors = embedding.enabled and vectors < documents
+        needs_vectors = encoder.enabled and (vectors < documents or not encoder.prepared)
         if not needs_documents and not needs_vectors:
             return
         project = service.project(project_id)
         revision = str(getattr(project, "analysis_revision", "") or "")
-        suffix = f"{revision}:{documents}:{vectors}:{embedding.identity}"
+        suffix = f"{revision}:{documents}:{vectors}:{encoder.identity}:{int(encoder.prepared)}"
         try:
             service.tasks.submit(
                 project_id,
@@ -385,22 +382,13 @@ def install_semantic_runtime() -> None:
 
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
-                if (
-                    len(parts) == 5
-                    and parts[:3] == ["api", "v1", "projects"]
-                    and parts[4] == "semantic-search"
-                ):
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "semantic-search":
                     self._local_only()
                     project_id = parts[3]
                     text, limit, sources = self._search_parameters(parsed)
                     if not text:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "语义搜索内容不能为空")
-                    payload = _searcher(service, project_id).search(
-                        text,
-                        limit=limit,
-                        sources=sources,
-                        refresh=False,
-                    )
+                    payload = _searcher(service, project_id).search(text, limit=limit, sources=sources, refresh=False)
                     maybe_schedule_bootstrap(service, project_id, payload)
                     self._send_json(payload)
                     return
@@ -408,24 +396,13 @@ def install_semantic_runtime() -> None:
 
             def _agent_get(self, parsed):
                 parts = web_server._parts(parsed.path)
-                if (
-                    len(parts) == 6
-                    and parts[:4] == ["api", "agent", "v1", "projects"]
-                    and parts[5] == "semantic-search"
-                ):
+                if len(parts) == 6 and parts[:4] == ["api", "agent", "v1", "projects"] and parts[5] == "semantic-search":
                     project_id = parts[4]
                     agent = self._agent("read", project_id)
                     text, limit, sources = self._search_parameters(parsed)
                     if not text:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "语义搜索内容不能为空")
-                    payload = safe_search_payload(
-                        _searcher(service, project_id).search(
-                            text,
-                            limit=limit,
-                            sources=sources,
-                            refresh=False,
-                        )
-                    )
+                    payload = safe_search_payload(_searcher(service, project_id).search(text, limit=limit, sources=sources, refresh=False))
                     service.tokens.audit(agent, "read:semantic-search", project_id)
                     self._send_json(payload)
                     return
