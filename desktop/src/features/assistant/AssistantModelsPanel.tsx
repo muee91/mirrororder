@@ -11,10 +11,10 @@ interface Draft extends ModelConnectionWrite {
   api_key: string;
 }
 
-const ROLES: Array<{ role: ModelRole; label: string }> = [
-  { role: "text", label: "语言 / 小镜" },
-  { role: "vision", label: "视觉 / 多模态" },
-  { role: "embedding", label: "语义检索" },
+const ROLES: Array<{ role: ModelRole; label: string; description: string }> = [
+  { role: "text", label: "语言模型", description: "小镜的语言解释与受限规划" },
+  { role: "vision", label: "视觉模型", description: "画面理解与多模态增强" },
+  { role: "embedding", label: "语义检索", description: "项目证据的向量检索编码" },
 ];
 
 function draft(row: ModelConnection): Draft {
@@ -37,7 +37,7 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
   const client = useMemo(() => new ModelSettingsClient(baseUrl), [baseUrl]);
   const [payload, setPayload] = useState<AssistantModelsPayload | null>(null);
   const [drafts, setDrafts] = useState<Record<ModelRole, Draft>>(emptyDraft);
-  const [message, setMessage] = useState("正在读取本机模型连接…");
+  const [message, setMessage] = useState("正在读取模型连接…");
   const [busy, setBusy] = useState(false);
 
   function applyPayload(next: AssistantModelsPayload): void {
@@ -54,7 +54,8 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
     void client.read(projectId).then((next) => {
       if (cancelled) return;
       applyPayload(next);
-      setMessage(`models.v1 · device-local connections v${next.connections.version}`);
+      const enabled = ROLES.filter(({ role }) => next.connections[role].enabled).length;
+      setMessage(enabled ? `${enabled} 类外部 / 自定义模型连接已启用` : "当前没有启用外部 / 自定义模型连接");
     }).catch((error: unknown) => {
       if (!cancelled) setMessage(error instanceof Error ? error.message : String(error));
     });
@@ -67,7 +68,7 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
 
   async function save(): Promise<void> {
     setBusy(true);
-    setMessage("正在保存设备本机模型连接…");
+    setMessage("正在保存本机模型连接…");
     try {
       const writes = Object.fromEntries(ROLES.map(({ role }) => {
         const row = drafts[role];
@@ -82,7 +83,7 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
       })) as Record<ModelRole, ModelConnectionWrite>;
       const next = await client.save(projectId, writes);
       applyPayload(next);
-      setMessage("模型连接已保存；API key 仍只保存在设备 secret store 文件，不回显到 UI。");
+      setMessage("模型连接已保存。密钥只保存在当前设备，不会在界面中回显。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -91,29 +92,32 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
   }
 
   return (
-    <details className="assistant-models production-panel">
-      <summary>模型与连接 · Desktop only</summary>
-      <p className="production-note">{message}</p>
+    <details className="assistant-models production-panel model-connections-card">
+      <summary>
+        <span>外部 / 自定义模型连接</span>
+        <small>{message}</small>
+      </summary>
       {payload ? (
         <div className="assistant-model-grid">
-          {ROLES.map(({ role, label }) => {
+          {ROLES.map(({ role, label, description }) => {
             const row = drafts[role];
             return (
               <section className="assistant-model-role" key={role}>
                 <div className="assistant-model-heading">
-                  <strong>{label}</strong>
+                  <div><strong>{label}</strong><small>{description}</small></div>
                   <label><input type="checkbox" checked={row.enabled} onChange={(event) => patch(role, { enabled: event.target.checked })} />启用</label>
                 </div>
-                <label className="production-field"><span>Provider</span><select value={row.provider} onChange={(event) => patch(role, { provider: event.target.value })}><option value="openai-compatible">OpenAI-compatible</option><option value="openai">OpenAI</option><option value="local">Local</option><option value="llama.cpp">llama.cpp</option><option value="llama-server">llama-server</option></select></label>
-                <label className="production-field"><span>Base URL</span><input value={row.base_url} onChange={(event) => patch(role, { base_url: event.target.value })} placeholder="http://127.0.0.1:... 或兼容 API" /></label>
-                <label className="production-field"><span>Model</span><input value={row.model} onChange={(event) => patch(role, { model: event.target.value })} /></label>
+                <label className="production-field"><span>提供方</span><select value={row.provider} onChange={(event) => patch(role, { provider: event.target.value })}><option value="openai-compatible">OpenAI-compatible</option><option value="openai">OpenAI</option><option value="local">本机服务</option><option value="llama.cpp">llama.cpp</option><option value="llama-server">llama-server</option></select></label>
+                <label className="production-field"><span>服务地址</span><input value={row.base_url} onChange={(event) => patch(role, { base_url: event.target.value })} placeholder="http://127.0.0.1:... 或兼容 API" /></label>
+                <label className="production-field"><span>模型</span><input value={row.model} onChange={(event) => patch(role, { model: event.target.value })} /></label>
                 <label className="production-field"><span>API Key</span><input type="password" value={row.api_key} onChange={(event) => patch(role, { api_key: event.target.value })} placeholder={row.has_api_key ? "已保存；留空保持不变" : "可选；不会回显"} /></label>
               </section>
             );
           })}
         </div>
-      ) : null}
+      ) : <p className="production-note">{message}</p>}
       <button type="button" disabled={busy || !payload} onClick={() => void save()}>保存模型连接</button>
+      <p className="production-note">这是当前设备的低频连接设置。小镜本身只显示项目事项与对话，不暴露 Provider、地址或密钥配置。</p>
     </details>
   );
 }
