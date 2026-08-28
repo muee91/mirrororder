@@ -3,10 +3,12 @@ import {
   DesktopClient,
   type LocalRuntimeAction,
   type LocalRuntimePayload,
+  type SemanticEmbeddingProfile,
 } from "../../api/desktop";
 import { HostConnectionError } from "../../api/host";
+import { ProjectTaskClient } from "../../api/tasks";
 
-interface Props { baseUrl: string }
+interface Props { baseUrl: string; projectId: string }
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
@@ -18,8 +20,13 @@ function bytesLabel(value: number): string {
   return `${(value / (1024 * 1024)).toFixed(value > 1024 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 
-export function LocalRuntimePanel({ baseUrl }: Props) {
+function semanticProfileLabel(value: SemanticEmbeddingProfile): string {
+  return value === "standard" ? "标准 · 多模态" : "轻量 · 仅文本";
+}
+
+export function LocalRuntimePanel({ baseUrl, projectId }: Props) {
   const client = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
+  const tasks = useMemo(() => new ProjectTaskClient(baseUrl), [baseUrl]);
   const [runtime, setRuntime] = useState<LocalRuntimePayload | null>(null);
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,7 +37,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
       const next = await client.localRuntime();
       setRuntime(next);
       setModel(next.local_vision_model);
-      setMessage(`local_runtime.v1 · vision ${next.vision.status} · face ${next.identity.face.status} · speaker ${next.identity.speaker.status}`);
+      setMessage(`local_runtime.v1 · semantic ${next.semantic.prepared ? "prepared" : next.semantic.runtime_available ? "ready" : "unavailable"} · vision ${next.vision.status} · face ${next.identity.face.status} · speaker ${next.identity.speaker.status}`);
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -45,7 +52,26 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
       const next = await client.updateLocalRuntime(payload);
       setRuntime(next);
       setModel(next.local_vision_model);
-      setMessage(`运行时已更新 · vision ${next.vision.status} · face ${next.identity.face.status} · speaker ${next.identity.speaker.status}`);
+      setMessage(`运行时已更新 · semantic ${next.semantic.prepared ? "prepared" : next.semantic.runtime_available ? "ready" : "unavailable"} · vision ${next.vision.status}`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function prepareSemantic(): Promise<void> {
+    if (!runtime?.semantic_embedding_enabled || !runtime.semantic.runtime_available || busy) return;
+    setBusy(true);
+    setMessage("正在把语义模型准备与当前项目索引加入状态中心…");
+    try {
+      await tasks.submit(
+        projectId,
+        "semantic_index",
+        { sources: ["visual", "speech", "slate"] },
+        `desktop:semantic-index:${projectId}:${Date.now()}`,
+      );
+      setMessage("语义索引已提交到状态中心；模型首次下载、加载与索引进度都在那里执行。搜索仍可继续使用文本召回。");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -67,6 +93,10 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
         <>
           <div className="runtime-switch-grid">
             <label className="settings-check">
+              <input type="checkbox" checked={runtime.semantic_embedding_enabled} disabled={busy} onChange={(event) => void action({ action: "set", semantic_embedding_enabled: event.target.checked }, "正在更新本地语义索引开关…")} />
+              <span>本地语义索引</span>
+            </label>
+            <label className="settings-check">
               <input type="checkbox" checked={runtime.local_vision_enabled} disabled={busy} onChange={(event) => void action({ action: "set", local_vision_enabled: event.target.checked }, "正在更新本地视觉开关…")} />
               <span>本地视觉</span>
             </label>
@@ -79,14 +109,37 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
               <span>说话人身份</span>
             </label>
           </div>
+
           <div className="runtime-model-row">
             <label className="production-field">
-              <span>本地视觉模型</span>
-              <input value={model} onChange={(event) => setModel(event.target.value)} spellCheck={false} />
+              <span>语义索引档位</span>
+              <select
+                value={runtime.semantic_embedding_profile}
+                disabled={busy}
+                onChange={(event) => void action(
+                  { action: "set", semantic_embedding_profile: event.target.value as SemanticEmbeddingProfile, semantic_embedding_dimensions: 1024 },
+                  "正在切换语义索引档位…",
+                )}
+              >
+                <option value="standard">标准 · 多模态</option>
+                <option value="lightweight">轻量 · 仅文本</option>
+              </select>
             </label>
-            <button type="button" className="secondary" disabled={busy || !model.trim() || model.trim() === runtime.local_vision_model} onClick={() => void action({ action: "set", local_vision_model: model.trim() }, "正在切换本地视觉模型…")}>保存模型</button>
+            <div className="production-note">
+              <strong>{semanticProfileLabel(runtime.semantic_embedding_profile)}</strong> · {runtime.semantic_embedding_dimensions} 维
+            </div>
           </div>
+
           <div className="runtime-status-grid">
+            <article>
+              <strong>Semantic</strong>
+              <span>{runtime.semantic.prepared ? "prepared" : runtime.semantic.runtime_available ? "ready" : "runtime unavailable"}</span>
+              <small>{bytesLabel(runtime.semantic.cache_bytes)} · {runtime.semantic_embedding_profile === "standard" ? "multimodal" : "text only"}</small>
+              <small>{runtime.semantic.model}</small>
+              {runtime.semantic.last_error ? <em>{runtime.semantic.last_error}</em> : null}
+              {!runtime.semantic.runtime_available ? <em>{runtime.semantic_embedding_profile === "standard" ? "当前 App 尚未包含通过验收的 Sentence Transformers 5.4 / Torch 语义 runtime。" : "轻量 llama.cpp 档仍需通过当前 packaged binary 的 macOS embedding smoke。"}</em> : null}
+              <button type="button" disabled={busy || !runtime.semantic_embedding_enabled || !runtime.semantic.runtime_available} onClick={() => void prepareSemantic()}>准备并建立当前项目索引</button>
+            </article>
             <article>
               <strong>Vision</strong><span>{runtime.vision.status}</span><small>{bytesLabel(runtime.vision.cache_bytes)} · {runtime.vision.available ? "runtime available" : "llama-server missing"}</small>
               {runtime.vision.last_error ? <em>{runtime.vision.last_error}</em> : null}
@@ -103,7 +156,15 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
               <button type="button" disabled={busy || !runtime.speaker_identity_enabled || runtime.identity.speaker.preparing} onClick={() => void action({ action: "prepare_identity", kind: "speaker" }, "正在后台准备说话人识别运行时…")}>准备说话人模型</button>
             </article>
           </div>
-          <p className="production-note">模型与 optional Python wheels 都是当前设备状态。准备动作由现有 Python runtime 后台执行；React 不下载模型、不保存 embedding。</p>
+
+          <div className="runtime-model-row">
+            <label className="production-field">
+              <span>本地视觉模型</span>
+              <input value={model} onChange={(event) => setModel(event.target.value)} spellCheck={false} />
+            </label>
+            <button type="button" className="secondary" disabled={busy || !model.trim() || model.trim() === runtime.local_vision_model} onClick={() => void action({ action: "set", local_vision_model: model.trim() }, "正在切换本地视觉模型…")}>保存模型</button>
+          </div>
+          <p className="production-note">模型与 optional Python wheels 都是当前设备状态。React 不下载模型、不保存 embedding；语义模型的首次准备与索引必须通过后台任务执行，向量只用于检索证据，不会写入 Review / Editorial / Best。</p>
         </>
       ) : null}
     </div>
