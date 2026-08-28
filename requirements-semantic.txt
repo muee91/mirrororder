@@ -1,0 +1,10 @@
+# Optional local multimodal semantic runtime.
+# These dependencies are intentionally not part of the core Python runtime yet.
+# Release packaging must vendor/test the macOS arm64 wheels before the Standard
+# semantic profile is enabled in packaged builds; never pip-install at App launch.
+sentence-transformers==5.4.0
+transformers>=4.57.3,<5
+# Sentence Transformers pulls torch, but pin the supported major/minor explicitly
+# for reproducible packaged-runtime validation against Qwen3-VL-Embedding.
+torch>=2.8,<2.9
+torchvision>=0.23,<0.24
