@@ -53,6 +53,7 @@ function taskLabel(task: ProjectTaskRecord): string {
     transcription: "转写",
     transcribe: "转写",
     multicam: "多机位同步",
+    semantic_index: "语义索引",
   };
   return labels[task.type] || task.type || "后台任务";
 }
@@ -182,7 +183,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Prop
         <span><strong>{totals.completed}</strong>近期完成</span>
       </div>
 
-      <p className="status-center-note">同步、转写、剧本匹配、内容识别、人物、声纹与 Audit 的后台执行统一在这里查看。项目工作区只保留制作对象和必要的轻量进度。</p>
+      <p className="status-center-note">同步、转写、剧本匹配、内容识别、人物、声纹、语义索引与 Audit 的后台执行统一在这里查看。项目工作区只保留制作对象和必要的轻量进度。</p>
 
       <div className="status-center-projects">
         {visibleRows.map((row) => {
