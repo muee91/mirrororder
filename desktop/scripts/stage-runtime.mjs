@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -45,6 +46,43 @@ function run(executable, args, label, options = {}) {
     fail(`${label} exited ${result.status}: ${(result.stderr || result.stdout || "").trim()}`);
   }
   return (result.stdout || "").trim();
+}
+
+function parseJsonProbe(output, label) {
+  try {
+    return JSON.parse(output.split(/\r?\n/).at(-1));
+  } catch {
+    fail(`${label} returned invalid JSON: ${output}`);
+  }
+}
+
+function probeSemanticRuntime(pythonExecutable, label) {
+  const output = run(
+    pythonExecutable,
+    [
+      "-I",
+      "-c",
+      [
+        "import importlib, json",
+        "required = {'sentence_transformers': 'sentence_transformers', 'transformers': 'transformers', 'torch': 'torch', 'torchvision': 'torchvision', 'PIL': 'PIL'}",
+        "modules = {}",
+        "errors = {}",
+        "for key, module_name in required.items():",
+        "    try:",
+        "        module = importlib.import_module(module_name)",
+        "        modules[key] = str(getattr(module, '__version__', 'unknown'))",
+        "    except Exception as error:",
+        "        errors[key] = str(error)[:500]",
+        "print(json.dumps({'available': not errors, 'modules': modules, 'errors': errors}, sort_keys=True))",
+      ].join("\n"),
+    ],
+    label,
+  );
+  const info = parseJsonProbe(output, label);
+  if (process.env.MIRRORORDER_REQUIRE_SEMANTIC_RUNTIME === "1" && info.available !== true) {
+    fail(`${label} missing required semantic modules: ${JSON.stringify(info.errors)}`);
+  }
+  return info;
 }
 
 function isInside(root, candidate) {
@@ -120,6 +158,12 @@ const mediaToolsSource = process.env.MIRRORORDER_MEDIA_TOOLS_SOURCE?.trim();
 const mediaToolsLicense = process.env.MIRRORORDER_MEDIA_TOOLS_LICENSE?.trim();
 if (!mediaToolsSource) fail("MIRRORORDER_MEDIA_TOOLS_SOURCE is required; media tool provenance cannot be implicit");
 if (!mediaToolsLicense) fail("MIRRORORDER_MEDIA_TOOLS_LICENSE is required; media tool license classification cannot be implicit");
+const semanticRequirementsPath = path.join(repoRoot, "requirements-semantic.txt");
+if (!fs.existsSync(semanticRequirementsPath)) fail(`semantic requirements missing: ${semanticRequirementsPath}`);
+const semanticRequirementsSha256 = crypto
+  .createHash("sha256")
+  .update(fs.readFileSync(semanticRequirementsPath))
+  .digest("hex");
 
 try {
   parseToolVersionOutput("ffmpeg", run(ffmpegExecutable, ["-version"], "ffmpeg source policy probe"));
@@ -220,6 +264,7 @@ for (const [label, candidate] of [["sys.executable", stagedPythonInfo.executable
     fail(`staged Python ${label} escapes staged runtime: ${candidate}`);
   }
 }
+const stagedSemanticInfo = probeSemanticRuntime(stagedPython, "staged Python semantic runtime probe");
 const stagedCorePathLiteral = JSON.stringify(path.join(coreTarget, "src"));
 run(
   stagedPython,
@@ -273,6 +318,18 @@ const manifest = {
     relocation_probe: true,
     source: "MIRRORORDER_PORTABLE_PYTHON_ROOT",
   },
+  semantic: {
+    profile: "standard",
+    runtime: "sentence-transformers",
+    included: stagedSemanticInfo.available === true,
+    runtime_available: stagedSemanticInfo.available === true,
+    modules: stagedSemanticInfo.modules,
+    import_errors: stagedSemanticInfo.errors,
+    requirements: "requirements-semantic.txt",
+    requirements_sha256: semanticRequirementsSha256,
+    provenance: "MIRRORORDER_PORTABLE_PYTHON_ROOT",
+    model_weights: "not bundled",
+  },
   tools: {
     ffmpeg: ffmpegMetadata,
     ffprobe: ffprobeMetadata,
@@ -305,3 +362,4 @@ console.log(`Core: ${coreTarget}`);
 console.log(`Python: ${pythonTarget}`);
 console.log(`Tools: ${toolsTarget}`);
 console.log(`Manifest: ${manifestTarget}`);
+console.log(`Semantic runtime: ${manifest.semantic.included ? "included" : "unavailable"} · modules=${JSON.stringify(manifest.semantic.modules)} · requirements_sha256=${manifest.semantic.requirements_sha256}`);

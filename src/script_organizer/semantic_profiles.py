@@ -78,9 +78,11 @@ def _module_available(name: str) -> bool:
 def semantic_runtime_support(profile: SemanticEmbeddingProfile) -> dict[str, Any]:
     if profile.runtime == "sentence-transformers":
         modules = {
+            "PIL": _module_available("PIL"),
             "torch": _module_available("torch"),
             "transformers": _module_available("transformers"),
             "sentence_transformers": _module_available("sentence_transformers"),
+            "torchvision": _module_available("torchvision"),
         }
         return {
             "available": all(modules.values()),

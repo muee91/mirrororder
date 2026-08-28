@@ -25,10 +25,23 @@ def _frame_documents(
     groups: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     config = getattr(indexer.encoder, "config", None)
-    if not bool(getattr(indexer.encoder, "enabled", False)) or str(getattr(config, "profile", "")) != "standard":
+    if str(getattr(config, "profile", "")) != "standard":
         return []
-    if not hasattr(indexer.encoder, "encode_multimodal"):
-        return []
+
+    existing: dict[str, dict[str, Any]] = {}
+    store = getattr(indexer, "store", None)
+    document_reader = getattr(store, "documents", None)
+    if callable(document_reader):
+        try:
+            existing = {
+                str(row.get("document_id", "")): row
+                for row in document_reader(indexer.project_id, sources=[FRAME_SOURCE])
+                if isinstance(row, dict) and row.get("document_id")
+            }
+        except Exception:
+            # Frame discovery must remain available even when an unavailable
+            # optional encoder has a minimal store/test double.
+            existing = {}
 
     documents: list[dict[str, Any]] = []
     for group_id, group in groups.items():
@@ -36,8 +49,6 @@ def _frame_documents(
         by_clip = {str(row.get("clip_id", "") or ""): row for row in members}
         for frame in indexer.database.frames(indexer.project_id, group_id):
             path = Path(str(frame.get("path", "") or ""))
-            if not path.is_file():
-                continue
             frame_id = str(frame.get("frame_id", "") or "")
             clip_id = str(frame.get("clip_id", "") or "")
             if not frame_id:
@@ -47,10 +58,12 @@ def _frame_documents(
             source_start = float(member.get("source_start", 0) or 0) if isinstance(member, dict) else 0.0
             relative_time = max(0.0, source_time - source_start)
             camera = str(frame.get("camera", "") or (member.get("camera", "") if isinstance(member, dict) else ""))
-            try:
-                image_sha = hashlib.sha1(path.read_bytes()).hexdigest()
-            except OSError:
-                continue
+            image_sha = ""
+            if path.is_file():
+                try:
+                    image_sha = hashlib.sha1(path.read_bytes()).hexdigest()
+                except OSError:
+                    image_sha = ""
             metadata = {
                 "evidence": "representative_frame",
                 "frame_id": frame_id,
@@ -58,26 +71,42 @@ def _frame_documents(
                 "reason": str(frame.get("reason", "") or ""),
                 "time_basis": "take_relative",
             }
-            fingerprint = hashlib.sha1(
-                f"{frame_id}|{image_sha}|{relative_time:.3f}|{camera}".encode("utf-8")
-            ).hexdigest()
-            documents.append(
-                {
-                    "document_id": f"sem_frame_{hashlib.sha1(f'{indexer.project_id}|{frame_id}'.encode('utf-8')).hexdigest()[:24]}",
-                    "group_id": group_id,
-                    "clip_id": clip_id,
-                    "media_id": str(member.get("media_id", "") or "") if isinstance(member, dict) else "",
-                    "source": FRAME_SOURCE,
-                    "start": relative_time,
-                    "end": relative_time,
-                    # SemanticStore requires safe display text. The image path is
-                    # deliberately transient and _safe_document drops unknown keys.
-                    "text": f"代表帧 · {camera or 'camera'} · {relative_time:.2f}s",
-                    "metadata": metadata,
-                    "content_fingerprint": fingerprint,
-                    "_embedding_input": {"image": str(path)},
-                }
-            )
+            document_id = f"sem_frame_{hashlib.sha1(f'{indexer.project_id}|{frame_id}'.encode('utf-8')).hexdigest()[:24]}"
+            current = existing.get(document_id, {})
+            if image_sha:
+                fingerprint = hashlib.sha1(
+                    f"{frame_id}|{image_sha}|{relative_time:.3f}|{camera}".encode("utf-8")
+                ).hexdigest()
+            else:
+                # A temporarily unavailable/moved cache frame must not erase a
+                # previously indexed standard vector. Reuse its fingerprint so
+                # SemanticStore treats the row as unchanged; a later available
+                # cache path naturally produces a new fingerprint and re-encodes.
+                fingerprint = str(current.get("content_fingerprint", "") or "")
+                if not fingerprint:
+                    fingerprint = hashlib.sha1(
+                        f"{frame_id}|missing|{relative_time:.3f}|{camera}".encode("utf-8")
+                    ).hexdigest()
+            document = {
+                "document_id": document_id,
+                "group_id": group_id,
+                "clip_id": clip_id,
+                "media_id": str(member.get("media_id", "") or "") if isinstance(member, dict) else "",
+                "source": FRAME_SOURCE,
+                "start": relative_time,
+                "end": relative_time,
+                "text": f"代表帧 · {camera or 'camera'} · {relative_time:.2f}s",
+                "metadata": metadata,
+                "content_fingerprint": fingerprint,
+            }
+            if current.get("embedding") and not image_sha:
+                document["embedding"] = current["embedding"]
+                document["embedding_model"] = str(current.get("embedding_model", "") or "")
+            if image_sha:
+                # This input is consumed only by the encoder and is filtered by
+                # SemanticStore._safe_document before persistence/API exposure.
+                document["_embedding_input"] = {"image": str(path)}
+            documents.append(document)
     return documents
 
 
@@ -162,6 +191,9 @@ def _attach_embeddings_incrementally(
             break
         batch = pending[offset : offset + size]
         if source == FRAME_SOURCE:
+            if not callable(getattr(indexer.encoder, "encode_multimodal", None)):
+                failed = True
+                break
             inputs = [row.get("_embedding_input") for row in batch]
             vectors = indexer.encoder.encode_multimodal(inputs)
         else:

@@ -52,7 +52,15 @@ def test_stager_requires_relocatable_python_and_media_tools() -> None:
     assert "license_classification" in stager
     assert "sha256" in tool_policy
     assert 'contract: "mirrororder_packaged_runtime.v1"' in stager
+    assert "requirements-semantic.txt" in stager
+    assert "probeSemanticRuntime" in stager
+    assert "MIRRORORDER_REQUIRE_SEMANTIC_RUNTIME" in stager
+    assert "'sentence_transformers'" in stager
+    assert "'torchvision'" in stager
     assert "otool" in verifier
+    assert "bundledMachOFiles" in verifier
+    assert "nested Mach-O gate" in verifier
+    assert "MIRRORORDER_REQUIRE_SEMANTIC_RUNTIME" in verifier
     assert "assertManifestToolMatches" in verifier
     assert "license classification" in verifier
     assert "version_output" in tool_policy

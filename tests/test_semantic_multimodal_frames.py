@@ -9,6 +9,7 @@ from script_organizer.semantic_task_indexer import (
     FRAME_SOURCE,
     _frame_documents,
     _prepare_documents,
+    refresh_semantic_index_background,
 )
 from script_organizer.workspace_db import WorkspaceDatabase
 
@@ -37,6 +38,29 @@ class _FakeMultimodalEncoder:
     @staticmethod
     def encode_one(_text: str):
         return [1.0, 0.0]
+
+
+class _DisabledStandardEncoder:
+    enabled = False
+    identity = ""
+    config = _Config()
+
+    @staticmethod
+    def encode(_texts):
+        raise AssertionError("disabled encoder must not encode text")
+
+    @staticmethod
+    def encode_multimodal(_inputs):
+        raise AssertionError("disabled encoder must not encode frames")
+
+
+class _DisabledLightweightEncoder(_DisabledStandardEncoder):
+    class config:
+        profile = "lightweight"
+
+        @staticmethod
+        def public() -> dict:
+            return {"enabled": False, "profile": "lightweight", "model": ""}
 
 
 class _FakeIndexer:
@@ -140,6 +164,38 @@ def test_frame_embedding_path_is_transient_and_never_persisted(tmp_path: Path) -
     assert str(frame_path) not in serialized
     assert persisted[0]["metadata"]["frame_id"] == "frm_1"
     assert persisted[0]["media_id"] == "M1"
+
+
+def test_disabled_standard_refresh_preserves_frame_vector_but_lightweight_removes_it(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    indexer = _FakeIndexer(database)
+    frame_path = tmp_path / "cached-frame.jpg"
+    frame_path.write_bytes(b"representative-frame")
+    database.replace_frames(
+        "demo",
+        "G1",
+        [{"frame_id": "frm_keep", "clip_id": "C1", "camera": "B", "source_time": 12.5, "path": str(frame_path)}],
+    )
+
+    initial = _frame_documents(indexer, indexer._selected_groups(None))
+    initial[0]["embedding"] = [1.0, 0.0]
+    initial[0]["embedding_model"] = _FakeMultimodalEncoder.identity
+    indexer.store.replace_documents("demo", FRAME_SOURCE, initial)
+
+    indexer.encoder = _DisabledStandardEncoder()
+    preserved = refresh_semantic_index_background(
+        indexer,
+        sources=["visual", "speech", "slate"],
+    )
+    assert preserved["embedding_failed"] is False
+    rows = indexer.store.documents("demo", sources=[FRAME_SOURCE])
+    assert len(rows) == 1
+    assert rows[0]["embedding"] == [1.0, 0.0]
+    assert rows[0]["embedding_model"] == _FakeMultimodalEncoder.identity
+
+    indexer.encoder = _DisabledLightweightEncoder()
+    refresh_semantic_index_background(indexer, sources=[FRAME_SOURCE])
+    assert indexer.store.documents("demo", sources=[FRAME_SOURCE]) == []
 
 
 def test_text_query_can_recall_representative_frame_in_shared_vector_space(tmp_path: Path) -> None:

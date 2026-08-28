@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import parse_qs
 
-from .semantic_index import ProjectSemanticIndexer, SEMANTIC_SOURCES
+from .semantic_index import ProjectSemanticIndexer
 from .semantic_managed_encoder import ManagedSemanticEncoder
 from .semantic_profiles import semantic_profiles_public
 from .semantic_search import SemanticSearcher, safe_search_payload
-from .semantic_task_indexer import refresh_semantic_index_background
+from .semantic_task_indexer import BACKGROUND_SEMANTIC_SOURCES, FRAME_SOURCE, refresh_semantic_index_background
 
 
 _INSTALLED = False
@@ -75,8 +75,8 @@ def _semantic_task_targets(task: dict[str, Any]) -> tuple[list[str] | None, list
     if raw_sources and not isinstance(raw_sources, list):
         raise ValueError("semantic_index sources 必须是数组")
     selected = [str(value) for value in raw_sources if str(value)] if isinstance(raw_sources, list) else []
-    sources = sorted(set(selected) if selected else SEMANTIC_SOURCES)
-    unknown = set(sources) - SEMANTIC_SOURCES
+    sources = sorted(set(selected) if selected else BACKGROUND_SEMANTIC_SOURCES)
+    unknown = set(sources) - BACKGROUND_SEMANTIC_SOURCES
     if unknown:
         raise ValueError("unknown semantic sources: " + ", ".join(sorted(unknown)))
     return group_ids, sources
@@ -205,7 +205,7 @@ def install_semantic_runtime() -> None:
         payload["semantic_search"] = {
             "contract": "semantic_search.v1",
             "read": True,
-            "sources": ["visual", "speech", "slate"],
+            "sources": ["visual", "speech", "slate", FRAME_SOURCE],
             "keyword_fallback": True,
             "vector_enabled": encoder.enabled,
             "vector_prepared": encoder.prepared,
@@ -247,7 +247,7 @@ def install_semantic_runtime() -> None:
                     return
                 last_progress["done"] = done
                 last_progress["source"] = source
-                label = {"visual": "画面", "speech": "对白", "slate": "场记", "preparing": "准备"}.get(source, source or "索引")
+                label = {"visual": "画面", "speech": "对白", "slate": "场记", FRAME_SOURCE: "代表帧", "preparing": "准备"}.get(source, source or "索引")
                 manager._update(
                     config,
                     task_id,
@@ -334,7 +334,7 @@ def install_semantic_runtime() -> None:
             manager.submit(
                 project_id,
                 SEMANTIC_TASK_TYPE,
-                targets={"group_ids": group_ids, "sources": sorted(SEMANTIC_SOURCES)},
+                targets={"group_ids": group_ids, "sources": sorted(BACKGROUND_SEMANTIC_SOURCES)},
                 idempotency_key=_semantic_task_key(project_id, reason="after-task", groups=group_ids or None, suffix=task_id),
                 actor="system",
             )

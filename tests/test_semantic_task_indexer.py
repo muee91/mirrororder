@@ -168,5 +168,8 @@ def test_semantic_task_is_visible_and_search_does_not_run_inline_indexing() -> N
     assert "refresh_semantic_index_background" in runtime
     assert runtime.count("refresh=False") >= 4
     assert "maybe_schedule_bootstrap" not in runtime
+    assert '"sources": ["visual", "speech", "slate", FRAME_SOURCE]' in runtime
+    assert 'FRAME_SOURCE: "代表帧"' in runtime
+    assert "BACKGROUND_SEMANTIC_SOURCES" in runtime
     assert 'semantic_index: "语义索引"' in status
     assert "语义索引与 Audit" in status

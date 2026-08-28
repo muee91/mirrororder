@@ -68,7 +68,7 @@ export function LocalRuntimePanel({ baseUrl, projectId }: Props) {
       await tasks.submit(
         projectId,
         "semantic_index",
-        { sources: ["visual", "speech", "slate"] },
+        { sources: ["visual", "speech", "slate", "frame"] },
         `desktop:semantic-index:${projectId}:${Date.now()}`,
       );
       setMessage("语义索引已提交到状态中心；模型首次下载、加载与索引进度都在那里执行。搜索仍可继续使用文本召回。");

@@ -31,6 +31,40 @@ function assertFile(value, label) {
   if (!fs.existsSync(value) || !fs.statSync(value).isFile()) fail(`${label} missing: ${value}`);
 }
 
+function bundledMachOFiles(root) {
+  const candidates = new Set();
+  const visit = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const item = path.join(current, entry.name);
+      let stat;
+      try {
+        stat = fs.lstatSync(item);
+      } catch (error) {
+        fail(`cannot inspect bundled runtime entry ${item}: ${error.message}`);
+      }
+      if (stat.isDirectory()) {
+        visit(item);
+        continue;
+      }
+      if (!stat.isFile() && !stat.isSymbolicLink()) continue;
+      if (stat.isSymbolicLink()) {
+        try {
+          if (!fs.statSync(item).isFile()) continue;
+        } catch (error) {
+          fail(`broken bundled runtime symlink ${item}: ${error.message}`);
+        }
+      }
+      const extensionCandidate = /\.(?:dylib|so)(?:\..*)?$/i.test(entry.name);
+      const executableCandidate = Boolean(stat.mode & 0o111);
+      if (!extensionCandidate && !executableCandidate) continue;
+      const fileType = run("file", ["-b", item], `file ${path.basename(item)}`);
+      if (fileType.includes("Mach-O")) candidates.add(item);
+    }
+  };
+  visit(root);
+  return [...candidates].sort();
+}
+
 function inspectMachO(binary, appRoot) {
   const output = run("otool", ["-L", binary], `otool ${path.basename(binary)}`);
   const forbidden = [];
@@ -70,6 +104,15 @@ try {
 if (manifest.contract !== "mirrororder_packaged_runtime.v1") fail(`unexpected runtime contract: ${manifest.contract}`);
 if (manifest.platform !== "darwin") fail(`runtime was staged for ${manifest.platform}, not darwin`);
 if (!manifest.python?.executable) fail("runtime manifest has no python executable");
+if (manifest.semantic?.profile !== "standard" || manifest.semantic?.runtime !== "sentence-transformers") {
+  fail("runtime manifest has no standard semantic runtime contract");
+}
+if (typeof manifest.semantic?.requirements_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(manifest.semantic.requirements_sha256)) {
+  fail("runtime manifest has no semantic requirements SHA256");
+}
+if (process.env.MIRRORORDER_REQUIRE_SEMANTIC_RUNTIME === "1" && manifest.semantic.included !== true) {
+  fail("standard semantic runtime is not included in this packaged acceptance");
+}
 if (typeof manifest.tools?.source !== "string" || !manifest.tools.source.trim()) fail("runtime manifest has no media tool source/provenance");
 if (typeof manifest.tools?.provenance !== "string" || !manifest.tools.provenance.trim()) fail("runtime manifest has no media tool provenance");
 if (typeof manifest.tools?.license_classification !== "string" || !manifest.tools.license_classification.trim()) fail("runtime manifest has no media tool license classification");
@@ -92,6 +135,7 @@ const probe = [
   `sys.path.insert(0, ${JSON.stringify(source)})`,
   "import script_organizer.cli",
   "import numpy, pandas, scipy",
+  ...(manifest.semantic?.included ? ["import sentence_transformers, transformers, torch, torchvision", "from PIL import Image"] : []),
   "print(json.dumps({'python': sys.version.split()[0], 'executable': sys.executable, 'prefix': sys.prefix}))",
 ].join("; ");
 const pythonOutput = run(python, ["-I", "-c", probe], "bundled Python/Core probe", {
@@ -133,6 +177,11 @@ const executableDir = path.join(app, "Contents", "MacOS");
 const appExecutables = fs.readdirSync(executableDir).map((name) => path.join(executableDir, name)).filter((item) => fs.statSync(item).isFile());
 if (!appExecutables.length) fail("app bundle has no Contents/MacOS executable");
 for (const executable of appExecutables) inspectMachO(executable, app);
+
+const nestedMachOs = bundledMachOFiles(pythonRoot);
+if (!nestedMachOs.length) fail(`no nested Mach-O files found under ${pythonRoot}`);
+for (const binary of nestedMachOs) inspectMachO(binary, app);
+console.log(`nested Mach-O gate: ${nestedMachOs.length} files under mirrororder-python`);
 
 if (process.env.MIRRORORDER_REQUIRE_CODESIGN === "1") {
   run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", app], "codesign verification");
