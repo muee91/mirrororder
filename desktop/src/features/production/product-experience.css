@@ -28,6 +28,11 @@
 .production-heading { margin-bottom: 10px; }
 .production-heading h2 { font-size: 16px; }
 .production-panel { border-radius: 8px; }
+.main-stage > .status-center-workbench,
+.main-stage > .settings-status-workbench,
+.main-stage > .team-web-workbench { min-height: 100%; height: 100%; overflow: auto; padding: 12px 14px 28px; }
+.main-stage > .settings-status-workbench .production-heading,
+.main-stage > .status-center-workbench .production-heading { position: sticky; z-index: 3; top: -12px; margin: -12px -14px 12px; border-bottom: 1px solid #232b33; padding: 12px 14px 10px; background: #0f1419; }
 
 @media (max-width: 1180px) {
   .project-toolbar-main { grid-template-columns: minmax(150px, auto) minmax(280px, 1fr) auto; gap: 8px; padding-inline: 9px; }
@@ -58,5 +63,7 @@
   .project-workbench-secondary button.is-active { color: #fff; background: #3a4650; }
   .has-assistant-drawer .project-workbench-main { border-color: #dce3e9; }
   .assistant-context-drawer, .assistant-drawer-heading { background: #fff; }
-  .assistant-drawer-heading { border-color: #dce3e9; }
+  .assistant-drawer-heading { border-bottom-color: #dce3e9; }
+  .main-stage > .settings-status-workbench .production-heading,
+  .main-stage > .status-center-workbench .production-heading { border-color: #dce3e9; background: #fff; }
 }
