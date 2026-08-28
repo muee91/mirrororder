@@ -103,6 +103,20 @@ export class ProjectTaskClient {
     return Array.isArray(payload.tasks) ? payload.tasks : [];
   }
 
+  submit(projectId: string, type: string, targets: Record<string, unknown> = {}, idempotencyKey = ""): Promise<ProjectTaskRecord> {
+    const taskType = type.trim();
+    if (!taskType) throw new HostConnectionError("提交后台任务需要 type");
+    return requestJson<ProjectTaskRecord>(this.baseUrl, `${projectPath(projectId)}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({
+        type: taskType,
+        targets,
+        actor: "desktop",
+        idempotency_key: idempotencyKey || `desktop:${taskType}:${projectId}:${Date.now()}`,
+      }),
+    });
+  }
+
   cancel(projectId: string, taskId: string): Promise<ProjectTaskRecord> {
     const value = taskId.trim();
     if (!value) throw new HostConnectionError("取消任务需要 task_id");
