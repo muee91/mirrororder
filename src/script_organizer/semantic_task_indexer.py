@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 from .semantic_index import ProjectSemanticIndexer, SEMANTIC_SOURCES
 
 
+FRAME_SOURCE = "frame"
+BACKGROUND_SEMANTIC_SOURCES = set(SEMANTIC_SOURCES) | {FRAME_SOURCE}
 ProgressCallback = Callable[[int, int, str], None]
 CancelCallback = Callable[[], bool]
 
@@ -16,14 +20,75 @@ def _cancelled(callback: CancelCallback | None) -> bool:
         return False
 
 
+def _frame_documents(
+    indexer: ProjectSemanticIndexer,
+    groups: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    config = getattr(indexer.encoder, "config", None)
+    if not bool(getattr(indexer.encoder, "enabled", False)) or str(getattr(config, "profile", "")) != "standard":
+        return []
+    if not hasattr(indexer.encoder, "encode_multimodal"):
+        return []
+
+    documents: list[dict[str, Any]] = []
+    for group_id, group in groups.items():
+        members = [row for row in group.get("members", []) if isinstance(row, dict)]
+        by_clip = {str(row.get("clip_id", "") or ""): row for row in members}
+        for frame in indexer.database.frames(indexer.project_id, group_id):
+            path = Path(str(frame.get("path", "") or ""))
+            if not path.is_file():
+                continue
+            frame_id = str(frame.get("frame_id", "") or "")
+            clip_id = str(frame.get("clip_id", "") or "")
+            if not frame_id:
+                continue
+            member = by_clip.get(clip_id, {})
+            source_time = float(frame.get("source_time", 0) or 0)
+            source_start = float(member.get("source_start", 0) or 0) if isinstance(member, dict) else 0.0
+            relative_time = max(0.0, source_time - source_start)
+            camera = str(frame.get("camera", "") or (member.get("camera", "") if isinstance(member, dict) else ""))
+            try:
+                image_sha = hashlib.sha1(path.read_bytes()).hexdigest()
+            except OSError:
+                continue
+            metadata = {
+                "evidence": "representative_frame",
+                "frame_id": frame_id,
+                "camera": camera,
+                "reason": str(frame.get("reason", "") or ""),
+                "time_basis": "take_relative",
+            }
+            fingerprint = hashlib.sha1(
+                f"{frame_id}|{image_sha}|{relative_time:.3f}|{camera}".encode("utf-8")
+            ).hexdigest()
+            documents.append(
+                {
+                    "document_id": f"sem_frame_{hashlib.sha1(f'{indexer.project_id}|{frame_id}'.encode('utf-8')).hexdigest()[:24]}",
+                    "group_id": group_id,
+                    "clip_id": clip_id,
+                    "media_id": str(member.get("media_id", "") or "") if isinstance(member, dict) else "",
+                    "source": FRAME_SOURCE,
+                    "start": relative_time,
+                    "end": relative_time,
+                    # SemanticStore requires safe display text. The image path is
+                    # deliberately transient and is stripped before persistence.
+                    "text": f"代表帧 · {camera or 'camera'} · {relative_time:.2f}s",
+                    "metadata": metadata,
+                    "content_fingerprint": fingerprint,
+                    "_embedding_input": {"image": str(path)},
+                }
+            )
+    return documents
+
+
 def _prepare_documents(
     indexer: ProjectSemanticIndexer,
     *,
     group_ids: Sequence[str] | None,
     sources: Iterable[str] | None,
 ) -> list[tuple[str, list[dict[str, Any]]]]:
-    selected_sources = {str(value) for value in (sources or SEMANTIC_SOURCES) if str(value)}
-    unknown = selected_sources - SEMANTIC_SOURCES
+    selected_sources = {str(value) for value in (sources or BACKGROUND_SEMANTIC_SOURCES) if str(value)}
+    unknown = selected_sources - BACKGROUND_SEMANTIC_SOURCES
     if unknown:
         raise ValueError("unknown semantic sources: " + ", ".join(sorted(unknown)))
     groups = indexer._selected_groups(group_ids)
@@ -33,8 +98,10 @@ def _prepare_documents(
             documents = indexer._visual_documents(groups)
         elif source == "speech":
             documents = indexer._speech_documents(groups)
-        else:
+        elif source == "slate":
             documents = indexer._slate_documents(group_ids)
+        else:
+            documents = _frame_documents(indexer, groups)
         prepared.append((source, documents))
     return prepared
 
@@ -85,7 +152,11 @@ def _attach_embeddings_incrementally(
             was_cancelled = True
             break
         batch = pending[offset : offset + size]
-        vectors = indexer.encoder.encode([str(row.get("text", "") or "") for row in batch])
+        if source == FRAME_SOURCE:
+            inputs = [row.get("_embedding_input") for row in batch]
+            vectors = indexer.encoder.encode_multimodal(inputs)
+        else:
+            vectors = indexer.encoder.encode([str(row.get("text", "") or "") for row in batch])
         if vectors is None or len(vectors) != len(batch):
             failed = True
             break
@@ -114,12 +185,13 @@ def refresh_semantic_index_background(
     cancelled: CancelCallback | None = None,
     batch_size: int = 32,
 ) -> dict[str, Any]:
-    """Refresh semantic documents without hiding expensive work in a search request.
+    """Refresh text and representative-frame semantic evidence in background.
 
-    Document construction is cheap/rebuildable and never performs new VLM
-    inference. Embedding is processed in bounded batches with cancellation
-    checks between batches. Any already completed vectors are persisted when a
-    user cancels, while unfinished documents remain available to lexical FTS.
+    No new VLM inference occurs here. Existing device-local perception frames are
+    read only while encoding and their filesystem paths are never persisted into
+    SemanticStore. Embedding is bounded and cancellation-aware between batches;
+    partially completed vectors remain usable and every textual evidence source
+    keeps its FTS fallback.
     """
 
     prepared = _prepare_documents(indexer, group_ids=group_ids, sources=sources)
@@ -184,7 +256,7 @@ def refresh_semantic_index_background(
                 "progress": {"done": done, "total": total},
             }
 
-        done = sum(len(rows) for name, rows in prepared[: len(reports)])
+        done = sum(len(rows) for _name, rows in prepared[: len(reports)])
         if progress:
             progress(done, total, source)
 
@@ -199,7 +271,9 @@ def refresh_semantic_index_background(
         "progress": {"done": total, "total": total},
         "semantics": {
             "new_vlm_inference": False,
+            "representative_frames_only": True,
             "device_local": True,
+            "device_paths_persisted": False,
             "review_write": False,
             "editorial_write": False,
             "automatic_write": False,
