@@ -67,11 +67,13 @@ function bundledMachOFiles(root) {
 
 function inspectMachO(binary, appRoot) {
   const output = run("otool", ["-L", binary], `otool ${path.basename(binary)}`);
+  const selfInstallName = path.basename(binary);
   const forbidden = [];
   for (const raw of output.split(/\r?\n/).slice(1)) {
     const dependency = raw.trim().split(" (compatibility")[0];
     if (!dependency) continue;
     const allowed =
+      dependency === selfInstallName ||
       dependency.startsWith("@rpath/") ||
       dependency.startsWith("@loader_path/") ||
       dependency.startsWith("@executable_path/") ||

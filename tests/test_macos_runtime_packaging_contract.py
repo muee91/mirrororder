@@ -15,6 +15,7 @@ def test_tauri_build_stages_packaged_runtime_before_bundle() -> None:
     config = json.loads(read("desktop/src-tauri/tauri.conf.json"))
     assert config["build"]["beforeBuildCommand"] == "npm run stage:runtime && npm run build"
     resources = config["bundle"]["resources"]
+    assert config["bundle"]["icon"] == ["icons/icon.png"]
     assert resources["resources/mirrororder-core/"] == "mirrororder-core/"
     assert resources["resources/mirrororder-python/"] == "mirrororder-python/"
     assert resources["resources/mirrororder-tools/"] == "mirrororder-tools/"
@@ -63,6 +64,7 @@ def test_stager_requires_relocatable_python_and_media_tools() -> None:
     assert "MIRRORORDER_REQUIRE_SEMANTIC_RUNTIME" in verifier
     assert "assertManifestToolMatches" in verifier
     assert "license classification" in verifier
+    assert "dependency === selfInstallName" in verifier
     assert "version_output" in tool_policy
     assert "/opt/homebrew" not in verifier  # generic external-dylib policy, not path-specific allowlisting
     assert "MIRRORORDER_REQUIRE_CODESIGN" in verifier
