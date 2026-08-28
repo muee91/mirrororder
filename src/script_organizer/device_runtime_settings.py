@@ -9,6 +9,7 @@ from typing import Any
 
 from .local_intelligence_profiles import IDENTITY_PROFILES, SAMPLING_PROFILES
 from .local_vision_runtime import DEFAULT_LOCAL_VISION_MODEL
+from .semantic_profiles import PROFILES as SEMANTIC_PROFILES
 
 
 def application_support_root() -> Path:
@@ -28,11 +29,16 @@ def settings_path() -> Path:
 
 def _default() -> dict[str, Any]:
     return {
-        "version": 4,
+        "version": 5,
         "local_vision_enabled": False,
         "local_vision_model": DEFAULT_LOCAL_VISION_MODEL,
         "face_identity_enabled": False,
         "speaker_identity_enabled": False,
+        # Standard is the product default, but the large local model is opt-in:
+        # enabling it may download several GB and must never happen from search.
+        "semantic_embedding_enabled": False,
+        "semantic_embedding_profile": "standard",
+        "semantic_embedding_dimensions": 1024,
         "default_perception_sampling_profile": "standard",
         "default_identity_matching_profile": "balanced",
         "project_intelligence": {},
@@ -67,15 +73,35 @@ def _profile(raw: dict[str, Any], key: str, legacy_key: str, allowed: dict[str, 
     return value if value in allowed else fallback
 
 
+def _semantic_dimensions(profile_key: str, value: object) -> int:
+    profile = SEMANTIC_PROFILES.get(profile_key, SEMANTIC_PROFILES["standard"])
+    try:
+        dimensions = int(value)
+    except (TypeError, ValueError):
+        dimensions = profile.default_dimensions
+    if dimensions < 64 or dimensions > profile.max_dimensions:
+        return profile.default_dimensions
+    return dimensions
+
+
 def load_runtime_settings() -> dict[str, Any]:
     payload = _default()
     raw = _read_raw()
     payload["local_vision_enabled"] = bool(raw.get("local_vision_enabled", payload["local_vision_enabled"]))
     payload["face_identity_enabled"] = bool(raw.get("face_identity_enabled", payload["face_identity_enabled"]))
     payload["speaker_identity_enabled"] = bool(raw.get("speaker_identity_enabled", payload["speaker_identity_enabled"]))
+    payload["semantic_embedding_enabled"] = bool(raw.get("semantic_embedding_enabled", payload["semantic_embedding_enabled"]))
     model = str(raw.get("local_vision_model", "") or "").strip()
     if model:
         payload["local_vision_model"] = model[:300]
+    semantic_profile = str(raw.get("semantic_embedding_profile", payload["semantic_embedding_profile"]) or "").strip().lower()
+    if semantic_profile not in SEMANTIC_PROFILES:
+        semantic_profile = "standard"
+    payload["semantic_embedding_profile"] = semantic_profile
+    payload["semantic_embedding_dimensions"] = _semantic_dimensions(
+        semantic_profile,
+        raw.get("semantic_embedding_dimensions", payload["semantic_embedding_dimensions"]),
+    )
     payload["default_perception_sampling_profile"] = _profile(
         raw,
         "default_perception_sampling_profile",
@@ -103,12 +129,31 @@ def save_runtime_settings(raw: object) -> dict[str, Any]:
         payload["face_identity_enabled"] = bool(raw["face_identity_enabled"])
     if "speaker_identity_enabled" in raw:
         payload["speaker_identity_enabled"] = bool(raw["speaker_identity_enabled"])
+    if "semantic_embedding_enabled" in raw:
+        payload["semantic_embedding_enabled"] = bool(raw["semantic_embedding_enabled"])
     if "local_vision_model" in raw:
         model = str(raw.get("local_vision_model", "") or "").strip()
         if not model:
             raise ValueError("本地视觉模型不能为空")
         payload["local_vision_model"] = model[:300]
-    payload["version"] = 4
+    if "semantic_embedding_profile" in raw:
+        profile = str(raw.get("semantic_embedding_profile", "") or "").strip().lower()
+        if profile not in SEMANTIC_PROFILES:
+            raise ValueError("语义索引预设必须是 standard 或 lightweight")
+        payload["semantic_embedding_profile"] = profile
+        # A profile switch resets incompatible custom dimensions unless the same
+        # request explicitly supplies a valid dimension for the new profile.
+        if "semantic_embedding_dimensions" not in raw:
+            payload["semantic_embedding_dimensions"] = SEMANTIC_PROFILES[profile].default_dimensions
+    if "semantic_embedding_dimensions" in raw:
+        profile_key = str(payload.get("semantic_embedding_profile", "standard") or "standard")
+        dimensions = _semantic_dimensions(profile_key, raw.get("semantic_embedding_dimensions"))
+        requested = int(raw.get("semantic_embedding_dimensions", dimensions) or dimensions)
+        if requested != dimensions:
+            profile = SEMANTIC_PROFILES[profile_key]
+            raise ValueError(f"语义向量维度必须在 64–{profile.max_dimensions} 之间")
+        payload["semantic_embedding_dimensions"] = dimensions
+    payload["version"] = 5
     existing = _read_raw()
     if isinstance(existing.get("project_intelligence"), dict):
         payload["project_intelligence"] = existing["project_intelligence"]
