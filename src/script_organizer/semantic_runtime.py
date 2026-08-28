@@ -6,6 +6,7 @@ from urllib.parse import parse_qs
 
 from .semantic_encoder import SemanticEmbeddingConfig
 from .semantic_index import ProjectSemanticIndexer
+from .semantic_profiles import semantic_profiles_public
 from .semantic_search import SemanticSearcher, safe_search_payload
 
 
@@ -64,6 +65,11 @@ def install_semantic_runtime() -> None:
     The runtime adds no review/editorial/automation authority. It indexes only
     already-produced VLM descriptions, cached ASR and human slate facts, then
     grounds assistant answers and read-only API search in that evidence.
+
+    Search requests deliberately do not rebuild or embed the project inline.
+    Expensive refresh work is triggered after production tasks and runs in the
+    background, so enabling a local embedding model cannot turn Cmd/Ctrl+K into
+    an implicit whole-project indexing request.
     """
 
     global _INSTALLED
@@ -82,6 +88,7 @@ def install_semantic_runtime() -> None:
     def models_public_with_semantic(registry: Any) -> dict[str, Any]:
         payload = original_models_public(registry)
         payload["semantic_embedding"] = SemanticEmbeddingConfig.from_env().public()
+        payload["semantic_embedding_profiles"] = semantic_profiles_public()
         return payload
 
     def search_project_semantics(
@@ -114,7 +121,7 @@ def install_semantic_runtime() -> None:
                 self.workspace_id,
                 self.project_id,
                 self.config,
-            ).search(text, limit=14, refresh=True)
+            ).search(text, limit=14, refresh=False)
             safe_retrieval = safe_search_payload(retrieval)
         except Exception:
             safe_retrieval = {
@@ -170,6 +177,7 @@ def install_semantic_runtime() -> None:
             "vector_enabled": embedding.enabled,
             "device_local_index": True,
             "editorial_authority": False,
+            "inline_index_refresh": False,
         }
         return payload
 
@@ -253,7 +261,7 @@ def install_semantic_runtime() -> None:
                         text,
                         limit=limit,
                         sources=sources,
-                        refresh=True,
+                        refresh=False,
                     )
                     self._send_json(payload)
                     return
