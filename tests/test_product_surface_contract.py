@@ -66,8 +66,7 @@ def test_project_resume_restores_last_canvas_and_defaults_to_slate() -> None:
     assert 'const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"' in resume
     assert "readProjectPage(project.project_id)" in workbench
     assert "rememberProjectPage(project.project_id, page)" in workbench
-    material_area = workbench.split('{ id: "material"', 1)[1].split("},", 1)[0]
-    assert material_area.index('id: "slate"') < material_area.index('id: "media-library"')
+    assert '{ id: "material", label: "素材", pages: [{ id: "slate", label: "场记" }, { id: "media-library", label: "素材库" }' in workbench
 
 
 def test_frontend_parity_surfaces_are_reachable_from_product_ia() -> None:
