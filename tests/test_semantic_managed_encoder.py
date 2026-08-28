@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from script_organizer.device_runtime_settings import load_runtime_settings, save_runtime_settings
-from script_organizer.semantic_managed_encoder import ManagedSemanticEncoder
+from script_organizer.semantic_managed_encoder import ManagedSemanticEncoder, _map_qwen_checkpoint_keys
 
 
 def _isolated_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -108,6 +108,13 @@ def test_vector_identity_changes_with_dimensions_and_instruction_contract(monkey
     assert "1024" in first.identity
     assert "768" in second.identity
     assert "editor-retrieval-v1" in first.identity
+
+
+def test_qwen_checkpoint_mapping_is_explicit_and_fail_closed() -> None:
+    marker = object()
+    assert _map_qwen_checkpoint_keys({"model.language_model.weight": marker}) == {"language_model.weight": marker}
+    with pytest.raises(ValueError):
+        _map_qwen_checkpoint_keys({"language_model.weight": marker})
 
 
 def test_desktop_contract_exposes_semantic_profile_without_model_download_action() -> None:

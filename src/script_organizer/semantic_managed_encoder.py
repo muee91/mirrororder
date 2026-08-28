@@ -5,7 +5,7 @@ import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from .device_runtime_settings import application_support_root, load_runtime_settings
 from .semantic_encoder import SemanticEmbeddingConfig, SemanticEncoder
@@ -38,6 +38,67 @@ class ManagedSemanticConfig:
             "runtime_available": self.runtime_available,
             "query_instruction_version": QUERY_INSTRUCTION_VERSION,
         }
+
+
+def _map_qwen_checkpoint_keys(state: Mapping[str, Any]) -> dict[str, Any]:
+    """Map the official Qwen embedding wrapper checkpoint onto Qwen3VLModel.
+
+    The Sentence Transformers model package stores the base model below a
+    ``model.`` wrapper (the same layout used by Qwen's official embedding
+    wrapper), while Transformers' bare ``AutoModel`` expects the inner keys.
+    Refuse any other layout so a future checkpoint cannot silently run with
+    newly initialized weights.
+    """
+    if not state or any(not str(key).startswith("model.") for key in state):
+        raise ValueError("Qwen3-VL checkpoint must contain only model-prefixed weights")
+    return {str(key)[len("model.") :]: value for key, value in state.items()}
+
+
+def _load_qwen_sentence_transformer(model_path: Path, *, device: str, dimensions: int) -> Any:
+    """Build SentenceTransformer around the official Qwen checkpoint layout."""
+    from safetensors.torch import load_file
+    from sentence_transformers import SentenceTransformer
+    from sentence_transformers.base.modules.transformer import Transformer
+    from sentence_transformers.sentence_transformer.modules import Normalize, Pooling
+    from transformers import AutoModel
+
+    class MappedTransformer(Transformer):
+        def _load_model(self, model_name_or_path, transformer_task, config, backend, is_peft_model, **model_kwargs):
+            if backend == "torch" and getattr(config, "model_type", "") == "qwen3_vl":
+                state_path = Path(model_name_or_path) / "model.safetensors"
+                if not state_path.is_file():
+                    raise FileNotFoundError(f"Qwen3-VL checkpoint is missing: {state_path}")
+                state = load_file(str(state_path), device="cpu")
+                mapped = _map_qwen_checkpoint_keys(state)
+                model = AutoModel.from_config(config)
+                incompatible = model.load_state_dict(mapped, strict=False)
+                if incompatible.missing_keys or incompatible.unexpected_keys:
+                    raise RuntimeError(
+                        "Qwen3-VL checkpoint mapping is incomplete: "
+                        f"missing={incompatible.missing_keys[:3]} "
+                        f"unexpected={incompatible.unexpected_keys[:3]}"
+                    )
+                return model
+            return super()._load_model(model_name_or_path, transformer_task, config, backend, is_peft_model, **model_kwargs)
+
+    transformer = MappedTransformer(
+        model_name_or_path=str(model_path),
+        transformer_task="feature-extraction",
+        model_kwargs={"local_files_only": True},
+        processor_kwargs={"local_files_only": True},
+        config_kwargs={"local_files_only": True},
+    )
+    return SentenceTransformer(
+        modules=[
+            transformer,
+            Pooling(transformer.get_embedding_dimension(), pooling_mode="lasttoken"),
+            Normalize(),
+        ],
+        device=device,
+        prompts={"default": "Represent the user's input."},
+        default_prompt_name="default",
+        truncate_dim=dimensions,
+    )
 
 
 class ManagedSemanticEncoder:
@@ -170,13 +231,18 @@ class ManagedSemanticEncoder:
                 return True
             try:
                 import torch
-                from sentence_transformers import SentenceTransformer
+                from huggingface_hub import snapshot_download
 
-                model = SentenceTransformer(
-                    self.config.model,
-                    cache_folder=str(self.cache_dir),
+                model_path = Path(
+                    snapshot_download(
+                        self.config.model,
+                        cache_dir=str(self.cache_dir),
+                    )
+                )
+                model = _load_qwen_sentence_transformer(
+                    model_path,
                     device=self._device(torch),
-                    truncate_dim=self.config.dimensions,
+                    dimensions=self.config.dimensions,
                 )
                 self._models[identity] = model
                 self._model_errors.pop(identity, None)
