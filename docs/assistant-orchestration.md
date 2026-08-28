@@ -1,41 +1,98 @@
-# 镜序助理：生产编排与模型接入
+# 小镜：生产编排与项目问答
 
-镜序助理不是悬挂在工作台旁边的聊天机器人。它是 MirrorOrder Host 上方的一层**受限生产编排器**：读取项目事实，识别值得处理的问题，调用镜序已经存在的分析能力，并把需要人的判断主动送回看片工作流。
+> 当前 contract：`assistant.v1`。
+>
+> 小镜是 MirrorOrder Host 上方的**受限生产编排与解释层**。它读取已有项目事实和证据、发现需要人工关注的问题，并通过 allowlist 工具请求有限的分析动作。它不是 Review、Slate、Editorial 或 Timeline authority。
 
 核心原则：
 
 > **AI 接管重复劳动和问题发现，不接管人工审核与最终创意权。**
 
-## 1. 架构
+## 1. 产品入口
+
+小镜只有一个用户入口：**当前项目右侧 contextual drawer**。
+
+当前 Drawer 负责：
+
+- 关注事项；
+- 当前项目范围内问答；
+- 重新检查当前项目。
+
+它不负责：
+
+- Provider / Base URL / API Key 配置；
+- 独立“找素材”页面；
+- Agent token / Host runtime 调试；
+- 最终审核或剪辑决策写入。
+
+对应入口已经分开：
+
+```text
+⌘K / Ctrl+K          → 项目语义搜索
+小镜 Drawer           → 项目事项 + grounded 问答
+全局设置              → 本地模型 / 外部或自定义模型连接 / 高级诊断
+状态中心              → durable background tasks
+团队审阅              → Team Web collaboration
+```
+
+同一能力不得重新在小镜里长出平行入口。
+
+## 2. 架构
 
 ```text
 Project / Task events
         ↓
 AssistantOrchestrator
+        ├─ deterministic project facts
+        ├─ semantic retrieval grounding
+        ├─ Audit / perception / identity evidence
+        └─ optional language model
         ↓
-AgentToolRegistry
-        ↓
-┌──────────────┬───────────────┬────────────────┐
-│ deterministic│ local/remote  │ optional LLM   │
-│ Host facts   │ Audit / VLM   │ plan / explain │
-└──────────────┴───────────────┴────────────────┘
+AgentToolRegistry allowlist
         ↓
 assistant.json / assistant.v1
         ↓
-镜序助理
-  → 主动提醒
-  → 低置信看片队列
-  → 人物候选
-  → 素材问题
+小镜
+  ├─ 需要判断
+  ├─ 制作提醒
+  ├─ 人物线索
+  └─ 项目问答
         ↓
-Human Review / Editorial Decision
+Human Review / Slate / Editorial workflow
 ```
 
-`assistant.json` 是可重建的派生状态，不是审核权威。它不能替代 `review.json`、`editorial.json` 或 `auto_decisions.json`。
+`assistant.json` 是可重建派生状态，不替代：
 
-## 2. 触发与算力边界
+- `review.json`；
+- Script Supervisor / Slate；
+- `editorial.json`；
+- `auto_decisions.json`；
+- Rust Timeline state。
 
-以下 Host 任务完成后重新整理助理状态：
+## 3. Authority 边界
+
+小镜不得：
+
+- 直接写 `review.json`；
+- 覆盖人工 placement / assignment；
+- 写或伪造 Final Editorial Decision；
+- 把 Slate `NG` 转成 Editorial Reject；
+- 把 Exclusion 转成 Reject；
+- 自动产生 Best / Reject；
+- 直接修改 Rust Timeline；
+- 修改原始媒体或原始 FCPXML；
+- 把 retrieval / Audit score 当作人工 confidence；
+- 用常识补写项目里不存在的画面、对白或场记事实。
+
+统一权限链：
+
+```text
+evidence → proposal / explanation → human confirmation → authority
+```
+
+## 4. 触发与算力边界
+
+以下生产任务完成后可刷新小镜派生状态：
 
 - `prepare_project`
 - `incremental_analyze`
@@ -45,65 +102,9 @@ Human Review / Editorial Decision
 - `identity_index`
 - `evidence_extract`
 
-前四类完成后允许执行受限后续动作；Audit、身份识别和证据提取完成后只刷新问题队列，防止递归昂贵任务。
+主分析类任务完成后可以触发受限的后续分析；Audit、身份识别和证据提取主要用于刷新问题队列，避免递归昂贵任务。
 
-视觉能力已经由用户明确启用时，助理允许在主分析结束后自动提交**最多 24 个高优先疑难 Take** 的 `priority audit`。审计任务幂等键包含 analysis revision；同一分析版本、同一组目标不会因为轮询重复排队。
-
-其它受限工具的上限：
-
-```text
-extract_visual_evidence   最多 12 Take / 调用
-index_unknown_identities  最多 16 Take / 调用
-```
-
-身份索引继续遵守 identity cache：人工已确认的 identity 不因助理的指定 Take 调用而重新计算。
-
-镜序不会因为“AI 已启用”就全项目跑 VLM、人脸或声纹。
-
-## 3. Audit freshness：映射判断与画面事实分开
-
-Audit 现在区分两类 freshness：
-
-```text
-visual freshness
-  由 material_index / script / matches 的 analysis revision 决定
-
-mapping freshness
-  由当前 review.json + auto_decisions.json 计算出的 effective mapping 决定
-```
-
-原因是两类证据生命周期不同。
-
-例如某个 Take 已经审计出：
-
-```text
-A = closeup
-B = medium
-```
-
-之后剪辑人员把该 Take 从剧本 S12 改到 S18：
-
-- A/B 的景别仍然是当前素材事实，可以继续复用；
-- “AI 是否同意当前剧本归集”、角色候选、mapping issue、rough-cut guidance 已经基于旧归集，必须标记 `mapping_stale`；
-- 助理不能把旧 judge 当作当前审计继续压掉新的 priority audit。
-
-因此 review.v1 中允许：
-
-```text
-audit_state.stale = true
-audit_state.mapping_stale = true
-audit_state.visual_current = true
-```
-
-同时继续保留 `shot_intelligence`。
-
-当 analysis revision 本身变化时，旧画面证据也不再作为 current visual evidence。
-
-## 4. Agent Tool Registry
-
-模型没有文件系统控制权。Assistant Orchestrator 只能执行 MirrorOrder 自己注册的 allowlist 工具。
-
-当前可执行工具：
+当前 allowlist 的 bounded 工具包括：
 
 ```text
 run_priority_audit
@@ -113,7 +114,21 @@ collect_learning_cases
 noop
 ```
 
-只读能力：
+典型上限继续保持：
+
+```text
+priority audit              ≤ 24 Take
+extract_visual_evidence     ≤ 12 Take / 调用
+index_unknown_identities    ≤ 16 Take / 调用
+```
+
+镜序不会因为启用了 AI 就无边界地全项目运行 VLM、人脸或声纹。
+
+## 5. Agent Tool Registry
+
+模型没有文件系统或通用 shell 控制权。
+
+只读能力包括：
 
 ```text
 inspect_project
@@ -121,93 +136,105 @@ inspect_take
 list_attention_groups
 model_status
 failure_patterns
+search_project_semantics
 ```
 
-明确禁止：
+生产动作必须进入明确 allowlist；未知 tool name 或越界参数由 Host 拒绝。
 
-- 直接写 `review.json`
-- 直接写 `editorial.json`
-- 直接写或伪造 `auto_decisions.json`
-- 自动 Best / Reject
-- 覆盖人工 placement / assignment
-- 修改原始媒体
-- 修改原始 FCPXML
-- 修改全局匹配阈值
-- 直接部署模型提出的算法补丁
+`search_project_semantics()` 是 read-only helper，不因为被模型调用就获得 Review、Slate、Editorial 或 Timeline 写权限。
 
-任何没有进入 allowlist 的 tool name 都必须拒绝。
+## 6. Audit freshness
 
-## 5. Model Registry
+Audit 必须把**画面事实 freshness**与**mapping freshness**分开。
 
-统一入口是 `ModelRegistry`，公开契约为 `models.v1`：
+例如某 Take 已记录：
 
 ```text
-production_rescue   生产映射链受限文本二审
-vision              本地或用户明确连接的远端视觉能力
-multimodal_audit    Shadow Audit 使用的多模态能力
-assistant_language  自然语言解释与受限规划
+A = closeup
+B = medium
 ```
 
-`assistant_language` 选择顺序：
+之后人工把它从剧本 S12 改到 S18：
 
-1. `MIRRORORDER_ASSISTANT_MODEL_*` 显式环境变量；
-2. App 保存的本机语言模型连接；
-3. production rescue LLM；
-4. 已启用本地视觉模型，作为 text-only fallback；
-5. 无语言模型。
+- A/B 景别仍可能是当前媒体事实；
+- 基于旧 mapping 的 judge / advice 必须视为 stale；
+- stale mapping 不能继续冒充当前归集判断；
+- 当前媒体派生视觉事实可以在其自身 revision 仍有效时继续显示。
 
-因此当前只有本地小参数视觉模型时，镜序仍然可以：
+Audit 是反方证据/建议，不写 Review 或 Final Editorial Decision。
 
-- 做 per-clip 景别判断；
-- 做 Shadow Audit；
-- 输出技术质量、连续性与 coverage 线索；
-- 主动挑出最值得审计的低置信 Take；
-- 用户明确点击“让助理规划”时复用本地模型做简短 JSON 规划。
+## 7. 模型与连接入口
 
-没有语言模型时，问题队列和优先级继续由确定性规则生成。
-
-## 6. App 模型连接
-
-“镜序助理 → 模型连接”有两个可选连接。
-
-### 语言模型
+模型能力由设备本地配置与 `ModelRegistry` / runtime projection 统一暴露，主要角色包括：
 
 ```text
+text       小镜语言解释 / 受限规划
+vision     可选视觉增强 / Audit evidence
+embedding  语义检索编码
+```
+
+用户配置入口是：
+
+> **全局设置 → 本地模型 / 外部或自定义模型连接**
+
+不是“小镜 → 模型连接”。
+
+当前设备连接可以保存：
+
+```text
+provider
 base_url
 model
-api_key
+api_key secret
 ```
 
-用于自然语言解释和受限工具规划。
+其中 API Key 必须保持设备本地，不进入：
 
-### 增强多模态
+- workspace；
+- project.toml；
+- `assistant.json`；
+- `audit.json`；
+- `review.json`；
+- `editorial.json`；
+- `auto_decisions.json`；
+- Team Web / Agent 公开 payload。
 
-同样使用 OpenAI-compatible `chat/completions`：
+设备本地连接和 secret 文件位于 MirrorOrder Application Support 数据目录。公开 API 只暴露 `has_api_key` 等安全状态，不回显 secret。
+
+## 8. 小镜 Grounding
+
+小镜回答用户问题时优先使用项目语义检索：
 
 ```text
-base_url
-model
-api_key
+用户问题
+  ↓
+SemanticSearcher
+  ├─ visual evidence
+  ├─ speech evidence
+  └─ slate evidence
+  ↓
+project / attention 作为次级上下文
+  ↓
+optional language model
+  或确定性证据摘要
 ```
 
-只有用户明确启用这个连接，视觉 Provider 才会使用它；否则继续使用已经启用的本地视觉模型或保持无视觉模型状态。远端多模态启用后，Audit 可能把**有限抽样 JPEG 帧**发送到该端点；原始视频不会由该 Provider 上传。
+系统 contract 要求：
 
-环境变量仍然高于 App 保存连接。兼容旧行为：本地视觉已启用且只设置 `MIRRORORDER_VISION_MODEL` 时，它仍表示替换本地模型，不会被误判为远端连接。
+- 优先引用检索到的项目证据；
+- 没有证据时明确说证据不足；
+- ASR 允许存在转写误差；
+- 多机位画面中的人不等于正在说话的人；
+- 场记“前半段”没有人工精确 I/O 时不能伪造秒数；
+- 检索结果不能自动升级成 Best / Reject / placement / Editorial Decision。
 
-本机配置位置：
+没有可用语言模型时，小镜仍可用确定性方式汇总最高相关的现有证据，而不是把整个产品降级成“模型未连接”。
 
-```text
-~/Library/Application Support/MirrorOrder/model-connections.json
-~/Library/Application Support/MirrorOrder/model-secrets.json
-```
+语义检索的索引、刷新和 Status Center contract 见 `semantic-retrieval.md`。
 
-`model-secrets.json` 尽可能以 `0600` 权限保存。
+## 9. 语言模型规划
 
-API Key 不得进入：workspace、project.toml、`assistant.json`、`audit.json`、`review.json`、`editorial.json`、`auto_decisions.json` 或 Team Web / Agent 公开 payload。
-
-## 7. 语言模型规划
-
-语言模型不是自由 Agent。它只能返回结构化计划，例如：
+语言模型不是自由 Agent，只能返回受约束结构化计划。例如：
 
 ```json
 {
@@ -216,10 +243,6 @@ API Key 不得进入：workspace、project.toml、`assistant.json`、`audit.json
     {
       "tool": "extract_visual_evidence",
       "arguments": {"group_ids": ["G_001"]}
-    },
-    {
-      "tool": "index_unknown_identities",
-      "arguments": {"group_ids": ["G_001"], "kind": "speaker"}
     }
   ],
   "questions": [
@@ -228,46 +251,33 @@ API Key 不得进入：workspace、project.toml、`assistant.json`、`audit.json
 }
 ```
 
-Host 会再次验证 tool name 与参数；每次计划最多执行 2 个动作。
+Host 会再次校验 tool name、参数、目标范围和动作数量。
 
-**显式模型计划一旦成功生成，就拥有当前 cycle。** Host 不会在计划后面再偷偷追加第三个 deterministic priority audit。只有没有得到可用模型计划时，确定性 auto-audit 才作为 fallback。
+当前 Desktop 的“重新检查”属于用户显式触发的项目检查入口；UI 不需要暴露“Agent planner”工程概念。即使模型参与规划，用户看到的仍应是项目事项与制作语言。
 
-自动模型规划默认关闭。只有：
+## 10. 主动问题队列
 
-- App 用户点击“让助理规划”；或
-- Host 明确设置 `MIRRORORDER_ASSISTANT_AUTO_PLAN=1`
+问题按生产风险排序，不做“AI confidence 排行”。典型优先级来源包括：
 
-才允许调用语言模型做规划。
-
-自动 priority audit 不依赖语言模型；它是 Host 的确定性、bounded fallback 调度。
-
-## 8. 主动问题队列
-
-问题按生产风险排序，而不是做“AI confidence 排行”：
-
-```text
-100  人工归集 vs 当前算法冲突
- 96  AI Audit 不同意算法
- 95  当前 Host 缺媒体
- 90  unresolved
- 86  needs_review
- 84  no_candidate
- 82  top candidates 分差过小
- 66  技术质量 / continuity 风险
- 38  角色候选待确认
-```
+- 人工归集与当前算法冲突；
+- Audit disagreement；
+- 当前 Host 缺媒体；
+- unresolved / no candidate；
+- 候选竞争；
+- 技术质量 / continuity 风险；
+- 人物候选待确认。
 
 用户主要看到：
 
 ```text
-看片
-判断归集
-确认人物
+需要判断
+制作提醒
+人物线索
 ```
 
-Host `assistant.v1` 是主动提醒与问题队列的来源；前端本地问题生成只保留为 Host API 不可用时的降级路径。
+前端不应把内部 failure taxonomy、模型名或 raw score 当主文案。
 
-## 9. 人物与多机位
+## 11. 人物与多机位
 
 角色推断只能作为候选：
 
@@ -285,27 +295,29 @@ speaker cluster
 speaker != visible_actor
 ```
 
-B 机拍王强而现场说话的是李雪不是矛盾。没有可靠视听绑定时，不得因为台词属于李雪就把 B 机 face 命名为李雪。
+人工确认过的 face / speaker identity 不得被普通重跑自动擦除。
 
-人工确认过的 face / speaker identity 不重复计算或自动覆盖。
+face/speaker identity embedding 与 text semantic embedding 是不同数据空间，也不得因为都叫 embedding 就混为同一 authority 或索引。
 
-## 10. Agent API
+## 12. Team Web / Agent API 边界
 
-外部 Codex / Agent 与镜序助理不是同一权限主体，但共用安全边界。
+Team Web 可以读取安全的 assistant projection，例如：
 
-Host project route：
+- summary；
+- items；
+- revision / updated_at。
 
-```text
-/api/agent/v1/projects/{project_id}/...
-```
+不包含：
 
-Gateway workspace route：
+- App 小镜聊天记录；
+- provider / 模型连接；
+- API Key；
+- Host runtime / 模型路径；
+- Agent token 管理；
+- Final Editorial Decision authority；
+- Production Timeline control。
 
-```text
-/api/agent/v1/workspaces/{workspace_id}/projects/{project_id}/...
-```
-
-Bearer scope：
+外部 Agent 使用受限 Bearer scope：
 
 ```text
 read
@@ -313,34 +325,15 @@ analyze
 propose
 ```
 
-新增：
+assistant cycle 即使由 Agent 请求，也只能调用 allowlist，不能直接写人工审核。
 
-```text
-GET  /api/agent/v1/projects/{project_id}/assistant
-POST /api/agent/v1/projects/{project_id}/assistant/cycle
-```
+Agent route / capability 等诊断信息属于设置/高级工程入口，不需要占据小镜 Drawer。
 
-`assistant/cycle` 需要 `analyze` scope。它仍只能调用 Assistant allowlist，不能直接写人工审核。
+## 13. 学习闭环
 
-App 镜序助理面板有明确 **Agent API** 入口显示 project route、capabilities route 和权限边界；Team Web 不展示这些制作配置。
+`learning_cases.jsonl` 只用于离线 replay / eval / 算法研发，production matcher 不读取它作为在线自我修改规则。
 
-## 11. 算法学习与人工修正
-
-`learning_cases.jsonl` 是只供离线 replay / eval / 算法研发使用的派生数据，生产 matcher 永远不读取它。
-
-Audit 完成时会刷新 learning dataset。现在人工 `review.json` 写入成功后也会做一次廉价重建，因此：
-
-```text
-旧算法预测
-↓
-剪辑人员人工修正 placement / assignment
-↓
-learning_cases.jsonl 立即以最新人工范围作为 human_expected
-```
-
-这一步不会运行 VLM，也不会改自动结果，只重建 JSONL 派生数据和助理问题队列。
-
-正确升级链：
+正确链路：
 
 ```text
 human override / audit disagreement
@@ -348,54 +341,21 @@ human override / audit disagreement
 → failure pattern clustering
 → candidate algorithm patch
 → offline replay / regression
-→ 人工批准 promotion
+→ human-approved promotion
 → 下一版 production algorithm
 ```
 
 禁止：
 
 ```text
-LLM发现问题 → 直接修改production matcher → 自动部署
+LLM发现问题 → 直接修改 production matcher → 自动部署
 ```
 
-## 12. App / Web 边界
+新增 Assistant 工具时必须分别定义：
 
-### App Production
-
-可以：
-
-- 查看主动问题并直达看片 / 归集 / 人物库；
-- 查看本地/远端视觉、语言模型和 Agent API 是否可用；
-- 配置设备本地语言模型与可选多模态连接；
-- 点击“让助理规划”；
-- 与镜序助理做当前项目范围内问答。
-
-### Team Web Review
-
-安全 `assistant.v1` 只包含：
-
-- summary
-- items
-- revision / updated_at
-
-不包含：
-
-- App 助理聊天记录
-- provider / 模型配置
-- API Key
-- Host runtime / 模型路径
-- Agent token 管理
-- 自动生产任务控制
-
-外部 Agent 的 assistant read 同样不读取 App 助理聊天记录。
-
-## 13. 后续工具优先级
-
-Assistant Orchestrator 已形成真正控制平面。下一阶段重点不是增加闲聊，而是增加新的第一方安全工具：
-
-1. `build_coverage_graph(scene_id)`
-2. `find_continuity_risks(scene_id)`
-3. `evaluate_algorithm_candidate(version)`，只允许离线 replay
-4. Rough Cut Planner，以 Coverage Graph + Editorial Decision 为输入
-
-每增加一个工具，都必须单独定义写入边界、算力上限和回归测试。
+1. 输入 evidence；
+2. 写入 authority；
+3. 算力上限；
+4. cancellation / retry；
+5. Team Web / Agent 暴露范围；
+6. 回归测试。
