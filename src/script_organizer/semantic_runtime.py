@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from threading import Thread
 from typing import Any
 from urllib.parse import parse_qs
 
 from .semantic_encoder import SemanticEmbeddingConfig
-from .semantic_index import ProjectSemanticIndexer
+from .semantic_index import ProjectSemanticIndexer, SEMANTIC_SOURCES
 from .semantic_search import SemanticSearcher, safe_search_payload
 
 
@@ -73,11 +72,18 @@ def install_semantic_runtime() -> None:
     from . import model_registry, tasks as tasks_module, web_server
     from .agent_tools import AgentToolRegistry
     from .assistant_orchestrator import AssistantOrchestrator
+    from .resource_scheduler import ResourceCancelled
 
     original_make_handler = web_server.make_handler
     original_capabilities = web_server.WorkspaceService.capabilities
     original_update = tasks_module.TaskManager._update
+    original_task_run = tasks_module.TaskManager._run
     original_models_public = model_registry.ModelRegistry.public
+
+    # Semantic refresh is device-local and rebuildable, but it is still real
+    # background work. Register it as a durable task so Status Center is the
+    # single place users can observe, cancel and retry that work.
+    tasks_module.TASK_TYPES.add("semantic_index")
 
     def models_public_with_semantic(registry: Any) -> dict[str, Any]:
         payload = original_models_public(registry)
@@ -173,6 +179,103 @@ def install_semantic_runtime() -> None:
         }
         return payload
 
+    def run_with_semantic(manager: Any, project_id: str, task_id: str) -> None:
+        config = manager.project_loader(project_id)
+        try:
+            task = manager._task(manager._load(config), task_id)
+        except Exception:
+            return original_task_run(manager, project_id, task_id)
+        if str(task.get("type", "") or "") != "semantic_index":
+            return original_task_run(manager, project_id, task_id)
+
+        workspace_id = str(getattr(manager, "workspace_id", "") or "")
+        if not workspace_id:
+            manager._update(
+                config,
+                task_id,
+                status="failed",
+                stage="failed",
+                error="语义索引缺少 workspace_id",
+                message="语义索引失败",
+            )
+            return
+
+        targets = _as_dict(task.get("targets"))
+        raw_groups = targets.get("group_ids", [])
+        group_ids = [str(value) for value in raw_groups if str(value)] if isinstance(raw_groups, list) else []
+        raw_sources = targets.get("sources", [])
+        requested_sources = [str(value) for value in raw_sources if str(value)] if isinstance(raw_sources, list) else []
+        sources = sorted(set(requested_sources) or SEMANTIC_SOURCES)
+        unknown = set(sources) - SEMANTIC_SOURCES
+        if unknown:
+            manager._update(
+                config,
+                task_id,
+                status="failed",
+                stage="failed",
+                error="unknown semantic sources: " + ", ".join(sorted(unknown)),
+                message="语义索引失败",
+            )
+            return
+
+        try:
+            manager._update(config, task_id, status="running", stage="starting", message="语义索引开始")
+            if manager._cancel_requested(config, task_id):
+                manager._update(config, task_id, status="cancelled", stage="cancelled", message="语义索引已取消")
+                return
+
+            reports: dict[str, Any] = {}
+            latest: dict[str, Any] = {}
+            total = len(sources)
+            with manager._resource(config, task, "embedding", "semantic_index", "语义索引"):
+                for index, source in enumerate(sources, start=1):
+                    if manager._cancel_requested(config, task_id):
+                        manager._update(config, task_id, status="cancelled", stage="cancelled", message="语义索引已取消")
+                        return
+                    manager._update(
+                        config,
+                        task_id,
+                        stage="semantic_index",
+                        progress={"done": index - 1, "total": total},
+                        message=f"正在更新{source}证据索引 {index}/{total}",
+                    )
+                    latest = ProjectSemanticIndexer(workspace_id, project_id, config).refresh(
+                        group_ids=group_ids or None,
+                        sources=[source],
+                    )
+                    reports.update(_as_dict(latest.get("sources")))
+                    manager._update(
+                        config,
+                        task_id,
+                        progress={"done": index, "total": total},
+                        message=f"语义索引 {index}/{total}",
+                    )
+            result = {
+                **latest,
+                "contract": "semantic_refresh_task.v1",
+                "sources": reports,
+            }
+            manager._update(
+                config,
+                task_id,
+                status="completed",
+                stage="completed",
+                progress={"done": total, "total": total},
+                result=result,
+                message="语义索引已更新",
+            )
+        except ResourceCancelled:
+            manager._update(config, task_id, status="cancelled", stage="cancelled", message="语义索引已取消")
+        except Exception as error:
+            manager._update(
+                config,
+                task_id,
+                status="failed",
+                stage="failed",
+                error=str(error),
+                message="语义索引失败",
+            )
+
     def update_with_semantic(
         manager: Any,
         config: Any,
@@ -208,18 +311,21 @@ def install_semantic_runtime() -> None:
         workspace_id = str(getattr(manager, "workspace_id", "") or "")
         if not project_id or not workspace_id:
             return
-        raw_groups = _as_dict(task.get("targets")).get("group_ids", [])
+        targets = _as_dict(task.get("targets"))
+        raw_groups = task.get("affected_group_ids") or targets.get("group_ids", [])
         group_ids = [str(value) for value in raw_groups if str(value)] if isinstance(raw_groups, list) else []
-
-        def refresh() -> None:
-            try:
-                ProjectSemanticIndexer(workspace_id, project_id, config).refresh(
-                    group_ids=group_ids or None,
-                )
-            except Exception:
-                return
-
-        Thread(target=refresh, daemon=True, name=f"mirror-semantic-{project_id}").start()
+        try:
+            manager.submit(
+                project_id,
+                "semantic_index",
+                targets={"group_ids": group_ids},
+                idempotency_key=f"semantic-refresh:{task_id}",
+                actor="system",
+            )
+        except Exception:
+            # Search remains read-only and can refresh on demand. Failure to
+            # enqueue derived semantic work must never fail the source task.
+            return
 
     def make_handler_with_semantic(service: Any, web_root):
         BaseHandler = original_make_handler(service, web_root)
@@ -291,5 +397,6 @@ def install_semantic_runtime() -> None:
     AssistantOrchestrator.answer = answer_with_semantic
     web_server.WorkspaceService.capabilities = capabilities_with_semantic
     web_server.make_handler = make_handler_with_semantic
+    tasks_module.TaskManager._run = run_with_semantic
     tasks_module.TaskManager._update = update_with_semantic
     _INSTALLED = True
