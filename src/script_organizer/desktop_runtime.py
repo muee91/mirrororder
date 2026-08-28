@@ -8,6 +8,7 @@ from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .media_identity import DeviceMediaStore
 from .runtime_diagnostics import environment_payload
+from .semantic_managed_encoder import ManagedSemanticEncoder
 
 _INSTALLED = False
 
@@ -49,6 +50,20 @@ def _normalize_roots(raw: object) -> list[str]:
     return roots
 
 
+def _tree_bytes(root: Path) -> int:
+    total = 0
+    try:
+        for path in root.rglob("*"):
+            if path.is_file():
+                try:
+                    total += path.stat().st_size
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
+
 def _media_summary(service: Any, project: Any) -> dict[str, Any]:
     store = DeviceMediaStore()
     workspace_id = _workspace_id(service)
@@ -60,6 +75,15 @@ def _local_runtime_payload(service: Any) -> dict[str, Any]:
     model = str(settings.get("local_vision_model", "") or "")
     vision = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(model)).public()
     identity = IdentityRuntime.public()
+    semantic_encoder = ManagedSemanticEncoder(allow_prepare=False)
+    semantic_root = application_support_root() / "models" / "semantic"
+    semantic = {
+        **semantic_encoder.config.public(),
+        "prepared": semantic_encoder.prepared,
+        "cache_dir": str(semantic_root),
+        "cache_bytes": _tree_bytes(semantic_root),
+        "last_error": semantic_encoder.last_error,
+    }
     root = _workspace_root(service)
     return {
         "contract": "local_runtime.v1",
@@ -67,6 +91,10 @@ def _local_runtime_payload(service: Any) -> dict[str, Any]:
         "local_vision_model": model,
         "face_identity_enabled": bool(settings.get("face_identity_enabled", False)),
         "speaker_identity_enabled": bool(settings.get("speaker_identity_enabled", False)),
+        "semantic_embedding_enabled": bool(settings.get("semantic_embedding_enabled", False)),
+        "semantic_embedding_profile": str(settings.get("semantic_embedding_profile", "standard") or "standard"),
+        "semantic_embedding_dimensions": int(settings.get("semantic_embedding_dimensions", 1024) or 1024),
+        "semantic": semantic,
         "vision": vision,
         "identity": identity,
         # Retain the legacy field name used by the old SwiftUI status surface.
@@ -91,6 +119,12 @@ def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, An
             update["face_identity_enabled"] = bool(payload.get("face_identity_enabled"))
         if "speaker_identity_enabled" in payload:
             update["speaker_identity_enabled"] = bool(payload.get("speaker_identity_enabled"))
+        if "semantic_embedding_enabled" in payload:
+            update["semantic_embedding_enabled"] = bool(payload.get("semantic_embedding_enabled"))
+        if "semantic_embedding_profile" in payload:
+            update["semantic_embedding_profile"] = str(payload.get("semantic_embedding_profile", "") or "").strip()
+        if "semantic_embedding_dimensions" in payload:
+            update["semantic_embedding_dimensions"] = payload.get("semantic_embedding_dimensions")
         if update:
             old_model = str(settings.get("local_vision_model", "") or "")
             settings = save_runtime_settings(update)
@@ -174,11 +208,7 @@ def install_desktop_runtime() -> None:
                         }
                     )
                     return
-                if (
-                    len(parts) == 5
-                    and parts[:3] == ["api", "v1", "projects"]
-                    and parts[4] == "media-binding"
-                ):
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "media-binding":
                     self._local_only()
                     project = current.project(parts[3])
                     self._send_json(
@@ -207,11 +237,7 @@ def install_desktop_runtime() -> None:
                     self._local_only()
                     self._send_json(_apply_runtime_action(current, web_server._body(self)))
                     return
-                if (
-                    len(parts) == 4
-                    and parts[:3] == ["api", "v1", "desktop-collaboration"]
-                    and parts[3]
-                ):
+                if len(parts) == 4 and parts[:3] == ["api", "v1", "desktop-collaboration"] and parts[3]:
                     self._local_only()
                     user = current.collaborators.update_user(parts[3], web_server._body(self))
                     self._send_json(
@@ -224,11 +250,7 @@ def install_desktop_runtime() -> None:
                         }
                     )
                     return
-                if (
-                    len(parts) == 5
-                    and parts[:3] == ["api", "v1", "projects"]
-                    and parts[4] == "media-binding"
-                ):
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "media-binding":
                     self._local_only()
                     project = current.project(parts[3])
                     payload = web_server._body(self)
@@ -248,16 +270,11 @@ def install_desktop_runtime() -> None:
                         if action == "replace_and_scan":
                             store.replace_roots(workspace_id, project.project_id, roots)
                         elif action != "scan":
-                            raise web_server.ApiError(
-                                web_server.HTTPStatus.BAD_REQUEST,
-                                "不支持的 media binding action",
-                            )
+                            raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "不支持的 media binding action")
                         if project.index.get("clips"):
                             summary = store.scan(workspace_id, project.project_id, project.index, roots)
                         else:
                             summary = store.probe_roots(workspace_id, project.project_id, roots)
-                    # Re-apply device-local bindings immediately so subsequent
-                    # media/review-model reads observe the new device state.
                     project.reload()
                     self._send_json(
                         {
