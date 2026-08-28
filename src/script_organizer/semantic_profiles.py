@@ -8,6 +8,7 @@ from .local_vision_runtime import LocalVisionRuntime
 
 
 DEFAULT_SEMANTIC_PROFILE = "standard"
+STANDARD_MODEL_REVISION = "9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda"
 SEMANTIC_QUERY_INSTRUCTION = (
     "Retrieve video-production evidence relevant to the editor's search query. "
     "Prefer concrete visual actions, spoken lines, human slate notes and production context."
@@ -26,6 +27,7 @@ class SemanticEmbeddingProfile:
     default_dimensions: int
     instruction_aware: bool
     mrl: bool
+    revision: str = ""
     managed_local: bool = True
 
     def public(self) -> dict[str, Any]:
@@ -41,6 +43,7 @@ PROFILES: dict[str, SemanticEmbeddingProfile] = {
         title="标准",
         description="多模态语义检索；用于画面、对白、场记与后续相似镜头检索。",
         model="Qwen/Qwen3-VL-Embedding-2B",
+        revision=STANDARD_MODEL_REVISION,
         runtime="sentence-transformers",
         modalities=("text", "image", "video", "mixed"),
         max_dimensions=2048,

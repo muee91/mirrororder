@@ -67,6 +67,9 @@ def test_stager_requires_relocatable_python_and_media_tools() -> None:
     assert "sha256" in tool_policy
     assert 'contract: "mirrororder_packaged_runtime.v1"' in stager
     assert "requirements-semantic.txt" in stager
+    assert "STANDARD_MODEL_REVISION" in stager
+    assert "semanticModelRevision" in stager
+    assert "revision: semanticModelRevision" in stager
     assert "probeSemanticRuntime" in stager
     assert "MIRRORORDER_REQUIRE_SEMANTIC_RUNTIME" in stager
     assert "'sentence_transformers'" in stager
@@ -75,6 +78,7 @@ def test_stager_requires_relocatable_python_and_media_tools() -> None:
     assert "bundledMachOFiles" in verifier
     assert "nested Mach-O gate" in verifier
     assert "MIRRORORDER_REQUIRE_SEMANTIC_RUNTIME" in verifier
+    assert "9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda" in verifier
     assert "assertManifestToolMatches" in verifier
     assert "license classification" in verifier
     assert "dependency === selfInstallName" in verifier

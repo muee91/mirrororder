@@ -49,6 +49,7 @@ export interface SemanticRuntimeStatus {
   enabled: boolean;
   profile: SemanticEmbeddingProfile | "external" | string;
   model: string;
+  revision: string;
   runtime: string;
   dimensions: number;
   source: string;

@@ -266,6 +266,13 @@ const semanticRequirementsSha256 = crypto
   .createHash("sha256")
   .update(fs.readFileSync(semanticRequirementsPath))
   .digest("hex");
+const semanticProfilesSource = fs.readFileSync(path.join(repoRoot, "src", "script_organizer", "semantic_profiles.py"), "utf8");
+const semanticModel = "Qwen/Qwen3-VL-Embedding-2B";
+if (!semanticProfilesSource.includes(`model="${semanticModel}"`)) {
+  fail(`semantic profile model is not pinned to ${semanticModel}`);
+}
+const semanticModelRevision = semanticProfilesSource.match(/STANDARD_MODEL_REVISION\s*=\s*"([0-9a-f]{40})"/)?.[1];
+if (!semanticModelRevision) fail("standard semantic profile has no 40-character pinned model revision");
 
 try {
   parseToolVersionOutput("ffmpeg", run(ffmpegExecutable, ["-version"], "ffmpeg source policy probe"));
@@ -424,6 +431,8 @@ const manifest = {
   semantic: {
     profile: "standard",
     runtime: "sentence-transformers",
+    model: semanticModel,
+    revision: semanticModelRevision,
     included: stagedSemanticInfo.available === true,
     runtime_available: stagedSemanticInfo.available === true,
     modules: stagedSemanticInfo.modules,
@@ -465,4 +474,4 @@ console.log(`Core: ${coreTarget}`);
 console.log(`Python: ${pythonTarget}`);
 console.log(`Tools: ${toolsTarget}`);
 console.log(`Manifest: ${manifestTarget}`);
-console.log(`Semantic runtime: ${manifest.semantic.included ? "included" : "unavailable"} · modules=${JSON.stringify(manifest.semantic.modules)} · requirements_sha256=${manifest.semantic.requirements_sha256}`);
+console.log(`Semantic runtime: ${manifest.semantic.included ? "included" : "unavailable"} · model=${manifest.semantic.model}@${manifest.semantic.revision} · modules=${JSON.stringify(manifest.semantic.modules)} · requirements_sha256=${manifest.semantic.requirements_sha256}`);

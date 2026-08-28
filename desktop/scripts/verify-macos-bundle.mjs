@@ -110,6 +110,12 @@ if (!manifest.python?.executable) fail("runtime manifest has no python executabl
 if (manifest.semantic?.profile !== "standard" || manifest.semantic?.runtime !== "sentence-transformers") {
   fail("runtime manifest has no standard semantic runtime contract");
 }
+if (manifest.semantic?.model !== "Qwen/Qwen3-VL-Embedding-2B") {
+  fail(`runtime manifest has unexpected semantic model: ${manifest.semantic?.model}`);
+}
+if (manifest.semantic?.revision !== "9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda") {
+  fail(`runtime manifest has unexpected pinned semantic revision: ${manifest.semantic?.revision}`);
+}
 if (typeof manifest.semantic?.requirements_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(manifest.semantic.requirements_sha256)) {
   fail("runtime manifest has no semantic requirements SHA256");
 }

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
 
 from script_organizer.device_runtime_settings import load_runtime_settings, save_runtime_settings
 from script_organizer.semantic_managed_encoder import ManagedSemanticEncoder, _map_qwen_checkpoint_keys
+from script_organizer.semantic_profiles import STANDARD_MODEL_REVISION
 
 
 def _isolated_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -108,6 +111,63 @@ def test_vector_identity_changes_with_dimensions_and_instruction_contract(monkey
     assert "1024" in first.identity
     assert "768" in second.identity
     assert "editor-retrieval-v1" in first.identity
+    assert STANDARD_MODEL_REVISION in first.identity
+    assert first.config.public()["revision"] == STANDARD_MODEL_REVISION
+
+
+def test_prepare_downloads_the_pinned_revision_and_rejects_unresolved_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _isolated_runtime(monkeypatch, tmp_path)
+    import script_organizer.semantic_managed_encoder as managed
+
+    monkeypatch.setattr(managed, "semantic_runtime_support", lambda _profile: {"available": True})
+    save_runtime_settings(
+        {
+            "semantic_embedding_enabled": True,
+            "semantic_embedding_profile": "standard",
+            "semantic_embedding_dimensions": 1024,
+        }
+    )
+    encoder = ManagedSemanticEncoder(allow_prepare=True)
+    monkeypatch.setattr(managed.ManagedSemanticEncoder, "_models", {})
+    snapshot = tmp_path / "snapshots" / STANDARD_MODEL_REVISION
+    snapshot.mkdir(parents=True)
+    calls: list[dict[str, str]] = []
+
+    def fake_snapshot_download(model: str, *, revision: str, cache_dir: str) -> str:
+        calls.append({"model": model, "revision": revision, "cache_dir": cache_dir})
+        return str(snapshot)
+
+    hub = types.ModuleType("huggingface_hub")
+    hub.snapshot_download = fake_snapshot_download  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    monkeypatch.setattr(managed, "_load_qwen_sentence_transformer", lambda *args, **kwargs: object())
+    monkeypatch.setattr(managed.ManagedSemanticEncoder, "_device", staticmethod(lambda _torch: "cpu"))
+    torch = types.ModuleType("torch")
+    monkeypatch.setitem(sys.modules, "torch", torch)
+
+    assert encoder.prepare() is True
+    assert calls == [
+        {
+            "model": "Qwen/Qwen3-VL-Embedding-2B",
+            "revision": STANDARD_MODEL_REVISION,
+            "cache_dir": str(tmp_path / "app-data" / "models" / "semantic"),
+        }
+    ]
+    assert encoder.identity.endswith(f":1024:editor-retrieval-v1")
+
+    ManagedSemanticEncoder._models.clear()
+    wrong_encoder = ManagedSemanticEncoder(allow_prepare=True)
+    wrong_snapshot = tmp_path / "snapshots" / "wrong-revision"
+    wrong_snapshot.mkdir()
+    monkeypatch.setattr(
+        hub,
+        "snapshot_download",
+        lambda model, *, revision, cache_dir: str(wrong_snapshot),
+    )
+    assert wrong_encoder.prepare() is False
+    assert "revision mismatch" in wrong_encoder.last_error
 
 
 def test_qwen_checkpoint_mapping_is_explicit_and_fail_closed() -> None:

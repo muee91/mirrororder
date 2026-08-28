@@ -5,6 +5,7 @@ from pathlib import Path
 from script_organizer.semantic_profiles import (
     DEFAULT_SEMANTIC_PROFILE,
     SEMANTIC_QUERY_INSTRUCTION,
+    STANDARD_MODEL_REVISION,
     semantic_profile,
     semantic_profiles_public,
 )
@@ -14,6 +15,8 @@ def test_standard_profile_targets_qwen3_vl_embedding_2b() -> None:
     profile = semantic_profile("standard")
     assert DEFAULT_SEMANTIC_PROFILE == "standard"
     assert profile.model == "Qwen/Qwen3-VL-Embedding-2B"
+    assert profile.revision == STANDARD_MODEL_REVISION
+    assert len(profile.revision) == 40
     assert profile.runtime == "sentence-transformers"
     assert set(profile.modalities) == {"text", "image", "video", "mixed"}
     assert profile.max_dimensions == 2048
@@ -46,6 +49,7 @@ def test_profile_inventory_never_grants_editorial_authority() -> None:
         support = row["runtime_support"]
         assert isinstance(support["available"], bool)
         assert support["runtime"] == row["runtime"]
+    assert payload["profiles"]["standard"]["revision"] == STANDARD_MODEL_REVISION
 
 
 def test_desktop_search_and_assistant_do_not_trigger_inline_index_refresh() -> None:

@@ -20,6 +20,7 @@ class ManagedSemanticConfig:
     enabled: bool
     profile: str
     model: str
+    revision: str
     runtime: str
     dimensions: int
     source: str
@@ -31,6 +32,7 @@ class ManagedSemanticConfig:
             "enabled": self.enabled,
             "profile": self.profile,
             "model": self.model,
+            "revision": self.revision,
             "runtime": self.runtime,
             "dimensions": self.dimensions,
             "source": self.source,
@@ -128,6 +130,7 @@ class ManagedSemanticEncoder:
                 enabled=True,
                 profile="external",
                 model=external_config.model,
+                revision="",
                 runtime=external_config.provider,
                 dimensions=0,
                 source=external_config.source,
@@ -155,11 +158,12 @@ class ManagedSemanticEncoder:
         # official Sentence Transformers integration. The llama.cpp text-only
         # profile remains a declared fallback target until packaged macOS smoke
         # proves stable pooling/embedding behavior with our bundled binary.
-        implemented = profile.runtime == "sentence-transformers"
+        implemented = profile.runtime == "sentence-transformers" and bool(profile.revision)
         self.config = ManagedSemanticConfig(
             enabled=bool(enabled and runtime_available and implemented),
             profile=profile.key,
             model=profile.model,
+            revision=profile.revision,
             runtime=profile.runtime,
             dimensions=dimensions,
             source="device-semantic-profile",
@@ -180,7 +184,7 @@ class ManagedSemanticEncoder:
         if not self.enabled:
             return ""
         return (
-            f"managed:{self.config.profile}:{self.config.model}:"
+            f"managed:{self.config.profile}:{self.config.model}:{self.config.revision}:"
             f"{self.config.dimensions}:{QUERY_INSTRUCTION_VERSION}"
         )
 
@@ -224,6 +228,9 @@ class ManagedSemanticEncoder:
         if not self.allow_prepare:
             self.last_error = "语义模型尚未由后台索引任务准备"
             return False
+        if not self.config.revision:
+            self.last_error = "标准语义模型缺少固定 revision，拒绝加载"
+            return False
 
         identity = self.identity
         with self._lock:
@@ -236,9 +243,16 @@ class ManagedSemanticEncoder:
                 model_path = Path(
                     snapshot_download(
                         self.config.model,
+                        revision=self.config.revision,
                         cache_dir=str(self.cache_dir),
                     )
                 )
+                resolved_revision = model_path.name
+                if resolved_revision != self.config.revision:
+                    raise RuntimeError(
+                        "Hugging Face snapshot revision mismatch: "
+                        f"expected={self.config.revision} resolved={resolved_revision}"
+                    )
                 model = _load_qwen_sentence_transformer(
                     model_path,
                     device=self._device(torch),
