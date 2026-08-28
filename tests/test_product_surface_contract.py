@@ -9,6 +9,7 @@ PROJECT_LIBRARY = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectL
 PROJECT_LIFECYCLE = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLifecyclePanel.tsx"
 STATUS_CENTER = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenterWorkbench.tsx"
 SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
+LEGACY_TASK_PANEL = ROOT / "desktop" / "src" / "features" / "settings" / "TaskStatusPanel.tsx"
 SEARCH = ROOT / "desktop" / "src" / "features" / "search" / "SemanticSearchPalette.tsx"
 SLATE = ROOT / "desktop" / "src" / "features" / "slate" / "SlateWorkbench.tsx"
 ANGLE_CARD = ROOT / "desktop" / "src" / "features" / "material-script" / "AngleEvidenceCard.tsx"
@@ -164,8 +165,22 @@ def test_background_tasks_have_one_global_status_center_home() -> None:
     assert "ProjectTaskClient" in status_center
     assert "canCancelTask" in status_center
     assert "canRetryTask" in status_center
-    assert "TaskStatusPanel" not in settings
-    assert "后台任务的进度、取消与重试统一放在左侧“状态中心”" in settings
+    assert "showCompleted" in status_center
+    for label in ("准备项目", "多机位同步", "增量素材分析", "剧本归集整理", "转写", "证据提取", "人物 / 声纹索引"):
+        assert label in status_center
+    assert not LEGACY_TASK_PANEL.exists()
+    assert "后台任务统一在“状态中心”查看" in settings
+
+
+def test_settings_do_not_confuse_team_web_preferences_with_desktop_canvas() -> None:
+    settings = SETTINGS.read_text(encoding="utf-8")
+
+    assert "团队审阅偏好" in settings
+    assert "这些选项只控制浏览器团队审阅界面，不改变 Desktop 项目的默认场记画布" in settings
+    assert ">默认视图<" in settings
+    assert ">默认工作台<" not in settings
+    assert "settings-advanced-diagnostics" in settings
+    assert "高级诊断" in settings
 
 
 def test_team_web_and_settings_are_global_utilities_not_project_tabs() -> None:
