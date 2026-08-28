@@ -5,6 +5,7 @@ import { DesktopClient, type DesktopStatusPayload, type FrontendSettings } from 
 import { HostConnection, HostConnectionError, type HostProcessStatus } from "../../api/host";
 import { PlatformClient, type PlatformInfo } from "../../api/platform";
 import { TimelineClient, type TimelineRuntimeStatus } from "../../api/timeline";
+import { AssistantModelsPanel } from "../assistant/AssistantModelsPanel";
 import { CollaborationPanel } from "./CollaborationPanel";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
 
@@ -126,6 +127,14 @@ export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
         </div>
 
         <LocalRuntimePanel baseUrl={baseUrl} />
+        {projectId ? (
+          <AssistantModelsPanel baseUrl={baseUrl} projectId={projectId} />
+        ) : (
+          <div className="production-panel status-card model-connections-card">
+            <p className="eyebrow">本机模型</p><h3>外部 / 自定义模型连接</h3>
+            <p className="production-note">先从左侧选择一个项目，即可读取和编辑当前设备的语言、视觉与语义检索连接。连接本身仍是设备本机配置，不会写入项目。</p>
+          </div>
+        )}
         <CollaborationPanel baseUrl={baseUrl} />
 
         <details className="settings-advanced-diagnostics">
