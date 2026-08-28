@@ -16,6 +16,7 @@ import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
 import { SlateWorkbench } from "../slate/SlateWorkbench";
 import "./production.css";
 import "./assistant-drawer.css";
+import "./product-experience.css";
 
 interface Props { baseUrl: string; project: ProjectSummary }
 
