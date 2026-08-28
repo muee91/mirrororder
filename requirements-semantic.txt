@@ -2,9 +2,10 @@
 # These dependencies are intentionally not part of the core Python runtime yet.
 # Release packaging must vendor/test the macOS arm64 wheels before the Standard
 # semantic profile is enabled in packaged builds; never pip-install at App launch.
-sentence-transformers==5.4.0
+# The image extra is required for VLM-backed representative-frame embeddings.
+sentence-transformers[image]==5.4.0
 transformers>=4.57.3,<5
-# Sentence Transformers pulls torch, but pin the supported major/minor explicitly
-# for reproducible packaged-runtime validation against Qwen3-VL-Embedding.
+# Qwen3-VL's official Transformers path documents torch 2.8; keep this bounded
+# until the packaged arm64/MPS smoke matrix proves a newer stack.
 torch>=2.8,<2.9
 torchvision>=0.23,<0.24
