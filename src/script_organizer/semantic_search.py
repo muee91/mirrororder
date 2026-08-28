@@ -12,7 +12,8 @@ from .workspace_db import WorkspaceDatabase
 
 SEMANTIC_SEARCH_CONTRACT = "semantic_search.v1"
 SOURCE_LABELS = {
-    "visual": "画面",
+    "visual": "画面描述",
+    "frame": "代表帧",
     "speech": "对白",
     "slate": "场记",
 }
@@ -41,7 +42,7 @@ def _snippet(text: str, query: str, limit: int = 320) -> str:
 
 
 class SemanticSearcher:
-    """Hybrid retrieval over visual, speech and human slate evidence."""
+    """Hybrid retrieval over visual, frame, speech and human slate evidence."""
 
     def __init__(
         self,
@@ -177,6 +178,7 @@ class SemanticSearcher:
                 "device_paths_exposed": False,
                 "keyword_fallback": True,
                 "shared_encoder_for_documents_and_query": True,
+                "representative_frame_vectors": True,
             },
         }
 
