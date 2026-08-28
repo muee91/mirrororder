@@ -237,7 +237,7 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
                 </div>
                 <div className="lifecycle-delete">
                   <strong>移除项目</strong>
-                  <p>这是低频危险操作。输入项目 ID 确认；Core 会按现有隔离与 quarantine 规则处理项目数据。</p>
+                  <p>输入项目 ID 确认。镜序会删除工作区内生成的项目目录和项目记录；你原来的媒体、剧本与 FCPXML 文件不会被删除。</p>
                   <input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={selectedProject.project_id} />
                   <button type="button" className="danger-quiet" disabled={busy || deleteConfirm.trim() !== selectedProject.project_id} onClick={() => void removeSelected()}>移除当前项目</button>
                 </div>
