@@ -10,7 +10,7 @@
 .status-capabilities span.is-ready { border-color: #355745; color: #99c0aa; background: #122019; }
 .status-capabilities span.is-missing { border-color: #644444; color: #d0a0a0; background: #211717; }
 .status-capabilities span.is-pending { border-color: #655a3e; color: #cfbd84; background: #211e14; }
-.frontend-settings-card, .baseline-gate-card, .local-runtime-card, .collaboration-card { grid-column: span 1; }
+.frontend-settings-card, .baseline-gate-card, .local-runtime-card, .collaboration-card, .model-connections-card { grid-column: span 1; }
 .settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
 .settings-form-grid .production-field { margin: 0; }
 .settings-check { display: flex; align-items: center; gap: 7px; min-height: 34px; color: #8a96a2; font-size: 10px; }
@@ -25,6 +25,20 @@
 .runtime-status-grid em { color: #c99696; font-size: 8px; font-style: normal; line-height: 1.4; }
 .runtime-status-grid article > div { display: flex; flex-wrap: wrap; gap: 5px; }
 .runtime-status-grid button { justify-self: start; }
+.assistant-models { display: grid; gap: 10px; }
+.assistant-models > summary { display: grid; gap: 2px; cursor: pointer; list-style: none; }
+.assistant-models > summary::-webkit-details-marker { display: none; }
+.assistant-models > summary span { color: #ced6de; font-size: 11px; font-weight: 650; }
+.assistant-models > summary small { color: #71808c; font-size: 8px; font-weight: 400; }
+.assistant-models[open] > summary { border-bottom: 1px solid #252d36; padding-bottom: 8px; }
+.assistant-model-grid { display: grid; gap: 8px; }
+.assistant-model-role { display: grid; gap: 8px; border: 1px solid #2c3540; border-radius: 8px; padding: 10px; background: #11171c; }
+.assistant-model-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.assistant-model-heading > div { display: grid; gap: 2px; }
+.assistant-model-heading strong { color: #c6d0d9; font-size: 10px; }
+.assistant-model-heading small { color: #71808c; font-size: 8px; }
+.assistant-model-heading label { display: flex; align-items: center; gap: 5px; color: #8a96a2; font-size: 9px; }
+.assistant-model-role .production-field { margin: 0; }
 .collaboration-users { display: grid; gap: 7px; max-height: 420px; overflow-y: auto; }
 .collaboration-user { display: grid; grid-template-columns: minmax(0, 1fr) 108px 108px; gap: 8px; align-items: center; border: 1px solid #2d3740; border-radius: 9px; padding: 9px; background: #11171c; }
 .collaboration-user.is-disabled { opacity: .58; }
@@ -64,15 +78,15 @@
 }
 
 @media (prefers-color-scheme: light) {
-  .status-card h3 { color: #26313a; }
-  .status-facts div, .baseline-gate-row, .collaboration-audit, .settings-advanced-diagnostics { border-color: #dde3e9; }
+  .status-card h3, .assistant-models > summary span { color: #26313a; }
+  .status-facts div, .baseline-gate-row, .collaboration-audit, .settings-advanced-diagnostics, .assistant-models[open] > summary { border-color: #dde3e9; }
   .status-facts dd { color: #56616d; }
   .status-capabilities span { border-color: #d7dfe6; color: #63707c; background: #f4f7f9; }
   .status-capabilities span.is-ready { border-color: #b7d3c2; color: #37634a; background: #eef8f2; }
   .status-capabilities span.is-missing { border-color: #e0bcbc; color: #8b4f4f; background: #fff3f3; }
   .status-capabilities span.is-pending { border-color: #e2d4a7; color: #79651e; background: #fff9e7; }
-  .runtime-status-grid article, .collaboration-user { border-color: #dce3e9; background: #fff; }
-  .runtime-status-grid strong, .collaboration-user-main strong { color: #45515c; }
+  .runtime-status-grid article, .collaboration-user, .assistant-model-role { border-color: #dce3e9; background: #fff; }
+  .runtime-status-grid strong, .collaboration-user-main strong, .assistant-model-heading strong { color: #45515c; }
   .baseline-gate-row strong { color: #4d5964; }
   .baseline-gate-row > span.is-ready { color: #37634a; background: #eef8f2; }
   .baseline-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
