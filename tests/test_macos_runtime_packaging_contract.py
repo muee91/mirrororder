@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -20,6 +21,15 @@ def test_tauri_build_stages_packaged_runtime_before_bundle() -> None:
     assert resources["resources/mirrororder-python/"] == "mirrororder-python/"
     assert resources["resources/mirrororder-tools/"] == "mirrororder-tools/"
     assert resources["resources/mirrororder-runtime/"] == "mirrororder-runtime/"
+
+
+def test_tauri_uses_the_selected_mirrororder_brand_icon() -> None:
+    icon = ROOT / "desktop/src-tauri/icons/icon.png"
+
+    assert icon.is_file()
+    assert hashlib.sha256(icon.read_bytes()).hexdigest() == (
+        "d3c8e76ba72b14a716059bfd3102b8dac8090d7c16d8c584517fa5d9da24b8a3"
+    )
 
 
 def test_packaged_runtime_is_fail_closed_and_used_by_host_and_gateway() -> None:
