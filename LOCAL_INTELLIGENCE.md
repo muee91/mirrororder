@@ -1,10 +1,10 @@
-# 镜序本地感知索引
+# 镜序本地智能与可重建索引
 
-镜序把“项目事实”和“本机可重建的 AI 感知索引”分开。
+镜序把**共享项目事实**和**当前设备可重建的智能索引**分开。删除本机索引可以降低功能或触发重建，但不能丢失人工场记、Review placement 或最终 Editorial Decision。
 
-## 1. 工作区数据库
+## 1. 本机工作区数据
 
-每个 `workspace_id` 在当前 Mac 上拥有独立 SQLite：
+每个 `workspace_id` 在当前设备上拥有独立的本机数据库和缓存目录。典型 macOS 位置：
 
 ```text
 ~/Library/Application Support/MirrorOrder/
@@ -14,103 +14,99 @@
         └── frames/
 ```
 
-数据库不放进共享 workspace，不通过 iCloud/Dropbox/普通网盘同步。原因是 SQLite WAL 适合由一台 Host 进程本机并发读写，不适合让多个设备通过文件同步同时写同一个活跃数据库。
+这类数据不放进共享 workspace，也不应通过普通文件同步让多台设备同时写一个活跃 SQLite。
 
-当前 schema v1 的职责：
+本机索引可保存或派生：
 
-- 项目摘要和当前分析状态的本机索引；
-- Take 结构；
-- 代表帧；
-- Take 语义描述；
-- 感知任务运行记录；
-- Web/Agent 后续请求 AI 再分析的请求记录；
-- 未来可选的人脸 / 说话人 identity 与 observation。
+- 项目 / Take 的本地检索索引；
+- 代表帧与帧元数据；
+- 感知 / VLM 结构化描述；
+- ASR 与语义检索所需的本机派生信息；
+- 人脸、声纹与人工确认后的身份观察；
+- 后台感知和索引任务状态；
+- 可重建的 semantic documents / embeddings。
 
-以下仍然是共享项目事实权威，不在 v1 中迁移到 SQLite：
+共享项目 authority 仍由项目文件、ReviewStore、Script Supervisor、Editorial Decision 等对应业务存储维护，本机 SQLite 不取代这些人工事实。
 
-- `workspace.toml`
-- `projects/registry.json`
-- `project.toml`
-- `material_index.json`
-- `script.json`
-- `matches.json`
-- `review.json`
+## 2. 感知与代表帧
 
-这样数据库损坏或删除时可以重建，不会丢失人工审核。
+镜序优先复用已经抽取的低分辨率代表帧，而不是为了每个新能力重新扫描整段视频。
 
-## 2. 分层感知策略
+代表帧和视觉描述属于设备本机缓存：
 
-### Tier 0：自动后台索引
+- 可以删除和重建；
+- 可以用于素材预览、VLM 分析和多模态检索；
+- 路径本身不应成为共享项目事实；
+- 感知失败不能回滚同步、ASR、剧本匹配或人工审核。
 
-项目完成同步 / ASR / 匹配后：
+VLM 负责描述“画面里发生了什么”，不负责成为最终人物身份、Best、Reject 或剪辑判断的 authority。
 
-1. 把 Take 结构同步到工作区 SQLite；
-2. 每个 Take 只抽取一张中点代表帧；
-3. 代表帧缩放到 640px 宽度级别；
-4. 保存在 Application Support，而不是项目共享目录。
+## 3. 人脸与声纹
 
-Tier 0 不调用 VLM，不连续逐帧扫描。
+人脸与声纹能力已经属于当前本机 Identity 工作流，而不是只预留 schema。
 
-### Semantic：按需深度索引
-
-`evidence_extract` / 疑难 Take / 团队主动请求 AI 时：
-
-1. 对指定 Take 抽取最多 3 张语义采样帧；
-2. 读取已有 ASR 和候选剧本上下文；
-3. 调用已配置的 VLM；
-4. 只生成结构化描述：场景、景别、人物数量/描述、动作、道具、情绪、连续性线索；
-5. 写入本机 SQLite。
-
-语义结果不是 Best / Keep / Reject，也不是人工审核事实。
-
-## 3. 演员和角色音色
-
-数据库已经为以下本机可选能力预留：
+基本原则：
 
 ```text
-face identity
-speaker identity
-identity observation
-embedding
+本机 observation / embedding
+        ↓
+候选聚类或身份建议
+        ↓
+人工确认
+        ↓
+项目中的人物 / 角色事实
 ```
 
-但默认不启用识别 provider。正式接入前必须满足：
+- 生物特征向量只保存在当前设备的受控本机索引；
+- Team Web 不直接获得 face / speaker embeddings；
+- 聚类 ID 与真实演员 / 角色名称必须区分；
+- 人工确认优先于自动建议；
+- 人物或声纹相似度不能直接成为 Editorial Decision。
 
-- 模型许可证允许镜序的目标发行方式；
-- 用户明确启用；
-- embedding 只保存在本机工作区数据库；
-- Web 不直接获得生物特征向量；
-- UI 把“聚类身份”与“真实演员/角色名称”分开；
-- 人工确认过的演员/角色映射优先于自动聚类。
+## 4. 语义检索
 
-推荐流程：
+当前语义检索采用统一 semantic document 层组织可检索证据，来源可以包括视觉描述、对白和人工场记等。
 
 ```text
-Face/Speaker embedding
-        ↓
-项目内聚类
-        ↓
-Person 01 / Speaker 02
-        ↓
-人工一次确认
-        ↓
-演员 / 角色
+项目证据
+  ↓
+Semantic Documents
+  ↓
+本机 SQLite / FTS / 可选 embedding
+  ↓
+混合检索
+  ↓
+⌘K / 小镜 grounding / 其它只读召回
 ```
 
-VLM 负责“画面里发生了什么”，不负责成为演员真实身份的唯一判断器。
+检索结果只代表相关证据，不代表剪辑置信度、Best、Review placement 或最终选择。
 
-## 4. 数据边界
+更具体的合同见 [`docs/semantic-retrieval.md`](./docs/semantic-retrieval.md)。
 
-- 原始视频不写入 SQLite；
-- 代表帧是可删除、可重建缓存；
-- face/speaker embedding 属于敏感本机索引，不进入共享 workspace；
-- 本地 Qwen3-VL 只读取抽取帧，不直接读取整个视频；
-- 如果未来显式配置远端 VLM，Host 只能发送抽取帧和有限上下文，并必须在 UI 中明确标示该 provider。
+## 5. 本地模型与外部连接
 
-## 5. 故障原则
+本地模型、身份运行时和外部 / 自定义模型连接都属于**设备本机配置**：
 
-感知索引属于增强层：
+- 本地运行时在 Desktop `设置` 中启用、准备和查看状态；
+- Provider、服务地址、模型名和 API Key 也集中在 `设置`，不放在小镜日常 Drawer；
+- API Key 不在 UI 中回显，也不写入共享项目；
+- 未配置模型时，确定性主流程和可用的离线回退仍应工作；
+- 如果显式配置远端视觉模型，上传范围必须受 Host 约束，不能把整个项目媒体无界发送给 provider。
 
-> 感知失败不能让同步、ASR、剧本匹配或人工审核任务失败。
+## 6. 故障与 authority 原则
 
-`prepare_project` 会在主分析完成后尝试 Tier 0；SQLite、FFmpeg 抽帧或 VLM 失败只记录为 deferred / failed perception，不回滚项目事实。
+本地智能属于增强层：
+
+> 智能索引或模型失败，可以降低检索、人物建议或视觉理解能力，但不能破坏项目事实和人工工作。
+
+任何模型输出都遵循：
+
+```text
+evidence / suggestion
+        ↓
+human confirmation when authority changes
+        ↓
+authoritative store
+```
+
+模型、Audit、语义检索和小镜都不能绕过 ReviewStore、Script Supervisor、Editorial Decision 或 Rust Timeline 的既有 authority。

@@ -1,6 +1,8 @@
 .status-center-workbench { min-width: 0; }
 .status-center-summary { display: flex; gap: 1px; margin-bottom: 10px; border: 1px solid #28313a; border-radius: 9px; overflow: hidden; background: #28313a; }
-.status-center-summary span { display: grid; min-width: 120px; flex: 1 1 0; gap: 2px; padding: 9px 10px; color: #788591; background: #0f1419; font-size: 9px; }
+.status-center-summary span, .status-center-summary button { display: grid; min-width: 120px; flex: 1 1 0; gap: 2px; border: 0; border-radius: 0; padding: 9px 10px; color: #788591; background: #0f1419; font-size: 9px; font-weight: 500; text-align: left; }
+.status-center-summary button { cursor: pointer; }
+.status-center-summary button:hover, .status-center-summary button.is-active { color: #aeb8c1; background: #171e24; }
 .status-center-summary strong { color: #d1dae2; font-size: 15px; }
 .status-center-summary .needs-attention strong { color: #d8be75; }
 .status-center-note { margin: 0 0 12px; border-left: 2px solid #47535f; padding-left: 9px; color: #75828e; font-size: 10px; line-height: 1.5; }
@@ -14,6 +16,7 @@
 .status-center-task { display: grid; grid-template-columns: minmax(160px, .65fr) minmax(170px, .85fr) minmax(180px, 1fr) auto; align-items: center; gap: 9px; border-top: 1px solid #232b33; padding: 9px 11px; }
 .status-center-task:first-child { border-top: 0; }
 .status-center-task.status-failed, .status-center-task.status-interrupted { background: #1d1515; }
+.status-center-task.status-completed { opacity: .72; }
 .status-center-task-name { display: grid; gap: 2px; }
 .status-center-task-name strong { color: #bbc5ce; font-size: 10px; }
 .status-center-task-name span { color: #7b8793; font-size: 9px; }
@@ -36,12 +39,13 @@
 
 @media (max-width: 700px) {
   .status-center-summary { overflow-x: auto; }
-  .status-center-summary span { flex: 0 0 120px; }
+  .status-center-summary span, .status-center-summary button { flex: 0 0 120px; }
 }
 
 @media (prefers-color-scheme: light) {
   .status-center-summary { border-color: #dce3e9; background: #dce3e9; }
-  .status-center-summary span, .status-center-project { background: #fff; }
+  .status-center-summary span, .status-center-summary button, .status-center-project { background: #fff; }
+  .status-center-summary button:hover, .status-center-summary button.is-active { background: #eef2f5; }
   .status-center-summary strong, .status-center-project-head strong, .status-center-task-name strong { color: #2d3740; }
   .status-center-project, .status-center-project-head, .status-center-task { border-color: #e0e6eb; }
   .status-center-task.status-failed, .status-center-task.status-interrupted { background: #fff5f5; }

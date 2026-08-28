@@ -10,7 +10,7 @@
 .status-capabilities span.is-ready { border-color: #355745; color: #99c0aa; background: #122019; }
 .status-capabilities span.is-missing { border-color: #644444; color: #d0a0a0; background: #211717; }
 .status-capabilities span.is-pending { border-color: #655a3e; color: #cfbd84; background: #211e14; }
-.frontend-settings-card, .baseline-gate-card, .local-runtime-card, .collaboration-card, .task-status-card { grid-column: span 1; }
+.frontend-settings-card, .baseline-gate-card, .local-runtime-card, .collaboration-card, .model-connections-card { grid-column: span 1; }
 .settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
 .settings-form-grid .production-field { margin: 0; }
 .settings-check { display: flex; align-items: center; gap: 7px; min-height: 34px; color: #8a96a2; font-size: 10px; }
@@ -25,6 +25,20 @@
 .runtime-status-grid em { color: #c99696; font-size: 8px; font-style: normal; line-height: 1.4; }
 .runtime-status-grid article > div { display: flex; flex-wrap: wrap; gap: 5px; }
 .runtime-status-grid button { justify-self: start; }
+.assistant-models { display: grid; gap: 10px; }
+.assistant-models > summary { display: grid; gap: 2px; cursor: pointer; list-style: none; }
+.assistant-models > summary::-webkit-details-marker { display: none; }
+.assistant-models > summary span { color: #ced6de; font-size: 11px; font-weight: 650; }
+.assistant-models > summary small { color: #71808c; font-size: 8px; font-weight: 400; }
+.assistant-models[open] > summary { border-bottom: 1px solid #252d36; padding-bottom: 8px; }
+.assistant-model-grid { display: grid; gap: 8px; }
+.assistant-model-role { display: grid; gap: 8px; border: 1px solid #2c3540; border-radius: 8px; padding: 10px; background: #11171c; }
+.assistant-model-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.assistant-model-heading > div { display: grid; gap: 2px; }
+.assistant-model-heading strong { color: #c6d0d9; font-size: 10px; }
+.assistant-model-heading small { color: #71808c; font-size: 8px; }
+.assistant-model-heading label { display: flex; align-items: center; gap: 5px; color: #8a96a2; font-size: 9px; }
+.assistant-model-role .production-field { margin: 0; }
 .collaboration-users { display: grid; gap: 7px; max-height: 420px; overflow-y: auto; }
 .collaboration-user { display: grid; grid-template-columns: minmax(0, 1fr) 108px 108px; gap: 8px; align-items: center; border: 1px solid #2d3740; border-radius: 9px; padding: 9px; background: #11171c; }
 .collaboration-user.is-disabled { opacity: .58; }
@@ -39,21 +53,6 @@
 .collaboration-audit p { display: grid; gap: 2px; margin: 0; border-bottom: 1px solid #222b33; padding-bottom: 5px; }
 .collaboration-audit strong { color: #aeb9c3; font-size: 9px; }
 .collaboration-audit span, .collaboration-audit small { color: #71808d; font-size: 8px; }
-.task-active-card { display: grid; gap: 7px; border: 1px solid #355745; border-radius: 9px; padding: 9px; background: #122019; }
-.task-status-line, .task-progress-row, .task-status-meta { display: flex; align-items: center; gap: 8px; }
-.task-status-line { justify-content: space-between; }
-.task-status-line strong, .task-status-row strong { color: #bcc8d1; font-size: 10px; }
-.task-status-line span, .task-status-row span, .task-status-row small { color: #778591; font-size: 8px; }
-.task-progress-row progress { flex: 1; min-width: 0; }
-.task-progress-row span { color: #91a39a; font-size: 8px; }
-.task-status-list { display: grid; gap: 0; max-height: 300px; overflow-y: auto; }
-.task-status-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; min-width: 0; border-top: 1px solid #252d36; padding: 7px 0; }
-.task-status-name { display: grid; gap: 2px; min-width: 0; }
-.task-status-name strong, .task-status-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-status-meta { flex-direction: column; align-items: flex-end; gap: 2px; }
-.task-status-meta span.is-active { color: #9ac4aa; }
-.task-status-meta span.is-complete { color: #7f9b88; }
-.task-error { grid-column: 1 / -1; margin: 3px 0 0; color: #cb9090; font-size: 8px; }
 .baseline-gate-list { display: grid; gap: 6px; }
 .baseline-gate-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; border-top: 1px solid #252d36; padding-top: 7px; }
 .baseline-gate-row strong { color: #b9c4ce; font-size: 10px; font-weight: 600; text-transform: capitalize; }
@@ -62,25 +61,34 @@
 .baseline-gate-row > span.is-missing { color: #d0a0a0; background: #281a1a; }
 .baseline-gate-row small { grid-column: 1 / -1; color: #71808d; font-size: 8px; }
 
+.settings-advanced-diagnostics { grid-column: 1 / -1; border-top: 1px solid #252d36; padding-top: 10px; }
+.settings-advanced-diagnostics > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; color: #87939e; }
+.settings-advanced-diagnostics > summary::-webkit-details-marker { display: none; }
+.settings-advanced-diagnostics > summary div { display: grid; gap: 2px; }
+.settings-advanced-diagnostics > summary strong { color: #aeb8c1; font-size: 10px; }
+.settings-advanced-diagnostics > summary span, .settings-advanced-diagnostics > summary small { color: #697681; font-size: 8px; }
+.settings-advanced-diagnostics[open] > summary { margin-bottom: 10px; }
+.settings-diagnostics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+
 @media (max-width: 1180px) {
-  .settings-status-grid { grid-template-columns: minmax(0, 1fr); }
+  .settings-status-grid, .settings-diagnostics-grid { grid-template-columns: minmax(0, 1fr); }
   .settings-form-grid, .runtime-status-grid { grid-template-columns: minmax(0, 1fr); }
   .collaboration-user { grid-template-columns: minmax(0, 1fr) 110px; }
   .collaboration-user label:last-child { grid-column: 2; }
 }
 
 @media (prefers-color-scheme: light) {
-  .status-card h3 { color: #26313a; }
-  .status-facts div, .baseline-gate-row, .collaboration-audit, .task-status-row { border-color: #dde3e9; }
+  .status-card h3, .assistant-models > summary span { color: #26313a; }
+  .status-facts div, .baseline-gate-row, .collaboration-audit, .settings-advanced-diagnostics, .assistant-models[open] > summary { border-color: #dde3e9; }
   .status-facts dd { color: #56616d; }
   .status-capabilities span { border-color: #d7dfe6; color: #63707c; background: #f4f7f9; }
   .status-capabilities span.is-ready { border-color: #b7d3c2; color: #37634a; background: #eef8f2; }
   .status-capabilities span.is-missing { border-color: #e0bcbc; color: #8b4f4f; background: #fff3f3; }
   .status-capabilities span.is-pending { border-color: #e2d4a7; color: #79651e; background: #fff9e7; }
-  .runtime-status-grid article, .collaboration-user { border-color: #dce3e9; background: #fff; }
-  .runtime-status-grid strong, .collaboration-user-main strong, .task-status-row strong { color: #45515c; }
-  .task-active-card { border-color: #b7d3c2; background: #eef8f2; }
+  .runtime-status-grid article, .collaboration-user, .assistant-model-role { border-color: #dce3e9; background: #fff; }
+  .runtime-status-grid strong, .collaboration-user-main strong, .assistant-model-heading strong { color: #45515c; }
   .baseline-gate-row strong { color: #4d5964; }
   .baseline-gate-row > span.is-ready { color: #37634a; background: #eef8f2; }
   .baseline-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
+  .settings-advanced-diagnostics > summary strong { color: #46515b; }
 }
