@@ -62,8 +62,17 @@
 .baseline-gate-row > span.is-missing { color: #d0a0a0; background: #281a1a; }
 .baseline-gate-row small { grid-column: 1 / -1; color: #71808d; font-size: 8px; }
 
+.settings-advanced-diagnostics { grid-column: 1 / -1; border-top: 1px solid #252d36; padding-top: 10px; }
+.settings-advanced-diagnostics > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; color: #87939e; }
+.settings-advanced-diagnostics > summary::-webkit-details-marker { display: none; }
+.settings-advanced-diagnostics > summary div { display: grid; gap: 2px; }
+.settings-advanced-diagnostics > summary strong { color: #aeb8c1; font-size: 10px; }
+.settings-advanced-diagnostics > summary span, .settings-advanced-diagnostics > summary small { color: #697681; font-size: 8px; }
+.settings-advanced-diagnostics[open] > summary { margin-bottom: 10px; }
+.settings-diagnostics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+
 @media (max-width: 1180px) {
-  .settings-status-grid { grid-template-columns: minmax(0, 1fr); }
+  .settings-status-grid, .settings-diagnostics-grid { grid-template-columns: minmax(0, 1fr); }
   .settings-form-grid, .runtime-status-grid { grid-template-columns: minmax(0, 1fr); }
   .collaboration-user { grid-template-columns: minmax(0, 1fr) 110px; }
   .collaboration-user label:last-child { grid-column: 2; }
@@ -71,7 +80,7 @@
 
 @media (prefers-color-scheme: light) {
   .status-card h3 { color: #26313a; }
-  .status-facts div, .baseline-gate-row, .collaboration-audit, .task-status-row { border-color: #dde3e9; }
+  .status-facts div, .baseline-gate-row, .collaboration-audit, .task-status-row, .settings-advanced-diagnostics { border-color: #dde3e9; }
   .status-facts dd { color: #56616d; }
   .status-capabilities span { border-color: #d7dfe6; color: #63707c; background: #f4f7f9; }
   .status-capabilities span.is-ready { border-color: #b7d3c2; color: #37634a; background: #eef8f2; }
@@ -83,4 +92,5 @@
   .baseline-gate-row strong { color: #4d5964; }
   .baseline-gate-row > span.is-ready { color: #37634a; background: #eef8f2; }
   .baseline-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
+  .settings-advanced-diagnostics > summary strong { color: #46515b; }
 }
