@@ -44,12 +44,32 @@ export interface RuntimeKindStatus {
   artifacts?: Array<Record<string, unknown>>;
   dependencies?: Record<string, unknown>;
 }
+export type SemanticEmbeddingProfile = "standard" | "lightweight";
+export interface SemanticRuntimeStatus {
+  enabled: boolean;
+  profile: SemanticEmbeddingProfile | "external" | string;
+  model: string;
+  runtime: string;
+  dimensions: number;
+  source: string;
+  local: boolean;
+  runtime_available: boolean;
+  prepared: boolean;
+  cache_dir: string;
+  cache_bytes: number;
+  last_error?: string;
+  query_instruction_version?: string;
+}
 export interface LocalRuntimePayload {
   contract: "local_runtime.v1" | string;
   local_vision_enabled: boolean;
   local_vision_model: string;
   face_identity_enabled: boolean;
   speaker_identity_enabled: boolean;
+  semantic_embedding_enabled: boolean;
+  semantic_embedding_profile: SemanticEmbeddingProfile;
+  semantic_embedding_dimensions: number;
+  semantic: SemanticRuntimeStatus;
   vision: RuntimeKindStatus & { running?: boolean; model?: string };
   identity: { face: RuntimeKindStatus; speaker: RuntimeKindStatus; root: string; python_runtime_root?: string };
   mlx_cache_bytes: number;
@@ -57,7 +77,16 @@ export interface LocalRuntimePayload {
   environment: DesktopEnvironment;
 }
 export type LocalRuntimeAction =
-  | { action: "set"; local_vision_enabled?: boolean; local_vision_model?: string; face_identity_enabled?: boolean; speaker_identity_enabled?: boolean }
+  | {
+      action: "set";
+      local_vision_enabled?: boolean;
+      local_vision_model?: string;
+      face_identity_enabled?: boolean;
+      speaker_identity_enabled?: boolean;
+      semantic_embedding_enabled?: boolean;
+      semantic_embedding_profile?: SemanticEmbeddingProfile;
+      semantic_embedding_dimensions?: number;
+    }
   | { action: "prepare" }
   | { action: "prepare_identity"; kind: "face" | "speaker" }
   | { action: "stop" };
