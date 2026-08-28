@@ -325,7 +325,7 @@ export function App() {
           ) : surface === "team" ? (
             <TeamWebWorkbench workspacePath={workspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
           ) : surface === "settings" ? (
-            selectedProject ? <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} projectId={selectedProject.project_id} /> : <div className="primary-empty"><strong>选择项目后配置制作环境</strong><p>模型、运行时和项目级设置跟随当前项目。</p></div>
+            <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} projectId={selectedProject?.project_id ?? ""} />
           ) : selectedProject ? (
             <ProjectWorkbench key={selectedProject.project_id} baseUrl={snapshot.baseUrl} project={selectedProject} />
           ) : (
