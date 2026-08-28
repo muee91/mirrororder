@@ -34,7 +34,7 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
   const [prepareAfterCreate, setPrepareAfterCreate] = useState(true);
   const [preflight, setPreflight] = useState<ProjectPreflight | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
-  const [message, setMessage] = useState("项目生命周期由 Python WorkspaceRegistry 管理。 ");
+  const [message, setMessage] = useState("选择剧本和素材来源，镜序会先检查项目是否可以安全创建。");
   const [busy, setBusy] = useState(false);
 
   function payload(): ProjectCreatePayload {
@@ -50,7 +50,7 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
 
   async function chooseFile(kind: "script" | "fcpxml"): Promise<void> {
     if (!isTauri()) {
-      setMessage("浏览器预览不提供原生文件选择；可以手动填写路径。");
+      setMessage("浏览器预览不提供系统文件选择器；可以手动填写路径。");
       return;
     }
     try {
@@ -73,7 +73,7 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
 
   async function chooseMediaRoots(): Promise<void> {
     if (!isTauri()) {
-      setMessage("浏览器预览不提供原生目录选择；可以手动填写路径。");
+      setMessage("浏览器预览不提供系统目录选择器；可以手动填写路径。");
       return;
     }
     try {
@@ -89,11 +89,11 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
 
   async function runPreflight(): Promise<ProjectPreflight | null> {
     setBusy(true);
-    setMessage("正在执行 Python project preflight…");
+    setMessage("正在检查剧本与素材来源…");
     try {
       const next = await client.preflightProject(payload());
       setPreflight(next);
-      setMessage(next.ready ? "项目预检通过。" : `项目预检未通过：${next.errors.join("；")}`);
+      setMessage(next.ready ? "检查通过，可以创建项目。" : `还不能创建：${next.errors.join("；")}`);
       return next;
     } catch (error) {
       setMessage(errorMessage(error));
@@ -109,20 +109,20 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
       const checked = await client.preflightProject(payload());
       setPreflight(checked);
       if (!checked.ready) {
-        setMessage(`项目预检未通过：${checked.errors.join("；")}`);
+        setMessage(`还不能创建：${checked.errors.join("；")}`);
         return;
       }
-      setMessage("正在由 Python WorkspaceRegistry 创建项目…");
+      setMessage("正在创建项目…");
       const created = await client.createProject(payload());
       if (prepareAfterCreate) {
         try {
-          const task = await client.prepareProject(created.project_id);
-          setMessage(`项目已创建 · prepare task ${task.task_id ?? "submitted"}`);
+          await client.prepareProject(created.project_id);
+          setMessage("项目已创建，正在后台整理素材与剧本。");
         } catch (error) {
-          setMessage(`项目已创建，但 prepare task 提交失败：${errorMessage(error)}`);
+          setMessage(`项目已创建，但后台整理没有启动：${errorMessage(error)}`);
         }
       } else {
-        setMessage("项目已创建；尚未启动 prepare task。");
+        setMessage("项目已创建。");
       }
       setName("");
       setScriptPath("");
@@ -130,6 +130,7 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
       setMediaRoots("");
       setPreflight(null);
       await onWorkspaceChanged(created.project_id);
+      setOpen(false);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -139,16 +140,17 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
 
   async function removeSelected(): Promise<void> {
     if (!selectedProject || deleteConfirm.trim() !== selectedProject.project_id) {
-      setMessage("删除前必须完整输入当前 project_id。 ");
+      setMessage("删除前必须完整输入当前项目 ID。");
       return;
     }
     setBusy(true);
-    setMessage(`正在删除 ${selectedProject.project_id}…`);
+    setMessage(`正在移除 ${selectedProject.name || selectedProject.project_id}…`);
     try {
       await client.deleteProject(selectedProject.project_id);
       setDeleteConfirm("");
-      setMessage("项目已由 Python WorkspaceRegistry 安全删除。");
+      setMessage("项目已移除。");
       await onWorkspaceChanged();
+      setOpen(false);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -157,68 +159,78 @@ export function ProjectLifecyclePanel({ baseUrl, selectedProject, onWorkspaceCha
   }
 
   return (
-    <section className="project-lifecycle-panel">
-      <button type="button" className="secondary lifecycle-toggle" onClick={() => setOpen((value) => !value)}>
-        {open ? "收起项目管理" : "新建 / 删除项目"}
-      </button>
+    <>
+      <button type="button" className="project-new-button" onClick={() => setOpen(true)}>新建</button>
       {open ? (
-        <div className="project-lifecycle-body">
-          <p className="project-lifecycle-message">{message}</p>
-          <div className="lifecycle-kind">
-            <button type="button" className={inputKind === "fcpxml" ? "is-active" : ""} onClick={() => { setInputKind("fcpxml"); setPreflight(null); }}>FCPXML</button>
-            <button type="button" className={inputKind === "media-directory" ? "is-active" : ""} onClick={() => { setInputKind("media-directory"); setPreflight(null); }}>媒体目录</button>
-          </div>
-          <label>
-            <span>项目名称</span>
-            <input value={name} onChange={(event) => { setName(event.target.value); setPreflight(null); }} placeholder="短剧 A组" />
-          </label>
-          <label>
-            <span>剧本</span>
-            <div className="lifecycle-path-row">
-              <input value={scriptPath} onChange={(event) => { setScriptPath(event.target.value); setPreflight(null); }} spellCheck={false} />
-              <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("script")}>选择</button>
-            </div>
-          </label>
-          {inputKind === "fcpxml" ? (
-            <label>
-              <span>FCPXML</span>
-              <div className="lifecycle-path-row">
-                <input value={fcpxmlPath} onChange={(event) => { setFcpxmlPath(event.target.value); setPreflight(null); }} spellCheck={false} />
-                <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("fcpxml")}>选择</button>
+        <div className="project-lifecycle-overlay" role="presentation" onMouseDown={() => !busy && setOpen(false)}>
+          <section className="project-lifecycle-dialog" role="dialog" aria-modal="true" aria-label="新建项目" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="project-lifecycle-header">
+              <div>
+                <p className="eyebrow">Production</p>
+                <h2>新建项目</h2>
               </div>
-            </label>
-          ) : (
-            <label>
-              <span>媒体目录 · 每行一个</span>
-              <textarea rows={4} value={mediaRoots} onChange={(event) => { setMediaRoots(event.target.value); setPreflight(null); }} spellCheck={false} />
-              <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseMediaRoots()}>选择目录</button>
-            </label>
-          )}
-          <label className="lifecycle-checkbox">
-            <input type="checkbox" checked={prepareAfterCreate} onChange={(event) => setPrepareAfterCreate(event.target.checked)} />
-            <span>创建后提交 prepare_project</span>
-          </label>
-          {preflight ? (
-            <div className={`lifecycle-preflight ${preflight.ready ? "is-ready" : "is-error"}`}>
-              <strong>{preflight.ready ? "Preflight ready" : "Preflight blocked"}</strong>
-              {preflight.errors.map((error) => <span key={error}>{error}</span>)}
-              {preflight.warnings.map((warning) => <span key={warning}>⚠ {warning}</span>)}
-            </div>
-          ) : null}
-          <div className="lifecycle-actions">
-            <button type="button" className="secondary" disabled={busy} onClick={() => void runPreflight()}>预检</button>
-            <button type="button" disabled={busy} onClick={() => void create()}>创建项目</button>
-          </div>
+              <button type="button" className="dialog-close" disabled={busy} onClick={() => setOpen(false)}>关闭</button>
+            </header>
 
-          {selectedProject ? (
-            <div className="lifecycle-delete">
-              <p>删除只允许当前 workspace 的 generated project，并由 Core 先移入 quarantine 再更新 registry。</p>
-              <input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={`输入 ${selectedProject.project_id}`} />
-              <button type="button" className="danger-quiet" disabled={busy || deleteConfirm.trim() !== selectedProject.project_id} onClick={() => void removeSelected()}>删除选中项目</button>
+            <div className="project-lifecycle-body">
+              <p className="project-lifecycle-message">{message}</p>
+              <div className="lifecycle-kind">
+                <button type="button" className={inputKind === "fcpxml" ? "is-active" : ""} onClick={() => { setInputKind("fcpxml"); setPreflight(null); }}>已有 FCPXML</button>
+                <button type="button" className={inputKind === "media-directory" ? "is-active" : ""} onClick={() => { setInputKind("media-directory"); setPreflight(null); }}>素材目录</button>
+              </div>
+              <label><span>项目名称</span><input value={name} onChange={(event) => { setName(event.target.value); setPreflight(null); }} placeholder="例如：人不狠，站不稳" /></label>
+              <label>
+                <span>剧本</span>
+                <div className="lifecycle-path-row">
+                  <input value={scriptPath} onChange={(event) => { setScriptPath(event.target.value); setPreflight(null); }} spellCheck={false} />
+                  <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("script")}>选择</button>
+                </div>
+              </label>
+              {inputKind === "fcpxml" ? (
+                <label>
+                  <span>FCPXML</span>
+                  <div className="lifecycle-path-row">
+                    <input value={fcpxmlPath} onChange={(event) => { setFcpxmlPath(event.target.value); setPreflight(null); }} spellCheck={false} />
+                    <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("fcpxml")}>选择</button>
+                  </div>
+                </label>
+              ) : (
+                <label>
+                  <span>素材目录</span>
+                  <textarea rows={4} value={mediaRoots} onChange={(event) => { setMediaRoots(event.target.value); setPreflight(null); }} spellCheck={false} />
+                  <button type="button" className="secondary choose-roots" disabled={!isTauri()} onClick={() => void chooseMediaRoots()}>选择目录</button>
+                </label>
+              )}
+              <label className="lifecycle-checkbox">
+                <input type="checkbox" checked={prepareAfterCreate} onChange={(event) => setPrepareAfterCreate(event.target.checked)} />
+                <span>创建后在后台自动整理素材、转写并匹配剧本</span>
+              </label>
+              {preflight ? (
+                <div className={`lifecycle-preflight ${preflight.ready ? "is-ready" : "is-error"}`}>
+                  <strong>{preflight.ready ? "可以创建" : "需要处理"}</strong>
+                  {preflight.errors.map((error) => <span key={error}>{error}</span>)}
+                  {preflight.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+                </div>
+              ) : null}
+              <div className="lifecycle-actions">
+                <button type="button" className="secondary" disabled={busy} onClick={() => void runPreflight()}>检查</button>
+                <button type="button" disabled={busy} onClick={() => void create()}>创建项目</button>
+              </div>
+
+              {selectedProject ? (
+                <details className="lifecycle-danger-zone">
+                  <summary>项目管理</summary>
+                  <div className="lifecycle-delete">
+                    <p>移除项目是低频操作。输入项目 ID 确认：<code>{selectedProject.project_id}</code></p>
+                    <input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={selectedProject.project_id} />
+                    <button type="button" className="danger-quiet" disabled={busy || deleteConfirm.trim() !== selectedProject.project_id} onClick={() => void removeSelected()}>移除当前项目</button>
+                  </div>
+                </details>
+              ) : null}
             </div>
-          ) : null}
+          </section>
         </div>
       ) : null}
-    </section>
+    </>
   );
 }
