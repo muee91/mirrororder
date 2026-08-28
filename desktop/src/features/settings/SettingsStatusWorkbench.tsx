@@ -120,7 +120,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
           <p className="production-note">这里直接读写当前工作区已有的前端偏好，不创建 Desktop 专用业务配置副本。</p>
         </div>
 
-        <LocalRuntimePanel baseUrl={baseUrl} />
+        <LocalRuntimePanel baseUrl={baseUrl} projectId={projectId} />
         <CollaborationPanel baseUrl={baseUrl} />
 
         <div className="production-panel status-card baseline-gate-card">
