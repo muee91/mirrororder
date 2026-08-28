@@ -38,6 +38,22 @@ function completed(task: ProjectTaskRecord): boolean {
   return task.status === "completed";
 }
 
+export function latestTaskAttempts(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
+  const seen = new Set<string>();
+  const latest: ProjectTaskRecord[] = [];
+  // ProjectTaskClient.list mirrors TaskManager.list: newest attempt first.
+  // Retries intentionally reuse an idempotency key, so only the newest attempt
+  // should contribute to current status. Older attempts remain in tasks.json as
+  // durable history without leaving a permanent false "needs attention" badge.
+  for (const task of tasks) {
+    const key = task.idempotency_key?.trim() || task.task_id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    latest.push(task);
+  }
+  return latest;
+}
+
 function progress(task: ProjectTaskRecord): { done: number; total: number } | null {
   const value = task.progress ?? {};
   const done = value.done ?? value.audit_done ?? value.perception_done ?? value.face_done ?? value.speaker_done;
@@ -84,7 +100,7 @@ function stageLabel(stage: string): string {
     waiting_cpu: "等待处理资源",
     waiting_mlx: "等待本地模型资源",
     waiting_vision: "等待视觉资源",
-    waiting_embedding: "等待语义模型资源",
+    waiting_embedding: "等待语义索引资源",
     completed: "完成",
     failed: "失败",
     cancelled: "已取消",
@@ -122,7 +138,8 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Prop
     try {
       const next = await Promise.all(projects.map(async (project): Promise<ProjectTasks> => {
         try {
-          return { project, tasks: sortTasks(await client.list(project.project_id)), error: "" };
+          const attempts = latestTaskAttempts(await client.list(project.project_id));
+          return { project, tasks: sortTasks(attempts), error: "" };
         } catch (error) {
           return { project, tasks: [], error: errorMessage(error) };
         }
@@ -219,7 +236,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Prop
         <button type="button" className={showCompleted ? "is-active" : ""} aria-pressed={showCompleted} onClick={() => setShowCompleted((value) => !value)}><strong>{totals.completed}</strong>{showCompleted ? "隐藏已完成" : "查看已完成"}</button>
       </div>
 
-      <p className="status-center-note">同步、转写、素材分析、内容识别、人物 / 声纹与剧本归集等后台工作统一在这里查看。项目画布只显示制作对象和必要的轻量进度。</p>
+      <p className="status-center-note">同步、转写、素材分析、内容识别、人物 / 声纹、语义索引与剧本归集等后台工作统一在这里查看。项目画布只显示制作对象和必要的轻量进度。</p>
 
       <div className="status-center-projects">
         {visibleRows.map((row) => {
