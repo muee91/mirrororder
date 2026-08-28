@@ -71,7 +71,7 @@ def _frame_documents(
                     "start": relative_time,
                     "end": relative_time,
                     # SemanticStore requires safe display text. The image path is
-                    # deliberately transient and is stripped before persistence.
+                    # deliberately transient and _safe_document drops unknown keys.
                     "text": f"代表帧 · {camera or 'camera'} · {relative_time:.2f}s",
                     "metadata": metadata,
                     "content_fingerprint": fingerprint,
@@ -91,6 +91,15 @@ def _prepare_documents(
     unknown = selected_sources - BACKGROUND_SEMANTIC_SOURCES
     if unknown:
         raise ValueError("unknown semantic sources: " + ", ".join(sorted(unknown)))
+
+    # Existing callers created before frame retrieval know only the three text
+    # evidence sources and explicitly pass that complete legacy set. Treat that
+    # exact set as "all semantic evidence" so production-task refreshes also
+    # pick up representative frames without widening deliberately scoped calls
+    # such as sources=["speech"].
+    if selected_sources == set(SEMANTIC_SOURCES):
+        selected_sources.add(FRAME_SOURCE)
+
     groups = indexer._selected_groups(group_ids)
     prepared: list[tuple[str, list[dict[str, Any]]]] = []
     for source in sorted(selected_sources):
