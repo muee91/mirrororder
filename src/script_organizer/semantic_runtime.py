@@ -120,7 +120,7 @@ def install_semantic_runtime() -> None:
                 self.workspace_id,
                 self.project_id,
                 self.config,
-            ).search(text, limit=14, refresh=True)
+            ).search(text, limit=14, refresh=False)
             safe_retrieval = safe_search_payload(retrieval)
         except Exception:
             safe_retrieval = {
@@ -323,8 +323,8 @@ def install_semantic_runtime() -> None:
                 actor="system",
             )
         except Exception:
-            # Search remains read-only and can refresh on demand. Failure to
-            # enqueue derived semantic work must never fail the source task.
+            # Derived semantic refresh must never fail the source production task.
+            # Read paths remain side-effect free; the next background refresh can retry.
             return
 
     def make_handler_with_semantic(service: Any, web_root):
@@ -359,7 +359,7 @@ def install_semantic_runtime() -> None:
                         text,
                         limit=limit,
                         sources=sources,
-                        refresh=True,
+                        refresh=False,
                     )
                     self._send_json(payload)
                     return
