@@ -46,6 +46,9 @@ def test_stager_requires_relocatable_python_and_media_tools() -> None:
     assert "MIRRORORDER_PORTABLE_PYTHON_ROOT" in stager
     assert "MIRRORORDER_MEDIA_TOOLS_ROOT" in stager
     assert "assertSelfContainedSymlinks" in stager
+    assert "normalizeBundledMachOPaths" in stager
+    assert "install_name_tool" in stager
+    assert "re-sign" in stager
     assert "staged Python relocation probe" in stager
     assert "parseToolVersionOutput" in stager
     assert "./runtime-tools.mjs" in stager

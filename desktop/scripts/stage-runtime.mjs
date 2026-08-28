@@ -114,6 +114,108 @@ function assertSelfContainedSymlinks(root, label) {
   visit(root);
 }
 
+function isMachOCandidate(item, stat) {
+  const extensionCandidate = /\.(?:dylib|so)(?:\..*)?$/i.test(path.basename(item));
+  const executableStat = stat.isSymbolicLink() ? fs.statSync(item) : stat;
+  return extensionCandidate || Boolean(executableStat.mode & 0o111);
+}
+
+function collectMachOFiles(root) {
+  const files = [];
+  const visited = new Set();
+  const visit = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const item = path.join(current, entry.name);
+      const stat = fs.lstatSync(item);
+      if (stat.isDirectory()) {
+        visit(item);
+        continue;
+      }
+      if (!stat.isFile() && !stat.isSymbolicLink()) continue;
+      if (stat.isSymbolicLink() && !fs.statSync(item).isFile()) continue;
+      if (!isMachOCandidate(item, stat)) continue;
+      const realPath = fs.realpathSync(item);
+      if (visited.has(realPath)) continue;
+      visited.add(realPath);
+      if (run("file", ["-b", realPath], `Mach-O probe ${path.basename(item)}`).includes("Mach-O")) {
+        files.push(realPath);
+      }
+    }
+  };
+  visit(root);
+  return files.sort();
+}
+
+function isAllowedMachODependency(dependency) {
+  return (
+    dependency.startsWith("@rpath/") ||
+    dependency.startsWith("@loader_path/") ||
+    dependency.startsWith("@executable_path/") ||
+    dependency.startsWith("/usr/lib/") ||
+    dependency.startsWith("/System/Library/")
+  );
+}
+
+function localMachODependency(binary, dependency, byBasename) {
+  const basename = path.basename(dependency);
+  const sameDirectory = path.join(path.dirname(binary), basename);
+  if (fs.existsSync(sameDirectory) && fs.statSync(sameDirectory).isFile()) return fs.realpathSync(sameDirectory);
+  const suffix = dependency.split("/").slice(-3).join("/");
+  const suffixMatches = (byBasename.get(basename) || []).filter((candidate) => candidate.endsWith(`/${suffix}`));
+  if (suffixMatches.length === 1) return suffixMatches[0];
+  const matches = byBasename.get(basename) || [];
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function loaderRelativePath(binary, target) {
+  const relative = path.relative(path.dirname(binary), target).split(path.sep).join("/");
+  return `@loader_path/${relative}`;
+}
+
+function normalizeBundledMachOPaths(root) {
+  if (process.platform !== "darwin") return;
+  const binaries = collectMachOFiles(root);
+  const byBasename = new Map();
+  for (const binary of binaries) {
+    const basename = path.basename(binary);
+    const entries = byBasename.get(basename) || [];
+    entries.push(binary);
+    byBasename.set(basename, entries);
+  }
+  let rewrites = 0;
+  for (const binary of binaries) {
+    const output = run("otool", ["-L", binary], `Mach-O dependency probe ${path.basename(binary)}`);
+    let modified = false;
+    for (const raw of output.split(/\r?\n/).slice(1)) {
+      if (!/^\s/.test(raw)) continue; // universal-binary architecture headers are not dependencies
+      const dependency = raw.trim().split(" (compatibility")[0];
+      if (!dependency || isAllowedMachODependency(dependency) || dependency === path.basename(binary)) continue;
+      const target = localMachODependency(binary, dependency, byBasename);
+      if (!target) fail(`staged Mach-O dependency is not bundled: ${binary} -> ${dependency}`);
+      const replacement = loaderRelativePath(binary, target);
+      run("install_name_tool", ["-change", dependency, replacement, binary], `rewrite ${path.basename(binary)} dependency`);
+      modified = true;
+      rewrites += 1;
+    }
+    if (/\.(?:dylib|so)(?:\..*)?$/i.test(path.basename(binary))) {
+      const idOutput = spawnSync("otool", ["-D", binary], { encoding: "utf8" });
+      const installName = idOutput.status === 0 ? (idOutput.stdout || "").trim().split(/\r?\n/)[1] : "";
+      if (installName && !isAllowedMachODependency(installName) && installName !== path.basename(binary)) {
+        run("install_name_tool", ["-id", `@loader_path/${path.basename(binary)}`, binary], `rewrite ${path.basename(binary)} install name`);
+        modified = true;
+        rewrites += 1;
+      }
+    }
+    if (modified) {
+      // install_name_tool invalidates wheel signatures. macOS may refuse to
+      // load the modified nested library (notably Torch's libomp) unless the
+      // staged copy is signed again before the isolated import probe.
+      run("codesign", ["--force", "--sign", "-", binary], `re-sign ${path.basename(binary)}`);
+    }
+  }
+  console.log(`Mach-O relocation: ${binaries.length} files inspected · ${rewrites} install names normalized`);
+}
+
 function cleanGeneratedTarget(target) {
   fs.mkdirSync(target, { recursive: true });
   for (const entry of fs.readdirSync(target)) {
@@ -238,6 +340,7 @@ for (const executable of [stagedPython, stagedFfmpeg, stagedFfprobe]) {
 
 assertSelfContainedSymlinks(pythonTarget, "staged portable Python runtime");
 assertSelfContainedSymlinks(toolsTarget, "staged media tools runtime");
+normalizeBundledMachOPaths(pythonTarget);
 const stagedPythonProbe = run(
   stagedPython,
   [

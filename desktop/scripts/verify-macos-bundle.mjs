@@ -70,6 +70,7 @@ function inspectMachO(binary, appRoot) {
   const selfInstallName = path.basename(binary);
   const forbidden = [];
   for (const raw of output.split(/\r?\n/).slice(1)) {
+    if (!/^\s/.test(raw)) continue; // universal-binary architecture headers are not dependencies
     const dependency = raw.trim().split(" (compatibility")[0];
     if (!dependency) continue;
     const allowed =
