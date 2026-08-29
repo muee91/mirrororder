@@ -118,10 +118,18 @@ def _frame_duration(sequence: dict[str, Any]) -> Fraction:
 
 def _validate_tracks(sequence: dict[str, Any]) -> list[dict[str, Any]]:
     tracks = [_object(item, "timeline track") for item in _list(sequence.get("tracks"), "sequence.tracks")]
-    video_tracks = [item for item in tracks if str(item.get("kind", "")) == "video" and _list(item.get("clips", []), "track.clips")]
-    if len(video_tracks) > 1:
-        raise UnsafeTimelineDelivery("timeline_delivery.v1 supports exactly one non-empty video track")
-    audio_tracks = [item for item in tracks if str(item.get("kind", "")) == "audio" and _list(item.get("clips", []), "track.clips")]
+    video_tracks = [
+        item
+        for item in tracks
+        if str(item.get("kind", "")) == "video" and _list(item.get("clips", []), "track.clips")
+    ]
+    if len(video_tracks) != 1:
+        raise UnsafeTimelineDelivery("timeline_delivery.v1 requires exactly one non-empty video track")
+    audio_tracks = [
+        item
+        for item in tracks
+        if str(item.get("kind", "")) == "audio" and _list(item.get("clips", []), "track.clips")
+    ]
     if audio_tracks:
         raise UnsafeTimelineDelivery("timeline_delivery.v1 does not support independent audio-track clips")
     transitions = _list(sequence.get("transitions", []), "sequence.transitions")
@@ -159,6 +167,24 @@ def _source_map(project: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _multicam_map(project: dict[str, Any]) -> dict[str, set[str]]:
+    result: dict[str, set[str]] = {}
+    for raw in _list(project.get("multicam_groups", []), "timeline.multicam_groups"):
+        group = _object(raw, "timeline multicam group")
+        group_id = str(group.get("group_id", "") or "")
+        if not group_id or group_id in result:
+            raise UnsafeTimelineDelivery(f"invalid or duplicate Timeline multicam group_id: {group_id or '<empty>'}")
+        source_ids = {
+            str(value or "")
+            for value in _list(group.get("angle_source_ids", []), "multicam angle_source_ids")
+            if str(value or "")
+        }
+        if not source_ids:
+            raise UnsafeTimelineDelivery(f"Timeline multicam group has no angle sources: {group_id}")
+        result[group_id] = source_ids
+    return result
+
+
 def _source_assets(root: ET.Element) -> tuple[ET.Element, dict[str, ET.Element], dict[str, Fraction]]:
     resources = next((item for item in root if _tag(item) == "resources"), None)
     if resources is None:
@@ -177,13 +203,52 @@ def _source_assets(root: ET.Element) -> tuple[ET.Element, dict[str, ET.Element],
     return resources, assets, formats
 
 
-def _matching_format_id(formats: dict[str, Fraction], frame_duration: Fraction) -> str:
+def _source_project_sequence(root: ET.Element) -> ET.Element | None:
+    """Return the same first user Project sequence class used by the FCPXML reader."""
+    for project in root.iter():
+        if _tag(project) != "project":
+            continue
+        for element in project.iter():
+            if _tag(element) == "sequence":
+                return element
+    return None
+
+
+def _sequence_attributes(
+    root: ET.Element,
+    formats: dict[str, Fraction],
+    frame_duration: Fraction,
+) -> dict[str, str]:
+    source_sequence = _source_project_sequence(root)
+    if source_sequence is not None:
+        source_format = str(source_sequence.get("format", "") or "")
+        if source_format:
+            source_duration = formats.get(source_format)
+            if source_duration is None:
+                raise UnsafeTimelineDelivery(f"source Project sequence format has no frameDuration: {source_format}")
+            if source_duration != frame_duration:
+                raise UnsafeTimelineDelivery(
+                    "Timeline frame rate does not match the analyzed source Project sequence format"
+                )
+            attrs = {
+                key: value
+                for key, value in source_sequence.attrib.items()
+                if key in {"tcFormat", "audioLayout", "audioRate"} and str(value).strip()
+            }
+            attrs["format"] = source_format
+            attrs["tcStart"] = "0s"
+            return attrs
+
     matches = [format_id for format_id, duration in formats.items() if duration == frame_duration]
     if not matches:
         raise UnsafeTimelineDelivery(
             f"source FCPXML has no format matching Timeline frame duration {_format_time(frame_duration)}"
         )
-    return sorted(matches)[0]
+    if len(matches) != 1:
+        raise UnsafeTimelineDelivery(
+            "source FCPXML has multiple matching formats but no unambiguous Project sequence format"
+        )
+    return {"format": matches[0], "tcStart": "0s"}
 
 
 def _asset_bounds(asset: ET.Element) -> tuple[Fraction, Fraction | None]:
@@ -196,12 +261,11 @@ def _asset_bounds(asset: ET.Element) -> tuple[Fraction, Fraction | None]:
 def _timeline_clips(
     video_tracks: list[dict[str, Any]],
     sources: dict[str, dict[str, Any]],
+    multicam_groups: dict[str, set[str]],
     clip_assets: dict[str, str],
     assets: dict[str, ET.Element],
     frame_duration: Fraction,
 ) -> tuple[list[dict[str, Any]], int]:
-    if not video_tracks:
-        return [], 0
     raw_clips = _list(video_tracks[0].get("clips", []), "video track clips")
     clips: list[dict[str, Any]] = []
     flattened_multicam = 0
@@ -214,7 +278,23 @@ def _timeline_clips(
         seen_ids.add(clip_id)
         if clip.get("enabled") is False:
             continue
-        source_id = str(clip.get("selected_angle_source_id", "") or clip.get("source_id", "") or "")
+
+        base_source_id = str(clip.get("source_id", "") or "")
+        selected_source_id = str(clip.get("selected_angle_source_id", "") or "")
+        multicam_group_id = str(clip.get("multicam_group_id", "") or "")
+        if multicam_group_id:
+            group_sources = multicam_groups.get(multicam_group_id)
+            if group_sources is None:
+                raise UnsafeTimelineDelivery(f"Timeline clip references unknown multicam group: {clip_id} -> {multicam_group_id}")
+            if not selected_source_id:
+                raise UnsafeTimelineDelivery(f"Timeline multicam clip has no selected angle: {clip_id}")
+            if selected_source_id not in group_sources:
+                raise UnsafeTimelineDelivery(f"Timeline selected angle is not in multicam group: {clip_id}")
+            flattened_multicam += 1
+        elif selected_source_id:
+            raise UnsafeTimelineDelivery(f"Timeline clip has selected angle without multicam group: {clip_id}")
+
+        source_id = selected_source_id or base_source_id
         source = sources.get(source_id)
         if source is None:
             raise UnsafeTimelineDelivery(f"Timeline clip references unknown active source: {clip_id} -> {source_id}")
@@ -229,6 +309,11 @@ def _timeline_clips(
         timeline_start = _non_negative_int(clip.get("timeline_start"), f"clip {clip_id} timeline_start")
         source_in = _non_negative_int(clip.get("source_in"), f"clip {clip_id} source_in")
         duration = _positive_int(clip.get("duration"), f"clip {clip_id} duration")
+        source_duration_frames = source.get("duration_frames")
+        if source_duration_frames is not None:
+            total_frames = _positive_int(source_duration_frames, f"source {source_id} duration_frames")
+            if source_in + duration > total_frames:
+                raise UnsafeTimelineDelivery(f"Timeline clip source range exceeds TimelineSource duration: {clip_id}")
         source_start = source_in * frame_duration
         source_duration = duration * frame_duration
         asset_start, asset_end = _asset_bounds(asset)
@@ -236,8 +321,6 @@ def _timeline_clips(
             raise UnsafeTimelineDelivery(f"Timeline clip source_in precedes asset start: {clip_id}")
         if asset_end is not None and source_start + source_duration > asset_end:
             raise UnsafeTimelineDelivery(f"Timeline clip source range exceeds asset duration: {clip_id}")
-        if clip.get("multicam_group_id"):
-            flattened_multicam += 1
         clips.append(
             {
                 "clip_id": clip_id,
@@ -250,6 +333,8 @@ def _timeline_clips(
             }
         )
 
+    if not clips:
+        raise UnsafeTimelineDelivery("timeline_delivery.v1 requires at least one enabled video clip")
     clips.sort(key=lambda item: (item["timeline_start"], item["clip_id"]))
     previous_end = 0
     for clip in clips:
@@ -307,6 +392,7 @@ def export_timeline_snapshot(
     frame_duration = _frame_duration(sequence)
     video_tracks = _validate_tracks(sequence)
     sources = _source_map(timeline)
+    multicam_groups = _multicam_map(timeline)
     clip_assets = _material_asset_map(config)
     if not config.fcpxml or not config.fcpxml.is_file():
         raise UnsafeTimelineDelivery("Timeline FCPXML delivery requires the original source FCPXML")
@@ -316,16 +402,18 @@ def export_timeline_snapshot(
         raise UnsafeTimelineDelivery(f"cannot parse source FCPXML safely: {error}") from error
     source_root = source_tree.getroot()
     resources, assets, formats = _source_assets(source_root)
-    format_id = _matching_format_id(formats, frame_duration)
+    sequence_attrs = _sequence_attributes(source_root, formats, frame_duration)
     clips, flattened_multicam = _timeline_clips(
         video_tracks,
         sources,
+        multicam_groups,
         clip_assets,
         assets,
         frame_duration,
     )
 
     namespace_prefix = source_root.tag[:-len("fcpxml")] if source_root.tag.endswith("fcpxml") else ""
+
     def q(tag: str) -> str:
         return f"{namespace_prefix}{tag}" if namespace_prefix else tag
 
@@ -334,12 +422,15 @@ def export_timeline_snapshot(
     library = ET.SubElement(output_root, q("library"))
     event = ET.SubElement(library, q("event"), {"name": "MirrorOrder Timeline Delivery"})
     project = ET.SubElement(event, q("project"), {"name": f"{config.name} · Timeline"})
-    sequence_end_frames = max((int(item["timeline_start"]) + int(item["duration"] / frame_duration) for item in clips), default=0)
+    sequence_end_frames = max(
+        int(item["timeline_start"]) + int(item["duration"] / frame_duration)
+        for item in clips
+    )
     sequence_element = ET.SubElement(
         project,
         q("sequence"),
         {
-            "format": format_id,
+            **sequence_attrs,
             "duration": _format_time(sequence_end_frames * frame_duration),
         },
     )
@@ -384,17 +475,25 @@ def export_timeline_snapshot(
         "timeline_project_id": project_id,
         "sequence_id": str(sequence.get("sequence_id", "") or ""),
         "frame_rate": {
-            "numerator": _positive_int(_object(sequence.get("frame_rate"), "sequence.frame_rate").get("numerator"), "frame_rate.numerator"),
-            "denominator": _positive_int(_object(sequence.get("frame_rate"), "sequence.frame_rate").get("denominator"), "frame_rate.denominator"),
+            "numerator": _positive_int(
+                _object(sequence.get("frame_rate"), "sequence.frame_rate").get("numerator"),
+                "frame_rate.numerator",
+            ),
+            "denominator": _positive_int(
+                _object(sequence.get("frame_rate"), "sequence.frame_rate").get("denominator"),
+                "frame_rate.denominator",
+            ),
         },
         "video_clip_count": len(clips),
         "multicam_flattened_count": flattened_multicam,
         "markers_not_exported": len(_list(sequence.get("markers", []), "sequence.markers")),
+        "device_paths_exposed": False,
         "semantics": {
             "source_resources_preserved": True,
             "timeline_positions_preserved": True,
             "source_ranges_preserved": True,
             "selected_multicam_angles_flattened_to_assets": True,
+            "embedded_asset_audio_preserved": True,
             "independent_audio_tracks_supported": False,
             "transitions_supported": False,
             "markers_are_delivery_authority": False,
