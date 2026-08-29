@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 # Compatibility module. Keep the public import surface stable while the active
-# implementation evolves independently.
+# implementation evolves independently. Importing this module must not mutate
+# global Host runtime state; role-inference installation belongs to the explicit
+# identity API installer in the Production runtime stack.
 from .identity_runtime_v3 import (
     FACE_DETECTOR,
     FACE_RECOGNIZER,
@@ -13,11 +15,6 @@ from .identity_runtime_v3 import (
     identity_model_root,
     identity_python_root,
 )
-from .identity_role_inference import install_identity_role_inference
-
-# Role candidates are a derived, read-only convenience layer over the device-
-# local identity library. They never write role_name or human_confirmed.
-install_identity_role_inference()
 
 __all__ = [
     "ModelArtifact",
