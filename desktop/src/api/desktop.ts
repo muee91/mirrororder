@@ -44,6 +44,7 @@ export interface RuntimeKindStatus {
   artifacts?: Array<Record<string, unknown>>;
   dependencies?: Record<string, unknown>;
 }
+export interface ProjectTask { task_id?: string; status?: string; type?: string; scope?: string; [key: string]: unknown }
 export interface LocalRuntimePayload {
   contract: "local_runtime.v1" | string;
   local_vision_enabled: boolean;
@@ -55,6 +56,7 @@ export interface LocalRuntimePayload {
   mlx_cache_bytes: number;
   model_root: string;
   environment: DesktopEnvironment;
+  device_task?: ProjectTask;
 }
 export type LocalRuntimeAction =
   | { action: "set"; local_vision_enabled?: boolean; local_vision_model?: string; face_identity_enabled?: boolean; speaker_identity_enabled?: boolean }
@@ -113,7 +115,6 @@ export interface ProjectCreatePayload {
   fcpxml?: string; media_roots?: string[]; timeline_mode?: "sequential" | "timestamp" | string; camera_patterns?: Record<string, string>;
 }
 export interface ProjectPreflight { ready: boolean; errors: string[]; warnings: string[]; detected?: Record<string, unknown>; project_id?: string; [key: string]: unknown }
-export interface ProjectTask { task_id?: string; status?: string; type?: string; [key: string]: unknown }
 export interface ProjectTaskStatus {
   task_id: string;
   type: string;
