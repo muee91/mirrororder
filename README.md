@@ -2,17 +2,19 @@
 
 镜序是面向短剧、多机位拍摄与后期协作的本地优先 Production 工具。它把素材、剧本、场记、人物身份、人工审阅、粗剪提案、时间线编辑和交付串成一套可追踪工作流。
 
-当前产品与文档 authority 从 [`docs/README.md`](docs/README.md) 开始阅读；中文产品总览见 [`项目介绍.md`](项目介绍.md)。仓库文件位置与源码/工作区边界见 [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)。
+当前产品与文档 authority 从 [`docs/README.md`](docs/README.md) 开始阅读；中文产品总览见 [`项目介绍.md`](项目介绍.md)。仓库文件位置与源码/工作区边界见 [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)。当前工程状态、worktree 和本地 gate 规则见 [`docs/engineering/README.md`](docs/engineering/README.md)。
 
 ## 当前开发基线
 
-`main` 是开发基线，Desktop 客户端位于 `desktop/`：
+`main` 是稳定集成基线，Desktop 客户端位于 `desktop/`：
 
 - React / TypeScript：Production UI；
 - Tauri 2 / Rust：桌面生命周期和窄平台适配；
 - Rust Timeline Core：本机 authoritative timeline edit state；
 - Python MirrorOrder Core：项目、Review、Slate、Identity、Assistant、媒体身份和 FCPXML 等业务权威；
 - Team Web：独立轻量 Review / Collaboration surface。
+
+跨层、runtime、schema/API、审计、迁移、重构和实验默认在独立 branch + `git worktree` 中完成，再通过本地 gate 并回 `main`。GitHub 是远端协作/备份/Release 层，不是日常开发的单点控制面。
 
 机器可读基线：
 
@@ -77,14 +79,19 @@ npm install
 npm run dev
 ```
 
-本地 RC 验证：
+日常本地 fast gate：
 
 ```bash
-cd desktop
-npm run verify:rc
+python scripts/check_fast.py
 ```
 
-该命令应串联 TypeScript、Vitest、Vite、Cargo 与 Python 检查。缺少必要工具时必须明确失败；没有实际执行过的 gate 不得写成“已通过”。
+高风险工作并回前的完整源码 gate：
+
+```bash
+python scripts/check_full.py
+```
+
+`check_full.py` 复用当前 `desktop` 的 `verify:rc`，串联 TypeScript、Vitest、Vite、Cargo 与 Python 检查。缺少必要工具时必须明确失败；没有实际执行过的 gate 不得写成“已通过”。GitHub Actions 是附加验证信号，不是本地开发基线的必要条件。
 
 ## Production Host / Team Gateway
 
@@ -104,14 +111,14 @@ Production Host 与 Team Gateway 是两套独立生命周期。健康状态必�
 
 ## 源码仓库与工作区数据
 
-根 `workspace.toml` 是仓库开发入口；它的 registry 指向 `./projects/registry.json`。`projects/` 会由 Host 按需创建，但**整个目录属于本地/生产 workspace 状态并被 Git 忽略**。
+根 `workspace.toml` 是仓库开发入口；它的 registry 指向 `./projects/registry.json`。`projects/` 是本地/生产 workspace 容器；源码仓库只跟踪空的 `projects/.gitkeep`，其余 `projects/*` 全部由 Git 忽略。
 
 因此源码仓库不再保存真实：
 
 - 项目 registry / `project.toml`；
 - 剧本、FCPXML/XML 或媒体输入副本；
 - cache / output / review / tasks / locks；
-- `/Volumes/...`、盘符路径等设备绝对路径。
+- `/Volumes/...`、`/Users/...`、盘符路径等设备绝对路径。
 
 生产团队仍可以按 [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md) 在设备之间同步项目事实和人工状态；“可同步的生产 workspace”与“MirrorOrder 源码 Git 仓库”是两个不同边界。测试所需项目数据应使用 `tests/fixtures/` 中的最小合成/脱敏 fixture。
 
@@ -136,13 +143,21 @@ media_id = 物理媒体文件身份，与磁盘路径无关
 
 Timeline authoritative state 由 Rust 持有；React 只发 commands 和读取 snapshots。Python proposal 只有在人工确认后才可转换成 Timeline commands。
 
-## 重功能隔离
+## 工程管理
 
-Runtime packaging、自动配乐、重媒体处理、新 NLE adapter、模型 runtime infrastructure 和实验自动化默认先在独立 branch/worktree 验证，再按 typed contract、authority、failure isolation 和 native smoke gate 决定是否并回主线。
+当前工程控制层：
+
+- [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)：当前工作包与真实验证状态；
+- [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md)：未来工程事项；
+- [`docs/engineering/DECISIONS.md`](docs/engineering/DECISIONS.md)：长期工程决策；
+- [`docs/engineering/INVARIANTS.md`](docs/engineering/INVARIANTS.md)：跨分支高影响不变量。
+
+Runtime packaging、自动配乐、重媒体处理、新 NLE adapter、模型 runtime infrastructure、实验自动化、审计和迁移默认先在独立 branch/worktree 验证，再按 typed contract、authority、failure isolation 和本地/native gate 决定是否并回主线。
 
 ## 文档入口
 
 - [`docs/README.md`](docs/README.md)：文档索引与 authority 层级；
+- [`docs/engineering/README.md`](docs/engineering/README.md)：工程控制层与 worktree / gate 规则；
 - [`docs/app-information-architecture.md`](docs/app-information-architecture.md)：当前产品 IA；
 - [`docs/ux-principles.md`](docs/ux-principles.md)：当前 UX 原则；
 - [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)：仓库与工作区文件位置；
