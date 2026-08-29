@@ -76,3 +76,23 @@ L4 失败或不可用不能自动否定已经真实执行的 L1/L2/L3；反过�
 Device task 持久化在 MirrorOrder device state 中，target 只能包含逻辑模型 ID、`face|speaker` 等 path-free 参数；设备绝对路径、缓存根、密钥不得进入 durable target。Host 启动时恢复中断状态，普通 GET 只读 snapshot。
 
 无论 scope 是 project 还是 device，用户控制面仍然只有一个：Desktop Status Center。设置页或具体工作台只能提交任务和显示轻量状态，不另建第二套完整任务控制器。
+
+## ADR-008 — Python-only gate 是降级验证层，不是 fast/full 的替代品
+
+- 状态：Accepted
+- 日期：2026-08-29
+
+当 Node、Cargo、Desktop 依赖或远端 CI 暂不可用，但存在完整源码 checkout 时，允许先执行 `python scripts/check_python.py`。该 gate 只覆盖 Python compile 与当前 production contract smoke，并且缺少 pytest、测试文件或源码时必须 fail closed。
+
+验证层级因此补充为：
+
+```text
+L0   source / contract review
+L0.5 python-only source gate
+L1   local fast cross-stack gate
+L2   local full source gate
+L3   native packaged/runtime smoke
+L4   GitHub CI / release automation
+```
+
+L0.5 的 PASS 只能证明 Python/source contracts 在该 checkout 上真实执行成功；不得把它表述为 TypeScript、Vitest、Rust/Tauri、packaged runtime、真实媒体或 FCP smoke 的通过结果。`check_fast.py` 应复用 `check_python.py`，避免同一 Python smoke 清单维护两份并产生漂移。
