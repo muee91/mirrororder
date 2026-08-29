@@ -7,7 +7,7 @@
 - 主线：`main`
 - 建立工程控制层时的主线 commit：`4e112efebf70159ff2d1ef91b530947e5efb7c3e`
 - 工程控制层：`chore/engineering-control-plane`
-- 当前 P1 工作分支：`fix/runtime-read-paths`
+- 当前工作分支：`fix/runtime-read-paths`
 - GitHub Actions：当前不可作为必要 gate；本地验证优先。
 
 ## 产品就绪度
@@ -15,9 +15,10 @@
 - 初始评估：**68 / 100**
 - Stage 1 — Runtime read-path safety：**70 / 100**
 - Stage 2 — Device-local model preparation durability：**72 / 100**
+- Stage 3 — Runtime installation order：**74 / 100**
 - 评分只代表当前产品/工程就绪度判断，不替代 executable gate。
 
-## 当前 P1
+## 当前工作包
 
 | 工作包 | 状态 | 说明 |
 | --- | --- | --- |
@@ -25,7 +26,8 @@
 | Waveform durable build | 已收口 | GET 只读 cache；显式生成进入 `waveform_build` durable task。 |
 | Runtime read-path safety | 源码收口 / 待本地验证 | 删除旧 `/api/v1/local-runtime` 和隐藏同步 fallback；Settings / Assistant / diagnostics 等普通读路径保持 snapshot/cache/read-only。 |
 | Device-local model preparation durability | 源码收口 / 待本地验证 | 本地视觉、Identity 模型/运行时准备进入 device-scope durable task，并统一进入 Status Center；不绑定随机项目。 |
-| Runtime install ordering | 进行中 | 下一阶段审计 runtime/monkeypatch 安装顺序、幂等和失败隔离。 |
+| Runtime install ordering | 源码收口 / 待本地验证 | Host 使用单一 runtime stack；Editorial 单职责；全栈失败可重试、禁止重入；Identity compatibility import 不再安装全局 wrapper。 |
+| Golden production project | 进行中 | 建立 synthetic/redacted 最小短剧 fixture，固定 Script → Slate → Mapping → Review → Coverage → Rough Cut → Delivery / reopen 的生产语义。 |
 | Engineering control plane | 待本地验证 | worktree 规则、本地 gate、状态/决策/不变量文档和 repository guard 已接入；`main` 暂未修改。 |
 
 ## Stage 1 — Runtime read-path safety
@@ -45,26 +47,32 @@
 
 已完成源码收口：
 
-- 新增 `device_tasks.py`，设备任务持久化在 MirrorOrder device state，而不是项目 `tasks.json`；
-- `local_vision_prepare` target 只保存逻辑模型 ID；`identity_runtime_prepare` target 只保存 `face|speaker`，不保存设备绝对路径；
-- Host runtime 安装时恢复前一 runner 的 queued/running device task 为 `interrupted`；普通 GET 只读 task snapshot；
-- Desktop `/api/v1/device-tasks` 提供 Host-local list/submit/cancel；
-- Settings 的视觉/人脸/声纹准备不再调用 unmanaged `prepare_async()`，只提交 device durable task；
-- Status Center 同时管理 project task 与 device task，统一查看、轮询、取消、重试；
-- Local Vision 取消直接进入 llama-server 启动/模型加载循环；
-- Identity 取消可传播到 pip 子进程、模型下载 chunk、SHA-256 chunk；
-- 切换视觉模型、关闭视觉/人脸/声纹时会取消与新设置冲突的 active device task；
-- Local Vision cache snapshot 绑定具体逻辑 model，切换模型后不会把旧模型 cache 大小误报为当前模型；
-- `stage-runtime.mjs` 递归打包整个 `src/script_organizer`，新增 `device_tasks.py` 无额外 staging 白名单风险；
-- 新增 `tests/test_device_tasks.py`，并更新 Desktop/runtime/status contract tests；
-- ADR-007 固化 project-scope / device-scope durable task 分域规则。
+- 新增 device-scope durable task；本地视觉和 Identity runtime 准备不再伪装成随机 project task；
+- task target 只保存逻辑模型 ID / `face|speaker`，不保存设备绝对路径；
+- Host 启动恢复旧 runner 的 queued/running device task 为 `interrupted`；普通 GET 只读 snapshot；
+- Settings 只提交任务；Status Center 统一查看、轮询、取消、重试；
+- Local Vision 取消进入 llama-server 启动/加载循环；Identity 取消可传播到 pip、下载 chunk、SHA chunk；
+- 切换模型或关闭视觉/人脸/声纹会取消冲突 active task；
+- 新增 device task 与 Desktop contract tests；ADR-007 固化 project/device task 分域。
+
+## Stage 3 — Runtime installation order
+
+已完成源码收口：
+
+- 新增 `src/script_organizer/runtime_stack.py`，Production Host / Gateway 使用单一 `install_production_runtime()`；
+- `RUNTIME_INSTALL_ORDER` 显式记录 18 个 first-party runtime layer；Media Role 明确先于 Coverage/Rough Cut，Desktop 明确先于 durable media inventory adapter；
+- stack 只有全部 installer 成功后才置 `installed=true`；失败保留错误并允许再次执行；重复调用幂等；重入直接拒绝；
+- `editorial_runtime.py` 恢复单职责，不再作为 Audit/Identity/Coverage/Desktop 等模块的隐藏 bootstrap；
+- `identity_runtime.py` compatibility import 不再执行 `install_identity_role_inference()`；Identity API installer 显式拥有该安装职责；
+- CLI `serve/run/gateway` 不再各自维护散落安装顺序；`agent-context` 保留有意的最小非 Host runtime；
+- 新增 runtime stack contract tests，覆盖失败重试、禁止重入、关键顺序和 import-time installer 副作用。
 
 ## 当前验证状态
 
 针对 `fix/runtime-read-paths`：
 
 - Source / diff review：PASS（仅代表已审阅分支 diff 和关键 runtime contract）
-- Stage 1 / Stage 2 新增及更新 tests：已写入，**NOT RUN**
+- Stage 1–3 新增及更新 tests：已写入，**NOT RUN**
 - 临时环境直接 clone 分支：NOT RUN（运行环境无外网 DNS，无法获得完整 checkout）
 - `python scripts/check_fast.py`：NOT RUN
 - `python scripts/check_full.py`：NOT RUN
@@ -75,26 +83,24 @@
 
 ## 下一工作包
 
-### P1 — Runtime installation order
+### P1 — Golden production project
 
-目标：让 runtime/monkeypatch 安装链的正确性不依赖偶然 import 顺序，并保证重复安装幂等。
+目标：建立最小、合成、脱敏、可重建的短剧项目，固定生产闭环语义，而不是继续只依赖分散单元测试。
 
-重点：
+覆盖：
 
-- `editorial_runtime.py` 及其安装链；
-- Desktop、automation、media inventory、waveform、assistant、semantic、identity 等 wrapper 的顺序；
-- 重复 install 不应重复包裹 handler / TaskManager method；
-- install 失败不能留下半安装全局状态；
-- device task manager 的启动恢复必须只发生一次且不污染普通 GET；
-- 为确定顺序和幂等增加 contract tests。
+- 多集剧本与 scene/segment identity；
+- 多 Take / 多机位、NG/Keep/Best、孤立/辅助素材；
+- 人工场记与 placement；
+- Review / Editorial Decision 边界；
+- Coverage / continuity；
+- Rough Cut / Assembly proposal；
+- Delivery 输入与 reopen 后 revision/staleness 语义；
+- fixture 不保存真实媒体、设备绝对路径、模型 cache 或真实制作内容。
 
 ### P2 — Python package migration plan
 
 `src/script_organizer/` 的 flat namespace 是历史兼容区。先划分 coherent domains 和兼容 import / packaging / stage-runtime contract，再独立迁移；不与产品功能混改。
-
-### P2 — Golden production project
-
-用 synthetic/redacted fixture 打穿 Create → Slate → Mapping → Review → Coverage → Rough Cut → Timeline → Delivery → reopen，作为单元测试之外的生产闭环证据。
 
 ## 状态维护规则
 
