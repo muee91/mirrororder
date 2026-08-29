@@ -50,6 +50,8 @@ def test_local_model_cache_is_device_local(monkeypatch, tmp_path: Path) -> None:
     assert "status" in public
     assert "cache_bytes" in public
     assert "preparing" in public
+    assert public["read_path_health_probe"] is False
+    assert public["read_path_cache_scan"] is False
 
 
 def test_mlx_model_cache_is_device_local(monkeypatch, tmp_path: Path) -> None:
@@ -77,16 +79,19 @@ def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     assert "本地模型 / 身份运行时" in panel
     assert "准备 / 启动" in panel
     assert "准备人脸模型" in panel and "准备说话人模型" in panel
-    assert "React 不下载模型、不保存 embedding" in panel
+    assert "React 不下载模型，也不保存 embedding" in panel
 
 
-def test_local_runtime_control_api_is_host_local() -> None:
+def test_legacy_local_runtime_route_is_removed_and_desktop_api_is_host_local() -> None:
     root = Path(__file__).resolve().parents[1]
     automation = (root / "src" / "script_organizer" / "automation_runtime.py").read_text(encoding="utf-8")
-    assert '["api", "v1", "local-runtime"]' in automation
-    assert "self._local_only()" in automation
-    assert 'action == "prepare"' in automation
-    assert "prepare_async" in automation
+    desktop = (root / "src" / "script_organizer" / "desktop_runtime.py").read_text(encoding="utf-8")
+    assert '["api", "v1", "local-runtime"]' not in automation
+    assert "_runtime_payload" not in automation
+    assert '["api", "v1", "desktop-local-runtime"]' in desktop
+    assert "self._local_only()" in desktop
+    assert 'action == "prepare"' in desktop
+    assert "prepare_async" in desktop
 
 
 def test_local_runtime_binds_llama_server_to_loopback_only() -> None:
