@@ -12,7 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from .device_runtime_settings import application_support_root
-from .identity_runtime import IdentityRuntime
+from .identity_runtime import IdentityPreparationCancelled, IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 
 
@@ -249,15 +249,10 @@ class DeviceTaskManager:
             elif task_type == "identity_runtime_prepare":
                 kind = str(targets["kind"])
                 self._update(task_id, stage="identity_prepare", message=f"正在准备{kind}身份运行时")
-                IdentityRuntime.prepare(kind)
-                if self._cancel_requested(task_id):
-                    self._update(
-                        task_id,
-                        status="cancelled",
-                        stage="cancelled",
-                        message="身份运行时准备完成当前不可中断阶段后已取消",
-                    )
-                    return
+                IdentityRuntime.prepare_cancellable(
+                    kind,
+                    cancel_requested=lambda: self._cancel_requested(task_id),
+                )
                 result = {"kind": kind, "ready": True}
             else:
                 raise ValueError("不支持的 device task 类型")
@@ -269,6 +264,8 @@ class DeviceTaskManager:
                 result=result,
                 message="设备运行时准备完成",
             )
+        except IdentityPreparationCancelled:
+            self._update(task_id, status="cancelled", stage="cancelled", message="身份运行时准备已取消")
         except Exception as error:
             if self._cancel_requested(task_id):
                 self._update(task_id, status="cancelled", stage="cancelled", message="设备运行时准备已取消")
