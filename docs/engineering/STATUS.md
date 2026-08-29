@@ -53,6 +53,7 @@
 - Slate 播放快捷键恢复：Space 播放/暂停、J 后退 1 秒、K 暂停、L 正向播放；不伪造 WebView 不可靠的负 playback rate。
 - Desktop Appearance 独立于 Team Web：System / Light / Dark 仅存 device-local storage；显式主题 root override 晚于 feature CSS 加载，覆盖 Project Home / Production / Slate / Material-Script / Status / Settings / Team Review 外壳。
 - `project-local-location` 仅用于本机显式 reveal；GET 只读 registry + `project.toml`，不读 media binding snapshot，不做 scan/hash/FFmpeg/model/network work。
+- `project-local-location` 已进一步 fail closed：registry config 必须精确落在 `projects/<project_id>/project.toml`，output 必须留在项目目录内；workspace path escape 返回 conflict。
 - 长期 parity 契约记录于 `docs/engineering/SWIFT_GOLDEN_PARITY.md`。
 
 ## Authority 保持不变
@@ -84,16 +85,19 @@
 
 - GitHub 当前源逻辑隔离物化 + 最小 Tauri/React/Host stubs：全局 TypeScript strict compile **PASS**。
 - Node 22 runtime assertions：`PARITY_TS_RUNTIME_PASS appearance=3 playback=6 roughPlacement=5 projectActions=3`，共 17 项 **PASS**。
-- 覆盖：Desktop Appearance、Slate Space/J/K/L、rough-placement `expected_revision`/actor/409、project local-location device-local fail closed。
+- 仓库现有 4 个 TS test files 在最小 Vitest-compatible runner 下原样执行：**12/12 PASS**。
 - Review stale batch behavioral probe：先建立 r1，再以 stale r0 提交两条 placement；`ReviewConflictError` 后 reopen 仍 `revision=1`、`placements={}`：**PASS**。
-- 这些是 targeted executable evidence，不等于原生 Vitest、Python source gate、fast/full 或 packaged gate。
+- Project-location safety probe：正常路径、registry escape、output escape：**3/3 PASS**。
+- 当前仓库 `tests/test_project_location_runtime.py` + `tests/test_rough_placement_runtime_contract.py` 在最小依赖物化下由真实 pytest 执行：**6/6 PASS，0.07s**。
+- 这些是 targeted executable evidence，不等于仓库原生 Vitest、Python source gate、fast/full 或 packaged gate。
 
 ## 当前 parity 分支验证状态
 
 - Source / diff scope review：已完成当前功能边界审计；相对 Stage 17 基线未发现 Rust Timeline Core / Timeline bridge / Delivery authority 修改。
-- Targeted TypeScript strict compile + runtime assertions：**PASS**；详见 2026-08-30 verification 记录。
-- Review stale batch behavioral probe：**PASS**；确认 stale batch 零 placement 写入。
-- 当前 parity 分支原生 Vitest test files：**NOT RUN**。
+- Targeted TypeScript strict compile + runtime assertions：**PASS**。
+- Existing parity TS test files under compatibility runner：**12/12 PASS**；原生 Vitest runner 仍 NOT RUN。
+- Targeted Python contract pytest：**6/6 PASS**；Review stale batch 和 project-location containment 已有真实执行证据。
+- 当前 parity 分支原生 Vitest / 完整 Desktop typecheck：**NOT RUN**。
 - `python scripts/check_python.py`：**NOT RUN on parity branch**。
 - `python scripts/check_fast.py`：**NOT RUN on parity branch**。
 - `python scripts/check_full.py`：**NOT RUN on parity branch**。
