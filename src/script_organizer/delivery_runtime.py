@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from .fcpxml_exporter import UnsafeFCPXMLExport, export
+from .timeline_audio_delivery import export_timeline_snapshot_with_audio
 from .timeline_delivery import (
     TIMELINE_FCPXML_NAME,
     TIMELINE_REPORT_NAME,
     UnsafeTimelineDelivery,
-    export_timeline_snapshot,
 )
 from .timeline_delivery_sync import normalize_timeline_delivery_request
 
@@ -170,7 +170,7 @@ def install_delivery_runtime() -> None:
                     raw_payload = web_server._body(self)
                     try:
                         payload = normalize_timeline_delivery_request(raw_payload)
-                        report = export_timeline_snapshot(
+                        report = export_timeline_snapshot_with_audio(
                             project.config,
                             payload,
                             expected_project_id=project_id,
