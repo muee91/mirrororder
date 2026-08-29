@@ -38,6 +38,21 @@ describe("desktop task controls", () => {
     });
   });
 
+  it("uses the same retry contract for device-scoped runtime tasks", () => {
+    expect(retryTaskBody(task("interrupted", {
+      task_id: "device_task_1",
+      scope: "device",
+      type: "identity_runtime_prepare",
+      targets: { kind: "speaker" },
+      idempotency_key: "identity-runtime:speaker",
+    }))).toEqual({
+      type: "identity_runtime_prepare",
+      targets: { kind: "speaker" },
+      actor: "desktop",
+      idempotency_key: "identity-runtime:speaker",
+    });
+  });
+
   it("creates a retry key when older task records do not have one", () => {
     expect(retryTaskBody(task("interrupted", { idempotency_key: undefined }))).toMatchObject({
       idempotency_key: "desktop:retry:task_1",
