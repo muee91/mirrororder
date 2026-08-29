@@ -28,7 +28,15 @@ def _config(tmp_path: Path) -> ProjectConfig:
       <media-rep kind="original-media" src="file:///Volumes/SYNTH/B.mov"/>
     </asset>
   </resources>
-  <library><event name="Source"><asset-clip name="A" ref="a1" duration="20s"/></event></library>
+  <library>
+    <event name="Source">
+      <project name="Source Project">
+        <sequence format="r1" duration="20s" tcStart="3600s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+          <spine><asset-clip name="A" ref="a1" offset="0s" start="0s" duration="20s"/></spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
 </fcpxml>
 """,
         encoding="utf-8",
@@ -127,6 +135,8 @@ def test_exports_captured_rust_timeline_positions_source_ranges_and_authority(tm
     assert report["multicam_flattened_count"] == 1
     assert report["markers_not_exported"] == 1
     assert report["organized_fcpxml"] == "timeline_organized.fcpxml"
+    assert report["device_paths_exposed"] is False
+    assert report["semantics"]["embedded_asset_audio_preserved"] is True
     assert "/Volumes/" not in json.dumps(report)
 
     root = ET.parse(config.output_dir / "timeline_organized.fcpxml").getroot()
@@ -134,6 +144,10 @@ def test_exports_captured_rust_timeline_positions_source_ranges_and_authority(tm
     sequence = next(item for item in root.iter() if _tag(item) == "sequence")
     assert sequence.get("format") == "r1"
     assert sequence.get("duration") == "6s"
+    assert sequence.get("tcStart") == "0s"
+    assert sequence.get("tcFormat") == "NDF"
+    assert sequence.get("audioLayout") == "stereo"
+    assert sequence.get("audioRate") == "48k"
     spine = next(item for item in sequence if _tag(item) == "spine")
     children = list(spine)
     assert [_tag(item) for item in children] == ["asset-clip", "gap", "asset-clip"]
@@ -199,4 +213,33 @@ def test_rejects_overlapping_video_clips_even_if_client_payload_is_malformed(tmp
     request = _request()
     request["timeline"]["sequences"][0]["tracks"][0]["clips"][1]["timeline_start"] = 60
     with pytest.raises(UnsafeTimelineDelivery, match="overlap"):
+        export_timeline_snapshot(_config(tmp_path), request, expected_project_id="p1")
+
+
+def test_rejects_all_disabled_video_clips_instead_of_generating_an_empty_final_cut(tmp_path: Path) -> None:
+    request = _request()
+    for clip in request["timeline"]["sequences"][0]["tracks"][0]["clips"]:
+        clip["enabled"] = False
+    with pytest.raises(UnsafeTimelineDelivery, match="at least one enabled video clip"):
+        export_timeline_snapshot(_config(tmp_path), request, expected_project_id="p1")
+
+
+def test_rejects_ambiguous_same_rate_formats_without_a_project_sequence_format(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    tree = ET.parse(config.fcpxml)
+    root = tree.getroot()
+    resources = next(item for item in root if _tag(item) == "resources")
+    ET.SubElement(resources, "format", {"id": "r2", "name": "Other24", "frameDuration": "1/24s", "width": "1280", "height": "720"})
+    source_sequence = next(item for item in root.iter() if _tag(item) == "sequence")
+    source_sequence.attrib.pop("format", None)
+    tree.write(config.fcpxml, encoding="utf-8", xml_declaration=True)
+
+    with pytest.raises(UnsafeTimelineDelivery, match="multiple matching formats"):
+        export_timeline_snapshot(config, _request(), expected_project_id="p1")
+
+
+def test_rejects_selected_multicam_angle_outside_declared_group(tmp_path: Path) -> None:
+    request = _request()
+    request["timeline"]["multicam_groups"][0]["angle_source_ids"] = ["source:a"]
+    with pytest.raises(UnsafeTimelineDelivery, match="selected angle is not in multicam group"):
         export_timeline_snapshot(_config(tmp_path), request, expected_project_id="p1")
