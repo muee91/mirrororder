@@ -34,7 +34,7 @@
 | Stage 15 — Timeline multicam synchronization | 92 |
 | Stage 16 — Timeline audio semantics | **93** |
 | Stage 17 — Audio editing UX | 源码完成；native/FCP 阻塞，不计入关闭 |
-| Stage 18 — Swift Golden product parity | **source candidate；当前分支 gates NOT RUN，暂不加分** |
+| Stage 18 — Swift Golden product parity | **targeted executable PASS；full gates NOT RUN，暂不加分** |
 
 评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。当前官方评分仍为 **93/100**。
 
@@ -78,11 +78,22 @@
 - runtime staging、`verify:rc`、macOS Tauri build、`verify:macos-bundle`：PASS。
 - packaged Host/project/durable-task/cancel/restart/path-free smoke：部分 PASS；见 `docs/verification/2026-08-29-production-readiness.md`。
 
+## 当前 parity 分支已执行的局部验证
+
+验证记录：`docs/verification/2026-08-30-swift-golden-parity-targeted.md`。
+
+- GitHub 当前源逻辑隔离物化 + 最小 Tauri/React/Host stubs：全局 TypeScript strict compile **PASS**。
+- Node 22 runtime assertions：`PARITY_TS_RUNTIME_PASS appearance=3 playback=6 roughPlacement=5 projectActions=3`，共 17 项 **PASS**。
+- 覆盖：Desktop Appearance、Slate Space/J/K/L、rough-placement `expected_revision`/actor/409、project local-location device-local fail closed。
+- Review stale batch behavioral probe：先建立 r1，再以 stale r0 提交两条 placement；`ReviewConflictError` 后 reopen 仍 `revision=1`、`placements={}`：**PASS**。
+- 这些是 targeted executable evidence，不等于原生 Vitest、Python source gate、fast/full 或 packaged gate。
+
 ## 当前 parity 分支验证状态
 
 - Source / diff scope review：已完成当前功能边界审计；相对 Stage 17 基线未发现 Rust Timeline Core / Timeline bridge / Delivery authority 修改。
-- Python parity contract files：已写入，但 **NOT RUN**。
-- TypeScript typecheck / Vitest（含 parity、appearance、project actions、rough placement、playback shortcuts）：**NOT RUN**。
+- Targeted TypeScript strict compile + runtime assertions：**PASS**；详见 2026-08-30 verification 记录。
+- Review stale batch behavioral probe：**PASS**；确认 stale batch 零 placement 写入。
+- 当前 parity 分支原生 Vitest test files：**NOT RUN**。
 - `python scripts/check_python.py`：**NOT RUN on parity branch**。
 - `python scripts/check_fast.py`：**NOT RUN on parity branch**。
 - `python scripts/check_full.py`：**NOT RUN on parity branch**。
@@ -101,11 +112,11 @@
 
 ## 下一步
 
-1. 在完整 checkout 上运行 parity 分支的 TypeScript/Vitest 与 Python source gate，修复所有真实失败。
+1. 在完整 checkout 上运行 parity 分支的原生 TypeScript/Vitest 与 Python source gate，修复所有真实失败。
 2. 再跑 fast/full，确认新增 runtime wrapper 顺序、read-path 与产品 source contracts 没有破坏已有基线。
 3. 运行 packaged Desktop smoke：Project Home、Golden Slate、Finder drop、项目右键、本机素材、Appearance、Status Center。
 4. 语音听写独立分支实现，不与当前 parity source candidate 混为一体。
-5. 只有当前 parity 分支 gates 真实 PASS 后，才重新评估 Stage 18 分数与 integration/squash 路径。
+5. 只有当前 parity 分支 full gates 真实 PASS 后，才重新评估 Stage 18 分数与 integration/squash 路径。
 
 ## 状态维护规则
 
