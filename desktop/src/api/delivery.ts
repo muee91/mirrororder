@@ -3,17 +3,25 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
 
 export interface DeliveryExportReport {
+  version?: number;
+  contract?: string;
   organized_fcpxml?: string;
+  organized_fcpxml_ref?: string;
   organized_fcpxml_exists?: boolean;
   selection_manifest?: string;
+  selection_manifest_ref?: string;
   selection_manifest_exists?: boolean;
   selection_contract?: string;
   selection_manifest_version?: number;
   selection_summary?: Record<string, unknown>;
   keywords_written?: boolean;
+  keyword_count?: number;
+  decision_ranges_written?: number;
   multicam_structure_modified?: boolean;
   warning?: string;
+  persisted_report_path_safe?: boolean;
   device_paths_exposed?: boolean;
+  device_paths_scope?: "localhost_response_only" | string;
   [key: string]: unknown;
 }
 
