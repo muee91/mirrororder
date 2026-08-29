@@ -1,6 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DesktopClient } from "../api/desktop";
 import {
   HostConnection,
   HostConnectionError,
@@ -10,6 +11,7 @@ import {
   type ProjectSummary,
 } from "../api/host";
 import { PlatformClient, type PlatformInfo } from "../api/platform";
+import { ProjectActionClient } from "../api/projectActions";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectHome } from "../features/projects/ProjectHome";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
@@ -21,6 +23,7 @@ import {
   loadAppResume,
   rememberProject,
   rememberWorkspace,
+  type ProductionPage,
 } from "./resumeState";
 
 function errorMessage(error: unknown): string {
@@ -44,6 +47,7 @@ function projectById(snapshot: HostSnapshot, projectId: string | null | undefine
 }
 
 type AppSurface = "production" | "status" | "team" | "settings";
+interface ProjectPageRequest { projectId: string; page: ProductionPage; nonce: number }
 
 export function App() {
   const [launchResume] = useState(() => loadAppResume());
@@ -53,10 +57,12 @@ export function App() {
   const [state, setState] = useState<HostConnectionState>("idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
+  const [pageRequest, setPageRequest] = useState<ProjectPageRequest | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "打开一个工作区开始制作。");
   const [resumeEnabledForSession, setResumeEnabledForSession] = useState(false);
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
+  const pageRequestNonce = useRef(0);
 
   const connection = useMemo(() => {
     try {
@@ -86,6 +92,7 @@ export function App() {
       setWorkspacePath(launchResume.workspacePath);
       setSnapshot(next);
       setSelectedProject(null);
+      setPageRequest(null);
       setSurface("production");
       setResumeEnabledForSession(true);
       setState("connected");
@@ -97,6 +104,7 @@ export function App() {
       if (!active) return;
       setSnapshot(null);
       setSelectedProject(null);
+      setPageRequest(null);
       setResumeEnabledForSession(false);
       setState("error");
       setMessage(`无法恢复上次工作区：${errorMessage(error)}`);
@@ -128,6 +136,7 @@ export function App() {
       setWorkspacePath(normalizedPath);
       setSnapshot(next);
       setSelectedProject(null);
+      setPageRequest(null);
       setSurface("production");
       setResumeEnabledForSession(true);
       setState("connected");
@@ -143,6 +152,7 @@ export function App() {
       } else {
         setSnapshot(null);
         setSelectedProject(null);
+        setPageRequest(null);
         setResumeEnabledForSession(false);
         setState("error");
         setMessage(errorMessage(error));
@@ -189,6 +199,7 @@ export function App() {
       const project = selectedProject ? projectById(next, selectedProject.project_id) : null;
       setSnapshot(next);
       setSelectedProject(project);
+      setPageRequest(null);
       setSurface("production");
       setResumeEnabledForSession(false);
       setState("connected");
@@ -196,6 +207,7 @@ export function App() {
     } catch (error) {
       setSnapshot(null);
       setSelectedProject(null);
+      setPageRequest(null);
       setResumeEnabledForSession(false);
       setState("error");
       setMessage(errorMessage(error));
@@ -217,13 +229,60 @@ export function App() {
 
   function selectProject(project: ProjectSummary): void {
     setSelectedProject(project);
+    setPageRequest(null);
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
     setMessage(`已打开 ${project.name || project.project_id}`);
   }
 
+  function openProjectPage(project: ProjectSummary, page: ProductionPage): void {
+    pageRequestNonce.current += 1;
+    setSelectedProject(project);
+    setPageRequest({ projectId: project.project_id, page, nonce: pageRequestNonce.current });
+    setSurface("production");
+    if (resumeEnabledForSession) rememberProject(project.project_id);
+    setMessage(`已打开 ${project.name || project.project_id} · ${page === "media-binding" ? "本机素材" : page}`);
+  }
+
+  function openTeamProject(project: ProjectSummary): void {
+    setSelectedProject(project);
+    setPageRequest(null);
+    setSurface("team");
+    if (resumeEnabledForSession) rememberProject(project.project_id);
+    setMessage(`团队审阅 · ${project.name || project.project_id}`);
+  }
+
+  async function revealProject(project: ProjectSummary): Promise<void> {
+    if (!snapshot || !isTauri()) return;
+    try {
+      const location = await new ProjectActionClient(snapshot.baseUrl).localLocation(project.project_id);
+      if (!location.project_exists) {
+        setMessage(`项目目录不存在：${project.name || project.project_id}`);
+        return;
+      }
+      await platform.reveal(location.project_dir);
+      setMessage(`已在 ${platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器"} 中定位 ${project.name || project.project_id}`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  async function prepareProject(project: ProjectSummary): Promise<void> {
+    if (!snapshot) return;
+    try {
+      const task = await new DesktopClient(snapshot.baseUrl).prepareProject(project.project_id);
+      setSelectedProject(project);
+      setPageRequest(null);
+      setSurface("status");
+      setMessage(`已提交重整任务${task.task_id ? ` · ${task.task_id}` : ""}；在状态中心查看进度。`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
   function openHome(): void {
     setSelectedProject(null);
+    setPageRequest(null);
     setSurface("production");
     setMessage(`项目主页 · ${snapshot?.projects.length ?? 0} 个项目`);
   }
@@ -243,6 +302,7 @@ export function App() {
   const recovering = state === "starting" && Boolean(launchResume.workspacePath) && !snapshot;
   const recoveryFailed = state === "error" && Boolean(workspacePath.trim()) && !snapshot;
   const utilityActive = surface === "production" ? null : surface;
+  const revealLabel = platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器";
 
   if (!snapshot) {
     return (
@@ -294,11 +354,16 @@ export function App() {
             workspace={snapshot.workspace}
             selectedProjectId={selectedProject?.project_id ?? null}
             utilityActive={utilityActive}
+            revealLabel={revealLabel}
             onSelectProject={selectProject}
             onOpenHome={openHome}
             onOpenStatusCenter={() => setSurface("status")}
             onOpenTeam={() => setSurface("team")}
             onOpenSettings={() => setSurface("settings")}
+            onOpenTeamProject={openTeamProject}
+            onRevealProject={(project) => revealProject(project)}
+            onPrepareProject={(project) => prepareProject(project)}
+            onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
             onWorkspaceChanged={refreshWorkspace}
           />
 
@@ -312,7 +377,7 @@ export function App() {
               <label><span>工作区</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
               <div className="workspace-control-actions">
                 <button type="button" className="secondary" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>切换</button>
-                <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !workspacePath.trim()}>{platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器"}</button>
+                <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !workspacePath.trim()}>{revealLabel}</button>
               </div>
               <details className="workspace-advanced">
                 <summary>高级连接</summary>
@@ -332,7 +397,12 @@ export function App() {
           ) : surface === "settings" ? (
             <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} projectId={selectedProject?.project_id ?? ""} />
           ) : selectedProject ? (
-            <ProjectWorkbench key={selectedProject.project_id} baseUrl={snapshot.baseUrl} project={selectedProject} />
+            <ProjectWorkbench
+              key={selectedProject.project_id}
+              baseUrl={snapshot.baseUrl}
+              project={selectedProject}
+              pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
+            />
           ) : (
             <ProjectHome baseUrl={snapshot.baseUrl} workspace={snapshot.workspace} onOpenProject={selectProject} onWorkspaceChanged={refreshWorkspace} />
           )}
