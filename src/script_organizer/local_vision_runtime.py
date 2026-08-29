@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 DEFAULT_LOCAL_VISION_MODEL = "Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M"
@@ -54,6 +54,13 @@ def _free_loopback_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _cancelled(callback: Callable[[], bool] | None) -> bool:
+    try:
+        return bool(callback and callback())
+    except Exception:
+        return False
+
+
 @dataclass(frozen=True)
 class LocalVisionRuntimeConfig:
     model: str = DEFAULT_LOCAL_VISION_MODEL
@@ -74,11 +81,10 @@ class LocalVisionRuntimeConfig:
 class LocalVisionRuntime:
     """Own a localhost-only llama-server used for optional visual rescue.
 
-    Model weights are runtime-only device state. `prepare_async()` is used by
-    the App settings UI to trigger first download/loading without blocking the
-    Host HTTP request. Status reads never enumerate the model cache or perform a
-    localhost health request; expensive verification stays on explicit runtime
-    preparation paths.
+    Model weights are runtime-only device state. Status reads never enumerate
+    the model cache or perform a localhost health request. Explicit durable
+    device tasks may pass a cancellation callback to `ensure_server()` so model
+    download/loading can stop with the Status Center task.
     """
 
     _lock = threading.RLock()
@@ -145,6 +151,8 @@ class LocalVisionRuntime:
             payload = json.loads(self.cache_snapshot_path.read_text(encoding="utf-8"))
             if not isinstance(payload, dict):
                 return 0
+            if str(payload.get("model", "") or "") != self.config.model:
+                return 0
             return max(0, int(payload.get("cache_bytes", 0) or 0))
         except (OSError, ValueError, TypeError):
             return 0
@@ -170,8 +178,10 @@ class LocalVisionRuntime:
         os.replace(temporary, path)
         return cache_bytes
 
-    def ensure_server(self) -> str:
+    def ensure_server(self, cancel_requested: Callable[[], bool] | None = None) -> str:
         cls = self.__class__
+        if _cancelled(cancel_requested):
+            return ""
         with cls._lock:
             if (
                 cls._process is not None
@@ -191,6 +201,9 @@ class LocalVisionRuntime:
             if executable is None:
                 cls._preparing = False
                 cls._last_error = "llama-server 不可用；请使用包含本地视觉运行时的镜序 App"
+                return ""
+            if _cancelled(cancel_requested):
+                cls._preparing = False
                 return ""
 
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -232,6 +245,9 @@ class LocalVisionRuntime:
 
         deadline = time.monotonic() + self.config.startup_timeout_seconds
         while time.monotonic() < deadline:
+            if _cancelled(cancel_requested):
+                cls.stop()
+                return ""
             with cls._lock:
                 process = cls._process
                 current_url = cls._base_url
@@ -242,6 +258,9 @@ class LocalVisionRuntime:
                 cls.stop(preserve_error=True)
                 return ""
             if self._healthy(current_url, timeout=1.0):
+                if _cancelled(cancel_requested):
+                    cls.stop()
+                    return ""
                 try:
                     self._refresh_cache_snapshot()
                 except OSError:
@@ -257,6 +276,7 @@ class LocalVisionRuntime:
         return ""
 
     def prepare_async(self) -> bool:
+        """Legacy internal helper; Desktop preparation uses durable device tasks."""
         cls = self.__class__
         with cls._lock:
             if _find_llama_server() is None:
