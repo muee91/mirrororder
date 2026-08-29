@@ -35,7 +35,9 @@ def _tag(element: ET.Element) -> str:
 
 
 def _parse_time(value: object) -> Fraction | None:
-    raw = str(value or "").strip().rstrip("s")
+    if value is None:
+        return None
+    raw = str(value).strip().rstrip("s")
     if not raw:
         return None
     try:
@@ -138,18 +140,18 @@ def _validate_tracks(sequence: dict[str, Any]) -> list[dict[str, Any]]:
     return video_tracks
 
 
-def _material_asset_map(config: ProjectConfig) -> dict[str, str]:
+def _material_clip_map(config: ProjectConfig) -> dict[str, dict[str, Any]]:
     payload = _load_json(config.output_dir / "material_index.json", {})
     if not isinstance(payload, dict):
         raise UnsafeTimelineDelivery("material_index.json is not a valid object")
-    result: dict[str, str] = {}
+    result: dict[str, dict[str, Any]] = {}
     for raw in payload.get("clips", []):
         if not isinstance(raw, dict):
             continue
         clip_id = str(raw.get("clip_id", "") or "")
         asset_id = str(raw.get("source_asset_id", "") or "")
         if clip_id and asset_id:
-            result[clip_id] = asset_id
+            result[clip_id] = raw
     return result
 
 
@@ -262,7 +264,7 @@ def _timeline_clips(
     video_tracks: list[dict[str, Any]],
     sources: dict[str, dict[str, Any]],
     multicam_groups: dict[str, set[str]],
-    clip_assets: dict[str, str],
+    material_clips: dict[str, dict[str, Any]],
     assets: dict[str, ET.Element],
     frame_duration: Fraction,
 ) -> tuple[list[dict[str, Any]], int]:
@@ -294,14 +296,18 @@ def _timeline_clips(
         elif selected_source_id:
             raise UnsafeTimelineDelivery(f"Timeline clip has selected angle without multicam group: {clip_id}")
 
+        base_source = sources.get(base_source_id)
+        if base_source is None:
+            raise UnsafeTimelineDelivery(f"Timeline clip references unknown base source: {clip_id} -> {base_source_id}")
         source_id = selected_source_id or base_source_id
         source = sources.get(source_id)
         if source is None:
             raise UnsafeTimelineDelivery(f"Timeline clip references unknown active source: {clip_id} -> {source_id}")
         source_clip_id = str(source.get("clip_id", "") or "")
-        asset_id = clip_assets.get(source_clip_id, "")
-        if not asset_id:
+        material = material_clips.get(source_clip_id)
+        if material is None:
             raise UnsafeTimelineDelivery(f"Timeline source has no material-index FCPXML asset mapping: {source_clip_id}")
+        asset_id = str(material.get("source_asset_id", "") or "")
         asset = assets.get(asset_id)
         if asset is None:
             raise UnsafeTimelineDelivery(f"Timeline source asset is missing from source FCPXML resources: {asset_id}")
@@ -309,13 +315,44 @@ def _timeline_clips(
         timeline_start = _non_negative_int(clip.get("timeline_start"), f"clip {clip_id} timeline_start")
         source_in = _non_negative_int(clip.get("source_in"), f"clip {clip_id} source_in")
         duration = _positive_int(clip.get("duration"), f"clip {clip_id} duration")
-        source_duration_frames = source.get("duration_frames")
-        if source_duration_frames is not None:
-            total_frames = _positive_int(source_duration_frames, f"source {source_id} duration_frames")
-            if source_in + duration > total_frames:
-                raise UnsafeTimelineDelivery(f"Timeline clip source range exceeds TimelineSource duration: {clip_id}")
+        base_duration_frames = base_source.get("duration_frames")
+        if base_duration_frames is not None:
+            base_total_frames = _positive_int(base_duration_frames, f"source {base_source_id} duration_frames")
+            if source_in + duration > base_total_frames:
+                raise UnsafeTimelineDelivery(f"Timeline clip source range exceeds base TimelineSource duration: {clip_id}")
+
+        # Rust keeps source_in in the base clip's source-time coordinate even
+        # after MulticamSwitch changes selected_angle_source_id. Rebase that
+        # immutable edit coordinate onto the selected material occurrence using
+        # material_index source_start evidence; never assume camera files share
+        # the same absolute source time.
         source_start = source_in * frame_duration
         source_duration = duration * frame_duration
+        if selected_source_id and selected_source_id != base_source_id:
+            base_clip_id = str(base_source.get("clip_id", "") or "")
+            base_material = material_clips.get(base_clip_id)
+            base_origin = _parse_time(base_material.get("source_start")) if base_material is not None else None
+            selected_origin = _parse_time(material.get("source_start"))
+            if base_origin is None or selected_origin is None:
+                raise UnsafeTimelineDelivery(
+                    f"cannot rebase multicam source time without material source_start evidence: {clip_id}"
+                )
+            base_occurrence_end = _parse_time(base_material.get("source_end")) if base_material is not None else None
+            if base_occurrence_end is not None and source_start + source_duration > base_occurrence_end:
+                raise UnsafeTimelineDelivery(f"Timeline clip source range exceeds base material occurrence: {clip_id}")
+            relative_offset = source_start - base_origin
+            if relative_offset < 0:
+                raise UnsafeTimelineDelivery(f"Timeline multicam source_in precedes base angle origin: {clip_id}")
+            source_start = selected_origin + relative_offset
+
+        selected_duration_frames = source.get("duration_frames")
+        if selected_duration_frames is not None:
+            selected_end = _positive_int(selected_duration_frames, f"source {source_id} duration_frames") * frame_duration
+            if source_start + source_duration > selected_end:
+                raise UnsafeTimelineDelivery(f"Timeline clip source range exceeds selected TimelineSource duration: {clip_id}")
+        occurrence_end = _parse_time(material.get("source_end"))
+        if occurrence_end is not None and source_start + source_duration > occurrence_end:
+            raise UnsafeTimelineDelivery(f"Timeline clip source range exceeds selected material occurrence: {clip_id}")
         asset_start, asset_end = _asset_bounds(asset)
         if source_start < asset_start:
             raise UnsafeTimelineDelivery(f"Timeline clip source_in precedes asset start: {clip_id}")
@@ -393,7 +430,7 @@ def export_timeline_snapshot(
     video_tracks = _validate_tracks(sequence)
     sources = _source_map(timeline)
     multicam_groups = _multicam_map(timeline)
-    clip_assets = _material_asset_map(config)
+    material_clips = _material_clip_map(config)
     if not config.fcpxml or not config.fcpxml.is_file():
         raise UnsafeTimelineDelivery("Timeline FCPXML delivery requires the original source FCPXML")
     try:
@@ -407,7 +444,7 @@ def export_timeline_snapshot(
         video_tracks,
         sources,
         multicam_groups,
-        clip_assets,
+        material_clips,
         assets,
         frame_duration,
     )

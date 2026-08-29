@@ -47,8 +47,8 @@ def _config(tmp_path: Path) -> ProjectConfig:
         json.dumps(
             {
                 "clips": [
-                    {"clip_id": "clip-a", "source_asset_id": "a1"},
-                    {"clip_id": "clip-b", "source_asset_id": "a2"},
+                    {"clip_id": "clip-a", "source_asset_id": "a1", "source_start": 0.0, "source_end": 20.0},
+                    {"clip_id": "clip-b", "source_asset_id": "a2", "source_start": 4.0, "source_end": 24.0},
                 ]
             }
         ),
@@ -164,7 +164,7 @@ def test_exports_captured_rust_timeline_positions_source_ranges_and_authority(tm
         "name": "B.mov",
         "ref": "a2",
         "offset": "4s",
-        "start": "10s",
+        "start": "14s",
         "duration": "2s",
     }
 
@@ -243,3 +243,23 @@ def test_rejects_selected_multicam_angle_outside_declared_group(tmp_path: Path) 
     request["timeline"]["multicam_groups"][0]["angle_source_ids"] = ["source:a"]
     with pytest.raises(UnsafeTimelineDelivery, match="selected angle is not in multicam group"):
         export_timeline_snapshot(_config(tmp_path), request, expected_project_id="p1")
+
+
+def test_rejects_multicam_rebase_without_selected_angle_source_start_evidence(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    payload = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
+    payload["clips"][1].pop("source_start", None)
+    (config.output_dir / "material_index.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(UnsafeTimelineDelivery, match="source_start evidence"):
+        export_timeline_snapshot(config, _request(), expected_project_id="p1")
+
+
+def test_rejects_multicam_rebase_when_selected_occurrence_is_too_short(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    payload = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
+    payload["clips"][1]["source_end"] = 15.0
+    (config.output_dir / "material_index.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(UnsafeTimelineDelivery, match="selected material occurrence"):
+        export_timeline_snapshot(config, _request(), expected_project_id="p1")
