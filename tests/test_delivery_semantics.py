@@ -139,17 +139,17 @@ def test_editorial_decision_does_not_silently_inherit_from_parent_split_group() 
     assert result["decision_source"] == "automatic_mapping_fallback"
 
 
-def test_build_selection_manifest_v3_applies_editorial_decision(tmp_path: Path) -> None:
+def test_build_selection_manifest_v4_applies_editorial_decision_without_device_paths(tmp_path: Path) -> None:
     output = tmp_path / "output"
     output.mkdir()
     config = ProjectConfig(
         config_path=tmp_path / "project.toml",
         name="Delivery Demo",
-        fcpxml=None,
+        fcpxml=tmp_path / "private-source.fcpxml",
         script=tmp_path / "script.txt",
         output_dir=output,
         transcript_dir=tmp_path / "transcripts",
-        input_kind="media-directory",
+        input_kind="fcpxml",
     )
     (output / "material_index.json").write_text(
         json.dumps({
@@ -222,8 +222,10 @@ def test_build_selection_manifest_v3_applies_editorial_decision(tmp_path: Path) 
 
     manifest = build_selection_manifest(config)
     row = manifest["segments"][0]["groups"][0]
-    assert manifest["version"] == 3
+    assert manifest["version"] == 4
     assert manifest["contract"] == "delivery.v1"
+    assert manifest["source"] == {"input_kind": "fcpxml", "fcpxml_name": "private-source.fcpxml"}
+    assert manifest["artifacts"] == {"review": "review.json", "editorial": "editorial.json"}
     assert manifest["revisions"] == {"review": 4, "editorial": 7}
     assert manifest["decision_policy"]["majority_vote_enabled"] is False
     assert row["state"] == "reject"
@@ -232,16 +234,27 @@ def test_build_selection_manifest_v3_applies_editorial_decision(tmp_path: Path) 
     assert row["legacy_state"] == ""
     assert row["automatic_state"] == "keep"
     assert manifest["summary"]["sources"] == {"editorial_assignment": 1}
+    assert manifest["semantics"]["device_paths_exposed"] is False
+    raw = json.dumps(manifest, ensure_ascii=False)
+    assert str(tmp_path) not in raw
+    assert "manual_review_path" not in raw
+    assert "editorial_path" not in raw
+    assert "source_fcpxml" not in raw
 
 
-def test_selection_manifest_v3_documents_delivery_contract() -> None:
+def test_selection_manifest_v4_documents_delivery_contract() -> None:
     root = Path(__file__).resolve().parents[1]
     exporter = (root / "src" / "script_organizer" / "fcpxml_exporter.py").read_text(encoding="utf-8")
     semantics = (root / "src" / "script_organizer" / "delivery_semantics.py").read_text(encoding="utf-8")
 
-    assert '"version": 3' in exporter
+    assert '"version": 4' in exporter
     assert '"contract": "delivery.v1"' in exporter
+    assert '"device_paths_exposed": False' in exporter
+    assert '"artifact_refs_are_project_output_relative": True' in exporter
     assert '"majority_vote_enabled": False' in exporter
     assert '"individual_opinions_are_delivery_authority": False' in exporter
+    assert "manual_review_path" not in exporter
+    assert "editorial_path" not in exporter
+    assert "source_fcpxml" not in exporter
     assert "editorial_decision_for" in semantics
     assert "opinions" not in semantics.split("def resolve_delivery_state", 1)[1]
