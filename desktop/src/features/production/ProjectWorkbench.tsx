@@ -22,7 +22,7 @@ import "./product-experience.css";
 interface Props {
   baseUrl: string;
   project: ProjectSummary;
-  pageRequest?: { page: ProductionPage; nonce: number } | null;
+  pageRequest?: { projectId: string; page: ProductionPage; nonce: number } | null;
 }
 
 type ProductionArea = "material" | "script" | "edit" | "review";
@@ -56,8 +56,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
   }, [page, project.project_id]);
 
   useEffect(() => {
-    if (pageRequest) setPage(pageRequest.page);
-  }, [pageRequest]);
+    if (pageRequest?.projectId === project.project_id) setPage(pageRequest.page);
+  }, [pageRequest?.nonce, project.project_id]);
 
   function openTakeFromEvidence(groupId: string): void {
     const value = groupId.trim();
