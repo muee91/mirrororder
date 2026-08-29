@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from script_organizer.agent_tools import AgentToolRegistry
 from script_organizer.assistant_orchestrator import AssistantOrchestrator
 from script_organizer.assistant_runtime import _refresh_after_review
+from script_organizer.assistant_store import AssistantStore
 from script_organizer.audit_engine import _analysis_revision, _mapping_for_group
 from script_organizer.audit_store import AuditStore
 from script_organizer.automation_store import AutomationStore
@@ -383,8 +384,10 @@ def test_static_runtime_and_ui_contracts() -> None:
     control = (root / "web" / "assistant_control_ui.js").read_text(encoding="utf-8")
     css = (root / "web" / "assistant.css").read_text(encoding="utf-8")
     editorial = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
+    runtime_stack = (root / "src" / "script_organizer" / "runtime_stack.py").read_text(encoding="utf-8")
 
-    assert "install_assistant_runtime" in editorial
+    assert "install_editorial_runtime" in editorial
+    assert runtime_stack.index("install_assistant_runtime()") < runtime_stack.index("install_semantic_runtime()")
     assert "assistant/models" not in runtime
     assert 'parts[4] == "assistant"' in runtime
     assert 'parts[5] == "models"' in runtime
@@ -425,3 +428,24 @@ def test_static_runtime_and_ui_contracts() -> None:
     assert 'Agent API 已启用' in control
     assert '多模态模型地址' in control
     assert 'data:image/webp;base64,' in css
+
+
+def test_persisted_assistant_drops_device_model_runtime_paths(tmp_path: Path) -> None:
+    store = AssistantStore(tmp_path)
+    saved = store.save(
+        {
+            "orchestration": {
+                "models": {
+                    "vision": {
+                        "runtime": {
+                            "cache_dir": "/Users/operator/Library/Application Support/MirrorOrder/models"
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    assert "models" not in saved["orchestration"]
+    persisted = (tmp_path / "assistant.json").read_text(encoding="utf-8")
+    assert "/Users/operator" not in persisted

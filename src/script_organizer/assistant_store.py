@@ -56,7 +56,14 @@ class AssistantStore:
         payload["contract"] = ASSISTANT_CONTRACT
         payload["items"] = raw.get("items", []) if isinstance(raw.get("items"), list) else []
         payload["messages"] = raw.get("messages", []) if isinstance(raw.get("messages"), list) else []
-        payload["orchestration"] = raw.get("orchestration", {}) if isinstance(raw.get("orchestration"), dict) else {}
+        orchestration = raw.get("orchestration", {}) if isinstance(raw.get("orchestration"), dict) else {}
+        # Model runtime status may contain device-local cache/runtime paths.
+        # It belongs in localhost/device status responses, never in the shared
+        # assistant artifact. Drop the legacy field on read so an old artifact
+        # is also scrubbed the next time it is saved.
+        orchestration = dict(orchestration)
+        orchestration.pop("models", None)
+        payload["orchestration"] = orchestration
         return payload
 
     def save(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -70,7 +77,10 @@ class AssistantStore:
             saved["updated_at"] = _now()
             saved["items"] = payload.get("items", []) if isinstance(payload.get("items"), list) else []
             saved["messages"] = (payload.get("messages", []) if isinstance(payload.get("messages"), list) else [])[-40:]
-            saved["orchestration"] = payload.get("orchestration", {}) if isinstance(payload.get("orchestration"), dict) else {}
+            orchestration = payload.get("orchestration", {}) if isinstance(payload.get("orchestration"), dict) else {}
+            orchestration = dict(orchestration)
+            orchestration.pop("models", None)
+            saved["orchestration"] = orchestration
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, temporary = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=self.path.parent)
             try:

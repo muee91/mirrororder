@@ -198,7 +198,7 @@ describe("TimelineClient", () => {
     await client.openPersisted("p1");
     await expect(client.undo()).rejects.toMatchObject({
       name: "TimelineBridgeError",
-      issues: [{ code: "stale_timeline_authority", path: "authority" }],
+      issues: [{ code: "stale_timeline_authority", path: "authority", message: "expected g1@4, current g1@5" }],
     } satisfies Partial<TimelineBridgeError>);
   });
 });

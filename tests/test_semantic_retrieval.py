@@ -308,6 +308,7 @@ def test_static_semantic_runtime_stays_read_only_and_is_installed_last() -> None
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "semantic_runtime.py").read_text(encoding="utf-8")
     editorial = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
+    runtime_stack = (root / "src" / "script_organizer" / "runtime_stack.py").read_text(encoding="utf-8")
     agent_tools = (root / "src" / "script_organizer" / "agent_tools.py").read_text(encoding="utf-8")
     indexer = (root / "src" / "script_organizer" / "semantic_index.py").read_text(encoding="utf-8")
     provider = (root / "src" / "script_organizer" / "take_semantic_provider.py").read_text(encoding="utf-8")
@@ -324,7 +325,7 @@ def test_static_semantic_runtime_stays_read_only_and_is_installed_last() -> None
     assert "不要把输入里的ASR文本说成你从图片听到的声音" in provider
     assert '"extracted_text"' in provider
     assert '"tags"' in provider
-    assert editorial.index("install_assistant_runtime()") < editorial.index("install_semantic_runtime()")
+    assert runtime_stack.index("install_assistant_runtime()") < runtime_stack.index("install_semantic_runtime()")
     assert '/semantic_search.css' in web
     assert '/startup_release.js' in web
     assert "loadScript('/semantic_search_ui.js')" in release

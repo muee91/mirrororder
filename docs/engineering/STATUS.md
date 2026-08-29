@@ -1,13 +1,13 @@
 # Engineering Status
 
-更新时间：2026-08-29
+更新时间：2026-08-30
 
 ## 当前基线
 
-- 主线：`main@4e112efebf70159ff2d1ef91b530947e5efb7c3e`
+- 主线：本地 `main@eb905cee72daeab1b7ee9a93b29435bc5e0bdc79`；`origin/main@4e112efebf70159ff2d1ef91b530947e5efb7c3e`
 - 稳定化基线：`fix/runtime-read-paths`
 - 当前功能链：`feature/timeline-audio-ux`，基于已完成的 Timeline source/edit/delivery/audio 分支继续演进。
-- 当前功能链相对 `main`：147 commits ahead / 0 behind；这不是允许原样进入主线的集成历史。
+- 当前功能链相对本地 `main`：160 commits ahead / 0 behind；这不是允许原样进入主线的集成历史。
 - GitHub Actions：当前无可用 status checks；不作为已通过 gate。
 - 当前原则：源码审阅不能替代 executable validation；未执行的 gate 一律 `NOT RUN`。
 
@@ -32,7 +32,7 @@
 | Stage 14 — Authoritative Timeline → Delivery | 91 |
 | Stage 15 — Timeline multicam synchronization | 92 |
 | Stage 16 — Timeline audio semantics | **93** |
-| Stage 17 — Audio editing UX | **进行中，不计分** |
+| Stage 17 — Audio editing UX | **源码完成；native/FCP 阻塞，不计入关闭** |
 
 评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。
 
@@ -67,28 +67,18 @@
 
 ## 当前未完成的代码项
 
-### P1 — Audio editing UX reachability
-
-- `timelineAudioEditing.ts` 已能生成 A1 Insert/Overwrite commands，但 `TimelineWorkbench` 还没有可见的 `Insert Audio / Overwrite Audio` 操作入口。
-- 当前 connector 只支持 whole-file replacement；本环境又无法 checkout GitHub，因此暂不为四个按钮重写 600+ 行 Workbench，避免制造无关 diff。
-- 完整 checkout 可用后，以局部 patch 接入四个明确动作，并分别使用 V1/A1 的 Insert preflight。
+当前没有待完成的 Stage 17 代码接线；`TimelineWorkbench` 已接入四个 Video/Audio Source edit 动作，Audio 仍只通过 Rust A1 authority 写入。
 
 ## 当前 P1 — Executable validation and integration
 
-在完整 checkout 上先执行：
-
-```bash
-python scripts/check_python.py
-python scripts/check_fast.py
-python scripts/check_full.py
-cd desktop
-npm run typecheck
-npm test
-```
-
-还必须实际执行 Rust/Tauri tests、packaged Desktop smoke、真实素材生命周期和 Final Cut Pro FCPXML 导入 smoke。
-
-全部通过后，按 `INTEGRATION_PLAN.md` 在独立 integration worktree 把当前 147-commit 功能历史重建为可审阅/可回滚的少量语义提交，再复验并进入 `main`。不要把当前机械历史原样 merge。
+- `python scripts/check_python.py`：PASS，66 passed，1.24s。
+- `python scripts/check_fast.py`：PASS，28 个 Vitest 文件/130 tests，Rust Timeline 10、Tauri timeline 5、Tauri persistence 7、Python 66，8.53s。
+- `python scripts/check_full.py`：PASS，448 passed，1 个第三方 deprecation warning，125.36s。
+- packaged runtime staging、`verify:rc`、Tauri macOS build、`verify:macos-bundle`：PASS。
+- packaged Host/project/durable-task/cancel/restart/path-free smoke：部分 PASS；详见 `docs/verification/2026-08-29-production-readiness.md`。
+- packaged 已建立 Timeline 的 checkpoint/journal reopen、stale authority UI recovery、真实 media playback、LAN/Finder smoke：NOT RUN。
+- Final Cut Pro 不存在；真实媒体与 FCPXML import 全部 NOT RUN。
+- 未创建 squash integration worktree；未生成新的 main commit。不能继承 feature branch 的 PASS。
 
 ## 下一 P2
 
@@ -99,15 +89,16 @@ npm test
 
 ## 当前验证状态
 
-- Source / diff review：已完成各阶段局部审阅。
-- Python converter/audio 局部 contracts：部分 **PASS**，见上方证据。
-- `python scripts/check_python.py`：**NOT RUN**（无完整 checkout）。
-- `python scripts/check_fast.py`：**NOT RUN**。
-- `python scripts/check_full.py`：**NOT RUN**。
-- 全套 TypeScript/Vitest：**NOT RUN**。
-- Rust/Tauri executable tests：**NOT RUN**（当前环境无 Rust toolchain）。
-- Native packaged runtime / real media / LAN / Final Cut Pro smoke：**NOT RUN**。
-- GitHub Actions：**NOT RUN** / 当前 HEAD 无 status checks。
+- Source / diff review：已完成；`git diff --check`：PASS。
+- Python converter/audio 局部 contracts：PASS；见上方证据。
+- `python scripts/check_python.py`：**PASS**，66 passed。
+- `python scripts/check_fast.py`：**PASS**，TS/Vitest/Rust/Tauri/Python 全部通过。
+- `python scripts/check_full.py`：**PASS**，448 passed，1 个第三方 deprecation warning。
+- `npm install`、runtime staging、`verify:rc`、macOS Tauri build、`verify:macos-bundle`：**PASS**。
+- Packaged Host/project/durable-task/cancel/restart/path-free smoke：**部分 PASS**；详见验证报告。
+- Packaged Timeline checkpoint/journal reopen、stale authority UI recovery、真实 media/LAN/Finder：**NOT RUN**。
+- Final Cut Pro / real media / authoritative FCPXML import smoke：**NOT RUN**，本机没有 Final Cut Pro。
+- codesign/notarization、Windows native/installer gates、GitHub Actions：**NOT RUN**。
 
 ## 状态维护规则
 

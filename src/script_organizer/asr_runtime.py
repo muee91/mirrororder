@@ -104,7 +104,6 @@ class ASRRuntime:
             "model": self.model,
             "language": self.language,
             "apple_silicon": _is_apple_silicon(),
-            "model_cache": str(application_support_root() / "models"),
         }
 
     def transcribe(self, clip: Clip, store: TranscriptStore, initial_prompt: str = "") -> Transcript:

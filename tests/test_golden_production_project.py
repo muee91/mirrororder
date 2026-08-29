@@ -157,7 +157,7 @@ def _materialize(tmp_path: Path) -> GoldenProject:
     )
 
     slate_store = ScriptSupervisorStore(output)
-    slate_revision = 0
+    slate_revision = int(slate_store.load()["revision"])
     for row in scenario["slate"]:
         saved = slate_store.apply(
             {

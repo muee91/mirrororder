@@ -10,7 +10,7 @@ def test_app_production_is_native_and_does_not_embed_team_web() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
-    assert 'type AppWorkspace = "production" | "team"' in app
+    assert 'type AppSurface = "production" | "status" | "team" | "settings"' in app
     assert "TeamWebWorkbench" in app
     assert "ProjectWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
@@ -22,11 +22,11 @@ def test_native_production_navigation_starts_at_project_home_then_multicam_slate
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
-    assert 'useState<AppWorkspace>("production")' in app
+    assert 'useState<AppSurface>("production")' in app
     for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
     assert 'label: "场记"' in workbench
-    assert '>团队协作</button>' in app
+    assert 'onOpenTeam={() => setSurface("team")}' in app
     assert '>小镜</button>' in workbench
 
 

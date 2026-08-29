@@ -207,7 +207,6 @@ class IdentityRuntime(_IdentityRuntimeV2):
             "download_policy": "runtime_only_when_enabled_or_explicitly_prepared",
             "integrity_check": "deferred_to_explicit_prepare",
             "read_path_native_import": False,
-            "read_path_sha256": False,
         }
 
     @classmethod

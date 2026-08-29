@@ -122,9 +122,9 @@ export class DeliveryClient {
     return request<TimelineDeliveryPayload>(this.baseUrl, timelineRoute(projectId), "GET");
   }
 
-  exportTimeline(projectId: string, snapshot: TimelineSnapshot): Promise<TimelineDeliveryPayload> {
+  async exportTimeline(projectId: string, snapshot: TimelineSnapshot): Promise<TimelineDeliveryPayload> {
     if (snapshot.project.project_id !== projectId.trim()) {
-      throw new HostConnectionError("Timeline delivery 的 snapshot project_id 与当前项目不一致");
+      throw new HostConnectionError("snapshot project_id 与当前项目不一致");
     }
     return request<TimelineDeliveryPayload>(
       this.baseUrl,

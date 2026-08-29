@@ -76,9 +76,9 @@ def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     assert "runtime manifest" in verifier
     assert "PACKAGED_RUNTIME_CONTRACT" in runtime
     assert "resolve_python_runtime" in runtime
-    assert "本地模型 / 身份运行时" in panel
+    assert "本地模型与身份识别" in panel
     assert "准备 / 启动" in panel
-    assert "准备人脸模型" in panel and "准备说话人模型" in panel
+    assert "准备人脸模型" in panel and "准备声纹模型" in panel
     assert "React 不下载模型，也不保存 embedding" in panel
     assert "状态中心" in panel
 

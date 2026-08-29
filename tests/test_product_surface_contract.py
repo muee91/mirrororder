@@ -31,7 +31,7 @@ def test_desktop_is_project_first_production_surface() -> None:
     assert "ProjectWorkbench" in app
     assert 'type AppSurface = "production" | "status" | "team" | "settings"' in app
     assert 'className="global-sidebar"' in app
-    assert 'className="main-stage"' in app
+    assert 'className="workbench-shell main-stage"' in app
     assert "制作台" not in app
     assert "app-workspace-switch" not in app
 

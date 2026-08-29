@@ -13,12 +13,12 @@ def test_desktop_shell_fills_available_canvas() -> None:
     styles = read("desktop/src/styles.css")
     production = read("desktop/src/features/production/production.css")
 
-    assert 'className="app-shell"' in app
-    assert 'className="standalone-workspace-shell"' in app
-    assert 'className="workspace-shell"' in app
+    assert 'className="app-shell production-app-shell"' in app
+    assert 'className="startup-shell"' in app
+    assert 'className="workspace-shell application-frame"' in app
     assert ".app-shell { min-height: 100vh" in styles
     assert ".workspace-shell { display: grid" in styles
-    assert "min-height: 620px" in styles
+    assert ".project-workbench-canvas { flex: 1;" in (read("desktop/src/features/production/product-experience.css"))
     assert ".project-workbench-nav" in production
 
 
@@ -26,9 +26,8 @@ def test_top_level_workspace_switch_stays_outside_project_tabs() -> None:
     app = read("desktop/src/app/App.tsx")
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
-    assert 'className="app-workspace-switch"' in app
-    assert ">制作<" in app
-    assert ">团队协作<" in app
+    assert 'onOpenTeam={() => setSurface("team")}' in app
+    assert 'surface === "team"' in app
     assert "TeamWebWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
 

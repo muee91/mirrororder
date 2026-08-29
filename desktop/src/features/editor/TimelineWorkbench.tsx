@@ -25,6 +25,12 @@ import {
   type TimelineSourceOption,
 } from "./timelineSourceEditing";
 import {
+  audioInsertCutsExistingClip,
+  audioTrackId,
+  buildManualAudioCommand,
+  type ManualAudioEditMode,
+} from "./timelineAudioEditing";
+import {
   clampSourceCursor,
   markSourceIn,
   markSourceOut,
@@ -181,7 +187,9 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const sourceOption = sourceOptions.find((option) => option.source.source_id === sourceId) ?? null;
   const sourceRangeError = validateManualSourceRange(sourceOption, sourceIn, sourceDuration);
   const sourceOut = sourceIn + sourceDuration;
-  const insertBlocked = sequence ? insertCutsExistingClip(sequence, playhead) : false;
+  const videoInsertBlocked = sequence ? insertCutsExistingClip(sequence, playhead) : false;
+  const audioTargetTrackId = sequence ? audioTrackId(sequence) : null;
+  const audioInsertBlocked = sequence ? audioInsertCutsExistingClip(sequence, playhead) : false;
   const maxEnd = Math.max(1, ...(sequence?.tracks.flatMap((track) => track.clips.map((clip) => clip.timeline_start + clip.duration)) ?? [1]));
   const selectedMulticamGroupId = selection?.clip.multicam_group_id ?? null;
   const selectedMulticam = selectedMulticamGroupId
@@ -375,8 +383,8 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       setMessage(sourceRangeError);
       return;
     }
-    if (mode === "insert" && insertBlocked) {
-      setMessage("Insert 播放头位于现有视频片段内部；请先切分，或改用 Overwrite。");
+    if (mode === "insert" && videoInsertBlocked) {
+      setMessage("Insert Video 播放头位于现有视频片段内部；请先切分，或改用 Overwrite Video。");
       return;
     }
     try {
@@ -384,6 +392,42 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       void apply(
         command,
         `${mode === "insert" ? "Insert" : "Overwrite"} 完成 · ${sourceOption.label} · ${frameLabel(sourceDuration)} @ ${frameLabel(playhead)}`,
+      );
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  function editAudioFromSource(mode: ManualAudioEditMode): void {
+    if (!snapshot || !sequence || !sourceOption) {
+      setMessage("需要先选择一个可播放 Source。");
+      return;
+    }
+    if (sourceRangeError) {
+      setMessage(sourceRangeError);
+      return;
+    }
+    if (!audioTargetTrackId) {
+      setMessage("当前 Timeline 没有独立音频轨 A1。");
+      return;
+    }
+    if (mode === "insert" && audioInsertBlocked) {
+      setMessage("Insert Audio 播放头位于现有音频片段内部；请先切分，或改用 Overwrite Audio。");
+      return;
+    }
+    try {
+      const command = buildManualAudioCommand(
+        mode,
+        snapshot,
+        sequence,
+        sourceOption,
+        sourceIn,
+        sourceDuration,
+        playhead,
+      );
+      void apply(
+        command,
+        `${mode === "insert" ? "Insert Audio" : "Overwrite Audio"} 完成 · ${sourceOption.label} · ${frameLabel(sourceDuration)} @ ${frameLabel(playhead)}`,
       );
     } catch (error) {
       setMessage(errorMessage(error));
@@ -515,7 +559,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
             <div className="parse-heading">
               <div>
                 <p className="eyebrow">Source → Program</p>
-                <strong>人工 Insert / Overwrite</strong>
+                <strong>人工 Video / Audio Insert / Overwrite</strong>
               </div>
               <span>{sourceOptions.length} 个可播放 Source</span>
             </div>
@@ -554,11 +598,15 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
                 <div className="proposal-warnings">
                   <span>可用范围 {frameLabel(sourceOption.availableIn)}–{frameLabel(sourceOptionEnd(sourceOption))} · 目标 {frameLabel(playhead)}</span>
                   {sourceRangeError ? <span>⚠️ {sourceRangeError}</span> : null}
-                  {insertBlocked ? <span>Insert 位置位于现有片段内部；先切分或使用 Overwrite。</span> : null}
+                  {videoInsertBlocked ? <span>Insert Video 位于现有视频片段内部；先切分或使用 Overwrite Video。</span> : null}
+                  {audioInsertBlocked ? <span>Insert Audio 位于现有音频片段内部；先切分或使用 Overwrite Audio。</span> : null}
+                  {!audioTargetTrackId ? <span>当前 Timeline 没有独立音频轨；Audio Insert/Overwrite 不可用。</span> : null}
                 </div>
                 <div className="timeline-edit-actions">
-                  <button type="button" className="secondary" disabled={busy || Boolean(sourceRangeError) || insertBlocked} onClick={() => editFromSource("insert")}>Insert @ {frameLabel(playhead)}</button>
-                  <button type="button" disabled={busy || Boolean(sourceRangeError)} onClick={() => editFromSource("overwrite")}>Overwrite @ {frameLabel(playhead)}</button>
+                  <button type="button" className="secondary" disabled={busy || Boolean(sourceRangeError) || videoInsertBlocked} onClick={() => editFromSource("insert")}>Insert Video @ {frameLabel(playhead)}</button>
+                  <button type="button" disabled={busy || Boolean(sourceRangeError)} onClick={() => editFromSource("overwrite")}>Overwrite Video @ {frameLabel(playhead)}</button>
+                  <button type="button" className="secondary" disabled={busy || Boolean(sourceRangeError) || !audioTargetTrackId || audioInsertBlocked} onClick={() => editAudioFromSource("insert")}>Insert Audio @ {frameLabel(playhead)}</button>
+                  <button type="button" className="secondary" disabled={busy || Boolean(sourceRangeError) || !audioTargetTrackId} onClick={() => editAudioFromSource("overwrite")}>Overwrite Audio @ {frameLabel(playhead)}</button>
                 </div>
               </>
             ) : <p className="empty-copy">当前 Timeline 没有已注册的可播放 Source。先从 Review / Rough Cut 建立 source pool。</p>}

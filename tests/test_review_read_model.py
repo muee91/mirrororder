@@ -278,6 +278,6 @@ def test_review_v1_adapter_keeps_team_web_path_free_and_enriches_native_drag_onl
     assert "script_supervisor: supervisor" in adapter
     assert "['', '/script', '/groups', '/matches']" not in adapter
     assert html.index('<script src="/review_model.js"></script>') < html.index('<script src="/ux_fixes.js"></script>')
-    assert "install_review_read_model_runtime()" in cli
+    assert "install_production_runtime()" in cli
     assert 'CONTRACT_VERSION = "review.v1"' in runtime
     assert 'parts[4] == "review-model"' in runtime

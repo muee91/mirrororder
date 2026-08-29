@@ -131,10 +131,10 @@ def test_explicit_rescans_get_unique_requests_and_project_tasks_stay_path_free(t
 
 def test_media_inventory_runtime_installs_after_desktop_and_uses_durable_contract() -> None:
     root = Path(__file__).resolve().parents[1]
-    editorial = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
+    runtime_stack = (root / "src" / "script_organizer" / "runtime_stack.py").read_text(encoding="utf-8")
     runtime = (root / "src" / "script_organizer" / "media_inventory_task_runtime.py").read_text(encoding="utf-8")
 
-    assert editorial.index("install_desktop_runtime()") < editorial.index("install_media_inventory_task_runtime()")
+    assert runtime_stack.index("install_desktop_runtime()") < runtime_stack.index("install_media_inventory_task_runtime()")
     assert 'task_runtime.TASK_TYPES.add(_TASK_TYPE)' in runtime
     assert 'manager._resource(config, task, "cpu", "media_inventory", "素材扫描")' in runtime
     assert 'except ResourceCancelled:' in runtime

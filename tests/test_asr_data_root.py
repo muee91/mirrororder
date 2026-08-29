@@ -30,3 +30,12 @@ def test_asr_model_cache_respects_explicit_operator_cache(monkeypatch, tmp_path:
 
     assert cache == root / "models" / "huggingface"
     assert asr_runtime.os.environ["HF_HOME"] == str(explicit)
+
+
+def test_asr_runtime_public_status_is_path_free(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(asr_runtime, "application_support_root", lambda: tmp_path / "device-root")
+
+    payload = asr_runtime.ASRRuntime("faster-whisper", "small", "zh").public()
+
+    assert "model_cache" not in payload
+    assert all("/Users/" not in str(value) and "/Volumes/" not in str(value) for value in payload.values())

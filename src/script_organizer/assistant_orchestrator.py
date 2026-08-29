@@ -408,7 +408,6 @@ class AssistantOrchestrator:
         summary = self._summary(items)
         orchestration = dict(_as_dict(previous.get("orchestration")))
         orchestration["last_trigger"] = str(trigger or "manual")[:80]
-        orchestration["models"] = self.models.public()
         orchestration["agent_api"] = {
             "contract": "agent.v1",
             "base": f"/api/agent/v1/projects/{self.project_id}",

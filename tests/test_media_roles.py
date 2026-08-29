@@ -186,8 +186,9 @@ def test_rough_cut_exposes_scene_auxiliary_without_promoting_it(tmp_path: Path) 
 
 def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     root = Path(__file__).resolve().parents[1]
-    editorial = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
+    runtime_stack = (root / "src" / "script_organizer" / "runtime_stack.py").read_text(encoding="utf-8")
     runtime = (root / "src" / "script_organizer" / "media_role_runtime.py").read_text(encoding="utf-8")
+    inventory_runtime = (root / "src" / "script_organizer" / "media_inventory_task_runtime.py").read_text(encoding="utf-8")
     sync_engine = (root / "src" / "script_organizer" / "multicam_sync_engine.py").read_text(encoding="utf-8")
     vendor_index = (root / "vendor" / "multicam-audio-sync" / "scripts" / "make_index.py").read_text(encoding="utf-8")
     vendor_sync = (root / "vendor" / "multicam-audio-sync" / "scripts" / "sync.py").read_text(encoding="utf-8")
@@ -195,13 +196,13 @@ def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     index = (root / "web" / "index.html").read_text(encoding="utf-8")
     stage = (root / "desktop/scripts/stage-runtime.mjs").read_text(encoding="utf-8")
 
-    assert editorial.index("install_media_role_runtime()") < editorial.index("from .coverage_runtime import install_coverage_runtime")
-    assert editorial.index("install_media_role_runtime()") < editorial.index("install_coverage_runtime()")
-    assert 'parts[4] == "media-inventory"' in runtime
+    assert runtime_stack.index("install_media_role_runtime()") < runtime_stack.index("from .coverage_runtime import install_coverage_runtime")
+    assert runtime_stack.index("install_media_role_runtime()") < runtime_stack.index("install_coverage_runtime()")
+    assert 'parts[4] == "media-inventory"' in inventory_runtime
     assert 'self._local_only()' in runtime
     assert '"agent_write": False' in runtime
     assert '"editorial_authority": False' in runtime
-    assert '"paths_exposed": False' in runtime
+    assert '"paths_exposed": False' in inventory_runtime
 
     assert "MediaRoleStore(config.output_dir)" in sync_engine
     assert '"paths_projected": False' in sync_engine

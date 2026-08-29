@@ -53,7 +53,7 @@ def test_team_web_is_not_embedded_in_project_workbench() -> None:
     app = read("desktop/src/app/App.tsx")
     project = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
-    assert 'type AppWorkspace = "production" | "team"' in app
+    assert 'type AppSurface = "production" | "status" | "team" | "settings"' in app
     assert "TeamWebWorkbench" in app
     assert "TeamWebWorkbench" not in project
     assert 'label: "团队协作"' not in project
@@ -68,7 +68,7 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
     assert "client.createProject(payload())" in ui
     assert "client.prepareProject(created.project_id)" in ui
     assert "client.deleteProject(selectedProject.project_id)" in ui
-    assert "删除前必须完整输入当前 project_id" in ui
+    assert "移除前必须完整输入当前项目 ID" in ui
     assert "/api/v1/projects/preflight" in client
     assert "current.registry.preflight_create" in runtime
 

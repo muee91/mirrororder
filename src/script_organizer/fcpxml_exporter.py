@@ -314,17 +314,17 @@ def _decision_targets(index: dict[str, Any], manifest: dict[str, Any]) -> list[d
 
 
 def _inject_selection_keywords(
-    source_fcpxml: Path,
+    input_xml: Path,
     output_fcpxml: Path,
     index: dict[str, Any],
     manifest: dict[str, Any],
 ) -> dict[str, int]:
     targets = _decision_targets(index, manifest)
     if not targets:
-        shutil.copyfile(source_fcpxml, output_fcpxml)
+        shutil.copyfile(input_xml, output_fcpxml)
         return {"keywords": 0, "ranges": 0}
     try:
-        tree = ET.parse(source_fcpxml)
+        tree = ET.parse(input_xml)
     except (OSError, ET.ParseError) as error:
         raise UnsafeFCPXMLExport(f"cannot parse source FCPXML safely: {error}") from error
     root = tree.getroot()

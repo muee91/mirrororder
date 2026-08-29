@@ -151,12 +151,14 @@ def test_runtime_keeps_final_decision_host_local_and_review_v1_versioned() -> No
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
     cli = (root / "src" / "script_organizer" / "cli.py").read_text(encoding="utf-8")
+    runtime_stack = (root / "src" / "script_organizer" / "runtime_stack.py").read_text(encoding="utf-8")
     adapter = (root / "web" / "review_model.js").read_text(encoding="utf-8")
 
     assert 'parts[4] == "opinions"' in runtime
     assert 'parts[4] == "editorial-decision"' in runtime
     assert "self._local_only()" in runtime
     assert '"editorial_decision_write_scope": "host_local"' in runtime
-    assert "install_review_read_model_runtime()\n        install_editorial_runtime()" in cli
+    assert "install_production_runtime()" in cli
+    assert runtime_stack.index("install_review_read_model_runtime()") < runtime_stack.index("install_editorial_runtime()")
     assert "state.editorialRevision = Number(revisions.editorial || 0);" in adapter
     assert "next.editorial_revision" in adapter

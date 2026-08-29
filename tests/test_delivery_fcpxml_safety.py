@@ -31,7 +31,7 @@ def test_delivery_export_keeps_source_fcpxml_byte_for_byte(tmp_path: Path) -> No
 
     assert (output / "organized.fcpxml").read_bytes() == source_bytes
     assert report["selection_contract"] == "delivery.v1"
-    assert report["selection_manifest_version"] == 3
+    assert report["selection_manifest_version"] == 4
     assert report["keywords_written"] is False
     assert report["multicam_structure_modified"] is False
     assert "unchanged copy" in report["warning"]
