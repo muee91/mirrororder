@@ -17,6 +17,9 @@
 .timeline-source-fields { display: grid; grid-template-columns: minmax(240px, 2fr) minmax(120px, .75fr) minmax(120px, .75fr); gap: 8px; align-items: end; }
 .timeline-source-fields .production-field { min-width: 0; }
 .timeline-source-fields select, .timeline-source-fields input { width: 100%; box-sizing: border-box; }
+.timeline-source-cursor { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: #7d8996; font-size: 10px; }
+.timeline-source-cursor > span:last-child { margin-left: auto; color: #9aa7b3; }
+.timeline-source-cursor kbd { margin-left: 4px; border: 1px solid #3b4651; border-radius: 4px; padding: 1px 4px; color: #aeb9c4; background: #11171c; font: inherit; font-size: 8px; }
 .timeline-stage { display: grid; gap: 8px; overflow-x: auto; }
 .timeline-track { display: grid; grid-template-columns: 62px minmax(720px, 1fr); gap: 8px; align-items: center; }
 .track-label { display: grid; gap: 2px; }
@@ -50,6 +53,7 @@
   .timeline-toolbar > span { width: 100%; margin-left: 0; }
   .timeline-source-fields { grid-template-columns: 1fr 1fr; }
   .timeline-source-fields .production-field:first-child { grid-column: 1 / -1; }
+  .timeline-source-cursor > span:last-child { width: 100%; margin-left: 0; }
 }
 
 @media (prefers-color-scheme: light) {
@@ -58,4 +62,5 @@
   .timeline-clip { border-color: #aab7c3; color: #33404b; background: #e9eef2; }
   .timeline-clip.is-selected { border-color: #637688; box-shadow: inset 0 0 0 1px #9eabb7; }
   .timeline-clip-facts span, .timeline-marker-list span { background: #eef2f5; }
+  .timeline-source-cursor kbd { border-color: #c7d0d8; color: #4e5c68; background: #f7f9fb; }
 }
