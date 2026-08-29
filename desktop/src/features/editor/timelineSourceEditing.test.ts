@@ -114,6 +114,18 @@ describe("timeline source editing", () => {
     expect(buildTimelineSourceOptions(null, value, value.sequences[0])).toEqual([]);
   });
 
+  it("intersects current Review evidence with persisted media duration", () => {
+    const value = project();
+    value.sources[1].duration_frames = 500;
+    const options = buildTimelineSourceOptions(review(), value, value.sequences[0]);
+    expect(options[1]).toMatchObject({ availableIn: 480, availableDuration: 20 });
+    expect(validateManualSourceRange(options[1], 480, 20)).toBeNull();
+    expect(validateManualSourceRange(options[1], 480, 21)).toContain("可用 Source");
+
+    value.sources[1].duration_frames = 480;
+    expect(buildTimelineSourceOptions(review(), value, value.sequences[0]).map((option) => option.source.source_id)).toEqual(["source:a"]);
+  });
+
   it("rejects manual ranges outside Review evidence", () => {
     const value = project();
     const option = buildTimelineSourceOptions(review(), value, value.sequences[0])[0];
