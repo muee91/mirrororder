@@ -65,3 +65,14 @@ L4 失败或不可用不能自动否定已经真实执行的 L1/L2/L3；反过�
 源码 Git 不保存真实 `projects/` runtime 状态、制作输入或设备绝对路径。仓库只跟踪 `projects/.gitkeep` 作为空容器占位；生产 workspace 的同步语义由 `docs/architecture/sync-model.md` 定义。
 
 这条决策不要求重写 Git 历史；历史清理属于独立、破坏性维护工作，必须单独决定。
+
+## ADR-007 — Durable task 按 authority scope 分域
+
+- 状态：Accepted
+- 日期：2026-08-29
+
+项目素材分析、同步、波形、语义索引等工作属于 project scope，继续由项目 `TaskManager` 和项目 `tasks.json` 管理。模型下载、本机可选 Python/native runtime 安装、本地视觉模型加载等工作属于 device scope，不得为了复用项目任务 API 而绑定到任意项目。
+
+Device task 持久化在 MirrorOrder device state 中，target 只能包含逻辑模型 ID、`face|speaker` 等 path-free 参数；设备绝对路径、缓存根、密钥不得进入 durable target。Host 启动时恢复中断状态，普通 GET 只读 snapshot。
+
+无论 scope 是 project 还是 device，用户控制面仍然只有一个：Desktop Status Center。设置页或具体工作台只能提交任务和显示轻量状态，不另建第二套完整任务控制器。
