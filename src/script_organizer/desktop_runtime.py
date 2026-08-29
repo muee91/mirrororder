@@ -70,13 +70,21 @@ def _local_runtime_payload(service: Any) -> dict[str, Any]:
         "speaker_identity_enabled": bool(settings.get("speaker_identity_enabled", False)),
         "vision": vision,
         "identity": identity,
-        # Retain the historical field name used by the native status surface.
-        # The current runtime uses llama.cpp, so this is the lightweight cached
-        # model-size snapshot rather than a framework-specific live scan.
         "mlx_cache_bytes": int(vision.get("cache_bytes", 0) or 0),
         "model_root": str(application_support_root() / "models"),
         "environment": environment_payload([root]),
     }
+
+
+def _cancel_active_device_tasks(device_tasks: Any, task_type: str, *, kind: str = "") -> None:
+    for task in device_tasks.list():
+        if task.get("type") != task_type or task.get("status") not in {"queued", "running"}:
+            continue
+        if kind and str((task.get("targets") or {}).get("kind", "") or "") != kind:
+            continue
+        task_id = str(task.get("task_id", "") or "")
+        if task_id:
+            device_tasks.cancel(task_id)
 
 
 def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -97,8 +105,17 @@ def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, An
         if update:
             old_model = str(settings.get("local_vision_model", "") or "")
             settings = save_runtime_settings(update)
-            if not bool(settings.get("local_vision_enabled", False)) or str(settings.get("local_vision_model", "") or "") != old_model:
+            vision_changed = (
+                not bool(settings.get("local_vision_enabled", False))
+                or str(settings.get("local_vision_model", "") or "") != old_model
+            )
+            if vision_changed:
+                _cancel_active_device_tasks(device_tasks, "local_vision_prepare")
                 LocalVisionRuntime.stop()
+            if "face_identity_enabled" in update and not bool(settings.get("face_identity_enabled", False)):
+                _cancel_active_device_tasks(device_tasks, "identity_runtime_prepare", kind="face")
+            if "speaker_identity_enabled" in update and not bool(settings.get("speaker_identity_enabled", False)):
+                _cancel_active_device_tasks(device_tasks, "identity_runtime_prepare", kind="speaker")
     elif action == "prepare":
         model = str(settings.get("local_vision_model", "") or "")
         submitted = device_tasks.submit(
@@ -118,12 +135,7 @@ def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, An
             actor="desktop",
         )
     elif action == "stop":
-        for task in device_tasks.list():
-            if (
-                task.get("type") == "local_vision_prepare"
-                and task.get("status") in {"queued", "running"}
-            ):
-                device_tasks.cancel(str(task.get("task_id", "") or ""))
+        _cancel_active_device_tasks(device_tasks, "local_vision_prepare")
         LocalVisionRuntime.stop()
     else:
         raise ValueError("不支持的 local runtime action")
