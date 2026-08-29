@@ -6,9 +6,9 @@ import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import "../editor/timeline.css";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
-import { GoldenMaterialScriptWorkbench } from "../material-script/GoldenMaterialScriptWorkbench";
 import { MaterialScriptWorkbench } from "../material-script/MaterialScriptWorkbench";
 import "../material-script/material-script.css";
+import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
 import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
 import "../media/media.css";
 import { AssemblyWorkbench, CoverageWorkbench, RoughCutWorkbench } from "../planning/PlanningWorkbenches";
@@ -19,14 +19,18 @@ import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
 
-interface Props { baseUrl: string; project: ProjectSummary }
+interface Props {
+  baseUrl: string;
+  project: ProjectSummary;
+  pageRequest?: { page: ProductionPage; nonce: number } | null;
+}
 
 type ProductionArea = "material" | "script" | "edit" | "review";
 interface PageDefinition { id: ProductionPage; label: string }
 interface AreaDefinition { id: ProductionArea; label: string; pages: PageDefinition[] }
 
 const AREAS: AreaDefinition[] = [
-  { id: "material", label: "素材", pages: [{ id: "slate", label: "场记" }, { id: "media-library", label: "素材库" }, { id: "takes", label: "Take" }, { id: "identity", label: "人物" }] },
+  { id: "material", label: "素材", pages: [{ id: "slate", label: "场记" }, { id: "media-library", label: "素材库" }, { id: "media-binding", label: "本机素材" }, { id: "takes", label: "Take" }, { id: "identity", label: "人物" }] },
   { id: "script", label: "剧本", pages: [{ id: "script", label: "剧本" }, { id: "coverage", label: "覆盖" }] },
   { id: "edit", label: "剪辑", pages: [{ id: "rough-cut", label: "粗剪" }, { id: "assembly", label: "组接" }, { id: "timeline", label: "时间线" }, { id: "delivery", label: "交付" }] },
   { id: "review", label: "审阅", pages: [{ id: "watch", label: "看片" }, { id: "attention", label: "待处理" }, { id: "overview", label: "概览" }] },
@@ -40,7 +44,7 @@ function firstPage(area: ProductionArea): ProductionPage {
   return AREAS.find((item) => item.id === area)?.pages[0]?.id ?? "slate";
 }
 
-export function ProjectWorkbench({ baseUrl, project }: Props) {
+export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => readProjectPage(project.project_id));
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
@@ -50,6 +54,10 @@ export function ProjectWorkbench({ baseUrl, project }: Props) {
   useEffect(() => {
     rememberProjectPage(project.project_id, page);
   }, [page, project.project_id]);
+
+  useEffect(() => {
+    if (pageRequest) setPage(pageRequest.page);
+  }, [pageRequest]);
 
   function openTakeFromEvidence(groupId: string): void {
     const value = groupId.trim();
@@ -96,10 +104,11 @@ export function ProjectWorkbench({ baseUrl, project }: Props) {
       <div className="project-workbench-canvas">
         <div className="project-workbench-main">
           {page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-          {page === "takes" ? <GoldenMaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialMode="rough" showEditorial={false} /> : null}
+          {page === "media-binding" ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+          {page === "takes" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial={false} /> : null}
           {page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "slate" ? <GoldenSlateWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-          {page === "script" ? <GoldenMaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialMode="precise" showEditorial={false} /> : null}
+          {page === "script" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="script" showEditorial={false} /> : null}
           {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "rough-cut" ? <RoughCutWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "assembly" ? <AssemblyWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
