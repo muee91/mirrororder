@@ -65,6 +65,8 @@ def main() -> None:
             "tests/test_runtime_read_paths_contract.py",
             "tests/test_runtime_stack_installation.py",
             "tests/test_device_tasks.py",
+            "tests/test_delivery_semantics.py",
+            "tests/test_delivery_artifact_paths.py",
             "tests/test_golden_production_project.py",
         ],
         ROOT,
