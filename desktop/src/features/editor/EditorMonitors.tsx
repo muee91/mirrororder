@@ -13,6 +13,8 @@ import "./editor-monitors.css";
 export interface SourceMonitorPreview {
   source: TimelineSource;
   frame: number;
+  rangeStart: number;
+  rangeEnd: number;
 }
 
 interface Props {
@@ -25,6 +27,7 @@ interface Props {
   playhead: number;
   onPlayheadChange: (frame: number) => void;
   onStepFrames: (frames: number) => void;
+  onSourceFrameChange?: (frame: number) => void;
 }
 
 type TransportDirection = -1 | 0 | 1;
@@ -49,6 +52,10 @@ function waveformError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
 export function EditorMonitors({
   baseUrl,
   projectId,
@@ -59,6 +66,7 @@ export function EditorMonitors({
   playhead,
   onPlayheadChange,
   onStepFrames,
+  onSourceFrameChange,
 }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
@@ -72,7 +80,7 @@ export function EditorMonitors({
   const fps = sequenceFps(sequence);
   const sourceState = useMemo(() => {
     if (sourcePreview) {
-      const frame = Math.max(0, Math.round(sourcePreview.frame));
+      const frame = Math.max(sourcePreview.rangeStart, Math.min(sourcePreview.rangeEnd, Math.round(sourcePreview.frame)));
       return { source: sourcePreview.source, sourceSeconds: frame / fps, sourceFrame: frame };
     }
     const current = selectedSourceState(project, sequence, selectedClip);
@@ -203,9 +211,22 @@ export function EditorMonitors({
     return () => globalThis.removeEventListener("keydown", handleKey);
   }, [onStepFrames]);
 
-  const waveformProgress = selectedClip && playhead >= selectedClip.timeline_start && playhead <= selectedClip.timeline_start + selectedClip.duration
-    ? Math.max(0, Math.min(100, ((playhead - selectedClip.timeline_start) / Math.max(1, selectedClip.duration)) * 100))
-    : null;
+  function reportSourceFrame(video: HTMLVideoElement): void {
+    if (!sourcePreview || !onSourceFrameChange) return;
+    const rawFrame = Math.round(video.currentTime * fps);
+    const bounded = Math.max(sourcePreview.rangeStart, Math.min(sourcePreview.rangeEnd, rawFrame));
+    if (bounded !== rawFrame) {
+      video.currentTime = bounded / fps;
+      video.pause();
+    }
+    onSourceFrameChange(bounded);
+  }
+
+  const waveformProgress = sourcePreview && sourceState
+    ? clampPercent((sourceState.sourceFrame / Math.max(1, sourceState.source.duration_frames ?? sourcePreview.rangeEnd)) * 100)
+    : selectedClip && playhead >= selectedClip.timeline_start && playhead <= selectedClip.timeline_start + selectedClip.duration
+      ? clampPercent(((playhead - selectedClip.timeline_start) / Math.max(1, selectedClip.duration)) * 100)
+      : null;
 
   return (
     <section className="editor-monitors production-panel">
@@ -213,7 +234,15 @@ export function EditorMonitors({
         <article className="editor-monitor">
           <header><strong>Source Monitor</strong><span>{sourceState ? monitorLabel(sourceState.sourceFrame, fps) : "未选择 source"}</span></header>
           {sourceUrl && sourceState ? (
-            <video ref={sourceVideoRef} src={sourceUrl} controls preload="metadata" key={`source-${sourceState.source.source_id}`} />
+            <video
+              ref={sourceVideoRef}
+              src={sourceUrl}
+              controls
+              preload="metadata"
+              key={`source-${sourceState.source.source_id}`}
+              onTimeUpdate={(event) => reportSourceFrame(event.currentTarget)}
+              onSeeked={(event) => reportSourceFrame(event.currentTarget)}
+            />
           ) : <div className="monitor-empty">选择 Source pool 或 Timeline clip 查看原始 source。</div>}
           <footer>{sourceState?.source.name || sourceState?.source.clip_id || "—"}</footer>
         </article>
