@@ -1,0 +1,24 @@
+.slate-playback-shortcut-hint {
+  position: absolute;
+  z-index: 6;
+  right: 14px;
+  bottom: 10px;
+  max-width: min(520px, calc(100% - 28px));
+  border: 1px solid #2b353e;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #74818c;
+  background: rgba(13, 18, 22, .9);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .18);
+  font-size: 8px;
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: light) {
+  .slate-playback-shortcut-hint {
+    border-color: #d2d9df;
+    color: #74808a;
+    background: rgba(255, 255, 255, .92);
+    box-shadow: 0 8px 26px rgba(42, 54, 64, .1);
+  }
+}
