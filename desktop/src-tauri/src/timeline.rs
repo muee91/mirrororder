@@ -119,6 +119,41 @@ fn require_authority(
     ))
 }
 
+fn authorize_checkpoint_replacement(
+    current: Option<&ManagedTimeline>,
+    project_id: &str,
+    expected: Option<&TimelineAuthority>,
+    storage: &TimelineStorage,
+) -> Result<(), TimelineBridgeError> {
+    if let Some(managed) = current {
+        if managed.engine.project().project_id == project_id {
+            let expected = expected.ok_or_else(|| {
+                TimelineBridgeError::validation(
+                    "Timeline 已存在；替换 checkpoint 必须基于最新 Rust snapshot",
+                    vec![ValidationIssue {
+                        code: "timeline_authority_required".to_string(),
+                        path: "authority".to_string(),
+                        message: format!("project {project_id} 已加载，缺少 expected authority"),
+                    }],
+                )
+            })?;
+            return require_authority(managed, expected);
+        }
+    }
+
+    if storage.exists() {
+        return Err(TimelineBridgeError::validation(
+            "Timeline 已持久化；请先恢复最新 snapshot，再明确执行替换",
+            vec![ValidationIssue {
+                code: "timeline_authority_required".to_string(),
+                path: "authority".to_string(),
+                message: format!("project {project_id} 已有 persisted Timeline，必须先 openPersisted"),
+            }],
+        ));
+    }
+    Ok(())
+}
+
 fn apply_commands_transactionally(
     engine: &mut TimelineEngine,
     commands: &[Command],
@@ -154,12 +189,12 @@ fn apply_operation(
 }
 
 fn replace_with_checkpoint(
-    manager: &State<'_, TimelineManager>,
+    current: &mut Option<ManagedTimeline>,
     engine: TimelineEngine,
+    storage: TimelineStorage,
 ) -> Result<TimelineBridgeSnapshot, TimelineBridgeError> {
     let project = engine.project().clone();
     let project_id = project.project_id.clone();
-    let storage = TimelineStorage::for_project(&project_id).map_err(TimelineBridgeError::message)?;
     let generation = new_generation(&project_id);
     storage
         .write_checkpoint(&project, &generation, 0)
@@ -179,7 +214,7 @@ fn replace_with_checkpoint(
         ignored_partial_tail: false,
     };
     let snapshot = bridge_snapshot(&managed);
-    *lock_manager(manager)? = Some(managed);
+    *current = Some(managed);
     Ok(snapshot)
 }
 
@@ -298,17 +333,30 @@ pub fn timeline_new(
     let engine = TimelineEngine::new(TimelineProject::empty(project_id, sequence_id)).map_err(|issues| {
         TimelineBridgeError::validation("新建 Timeline 未通过校验", issues)
     })?;
-    replace_with_checkpoint(&manager, engine)
+    let storage = TimelineStorage::for_project(project_id).map_err(TimelineBridgeError::message)?;
+    let mut guard = lock_manager(&manager)?;
+    authorize_checkpoint_replacement(guard.as_ref(), project_id, None, &storage)?;
+    replace_with_checkpoint(&mut *guard, engine, storage)
 }
 
 #[tauri::command]
 pub fn timeline_load(
     project: TimelineProject,
+    expected_authority: Option<TimelineAuthority>,
     manager: State<'_, TimelineManager>,
 ) -> Result<TimelineBridgeSnapshot, TimelineBridgeError> {
+    let project_id = project.project_id.clone();
     let engine = TimelineEngine::new(project)
         .map_err(|issues| TimelineBridgeError::validation("Timeline project 未通过校验", issues))?;
-    replace_with_checkpoint(&manager, engine)
+    let storage = TimelineStorage::for_project(&project_id).map_err(TimelineBridgeError::message)?;
+    let mut guard = lock_manager(&manager)?;
+    authorize_checkpoint_replacement(
+        guard.as_ref(),
+        &project_id,
+        expected_authority.as_ref(),
+        &storage,
+    )?;
+    replace_with_checkpoint(&mut *guard, engine, storage)
 }
 
 #[tauri::command]
@@ -330,14 +378,24 @@ pub fn timeline_open_persisted(
 pub fn timeline_load_with_commands(
     project: TimelineProject,
     commands: Vec<Command>,
+    expected_authority: Option<TimelineAuthority>,
     manager: State<'_, TimelineManager>,
 ) -> Result<TimelineBridgeSnapshot, TimelineBridgeError> {
+    let project_id = project.project_id.clone();
     let mut next_engine = TimelineEngine::new(project)
         .map_err(|issues| TimelineBridgeError::validation("Timeline proposal base 未通过校验", issues))?;
     apply_commands_transactionally(&mut next_engine, &commands)?;
+    let storage = TimelineStorage::for_project(&project_id).map_err(TimelineBridgeError::message)?;
+    let mut guard = lock_manager(&manager)?;
+    authorize_checkpoint_replacement(
+        guard.as_ref(),
+        &project_id,
+        expected_authority.as_ref(),
+        &storage,
+    )?;
     // A human-confirmed proposal becomes a fresh durable history boundary only
-    // after the entire command batch validates.
-    replace_with_checkpoint(&manager, next_engine)
+    // after the entire command batch validates and the current authority agrees.
+    replace_with_checkpoint(&mut *guard, next_engine, storage)
 }
 
 #[tauri::command]
@@ -573,6 +631,36 @@ mod tests {
         let engine = clean_engine(project).unwrap();
         assert_eq!(engine.snapshot().undo_depth, 0);
         assert_eq!(engine.snapshot().redo_depth, 0);
+    }
+
+    #[test]
+    fn checkpoint_replacement_requires_the_current_rust_authority() {
+        let managed = managed(golden_project());
+        let storage = managed.storage.clone();
+        let current = Some(&managed);
+
+        let missing = authorize_checkpoint_replacement(current, "golden-timeline", None, &storage)
+            .unwrap_err();
+        assert_eq!(missing.issues[0].code, "timeline_authority_required");
+
+        let mut stale = authority(&managed);
+        stale.revision = stale.revision.saturating_add(1);
+        let stale_error = authorize_checkpoint_replacement(
+            current,
+            "golden-timeline",
+            Some(&stale),
+            &storage,
+        )
+        .unwrap_err();
+        assert_eq!(stale_error.issues[0].code, "stale_timeline_authority");
+
+        assert!(authorize_checkpoint_replacement(
+            current,
+            "golden-timeline",
+            Some(&authority(&managed)),
+            &storage,
+        )
+        .is_ok());
     }
 
     #[test]
