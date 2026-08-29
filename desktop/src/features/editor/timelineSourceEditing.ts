@@ -56,6 +56,7 @@ export function buildTimelineSourceOptions(
     const evidence = reviewAngles.get(source.clip_id);
     if (!evidence) return [];
     const availableIn = secondsToFrames(evidence.sourceStart, fps);
+    if (source.duration_frames !== null && availableIn >= source.duration_frames) return [];
     const evidenceDuration = Math.max(1, secondsToFrames(
       evidence.sourceEnd !== null
         ? Math.max(0, evidence.sourceEnd - evidence.sourceStart)
@@ -65,7 +66,9 @@ export function buildTimelineSourceOptions(
     const sourceRemaining = source.duration_frames !== null
       ? Math.max(1, source.duration_frames - availableIn)
       : Math.max(1, Math.round(fps * 5));
-    const availableDuration = positiveDuration(evidenceDuration, sourceRemaining);
+    const availableDuration = source.duration_frames !== null
+      ? Math.min(evidenceDuration, sourceRemaining)
+      : positiveDuration(evidenceDuration, sourceRemaining);
     const multicam = project.multicam_groups.find((group) => group.angle_source_ids.includes(source.source_id)) ?? null;
     const groupId = evidence.groupId ?? multicam?.group_id ?? "";
     const camera = evidence.camera;
