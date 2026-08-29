@@ -11,6 +11,7 @@ import {
 } from "../api/host";
 import { PlatformClient, type PlatformInfo } from "../api/platform";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
+import { ProjectHome } from "../features/projects/ProjectHome";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
 import { SettingsStatusWorkbench } from "../features/settings/SettingsStatusWorkbench";
 import { StatusCenterWorkbench } from "../features/status/StatusCenterWorkbench";
@@ -53,7 +54,7 @@ export function App() {
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
-  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作现场…" : "打开一个工作区开始制作。");
+  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "打开一个工作区开始制作。");
   const [resumeEnabledForSession, setResumeEnabledForSession] = useState(false);
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
 
@@ -75,22 +76,23 @@ export function App() {
     if (!isTauri() || !launchResume.workspacePath) return;
     let active = true;
     setState("starting");
-    setMessage("正在恢复上次工作现场…");
+    setMessage("正在恢复上次工作区…");
     const task = resumeTaskRef.current ?? new HostConnection(defaultHostBaseUrl).startAndConnect(launchResume.workspacePath);
     resumeTaskRef.current = task;
     void task.then((next) => {
       if (!active) return;
-      const project = projectById(next, launchResume.projectId);
+      const rememberedProject = projectById(next, launchResume.projectId);
       setBaseUrl(next.baseUrl);
       setWorkspacePath(launchResume.workspacePath);
       setSnapshot(next);
-      setSelectedProject(project);
+      setSelectedProject(null);
       setSurface("production");
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(launchResume.workspacePath);
-      if (project) rememberProject(project.project_id);
-      setMessage(project ? `已恢复 ${project.name || project.project_id}` : `工作区已就绪 · ${next.projects.length} 个项目`);
+      setMessage(rememberedProject
+        ? `工作区已恢复 · 上次项目 ${rememberedProject.name || rememberedProject.project_id} 可从项目主页继续`
+        : `工作区已恢复 · ${next.projects.length} 个项目`);
     }).catch((error: unknown) => {
       if (!active) return;
       setSnapshot(null);
@@ -117,24 +119,20 @@ export function App() {
     const previousSnapshot = snapshot;
     const previousProject = selectedProject;
     const previousPath = workspacePath;
-    const remembered = loadAppResume();
-    const preferredProjectId = remembered.workspacePath === normalizedPath ? remembered.projectId : "";
     setWorkspacePath(normalizedPath);
     setState("starting");
     setMessage("正在打开工作区…");
     try {
       const next = await connection.startAndConnect(normalizedPath);
-      const project = projectById(next, preferredProjectId);
       setBaseUrl(next.baseUrl);
       setWorkspacePath(normalizedPath);
       setSnapshot(next);
-      setSelectedProject(project);
+      setSelectedProject(null);
       setSurface("production");
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(normalizedPath);
-      if (project) rememberProject(project.project_id);
-      setMessage(project ? `已恢复 ${project.name || project.project_id}` : `工作区已就绪 · ${next.projects.length} 个项目`);
+      setMessage(`工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       if (previousSnapshot) {
         setWorkspacePath(previousPath);
@@ -194,7 +192,7 @@ export function App() {
       setSurface("production");
       setResumeEnabledForSession(false);
       setState("connected");
-      setMessage(project ? `已连接 · ${project.name || project.project_id}` : `工作区已就绪 · ${next.projects.length} 个项目`);
+      setMessage(project ? `已重新连接 · ${project.name || project.project_id}` : `工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       setSnapshot(null);
       setSelectedProject(null);
@@ -214,7 +212,7 @@ export function App() {
     setSelectedProject(project);
     if (project && resumeEnabledForSession) rememberProject(project.project_id);
     setState("connected");
-    setMessage(project ? `项目已刷新 · ${project.name || project.project_id}` : `项目库已刷新 · ${next.projects.length} 个项目`);
+    setMessage(project ? `项目已刷新 · ${project.name || project.project_id}` : `项目主页已刷新 · ${next.projects.length} 个项目`);
   }
 
   function selectProject(project: ProjectSummary): void {
@@ -222,6 +220,12 @@ export function App() {
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
     setMessage(`已打开 ${project.name || project.project_id}`);
+  }
+
+  function openHome(): void {
+    setSelectedProject(null);
+    setSurface("production");
+    setMessage(`项目主页 · ${snapshot?.projects.length ?? 0} 个项目`);
   }
 
   function openProjectFromStatus(projectId: string): void {
@@ -252,13 +256,13 @@ export function App() {
             </div>
           </div>
           <div className="startup-primary">
-            <p className="eyebrow">{recovering ? "恢复工作现场" : recoveryFailed ? "工作区恢复" : "Production"}</p>
-            <h1>{recovering ? "正在恢复上次工作现场" : recoveryFailed ? "重新定位工作区" : "继续制作"}</h1>
+            <p className="eyebrow">{recovering ? "恢复工作区" : recoveryFailed ? "工作区恢复" : "Production"}</p>
+            <h1>{recovering ? "正在恢复上次工作区" : recoveryFailed ? "重新定位工作区" : "继续制作"}</h1>
             <p>{recovering
-              ? "正在启动本机制作服务，并恢复上次项目与工作画布。"
+              ? "正在启动本机制作服务。恢复完成后先进入项目主页，不会自动钻入上次项目。"
               : recoveryFailed
                 ? "上次工作区没有成功打开。重新定位它，或选择其他工作区；项目数据不会被改写。"
-                : "打开镜序工作区后直接进入项目。Host、端口与运行诊断只在高级区域出现。"}</p>
+                : "打开镜序工作区后先进入项目主页。Host、端口与运行诊断只在高级区域出现。"}</p>
             {workspacePath.trim() ? <code className="startup-path">{workspacePath}</code> : null}
             <div className="startup-actions">
               <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>{recoveryFailed ? "重新定位" : "打开工作区"}</button>
@@ -291,6 +295,7 @@ export function App() {
             selectedProjectId={selectedProject?.project_id ?? null}
             utilityActive={utilityActive}
             onSelectProject={selectProject}
+            onOpenHome={openHome}
             onOpenStatusCenter={() => setSurface("status")}
             onOpenTeam={() => setSurface("team")}
             onOpenSettings={() => setSurface("settings")}
@@ -329,11 +334,7 @@ export function App() {
           ) : selectedProject ? (
             <ProjectWorkbench key={selectedProject.project_id} baseUrl={snapshot.baseUrl} project={selectedProject} />
           ) : (
-            <div className="primary-empty project-picker-placeholder">
-              <p className="eyebrow">项目</p>
-              <h2>选择一个项目开始</h2>
-              <p>从左侧项目栏进入制作。第一次进入项目默认打开电子场记，之后恢复你上次离开的工作画布。</p>
-            </div>
+            <ProjectHome baseUrl={snapshot.baseUrl} workspace={snapshot.workspace} onOpenProject={selectProject} onWorkspaceChanged={refreshWorkspace} />
           )}
         </section>
       </section>
