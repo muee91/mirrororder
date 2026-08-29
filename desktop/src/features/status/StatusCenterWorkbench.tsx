@@ -65,6 +65,7 @@ function progress(task: ProjectTaskRecord): { done: number; total: number } | nu
 function taskLabel(task: ProjectTaskRecord): string {
   const labels: Record<string, string> = {
     prepare_project: "准备项目",
+    media_inventory_scan: "素材扫描",
     multicam_sync: "多机位同步",
     incremental_analyze: "增量素材分析",
     auto_resolve: "剧本归集整理",
@@ -88,6 +89,7 @@ function stageLabel(stage: string): string {
   const labels: Record<string, string> = {
     queued: "等待开始",
     starting: "正在启动",
+    media_inventory: "素材扫描",
     sync: "同步",
     analysis: "素材分析",
     resolve: "剧本归集",
@@ -236,7 +238,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Prop
         <button type="button" className={showCompleted ? "is-active" : ""} aria-pressed={showCompleted} onClick={() => setShowCompleted((value) => !value)}><strong>{totals.completed}</strong>{showCompleted ? "隐藏已完成" : "查看已完成"}</button>
       </div>
 
-      <p className="status-center-note">同步、转写、素材分析、内容识别、人物 / 声纹、语义索引与剧本归集等后台工作统一在这里查看。项目画布只显示制作对象和必要的轻量进度。</p>
+      <p className="status-center-note">素材扫描、同步、转写、素材分析、内容识别、人物 / 声纹、语义索引与剧本归集等后台工作统一在这里查看。项目画布只显示制作对象和必要的轻量进度。</p>
 
       <div className="status-center-projects">
         {visibleRows.map((row) => {

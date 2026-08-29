@@ -107,6 +107,7 @@ export interface MediaBindingSummary {
   scan?: { files_seen: number; verified_matches: number; provisional_name_matches: number; provisional_name_candidates?: number };
 }
 export interface MediaBindingPayload { contract: "media_binding.v1" | string; project_id: string; summary: MediaBindingSummary }
+export interface MediaInventoryScanPayload { contract: "media_inventory_scan.v1" | string; project_id: string; task: ProjectTask }
 export interface ProjectCreatePayload {
   name: string; project_id?: string; input_kind: "fcpxml" | "media-directory"; script: string;
   fcpxml?: string; media_roots?: string[]; timeline_mode?: "sequential" | "timestamp" | string; camera_patterns?: Record<string, string>;
@@ -173,7 +174,7 @@ export class DesktopClient {
     return requestJson(this.baseUrl, `/api/v1/desktop-collaboration/${encodeURIComponent(value)}`, { method: "POST", body: JSON.stringify(values) });
   }
   mediaBinding(projectId: string): Promise<MediaBindingPayload> { return requestJson(this.baseUrl, `${projectPath(projectId)}/media-binding`); }
-  scanMediaBinding(projectId: string, roots: string[], replace = false): Promise<MediaBindingPayload> {
+  scanMediaBinding(projectId: string, roots: string[], replace = false): Promise<MediaInventoryScanPayload> {
     const normalized = [...new Set(roots.map((root) => root.trim()).filter(Boolean))];
     if (!normalized.length) throw new HostConnectionError("扫描本机素材至少需要一个目录");
     return requestJson(this.baseUrl, `${projectPath(projectId)}/media-binding`, { method: "POST", body: JSON.stringify({ action: replace ? "replace_and_scan" : "scan", roots: normalized }) });

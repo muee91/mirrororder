@@ -66,6 +66,13 @@ function defaultDraft(item: MediaInventoryItem, store: MediaRoleStore | null): M
   };
 }
 
+function inventoryUpdatedLabel(value: string): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
 export function MediaLibraryWorkbench({ baseUrl, projectId }: Props) {
   const client = useMemo(() => new MediaRoleClient(baseUrl), [baseUrl]);
   const [inventory, setInventory] = useState<MediaInventory | null>(null);
@@ -91,7 +98,14 @@ export function MediaLibraryWorkbench({ baseUrl, projectId }: Props) {
       setSelectedId(nextSelected);
       const item = nextInventory.items.find((row) => row.media_id === nextSelected);
       setDraft(item ? defaultDraft(item, nextRoles) : {});
-      setMessage(`${nextInventory.summary.files} 素材 · ${nextInventory.summary.indexed} 已入索引 · ${nextInventory.summary.auxiliary} 辅助素材`);
+      const updated = inventoryUpdatedLabel(nextInventory.inventory_updated_at);
+      if (nextInventory.scan_required) {
+        setMessage(updated
+          ? `素材清单需要重新扫描 · 上次清单 ${updated}`
+          : "素材清单尚未扫描 · 请打开本机素材恢复提交扫描任务");
+      } else {
+        setMessage(`${nextInventory.summary.files} 素材 · ${nextInventory.summary.indexed} 已入索引 · ${nextInventory.summary.auxiliary} 辅助素材${updated ? ` · 清单 ${updated}` : ""}`);
+      }
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {

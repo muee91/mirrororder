@@ -67,14 +67,23 @@ describe("DesktopClient", () => {
     expect(browserFetch).toHaveBeenCalledTimes(2);
   });
 
-  it("deduplicates media roots and preserves replace intent", async () => {
+  it("deduplicates media roots and returns a durable scan task without waiting for scan results", async () => {
     const browserFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.method).toBe("POST");
       expect(JSON.parse(String(init?.body))).toEqual({ action: "replace_and_scan", roots: ["/media/A", "/media/B"] });
-      return jsonResponse({ contract: "media_binding.v1", project_id: "p1", summary: { version: 1, device_id: "d", device_name: "mac", state_path: "/s", roots: ["/media/A", "/media/B"], total: 2, resolved: 2, missing: 0, items: [] } });
+      return jsonResponse({
+        contract: "media_inventory_scan.v1",
+        project_id: "p1",
+        task: { task_id: "task_scan", type: "media_inventory_scan", status: "queued" },
+      }, 202);
     });
     vi.stubGlobal("fetch", browserFetch);
     const result = await new DesktopClient("http://127.0.0.1:8765").scanMediaBinding("p1", [" /media/A ", "/media/A", "/media/B"], true);
-    expect(result.summary.resolved).toBe(2);
+    expect(result).toMatchObject({
+      contract: "media_inventory_scan.v1",
+      project_id: "p1",
+      task: { task_id: "task_scan", type: "media_inventory_scan", status: "queued" },
+    });
   });
 
   it("rejects empty media scans before transport", async () => {

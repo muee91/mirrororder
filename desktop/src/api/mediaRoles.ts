@@ -39,6 +39,8 @@ export interface MediaInventory {
   contract: string;
   project_id: string;
   role_revision: number;
+  inventory_updated_at: string;
+  scan_required: boolean;
   summary: {
     files: number;
     indexed: number;

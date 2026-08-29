@@ -72,15 +72,14 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       return;
     }
     setBusy(true);
-    setMessage(replace ? "正在替换本机素材目录并重新扫描…" : "正在扫描本机素材…");
+    setMessage(replace ? "正在提交替换目录并重扫任务…" : "正在提交素材扫描任务…");
     try {
       const payload = await client.scanMediaBinding(projectId, roots, replace);
-      setSummary(payload.summary);
-      setRootsText(payload.summary.roots.join("\n"));
-      const scanText = payload.summary.scan
-        ? ` · 扫描 ${payload.summary.scan.files_seen} 文件 · 内容匹配 ${payload.summary.scan.verified_matches} · 待确认 ${payload.summary.scan.provisional_name_candidates ?? 0}`
-        : "";
-      setMessage(`扫描完成 · ${payload.summary.resolved}/${payload.summary.total} 已解析${scanText}`);
+      if (payload.task.type && payload.task.type !== "media_inventory_scan") {
+        setMessage(`素材扫描提交返回了未知任务类型：${payload.task.type}`);
+        return;
+      }
+      setMessage("素材扫描已提交到状态中心；可以继续制作，完成后刷新这里或素材库查看结果。");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {

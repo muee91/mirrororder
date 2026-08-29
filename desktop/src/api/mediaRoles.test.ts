@@ -19,14 +19,14 @@ describe("MediaRoleClient", () => {
     const browserFetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/media-inventory")) {
-        return jsonResponse({ contract: "media_inventory.v1", project_id: "p/1", role_revision: 3, summary: { files: 1, indexed: 1, unindexed: 0, labeled: 1, auxiliary: 1 }, items: [{ media_id: "M_1", display_name: "DJI.mov", folder_label: "Drone", inferred_camera: "?", indexed: true, label: { source_role: "aerial", sync_policy: "exclude" } }], semantics: { paths_exposed: false } });
+        return jsonResponse({ contract: "media_inventory.v1", project_id: "p/1", role_revision: 3, inventory_updated_at: "2026-08-29T07:00:00+00:00", scan_required: false, summary: { files: 1, indexed: 1, unindexed: 0, labeled: 1, auxiliary: 1 }, items: [{ media_id: "M_1", display_name: "DJI.mov", folder_label: "Drone", inferred_camera: "?", indexed: true, label: { source_role: "aerial", sync_policy: "exclude" } }], semantics: { paths_exposed: false } });
       }
       return jsonResponse({ version: 1, contract: "media_roles.v1", revision: 3, updated_at: "now", media: { M_1: { source_role: "aerial", sync_policy: "exclude" } } });
     });
     vi.stubGlobal("fetch", browserFetch);
 
     const client = new MediaRoleClient("http://127.0.0.1:8765/");
-    await expect(client.inventory("p/1")).resolves.toMatchObject({ summary: { auxiliary: 1 }, semantics: { paths_exposed: false } });
+    await expect(client.inventory("p/1")).resolves.toMatchObject({ scan_required: false, inventory_updated_at: "2026-08-29T07:00:00+00:00", summary: { auxiliary: 1 }, semantics: { paths_exposed: false } });
     await expect(client.roles("p/1")).resolves.toMatchObject({ revision: 3 });
     expect(String(browserFetch.mock.calls[0]?.[0])).toMatch(/\/api\/v1\/projects\/p%2F1\/media-inventory$/);
     expect(String(browserFetch.mock.calls[1]?.[0])).toMatch(/\/api\/v1\/projects\/p%2F1\/media-roles$/);
