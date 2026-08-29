@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { TimelineBridgeError, TimelineClient, type TimelineProject } from "./timeline";
+import { TimelineBridgeError, TimelineClient, type TimelineAuthority, type TimelineProject, type TimelineSnapshot } from "./timeline";
 
 const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
@@ -22,6 +22,14 @@ function project(): TimelineProject {
   };
 }
 
+function authority(revision = 0, generation = "g1"): TimelineAuthority {
+  return { generation, revision };
+}
+
+function snapshot(revision = 0, generation = "g1"): TimelineSnapshot {
+  return { project: project(), undo_depth: revision, redo_depth: 0, validation: [], authority: authority(revision, generation) };
+}
+
 describe("TimelineClient", () => {
   beforeEach(() => {
     mockedInvoke.mockReset();
@@ -29,42 +37,95 @@ describe("TimelineClient", () => {
   });
 
   it("seeds a confirmed proposal through the transactional Rust command", async () => {
-    const snapshot = { project: project(), undo_depth: 1, redo_depth: 0, validation: [] };
-    mockedInvoke.mockResolvedValueOnce(snapshot as never);
+    const seeded = snapshot(0, "proposal-generation");
+    mockedInvoke.mockResolvedValueOnce(seeded as never);
     const commands = [{ type: "set_marker" as const, sequence_id: "main", marker: { marker_id: "m1", position: 0, label: "start" } }];
-    await expect(new TimelineClient().loadWithCommands(project(), commands)).resolves.toEqual(snapshot);
+    await expect(new TimelineClient().loadWithCommands(project(), commands)).resolves.toEqual(seeded);
     expect(mockedInvoke).toHaveBeenCalledWith("timeline_load_with_commands", { project: project(), commands });
   });
 
   it("opens crash-recovered project state by project id", async () => {
-    const snapshot = { project: project(), undo_depth: 4, redo_depth: 0, validation: [] };
-    mockedInvoke.mockResolvedValueOnce(snapshot as never);
-    await expect(new TimelineClient().openPersisted("p1")).resolves.toEqual(snapshot);
+    const recovered = snapshot(4, "persisted-generation");
+    mockedInvoke.mockResolvedValueOnce(recovered as never);
+    await expect(new TimelineClient().openPersisted("p1")).resolves.toEqual(recovered);
     expect(mockedInvoke).toHaveBeenCalledWith("timeline_open_persisted", { projectId: "p1" });
   });
 
-  it("exposes checkpoint and journal status without moving persistence into React", async () => {
-    const snapshot = { project: project(), undo_depth: 0, redo_depth: 0, validation: [] };
+  it("sends the last Rust snapshot authority with every mutation and advances it from the response", async () => {
+    const loaded = snapshot(3, "g1");
+    const applied = snapshot(4, "g1");
+    const undone = { ...snapshot(5, "g1"), redo_depth: 1 };
+    mockedInvoke
+      .mockResolvedValueOnce(loaded as never)
+      .mockResolvedValueOnce(applied as never)
+      .mockResolvedValueOnce(undone as never);
+
+    const client = new TimelineClient();
+    await client.openPersisted("p1");
+    const command = { type: "set_marker" as const, sequence_id: "main", marker: { marker_id: "m1", position: 12, label: "beat" } };
+    await client.apply(command);
+    await client.undo();
+
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "timeline_apply", {
+      command,
+      expectedAuthority: authority(3, "g1"),
+    });
+    expect(mockedInvoke).toHaveBeenNthCalledWith(3, "timeline_undo", {
+      expectedAuthority: authority(4, "g1"),
+    });
+  });
+
+  it("refuses mutations before a full Rust snapshot establishes authority", async () => {
+    const client = new TimelineClient();
+    await expect(client.apply({ type: "set_marker", sequence_id: "main", marker: { marker_id: "m1", position: 0, label: "x" } })).rejects.toThrow("Timeline authority 尚未加载");
+    await expect(client.undo()).rejects.toThrow("Timeline authority 尚未加载");
+    expect(mockedInvoke).not.toHaveBeenCalled();
+  });
+
+  it("checkpoint uses the current authority and accepts the fresh generation returned by Rust", async () => {
+    const loaded = snapshot(7, "before-checkpoint");
+    const checkpointed = { ...snapshot(0, "after-checkpoint"), undo_depth: 0, redo_depth: 0 };
+    mockedInvoke.mockResolvedValueOnce(loaded as never).mockResolvedValueOnce(checkpointed as never);
+    const client = new TimelineClient();
+    await client.openPersisted("p1");
+    await expect(client.checkpoint()).resolves.toEqual(checkpointed);
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "timeline_checkpoint", {
+      expectedAuthority: authority(7, "before-checkpoint"),
+    });
+  });
+
+  it("exposes checkpoint and journal status without using status as a mutation token", async () => {
+    const loaded = snapshot(2, "snapshot-generation");
     const status = {
       project_id: "p1",
+      authority: authority(9, "newer-status-generation"),
       persistence: {
         project_id: "p1",
         checkpoint_path: "/tmp/p1/checkpoint.json",
         journal_path: "/tmp/p1/journal.jsonl",
         backup_path: "/tmp/p1/checkpoint.json.bak",
-        journal_operations: 7,
+        generation: "newer-status-generation",
+        checkpoint_sequence: 8,
+        journal_operations: 1,
         ignored_partial_tail: false,
       },
       recovered_operations: 3,
       used_backup: false,
       ignored_partial_tail: false,
     };
-    mockedInvoke.mockResolvedValueOnce(snapshot as never).mockResolvedValueOnce(status as never);
+    const after = snapshot(3, "snapshot-generation");
+    mockedInvoke
+      .mockResolvedValueOnce(loaded as never)
+      .mockResolvedValueOnce(status as never)
+      .mockResolvedValueOnce(after as never);
     const client = new TimelineClient();
-    await expect(client.checkpoint()).resolves.toEqual(snapshot);
+    await client.openPersisted("p1");
     await expect(client.persistenceStatus()).resolves.toEqual(status);
-    expect(mockedInvoke).toHaveBeenNthCalledWith(1, "timeline_checkpoint", undefined);
-    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "timeline_persistence_status", undefined);
+    await client.apply({ type: "set_marker", sequence_id: "main", marker: { marker_id: "m1", position: 1, label: "one" } });
+    expect(mockedInvoke).toHaveBeenNthCalledWith(3, "timeline_apply", {
+      command: { type: "set_marker", sequence_id: "main", marker: { marker_id: "m1", position: 1, label: "one" } },
+      expectedAuthority: authority(2, "snapshot-generation"),
+    });
   });
 
   it("keeps browser preview read-only", async () => {
@@ -73,12 +134,18 @@ describe("TimelineClient", () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
-  it("preserves structured validator issues from the Rust bridge", async () => {
-    mockedInvoke.mockRejectedValueOnce({ message: "Timeline Command 被拒绝", issues: [{ code: "track_overlap", path: "V1", message: "overlap" }] } as never);
-    await expect(new TimelineClient().undo()).rejects.toMatchObject({
+  it("preserves structured stale-authority issues from the Rust bridge", async () => {
+    mockedInvoke
+      .mockResolvedValueOnce(snapshot(4, "g1") as never)
+      .mockRejectedValueOnce({
+        message: "Timeline authority 已变化；拒绝应用过期编辑，请刷新后重试",
+        issues: [{ code: "stale_timeline_authority", path: "authority", message: "expected g1@4, current g1@5" }],
+      } as never);
+    const client = new TimelineClient();
+    await client.openPersisted("p1");
+    await expect(client.undo()).rejects.toMatchObject({
       name: "TimelineBridgeError",
-      message: "Timeline Command 被拒绝",
-      issues: [{ code: "track_overlap", path: "V1", message: "overlap" }],
+      issues: [{ code: "stale_timeline_authority", path: "authority" }],
     } satisfies Partial<TimelineBridgeError>);
   });
 });
