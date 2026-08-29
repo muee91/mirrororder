@@ -2,15 +2,6 @@
 
 这里只保存**尚未进入当前工作包**的工程事项。优先级变化时移动条目，不在这里记录长实现日志。
 
-## P1
-
-### Timeline golden lifecycle
-
-- Python Golden Project 已固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen。
-- 下一步在 Rust Timeline Core 增加对应最小 golden command sequence：seed → trim/split/replace → undo/redo → serialize/reopen。
-- Timeline authority 只通过 Rust commands 改变；Python/React 不直接修改 authoritative timeline state。
-- golden lifecycle 必须覆盖 revision / stale command 边界（若现有 command API 支持）以及 reopen 后状态等价。
-
 ## P2
 
 ### Python package boundary
