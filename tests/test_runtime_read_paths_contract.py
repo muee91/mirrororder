@@ -63,6 +63,15 @@ def test_desktop_media_scan_has_no_synchronous_fallback() -> None:
     assert "禁止退回同步扫描" in runtime
 
 
+def test_media_role_runtime_does_not_own_media_inventory() -> None:
+    runtime = (SRC / "media_role_runtime.py").read_text(encoding="utf-8")
+    assert 'parts[4] == "media-inventory"' not in runtime
+    assert "_media_files(" not in runtime
+    assert "media_id_for_path" not in runtime
+    assert "infer_camera_label" not in runtime
+    assert "media_inventory_task_runtime" in runtime
+
+
 def test_automation_runtime_has_no_legacy_local_runtime_surface() -> None:
     runtime = (SRC / "automation_runtime.py").read_text(encoding="utf-8")
     assert '["api", "v1", "local-runtime"]' not in runtime
