@@ -28,6 +28,7 @@ ENGINEERING_DOCS = (
 )
 
 LOCAL_GATES = (
+    "scripts/check_python.py",
     "scripts/check_fast.py",
     "scripts/check_full.py",
 )
