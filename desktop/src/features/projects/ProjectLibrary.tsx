@@ -8,6 +8,7 @@ interface Props {
   selectedProjectId: string | null;
   utilityActive?: "status" | "team" | "settings" | null;
   onSelectProject: (project: ProjectSummary) => void;
+  onOpenHome?: () => void;
   onOpenStatusCenter?: () => void;
   onOpenTeam?: () => void;
   onOpenSettings?: () => void;
@@ -30,26 +31,33 @@ export function ProjectLibrary({
   selectedProjectId,
   utilityActive = null,
   onSelectProject,
+  onOpenHome,
   onOpenStatusCenter,
   onOpenTeam,
   onOpenSettings,
   onWorkspaceChanged,
 }: Props) {
   const selectedProject = workspace.projects.find((project) => project.project_id === selectedProjectId) ?? null;
+  const homeActive = utilityActive === null && selectedProjectId === null;
 
   return (
     <div className="project-library">
-      <div className="project-library-brand">
+      <button type="button" className="project-library-brand project-library-brand-button" onClick={onOpenHome} aria-label="返回项目主页">
         <span className="mirror-mark" aria-hidden="true">镜</span>
-        <div>
+        <span className="project-library-brand-copy">
           <strong>镜序</strong>
           <span>MirrorOrder</span>
-        </div>
-      </div>
+        </span>
+      </button>
+
+      <button type="button" className={`project-library-home ${homeActive ? "is-active" : ""}`} onClick={onOpenHome}>
+        <span>项目主页</span>
+        <small>全部项目</small>
+      </button>
 
       <div className="project-library-section-heading">
         <div>
-          <span>项目</span>
+          <span>最近项目</span>
           <small>{workspace.projects.length}</small>
         </div>
         <ProjectLifecyclePanel
@@ -66,7 +74,7 @@ export function ProjectLibrary({
             <span>使用上方“新建”创建第一个制作项目。</span>
           </div>
         ) : (
-          workspace.projects.map((project) => (
+          workspace.projects.slice(0, 12).map((project) => (
             <button
               className={`project-row ${utilityActive === null && selectedProjectId === project.project_id ? "is-selected" : ""}`}
               key={project.project_id}
