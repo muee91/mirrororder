@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, HostConnectionError } from "../../api/host";
 import { ProductionClient, type WaveformPayload } from "../../api/production";
-import type { TimelineClip, TimelineProject, TimelineSequence } from "../../api/timeline";
+import type { TimelineClip, TimelineProject, TimelineSequence, TimelineSource } from "../../api/timeline";
 import {
   isEditableKeyboardTarget,
   programMediaAtPlayhead,
@@ -10,12 +10,18 @@ import {
 } from "./editorPlayback";
 import "./editor-monitors.css";
 
+export interface SourceMonitorPreview {
+  source: TimelineSource;
+  frame: number;
+}
+
 interface Props {
   baseUrl: string;
   projectId: string;
   project: TimelineProject;
   sequence: TimelineSequence;
   selectedClip: TimelineClip | null;
+  sourcePreview?: SourceMonitorPreview | null;
   playhead: number;
   onPlayheadChange: (frame: number) => void;
   onStepFrames: (frames: number) => void;
@@ -49,6 +55,7 @@ export function EditorMonitors({
   project,
   sequence,
   selectedClip,
+  sourcePreview = null,
   playhead,
   onPlayheadChange,
   onStepFrames,
@@ -59,14 +66,18 @@ export function EditorMonitors({
   const programVideoRef = useRef<HTMLVideoElement>(null);
   const [direction, setDirection] = useState<TransportDirection>(0);
   const [waveform, setWaveform] = useState<WaveformPayload | null>(null);
-  const [waveformMessage, setWaveformMessage] = useState("选择 Timeline clip 后读取 waveform");
+  const [waveformMessage, setWaveformMessage] = useState("选择 Timeline clip 或 Source 后读取 waveform");
   const [waveformBusy, setWaveformBusy] = useState(false);
 
   const fps = sequenceFps(sequence);
-  const sourceState = useMemo(
-    () => selectedSourceState(project, sequence, selectedClip),
-    [project, selectedClip, sequence],
-  );
+  const sourceState = useMemo(() => {
+    if (sourcePreview) {
+      const frame = Math.max(0, Math.round(sourcePreview.frame));
+      return { source: sourcePreview.source, sourceSeconds: frame / fps, sourceFrame: frame };
+    }
+    const current = selectedSourceState(project, sequence, selectedClip);
+    return current ? { ...current, sourceFrame: selectedClip?.source_in ?? 0 } : null;
+  }, [fps, project, selectedClip, sequence, sourcePreview]);
   const programState = useMemo(
     () => programMediaAtPlayhead(project, sequence, playhead),
     [playhead, project, sequence],
@@ -79,7 +90,7 @@ export function EditorMonitors({
     let cancelled = false;
     setWaveform(null);
     if (!waveformClipId) {
-      setWaveformMessage("选择 Timeline clip 后读取 waveform");
+      setWaveformMessage("选择 Timeline clip 或 Source 后读取 waveform");
       return () => { cancelled = true; };
     }
     setWaveformMessage("正在读取缓存 waveform…");
@@ -200,10 +211,10 @@ export function EditorMonitors({
     <section className="editor-monitors production-panel">
       <div className="monitor-grid">
         <article className="editor-monitor">
-          <header><strong>Source Monitor</strong><span>{selectedClip ? monitorLabel(selectedClip.source_in, fps) : "未选择 source"}</span></header>
+          <header><strong>Source Monitor</strong><span>{sourceState ? monitorLabel(sourceState.sourceFrame, fps) : "未选择 source"}</span></header>
           {sourceUrl && sourceState ? (
             <video ref={sourceVideoRef} src={sourceUrl} controls preload="metadata" key={`source-${sourceState.source.source_id}`} />
-          ) : <div className="monitor-empty">选择一个 Timeline clip 查看原始 source。</div>}
+          ) : <div className="monitor-empty">选择 Source pool 或 Timeline clip 查看原始 source。</div>}
           <footer>{sourceState?.source.name || sourceState?.source.clip_id || "—"}</footer>
         </article>
 
