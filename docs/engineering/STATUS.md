@@ -5,8 +5,8 @@
 ## 当前基线
 
 - 主线：`main@4e112efebf70159ff2d1ef91b530947e5efb7c3e`
-- 当前工作分支：`fix/runtime-read-paths`
-- 工程控制层起始分支：`chore/engineering-control-plane`
+- 稳定化工作分支：`fix/runtime-read-paths`
+- 当前功能分支：`feature/timeline-editor-basics`（基于稳定化分支；不反向污染已冻结的稳定化 branch）
 - GitHub Actions：当前额度不可用；不作为必要 gate。
 - 当前原则：源码审阅不能替代 executable validation；未执行的 gate 一律 `NOT RUN`。
 
@@ -24,7 +24,8 @@
 | Stage 7 — Repository tracked-data leakage guard | 81 |
 | Stage 8 — Python-only source gate | 82 |
 | Stage 9 — Python package boundary plan | 83 |
-| Stage 10 — Integration stabilization audit | **84** |
+| Stage 10 — Integration stabilization audit | 84 |
+| Stage 11 — Timeline authority UX | **85** |
 
 评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。
 
@@ -36,19 +37,18 @@
 - Synthetic Golden Project 固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen 语义。
 - Delivery 持久化 artifact 只保存逻辑引用；设备绝对路径仅存在于 localhost runtime response。
 - Rust Timeline 以 `generation + journal revision` 作为 authority token，保护 replacement/edit/undo/redo/checkpoint，并覆盖 journal replay / reopen。
+- Timeline Desktop 在 stale/authority-required 冲突时恢复最新 persisted Rust snapshot，但**不自动重放失败编辑**；已有 Timeline 从 Rough Cut 重建必须二次确认。
 - Git tracked workspace/shared structured fixture 有 device-path leakage guard；ignored 用户 workspace 不参与扫描。
 - `scripts/check_python.py` 可独立执行 Python compile + production contract smoke；`check_fast.py` 复用该入口。
-- `PYTHON_PACKAGE_PLAN.md` 已固定 flat namespace 的目标 ownership、依赖方向、slice 顺序、临时 import facade 与 staging/package contract；当前分支明确不执行 mass move。
-- `INTEGRATION_PLAN.md` 已固定当前综合分支的本地 gate → squash integration worktree → 复验 → 单一主线 commit 流程；禁止直接把 100+ 个机械 API commits 合入 `main`。
+- `PYTHON_PACKAGE_PLAN.md` 已固定 flat namespace 的目标 ownership、依赖方向、slice 顺序、临时 import facade 与 staging/package contract；稳定化分支明确不执行 mass move。
+- `INTEGRATION_PLAN.md` 已固定综合稳定化分支的本地 gate → squash integration worktree → 复验 → 单一主线 commit 流程。
 
 ## 当前验证状态
 
-针对 `fix/runtime-read-paths`：
+### `fix/runtime-read-paths`
 
 - Source / diff review：**PASS**（仅代表源码/contract 已审阅）
-- 当前分支相对 main 的最终范围审计：约 50+ files / 100+ Contents API commits；**需要 squash integration，不适合原样 merge**
 - `scripts/check_python.py` 本身：`py_compile` **PASS**（当前会话临时目录）
-- `scripts/check_python.py` 在不完整临时目录执行：**EXPECTED FAIL**，因 contract tests 缺失而退出 1；证明缺材料时 fail closed，不等于仓库测试已执行
 - Python production contract smoke：**NOT RUN**（当前环境没有完整 checkout）
 - `python scripts/check_fast.py`：**NOT RUN**
 - `python scripts/check_full.py`：**NOT RUN**
@@ -57,11 +57,19 @@
 - Native packaged runtime / real media / LAN / FCP smoke：**NOT RUN**
 - GitHub Actions：**NOT RUN** / 当前额度不可用
 
+### `feature/timeline-editor-basics`
+
+- 相对稳定化分支 diff：3 files；Source / diff review **PASS**
+- `desktop/src/api/timeline.test.ts`：authority-conflict classification tests 已写入，**NOT RUN**
+- TypeScript typecheck：**NOT RUN**
+- Vitest：**NOT RUN**
+- Tauri/Rust：本分支未修改 Rust；基础 Stage 6 Rust executable evidence 仍 **NOT RUN**
+
 ## 当前 P1
 
 ### Local executable validation and integration stabilization
 
-在完整本地 checkout 上依次执行：
+先在完整 checkout 验证 `fix/runtime-read-paths`：
 
 ```bash
 python scripts/check_python.py
@@ -69,21 +77,23 @@ python scripts/check_fast.py
 python scripts/check_full.py
 ```
 
-全部通过后按 `INTEGRATION_PLAN.md`：
+全部通过后按 `INTEGRATION_PLAN.md` 把稳定化分支 squash/revalidate 集成到 `main`。
 
-1. 从稳定 `main` 建 `integration/production-readiness-1` worktree；
-2. `git merge --squash fix/runtime-read-paths`；
-3. 审阅 staged final diff；
-4. 在 integration tree 重新执行 python/fast/full gates；
-5. 形成一个语义完整的 production-readiness 主线 commit；
-6. 未执行 native/package smoke 的部分继续明确为 `NOT RUN`。
+随后对 `feature/timeline-editor-basics` 至少执行：
 
-任何失败都回到对应 contract 修复，不允许通过删除/跳过测试取得绿灯。
+```bash
+cd desktop
+npm run typecheck
+npm test
+```
+
+如果稳定化分支在本地 gate 暴露回归，先修 base；不把功能分支当作掩盖 base failure 的手段。
 
 ## 下一 P2
 
-- First Python package migration slice：当前大分支成功集成后，独立 `refactor/python-fcpxml-package` worktree，按 `PYTHON_PACKAGE_PLAN.md` 迁 FCPXML adapter；不与产品功能混改。
-- Validation ergonomics：有完整 checkout 后记录 python/fast/full 的典型耗时和失败分类，再决定是否需要更窄 smoke。
+- Timeline source-to-program editing：在 authority UX 验证后，再设计明确 source selection / source in-out → Rust Insert/Overwrite 的交互；不把当前“选中 timeline clip 的 Source Monitor”误当成完整 source browser。
+- First Python package migration slice：稳定化分支成功集成后，独立 `refactor/python-fcpxml-package` worktree。
+- Validation ergonomics：记录真实 python/fast/full gate 耗时与失败分类。
 
 ## 状态维护规则
 
