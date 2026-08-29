@@ -4,11 +4,13 @@
 
 ## P1
 
-### Runtime heavy-work audit
+### Device-local model preparation durability
 
-- 审计剩余 Production GET/read path 是否包含目录全扫、hash/stat 大循环、FFmpeg/FFprobe、模型下载/加载、全项目 perception/embedding/index rebuild、长 provider/network call。
-- 发现重工作时改为显式 durable task，并保留轻量 cache/snapshot read path。
-- 补最小 contract tests，防止重工作重新回到普通 GET。
+- `LocalVisionRuntime.prepare_async()` 可能触发大模型下载和 llama-server 模型加载；必须进入 durable task / Status Center。
+- `IdentityRuntime.prepare_async(face|speaker)` 可能触发模型下载、SHA 校验以及可选 `pip` / native wheel 安装；必须进入 durable task / Status Center。
+- 设备绝对路径和模型缓存根只留在 device-local state；共享 task target 只保存 path-free 的 kind/model/request identity。
+- 设备级 runtime 准备不能为了复用 project task 而随意绑定到某个随机项目；需要明确 workspace/device task scope。
+- 取消要尽量传播到下载、pip 子进程与模型加载等待。
 
 ## P2
 
@@ -17,6 +19,7 @@
 - 盘点 `editorial_runtime.py` 等 runtime/monkeypatch 安装链。
 - 明确安装顺序、幂等要求和失败隔离。
 - 为关键 install chain 增加 contract test。
+- 继续删除依赖“后装 wrapper 覆盖前层危险 fallback”才能成立的路径。
 
 ### Python package boundary
 
