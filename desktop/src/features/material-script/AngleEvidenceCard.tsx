@@ -1,5 +1,5 @@
 import type { ReviewAngle } from "../../api/host";
-import "./fixed-evidence-cards.css";
+import { MirrorOrderMediaCard, mediaCardFromAngle } from "../media/MirrorOrderMediaCard";
 
 export interface AngleEvidenceCardProps {
   angle: ReviewAngle;
@@ -8,37 +8,21 @@ export interface AngleEvidenceCardProps {
   compact?: boolean;
 }
 
-function mediaState(angle: ReviewAngle): string {
-  if (angle.playback.available === false) return "缺媒体";
-  if (angle.playback.available === true) return "可播放";
-  return "状态未知";
-}
-
+/**
+ * Compatibility adapter for Review surfaces.
+ *
+ * ReviewAngle remains the evidence model, while MirrorOrderMediaCard owns the
+ * visual contract. This component intentionally contains no independent media
+ * status/shot/camera rendering logic so Take list, Inspector and Slate cannot
+ * drift into separate card systems again.
+ */
 export function AngleEvidenceCard({ angle, selected = false, onSelect, compact = false }: AngleEvidenceCardProps) {
-  const shot = angle.shot_type && angle.shot_type !== "unknown" ? angle.shot_type : "景别—";
-  const role = angle.coverage_role && angle.coverage_role !== "unknown" ? angle.coverage_role : "";
-  const className = `angle-card fixed-angle-card ${selected ? "is-selected" : ""} ${onSelect ? "is-interactive" : ""} ${compact ? "is-compact" : ""}`;
-  const content = (
-    <>
-      <div className="angle-card-heading">
-        <span className="camera-label">{angle.camera || "—"}</span>
-        <span className="angle-duration">{angle.duration.toFixed(1)}s</span>
-      </div>
-      <strong className="angle-media-name" title={angle.name}>{angle.name}</strong>
-      <div className="angle-meta">
-        <span className={`angle-media-state media-${angle.playback.available === false ? "missing" : angle.playback.available === true ? "ready" : "unknown"}`}>{mediaState(angle)}</span>
-        <span className="shot-type">{shot}</span>
-      </div>
-      <div className="angle-card-role" title={role || "未标注 coverage role"}>{role || "用途—"}</div>
-    </>
+  return (
+    <MirrorOrderMediaCard
+      model={mediaCardFromAngle(angle)}
+      selected={selected}
+      compact={compact}
+      onSelect={onSelect}
+    />
   );
-
-  if (onSelect) {
-    return (
-      <button type="button" className={className} aria-pressed={selected} onClick={() => onSelect(angle.clip_id)}>
-        {content}
-      </button>
-    );
-  }
-  return <div className={className}>{content}</div>;
 }
