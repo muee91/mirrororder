@@ -1,0 +1,30 @@
+.project-context-menu {
+  position: fixed;
+  z-index: 120;
+  display: grid;
+  width: 190px;
+  overflow: hidden;
+  border: 1px solid #313a43;
+  border-radius: 9px;
+  padding: 5px;
+  color: #d7dee4;
+  background: rgba(16, 21, 26, .98);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, .42);
+  backdrop-filter: blur(14px);
+}
+.project-context-heading { display: grid; gap: 2px; border-bottom: 1px solid #273039; margin-bottom: 4px; padding: 7px 8px 8px; }
+.project-context-heading strong { overflow: hidden; color: #e2e8ed; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.project-context-heading small { overflow: hidden; color: #677581; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.project-context-menu > button { width: 100%; border: 0; border-radius: 6px; padding: 7px 8px; color: #aeb8c1; background: transparent; font-size: 9px; font-weight: 550; text-align: left; }
+.project-context-menu > button:hover:not(:disabled), .project-context-menu > button:focus-visible { color: #eef2f5; background: #202830; outline: none; }
+.project-context-menu > button:disabled { color: #596671; background: transparent; }
+
+@media (prefers-color-scheme: light) {
+  .project-context-menu { border-color: #cbd5dd; color: #27313a; background: rgba(255, 255, 255, .98); box-shadow: 0 18px 54px rgba(38, 49, 60, .16); }
+  .project-context-heading { border-color: #e1e6eb; }
+  .project-context-heading strong { color: #27313a; }
+  .project-context-heading small { color: #74808b; }
+  .project-context-menu > button { color: #53616d; }
+  .project-context-menu > button:hover:not(:disabled), .project-context-menu > button:focus-visible { color: #1f2a33; background: #eef2f5; }
+  .project-context-menu > button:disabled { color: #a4adb5; }
+}
