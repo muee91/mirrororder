@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .review_store import ReviewConflictError
 from .rough_placement import parse_rough_placement_text, resolve_rough_plans
 
 
@@ -13,9 +14,9 @@ def install_rough_placement_runtime() -> None:
     """Expose a Host-local coarse placement route for approximate slate notes.
 
     The route writes only episode-level human placement. It never invents scene
-    or script-segment ids. Preview is read-only; apply requires an explicit
-    ``confirm`` flag and a human actor, then uses ReviewStore.apply_actions so a
-    whole handwritten range batch lands under one review revision.
+    or script-segment ids. Preview is read-only; apply requires explicit human
+    confirmation plus the current Review revision, then uses ReviewStore's batch
+    lock so a handwritten range lands atomically under one Review revision.
     """
 
     global _INSTALLED
@@ -78,6 +79,19 @@ def install_rough_placement_runtime() -> None:
                             web_server.HTTPStatus.BAD_REQUEST,
                             "确认粗归集需要操作者昵称",
                         )
+                    try:
+                        expected_revision = int(body.get("expected_revision"))
+                    except (TypeError, ValueError) as error:
+                        raise web_server.ApiError(
+                            web_server.HTTPStatus.BAD_REQUEST,
+                            "确认粗归集需要有效 expected_revision",
+                        ) from error
+                    if expected_revision < 0:
+                        raise web_server.ApiError(
+                            web_server.HTTPStatus.BAD_REQUEST,
+                            "expected_revision 必须是非负整数",
+                        )
+
                     actions: list[dict[str, Any]] = []
                     for assignment in resolved["plans"]:
                         episode = int(assignment["episode"])
@@ -90,8 +104,9 @@ def install_rough_placement_runtime() -> None:
                                     "script_segment_ids": [],
                                     "actor": actor,
                                     "interaction": "rough_batch",
-                                    "source_surface": "native_app",
+                                    "source_surface": "desktop_material_script",
                                     "source_kind": "take",
+                                    "expected_revision": expected_revision,
                                 }
                             )
                     if not actions:
@@ -101,6 +116,8 @@ def install_rough_placement_runtime() -> None:
                         )
                     try:
                         saved = project.review.apply_actions(actions)
+                    except ReviewConflictError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
                     except ValueError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
                     response.update(
