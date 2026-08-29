@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .media_identity import DeviceMediaStore, media_id_for_path
-from .media_reader import infer_camera_label
 from .media_role_projection import enrich_coverage_graph, enrich_rough_cut_plan, revision_with_media_roles
 from .media_role_store import MEDIA_ROLE_CONTRACT, MediaRoleConflictError, MediaRoleStore
 from .script_supervisor_projection import (
@@ -48,69 +46,13 @@ def _safe_store(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _indexed_media(project: Any) -> set[str]:
-    result: set[str] = set()
-    for clip in project.index.get("clips", []):
-        if isinstance(clip, dict) and clip.get("media_id"):
-            result.add(str(clip["media_id"]))
-    for group in project.index.get("groups", []):
-        if not isinstance(group, dict):
-            continue
-        for member in group.get("members", []):
-            if isinstance(member, dict) and member.get("media_id"):
-                result.add(str(member["media_id"]))
-    return result
-
-
-def _inventory(project: Any, device: DeviceMediaStore, roles: MediaRoleStore) -> dict[str, Any]:
-    workspace_id = str(getattr(project, "workspace_id", "") or "")
-    snapshot = device.project_snapshot(workspace_id, project.project_id)
-    roots = [str(value) for value in snapshot.get("roots", []) if str(value)]
-    files = device._media_files(roots)
-    indexed = _indexed_media(project)
-    saved = roles.load()
-    labels = saved.get("media", {}) if isinstance(saved.get("media"), dict) else {}
-    rows: list[dict[str, Any]] = []
-    for path in files[:12000]:
-        media_id = media_id_for_path(path)
-        if not media_id:
-            continue
-        rows.append(
-            {
-                "media_id": media_id,
-                "display_name": path.name[:300],
-                "folder_label": path.parent.name[:120],
-                "inferred_camera": infer_camera_label(path, project.config.camera_patterns),
-                "indexed": media_id in indexed,
-                "label": _safe_role(labels.get(media_id)),
-            }
-        )
-    rows.sort(key=lambda row: (0 if row["label"] else 1, 0 if not row["indexed"] else 1, row["display_name"].casefold(), row["media_id"]))
-    return {
-        "contract": "media_inventory.v1",
-        "project_id": str(project.project_id),
-        "role_revision": int(saved.get("revision", 0) or 0),
-        "summary": {
-            "files": len(rows),
-            "indexed": sum(1 for row in rows if row["indexed"]),
-            "unindexed": sum(1 for row in rows if not row["indexed"]),
-            "labeled": sum(1 for row in rows if row["label"]),
-            "auxiliary": sum(1 for row in rows if _as_dict(row.get("label")).get("source_role") not in {None, "", "sync_camera"} or _as_dict(row.get("label")).get("sync_policy") == "exclude"),
-        },
-        "items": rows,
-        "semantics": {
-            "paths_exposed": False,
-            "device_local_scan": True,
-            "media_id_shared_identity": True,
-            "unindexed_media_may_be_labeled": True,
-            "camera_override_is_shared_human_fact": True,
-            "auxiliary_without_timecode_or_audio_is_valid": True,
-        },
-    }
-
-
 def install_media_role_runtime() -> None:
-    """Install shared media roles plus App-local media inventory and projections."""
+    """Install shared media roles and production-evidence projections.
+
+    Device-local media inventory is owned exclusively by
+    `media_inventory_task_runtime`; this layer must never enumerate media roots
+    or provide a synchronous inventory fallback.
+    """
     global _INSTALLED
     if _INSTALLED:
         return
@@ -120,7 +62,6 @@ def install_media_role_runtime() -> None:
     original_state = web_server.ProjectService.state
     original_capabilities = web_server.WorkspaceService.capabilities
     original_make_handler = web_server.make_handler
-    device = DeviceMediaStore()
 
     def build_with_media_roles(project: Any, **kwargs: Any) -> dict[str, Any]:
         payload = original_build(project, **kwargs)
@@ -141,8 +82,17 @@ def install_media_role_runtime() -> None:
                     angle["detected_camera"] = str(angle.get("camera", "") or "")
                     angle["camera"] = override
         payload.setdefault("revisions", {})["media_roles"] = int(roles.get("revision", 0) or 0)
-        payload.setdefault("summary", {})["media_roles"] = {"labeled": len(rows), "auxiliary": len(store.auxiliary())}
-        payload.setdefault("capabilities", {}).update({"media_roles_v1": True, "media_role_write_scope": "host_local", "media_role_is_editorial_authority": False})
+        payload.setdefault("summary", {})["media_roles"] = {
+            "labeled": len(rows),
+            "auxiliary": len(store.auxiliary()),
+        }
+        payload.setdefault("capabilities", {}).update(
+            {
+                "media_roles_v1": True,
+                "media_role_write_scope": "host_local",
+                "media_role_is_editorial_authority": False,
+            }
+        )
         return payload
 
     def state_with_media_roles(project: Any) -> dict[str, Any]:
@@ -154,7 +104,14 @@ def install_media_role_runtime() -> None:
 
     def capabilities_with_media_roles(service: Any, agent: dict[str, Any]) -> dict[str, Any]:
         payload = original_capabilities(service, agent)
-        payload["media_roles"] = {"contract": MEDIA_ROLE_CONTRACT, "read": True, "agent_write": False, "app_write": True, "auxiliary_inventory": True, "editorial_authority": False}
+        payload["media_roles"] = {
+            "contract": MEDIA_ROLE_CONTRACT,
+            "read": True,
+            "agent_write": False,
+            "app_write": True,
+            "auxiliary_inventory": True,
+            "editorial_authority": False,
+        }
         return payload
 
     def make_handler_with_media_roles(service: Any, web_root: Path):
@@ -163,40 +120,59 @@ def install_media_role_runtime() -> None:
         class Handler(BaseHandler):
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
-                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"]:
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "media-roles"
+                ):
+                    self._local_only()
                     project = service.project(parts[3])
-                    if parts[4] == "media-roles":
-                        self._local_only(); self._send_json(_safe_store(MediaRoleStore(project.config.output_dir).load())); return
-                    if parts[4] == "media-inventory":
-                        self._local_only(); self._send_json(_inventory(project, device, MediaRoleStore(project.config.output_dir))); return
+                    self._send_json(_safe_store(MediaRoleStore(project.config.output_dir).load()))
+                    return
                 return super()._app_get(parsed)
 
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
-                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "media-roles":
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "media-roles"
+                ):
                     self._local_only()
-                    project = service.project(parts[3]); store = MediaRoleStore(project.config.output_dir); body = web_server._body(self)
+                    project = service.project(parts[3])
+                    store = MediaRoleStore(project.config.output_dir)
+                    body = web_server._body(self)
                     try:
                         saved = store.apply_many(body)
                     except MediaRoleConflictError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
                     except ValueError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
-                    self._send_json(_safe_store(saved)); return
+                    self._send_json(_safe_store(saved))
+                    return
                 return super()._app_post(parsed)
 
             def _agent_get(self, parsed):
                 parts = web_server._parts(parsed.path)
-                if len(parts) == 6 and parts[:4] == ["api", "agent", "v1", "projects"] and parts[5] == "media-roles":
-                    project_id = parts[4]; agent = self._agent("read", project_id); project = service.project(project_id)
+                if (
+                    len(parts) == 6
+                    and parts[:4] == ["api", "agent", "v1", "projects"]
+                    and parts[5] == "media-roles"
+                ):
+                    project_id = parts[4]
+                    agent = self._agent("read", project_id)
+                    project = service.project(project_id)
                     service.tokens.audit(agent, "read:media-roles", project_id)
-                    self._send_json(_safe_store(MediaRoleStore(project.config.output_dir).load())); return
+                    self._send_json(_safe_store(MediaRoleStore(project.config.output_dir).load()))
+                    return
                 return super()._agent_get(parsed)
+
         return Handler
 
     # Coverage is patched before its runtime imports. The order is deliberate:
     # base deterministic coverage -> media role auxiliary -> standalone slate.
     from . import coverage_graph
+
     original_coverage_build = coverage_graph.build_coverage_graph
     original_coverage_revision = coverage_graph.coverage_revision
 
@@ -215,6 +191,7 @@ def install_media_role_runtime() -> None:
     # Rough Cut binds the already-patched Coverage builder, then receives both
     # auxiliary projections as optional coverage. Neither may become Primary.
     from . import rough_cut_plan
+
     original_rough_cut_build = rough_cut_plan.build_rough_cut_plan
 
     def rough_cut_with_production_evidence(project: Any, **kwargs: Any) -> dict[str, Any]:
