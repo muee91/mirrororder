@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload } from "../../api/host";
 import { ProductionClient, type RoughCutPlan } from "../../api/production";
 import {
+  isTimelineAuthorityConflict,
   TimelineBridgeError,
   TimelineClient,
   type FrameRate,
@@ -69,6 +70,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const [moveStart, setMoveStart] = useState(0);
   const [rateNumerator, setRateNumerator] = useState("");
   const [rateDenominator, setRateDenominator] = useState("");
+  const [replaceProposalArmed, setReplaceProposalArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("正在读取粗剪计划…");
 
@@ -89,6 +91,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setPlayhead(0);
     setRateNumerator("");
     setRateDenominator("");
+    setReplaceProposalArmed(false);
     setMessage("正在读取粗剪计划…");
     Promise.all([host.reviewModel(projectId), production.roughCutPlan(projectId)])
       .then(([nextReview, nextPlan]) => {
@@ -166,6 +169,30 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setPlayhead((current) => sequence ? clampPlayhead(sequence, current + frames) : Math.max(0, current + frames));
   }, [sequence]);
 
+  function adoptEditedSnapshot(next: TimelineSnapshot): void {
+    setSnapshot(next);
+    setReplaceProposalArmed(false);
+    const nextSequence = activeSequence(next);
+    const retained = selectedClipId ? findClip(next, selectedClipId)?.clip ?? null : null;
+    const firstClip = nextSequence?.tracks.flatMap((track) => track.clips)[0] ?? null;
+    const nextSelection = retained ?? firstClip;
+    setSelectedClipId(nextSelection?.clip_id ?? "");
+    setPlayhead((current) => nextSequence ? clampPlayhead(nextSequence, current) : 0);
+  }
+
+  async function recoverAuthorityConflict(error: unknown, action: string): Promise<boolean> {
+    if (!isTimelineAuthorityConflict(error)) return false;
+    try {
+      const current = await timeline.openPersisted(projectId);
+      adoptEditedSnapshot(current);
+      await refreshPersistence();
+      setMessage(`${action}未应用：Timeline authority 已变化，已恢复最新本机时间线。请检查当前状态后再重试；不会自动重放刚才的编辑。`);
+    } catch (refreshError) {
+      setMessage(`${action}失败，并且自动恢复最新 Timeline 也失败：${errorMessage(refreshError)}`);
+    }
+    return true;
+  }
+
   async function confirmProposal(): Promise<void> {
     if (!proposal) {
       setMessage("需要先确认有效时间基，才能建立时间线。");
@@ -175,8 +202,13 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       setMessage("浏览器预览可以检查粗剪提议；建立本机时间线需要在桌面 App 中执行。");
       return;
     }
+    if (snapshot && !replaceProposalArmed) {
+      setReplaceProposalArmed(true);
+      setMessage("当前已有 authoritative Timeline。重新从粗剪建立会替换当前时间线并清空现有 Undo/Redo 历史；再次点击确认才会执行。");
+      return;
+    }
     setBusy(true);
-    setMessage("正在建立本机时间线…");
+    setMessage(snapshot ? "正在用粗剪提议重建本机时间线…" : "正在建立本机时间线…");
     try {
       const next = await timeline.loadWithCommands(proposal.baseProject, proposal.commands);
       setSnapshot(next);
@@ -184,10 +216,13 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       setSelectedClipId(firstClip?.clip_id ?? "");
       setPlayhead(firstClip?.timeline_start ?? 0);
       await refreshPersistence();
-      setMessage(`时间线已建立并保存 · ${proposal.commands.length} 段人工确认素材已加入`);
+      setMessage(`${snapshot ? "时间线已从粗剪重新建立" : "时间线已建立并保存"} · ${proposal.commands.length} 段人工确认素材已加入`);
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (!(await recoverAuthorityConflict(error, "重建时间线"))) {
+        setMessage(errorMessage(error));
+      }
     } finally {
+      setReplaceProposalArmed(false);
       setBusy(false);
     }
   }
@@ -196,11 +231,13 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setBusy(true);
     try {
       const next = await timeline.apply(command);
-      setSnapshot(next);
+      adoptEditedSnapshot(next);
       await refreshPersistence();
       setMessage(success);
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (!(await recoverAuthorityConflict(error, "编辑"))) {
+        setMessage(errorMessage(error));
+      }
     } finally {
       setBusy(false);
     }
@@ -210,11 +247,13 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setBusy(true);
     try {
       const next = await timeline.undo();
-      setSnapshot(next);
+      adoptEditedSnapshot(next);
       await refreshPersistence();
       setMessage(`已撤销 · 还可撤销 ${next.undo_depth} 步`);
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (!(await recoverAuthorityConflict(error, "撤销"))) {
+        setMessage(errorMessage(error));
+      }
     } finally { setBusy(false); }
   }
 
@@ -222,11 +261,13 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setBusy(true);
     try {
       const next = await timeline.redo();
-      setSnapshot(next);
+      adoptEditedSnapshot(next);
       await refreshPersistence();
       setMessage(`已重做 · 当前可撤销 ${next.undo_depth} 步`);
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (!(await recoverAuthorityConflict(error, "重做"))) {
+        setMessage(errorMessage(error));
+      }
     } finally { setBusy(false); }
   }
 
@@ -234,11 +275,13 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setBusy(true);
     try {
       const next = await timeline.checkpoint();
-      setSnapshot(next);
+      adoptEditedSnapshot(next);
       await refreshPersistence();
       setMessage("当前时间线已安全保存。");
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (!(await recoverAuthorityConflict(error, "保存"))) {
+        setMessage(errorMessage(error));
+      }
     } finally {
       setBusy(false);
     }
@@ -281,9 +324,17 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
             <label>分子 <input type="number" min={1} max={120000} value={rateNumerator} placeholder="24000" onChange={(event) => setRateNumerator(event.target.value)} /></label>
             <label>分母 <input type="number" min={1} max={10000} value={rateDenominator} placeholder="1001" onChange={(event) => setRateDenominator(event.target.value)} /></label>
           </div>
-          <button type="button" disabled={busy || !proposal || proposal.commands.length === 0} onClick={() => void confirmProposal()}>确认建立时间线</button>
+          <button
+            type="button"
+            className={snapshot ? "danger-quiet" : undefined}
+            disabled={busy || !proposal || proposal.commands.length === 0}
+            onClick={() => void confirmProposal()}
+          >
+            {snapshot ? (replaceProposalArmed ? "再次确认重建" : "从粗剪重建时间线") : "确认建立时间线"}
+          </button>
         </div>
         {!frameRate ? <div className="proposal-warnings"><span>未确认时间基，不会生成或提交时间线提议。</span></div> : null}
+        {replaceProposalArmed ? <div className="proposal-warnings"><span>⚠️ 再次确认会替换当前 authoritative Timeline，并清空当前 Undo/Redo 历史。</span></div> : null}
         <div className="proposal-warnings">
           {(proposal?.warnings ?? []).map((warning) => <span key={warning}>{warning}</span>)}
         </div>
