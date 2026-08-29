@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
-from .device_tasks import DEVICE_TASKS
+from .device_tasks import get_device_task_manager, initialize_device_tasks
 from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .media_identity import DeviceMediaStore
@@ -82,6 +82,7 @@ def _local_runtime_payload(service: Any) -> dict[str, Any]:
 def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, Any]:
     action = str(payload.get("action", "set") or "set").strip().lower()
     settings = load_runtime_settings()
+    device_tasks = get_device_task_manager()
     submitted: dict[str, Any] | None = None
     if action == "set":
         update: dict[str, Any] = {}
@@ -100,7 +101,7 @@ def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, An
                 LocalVisionRuntime.stop()
     elif action == "prepare":
         model = str(settings.get("local_vision_model", "") or "")
-        submitted = DEVICE_TASKS.submit(
+        submitted = device_tasks.submit(
             "local_vision_prepare",
             {"model": model},
             idempotency_key=f"local-vision:{model}",
@@ -110,19 +111,19 @@ def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, An
         kind = str(payload.get("kind", "") or "").strip().lower()
         if kind not in {"face", "speaker"}:
             raise ValueError("identity kind 必须是 face 或 speaker")
-        submitted = DEVICE_TASKS.submit(
+        submitted = device_tasks.submit(
             "identity_runtime_prepare",
             {"kind": kind},
             idempotency_key=f"identity-runtime:{kind}",
             actor="desktop",
         )
     elif action == "stop":
-        for task in DEVICE_TASKS.list():
+        for task in device_tasks.list():
             if (
                 task.get("type") == "local_vision_prepare"
                 and task.get("status") in {"queued", "running"}
             ):
-                DEVICE_TASKS.cancel(str(task.get("task_id", "") or ""))
+                device_tasks.cancel(str(task.get("task_id", "") or ""))
         LocalVisionRuntime.stop()
     else:
         raise ValueError("不支持的 local runtime action")
@@ -146,6 +147,7 @@ def install_desktop_runtime() -> None:
 
     from . import web_server
 
+    device_tasks = initialize_device_tasks()
     original_make_handler = web_server.make_handler
 
     def make_handler_with_desktop(service: Any, web_root: Path):
@@ -157,7 +159,7 @@ def install_desktop_runtime() -> None:
                 current = _current_service(service)
                 if parts == ["api", "v1", "device-tasks"]:
                     self._local_only()
-                    self._send_json({"contract": "device_tasks.v1", "tasks": DEVICE_TASKS.list()})
+                    self._send_json({"contract": "device_tasks.v1", "tasks": device_tasks.list()})
                     return
                 if parts == ["api", "v1", "desktop-status"]:
                     self._local_only()
@@ -223,7 +225,7 @@ def install_desktop_runtime() -> None:
                     self._local_only()
                     payload = web_server._body(self)
                     try:
-                        task = DEVICE_TASKS.submit(
+                        task = device_tasks.submit(
                             str(payload.get("type", "") or ""),
                             payload.get("targets", {}),
                             str(payload.get("idempotency_key", "") or ""),
@@ -240,7 +242,7 @@ def install_desktop_runtime() -> None:
                 ):
                     self._local_only()
                     try:
-                        self._send_json(DEVICE_TASKS.cancel(parts[3]))
+                        self._send_json(device_tasks.cancel(parts[3]))
                     except KeyError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "device task 不存在") from error
                     return
