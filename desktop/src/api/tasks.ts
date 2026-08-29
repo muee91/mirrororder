@@ -5,6 +5,7 @@ import { HostConnectionError } from "./host";
 export interface ProjectTaskRecord {
   task_id: string;
   project_id?: string;
+  scope?: "project" | "device" | string;
   type: string;
   status: string;
   stage: string;
@@ -114,6 +115,35 @@ export class ProjectTaskClient {
 
   retry(projectId: string, task: ProjectTaskRecord): Promise<ProjectTaskRecord> {
     return requestJson<ProjectTaskRecord>(this.baseUrl, `${projectPath(projectId)}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(retryTaskBody(task)),
+    });
+  }
+}
+
+export class DeviceTaskClient {
+  readonly baseUrl: string;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = normalizeBaseUrl(baseUrl);
+  }
+
+  async list(): Promise<ProjectTaskRecord[]> {
+    const payload = await requestJson<{ tasks: ProjectTaskRecord[] }>(this.baseUrl, "/api/v1/device-tasks");
+    return Array.isArray(payload.tasks) ? payload.tasks : [];
+  }
+
+  cancel(taskId: string): Promise<ProjectTaskRecord> {
+    const value = taskId.trim();
+    if (!value) throw new HostConnectionError("取消设备任务需要 task_id");
+    return requestJson<ProjectTaskRecord>(this.baseUrl, `/api/v1/device-tasks/${encodeURIComponent(value)}`, {
+      method: "POST",
+      body: JSON.stringify({ action: "cancel" }),
+    });
+  }
+
+  retry(task: ProjectTaskRecord): Promise<ProjectTaskRecord> {
+    return requestJson<ProjectTaskRecord>(this.baseUrl, "/api/v1/device-tasks", {
       method: "POST",
       body: JSON.stringify(retryTaskBody(task)),
     });
