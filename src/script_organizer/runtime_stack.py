@@ -23,6 +23,7 @@ RUNTIME_INSTALL_ORDER = (
     "delivery",
     "desktop",
     "media_inventory_task",
+    "slate_media",
 )
 
 _LOCK = RLock()
@@ -38,7 +39,9 @@ def _install_stack_once() -> None:
     before Coverage/Rough Cut modules bind their module-level projection
     functions. Desktop installs before the durable media-inventory adapter so
     the latter owns scan submission while Desktop retains only lightweight
-    binding/status surfaces.
+    binding/status surfaces. Explicit Slate file-drop resolution installs last
+    because it consumes device-media identity and inventory semantics but adds
+    no GET/read-path work.
     """
 
     from .device_media_runtime import install_device_media_runtime
@@ -96,6 +99,9 @@ def _install_stack_once() -> None:
 
     from .media_inventory_task_runtime import install_media_inventory_task_runtime
     install_media_inventory_task_runtime()
+
+    from .slate_media_runtime import install_slate_media_runtime
+    install_slate_media_runtime()
 
 
 def install_production_runtime() -> None:
