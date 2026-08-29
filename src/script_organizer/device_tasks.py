@@ -19,6 +19,7 @@ from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 DEVICE_TASK_TYPES = {"local_vision_prepare", "identity_runtime_prepare"}
 PROCESS_RUNNER_ID = "device_host_" + uuid4().hex
 _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
+_MANAGER: DeviceTaskManager | None = None
 
 
 def _now() -> str:
@@ -78,10 +79,9 @@ class DeviceTaskManager:
 
     _lock = RLock()
 
-    def __init__(self) -> None:
-        self.path = application_support_root() / "tasks" / "device-tasks.json"
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path or application_support_root() / "tasks" / "device-tasks.json"
         self._threads: dict[str, Thread] = {}
-        self.recover_interrupted()
 
     def _load(self) -> dict[str, Any]:
         raw = _read_json(self.path, {"version": 1, "tasks": []})
@@ -100,7 +100,7 @@ class DeviceTaskManager:
         raise KeyError(task_id)
 
     def recover_interrupted(self) -> None:
-        """Run once at Host startup; ordinary list/GET remains read-only."""
+        """Run once at Host runtime install; ordinary list/GET remains read-only."""
         with self._lock:
             payload = self._load()
             changed = False
@@ -180,8 +180,6 @@ class DeviceTaskManager:
             self._save(payload)
             result = dict(task)
         if stop_vision:
-            # llama-server is the owned child process; stopping it lets the
-            # worker leave its health/load wait loop quickly.
             LocalVisionRuntime.stop(preserve_error=True)
         return result
 
@@ -237,7 +235,9 @@ class DeviceTaskManager:
                 model = str(targets["model"])
                 self._update(task_id, stage="vision_prepare", message="正在准备本地视觉模型")
                 runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(model))
-                base_url = runtime.ensure_server()
+                base_url = runtime.ensure_server(
+                    cancel_requested=lambda: self._cancel_requested(task_id),
+                )
                 if self._cancel_requested(task_id):
                     LocalVisionRuntime.stop(preserve_error=True)
                     self._update(task_id, status="cancelled", stage="cancelled", message="本地视觉准备已取消")
@@ -281,7 +281,22 @@ class DeviceTaskManager:
             self._threads.pop(task_id, None)
 
 
-DEVICE_TASKS = DeviceTaskManager()
+def get_device_task_manager() -> DeviceTaskManager:
+    global _MANAGER
+    if _MANAGER is None:
+        _MANAGER = DeviceTaskManager()
+    return _MANAGER
 
 
-__all__ = ["DEVICE_TASK_TYPES", "DeviceTaskManager", "DEVICE_TASKS"]
+def initialize_device_tasks() -> DeviceTaskManager:
+    manager = get_device_task_manager()
+    manager.recover_interrupted()
+    return manager
+
+
+__all__ = [
+    "DEVICE_TASK_TYPES",
+    "DeviceTaskManager",
+    "get_device_task_manager",
+    "initialize_device_tasks",
+]
