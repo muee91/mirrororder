@@ -25,6 +25,7 @@ ENGINEERING_DOCS = (
     "docs/engineering/BACKLOG.md",
     "docs/engineering/DECISIONS.md",
     "docs/engineering/INVARIANTS.md",
+    "docs/engineering/PYTHON_PACKAGE_PLAN.md",
 )
 
 LOCAL_GATES = (
