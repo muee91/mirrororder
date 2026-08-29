@@ -74,14 +74,18 @@ evidence → proposal → human confirmation → authority
 
 ## Python package 不变量
 
-`src/script_organizer/` 的 flat namespace 是历史兼容区，不是继续无限堆顶层 runtime 的默认方案。
+`src/script_organizer/` 的 flat namespace 是历史兼容区，不是继续无限堆顶层 runtime 的默认方案。目标 ownership 和迁移顺序见 `docs/engineering/PYTHON_PACKAGE_PLAN.md`。
 
 ### MUST
 
 - 新 coherent engine/store/runtime/support 组优先规划子 package。
-- 大规模迁移独立工作包完成，并保留兼容 import、packaging、stage-runtime、pytest contract。
+- 大规模迁移必须独立 `refactor/*` worktree、按 coherent domain slice 完成，并验证 import、packaging、recursive stage-runtime、pytest、fast/full contract。
+- 迁移期 root compatibility facade 只能 re-export，必须有删除里程碑；新 first-party caller 使用新 package path。
+- `runtime_stack.py` 保持显式 composition root；domain import 不得触发全栈安装。
 
 ### MUST NOT
 
 - 在产品功能提交里顺手完成大规模包搬家。
 - 仅为了目录“看起来整齐”破坏现有 import/runtime contract。
+- 让 compatibility facade 在 import 时注册 route、install runtime、写磁盘、加载模型或修改全局 registry。
+- 为迁包重新保留已经废弃的产品 API route；内部 import 迁移脚手架不等于产品兼容承诺。
