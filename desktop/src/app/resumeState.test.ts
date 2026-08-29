@@ -47,6 +47,12 @@ describe("production resume state", () => {
     expect(readProjectPage("project-a", storage)).toBe("rough-cut");
   });
 
+  it("remembers the device-local media binding canvas as a production page", () => {
+    const storage = new MemoryStorage();
+    rememberProjectPage("project-a", "media-binding", storage);
+    expect(readProjectPage("project-a", storage)).toBe("media-binding");
+  });
+
   it("fails closed to the script-supervisor canvas for stale or invalid page values", () => {
     const storage = new MemoryStorage();
     storage.setItem("mirrororder.desktop.project-page.project-a", "settings");
