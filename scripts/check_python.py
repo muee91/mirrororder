@@ -16,6 +16,7 @@ PYTHON_CONTRACT_TESTS = (
     "tests/test_delivery_semantics.py",
     "tests/test_delivery_artifact_paths.py",
     "tests/test_golden_production_project.py",
+    "tests/test_python_package_migration_contract.py",
 )
 
 
