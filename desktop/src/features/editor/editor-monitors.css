@@ -16,6 +16,10 @@
 .waveform-strip { display: grid; gap: 6px; }
 .waveform-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #6d7a86; font-size: 8px; }
 .waveform-heading strong { color: #9da9b5; font-size: 9px; }
+.waveform-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
+.waveform-heading-actions > span { max-width: min(56vw, 620px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.waveform-heading-actions button { border-color: #303944; padding: 4px 7px; color: #9da9b5; background: #151b21; font-size: 8px; }
+.waveform-heading-actions button:disabled { opacity: .45; }
 .waveform-canvas, .waveform-empty { position: relative; height: 64px; overflow: hidden; border: 1px solid #252e37; border-radius: 8px; background: #0b1014; }
 .waveform-canvas svg { display: block; width: 100%; height: 100%; }
 .waveform-canvas path { fill: #778896; opacity: .75; }
@@ -25,13 +29,16 @@
 @media (max-width: 980px) {
   .monitor-grid { grid-template-columns: minmax(0, 1fr); }
   .proxy-transport > span { flex-basis: 100%; margin-left: 0; }
+  .waveform-heading { align-items: flex-start; flex-direction: column; }
+  .waveform-heading-actions { justify-content: flex-start; width: 100%; }
+  .waveform-heading-actions > span { max-width: 100%; }
 }
 
 @media (prefers-color-scheme: light) {
   .editor-monitor, .waveform-canvas, .waveform-empty { border-color: #d9e0e6; background: #f7f9fb; }
   .editor-monitor video, .monitor-empty { background: #e8edf2; }
   .editor-monitor footer { border-top-color: #dce3e9; }
-  .proxy-transport button { border-color: #d5dde5; color: #53606d; background: #edf2f5; }
+  .proxy-transport button, .waveform-heading-actions button { border-color: #d5dde5; color: #53606d; background: #edf2f5; }
   .proxy-transport button.is-active { color: #fff; background: #17202a; }
   .proxy-transport input { border-color: #d5dde5; color: #17202a; background: #fff; }
   .waveform-canvas path { fill: #607383; }

@@ -81,4 +81,42 @@ describe("ProductionClient", () => {
     expect(String(browserFetch.mock.calls[1]?.[0])).toContain("episode=3");
     expect(String(browserFetch.mock.calls[1]?.[0])).toContain("scene_id=S+1");
   });
+
+  it("reads only cached waveform on GET and submits generation as a durable task", async () => {
+    const browserFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        expect(url).toMatch(/\/api\/v1\/projects\/p%2F1\/waveform\/clip%2Fa$/);
+        expect(JSON.parse(String(init.body))).toEqual({ samples: 64 });
+        return jsonResponse({
+          contract: "waveform_build.v1",
+          project_id: "p/1",
+          clip_id: "clip/a",
+          task: { task_id: "task_waveform", type: "waveform_build", status: "queued" },
+        }, 202);
+      }
+      expect(init?.method).toBe("GET");
+      expect(url).toMatch(/\/api\/v1\/projects\/p%2F1\/waveform\/clip%2Fa\?samples=4096$/);
+      return jsonResponse({
+        contract: "waveform.v1",
+        clip_id: "clip/a",
+        samples: 2,
+        requested_samples: 4096,
+        sample_rate: 4,
+        peaks: [0.1, 0.2],
+        derived: true,
+        editorial_authority: false,
+        source_fingerprint: "fp",
+      });
+    });
+    vi.stubGlobal("fetch", browserFetch);
+
+    const client = new ProductionClient("http://127.0.0.1:8765");
+    await expect(client.waveform("p/1", "clip/a", 999999)).resolves.toMatchObject({ contract: "waveform.v1", peaks: [0.1, 0.2] });
+    await expect(client.buildWaveform("p/1", "clip/a", 1)).resolves.toMatchObject({
+      contract: "waveform_build.v1",
+      task: { type: "waveform_build", status: "queued" },
+    });
+    expect(browserFetch).toHaveBeenCalledTimes(2);
+  });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HostConnection } from "../../api/host";
+import { HostConnection, HostConnectionError } from "../../api/host";
 import { ProductionClient, type WaveformPayload } from "../../api/production";
 import type { TimelineClip, TimelineProject, TimelineSequence } from "../../api/timeline";
 import {
@@ -38,6 +38,11 @@ function monitorLabel(frame: number, fps: number): string {
   return `${frame}f · ${(frame / fps).toFixed(2)}s`;
 }
 
+function waveformError(error: unknown): string {
+  if (error instanceof HostConnectionError && error.status === 404) return "当前 clip 尚未生成 waveform";
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function EditorMonitors({
   baseUrl,
   projectId,
@@ -55,6 +60,7 @@ export function EditorMonitors({
   const [direction, setDirection] = useState<TransportDirection>(0);
   const [waveform, setWaveform] = useState<WaveformPayload | null>(null);
   const [waveformMessage, setWaveformMessage] = useState("选择 Timeline clip 后读取 waveform");
+  const [waveformBusy, setWaveformBusy] = useState(false);
 
   const fps = sequenceFps(sequence);
   const sourceState = useMemo(
@@ -76,7 +82,7 @@ export function EditorMonitors({
       setWaveformMessage("选择 Timeline clip 后读取 waveform");
       return () => { cancelled = true; };
     }
-    setWaveformMessage("正在准备本机 waveform…");
+    setWaveformMessage("正在读取缓存 waveform…");
     void production.waveform(projectId, waveformClipId, 640)
       .then((payload) => {
         if (cancelled) return;
@@ -85,11 +91,44 @@ export function EditorMonitors({
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : String(error);
-        setWaveformMessage(message);
+        setWaveformMessage(waveformError(error));
       });
     return () => { cancelled = true; };
   }, [production, projectId, waveformClipId]);
+
+  async function refreshWaveform(): Promise<void> {
+    if (!waveformClipId || waveformBusy) return;
+    setWaveformBusy(true);
+    setWaveformMessage("正在刷新缓存 waveform…");
+    try {
+      const payload = await production.waveform(projectId, waveformClipId, 640);
+      setWaveform(payload);
+      setWaveformMessage(payload.peaks.length ? `waveform.v1 · ${payload.peaks.length} peaks` : "当前媒体没有可读取音频");
+    } catch (error) {
+      setWaveform(null);
+      setWaveformMessage(waveformError(error));
+    } finally {
+      setWaveformBusy(false);
+    }
+  }
+
+  async function buildWaveform(): Promise<void> {
+    if (!waveformClipId || waveformBusy) return;
+    setWaveformBusy(true);
+    setWaveformMessage("正在提交 waveform 生成任务…");
+    try {
+      const payload = await production.buildWaveform(projectId, waveformClipId, 640);
+      if (payload.task.type && payload.task.type !== "waveform_build") {
+        setWaveformMessage(`waveform 提交返回了未知任务类型：${payload.task.type}`);
+        return;
+      }
+      setWaveformMessage("waveform 已提交到状态中心；可以继续剪辑，完成后点“刷新”读取缓存。");
+    } catch (error) {
+      setWaveformMessage(waveformError(error));
+    } finally {
+      setWaveformBusy(false);
+    }
+  }
 
   useEffect(() => {
     const video = sourceVideoRef.current;
@@ -191,7 +230,14 @@ export function EditorMonitors({
       </div>
 
       <div className="waveform-strip">
-        <div className="waveform-heading"><strong>Waveform</strong><span>{waveformMessage}</span></div>
+        <div className="waveform-heading">
+          <strong>Waveform</strong>
+          <div className="waveform-heading-actions">
+            <span>{waveformMessage}</span>
+            <button type="button" disabled={!waveformClipId || waveformBusy} onClick={() => void refreshWaveform()}>刷新</button>
+            <button type="button" disabled={!waveformClipId || waveformBusy} onClick={() => void buildWaveform()}>生成 waveform</button>
+          </div>
+        </div>
         {waveform?.peaks.length ? (
           <div className="waveform-canvas">
             <svg viewBox="0 0 1000 100" preserveAspectRatio="none" role="img" aria-label={`${waveform.peaks.length} waveform peaks`}>

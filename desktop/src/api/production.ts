@@ -254,11 +254,19 @@ export interface WaveformPayload {
   source_fingerprint: string;
 }
 
+export interface WaveformBuildPayload {
+  contract: "waveform_build.v1" | string;
+  project_id: string;
+  clip_id: string;
+  task: {
+    task_id?: string;
+    type?: string;
+    status?: string;
+    [key: string]: unknown;
+  };
+}
+
 const REQUEST_TIMEOUT_MS = 10_000;
-// The server adaptively lowers PCM rate for long media and caps decode work at
-// ten minutes. Keep the client guardrail slightly above that cap so it does not
-// abort a valid first-time waveform build while the server is still decoding.
-const WAVEFORM_TIMEOUT_MS = 620_000;
 
 async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
@@ -310,6 +318,10 @@ function actorValue(actor: string): string {
   const value = actor.trim();
   if (!value) throw new HostConnectionError("写入人工生产事实需要操作者昵称");
   return value.slice(0, 80);
+}
+
+function waveformSamples(samples: number): number {
+  return Math.max(64, Math.min(4096, Math.round(samples || 512)));
 }
 
 export class ProductionClient {
@@ -423,12 +435,24 @@ export class ProductionClient {
   waveform(projectId: string, clipId: string, samples = 512): Promise<WaveformPayload> {
     const value = clipId.trim();
     if (!value) throw new HostConnectionError("waveform 需要 clip_id");
-    const boundedSamples = Math.max(64, Math.min(4096, Math.round(samples || 512)));
+    const boundedSamples = waveformSamples(samples);
     return requestJson<WaveformPayload>(
       this.baseUrl,
       `${projectPath(projectId)}/waveform/${encodeURIComponent(value)}?samples=${boundedSamples}`,
-      undefined,
-      WAVEFORM_TIMEOUT_MS,
+    );
+  }
+
+  buildWaveform(projectId: string, clipId: string, samples = 512): Promise<WaveformBuildPayload> {
+    const value = clipId.trim();
+    if (!value) throw new HostConnectionError("生成 waveform 需要 clip_id");
+    const boundedSamples = waveformSamples(samples);
+    return requestJson<WaveformBuildPayload>(
+      this.baseUrl,
+      `${projectPath(projectId)}/waveform/${encodeURIComponent(value)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ samples: boundedSamples }),
+      },
     );
   }
 }
