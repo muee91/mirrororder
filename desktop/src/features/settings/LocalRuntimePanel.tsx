@@ -23,6 +23,9 @@ function runtimeStatusLabel(value: string): string {
     disabled: "未启用",
     unavailable: "运行时不可用",
     missing: "未准备",
+    missing_runtime: "运行时未准备",
+    not_prepared: "未准备",
+    cached: "已缓存",
     preparing: "准备中",
     downloading: "下载中",
     loading: "加载中",
@@ -32,6 +35,10 @@ function runtimeStatusLabel(value: string): string {
     error: "需要处理",
     failed: "失败",
   }[value] ?? value;
+}
+
+function statusSummary(next: LocalRuntimePayload): string {
+  return `视觉 ${runtimeStatusLabel(next.vision.status)} · 人脸 ${runtimeStatusLabel(next.identity.face.status)} · 声纹 ${runtimeStatusLabel(next.identity.speaker.status)}`;
 }
 
 export function LocalRuntimePanel({ baseUrl }: Props) {
@@ -46,7 +53,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
       const next = await client.localRuntime();
       setRuntime(next);
       setModel(next.local_vision_model);
-      setMessage(`视觉 ${runtimeStatusLabel(next.vision.status)} · 人脸 ${runtimeStatusLabel(next.identity.face.status)} · 声纹 ${runtimeStatusLabel(next.identity.speaker.status)}`);
+      setMessage(statusSummary(next));
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -61,7 +68,11 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
       const next = await client.updateLocalRuntime(payload);
       setRuntime(next);
       setModel(next.local_vision_model);
-      setMessage(`视觉 ${runtimeStatusLabel(next.vision.status)} · 人脸 ${runtimeStatusLabel(next.identity.face.status)} · 声纹 ${runtimeStatusLabel(next.identity.speaker.status)}`);
+      if (next.device_task?.task_id) {
+        setMessage(`${statusSummary(next)} · 准备任务已提交到状态中心，可继续使用其他功能。`);
+      } else {
+        setMessage(statusSummary(next));
+      }
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -106,20 +117,20 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
             <article>
               <strong>视觉</strong><span>{runtimeStatusLabel(runtime.vision.status)}</span><small>{bytesLabel(runtime.vision.cache_bytes)} · {runtime.vision.available ? "本地运行时可用" : "本地运行时缺失"}</small>
               {runtime.vision.last_error ? <em>{runtime.vision.last_error}</em> : null}
-              <div><button type="button" disabled={busy || !runtime.local_vision_enabled} onClick={() => void action({ action: "prepare" }, "正在后台准备本地视觉模型…")}>准备 / 启动</button><button type="button" className="secondary" disabled={busy || !runtime.vision.running} onClick={() => void action({ action: "stop" }, "正在停止本地视觉模型…")}>停止</button></div>
+              <div><button type="button" disabled={busy || !runtime.local_vision_enabled} onClick={() => void action({ action: "prepare" }, "正在提交本地视觉准备任务…")}>准备 / 启动</button><button type="button" className="secondary" disabled={busy || !runtime.vision.running} onClick={() => void action({ action: "stop" }, "正在停止本地视觉模型…")}>停止</button></div>
             </article>
             <article>
               <strong>人脸</strong><span>{runtimeStatusLabel(runtime.identity.face.status)}</span><small>{bytesLabel(runtime.identity.face.cache_bytes)}</small>
               {runtime.identity.face.last_error ? <em>{runtime.identity.face.last_error}</em> : null}
-              <button type="button" disabled={busy || !runtime.face_identity_enabled || runtime.identity.face.preparing} onClick={() => void action({ action: "prepare_identity", kind: "face" }, "正在后台准备人脸识别运行时…")}>准备人脸模型</button>
+              <button type="button" disabled={busy || !runtime.face_identity_enabled || runtime.identity.face.preparing} onClick={() => void action({ action: "prepare_identity", kind: "face" }, "正在提交人脸运行时准备任务…")}>准备人脸模型</button>
             </article>
             <article>
               <strong>声纹</strong><span>{runtimeStatusLabel(runtime.identity.speaker.status)}</span><small>{bytesLabel(runtime.identity.speaker.cache_bytes)}</small>
               {runtime.identity.speaker.last_error ? <em>{runtime.identity.speaker.last_error}</em> : null}
-              <button type="button" disabled={busy || !runtime.speaker_identity_enabled || runtime.identity.speaker.preparing} onClick={() => void action({ action: "prepare_identity", kind: "speaker" }, "正在后台准备声纹识别运行时…")}>准备声纹模型</button>
+              <button type="button" disabled={busy || !runtime.speaker_identity_enabled || runtime.identity.speaker.preparing} onClick={() => void action({ action: "prepare_identity", kind: "speaker" }, "正在提交声纹运行时准备任务…")}>准备声纹模型</button>
             </article>
           </div>
-          <p className="production-note">模型和可选运行时只保存在当前设备。准备动作由本机后台执行；React 不下载模型，也不保存 embedding。</p>
+          <p className="production-note">模型和可选运行时只保存在当前设备。准备、下载、安装与模型加载通过可取消的设备任务进入状态中心；React 不下载模型，也不保存 embedding。</p>
         </>
       ) : null}
     </div>
