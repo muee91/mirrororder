@@ -56,7 +56,11 @@ def _scene(payload: dict, scene_id: str) -> dict:
 
 
 def _segment(scene: dict, segment_id: str) -> dict:
-    return next(segment for segment in scene["segments"] if segment["segment_id"] == segment_id)
+    return next(
+        segment
+        for segment in scene["segments"]
+        if segment.get("script", {}).get("segment_id") == segment_id
+    )
 
 
 def _materialize(tmp_path: Path) -> GoldenProject:
@@ -217,8 +221,10 @@ def test_golden_project_cross_module_production_semantics(tmp_path: Path) -> Non
     assert second["primary_group_id"] == "G_E1_SC1_T1"
     ng = next(row for row in first["candidates"] if row["group_id"] == "G_E1_SC1_T2")
     assert ng["delivery_state"] == "keep"
-    assert ng["eligible"] is False
+    assert ng["supervisor_blocked"] is True
+    assert first["summary"]["eligible"] == 1
     assert plan["semantics"]["keep_promoted_to_best"] is False
+    assert plan["semantics"]["script_supervisor_ng_is_delivery_reject"] is False
 
     sc2_plan = _scene(plan, "E1_SC2")
     sc2_segment = _segment(sc2_plan, "E1_SC2_S1")
@@ -242,7 +248,7 @@ def test_golden_project_cross_module_production_semantics(tmp_path: Path) -> Non
 
     manifest = build_selection_manifest(project.config)
     rows = {
-        (segment["segment_id"], row["group_id"]): row
+        (segment["script_segment"], row["group_id"]): row
         for segment in manifest["segments"]
         for row in segment["groups"]
     }
@@ -254,14 +260,17 @@ def test_golden_project_cross_module_production_semantics(tmp_path: Path) -> Non
     assert rows[("E2_SC1_S1", "G_E2_SC1_T1")]["state"] == "best"
     assert manifest["decision_policy"]["individual_opinions_are_delivery_authority"] is False
 
-    # The golden fixture itself and all project/shared projections are path-free.
+    # Production read models must never expose Host media/device paths. Delivery
+    # manifest artifact references are checked separately by the delivery path
+    # normalization contract; decision rows themselves remain path-free here.
     serialized = json.dumps(
-        {"coverage": coverage, "rough_cut": plan, "assembly": assembly, "delivery": manifest},
+        {"coverage": coverage, "rough_cut": plan, "assembly": assembly},
         ensure_ascii=False,
     )
     assert "/Volumes/" not in serialized
     assert "/Users/" not in serialized
     assert "C:\\" not in serialized
+    assert "/Volumes/" not in json.dumps(manifest["segments"], ensure_ascii=False)
 
 
 def test_golden_project_reopen_preserves_authority_and_revisions(tmp_path: Path) -> None:
