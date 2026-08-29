@@ -1,4 +1,5 @@
 import type { TimelineClip, TimelineProject, TimelineSequence, TimelineSource, TimelineTrack } from "../../api/timeline";
+import { rebaseMulticamSourceFrame } from "./timelineSync";
 
 export interface LocatedTimelineClip {
   track: TimelineTrack;
@@ -53,6 +54,10 @@ export function sourceForClip(project: TimelineProject, clip: TimelineClip): Tim
   return project.sources.find((source) => source.source_id === sourceId) ?? null;
 }
 
+export function synchronizedSourceFrame(clip: TimelineClip, baseSourceFrame: number): number | null {
+  return rebaseMulticamSourceFrame(clip, baseSourceFrame);
+}
+
 export function programMediaAtPlayhead(
   project: TimelineProject,
   sequence: TimelineSequence,
@@ -62,7 +67,9 @@ export function programMediaAtPlayhead(
   if (!located) return null;
   const source = sourceForClip(project, located.clip);
   if (!source) return null;
-  const sourceFrame = located.clip.source_in + Math.max(0, playhead - located.clip.timeline_start);
+  const baseSourceFrame = located.clip.source_in + Math.max(0, playhead - located.clip.timeline_start);
+  const sourceFrame = synchronizedSourceFrame(located.clip, baseSourceFrame);
+  if (sourceFrame === null) return null;
   return {
     ...located,
     source,
@@ -79,7 +86,9 @@ export function selectedSourceState(
   if (!clip) return null;
   const source = sourceForClip(project, clip);
   if (!source) return null;
-  return { source, sourceSeconds: clip.source_in / sequenceFps(sequence) };
+  const sourceFrame = synchronizedSourceFrame(clip, clip.source_in);
+  if (sourceFrame === null) return null;
+  return { source, sourceSeconds: sourceFrame / sequenceFps(sequence) };
 }
 
 export function isEditableKeyboardTarget(target: EventTarget | null): boolean {

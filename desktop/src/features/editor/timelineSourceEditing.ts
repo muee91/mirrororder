@@ -1,4 +1,4 @@
-import type { ReviewModelPayload } from "../../api/host";
+import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import type {
   TimelineCommand,
   TimelineProject,
@@ -7,6 +7,7 @@ import type {
   TimelineSource,
 } from "../../api/timeline";
 import { sequenceFps } from "./editorPlayback";
+import { encodeMulticamSyncRanges, MULTICAM_SYNC_METADATA_KEY, type TimelineSyncRange } from "./timelineSync";
 
 export type ManualSourceEditMode = "insert" | "overwrite";
 
@@ -17,6 +18,7 @@ export interface TimelineSourceOption {
   availableIn: number;
   availableDuration: number;
   multicamGroupId: string | null;
+  syncMetadata?: string | null;
   label: string;
 }
 
@@ -28,6 +30,19 @@ function positiveDuration(value: number | null | undefined, fallback: number): n
   return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : Math.max(1, fallback);
 }
 
+function syncMetadataForTake(take: ReviewTakeGroup, fps: number): string | null {
+  const ranges: TimelineSyncRange[] = [];
+  for (const angle of take.angles.filter((value) => value.playback.available !== false)) {
+    const start = Number(angle.source_start);
+    const inferredEnd = angle.source_end !== null ? Number(angle.source_end) : start + Math.max(0, Number(angle.duration) || 0);
+    if (!Number.isFinite(start) || !Number.isFinite(inferredEnd) || start < 0 || inferredEnd <= start) return null;
+    const startFrame = secondsToFrames(start, fps);
+    const endFrame = Math.max(startFrame + 1, secondsToFrames(inferredEnd, fps));
+    ranges.push({ source_id: `source:${angle.clip_id}`, start_frame: startFrame, end_frame: endFrame });
+  }
+  return encodeMulticamSyncRanges(ranges);
+}
+
 export function buildTimelineSourceOptions(
   review: ReviewModelPayload | null,
   project: TimelineProject,
@@ -36,7 +51,9 @@ export function buildTimelineSourceOptions(
   if (!review) return [];
   const fps = sequenceFps(sequence);
   const reviewAngles = new Map<string, { groupId: string; camera: string; sourceStart: number; sourceEnd: number | null; duration: number }>();
+  const reviewTakes = new Map<string, ReviewTakeGroup>();
   for (const take of review.take_groups) {
+    reviewTakes.set(take.group_id, take);
     for (const angle of take.angles) {
       if (angle.playback.available === false) continue;
       reviewAngles.set(angle.clip_id, {
@@ -73,6 +90,7 @@ export function buildTimelineSourceOptions(
     const groupId = evidence.groupId ?? multicam?.group_id ?? "";
     const camera = evidence.camera;
     const suffix = [groupId, camera].filter(Boolean).join(" · ");
+    const take = multicam ? reviewTakes.get(groupId) ?? null : null;
     return [{
       source,
       groupId,
@@ -80,6 +98,7 @@ export function buildTimelineSourceOptions(
       availableIn,
       availableDuration,
       multicamGroupId: multicam?.group_id ?? null,
+      syncMetadata: take ? syncMetadataForTake(take, fps) : null,
       label: `${source.name || source.clip_id}${suffix ? ` · ${suffix}` : ""}`,
     }];
   });
@@ -143,6 +162,7 @@ export function buildManualSourceCommand(
   };
   if (option.groupId) metadata.group_id = option.groupId;
   if (option.camera) metadata.camera = option.camera;
+  if (option.multicamGroupId && option.syncMetadata) metadata[MULTICAM_SYNC_METADATA_KEY] = option.syncMetadata;
 
   return {
     type: mode,

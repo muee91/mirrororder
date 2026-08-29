@@ -1,22 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { TimelineProject, TimelineSequence } from "../../api/timeline";
 import { activeSourceId, clampPlayhead, programMediaAtPlayhead, sequenceFps, videoClipAtPlayhead } from "./editorPlayback";
-
-function project(): TimelineProject {
-  return {
-    version: 1,
-    project_id: "p1",
-    sources: [
-      { source_id: "source:a", clip_id: "a", media_id: "ma", name: "A", duration_frames: 1000 },
-      { source_id: "source:b", clip_id: "b", media_id: "mb", name: "B", duration_frames: 1000 },
-    ],
-    multicam_groups: [{ group_id: "g1", angle_source_ids: ["source:a", "source:b"] }],
-    sequences: [sequence()],
-    active_sequence_id: "main",
-  };
-}
+import { encodeMulticamSyncRanges, MULTICAM_SYNC_METADATA_KEY } from "./timelineSync";
 
 function sequence(): TimelineSequence {
+  const sync = encodeMulticamSyncRanges([
+    { source_id: "source:a", start_frame: 100, end_frame: 300 },
+    { source_id: "source:b", start_frame: 400, end_frame: 600 },
+  ]);
+  if (!sync) throw new Error("expected sync metadata");
   return {
     sequence_id: "main",
     name: "Main",
@@ -35,7 +27,7 @@ function sequence(): TimelineSequence {
             enabled: true,
             multicam_group_id: "g1",
             selected_angle_source_id: "source:b",
-            metadata: {},
+            metadata: { [MULTICAM_SYNC_METADATA_KEY]: sync },
           },
         ],
       },
@@ -45,16 +37,36 @@ function sequence(): TimelineSequence {
   };
 }
 
+function project(): TimelineProject {
+  return {
+    version: 1,
+    project_id: "p1",
+    sources: [
+      { source_id: "source:a", clip_id: "a", media_id: "ma", name: "A", duration_frames: 1000 },
+      { source_id: "source:b", clip_id: "b", media_id: "mb", name: "B", duration_frames: 1000 },
+    ],
+    multicam_groups: [{ group_id: "g1", angle_source_ids: ["source:a", "source:b"] }],
+    sequences: [sequence()],
+    active_sequence_id: "main",
+  };
+}
+
 describe("editor playback mapping", () => {
   it("uses the rational sequence frame rate", () => {
     expect(sequenceFps({ ...sequence(), frame_rate: { numerator: 30000, denominator: 1001 } })).toBeCloseTo(29.970, 2);
   });
 
-  it("resolves the selected multicam angle for Program Monitor", () => {
+  it("rebases the selected multicam angle using Rust-persisted clip metadata", () => {
     const value = programMediaAtPlayhead(project(), sequence(), 20);
     expect(value?.source.clip_id).toBe("b");
-    expect(value?.sourceFrame).toBe(110);
-    expect(value?.sourceSeconds).toBeCloseTo(4.4);
+    expect(value?.sourceFrame).toBe(410);
+    expect(value?.sourceSeconds).toBeCloseTo(16.4);
+  });
+
+  it("fails closed when a switched multicam clip lacks synchronization metadata", () => {
+    const next = sequence();
+    delete next.tracks[0].clips[0].metadata[MULTICAM_SYNC_METADATA_KEY];
+    expect(programMediaAtPlayhead(project(), next, 20)).toBeNull();
   });
 
   it("does not show a disabled clip in Program Monitor", () => {
@@ -68,9 +80,11 @@ describe("editor playback mapping", () => {
     expect(clampPlayhead(sequence(), 999)).toBe(60);
   });
 
-  it("uses base source when no multicam selection is active", () => {
-    const clip = sequence().tracks[0].clips[0];
+  it("uses the base source directly when no multicam selection is active", () => {
+    const nextSequence = sequence();
+    const clip = nextSequence.tracks[0].clips[0];
     clip.selected_angle_source_id = null;
     expect(activeSourceId(clip)).toBe("source:a");
+    expect(programMediaAtPlayhead(project(), nextSequence, 20)?.sourceFrame).toBe(110);
   });
 });

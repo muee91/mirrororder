@@ -1,6 +1,7 @@
 import type { ReviewAngle, ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import type { RoughCutCandidate, RoughCutPlan, RoughCutSegmentPlan } from "../../api/production";
 import type { FrameRate, TimelineCommand, TimelineMulticamGroup, TimelineProject, TimelineSource } from "../../api/timeline";
+import { encodeMulticamSyncRanges, MULTICAM_SYNC_METADATA_KEY, type TimelineSyncRange } from "./timelineSync";
 
 export interface TimelineSeedProposal {
   baseProject: TimelineProject;
@@ -60,6 +61,19 @@ function usableRange(candidate: RoughCutCandidate | null, take: ReviewTakeGroup)
   if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
   if (take.duration > 0 && end > take.duration + 0.001) return null;
   return { start, end };
+}
+
+function syncMetadataForTake(take: ReviewTakeGroup, rate: FrameRate): string | null {
+  const ranges: TimelineSyncRange[] = [];
+  for (const angle of take.angles.filter((value) => value.playback.available !== false)) {
+    const start = Number(angle.source_start);
+    const inferredEnd = angle.source_end !== null ? Number(angle.source_end) : start + Math.max(0, Number(angle.duration) || 0);
+    if (!Number.isFinite(start) || !Number.isFinite(inferredEnd) || start < 0 || inferredEnd <= start) return null;
+    const startFrame = secondsToFrames(start, rate);
+    const endFrame = Math.max(startFrame + 1, secondsToFrames(inferredEnd, rate));
+    ranges.push({ source_id: sourceId(angle.clip_id), start_frame: startFrame, end_frame: endFrame });
+  }
+  return encodeMulticamSyncRanges(ranges);
 }
 
 function ensureSources(
@@ -145,6 +159,19 @@ export function buildRoughCutTimelineProposal(
       const sourceInFrames = secondsToFrames(angle.source_start + sourceOffset, rate);
       const clipId = `rough:${segmentId}:${take.group_id}`;
       const trimBasis = range ? "script_supervisor_usable_range" : "full_take_range";
+      const availableAngleCount = take.angles.filter((item) => item.playback.available !== false).length;
+      const syncMetadata = availableAngleCount > 1 ? syncMetadataForTake(take, rate) : null;
+      const metadata: Record<string, string> = {
+        proposal_source: plan.contract,
+        proposal_revision: plan.revision,
+        segment_id: segmentId,
+        group_id: take.group_id,
+        source_clip_id: angle.clip_id,
+        decision_source: candidate?.decision_source ?? "explicit_best",
+        trim_basis: trimBasis,
+        frame_rate: `${rate.numerator}/${rate.denominator}`,
+      };
+      if (syncMetadata) metadata[MULTICAM_SYNC_METADATA_KEY] = syncMetadata;
 
       commands.push({
         type: "insert",
@@ -157,18 +184,9 @@ export function buildRoughCutTimelineProposal(
           source_in: sourceInFrames,
           duration: durationFrames,
           enabled: true,
-          multicam_group_id: take.angles.filter((item) => item.playback.available !== false).length > 1 ? take.group_id : null,
-          selected_angle_source_id: take.angles.filter((item) => item.playback.available !== false).length > 1 ? sourceId(angle.clip_id) : null,
-          metadata: {
-            proposal_source: plan.contract,
-            proposal_revision: plan.revision,
-            segment_id: segmentId,
-            group_id: take.group_id,
-            source_clip_id: angle.clip_id,
-            decision_source: candidate?.decision_source ?? "explicit_best",
-            trim_basis: trimBasis,
-            frame_rate: `${rate.numerator}/${rate.denominator}`,
-          },
+          multicam_group_id: availableAngleCount > 1 ? take.group_id : null,
+          selected_angle_source_id: availableAngleCount > 1 ? sourceId(angle.clip_id) : null,
+          metadata,
         },
       });
       included.push({ segmentId, groupId: take.group_id, clipId, durationFrames, trimBasis });
@@ -181,6 +199,9 @@ export function buildRoughCutTimelineProposal(
   }
   if (skipped.length) {
     warnings.push(`${skipped.length} 个剧本段因缺少单一显式 Best / 存在冲突而未进入时间线提议。`);
+  }
+  if (commands.some((command) => command.type === "insert" && command.clip.multicam_group_id && !command.clip.metadata[MULTICAM_SYNC_METADATA_KEY])) {
+    warnings.push("部分多机位 Take 缺少完整同步范围；可以保留当前 base angle，但后续切换机位会 fail closed。 ");
   }
   warnings.push(`Source pool 已注册 ${sources.size} 个可播放 angle；非 Best 素材只有人工 Insert/Overwrite 后才进入 Timeline。`);
   warnings.push(`时间基 ${rate.numerator}/${rate.denominator} fps；所有秒级范围会在提交前量化到整数帧。`);

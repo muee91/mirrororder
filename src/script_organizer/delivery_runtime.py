@@ -11,6 +11,7 @@ from .timeline_delivery import (
     UnsafeTimelineDelivery,
     export_timeline_snapshot,
 )
+from .timeline_delivery_sync import normalize_timeline_delivery_request
 
 _INSTALLED = False
 _ALLOWED_ARTIFACTS = {
@@ -166,8 +167,9 @@ def install_delivery_runtime() -> None:
                     self._local_only()
                     project_id = parts[3]
                     project = service.project(project_id)
-                    payload = web_server._body(self)
+                    raw_payload = web_server._body(self)
                     try:
+                        payload = normalize_timeline_delivery_request(raw_payload)
                         report = export_timeline_snapshot(
                             project.config,
                             payload,
