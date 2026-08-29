@@ -10,9 +10,9 @@ __pycache__/
 *.app/
 output/
 
-# Local project data can contain ASR, analysis output, review decisions, and locks.
-projects/*/cache/
-projects/*/output/
+# Live workspace/project runtime state belongs to the user's workspace, not the source repository.
+# This includes registry.json, project.toml, immutable input copies, cache, output, review/task state, and locks.
+projects/
 
 # Host supplies this per-machine sync configuration; it must never enter the repo or App bundle.
 vendor/multicam-audio-sync/scripts/config.json

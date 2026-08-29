@@ -17,6 +17,24 @@ Start with the repository documentation authority index:
 - `../docs/ux-principles.md`
 - `development-baseline.json`
 - `../docs/desktop-development-baseline.md`
+- `../docs/architecture/repository-layout.md`
+- `../docs/architecture/desktop-bridge.md`
+
+## File placement
+
+Desktop code is organized by responsibility:
+
+```text
+src/api/                 typed localhost/native clients and DTOs
+src/app/                 application shell and global navigation
+src/features/<domain>/   domain workbench UI, hooks, styles and colocated Vitest
+src-tauri/src/            narrow platform adapters and lifecycle managers
+src-tauri/crates/         independently testable Rust cores such as timeline-core
+scripts/                  build, staging, smoke and release tooling
+src-tauri/resources/      generated/packaged resource targets and source-level manifests/placeholders
+```
+
+Do not put product business authority into Tauri platform adapters, and do not duplicate Host fetch logic inside individual Workbenches. Generated portable Python/media-tool runtime contents are build outputs, not hand-maintained source files.
 
 ## Product surfaces
 
@@ -38,6 +56,8 @@ Global surfaces sit outside project navigation:
 - 设置 — Team Web preferences, local runtimes, external/custom model connections, collaboration access and advanced diagnostics.
 
 `⌘K / Ctrl+K` is project semantic search. 小镜 is a contextual right-side drawer. Model Provider / Base URL / API Key configuration belongs to Settings, not the Assistant drawer.
+
+Passive GETs, opening/switching pages or selecting objects must not start full media scans, long FFmpeg jobs, model downloads or full-project indexing. Heavy work is submitted explicitly as a durable task and observed through Status Center.
 
 ## Local validation
 
@@ -96,6 +116,8 @@ Audit, retrieval scores and Individual Opinion remain evidence/advice, not final
 ## Status and settings contracts
 
 - `StatusCenterWorkbench` is the single global durable-task surface. Project workbenches may show lightweight progress or failure hints, but must not grow parallel task controllers.
+- `media_inventory_scan` owns explicit device-local media inventory rescans; ordinary media-inventory GETs read snapshots only.
+- `waveform_build` owns expensive waveform generation; waveform GETs read cache only.
 - Settings should show normal user configuration first. Python executable, Host process details, release gates, Timeline journal paths and similar engineering data belong in the advanced diagnostics disclosure.
 - Local runtime status uses user-facing state names; raw provider/runtime state should not dominate the normal settings experience.
 - External/custom model connection secrets remain device-local and are never echoed back into project/shared data.

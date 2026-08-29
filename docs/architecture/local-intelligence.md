@@ -14,7 +14,7 @@
         └── frames/
 ```
 
-这类数据不放进共享 workspace，也不应通过普通文件同步让多台设备同时写一个活跃 SQLite。
+这类数据不放进共享 workspace，也不应通过普通文件同步让多台设备同时写一个活跃 SQLite；更不属于 MirrorOrder 源码仓库。源码仓库与生产 workspace 的边界见 [`repository-layout.md`](./repository-layout.md)。
 
 本机索引可保存或派生：
 
@@ -81,7 +81,7 @@ Semantic Documents
 
 检索结果只代表相关证据，不代表剪辑置信度、Best、Review placement 或最终选择。
 
-更具体的合同见 [`docs/semantic-retrieval.md`](./docs/semantic-retrieval.md)。
+更具体的合同见 [`../semantic-retrieval.md`](../semantic-retrieval.md)。
 
 ## 5. 本地模型与外部连接
 
@@ -93,7 +93,19 @@ Semantic Documents
 - 未配置模型时，确定性主流程和可用的离线回退仍应工作；
 - 如果显式配置远端视觉模型，上传范围必须受 Host 约束，不能把整个项目媒体无界发送给 provider。
 
-## 6. 故障与 authority 原则
+模型下载、全项目感知索引和 embedding 刷新属于重工作：不得由普通 GET、打开页面或切换对象偷偷触发，应通过显式 durable task / 运行时准备动作执行，并在 Status Center 或设置的对应状态面展示。
+
+## 6. 媒体清单与 waveform
+
+设备本机媒体清单和 waveform 同样遵循“可重建、非 authority、显式重工作”的原则：
+
+- `GET /media-inventory` 只读取 device-local inventory snapshot，不枚举/哈希整个素材库；
+- 显式素材重扫提交 `media_inventory_scan` durable task；
+- waveform GET 只读取项目 cache；cache miss 不执行 `ffprobe` / `ffmpeg`；
+- 显式 waveform 生成提交 `waveform_build` durable task，并支持等待 CPU 资源与外部子进程取消；
+- 这些派生结果都不能变成 Review、Editorial Decision 或 Timeline authority。
+
+## 7. 故障与 authority 原则
 
 本地智能属于增强层：
 

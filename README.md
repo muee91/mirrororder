@@ -2,7 +2,7 @@
 
 镜序是面向短剧、多机位拍摄与后期协作的本地优先 Production 工具。它把素材、剧本、场记、人物身份、人工审阅、粗剪提案、时间线编辑和交付串成一套可追踪工作流。
 
-当前产品与文档 authority 从 [`docs/README.md`](docs/README.md) 开始阅读；中文产品总览见 [`项目介绍.md`](项目介绍.md)。
+当前产品与文档 authority 从 [`docs/README.md`](docs/README.md) 开始阅读；中文产品总览见 [`项目介绍.md`](项目介绍.md)。仓库文件位置与源码/工作区边界见 [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)。
 
 ## 当前开发基线
 
@@ -102,6 +102,19 @@ python -m script_organizer.cli gateway workspace.toml --port 8766
 
 Production Host 与 Team Gateway 是两套独立生命周期。健康状态必须验证 MirrorOrder service identity，不能只因为某端口可连接就认为服务正确。
 
+## 源码仓库与工作区数据
+
+根 `workspace.toml` 是仓库开发入口；它的 registry 指向 `./projects/registry.json`。`projects/` 会由 Host 按需创建，但**整个目录属于本地/生产 workspace 状态并被 Git 忽略**。
+
+因此源码仓库不再保存真实：
+
+- 项目 registry / `project.toml`；
+- 剧本、FCPXML/XML 或媒体输入副本；
+- cache / output / review / tasks / locks；
+- `/Volumes/...`、盘符路径等设备绝对路径。
+
+生产团队仍可以按 [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md) 在设备之间同步项目事实和人工状态；“可同步的生产 workspace”与“MirrorOrder 源码 Git 仓库”是两个不同边界。测试所需项目数据应使用 `tests/fixtures/` 中的最小合成/脱敏 fixture。
+
 ## 本机素材身份
 
 ```text
@@ -132,8 +145,10 @@ Runtime packaging、自动配乐、重媒体处理、新 NLE adapter、模型 ru
 - [`docs/README.md`](docs/README.md)：文档索引与 authority 层级；
 - [`docs/app-information-architecture.md`](docs/app-information-architecture.md)：当前产品 IA；
 - [`docs/ux-principles.md`](docs/ux-principles.md)：当前 UX 原则；
+- [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)：仓库与工作区文件位置；
+- [`docs/architecture/desktop-bridge.md`](docs/architecture/desktop-bridge.md)：Desktop / Python Core / Team Web / Timeline 边界；
+- [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md)：跨设备同步与本机素材边界；
+- [`docs/architecture/automation-pipeline.md`](docs/architecture/automation-pipeline.md)：自动整理与 AI 权限边界；
+- [`docs/architecture/local-intelligence.md`](docs/architecture/local-intelligence.md)：本机可重建智能索引；
 - [`AGENTS.md`](AGENTS.md)：工程接手与自动化修改约束；
-- [`desktop/README.md`](desktop/README.md)：Desktop 工程基线；
-- [`DESKTOP_BRIDGE.md`](DESKTOP_BRIDGE.md)：Desktop / Python Core / Team Web / Timeline 边界；
-- [`SYNC_MODEL.md`](SYNC_MODEL.md)：跨设备同步与本机素材边界；
-- [`AUTOMATION_PIPELINE.md`](AUTOMATION_PIPELINE.md)：自动整理与 AI 权限边界。
+- [`desktop/README.md`](desktop/README.md)：Desktop 工程基线。

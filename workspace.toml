@@ -1,3 +1,5 @@
+# Repository development workspace descriptor.
+# Live registry/project/input/cache/output state is created under ./projects and is gitignored.
 [workspace]
 id = "ws_9b9a4e7f2c1d4aa6b80c3f8b7e2d1a90"
 name = "视频素材工作台"

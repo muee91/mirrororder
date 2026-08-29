@@ -4,7 +4,7 @@ from pathlib import Path
 def test_media_camera_semantics_document_product_boundaries() -> None:
     root = Path(__file__).resolve().parents[1]
     doc = (root / "docs" / "media-camera-semantics.md").read_text(encoding="utf-8")
-    sync = (root / "SYNC_MODEL.md").read_text(encoding="utf-8")
+    sync = (root / "docs" / "architecture" / "sync-model.md").read_text(encoding="utf-8")
 
     assert "media_roles.v1" in doc
     assert "A机 / B机 / C机" in doc

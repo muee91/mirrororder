@@ -52,7 +52,45 @@ auto_resolve
 
 缺失源媒体只产生警告并保留逻辑片段，后续由当前设备的 `media-bindings.json` 解决；预检不会复制原始媒体、修改原始 FCPXML 或写入审核。
 
-## 2. 自动结果、人工结果与审计结果分离
+## 2. Production UX 与 durable task
+
+普通 GET、打开页面、切换项目/对象、展开 Inspector 等交互必须保持轻量。以下工作不得偷偷挂在读取路径上：
+
+- 全盘/大目录媒体枚举与内容 fingerprint；
+- 长时间 `ffprobe` / `ffmpeg`；
+- 模型下载；
+- 全项目感知/embedding/语义索引；
+- 其它可能持续数秒到数分钟、占用稀缺 CPU/ML/视觉资源的工作。
+
+重工作由明确用户动作提交 durable task，并统一在 Status Center 查看、取消、重试和追踪历史。项目工作台只展示制作对象与必要的轻量状态。
+
+当前两个明确契约：
+
+```text
+GET /media-inventory
+→ 只读 device-local inventory snapshot
+
+显式扫描/重扫
+→ media_inventory_scan durable task
+→ Status Center
+```
+
+```text
+GET /waveform/<clip_id>
+→ 只读项目 waveform cache
+→ cache miss 不跑 ffprobe/ffmpeg
+
+显式生成
+→ waveform_build durable task
+→ CPU resource scheduler
+→ 可取消 ffprobe/ffmpeg
+→ cache
+→ Status Center
+```
+
+设备绝对路径不能因为 durable task 方便而泄入共享项目产物；需要本机路径时应通过 device-local request/state 间接传递。
+
+## 3. 自动结果、人工结果与审计结果分离
 
 自动状态写：
 
@@ -95,7 +133,7 @@ output/learning_cases.jsonl
 - Shadow Audit 不得写 `review.json`、`editorial.json` 或 `auto_decisions.json`。
 - Production matcher 不读取 `learning_cases.jsonl`；它只用于离线 replay / eval / 算法研发。
 
-## 3. 自动状态
+## 4. 自动状态
 
 ```text
 auto_confirmed  本地确定性证据充分
@@ -109,7 +147,7 @@ unresolved      无可靠对白/候选/证据不足
 
 注意：Shadow Audit 的 `agree / disagree / insufficient_evidence` **不是新的自动状态**，不会把一个 Take 从 `needs_review` 直接升级成 `ai_confirmed`。
 
-## 4. 高置信度自动确认
+## 5. 高置信度自动确认
 
 当前自动确认至少要求：
 
@@ -121,7 +159,7 @@ unresolved      无可靠对白/候选/证据不足
 
 通过后写入 `auto_decisions.json`，不会触碰人工审核。
 
-## 5. AI Rescue 何时介入
+## 6. AI Rescue 何时介入
 
 AI Rescue 不是主匹配器。只有本地候选没有达到自动确认门槛时才考虑模型二审。
 
@@ -144,7 +182,7 @@ Host 只发送：
 
 任一失败 → `needs_review`，不自动写人工结果。
 
-## 6. Shadow Audit 如何介入
+## 7. Shadow Audit 如何介入
 
 Shadow Audit 的目标不是再次充当 matcher，而是尝试证明当前算法判断有问题，并积累后续粗剪需要的结构化素材智力。
 
@@ -204,9 +242,9 @@ C → 特写
 
 不能把某一机位的景别复制给整个 Take。
 
-完整边界见 `docs/ai-audit-learning-loop.md`。
+完整边界见 [`../ai-audit-learning-loop.md`](../ai-audit-learning-loop.md)。
 
-## 7. 演员 / 角色推断边界
+## 8. 演员 / 角色推断边界
 
 声纹可以利用已确认的剧本归集提出角色候选：
 
@@ -228,7 +266,7 @@ speaker cluster
 - face → 剧本角色：默认人工确认；
 - 未来只有在可靠 active-speaker / lip-motion / audio-visual binding 存在时，才考虑自动建立 face ↔ speaker 关系。
 
-## 8. 第三方 / 本地模型
+## 9. 第三方 / 本地模型
 
 当前 Provider 使用 OpenAI-compatible `chat/completions` 接口。通过 Host 进程环境变量配置：
 
@@ -258,16 +296,27 @@ Shadow Audit → 保留确定性问题分类和已有缓存，不影响主流程
 
 API Key 不得写入 workspace / project.toml / review.json / audit.json。
 
-## 9. multicam-audio-sync 的第一方集成方式
+## 10. multicam-audio-sync 的第一方集成方式
 
 MirrorOrder Host 通过项目内 `multicam_sync_engine` API 原地调度仓库内第一方同步实现，不通过 Codex，也不在运行时依赖外部 skill。每个项目只生成自己的 `.multicam-sync/config.json`、音频缓存和位置表，不复制算法源代码。
 
 运行时使用以下来源：
 
-1. App runtime 内的 `multicam-audio-sync`
-2. 仓库 `vendor/multicam-audio-sync`
+1. App packaged runtime 内的 `multicam-audio-sync`；
+2. 开发仓库 `vendor/multicam-audio-sync`。
 
-开发调试可同时设置 `MIRRORORDER_MULTICAM_SYNC_ROOT` 与 `MIRRORORDER_ALLOW_MULTICAM_SYNC_OVERRIDE=1` 覆盖第一方目录；普通发布构建始终使用仓库 vendor，缺少它会直接失败。`macos-app/build_app.sh` 将脚本、参考文档、FCPXML 校验器和 `capcut_draft_schema.json` 一并复制到 `镜序.app/Contents/Resources/runtime/multicam-audio-sync`，因此另一台 Mac 运行同步时不需要 Codex、Python 外部技能目录或本项目之外的同步包。
+开发调试可同时设置 `MIRRORORDER_MULTICAM_SYNC_ROOT` 与 `MIRRORORDER_ALLOW_MULTICAM_SYNC_OVERRIDE=1` 覆盖第一方目录；普通发布构建必须使用可追踪的 packaged runtime provenance。
+
+当前 Desktop runtime staging 由 `desktop/scripts/stage-runtime.mjs` 负责。它将：
+
+- `src/script_organizer` staged 到 `desktop/src-tauri/resources/mirrororder-core/src/script_organizer`；
+- `vendor/multicam-audio-sync` staged 到 `mirrororder-core/vendor/multicam-audio-sync`；
+- `pyproject.toml` staged 到 core resource；
+- portable Python、ffmpeg/ffprobe 分别 staged 到专用 runtime resource；
+- 验证 portable Python relocation、Core import、ffmpeg/ffprobe version/source/license provenance；
+- 写入 packaged runtime manifest。
+
+因此发布 App 运行同步不应依赖 Codex、外部 skill 目录或开发机上的仓库路径。
 
 第一方引擎的职责边界：
 
@@ -294,18 +343,23 @@ output/.multicam-sync/...
 
 原始媒体不会被修改；已有用户 FCPXML 项目也不会被覆盖。
 
-## 10. Host 任务
+## 11. Host durable tasks
 
 ```text
-prepare_project      完整确定性主流水线 + AI Rescue；不自动全量 Audit
-multicam_sync        只做多机位音频同步 + XML
-auto_resolve         只重跑自动确认 / AI Rescue
-incremental_analyze  现有增量分析，完成后刷新自动决策
-transcribe           定向 ASR，分析可用时刷新自动决策
-evidence_extract     定向证据提取
-identity_index       App 显式人物 / 声纹索引
-audit                App 显式 Shadow Audit；默认优先级 + 缓存
+prepare_project        完整确定性主流水线 + AI Rescue；不自动全量 Audit
+media_inventory_scan   显式设备本机素材清单扫描/重扫
+waveform_build         显式 waveform ffprobe/ffmpeg 生成并缓存
+multicam_sync          只做多机位音频同步 + XML
+incremental_analyze    现有增量分析，完成后刷新自动决策
+auto_resolve           只重跑自动确认 / AI Rescue
+transcribe             定向 ASR，分析可用时刷新自动决策
+evidence_extract       定向证据提取
+identity_index         App 显式人物 / 声纹索引
+audit                  App 显式 Shadow Audit；默认优先级 + 缓存
+semantic_index         显式语义索引工作
 ```
+
+所有 durable task 都应保留任务类型、stage、取消/失败/重试语义，不允许某个 Workbench 自己长出第二套完整任务控制器。
 
 CLI 主流水线仍保持：
 
@@ -315,9 +369,9 @@ CLI 主流水线仍保持：
 ./script-organizer auto-resolve workspace.toml <project_id>
 ```
 
-Audit 当前由 App Production 提交 Host 任务，不作为 Agent 可提交任务，也不作为 Web 审阅操作。
+Audit 当前由 App Production 提交 Host 任务，不作为普通 Web 审阅操作。
 
-## 11. 人工界面原则
+## 12. 人工界面原则
 
 工作台顶部继续显示生产状态：
 
@@ -341,7 +395,7 @@ Audit 当前由 App Production 提交 Host 任务，不作为 Agent 可提交任
 
 素材卡可以直接显示景别和角色上下文，但文件名、机位和播放仍是主信息。不得把页面改造成模型诊断控制台。
 
-## 12. 算法自我迭代
+## 13. 算法自我迭代
 
 所谓“算法自我迭代”必须是受控研发闭环：
 
@@ -383,7 +437,7 @@ Production algorithm N+1
 - frozen gold regression count；
 - auto Reject count = 0。
 
-## 13. 不允许的回归
+## 14. 不允许的回归
 
 - 不得把所有 Take 都发给大模型。
 - 不得让 AI Rescue 搜索整本剧本后自由返回任意位置。
@@ -397,4 +451,4 @@ Production algorithm N+1
 - 不得让生产 matcher 读取 `learning_cases.jsonl` 形成隐式反馈环。
 - 不得自动 Reject。
 - 不得用 LLM 替代音频同步、ASR 时间戳、FCPXML 时间关系或 `media_id`。
-- 不得恢复“每个 Take 默认都需要人工点一下”的产品逻辑。
+- 不得让普通 GET、页面打开或对象切换重新触发素材全盘扫描、长 FFmpeg、模型下载或全项目索引。

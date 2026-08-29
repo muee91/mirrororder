@@ -19,13 +19,25 @@
 4. `desktop/README.md`；
 5. `desktop/development-baseline.json`；
 6. `docs/desktop-development-baseline.md`；
-7. `DESKTOP_BRIDGE.md`；
-8. `SYNC_MODEL.md`；
-9. `AUTOMATION_PIPELINE.md`。
+7. `docs/architecture/repository-layout.md` — 源码仓库与运行时工作区的文件位置；
+8. `docs/architecture/desktop-bridge.md`；
+9. `docs/architecture/sync-model.md`；
+10. `docs/architecture/automation-pipeline.md`。
 
 涉及具体领域时再读 `docs/README.md` 列出的对应 contract。`docs/verification/` 和 Historical Reference 不能覆盖当前 authority。
 
 不确定时先给证据和不确定点，不做猜测式修改。
+
+## 仓库文件位置
+
+- 仓库根目录只保留入口、构建配置和仓库级约束；新的跨层架构说明放 `docs/architecture/`，一次性验收记录放 `docs/verification/`。
+- 根 `workspace.toml` 只是开发工作区描述。运行时 `projects/` 整体属于 workspace 数据并被 Git 忽略。
+- **禁止提交真实** `projects/registry.json`、`project.toml`、剧本/FCPXML/XML 输入副本、cache、output、Review/Editorial/tasks/locks，以及 `/Volumes/...`、`/Users/...`、Windows 盘符等设备绝对路径。
+- 测试需要项目数据时，只使用 `tests/fixtures/` 下最小、合成、脱敏且可重建的 fixture；不得复制真实制作项目。
+- Desktop typed clients / DTO 放 `desktop/src/api/`；领域 UI、专属 hooks、CSS、Vitest 尽量 colocate 在 `desktop/src/features/<domain>/`；Tauri `src-tauri` 只放窄平台 adapter、生命周期和 Rust Core。
+- `src/script_organizer/` 当前 flat namespace 是历史兼容区，不是继续无限堆顶层模块的模板。出现一组 engine/store/runtime/support 时优先规划子 package；大规模包迁移必须独立提交并有 import、packaging、stage-runtime、pytest contract，不能和产品功能改动混在一起。
+
+生产 workspace 可以按同步模型在团队设备之间同步；**“可同步的生产 workspace”与“MirrorOrder 源码 Git 仓库”是两个不同边界**。
 
 ## 当前产品入口
 
@@ -76,6 +88,14 @@ AI proposal、Audit、semantic retrieval score 或 Team Web Individual Opinion �
 - API Key 不得进入 workspace/project/review/audit/editorial 或可同步产物。
 - Exclusion、Slate `status=ng` 与 Editorial Reject 是三套不同语义，禁止合并。
 
+## Production UX / 重工作
+
+- GET、打开页面、切换项目/对象、展开 Inspector 等普通交互必须保持轻量，不得偷偷触发全盘媒体枚举、长 FFmpeg/FFprobe、模型下载、全项目 embedding/索引或其它分钟级工作。
+- 重工作必须由显式用户动作提交 durable task，并进入 Status Center；项目页只显示必要的轻量状态或失败提示。
+- 素材库 GET 只读 device-local inventory snapshot；显式重扫使用 `media_inventory_scan`。
+- Waveform GET 只读缓存；cache miss 由显式 `waveform_build` durable task 生成。
+- 取消必须尽可能传递到等待资源和外部子进程，不能只改 UI 状态。
+
 ## 人物 / 声纹 / 语义向量
 
 - face / speaker embedding 与 cluster 属于设备本地感知数据。
@@ -92,7 +112,7 @@ AI proposal、Audit、semantic retrieval score 或 Team Web Individual Opinion �
 - 每台设备自己的 media roots / bindings 保存在设备状态目录，不得写入共享 workspace。
 - 缺媒体应明确显示，不能偷偷匹配错误同名文件。
 - 同内容媒体移动、改盘符、改目录甚至改名后，正式 `media_id` 应保持一致。
-- 改多设备逻辑前先读 `SYNC_MODEL.md`。
+- 改多设备逻辑前先读 `docs/architecture/sync-model.md`。
 
 ## 多机位与 FCPXML
 
@@ -165,6 +185,7 @@ Python MirrorOrder Core + Rust Timeline Core
 
 - 新产品/导航规则优先更新现有 IA / UX 文档，不新建平行规范。
 - 领域 authority 更新对应 contract。
+- 跨 Python/Desktop/runtime/sync 等多个层的长期工程说明放 `docs/architecture/`。
 - 一次性验收结果进入 `docs/verification/`；历史 PASS 只对当次 commit 有效。
 - 一次性 Codex prompt 不作为长期项目文档保留。
 - 旧设计如果仍有参考价值必须明确标 `Historical Reference`。
