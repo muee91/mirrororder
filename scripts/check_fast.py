@@ -42,9 +42,22 @@ def main() -> None:
     run("TypeScript strict typecheck", NPM, ["run", "typecheck"], DESKTOP)
     run("Vitest", NPM, ["test"], DESKTOP)
     run(
-        "Rust Timeline Core cargo check",
+        "Rust Timeline Core tests",
         CARGO,
-        ["check", "--manifest-path", "src-tauri/crates/timeline-core/Cargo.toml"],
+        ["test", "--manifest-path", "src-tauri/crates/timeline-core/Cargo.toml", "--lib"],
+        DESKTOP,
+    )
+    run(
+        "Rust Timeline bridge golden lifecycle",
+        CARGO,
+        [
+            "test",
+            "--manifest-path",
+            "src-tauri/Cargo.toml",
+            "golden_timeline_lifecycle_replays_undo_redo_and_reopens_deterministically",
+            "--",
+            "--exact",
+        ],
         DESKTOP,
     )
     run(
