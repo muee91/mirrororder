@@ -19,7 +19,9 @@
 
 .golden-slate-body { display: grid; min-height: 0; grid-template-columns: minmax(0,1fr); }
 .golden-slate-workbench.has-inspector .golden-slate-body { grid-template-columns: minmax(680px,1fr) 340px; }
-.golden-slate-table-shell { min-width: 0; min-height: 0; overflow: auto; }
+.golden-slate-table-shell { position: relative; min-width: 0; min-height: 0; overflow: auto; }
+.golden-slate-drop-overlay { position: sticky; z-index: 30; top: 38px; display: grid; width: calc(100% - 24px); min-height: 58px; margin: 0 12px -58px; place-items: center; border: 2px dashed #5796df; border-radius: 9px; color: #dcecff; background: rgba(27, 53, 78, .94); box-shadow: 0 10px 32px rgba(0,0,0,.24); font-size: 11px; font-weight: 680; pointer-events: none; }
+.golden-slate-workbench.is-file-drop-active .golden-slate-table-shell { box-shadow: inset 0 0 0 2px rgba(87,150,223,.25); }
 .golden-slate-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 9px; }
 .golden-slate-table thead { position: sticky; z-index: 8; top: 0; }
 .golden-slate-table th { height: 31px; border-right: 1px solid #283039; border-bottom: 1px solid #323b44; padding: 4px 6px; color: #8e9aa4; background: #141a20; font-size: 8px; font-weight: 650; text-align: left; }
@@ -47,8 +49,14 @@
 .golden-slate-player { display: grid; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; place-items: center; border: 1px solid #2b343d; border-radius: 8px; background: #06090b; }
 .golden-slate-player video { width: 100%; height: 100%; object-fit: contain; }
 .golden-player-empty { color: #66737d; font-size: 9px; }
-.golden-inspector-media { display: grid; gap: 6px; margin: 9px 0; }
+.golden-inspector-media { display: grid; gap: 7px; margin: 9px 0; }
 .golden-inspector-media .mo-media-card { width: 100%; }
+.golden-angle-editor { display: grid; gap: 5px; border-bottom: 1px solid #252e36; padding-bottom: 7px; }
+.golden-angle-editor:last-child { border-bottom: 0; }
+.golden-angle-fields { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 5px; }
+.golden-angle-fields label { display: grid; gap: 3px; color: #74818c; font-size: 7px; }
+.golden-angle-fields input, .golden-angle-fields select { width: 100%; min-width: 0; border: 1px solid #303a43; border-radius: 5px; padding: 5px 6px; color: #d5dde3; background: #0a0f13; font-size: 8px; }
+.golden-angle-fields .golden-angle-note { grid-column: 1 / -1; }
 .golden-inspector-empty { padding: 12px 4px; color: #687681; font-size: 9px; }
 .golden-io-row { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 5px; align-items: end; margin: 9px 0; }
 .golden-io-row button { min-height: 31px; padding: 5px 7px; font-size: 8px; }
@@ -80,12 +88,13 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
   .golden-slate-toolbar, .golden-slate-quick, .golden-slate-inspector { background: #f3f5f7; }
   .golden-slate-toolbar, .golden-slate-quick, .golden-slate-inspector, .golden-slate-footer, .golden-slate-review-tools { border-color: #d7dee4; }
   .golden-slate-title > span, .golden-slate-footer { color: #6f7d88; }
-  .golden-slate-actions input, .golden-slate-quick textarea, .golden-io-row input, .golden-inspector-field input, .golden-inspector-field textarea { border-color: #cfd7de; color: #26313a; background: #fff; }
+  .golden-slate-actions input, .golden-slate-quick textarea, .golden-io-row input, .golden-inspector-field input, .golden-inspector-field textarea, .golden-angle-fields input, .golden-angle-fields select { border-color: #cfd7de; color: #26313a; background: #fff; }
   .golden-slate-table th { border-color: #d7dee4; color: #65727d; background: #e9edf1; }
   .golden-slate-table td { border-color: #e0e5e9; background: #fff; }
   .golden-slate-table tr:hover td { background: #f6f8fa; }
   .golden-slate-table tr.is-selected td { background: #edf5ff; }
   .golden-slate-table input, .golden-slate-table select { color: #26313a; }
   .golden-slate-table input:hover, .golden-slate-table input:focus, .golden-slate-table select:hover, .golden-slate-table select:focus { border-color: #c9d2da; background: #fff; }
+  .golden-slate-drop-overlay { color: #174a78; background: rgba(231,243,255,.96); }
   .golden-slate-review-tools { background: #f4f6f8; }
 }
