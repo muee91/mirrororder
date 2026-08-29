@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import atexit
+import json
 import os
 import shutil
 import socket
@@ -76,7 +76,9 @@ class LocalVisionRuntime:
 
     Model weights are runtime-only device state. `prepare_async()` is used by
     the App settings UI to trigger first download/loading without blocking the
-    Host HTTP request. A later visual rescue reuses the same process/cache.
+    Host HTTP request. Status reads never enumerate the model cache or perform a
+    localhost health request; expensive verification stays on explicit runtime
+    preparation paths.
     """
 
     _lock = threading.RLock()
@@ -92,6 +94,8 @@ class LocalVisionRuntime:
     def __init__(self, config: LocalVisionRuntimeConfig | None = None):
         self.config = config or LocalVisionRuntimeConfig.from_env()
         if not self.__class__._registered_exit:
+            import atexit
+
             atexit.register(self.__class__.stop)
             self.__class__._registered_exit = True
 
@@ -102,6 +106,10 @@ class LocalVisionRuntime:
     @property
     def cache_dir(self) -> Path:
         return self.root / "models" / "llama-cache"
+
+    @property
+    def cache_snapshot_path(self) -> Path:
+        return self.root / "models" / "llama-cache-status.json"
 
     @property
     def log_path(self) -> Path:
@@ -119,6 +127,7 @@ class LocalVisionRuntime:
             return False
 
     def cache_bytes(self) -> int:
+        """Enumerate cache size only from an explicit preparation path."""
         total = 0
         try:
             for path in self.cache_dir.rglob("*"):
@@ -130,6 +139,36 @@ class LocalVisionRuntime:
         except OSError:
             pass
         return total
+
+    def _cache_bytes_snapshot(self) -> int:
+        try:
+            payload = json.loads(self.cache_snapshot_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                return 0
+            return max(0, int(payload.get("cache_bytes", 0) or 0))
+        except (OSError, ValueError, TypeError):
+            return 0
+
+    def _refresh_cache_snapshot(self) -> int:
+        cache_bytes = self.cache_bytes()
+        path = self.cache_snapshot_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "model": self.config.model,
+                    "cache_bytes": cache_bytes,
+                    "updated_at_epoch": time.time(),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+        return cache_bytes
 
     def ensure_server(self) -> str:
         cls = self.__class__
@@ -203,6 +242,10 @@ class LocalVisionRuntime:
                 cls.stop(preserve_error=True)
                 return ""
             if self._healthy(current_url, timeout=1.0):
+                try:
+                    self._refresh_cache_snapshot()
+                except OSError:
+                    pass
                 with cls._lock:
                     cls._preparing = False
                 return current_url
@@ -260,11 +303,12 @@ class LocalVisionRuntime:
     def public(self) -> dict[str, Any]:
         executable = _find_llama_server()
         cls = self.__class__
-        running = bool(cls._process is not None and cls._process.poll() is None and self._healthy(cls._base_url))
-        cached_bytes = self.cache_bytes()
         with cls._lock:
+            process = cls._process
+            running = bool(process is not None and process.poll() is None)
             preparing = bool(cls._preparing)
             last_error = cls._last_error
+        cached_bytes = self._cache_bytes_snapshot()
         if executable is None:
             status = "unavailable"
         elif preparing:
@@ -285,6 +329,9 @@ class LocalVisionRuntime:
             "model": self.config.model,
             "cache_dir": str(self.cache_dir),
             "cache_bytes": cached_bytes,
+            "cache_snapshot": str(self.cache_snapshot_path),
             "last_error": last_error,
             "download_policy": "first_use_when_local_vision_enabled",
+            "read_path_health_probe": False,
+            "read_path_cache_scan": False,
         }
