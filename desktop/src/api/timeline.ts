@@ -74,11 +74,17 @@ export interface TimelineValidationIssue {
   message: string;
 }
 
+export interface TimelineAuthority {
+  generation: string;
+  revision: number;
+}
+
 export interface TimelineSnapshot {
   project: TimelineProject;
   undo_depth: number;
   redo_depth: number;
   validation: TimelineValidationIssue[];
+  authority: TimelineAuthority;
 }
 
 export interface TimelinePersistenceFiles {
@@ -94,6 +100,7 @@ export interface TimelinePersistenceFiles {
 
 export interface TimelineRuntimeStatus {
   project_id: string;
+  authority: TimelineAuthority;
   persistence: TimelinePersistenceFiles;
   recovered_operations: number;
   used_backup: boolean;
@@ -151,48 +158,75 @@ async function callTimeline<T>(command: string, args?: Record<string, unknown>):
 }
 
 export class TimelineClient {
+  private authority: TimelineAuthority | null = null;
+
+  private accept(snapshot: TimelineSnapshot): TimelineSnapshot {
+    this.authority = snapshot.authority;
+    return snapshot;
+  }
+
+  private expectedAuthority(): TimelineAuthority {
+    if (!this.authority) {
+      throw new TimelineBridgeError("Timeline authority 尚未加载；请先创建、恢复或刷新时间线。");
+    }
+    return this.authority;
+  }
+
+  private async readSnapshot(command: string, args?: Record<string, unknown>): Promise<TimelineSnapshot> {
+    return this.accept(await callTimeline<TimelineSnapshot>(command, args));
+  }
+
+  private async mutate(command: string, args: Record<string, unknown> = {}): Promise<TimelineSnapshot> {
+    const expectedAuthority = this.expectedAuthority();
+    return this.accept(await callTimeline<TimelineSnapshot>(command, { ...args, expectedAuthority }));
+  }
+
   newProject(projectId: string, sequenceId = "main"): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_new", { projectId, sequenceId });
+    return this.readSnapshot("timeline_new", { projectId, sequenceId });
   }
 
   load(project: TimelineProject): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_load", { project });
+    return this.readSnapshot("timeline_load", { project });
   }
 
   openPersisted(projectId: string): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_open_persisted", { projectId });
+    return this.readSnapshot("timeline_open_persisted", { projectId });
   }
 
   loadWithCommands(project: TimelineProject, commands: TimelineCommand[]): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_load_with_commands", { project, commands });
+    return this.readSnapshot("timeline_load_with_commands", { project, commands });
   }
 
   snapshot(): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_snapshot");
+    return this.readSnapshot("timeline_snapshot");
   }
 
   apply(command: TimelineCommand): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_apply", { command });
+    return this.mutate("timeline_apply", { command });
   }
 
   applyBatch(commands: TimelineCommand[]): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_apply_batch", { commands });
+    return this.mutate("timeline_apply_batch", { commands });
   }
 
   undo(): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_undo");
+    return this.mutate("timeline_undo");
   }
 
   redo(): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_redo");
+    return this.mutate("timeline_redo");
   }
 
   checkpoint(): Promise<TimelineSnapshot> {
-    return callTimeline<TimelineSnapshot>("timeline_checkpoint");
+    return this.mutate("timeline_checkpoint");
   }
 
-  persistenceStatus(): Promise<TimelineRuntimeStatus> {
-    return callTimeline<TimelineRuntimeStatus>("timeline_persistence_status");
+  async persistenceStatus(): Promise<TimelineRuntimeStatus> {
+    const status = await callTimeline<TimelineRuntimeStatus>("timeline_persistence_status");
+    // Status is a Rust-authoritative read and can resynchronize a client that
+    // has not issued a mutation since another local surface changed the state.
+    this.authority = status.authority;
+    return status;
   }
 
   validate(): Promise<TimelineValidationIssue[]> {
