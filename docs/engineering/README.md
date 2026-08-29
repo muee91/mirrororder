@@ -9,6 +9,7 @@
 - [`DECISIONS.md`](./DECISIONS.md)：已经接受、会长期影响实现方式的工程决策。
 - [`INVARIANTS.md`](./INVARIANTS.md)：任何分支、Agent 或实现都不能突破的高影响约束。
 - [`PYTHON_PACKAGE_PLAN.md`](./PYTHON_PACKAGE_PLAN.md)：Python flat namespace 的目标边界、迁移顺序与 compatibility/staging contract；它是迁移计划，不代表文件已经搬动。
+- [`INTEGRATION_PLAN.md`](./INTEGRATION_PLAN.md)：当前综合工作分支在真实 local gates 通过后如何 squash、复验并进入稳定 `main`；它不是远端 force-push 指令。
 
 产品入口、UX、领域 authority 和跨层架构仍以 [`../README.md`](../README.md) 中列出的当前文档为准；一次性验证证据仍进入 [`../verification/`](../verification/)。
 
@@ -20,7 +21,7 @@
 2. `AGENTS.md` 与 `INVARIANTS.md` 的仓库级约束；
 3. `DECISIONS.md` 已接受的工程决策；
 4. `STATUS.md` 当前执行状态；
-5. `BACKLOG.md` 与专项 migration plan 的未来工作；
+5. `BACKLOG.md` 与专项 migration/integration plan 的未来工作；
 6. `docs/verification/` 历史证据；
 7. 聊天记录、临时 prompt、旧分支说明。
 
