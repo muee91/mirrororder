@@ -227,9 +227,10 @@ impl TimelineStorage {
         };
         let bytes = serde_json::to_vec_pretty(&document).map_err(|error| format!("无法序列化 Timeline checkpoint：{error}"))?;
         atomic_replace(&self.checkpoint_path, &self.backup_path, &bytes)?;
-        // A failed truncate is harmless for recovery: the checkpoint records
-        // the last included sequence, so stale journal rows are skipped.
-        self.truncate_journal()?;
+        // Once the atomic checkpoint replace succeeds, that checkpoint is the
+        // durable authority. Journal cleanup is only compaction: recovery skips
+        // rows covered by checkpoint_sequence or from an older generation.
+        let _ = self.truncate_journal();
         Ok(())
     }
 
@@ -383,6 +384,22 @@ mod tests {
         assert_eq!(restored.generation, generation);
         assert_eq!(restored.journal_sequence, 0);
         assert_eq!(storage.read_journal().unwrap().entries[0].sequence, 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn committed_checkpoint_survives_journal_cleanup_failure() {
+        let root = temp_root("timeline-checkpoint-cleanup");
+        let storage = TimelineStorage::with_root("p1", root.clone()).unwrap();
+        let project = TimelineProject::empty("p1", "main");
+        let generation = new_generation("p1");
+        fs::create_dir_all(&storage.journal_path).unwrap();
+
+        storage.write_checkpoint(&project, &generation, 0).unwrap();
+
+        let restored = storage.load_checkpoint().unwrap();
+        assert_eq!(restored.project, project);
+        assert_eq!(restored.generation, generation);
         fs::remove_dir_all(root).unwrap();
     }
 
