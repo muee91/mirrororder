@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
+from .device_tasks import DEVICE_TASKS
 from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .media_identity import DeviceMediaStore
@@ -81,6 +82,7 @@ def _local_runtime_payload(service: Any) -> dict[str, Any]:
 def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, Any]:
     action = str(payload.get("action", "set") or "set").strip().lower()
     settings = load_runtime_settings()
+    submitted: dict[str, Any] | None = None
     if action == "set":
         update: dict[str, Any] = {}
         if "local_vision_enabled" in payload:
@@ -98,17 +100,36 @@ def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, An
                 LocalVisionRuntime.stop()
     elif action == "prepare":
         model = str(settings.get("local_vision_model", "") or "")
-        LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(model)).prepare_async()
+        submitted = DEVICE_TASKS.submit(
+            "local_vision_prepare",
+            {"model": model},
+            idempotency_key=f"local-vision:{model}",
+            actor="desktop",
+        )
     elif action == "prepare_identity":
         kind = str(payload.get("kind", "") or "").strip().lower()
         if kind not in {"face", "speaker"}:
             raise ValueError("identity kind 必须是 face 或 speaker")
-        IdentityRuntime.prepare_async(kind)
+        submitted = DEVICE_TASKS.submit(
+            "identity_runtime_prepare",
+            {"kind": kind},
+            idempotency_key=f"identity-runtime:{kind}",
+            actor="desktop",
+        )
     elif action == "stop":
+        for task in DEVICE_TASKS.list():
+            if (
+                task.get("type") == "local_vision_prepare"
+                and task.get("status") in {"queued", "running"}
+            ):
+                DEVICE_TASKS.cancel(str(task.get("task_id", "") or ""))
         LocalVisionRuntime.stop()
     else:
         raise ValueError("不支持的 local runtime action")
-    return _local_runtime_payload(service)
+    result = _local_runtime_payload(service)
+    if submitted is not None:
+        result["device_task"] = submitted
+    return result
 
 
 def install_desktop_runtime() -> None:
@@ -134,6 +155,10 @@ def install_desktop_runtime() -> None:
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
                 current = _current_service(service)
+                if parts == ["api", "v1", "device-tasks"]:
+                    self._local_only()
+                    self._send_json({"contract": "device_tasks.v1", "tasks": DEVICE_TASKS.list()})
+                    return
                 if parts == ["api", "v1", "desktop-status"]:
                     self._local_only()
                     root = _workspace_root(current)
@@ -194,6 +219,31 @@ def install_desktop_runtime() -> None:
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
                 current = _current_service(service)
+                if parts == ["api", "v1", "device-tasks"]:
+                    self._local_only()
+                    payload = web_server._body(self)
+                    try:
+                        task = DEVICE_TASKS.submit(
+                            str(payload.get("type", "") or ""),
+                            payload.get("targets", {}),
+                            str(payload.get("idempotency_key", "") or ""),
+                            str(payload.get("actor", "desktop") or "desktop"),
+                        )
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
+                    self._send_json(task, web_server.HTTPStatus.ACCEPTED)
+                    return
+                if (
+                    len(parts) == 4
+                    and parts[:3] == ["api", "v1", "device-tasks"]
+                    and parts[3]
+                ):
+                    self._local_only()
+                    try:
+                        self._send_json(DEVICE_TASKS.cancel(parts[3]))
+                    except KeyError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "device task 不存在") from error
+                    return
                 if parts == ["api", "v1", "projects", "preflight"]:
                     self._local_only()
                     self._send_json(
