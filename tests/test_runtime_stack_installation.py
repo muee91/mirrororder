@@ -59,6 +59,8 @@ def test_runtime_install_order_preserves_projection_dependencies() -> None:
     assert order.index("media_role") < order.index("coverage")
     assert order.index("media_role") < order.index("rough_cut")
     assert order.index("desktop") < order.index("media_inventory_task")
+    assert order.index("media_inventory_task") < order.index("slate_media")
+    assert order[-1] == "slate_media"
     assert len(order) == len(set(order))
 
 
