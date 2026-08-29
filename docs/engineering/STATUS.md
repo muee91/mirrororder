@@ -16,13 +16,13 @@
 | Media inventory durable scan | 已收口 | GET 只读 device-local snapshot；显式扫描进入 `media_inventory_scan` durable task。 |
 | Waveform durable build | 已收口 | GET 只读 cache；显式生成进入 `waveform_build` durable task。 |
 | Runtime heavy-work audit | 待执行 | 审计剩余 GET/页面路径是否仍触发全目录枚举、FFmpeg/FFprobe、模型下载/加载、全项目 embedding/index rebuild 或长 provider/network 工作。 |
-| Engineering control plane | 进行中 | 建立 worktree 规则、本地 gate、状态/决策/不变量文档；并回主线前需要本地验证。 |
+| Engineering control plane | 待本地验证 | worktree 规则、本地 gate、状态/决策/不变量文档和 repository guard 已接入；`main` 暂未修改。 |
 
 ## 当前验证状态
 
 针对 `chore/engineering-control-plane`：
 
-- Source review：进行中
+- Source / diff review：PASS（相对 `main@4e112ef`，仅工程文档、gate 脚本和 repository layout guard）
 - `python scripts/check_fast.py`：NOT RUN
 - `python scripts/check_full.py`：NOT RUN
 - Native packaged runtime smoke：NOT RUN
