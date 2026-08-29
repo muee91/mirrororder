@@ -7,6 +7,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+from uuid import uuid4
 
 from .media_identity import DeviceMediaStore, media_id_for_path
 from .media_reader import infer_camera_label
@@ -65,17 +66,31 @@ def _write_inventory_snapshot(
     workspace_id: str,
     project_id: str,
     roots: Iterable[str],
+    *,
+    media_rows: Iterable[tuple[str, str]] | None = None,
+    media_files: Iterable[Path] | None = None,
 ) -> dict[str, Any]:
     root_values = [str(Path(value).expanduser()) for value in roots if str(value)]
-    files = device._media_files(root_values)[:_MAX_INVENTORY_FILES]
+    candidates: list[tuple[str, str]] = []
+    source_count = 0
+    if media_rows is not None:
+        candidates = [(str(media_id), str(path)) for media_id, path in media_rows if str(media_id)]
+        source_count = len(candidates)
+    else:
+        files = list(media_files) if media_files is not None else device._media_files(root_values)
+        source_count = len(files)
+        for path in files[:_MAX_INVENTORY_FILES]:
+            media_id = media_id_for_path(path)
+            if media_id:
+                candidates.append((media_id, str(path)))
+
     rows: list[dict[str, str]] = []
     seen_media: set[str] = set()
-    for path in files:
-        media_id = media_id_for_path(path)
+    for media_id, path_text in candidates[:_MAX_INVENTORY_FILES]:
         if not media_id or media_id in seen_media:
             continue
         seen_media.add(media_id)
-        rows.append({"media_id": media_id, "path": str(path)})
+        rows.append({"media_id": media_id, "path": path_text})
     payload = {
         "version": 1,
         "workspace_id": workspace_id,
@@ -83,7 +98,7 @@ def _write_inventory_snapshot(
         "updated_at": _now(),
         "roots": root_values,
         "items": rows,
-        "truncated": len(files) >= _MAX_INVENTORY_FILES,
+        "truncated": source_count > _MAX_INVENTORY_FILES,
     }
     _atomic_json(_snapshot_path(device, workspace_id, project_id), payload)
     return payload
@@ -261,19 +276,7 @@ def _store_scan_request(
     roots: list[str],
     replace: bool,
 ) -> str:
-    snapshot = device.project_snapshot(workspace_id, project_id)
-    basis = json.dumps(
-        {
-            "workspace_id": workspace_id,
-            "project_id": project_id,
-            "roots": roots,
-            "replace": bool(replace),
-            "device_state_updated_at": str(snapshot.get("updated_at", "") or "initial"),
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-    )
-    request_id = hashlib.sha256(basis.encode("utf-8")).hexdigest()[:32]
+    request_id = uuid4().hex
     _atomic_json(
         _request_path(device, request_id),
         {
@@ -333,9 +336,23 @@ def install_media_inventory_task_runtime() -> None:
         index: dict[str, Any],
         roots: Iterable[str],
     ) -> dict[str, Any]:
-        summary = original_scan(store, workspace_id, project_id, index, roots)
+        media_rows: list[tuple[str, str]] = []
+        summary = original_scan(
+            store,
+            workspace_id,
+            project_id,
+            index,
+            roots,
+            media_rows=media_rows,
+        )
         state = store.project_snapshot(workspace_id, project_id)
-        _write_inventory_snapshot(store, workspace_id, project_id, state.get("roots", []))
+        _write_inventory_snapshot(
+            store,
+            workspace_id,
+            project_id,
+            state.get("roots", []),
+            media_rows=media_rows,
+        )
         return summary
 
     def probe_with_snapshot(
@@ -344,9 +361,22 @@ def install_media_inventory_task_runtime() -> None:
         project_id: str,
         roots: Iterable[str],
     ) -> dict[str, Any]:
-        summary = original_probe(store, workspace_id, project_id, roots)
+        media_files: list[Path] = []
+        summary = original_probe(
+            store,
+            workspace_id,
+            project_id,
+            roots,
+            media_files=media_files,
+        )
         state = store.project_snapshot(workspace_id, project_id)
-        _write_inventory_snapshot(store, workspace_id, project_id, state.get("roots", []))
+        _write_inventory_snapshot(
+            store,
+            workspace_id,
+            project_id,
+            state.get("roots", []),
+            media_files=media_files,
+        )
         return summary
 
     def remove_project_with_snapshot(store: DeviceMediaStore, workspace_id: str, project_id: str) -> None:

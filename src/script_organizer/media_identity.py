@@ -293,6 +293,8 @@ class DeviceMediaStore:
         project_id: str,
         index: dict[str, Any],
         roots: Iterable[str],
+        *,
+        media_rows: list[tuple[str, str]] | None = None,
     ) -> dict[str, Any]:
         payload = self.load()
         workspaces = payload.setdefault("workspaces", {})
@@ -355,6 +357,8 @@ class DeviceMediaStore:
 
         for path in files:
             media_id = media_id_for_path(path)
+            if media_id and media_rows is not None:
+                media_rows.append((media_id, str(path)))
             if media_id and media_id in expected_by_id:
                 bindings[media_id] = str(path)
                 matched_verified += 1
@@ -460,7 +464,14 @@ class DeviceMediaStore:
         projects.pop(project_id, None)
         self._save(payload)
 
-    def probe_roots(self, workspace_id: str, project_id: str, roots: Iterable[str]) -> dict[str, Any]:
+    def probe_roots(
+        self,
+        workspace_id: str,
+        project_id: str,
+        roots: Iterable[str],
+        *,
+        media_files: list[Path] | None = None,
+    ) -> dict[str, Any]:
         """Register and enumerate local media before a project index exists.
 
         A new media-directory project has no material_index.json until the first
@@ -471,6 +482,8 @@ class DeviceMediaStore:
         """
         snapshot = self.add_roots(workspace_id, project_id, roots)
         files = self._media_files(snapshot.get("roots", []))
+        if media_files is not None:
+            media_files.extend(files)
         payload = self.load()
         count = len(files)
         return {
