@@ -159,9 +159,11 @@ async function callTimeline<T>(command: string, args?: Record<string, unknown>):
 
 export class TimelineClient {
   private authority: TimelineAuthority | null = null;
+  private authorityProjectId: string | null = null;
 
   private accept(snapshot: TimelineSnapshot): TimelineSnapshot {
     this.authority = snapshot.authority;
+    this.authorityProjectId = snapshot.project.project_id;
     return snapshot;
   }
 
@@ -176,6 +178,16 @@ export class TimelineClient {
     return this.accept(await callTimeline<TimelineSnapshot>(command, args));
   }
 
+  private async replaceSnapshot(
+    command: string,
+    projectId: string,
+    args: Record<string, unknown>,
+  ): Promise<TimelineSnapshot> {
+    const expectedAuthority = this.authorityProjectId === projectId ? this.expectedAuthority() : null;
+    const requestArgs = expectedAuthority ? { ...args, expectedAuthority } : args;
+    return this.accept(await callTimeline<TimelineSnapshot>(command, requestArgs));
+  }
+
   private async mutate(command: string, args: Record<string, unknown> = {}): Promise<TimelineSnapshot> {
     const expectedAuthority = this.expectedAuthority();
     return this.accept(await callTimeline<TimelineSnapshot>(command, { ...args, expectedAuthority }));
@@ -186,7 +198,7 @@ export class TimelineClient {
   }
 
   load(project: TimelineProject): Promise<TimelineSnapshot> {
-    return this.readSnapshot("timeline_load", { project });
+    return this.replaceSnapshot("timeline_load", project.project_id, { project });
   }
 
   openPersisted(projectId: string): Promise<TimelineSnapshot> {
@@ -194,7 +206,7 @@ export class TimelineClient {
   }
 
   loadWithCommands(project: TimelineProject, commands: TimelineCommand[]): Promise<TimelineSnapshot> {
-    return this.readSnapshot("timeline_load_with_commands", { project, commands });
+    return this.replaceSnapshot("timeline_load_with_commands", project.project_id, { project, commands });
   }
 
   snapshot(): Promise<TimelineSnapshot> {
