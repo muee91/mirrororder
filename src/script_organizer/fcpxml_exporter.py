@@ -37,8 +37,7 @@ def _placement_for_group(review: dict[str, Any], group: dict[str, Any]) -> dict[
 
 
 def _automatic_manifest_state(candidate: dict[str, Any]) -> str:
-    # Preserve the v2 manifest compatibility rule. This is explicitly marked as
-    # an automatic mapping fallback in v3 and remains lower-authority than any
+    # Automatic mapping remains a lower-authority fallback than any explicit
     # human review or Editorial Decision.
     return (
         "keep"
@@ -160,12 +159,17 @@ def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
         )
 
     return {
-        "version": 3,
+        "version": 4,
         "contract": "delivery.v1",
         "project": config.name,
-        "source_fcpxml": str(config.fcpxml) if config.fcpxml else "",
-        "manual_review_path": str(config.output_dir / "review.json"),
-        "editorial_path": str(config.output_dir / "editorial.json"),
+        "source": {
+            "input_kind": config.input_kind,
+            "fcpxml_name": config.fcpxml.name if config.fcpxml else "",
+        },
+        "artifacts": {
+            "review": "review.json",
+            "editorial": "editorial.json",
+        },
         "revisions": {
             "review": int(review.get("revision", 0) or 0),
             "editorial": int(editorial.get("revision", 0) or 0),
@@ -189,6 +193,11 @@ def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
             "sources": dict(sorted(source_counts.items())),
         },
         "segments": segment_rows,
+        "semantics": {
+            "device_paths_exposed": False,
+            "artifact_refs_are_project_output_relative": True,
+            "source_path_is_host_local_only": True,
+        },
     }
 
 
@@ -397,8 +406,11 @@ def export(config: ProjectConfig, preserve_source: bool = True) -> dict[str, Any
 
     output_fcpxml = config.output_dir / "organized.fcpxml"
     report: dict[str, Any] = {
-        "organized_fcpxml": str(output_fcpxml),
-        "selection_manifest": str(manifest_path),
+        "version": 2,
+        "contract": "delivery_export_report.v1",
+        "artifact_scope": "project_output",
+        "organized_fcpxml": "organized.fcpxml",
+        "selection_manifest": "selection_manifest.json",
         "selection_contract": manifest.get("contract", ""),
         "selection_manifest_version": manifest.get("version", 0),
         "selection_summary": manifest.get("summary", {}),
@@ -406,6 +418,7 @@ def export(config: ProjectConfig, preserve_source: bool = True) -> dict[str, Any
         "keyword_count": 0,
         "decision_ranges_written": 0,
         "multicam_structure_modified": False,
+        "device_paths_exposed": False,
     }
     if preserve_source and config.fcpxml:
         index = _load(config.output_dir / "material_index.json", {})
