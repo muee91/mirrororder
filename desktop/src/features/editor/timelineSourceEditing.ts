@@ -33,9 +33,10 @@ export function buildTimelineSourceOptions(
   project: TimelineProject,
   sequence: TimelineSequence,
 ): TimelineSourceOption[] {
+  if (!review) return [];
   const fps = sequenceFps(sequence);
   const reviewAngles = new Map<string, { groupId: string; camera: string; sourceStart: number; sourceEnd: number | null; duration: number }>();
-  for (const take of review?.take_groups ?? []) {
+  for (const take of review.take_groups) {
     for (const angle of take.angles) {
       if (angle.playback.available === false) continue;
       reviewAngles.set(angle.clip_id, {
@@ -48,25 +49,28 @@ export function buildTimelineSourceOptions(
     }
   }
 
-  return project.sources.map((source) => {
+  return project.sources.flatMap((source) => {
+    // TimelineProject is durable edit state; current Review is the media-playback
+    // evidence. A source that was playable when the checkpoint was created must
+    // not remain manually editable after the current Review marks it unavailable.
     const evidence = reviewAngles.get(source.clip_id);
-    const availableIn = evidence ? secondsToFrames(evidence.sourceStart, fps) : 0;
-    const evidenceEnd = evidence?.sourceEnd;
-    const evidenceDuration = evidence
-      ? Math.max(1, secondsToFrames(
-        evidenceEnd !== null ? Math.max(0, evidenceEnd - evidence.sourceStart) : Math.max(0, evidence.duration),
-        fps,
-      ))
-      : null;
+    if (!evidence) return [];
+    const availableIn = secondsToFrames(evidence.sourceStart, fps);
+    const evidenceDuration = Math.max(1, secondsToFrames(
+      evidence.sourceEnd !== null
+        ? Math.max(0, evidence.sourceEnd - evidence.sourceStart)
+        : Math.max(0, evidence.duration),
+      fps,
+    ));
     const sourceRemaining = source.duration_frames !== null
       ? Math.max(1, source.duration_frames - availableIn)
       : Math.max(1, Math.round(fps * 5));
     const availableDuration = positiveDuration(evidenceDuration, sourceRemaining);
     const multicam = project.multicam_groups.find((group) => group.angle_source_ids.includes(source.source_id)) ?? null;
-    const groupId = evidence?.groupId ?? multicam?.group_id ?? "";
-    const camera = evidence?.camera ?? "";
+    const groupId = evidence.groupId ?? multicam?.group_id ?? "";
+    const camera = evidence.camera;
     const suffix = [groupId, camera].filter(Boolean).join(" · ");
-    return {
+    return [{
       source,
       groupId,
       camera,
@@ -74,7 +78,7 @@ export function buildTimelineSourceOptions(
       availableDuration,
       multicamGroupId: multicam?.group_id ?? null,
       label: `${source.name || source.clip_id}${suffix ? ` · ${suffix}` : ""}`,
-    };
+    }];
   });
 }
 
