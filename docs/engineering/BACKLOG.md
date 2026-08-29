@@ -4,15 +4,16 @@
 
 ## P2
 
-### Python package boundary
+### First Python package migration slice
 
-- 识别 `src/script_organizer/` 中可独立迁移的 coherent domains。
-- 为迁移设计兼容 import、packaging、stage-runtime 和 pytest contract。
-- 不做一次性大搬家，不与产品功能提交混合。
+- 迁移机制和目标边界已经固定在 `PYTHON_PACKAGE_PLAN.md`；当前大分支不执行真实文件搬迁。
+- 当前首选 slice：`fcpxml_reader.py` + `fcpxml_exporter.py` → `adapters/fcpxml/`。
+- 启动条件：当前 `fix/runtime-read-paths` 在完整 checkout 上完成 `check_python` / `check_fast` / `check_full` 的真实执行，并先处理任何现存回归。
+- 首个 slice 必须建立 old/new import identity、setuptools package discovery、recursive Desktop staging 和 packaged import contract。
 
 ### Validation ergonomics
 
-- 记录 fast/full gate 的典型耗时和失败分类。
+- 记录 python/fast/full gate 的典型耗时和失败分类。
 - 若 fast gate 超出日常反馈预算，再拆分为更窄的 smoke 子集；不要通过静默跳过必要检查来“提速”。
 
 ## P3 / Experimental
