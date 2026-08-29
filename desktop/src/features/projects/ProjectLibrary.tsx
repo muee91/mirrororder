@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
+import "./project-context-menu.css";
 import "./projects.css";
 
 interface Props {
