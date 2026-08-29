@@ -1,5 +1,6 @@
 export const PRODUCTION_PAGES = [
   "media-library",
+  "media-binding",
   "takes",
   "identity",
   "slate",
