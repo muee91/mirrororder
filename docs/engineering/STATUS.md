@@ -22,7 +22,8 @@
 | Stage 5 — Delivery artifact path normalization | 77 |
 | Stage 6 — Rust Timeline authority lifecycle | 80 |
 | Stage 7 — Repository tracked-data leakage guard | 81 |
-| Stage 8 — Python-only source gate | **82** |
+| Stage 8 — Python-only source gate | 82 |
+| Stage 9 — Python package boundary plan | **83** |
 
 评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。
 
@@ -35,7 +36,8 @@
 - Delivery 持久化 artifact 只保存逻辑引用；设备绝对路径仅存在于 localhost runtime response。
 - Rust Timeline 以 `generation + journal revision` 作为 authority token，保护 replacement/edit/undo/redo/checkpoint，并覆盖 journal replay / reopen。
 - Git tracked workspace/shared structured fixture 有 device-path leakage guard；ignored 用户 workspace 不参与扫描。
-- 新增 `scripts/check_python.py`，在缺少 Node/Rust 工具链时可独立执行 Python compile + production contract smoke；`check_fast.py` 复用该入口，不维护第二份 Python 测试清单。
+- `scripts/check_python.py` 可独立执行 Python compile + production contract smoke；`check_fast.py` 复用该入口。
+- `PYTHON_PACKAGE_PLAN.md` 已固定 flat namespace 的目标 ownership、依赖方向、slice 顺序、临时 import facade 与 staging/package contract；当前分支明确不执行 mass move。
 
 ## 当前验证状态
 
@@ -72,7 +74,7 @@ python scripts/check_full.py
 
 ## 下一 P2
 
-- Python package boundary：先形成迁移计划与兼容 contract，不与产品功能混改。
+- First Python package migration slice：通过当前大分支 executable gates 后，独立 `refactor/python-fcpxml-package` worktree，按 `PYTHON_PACKAGE_PLAN.md` 迁 FCPXML adapter；不与产品功能混改。
 - Validation ergonomics：有完整 checkout 后记录 python/fast/full 的典型耗时和失败分类，再决定是否需要更窄 smoke。
 
 ## 状态维护规则
