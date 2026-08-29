@@ -80,6 +80,7 @@ def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     assert "准备 / 启动" in panel
     assert "准备人脸模型" in panel and "准备说话人模型" in panel
     assert "React 不下载模型，也不保存 embedding" in panel
+    assert "状态中心" in panel
 
 
 def test_legacy_local_runtime_route_is_removed_and_desktop_api_is_host_local() -> None:
@@ -89,9 +90,12 @@ def test_legacy_local_runtime_route_is_removed_and_desktop_api_is_host_local() -
     assert '["api", "v1", "local-runtime"]' not in automation
     assert "_runtime_payload" not in automation
     assert '["api", "v1", "desktop-local-runtime"]' in desktop
+    assert '["api", "v1", "device-tasks"]' in desktop
     assert "self._local_only()" in desktop
     assert 'action == "prepare"' in desktop
-    assert "prepare_async" in desktop
+    assert "prepare_async" not in desktop
+    assert '"local_vision_prepare"' in desktop
+    assert '"identity_runtime_prepare"' in desktop
 
 
 def test_local_runtime_binds_llama_server_to_loopback_only() -> None:
