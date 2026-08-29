@@ -42,6 +42,8 @@ export interface TimelineDeliveryReport {
   sequence_id?: string;
   frame_rate?: { numerator: number; denominator: number };
   video_clip_count?: number;
+  audio_track_count?: number;
+  audio_clip_count?: number;
   multicam_flattened_count?: number;
   markers_not_exported?: number;
   semantics?: Record<string, boolean>;

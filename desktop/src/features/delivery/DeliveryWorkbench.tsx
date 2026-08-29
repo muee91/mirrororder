@@ -140,6 +140,8 @@ export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
   const legacyGenerated = Boolean(legacyReport.organized_fcpxml_exists || legacyReport.selection_manifest_exists);
   const flattened = Number(timelineReport.multicam_flattened_count || 0);
   const omittedMarkers = Number(timelineReport.markers_not_exported || 0);
+  const audioTracks = Number(timelineReport.audio_track_count || 0);
+  const audioClips = Number(timelineReport.audio_clip_count || 0);
 
   return (
     <section className="phase3-workbench delivery-workbench">
@@ -156,13 +158,14 @@ export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
           <p className="eyebrow">Authoritative Timeline → Final Cut Pro</p>
           <h3>{fileName(timelineReport.organized_fcpxml)}</h3>
           <p className="production-note">
-            最终交付从 Rust Timeline 的 persisted checkpoint + journal 捕获不可变 snapshot，保留当前 split / trim / move / Insert / Overwrite 与选中机位结果。不会从 Review Best 重新推导一条“看起来相似”的时间线。
+            最终交付从 Rust Timeline 的 persisted checkpoint + journal 捕获不可变 snapshot，保留当前 split / trim / move / Insert / Overwrite、独立 A-track 与选中机位结果。不会从 Review Best 重新推导一条“看起来相似”的时间线。
           </p>
 
           <dl className="status-facts">
             <div><dt>Timeline authority</dt><dd>{authorityLabel(timelineReport)}</dd></div>
             <div><dt>sequence</dt><dd>{String(timelineReport.sequence_id || "-")}</dd></div>
             <div><dt>video clips</dt><dd>{String(timelineReport.video_clip_count ?? "-")}</dd></div>
+            <div><dt>audio</dt><dd>{audioTracks ? `${audioTracks} tracks · ${audioClips} clips` : "linked asset audio only"}</dd></div>
             <div><dt>frame rate</dt><dd>{timelineReport.frame_rate ? `${timelineReport.frame_rate.numerator}/${timelineReport.frame_rate.denominator}` : "-"}</dd></div>
           </dl>
 
@@ -182,7 +185,8 @@ export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
 
           {flattened > 0 ? <p className="production-warning">{flattened} 个多机位片段按当前选中角度 flatten 为普通 asset-clip；不会伪装成保留了 multicam container。</p> : null}
           {omittedMarkers > 0 ? <p className="production-warning">{omittedMarkers} 个 Timeline marker 当前不属于交付 authority，v1 明确不导出。</p> : null}
-          <p className="production-note">v1 遇到独立音频轨、transition、多条非空视频轨、未知素材映射或重叠 clip 会 fail closed；不会静默丢失这些编辑语义。</p>
+          {audioClips > 0 ? <p className="production-note">{audioClips} 个独立音频片段会按 Timeline A-track 的位置与源范围导出为 connected audio-only asset-clip；视频 asset 自带音频继续 linked 保留。</p> : null}
+          <p className="production-note">v1 对 transition、多条非空视频轨、未知素材映射、同一音轨重叠或无音频组件的独立 A-track 素材继续 fail closed；不会静默丢失编辑语义。</p>
         </section>
 
         <aside className="production-panel">
@@ -215,6 +219,7 @@ export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
             <dl className="status-facts">
               <div><dt>Timeline report</dt><dd>{String(timelineReport.contract || "-")}</dd></div>
               <div><dt>Timeline path-safe</dt><dd>{timelineReport.persisted_report_path_safe ? "yes" : "-"}</dd></div>
+              <div><dt>independent audio</dt><dd>{timelineReport.semantics?.independent_audio_tracks_supported ? "connected audio" : "not present / unsupported"}</dd></div>
               <div><dt>legacy selection contract</dt><dd>{String(legacyReport.selection_contract || "-")}</dd></div>
               <div><dt>legacy keywords</dt><dd>{legacyReport.keywords_written ? "written" : "-"}</dd></div>
               <div><dt>platform</dt><dd>{platformInfo?.os || "browser preview"}</dd></div>
