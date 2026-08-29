@@ -7,15 +7,38 @@ from typing import Any
 from .fcpxml_exporter import UnsafeFCPXMLExport, export
 
 _INSTALLED = False
+_ALLOWED_ARTIFACTS = {
+    "organized_fcpxml": "organized.fcpxml",
+    "selection_manifest": "selection_manifest.json",
+}
 
 
-def _decorate_report(report: object) -> dict[str, Any]:
+def _artifact_path(project: Any, key: str, value: object) -> Path | None:
+    """Resolve a first-party logical artifact ref at the Host-local boundary."""
+    expected = _ALLOWED_ARTIFACTS[key]
+    ref = str(value or "").strip().replace("\\", "/")
+    if ref != expected:
+        return None
+    return Path(project.config.output_dir) / expected
+
+
+def _decorate_report(project: Any, report: object) -> dict[str, Any]:
+    """Add Host-local paths for native reveal/open without persisting them.
+
+    ``export_report.json`` remains path-free. Absolute paths are reconstructed
+    only for this localhost-only API response because Desktop platform commands
+    need a concrete file to reveal/open on the current device.
+    """
     payload = dict(report) if isinstance(report, dict) else {}
-    fcpxml = Path(str(payload.get("organized_fcpxml", "") or ""))
-    manifest = Path(str(payload.get("selection_manifest", "") or ""))
-    payload["organized_fcpxml_exists"] = bool(str(fcpxml)) and fcpxml.is_file()
-    payload["selection_manifest_exists"] = bool(str(manifest)) and manifest.is_file()
+    persisted_path_safe = not bool(payload.get("device_paths_exposed", False))
+    for key in ("organized_fcpxml", "selection_manifest"):
+        artifact = _artifact_path(project, key, payload.get(key))
+        payload[f"{key}_exists"] = bool(artifact and artifact.is_file())
+        payload[f"{key}_ref"] = str(payload.get(key, "") or "")
+        payload[key] = str(artifact) if artifact is not None else ""
+    payload["persisted_report_path_safe"] = persisted_path_safe
     payload["device_paths_exposed"] = True
+    payload["device_paths_scope"] = "localhost_response_only"
     return payload
 
 
@@ -23,7 +46,7 @@ def _existing_report(project: Any) -> dict[str, Any]:
     path = Path(project.config.output_dir) / "export_report.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        return _decorate_report(payload)
+        return _decorate_report(project, payload)
     except (OSError, ValueError):
         return {}
 
@@ -33,7 +56,8 @@ def install_delivery_runtime() -> None:
 
     This adapter does not move FCPXML semantics into Tauri. It simply gives an
     explicit local human action access to the same exporter already used by the
-    CLI, after which platform-specific open/reveal remains a Tauri concern.
+    CLI. Persisted delivery artifacts are path-free; concrete paths are resolved
+    only in this localhost-only adapter for platform reveal/open actions.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -77,7 +101,7 @@ def install_delivery_runtime() -> None:
                         raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
                     self._send_json({
                         "contract": "delivery_export.v1",
-                        "report": _decorate_report(report),
+                        "report": _decorate_report(project, report),
                     })
                     return
                 return super()._app_post(parsed)
