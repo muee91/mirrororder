@@ -10,11 +10,6 @@
 - 为迁移设计兼容 import、packaging、stage-runtime 和 pytest contract。
 - 不做一次性大搬家，不与产品功能提交混合。
 
-### Repository leakage guard
-
-- 在本地完整 checkout 上增加 tracked-file/path guard，检查源码 Git 是否重新出现真实 workspace、设备绝对路径或制作输入。
-- Guard 只能扫描源码/fixture 范围，避免误报用户本地 ignored workspace。
-
 ### Validation ergonomics
 
 - 记录 fast/full gate 的典型耗时和失败分类。
