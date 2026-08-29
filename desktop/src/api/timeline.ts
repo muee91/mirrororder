@@ -221,12 +221,11 @@ export class TimelineClient {
     return this.mutate("timeline_checkpoint");
   }
 
-  async persistenceStatus(): Promise<TimelineRuntimeStatus> {
-    const status = await callTimeline<TimelineRuntimeStatus>("timeline_persistence_status");
-    // Status is a Rust-authoritative read and can resynchronize a client that
-    // has not issued a mutation since another local surface changed the state.
-    this.authority = status.authority;
-    return status;
+  persistenceStatus(): Promise<TimelineRuntimeStatus> {
+    // Status may describe a newer Rust authority than this client's last full
+    // project snapshot. It is display-only and must never silently grant a new
+    // mutation token without refreshing the actual Timeline snapshot.
+    return callTimeline<TimelineRuntimeStatus>("timeline_persistence_status");
   }
 
   validate(): Promise<TimelineValidationIssue[]> {
