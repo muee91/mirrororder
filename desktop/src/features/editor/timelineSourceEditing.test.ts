@@ -105,6 +105,15 @@ describe("timeline source editing", () => {
     expect(options[1]).toMatchObject({ availableIn: 480, availableDuration: 240 });
   });
 
+  it("requires current playable Review evidence even when an older Timeline checkpoint still contains the source", () => {
+    const value = project();
+    const currentReview = review();
+    currentReview.take_groups[0].angles[1].playback.available = false;
+    const options = buildTimelineSourceOptions(currentReview, value, value.sequences[0]);
+    expect(options.map((option) => option.source.source_id)).toEqual(["source:a"]);
+    expect(buildTimelineSourceOptions(null, value, value.sequences[0])).toEqual([]);
+  });
+
   it("rejects manual ranges outside Review evidence", () => {
     const value = project();
     const option = buildTimelineSourceOptions(review(), value, value.sequences[0])[0];
