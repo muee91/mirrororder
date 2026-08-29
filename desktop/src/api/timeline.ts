@@ -123,6 +123,11 @@ interface TimelineBridgeErrorPayload {
   issues?: TimelineValidationIssue[];
 }
 
+const AUTHORITY_CONFLICT_CODES = new Set([
+  "stale_timeline_authority",
+  "timeline_authority_required",
+]);
+
 export class TimelineBridgeError extends Error {
   readonly issues: TimelineValidationIssue[];
 
@@ -131,6 +136,11 @@ export class TimelineBridgeError extends Error {
     this.name = "TimelineBridgeError";
     this.issues = issues;
   }
+}
+
+export function isTimelineAuthorityConflict(error: unknown): error is TimelineBridgeError {
+  return error instanceof TimelineBridgeError
+    && error.issues.some((issue) => AUTHORITY_CONFLICT_CODES.has(issue.code));
 }
 
 function requireTimelineRuntime(): void {
