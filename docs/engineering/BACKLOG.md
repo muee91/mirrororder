@@ -4,19 +4,14 @@
 
 ## P1
 
-### Delivery artifact path normalization
-
-- `delivery.v1` Selection Manifest 当前仍包含 `manual_review_path` / `editorial_path` 的 Host 绝对路径；共享/可持久化 delivery artifact 不应携带设备路径。
-- 将这些字段改成项目相对或逻辑 artifact 引用，并为 FCPXML source provenance 明确“共享 identity”与“Host-local source path”的边界。
-- 增加 path-safety contract，确保 `/Volumes/...`、`/Users/...`、Windows 盘符不会进入可共享 delivery manifest。
-
-## P2
-
 ### Timeline golden lifecycle
 
 - Python Golden Project 已固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen。
 - 下一步在 Rust Timeline Core 增加对应最小 golden command sequence：seed → trim/split/replace → undo/redo → serialize/reopen。
 - Timeline authority 只通过 Rust commands 改变；Python/React 不直接修改 authoritative timeline state。
+- golden lifecycle 必须覆盖 revision / stale command 边界（若现有 command API 支持）以及 reopen 后状态等价。
+
+## P2
 
 ### Python package boundary
 
