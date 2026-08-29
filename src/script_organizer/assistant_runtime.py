@@ -6,6 +6,7 @@ from typing import Any
 
 from .agent_tools import AgentToolRegistry
 from .assistant_orchestrator import AssistantOrchestrator
+from .assistant_store import AssistantStore
 from .audit_store import AuditStore
 from .learning_dataset import write_learning_dataset
 from .model_connections import load_model_connections, save_model_connections
@@ -43,6 +44,12 @@ def _orchestrator(service: Any, project_id: str) -> AssistantOrchestrator:
         project.config,
         task_manager=service.tasks,
     )
+
+
+def _assistant_snapshot(service: Any, project_id: str) -> dict[str, Any]:
+    """Read assistant.v1 exactly as persisted; GET never rebuilds or saves it."""
+    project = service.project(project_id)
+    return AssistantStore(project.config.output_dir).load()
 
 
 def _refresh_after_review(service: Any, project_id: str) -> None:
@@ -94,18 +101,16 @@ def install_assistant_runtime() -> None:
 
     def state_with_assistant(project: Any) -> dict[str, Any]:
         payload = original_state(project)
-        workspace_id = str(getattr(project, "workspace_id", "") or "")
-        if workspace_id:
-            try:
-                assistant = AssistantOrchestrator(workspace_id, project.project_id, project.config).status()
-                payload["assistant_revision"] = int(assistant.get("revision", 0) or 0)
-                payload["assistant_updated_at"] = str(assistant.get("updated_at", "") or "")
-                payload["assistant_attention"] = sum(
-                    1 for item in assistant.get("items", [])
-                    if isinstance(item, dict) and int(item.get("priority", 0) or 0) >= 80
-                )
-            except Exception:
-                payload.setdefault("assistant_revision", 0)
+        try:
+            assistant = AssistantStore(project.config.output_dir).load()
+            payload["assistant_revision"] = int(assistant.get("revision", 0) or 0)
+            payload["assistant_updated_at"] = str(assistant.get("updated_at", "") or "")
+            payload["assistant_attention"] = sum(
+                1 for item in assistant.get("items", [])
+                if isinstance(item, dict) and int(item.get("priority", 0) or 0) >= 80
+            )
+        except Exception:
+            payload.setdefault("assistant_revision", 0)
         return payload
 
     def capabilities_with_assistant(service: Any, agent: dict[str, Any]) -> dict[str, Any]:
@@ -185,9 +190,8 @@ def install_assistant_runtime() -> None:
                 parts = web_server._parts(parsed.path)
                 if len(parts) >= 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "assistant":
                     project_id = parts[3]
-                    assistant = _orchestrator(service, project_id)
                     if len(parts) == 5:
-                        payload = assistant.status()
+                        payload = _assistant_snapshot(service, project_id)
                         if self.client_address[0] not in {"127.0.0.1", "::1"}:
                             payload = _safe_assistant(payload)
                         self._send_json(payload)
@@ -267,7 +271,7 @@ def install_assistant_runtime() -> None:
                 ):
                     project_id = parts[4]
                     agent = self._agent("read", project_id)
-                    payload = _safe_assistant(_orchestrator(service, project_id).status())
+                    payload = _safe_assistant(_assistant_snapshot(service, project_id))
                     service.tokens.audit(agent, "read:assistant", project_id)
                     self._send_json(payload)
                     return
