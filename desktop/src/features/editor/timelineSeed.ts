@@ -43,10 +43,12 @@ function preferredAngle(take: ReviewTakeGroup, candidate: RoughCutCandidate | nu
   const supervisor = candidate?.script_supervisor ?? {};
   const preferredClipId = typeof supervisor.preferred_clip_id === "string" ? supervisor.preferred_clip_id : "";
   if (preferredClipId) {
-    const preferred = take.angles.find((angle) => angle.clip_id === preferredClipId);
+    const preferred = take.angles.find(
+      (angle) => angle.clip_id === preferredClipId && angle.playback.available !== false,
+    );
     if (preferred) return preferred;
   }
-  return take.angles.find((angle) => angle.playback.available !== false) ?? take.angles[0] ?? null;
+  return take.angles.find((angle) => angle.playback.available !== false) ?? null;
 }
 
 function usableRange(candidate: RoughCutCandidate | null, take: ReviewTakeGroup): { start: number; end: number } | null {
@@ -66,8 +68,9 @@ function ensureSources(
   sources: Map<string, TimelineSource>,
   multicam: Map<string, TimelineMulticamGroup>,
 ): void {
+  const availableAngles = take.angles.filter((angle) => angle.playback.available !== false);
   const angleSourceIds: string[] = [];
-  for (const angle of take.angles) {
+  for (const angle of availableAngles) {
     const id = sourceId(angle.clip_id);
     angleSourceIds.push(id);
     if (!sources.has(id)) {
@@ -101,6 +104,14 @@ export function buildRoughCutTimelineProposal(
   const warnings: string[] = [];
   let cursor = 0;
 
+  // The source pool is evidence/media availability, not an editorial decision.
+  // Register every locally playable Review angle so a human editor can later
+  // Insert/Overwrite an alternate Take explicitly. Only explicit Best rows below
+  // are converted into automatic Timeline commands.
+  for (const take of review.take_groups) {
+    ensureSources(take, rate, sources, multicam);
+  }
+
   for (const scene of plan.scenes) {
     for (const segment of scene.segments) {
       const segmentId = segment.script.segment_id;
@@ -125,7 +136,6 @@ export function buildRoughCutTimelineProposal(
         continue;
       }
 
-      ensureSources(take, rate, sources, multicam);
       const range = usableRange(candidate, take);
       const sourceOffset = range?.start ?? 0;
       const durationSeconds = range
@@ -147,8 +157,8 @@ export function buildRoughCutTimelineProposal(
           source_in: sourceInFrames,
           duration: durationFrames,
           enabled: true,
-          multicam_group_id: take.angles.length > 1 ? take.group_id : null,
-          selected_angle_source_id: take.angles.length > 1 ? sourceId(angle.clip_id) : null,
+          multicam_group_id: take.angles.filter((item) => item.playback.available !== false).length > 1 ? take.group_id : null,
+          selected_angle_source_id: take.angles.filter((item) => item.playback.available !== false).length > 1 ? sourceId(angle.clip_id) : null,
           metadata: {
             proposal_source: plan.contract,
             proposal_revision: plan.revision,
@@ -172,6 +182,7 @@ export function buildRoughCutTimelineProposal(
   if (skipped.length) {
     warnings.push(`${skipped.length} 个剧本段因缺少单一显式 Best / 存在冲突而未进入时间线提议。`);
   }
+  warnings.push(`Source pool 已注册 ${sources.size} 个可播放 angle；非 Best 素材只有人工 Insert/Overwrite 后才进入 Timeline。`);
   warnings.push(`时间基 ${rate.numerator}/${rate.denominator} fps；所有秒级范围会在提交前量化到整数帧。`);
 
   const baseProject: TimelineProject = {
