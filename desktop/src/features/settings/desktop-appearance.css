@@ -1,0 +1,12 @@
+.desktop-appearance-control { display: grid; gap: 5px; border-top: 1px solid #222930; padding: 8px 4px 9px; }
+.desktop-appearance-control > span { color: #65727d; font-size: 8px; font-weight: 620; }
+.desktop-appearance-control > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; border: 1px solid #29323b; border-radius: 7px; padding: 2px; background: #0b1014; }
+.desktop-appearance-control button { border: 0; border-radius: 5px; padding: 4px 5px; color: #6e7a85; background: transparent; font-size: 8px; font-weight: 600; }
+.desktop-appearance-control button:hover { color: #bdc6cd; background: #161d23; }
+.desktop-appearance-control button.is-active { color: #11161a; background: #e4e9ed; }
+
+html[data-mirrororder-theme="light"] .desktop-appearance-control { border-color: #dce3e9; }
+html[data-mirrororder-theme="light"] .desktop-appearance-control > div { border-color: #d4dce3; background: #eef2f5; }
+html[data-mirrororder-theme="light"] .desktop-appearance-control button { color: #65717c; }
+html[data-mirrororder-theme="light"] .desktop-appearance-control button:hover { color: #26313a; background: #e5eaee; }
+html[data-mirrororder-theme="light"] .desktop-appearance-control button.is-active { color: #fff; background: #33414c; }
