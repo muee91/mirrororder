@@ -18,6 +18,7 @@
 - Stage 3 — Runtime installation order：**74 / 100**
 - Stage 4 — Golden production project：**76 / 100**
 - Stage 5 — Delivery artifact path normalization：**77 / 100**
+- Stage 6 — Rust Timeline authority lifecycle：**80 / 100**
 - 评分只代表当前产品/工程就绪度判断，不替代 executable gate。
 
 ## 当前工作包
@@ -31,7 +32,7 @@
 | Runtime install ordering | 源码收口 / 待本地验证 | Host 使用单一 runtime stack；Editorial 单职责；全栈失败可重试、禁止重入；Identity compatibility import 不再安装全局 wrapper。 |
 | Golden production project | 源码收口 / 待本地验证 | synthetic 2 集 / 3 场 / 5 Take fixture 固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen 语义。 |
 | Delivery artifact path normalization | 源码收口 / 待本地验证 | delivery.v1 v4 / export report v2 只持久化逻辑 artifact ref；Desktop localhost response 才解析本机绝对路径。 |
-| Timeline golden lifecycle | 进行中 | 为 Rust Timeline Core 固定 seed → edit → undo/redo → serialize/reopen 的 authority lifecycle。 |
+| Timeline authority lifecycle | 源码收口 / 待本地验证 | Rust generation + journal revision 成为 stale-edit token；golden lifecycle 覆盖 edit / undo / redo / replay / checkpoint / reopen。 |
 | Engineering control plane | 待本地验证 | worktree 规则、本地 gate、状态/决策/不变量文档和 repository guard 已接入；`main` 暂未修改。 |
 
 ## Stage 1 — Runtime read-path safety
@@ -97,13 +98,26 @@
 - Desktop Delivery 类型显式区分 `<artifact>_ref`、本地 resolved path、`persisted_report_path_safe` 和 `device_paths_scope`；
 - 新增 delivery path-safety tests，并加入 fast gate。
 
+## Stage 6 — Rust Timeline authority lifecycle
+
+已完成源码收口：
+
+- Tauri Timeline bridge 直接复用持久化层的 `generation + journal sequence` 形成 `TimelineAuthority`，没有在 Python 或 React 再造第二套 revision；
+- `apply` / `apply_batch` / `undo` / `redo` / `checkpoint` 必须携带上一份完整 Rust snapshot 返回的 `expected_authority`；过期 token 在 journal append 前以 `stale_timeline_authority` fail closed；
+- `TimelineClient` 只在创建、恢复、刷新或 mutation 返回完整 snapshot 时更新 authority；`persistenceStatus()` 即使看到更新 revision 也只用于展示，不能授予新的编辑 token；
+- manual checkpoint 会建立新 generation 并清空 snapshot undo/redo history，使 checkpoint 前窗口、Inspector 或旧 snapshot token 自动失效；
+- generation 使用高分辨率时间、PID、project hash 和进程内原子 nonce，避免同一进程同一时间窗口连续 checkpoint 发生 generation 重复；
+- checkpoint 的 atomic replace 一旦成功即视为 durable authority；journal truncate 只做 best-effort compaction，失败不会造成“磁盘已切 generation、内存仍停旧 generation”的分叉；
+- Rust golden lifecycle 固定 24000/1001 timebase、Trim、Split、MulticamSwitch、Overwrite、Undo、Redo、journal replay、checkpoint、reopen，并验证 authoritative project 等价；
+- fast gate 执行 Timeline Core 全部 lib tests、Tauri `timeline::tests::` 与 `persistence::tests::`，不使用可能出现 0 tests 假通过的 `--exact` 过滤方式。
+
 ## 当前验证状态
 
 针对 `fix/runtime-read-paths`：
 
 - Source / diff review：PASS（仅代表已审阅分支 diff 和关键 runtime/production contract）
-- Stage 1–5 新增及更新 tests：已写入，**NOT RUN**
-- 临时环境直接 clone 分支：NOT RUN（运行环境无外网 DNS，无法获得完整 checkout）
+- Stage 1–6 新增及更新 tests：已写入，**NOT RUN**
+- 当前会话运行环境没有完整 Git checkout / Desktop 依赖，无法把 source review 冒充 executable validation
 - `python scripts/check_fast.py`：NOT RUN
 - `python scripts/check_full.py`：NOT RUN
 - Native packaged runtime smoke：NOT RUN
@@ -113,18 +127,17 @@
 
 ## 下一工作包
 
-### P1 — Timeline golden lifecycle
+### P1 — Local executable validation and integration stabilization
 
-目标：Rust Timeline authoritative state 具备可重复的最小生命周期验证，而不是只证明 Python proposal/read model 成立。
+目标：停止继续用源码审阅代替运行事实；在完整本地 checkout 上验证当前 6 个阶段能同时成立，再决定是否进入 `main`。
 
 重点：
 
-- synthetic seed / native timebase；
-- 通过 Rust command 执行 trim / split / replace 中现有支持的编辑；
-- revision 与 stale-command 防护（按现有 API 能力）；
-- undo / redo；
-- serialize / reopen 后 authoritative state 等价；
-- Python/React 不直接修改 Rust Timeline state。
+- 执行 `python scripts/check_fast.py`，确保 Python / TypeScript / Vitest / Rust Timeline Core / Tauri Timeline persistence contracts 全部真实运行；
+- 执行 `python scripts/check_full.py`，覆盖 Vite build、完整 Rust tests、完整 pytest；
+- 失败按 contract 回到对应 Stage 修复，不通过“跳过测试”或缩小断言取得绿灯；
+- 对 `main...fix/runtime-read-paths` 做集成 diff review，确认没有隐藏的第二 authority、同步 heavy path 或 device path persistence 回流；
+- local fast + full 都通过后，才进入 main 集成决策。
 
 ### P2 — Python package migration plan
 
@@ -135,4 +148,4 @@
 - `STATUS.md` 只写“现在是什么状态”，不要堆实现日志。
 - 完成的历史验收证据移到 `docs/verification/`；这里保留当前结论。
 - 新发现但不属于当前 scope 的事项进入 `BACKLOG.md`。
-- 新长期约束进入 `DECISIONS.md` 或 `INVARIANTS.md`。
+- 新长期约束进入 `DECISIONS.md` 或 `INVARIANTS.md`，而不是永久挂在 backlog。
