@@ -1,4 +1,5 @@
-.desktop-appearance-control { display: grid; gap: 5px; border-top: 1px solid #222930; padding: 8px 4px 9px; }
+.project-library > .project-list { flex: 1 1 auto; }
+.desktop-appearance-control { display: grid; flex: 0 0 auto; gap: 5px; border-top: 1px solid #222930; padding: 8px 4px 9px; }
 .desktop-appearance-control > span { color: #65727d; font-size: 8px; font-weight: 620; }
 .desktop-appearance-control > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; border: 1px solid #29323b; border-radius: 7px; padding: 2px; background: #0b1014; }
 .desktop-appearance-control button { border: 0; border-radius: 5px; padding: 4px 5px; color: #6e7a85; background: transparent; font-size: 8px; font-weight: 600; }
