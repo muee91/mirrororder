@@ -2,12 +2,13 @@
 
 `docs/engineering/` 保存**当前工程管理事实**，用于让本地开发、Agent、worktree 和远端协作共享同一套轻量控制面。这里不取代产品/领域 authority，也不保存一次性验收报告。
 
-## 四个文件各自负责什么
+## 核心文件各自负责什么
 
 - [`STATUS.md`](./STATUS.md)：当前正在做什么、哪些风险未关闭、哪些 gate 实际执行过。
 - [`BACKLOG.md`](./BACKLOG.md)：尚未进入当前工作包的工程事项，按优先级排队。
 - [`DECISIONS.md`](./DECISIONS.md)：已经接受、会长期影响实现方式的工程决策。
 - [`INVARIANTS.md`](./INVARIANTS.md)：任何分支、Agent 或实现都不能突破的高影响约束。
+- [`PYTHON_PACKAGE_PLAN.md`](./PYTHON_PACKAGE_PLAN.md)：Python flat namespace 的目标边界、迁移顺序与 compatibility/staging contract；它是迁移计划，不代表文件已经搬动。
 
 产品入口、UX、领域 authority 和跨层架构仍以 [`../README.md`](../README.md) 中列出的当前文档为准；一次性验证证据仍进入 [`../verification/`](../verification/)。
 
@@ -19,7 +20,7 @@
 2. `AGENTS.md` 与 `INVARIANTS.md` 的仓库级约束；
 3. `DECISIONS.md` 已接受的工程决策；
 4. `STATUS.md` 当前执行状态；
-5. `BACKLOG.md` 未来计划；
+5. `BACKLOG.md` 与专项 migration plan 的未来工作；
 6. `docs/verification/` 历史证据；
 7. 聊天记录、临时 prompt、旧分支说明。
 
@@ -91,6 +92,7 @@ fix/<topic>
 audit/<topic>
 chore/<topic>
 experiment/<topic>
+refactor/<topic>
 ```
 
 本地示例：
