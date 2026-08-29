@@ -7,20 +7,51 @@ from script_organizer.project_location_runtime import project_local_location
 
 
 class _Registry:
-    def __init__(self, config) -> None:
-        self.config = config
+    def __init__(self, workspace_path: Path, config_path: Path) -> None:
+        self.config = SimpleNamespace(config_path=workspace_path)
+        self._config_path = config_path
 
-    def project_config(self, project_id: str):
+    def get(self, project_id: str):
         assert project_id == "p1"
-        return self.config
+        return {"project_id": project_id, "config_path": str(self._config_path.relative_to(self.config.config_path.parent))}
+
+    def project_config(self, _project_id: str):
+        raise AssertionError("local-location must not load device media bindings")
+
+
+def _project(tmp_path: Path, *, make_output: bool) -> tuple[Path, Path, Path]:
+    workspace_path = tmp_path / "workspace.toml"
+    workspace_path.write_text('[workspace]\nid = "ws-test"\n', encoding="utf-8")
+    project_dir = tmp_path / "projects" / "p1"
+    output_dir = project_dir / "output"
+    project_dir.mkdir(parents=True)
+    if make_output:
+        output_dir.mkdir()
+    config_path = project_dir / "project.toml"
+    config_path.write_text(
+        "\n".join([
+            "[project]",
+            'name = "Test"',
+            "",
+            "[input]",
+            'kind = "media-directory"',
+            'script = "./inputs/script.txt"',
+            "",
+            "[output]",
+            'directory = "./output"',
+            "",
+            "[asr]",
+            'transcript_dir = "./cache/transcripts"',
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    return workspace_path, config_path, output_dir
 
 
 def test_project_location_is_device_local_response_only(tmp_path: Path) -> None:
-    project_dir = tmp_path / "projects" / "p1"
-    output_dir = project_dir / "output"
-    output_dir.mkdir(parents=True)
-    config = SimpleNamespace(project_dir=project_dir, output_dir=output_dir)
-    service = SimpleNamespace(registry=_Registry(config))
+    workspace_path, config_path, output_dir = _project(tmp_path, make_output=True)
+    project_dir = config_path.parent
+    service = SimpleNamespace(registry=_Registry(workspace_path, config_path))
 
     payload = project_local_location(service, "p1")
 
@@ -36,14 +67,12 @@ def test_project_location_is_device_local_response_only(tmp_path: Path) -> None:
     }
 
 
-def test_project_location_uses_gateway_current_service(tmp_path: Path) -> None:
-    project_dir = tmp_path / "p1"
-    output_dir = project_dir / "output"
-    project_dir.mkdir()
-    config = SimpleNamespace(project_dir=project_dir, output_dir=output_dir)
-    current = SimpleNamespace(registry=_Registry(config))
+def test_project_location_uses_gateway_current_service_without_media_binding_lookup(tmp_path: Path) -> None:
+    workspace_path, config_path, output_dir = _project(tmp_path, make_output=False)
+    current = SimpleNamespace(registry=_Registry(workspace_path, config_path))
     gateway = SimpleNamespace(current=current)
 
     payload = project_local_location(gateway, "p1")
-    assert payload["project_dir"] == str(project_dir.resolve())
+    assert payload["project_dir"] == str(config_path.parent.resolve())
+    assert payload["output_dir"] == str(output_dir.resolve())
     assert payload["output_exists"] is False
