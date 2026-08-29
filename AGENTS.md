@@ -2,27 +2,30 @@
 
 ## 当前基线
 
-- `main` 是开发基线。
+- `main` 是稳定集成基线，不是默认的大型工作区。
 - Desktop 客户端位于 `desktop/`。
 - Desktop = **React / TypeScript Production UI + Tauri 2 / Rust 平台层 + Rust Timeline Core + Python MirrorOrder Core**。
 - Team Web 是独立轻量 Review / Collaboration surface，不是 Production 主画布。
 - 不恢复已删除的旧 Desktop 产品线，不建立第二套客户端。
-- 重功能默认独立 module + branch/worktree，再通过明确 contract 和验证并回。
+- 跨层、runtime、schema、API contract、审计、迁移、重构和实验默认独立 branch/worktree；低风险小修正才直接进入 `main`。
 
 ## 写代码前
 
 先读以下当前 authority：
 
 1. `docs/README.md` — 文档分层与 authority 索引；
-2. `docs/app-information-architecture.md` — 当前产品入口、默认页与壳层 authority；
-3. `docs/ux-principles.md` — 当前 UX 语言；
-4. `desktop/README.md`；
-5. `desktop/development-baseline.json`；
-6. `docs/desktop-development-baseline.md`；
-7. `docs/architecture/repository-layout.md` — 源码仓库与运行时工作区的文件位置；
-8. `docs/architecture/desktop-bridge.md`；
-9. `docs/architecture/sync-model.md`；
-10. `docs/architecture/automation-pipeline.md`。
+2. `docs/engineering/README.md` — 当前工程控制层、worktree 与本地 gate 规则；
+3. `docs/engineering/STATUS.md` — 当前工作包和真实验证状态；
+4. `docs/engineering/INVARIANTS.md` — 跨分支高影响不变量；
+5. `docs/app-information-architecture.md` — 当前产品入口、默认页与壳层 authority；
+6. `docs/ux-principles.md` — 当前 UX 语言；
+7. `desktop/README.md`；
+8. `desktop/development-baseline.json`；
+9. `docs/desktop-development-baseline.md`；
+10. `docs/architecture/repository-layout.md` — 源码仓库与运行时工作区的文件位置；
+11. `docs/architecture/desktop-bridge.md`；
+12. `docs/architecture/sync-model.md`；
+13. `docs/architecture/automation-pipeline.md`。
 
 涉及具体领域时再读 `docs/README.md` 列出的对应 contract。`docs/verification/` 和 Historical Reference 不能覆盖当前 authority。
 
@@ -30,8 +33,8 @@
 
 ## 仓库文件位置
 
-- 仓库根目录只保留入口、构建配置和仓库级约束；新的跨层架构说明放 `docs/architecture/`，一次性验收记录放 `docs/verification/`。
-- 根 `workspace.toml` 只是开发工作区描述。运行时 `projects/` 整体属于 workspace 数据并被 Git 忽略。
+- 仓库根目录只保留入口、构建配置和仓库级约束；新的跨层架构说明放 `docs/architecture/`，当前工程管理事实放 `docs/engineering/`，一次性验收记录放 `docs/verification/`。
+- 根 `workspace.toml` 只是开发工作区描述。`projects/` 是运行时 workspace 容器；源码只跟踪空的 `projects/.gitkeep`，其余 `projects/*` 全部 Git 忽略。
 - **禁止提交真实** `projects/registry.json`、`project.toml`、剧本/FCPXML/XML 输入副本、cache、output、Review/Editorial/tasks/locks，以及 `/Volumes/...`、`/Users/...`、Windows 盘符等设备绝对路径。
 - 测试需要项目数据时，只使用 `tests/fixtures/` 下最小、合成、脱敏且可重建的 fixture；不得复制真实制作项目。
 - Desktop typed clients / DTO 放 `desktop/src/api/`；领域 UI、专属 hooks、CSS、Vitest 尽量 colocate 在 `desktop/src/features/<domain>/`；Tauri `src-tauri` 只放窄平台 adapter、生命周期和 Rust Core。
@@ -163,46 +166,58 @@ Python MirrorOrder Core + Rust Timeline Core
 
 ## 重功能隔离 / worktree
 
-以下能力默认独立 branch/worktree：
+满足任意一条即默认独立 branch/worktree：
 
+- 修改超过 3 个文件；
+- 跨 Python / React / Tauri / Rust；
+- API / DTO / schema / workspace / artifact contract 变化；
 - runtime packaging / portable Python / media toolchain；
-- 自动配乐与音乐生成；
-- 重媒体处理 / proxy generation infrastructure；
+- durable task、重媒体处理、proxy generation infrastructure；
+- 自动配乐、自动剪辑、模型 runtime infrastructure；
 - 新 NLE adapters；
-- model runtime infrastructure；
-- 实验自动化引擎。
+- 审计、迁移、重构或实验自动化引擎。
 
 只有同时满足以下条件才并回主线：
 
-1. typed contract 明确；
-2. authority/ownership 明确；
-3. failure isolation 明确；
-4. 本地测试与 native smoke gate 明确；
-5. 不复制 Python business logic；
-6. 不把 Production project tabs 当插件容器。
+1. scope 已收敛，新增非阻塞问题进入 `docs/engineering/BACKLOG.md`；
+2. typed contract 明确；
+3. authority/ownership 明确；
+4. failure isolation 明确；
+5. 适用的本地 fast/full/native gate 已真实执行；
+6. 不复制 Python business logic；
+7. 不把 Production project tabs 当插件容器；
+8. diff review 完成，工程状态同步到 `docs/engineering/STATUS.md`。
 
 ## 文档维护
 
 - 新产品/导航规则优先更新现有 IA / UX 文档，不新建平行规范。
 - 领域 authority 更新对应 contract。
 - 跨 Python/Desktop/runtime/sync 等多个层的长期工程说明放 `docs/architecture/`。
+- 当前工程状态、backlog、长期工程决策和高影响不变量放 `docs/engineering/`。
 - 一次性验收结果进入 `docs/verification/`；历史 PASS 只对当次 commit 有效。
 - 一次性 Codex prompt 不作为长期项目文档保留。
 - 旧设计如果仍有参考价值必须明确标 `Historical Reference`。
 
 ## 验证
 
-主线本地验证：
+日常本地 fast gate：
+
+```bash
+python scripts/check_fast.py
+```
+
+高风险工作并回前的完整源码 gate：
+
+```bash
+python scripts/check_full.py
+```
+
+`check_full.py` 复用 Desktop 当前 `verify:rc`，实际串联 TypeScript、Vitest、Vite、Cargo 与 Python 检查。打包后的 macOS/Windows runtime、真实媒体、LAN、FCP/installer smoke 仍是独立 native gate。
+
+需要单项定位时：
 
 ```bash
 cd desktop
-npm install
-npm run verify:rc
-```
-
-单项 gate：
-
-```bash
 npm run check:baseline
 npm run typecheck
 npm test
@@ -214,4 +229,4 @@ cd ..
 python -m pytest -q
 ```
 
-没有实际执行过的测试不得写成“已通过”。GitHub Actions 不是开发基线的必要条件。
+没有实际执行过的测试不得写成“已通过”。GitHub Actions 是额外验证信号，不是开发基线的必要条件。
