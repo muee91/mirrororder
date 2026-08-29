@@ -25,12 +25,9 @@ def _module_status(name: str, required: bool) -> dict[str, Any]:
 
 
 def _writable(path: Path) -> bool:
+    """Report existing-directory writability without mutating a GET read path."""
     try:
-        path.mkdir(parents=True, exist_ok=True)
-        probe = path / ".mirrororder-write-test"
-        probe.write_bytes(b"ok")
-        probe.unlink()
-        return True
+        return path.is_dir() and os.access(path, os.W_OK)
     except OSError:
         return False
 
@@ -83,7 +80,7 @@ def environment_payload(workspaces: list[Path] | None = None) -> dict[str, Any]:
         {
             "path": str(path),
             "exists": path.is_dir(),
-            "writable": _writable(path) if path.is_dir() else False,
+            "writable": _writable(path),
         }
         for path in workspaces
     ]
