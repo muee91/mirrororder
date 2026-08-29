@@ -55,8 +55,6 @@ def main() -> None:
             "--manifest-path",
             "src-tauri/Cargo.toml",
             "golden_timeline_lifecycle_replays_undo_redo_and_reopens_deterministically",
-            "--",
-            "--exact",
         ],
         DESKTOP,
     )
