@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -70,3 +71,24 @@ def test_cli_host_bootstrap_uses_single_production_runtime_entrypoint() -> None:
     assert source.count("install_production_runtime()") == 2
     assert source.count("install_device_media_runtime()") == 1
     assert source.count("install_automation_runtime()") == 1
+
+
+def test_modules_do_not_run_runtime_installers_at_import_time() -> None:
+    root = Path(__file__).resolve().parents[1] / "src" / "script_organizer"
+    offenders: list[str] = []
+    for path in root.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+                continue
+            function = node.value.func
+            name = function.id if isinstance(function, ast.Name) else function.attr if isinstance(function, ast.Attribute) else ""
+            if name.startswith("install_"):
+                offenders.append(f"{path.name}:{name}")
+    assert offenders == []
+
+
+def test_identity_runtime_compatibility_import_is_side_effect_free() -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "src" / "script_organizer" / "identity_runtime.py").read_text(encoding="utf-8")
+    assert "install_identity_role_inference" not in source
