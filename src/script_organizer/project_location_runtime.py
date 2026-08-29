@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .config import ProjectConfig
+
 
 _INSTALLED = False
 
@@ -12,16 +14,29 @@ def _current_service(service: Any) -> Any:
     return current if current is not None else service
 
 
+def _registered_config_path(service: Any, project_id: str) -> Path:
+    registry = service.registry
+    entry = registry.get(project_id)
+    value = Path(str(entry.get("config_path", "") or "")).expanduser()
+    if not value.is_absolute():
+        value = registry.config.config_path.parent / value
+    return value.resolve()
+
+
 def project_local_location(service: Any, project_id: str) -> dict[str, Any]:
     """Resolve device-local project paths for explicit Desktop actions only.
 
-    These absolute paths are intentionally returned only by a Host-local route.
-    They are never persisted into project/shared artifacts or workspace registry
-    fields beyond the existing relative project config reference.
+    This route intentionally reads only the registered project TOML. It does not
+    call ``WorkspaceRegistry.project_config`` because media-directory projects
+    enrich that method with device media bindings that are irrelevant to a
+    Finder/Explorer reveal action.
+
+    Absolute paths are returned only by this Host-local response. They are never
+    persisted into project/shared artifacts.
     """
 
     current = _current_service(service)
-    config = current.registry.project_config(project_id)
+    config = ProjectConfig.from_file(_registered_config_path(current, project_id))
     project_dir = Path(config.project_dir).resolve()
     output_dir = Path(config.output_dir).resolve()
     return {
