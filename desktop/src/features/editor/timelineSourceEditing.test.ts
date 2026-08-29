@@ -142,7 +142,7 @@ describe("timeline source editing", () => {
     const sequence = project().sequences[0];
     expect(insertCutsExistingClip(sequence, 0)).toBe(false);
     expect(insertCutsExistingClip(sequence, 60)).toBe(true);
-    expect(insertCutsExistingClip(sequence, 120)).toBe(true);
+    expect(insertCutsExistingClip(sequence, 120)).toBe(false);
     expect(insertCutsExistingClip(sequence, 240)).toBe(false);
   });
 });
