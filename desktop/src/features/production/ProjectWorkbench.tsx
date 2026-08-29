@@ -15,6 +15,8 @@ import { AssemblyWorkbench, CoverageWorkbench, RoughCutWorkbench } from "../plan
 import { ProjectOverviewWorkbench, ReviewAttentionWorkbench } from "../review/ReviewWorkbenches";
 import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
 import { GoldenSlateWorkbench } from "../slate/GoldenSlateWorkbench";
+import { SlatePlaybackShortcuts } from "../slate/SlatePlaybackShortcuts";
+import "../slate/slate-playback-shortcuts.css";
 import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
@@ -107,7 +109,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
           {page === "media-binding" ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "takes" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial={false} /> : null}
           {page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-          {page === "slate" ? <GoldenSlateWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+          {page === "slate" ? <><GoldenSlateWorkbench baseUrl={baseUrl} projectId={project.project_id} /><SlatePlaybackShortcuts /></> : null}
           {page === "script" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="script" showEditorial={false} /> : null}
           {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "rough-cut" ? <RoughCutWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
