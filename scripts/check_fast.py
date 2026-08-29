@@ -55,9 +55,18 @@ def main() -> None:
     )
     run("Python compileall", sys.executable, ["-m", "compileall", "-q", "src/script_organizer"], ROOT)
     run(
-        "Repository layout guard",
+        "Python production contract smoke",
         sys.executable,
-        ["-m", "pytest", "-q", "tests/test_repository_layout_guard.py"],
+        [
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_repository_layout_guard.py",
+            "tests/test_runtime_read_paths_contract.py",
+            "tests/test_runtime_stack_installation.py",
+            "tests/test_device_tasks.py",
+            "tests/test_golden_production_project.py",
+        ],
         ROOT,
     )
 
