@@ -5,8 +5,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from script_organizer.config import ProjectConfig
-from script_organizer.delivery_runtime import _decorate_report
+from script_organizer.delivery_runtime import _decorate_report, _decorate_timeline_report
 from script_organizer.fcpxml_exporter import export
+from script_organizer.timeline_delivery import TIMELINE_FCPXML_NAME
 
 
 def _config(tmp_path: Path) -> ProjectConfig:
@@ -77,4 +78,30 @@ def test_local_delivery_response_resolves_only_allowlisted_artifact_refs(tmp_pat
     assert malicious["selection_manifest"] == ""
     assert malicious["organized_fcpxml"] == ""
     assert malicious["selection_manifest_exists"] is False
+    assert malicious["organized_fcpxml_exists"] is False
+
+
+def test_timeline_delivery_response_resolves_only_the_allowlisted_timeline_artifact(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    project = SimpleNamespace(config=config)
+    timeline_file = config.output_dir / TIMELINE_FCPXML_NAME
+    timeline_file.write_text("<fcpxml/>", encoding="utf-8")
+    report = {
+        "contract": "timeline_delivery_report.v1",
+        "artifact_scope": "project_output",
+        "organized_fcpxml": TIMELINE_FCPXML_NAME,
+        "timeline_authority": {"generation": "g1", "revision": 3},
+        "device_paths_exposed": False,
+    }
+
+    decorated = _decorate_timeline_report(project, report)
+    assert decorated["organized_fcpxml_ref"] == TIMELINE_FCPXML_NAME
+    assert decorated["organized_fcpxml"] == str(timeline_file)
+    assert decorated["organized_fcpxml_exists"] is True
+    assert decorated["persisted_report_path_safe"] is True
+    assert decorated["device_paths_exposed"] is True
+    assert decorated["device_paths_scope"] == "localhost_response_only"
+
+    malicious = _decorate_timeline_report(project, {**report, "organized_fcpxml": "../../outside.fcpxml"})
+    assert malicious["organized_fcpxml"] == ""
     assert malicious["organized_fcpxml_exists"] is False
