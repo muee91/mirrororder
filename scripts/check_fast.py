@@ -65,24 +65,7 @@ def main() -> None:
         ["check", "--manifest-path", "src-tauri/Cargo.toml"],
         DESKTOP,
     )
-    run("Python compileall", sys.executable, ["-m", "compileall", "-q", "src/script_organizer"], ROOT)
-    run(
-        "Python production contract smoke",
-        sys.executable,
-        [
-            "-m",
-            "pytest",
-            "-q",
-            "tests/test_repository_layout_guard.py",
-            "tests/test_runtime_read_paths_contract.py",
-            "tests/test_runtime_stack_installation.py",
-            "tests/test_device_tasks.py",
-            "tests/test_delivery_semantics.py",
-            "tests/test_delivery_artifact_paths.py",
-            "tests/test_golden_production_project.py",
-        ],
-        ROOT,
-    )
+    run("Python-only source gate", sys.executable, ["scripts/check_python.py"], ROOT)
 
     print("\nLocal fast gate passed.")
     print("This is not the full RC/native runtime gate. Run python scripts/check_full.py before merging high-risk work.")
