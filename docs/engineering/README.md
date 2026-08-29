@@ -34,7 +34,7 @@ main
   ↓
 实现 / 测试 / diff review
   ↓
-本地 fast gate
+本地 source gate / fast gate
   ↓
 必要时 full gate / native smoke
   ↓
@@ -44,6 +44,23 @@ main
   ↓
 GitHub push / PR / release / optional CI
 ```
+
+### 本地验证入口
+
+在完整 checkout 中按可用工具链选择最低可执行层，但**低层通过不能替代高层**：
+
+```bash
+# Python-only：不依赖 Node/Cargo/网络
+python scripts/check_python.py
+
+# 日常跨栈 fast gate
+python scripts/check_fast.py
+
+# 合并高风险工作前的完整 source gate
+python scripts/check_full.py
+```
+
+`check_python.py` 会执行 Python compileall 和当前 production contract smoke；缺少测试文件或 pytest 时 fail closed。它适合 Node/Rust 工具链暂不可用时尽早发现 Python/contract 回归，但不代表 TypeScript、Vitest、Rust/Tauri、packaged runtime 或 native media/FCP 已验证。
 
 ### 可以直接改 `main` 的范围
 
