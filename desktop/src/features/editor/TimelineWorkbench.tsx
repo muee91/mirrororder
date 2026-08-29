@@ -14,7 +14,7 @@ import {
   type TimelineTrack,
 } from "../../api/timeline";
 import { EditorMonitors } from "./EditorMonitors";
-import { clampPlayhead } from "./editorPlayback";
+import { clampPlayhead, isEditableKeyboardTarget } from "./editorPlayback";
 import { buildRoughCutTimelineProposal } from "./timelineSeed";
 import {
   buildManualSourceCommand,
@@ -24,6 +24,12 @@ import {
   type ManualSourceEditMode,
   type TimelineSourceOption,
 } from "./timelineSourceEditing";
+import {
+  clampSourceCursor,
+  markSourceIn,
+  markSourceOut,
+  sourceOptionEnd,
+} from "./timelineSourceMarks";
 
 interface Props {
   baseUrl: string;
@@ -79,6 +85,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const [sourceId, setSourceId] = useState("");
   const [sourceIn, setSourceIn] = useState(0);
   const [sourceDuration, setSourceDuration] = useState(1);
+  const [sourcePosition, setSourcePosition] = useState(0);
   const [rateNumerator, setRateNumerator] = useState("");
   const [rateDenominator, setRateDenominator] = useState("");
   const [replaceProposalArmed, setReplaceProposalArmed] = useState(false);
@@ -104,6 +111,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setSourceId("");
     setSourceIn(0);
     setSourceDuration(1);
+    setSourcePosition(0);
     setRateNumerator("");
     setRateDenominator("");
     setReplaceProposalArmed(false);
@@ -172,6 +180,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   );
   const sourceOption = sourceOptions.find((option) => option.source.source_id === sourceId) ?? null;
   const sourceRangeError = validateManualSourceRange(sourceOption, sourceIn, sourceDuration);
+  const sourceOut = sourceIn + sourceDuration;
   const insertBlocked = sequence ? insertCutsExistingClip(sequence, playhead) : false;
   const maxEnd = Math.max(1, ...(sequence?.tracks.flatMap((track) => track.clips.map((clip) => clip.timeline_start + clip.duration)) ?? [1]));
   const selectedMulticamGroupId = selection?.clip.multicam_group_id ?? null;
@@ -184,14 +193,20 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       setSourceId("");
       setSourceIn(0);
       setSourceDuration(1);
+      setSourcePosition(0);
       return;
     }
-    if (sourceOptions.some((option) => option.source.source_id === sourceId)) return;
+    const current = sourceOptions.find((option) => option.source.source_id === sourceId);
+    if (current) {
+      setSourcePosition((position) => clampSourceCursor(current, position));
+      return;
+    }
     const selectedSourceId = selection?.clip.selected_angle_source_id ?? selection?.clip.source_id ?? "";
     const next = sourceOptions.find((option) => option.source.source_id === selectedSourceId) ?? sourceOptions[0];
     setSourceId(next.source.source_id);
     setSourceIn(next.availableIn);
     setSourceDuration(next.availableDuration);
+    setSourcePosition(next.availableIn);
   }, [selection?.clip.selected_angle_source_id, selection?.clip.source_id, sourceId, sourceOptions]);
 
   const changePlayhead = useCallback((frame: number) => {
@@ -210,7 +225,58 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setSourceId(option.source.source_id);
     setSourceIn(option.availableIn);
     setSourceDuration(option.availableDuration);
+    setSourcePosition(option.availableIn);
   }
+
+  function changeSourcePosition(frame: number): void {
+    if (!sourceOption) return;
+    setSourcePosition(clampSourceCursor(sourceOption, frame));
+  }
+
+  function setSourceInPrecisely(frame: number): void {
+    const next = sourceOption ? clampSourceCursor(sourceOption, frame) : Math.max(0, Math.round(frame));
+    setSourceIn(next);
+    setSourcePosition(next);
+  }
+
+  function markInAtCursor(): void {
+    if (!sourceOption) return;
+    try {
+      const next = markSourceIn(sourceOption, { sourceIn, duration: sourceDuration }, sourcePosition);
+      setSourceIn(next.sourceIn);
+      setSourceDuration(next.duration);
+      setMessage(`Mark In · ${frameLabel(next.sourceIn)} · Out 保持 ${frameLabel(next.sourceIn + next.duration)}`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  function markOutAtCursor(): void {
+    if (!sourceOption) return;
+    try {
+      const next = markSourceOut(sourceOption, { sourceIn, duration: sourceDuration }, sourcePosition);
+      setSourceIn(next.sourceIn);
+      setSourceDuration(next.duration);
+      setMessage(`Mark Out · ${frameLabel(next.sourceIn + next.duration)} · In 保持 ${frameLabel(next.sourceIn)}`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  useEffect(() => {
+    const handleSourceMarks = (event: KeyboardEvent) => {
+      if (!sourceOption || isEditableKeyboardTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === "i" || event.key === "I") {
+        event.preventDefault();
+        markInAtCursor();
+      } else if (event.key === "o" || event.key === "O") {
+        event.preventDefault();
+        markOutAtCursor();
+      }
+    };
+    globalThis.addEventListener("keydown", handleSourceMarks);
+    return () => globalThis.removeEventListener("keydown", handleSourceMarks);
+  }, [sourceDuration, sourceIn, sourceOption, sourcePosition]);
 
   function selectTimelineClip(clip: TimelineClip): void {
     setSelectedClipId(clip.clip_id);
@@ -222,6 +288,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       setSourceId(option.source.source_id);
       setSourceIn(clip.source_in);
       setSourceDuration(clip.duration);
+      setSourcePosition(clip.source_in);
     }
   }
 
@@ -469,15 +536,23 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
                   </label>
                   <label className="production-field">
                     <span>Source In</span>
-                    <input type="number" min={0} step={1} value={sourceIn} onChange={(event) => setSourceIn(Math.max(0, Math.round(Number(event.target.value) || 0)))} />
+                    <input type="number" min={0} step={1} value={sourceIn} onChange={(event) => setSourceInPrecisely(Number(event.target.value) || 0)} />
                   </label>
                   <label className="production-field">
                     <span>Duration</span>
                     <input type="number" min={1} step={1} value={sourceDuration} onChange={(event) => setSourceDuration(Math.max(1, Math.round(Number(event.target.value) || 1)))} />
                   </label>
                 </div>
+                <div className="timeline-source-cursor">
+                  <span>Cursor {frameLabel(sourcePosition)}</span>
+                  <button type="button" className="secondary" onClick={() => changeSourcePosition(sourcePosition - 1)}>−1f</button>
+                  <button type="button" className="secondary" onClick={() => changeSourcePosition(sourcePosition + 1)}>+1f</button>
+                  <button type="button" className="secondary" onClick={markInAtCursor}>Mark In <kbd>I</kbd></button>
+                  <button type="button" className="secondary" onClick={markOutAtCursor}>Mark Out <kbd>O</kbd></button>
+                  <span>In {frameLabel(sourceIn)} · Out {frameLabel(sourceOut)}</span>
+                </div>
                 <div className="proposal-warnings">
-                  <span>可用范围 {frameLabel(sourceOption.availableIn)}–{frameLabel(sourceOption.availableIn + sourceOption.availableDuration)} · 目标 {frameLabel(playhead)}</span>
+                  <span>可用范围 {frameLabel(sourceOption.availableIn)}–{frameLabel(sourceOptionEnd(sourceOption))} · 目标 {frameLabel(playhead)}</span>
                   {sourceRangeError ? <span>⚠️ {sourceRangeError}</span> : null}
                   {insertBlocked ? <span>Insert 位置位于现有片段内部；先切分或使用 Overwrite。</span> : null}
                 </div>
@@ -495,10 +570,16 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
             project={snapshot.project}
             sequence={sequence}
             selectedClip={selection?.clip ?? null}
-            sourcePreview={sourceOption ? { source: sourceOption.source, frame: sourceIn } : null}
+            sourcePreview={sourceOption ? {
+              source: sourceOption.source,
+              frame: sourcePosition,
+              rangeStart: sourceOption.availableIn,
+              rangeEnd: sourceOptionEnd(sourceOption),
+            } : null}
             playhead={playhead}
             onPlayheadChange={changePlayhead}
             onStepFrames={stepPlayhead}
+            onSourceFrameChange={changeSourcePosition}
           />
 
           <div className="timeline-stage production-panel">
