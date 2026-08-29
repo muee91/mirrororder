@@ -16,6 +16,19 @@ ARCHITECTURE_DOCS = (
     "docs/architecture/local-intelligence.md",
 )
 
+ENGINEERING_DOCS = (
+    "docs/engineering/README.md",
+    "docs/engineering/STATUS.md",
+    "docs/engineering/BACKLOG.md",
+    "docs/engineering/DECISIONS.md",
+    "docs/engineering/INVARIANTS.md",
+)
+
+LOCAL_GATES = (
+    "scripts/check_fast.py",
+    "scripts/check_full.py",
+)
+
 LEGACY_ROOT_ARCHITECTURE_DOCS = (
     "AUTOMATION_PIPELINE.md",
     "DESKTOP_BRIDGE.md",
@@ -43,6 +56,13 @@ def test_cross_layer_architecture_docs_have_one_home() -> None:
         assert not (ROOT / relative).exists(), relative
 
 
+def test_engineering_control_layer_is_present() -> None:
+    for relative in ENGINEERING_DOCS:
+        assert (ROOT / relative).is_file(), relative
+    for relative in LOCAL_GATES:
+        assert (ROOT / relative).is_file(), relative
+
+
 def test_live_workspace_projects_are_not_source_repository_files() -> None:
     ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert any(line.strip() == "projects/*" for line in ignore.splitlines())
@@ -60,11 +80,17 @@ def test_repository_workspace_descriptor_is_path_neutral() -> None:
         assert device_path_marker not in workspace
 
 
-def test_repository_entry_docs_point_to_normalized_architecture_paths() -> None:
+def test_repository_entry_docs_point_to_normalized_paths() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    docs_readme = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+
     assert "docs/architecture/repository-layout.md" in readme
     assert "docs/architecture/sync-model.md" in agents
+    assert "docs/engineering/README.md" in readme
+    assert "docs/engineering/README.md" in agents
+    assert "engineering/README.md" in docs_readme
+
     for legacy in LEGACY_ROOT_ARCHITECTURE_DOCS:
         assert f"]({legacy})" not in readme
         assert f"`{legacy}`" not in agents
