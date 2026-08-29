@@ -21,6 +21,7 @@ mirrororder/
 │   ├── architecture/             跨层长期工程架构
 │   └── verification/             某个 commit/环境的一次性验证证据
 ├── tests/                        Python 合同、单元与集成测试
+├── projects/.gitkeep             仅用于保留空的本地 workspace 容器目录
 ├── vendor/                       固定的第一方/第三方 vendored runtime source
 └── branding/                     产品品牌静态资源
 ```
@@ -35,7 +36,9 @@ mirrororder/
 ./projects/registry.json
 ```
 
-但 `projects/` 是**运行时工作区状态**，整体由 `.gitignore` 排除。
+`projects/` 是**运行时工作区容器**。源码仓库只跟踪一个空的 `projects/.gitkeep`，保证全新 checkout 中目录存在；除此之外，`projects/*` 全部由 `.gitignore` 排除。
+
+这样既不把真实项目带进源码 Git，又满足当前项目预检对 `projects/` 目录存在且可写的要求。普通 GET 不需要为了仓库初始化而写盘。
 
 源码仓库不得跟踪：
 
@@ -50,9 +53,9 @@ mirrororder/
 
 ### 从旧 checkout 迁移
 
-历史版本曾把 `projects/` 作为 tracked source 提交，其中甚至包含真实项目输入和设备绝对路径。本规范开始执行时会停止跟踪这些文件。
+历史版本曾把 `projects/` 作为 tracked source 提交，其中甚至包含真实项目输入和设备绝对路径。本规范开始执行时会停止跟踪这些文件，仅保留 `.gitkeep`。
 
-如果某台开发机仍把仓库内旧 `projects/` 当作正在使用的生产/测试工作区，**切换到移除这些 tracked 文件的 commit 前应先复制/备份该目录**。更新源码后，再把需要继续使用的 workspace 内容恢复到本地 `projects/`；因为目录此时已被 `.gitignore` 排除，恢复后的文件不会再次进入源码提交。
+如果某台开发机仍把仓库内旧 `projects/` 当作正在使用的生产/测试工作区，**切换到移除这些 tracked 文件的 commit 前应先复制/备份该目录**。更新源码后，再把需要继续使用的 workspace 内容恢复到本地 `projects/`；除 `.gitkeep` 外的内容都被 `.gitignore` 排除，不会再次进入源码提交。
 
 稳定的 `workspace.id` 不因这次仓库整理而变化，避免现有 device-local media binding 被误认为另一个工作区。
 

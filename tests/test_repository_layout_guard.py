@@ -45,8 +45,11 @@ def test_cross_layer_architecture_docs_have_one_home() -> None:
 
 def test_live_workspace_projects_are_not_source_repository_files() -> None:
     ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
-    assert any(line.strip() == "projects/" for line in ignore.splitlines())
-    assert _git_ls_files("projects") == []
+    assert any(line.strip() == "projects/*" for line in ignore.splitlines())
+    assert any(line.strip() == "!projects/.gitkeep" for line in ignore.splitlines())
+    assert (ROOT / "projects" / ".gitkeep").is_file()
+    if (ROOT / ".git").exists() and shutil.which("git") is not None:
+        assert _git_ls_files("projects") == ["projects/.gitkeep"]
 
 
 def test_repository_workspace_descriptor_is_path_neutral() -> None:

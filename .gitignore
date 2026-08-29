@@ -11,8 +11,9 @@ __pycache__/
 output/
 
 # Live workspace/project runtime state belongs to the user's workspace, not the source repository.
-# This includes registry.json, project.toml, immutable input copies, cache, output, review/task state, and locks.
-projects/
+# Keep only the empty directory placeholder so a fresh checkout can pass project preflight.
+projects/*
+!projects/.gitkeep
 
 # Host supplies this per-machine sync configuration; it must never enter the repo or App bundle.
 vendor/multicam-audio-sync/scripts/config.json
