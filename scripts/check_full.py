@@ -23,11 +23,14 @@ def main() -> None:
     if shutil.which(NPM) is None:
         fail(f"required command is unavailable: {NPM}")
 
+    env = os.environ.copy()
+    env.setdefault("MIRRORORDER_PYTHON", sys.executable)
+
     print("\n=== MirrorOrder local full source gate ===")
     completed = subprocess.run(
         [NPM, "run", "verify:rc"],
         cwd=DESKTOP,
-        env=os.environ.copy(),
+        env=env,
         check=False,
     )
     if completed.returncode != 0:
