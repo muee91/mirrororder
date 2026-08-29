@@ -19,6 +19,7 @@ PYTHON_CONTRACT_TESTS = (
     "tests/test_timeline_delivery_sync.py",
     "tests/test_timeline_audio_delivery.py",
     "tests/test_slate_media_runtime.py",
+    "tests/test_rough_placement_runtime_contract.py",
     "tests/test_golden_production_project.py",
     "tests/test_python_package_migration_contract.py",
 )
