@@ -1,6 +1,9 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
-import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateParseResult, type SlateRecord, type SlateStatus } from "../../api/production";
+import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord, type SlateStatus } from "../../api/production";
+import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
 import { SlateRecordClient } from "../../api/slateRecords";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
 import { SlateWorkbench } from "./SlateWorkbench";
@@ -20,6 +23,7 @@ const STATUS_OPTIONS: Array<{ value: SlateStatus; label: string }> = [
   { value: "partial", label: "部分可用" },
   { value: "ng", label: "NG" },
 ];
+const SHOT_OPTIONS = ["unknown", "wide", "full", "medium", "medium_closeup", "closeup", "extreme_closeup", "big_closeup", "insert"];
 
 function storedActor(): string {
   try { return globalThis.localStorage?.getItem(ACTOR_KEY)?.trim() ?? ""; } catch { return ""; }
@@ -39,6 +43,10 @@ function newRecordId(): string {
   return `slate-${id.replaceAll("-", "").toLowerCase()}`;
 }
 
+function attachmentKey(attachment: SlateAttachment): string {
+  return attachment.clip_id || attachment.media_id;
+}
+
 function attachmentFromAngle(angle: ReviewAngle): SlateAttachment {
   return {
     clip_id: angle.clip_id,
@@ -51,10 +59,34 @@ function attachmentFromAngle(angle: ReviewAngle): SlateAttachment {
   };
 }
 
+function attachmentFromResolved(item: SlateResolvedMediaItem): SlateAttachment {
+  return {
+    clip_id: item.clip_id,
+    media_id: item.media_id,
+    camera: item.camera,
+    display_name: item.display_name,
+    shot_type: "unknown",
+    source_role: item.source_role || "sync_camera",
+    note: "",
+  };
+}
+
+function mergeAttachments(current: SlateAttachment[], additions: SlateAttachment[]): SlateAttachment[] {
+  const rows = [...current];
+  const seen = new Set(rows.map(attachmentKey).filter(Boolean));
+  for (const item of additions) {
+    const key = attachmentKey(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    rows.push(item);
+  }
+  return rows;
+}
+
 function mergeTakeAttachments(record: SlateRecord, take: ReviewTakeGroup | null): SlateAttachment[] {
   if (!take) return record.attachments;
-  const existing = new Map(record.attachments.map((item) => [item.clip_id || item.media_id, item]));
-  return take.angles.map((angle) => {
+  const existing = new Map(record.attachments.map((item) => [attachmentKey(item), item]));
+  const reviewAttachments = take.angles.map((angle) => {
     const prior = existing.get(angle.clip_id) ?? existing.get(angle.media_id);
     return prior ? {
       ...attachmentFromAngle(angle),
@@ -64,7 +96,8 @@ function mergeTakeAttachments(record: SlateRecord, take: ReviewTakeGroup | null)
       camera: prior.camera || angle.camera,
       display_name: prior.display_name || angle.name,
     } : attachmentFromAngle(angle);
-  }).concat(record.attachments.filter((item) => !take.angles.some((angle) => angle.clip_id === item.clip_id || (item.media_id && angle.media_id === item.media_id))));
+  });
+  return mergeAttachments(reviewAttachments, record.attachments);
 }
 
 function draftFromRecord(record: SlateRecord, take: ReviewTakeGroup | null, xmlOrder: number): Draft {
@@ -150,7 +183,7 @@ function recordPayload(draft: Draft): Partial<SlateRecord> {
   };
 }
 
-function parsePrevious(draft: Draft): Record<string, unknown> {
+function parsePrevious(draft: Draft): Partial<SlateEntry> {
   return {
     episode: draft.episode,
     scene: draft.scene,
@@ -174,10 +207,20 @@ function primaryAttachment(draft: Draft, camera: "A" | "B" | "C" | "AUX"): { ite
   return rows[0] ? { item: rows[0], count: rows.length } : null;
 }
 
+function findReviewAngle(review: ReviewModelPayload | null, clipId: string, mediaId = ""): ReviewAngle | null {
+  if (!review) return null;
+  for (const take of review.take_groups) {
+    const angle = take.angles.find((item) => item.clip_id === clipId || (mediaId && item.media_id === mediaId));
+    if (angle) return angle;
+  }
+  return null;
+}
+
 export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
   const records = useMemo(() => new SlateRecordClient(baseUrl), [baseUrl]);
+  const slateMedia = useMemo(() => new SlateMediaClient(baseUrl), [baseUrl]);
   const [review, setReview] = useState<ReviewModelPayload | null>(null);
   const [board, setBoard] = useState<SlateBoard | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -189,6 +232,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   const [message, setMessage] = useState("正在读取多机位电子场记…");
   const [busy, setBusy] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [dropActive, setDropActive] = useState(false);
   const playerRef = useRef<HTMLVideoElement | null>(null);
 
   async function reload(preferredRecordId?: string): Promise<void> {
@@ -230,27 +274,36 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   const selectedIndex = drafts.findIndex((row) => row.record_id === selectedRecordId);
   const selected = selectedIndex >= 0 ? drafts[selectedIndex] : null;
   const selectedTake = selected?.source_group_id ? review?.take_groups.find((take) => take.group_id === selected.source_group_id) ?? null : null;
-  const selectedAngle = selectedClipId && selectedTake ? selectedTake.angles.find((angle) => angle.clip_id === selectedClipId) ?? null : null;
+  const selectedAttachment = selected?.attachments.find((item) => attachmentKey(item) === selectedClipId) ?? null;
+  const selectedAngle = selectedAttachment ? findReviewAngle(review, selectedAttachment.clip_id, selectedAttachment.media_id) : findReviewAngle(review, selectedClipId);
   const dirtyCount = drafts.filter((row) => row.dirty).length;
 
   useEffect(() => {
     if (!selected) return;
-    if (selectedClipId && selected.attachments.some((item) => item.clip_id === selectedClipId)) return;
-    setSelectedClipId(selected.preferred_clip_id || selected.attachments[0]?.clip_id || "");
+    if (selectedClipId && selected.attachments.some((item) => attachmentKey(item) === selectedClipId)) return;
+    setSelectedClipId(selected.preferred_clip_id || attachmentKey(selected.attachments[0] ?? { clip_id: "", media_id: "", camera: "", display_name: "", shot_type: "unknown", source_role: "sync_camera", note: "" }));
   }, [selected, selectedClipId]);
 
   function patchRecord(recordId: string, patch: Partial<Draft>): void {
     setDrafts((current) => current.map((row) => row.record_id === recordId ? { ...row, ...patch, dirty: true } : row));
   }
 
+  function patchAttachment(recordId: string, key: string, patch: Partial<SlateAttachment>): void {
+    setDrafts((current) => current.map((row) => row.record_id === recordId ? {
+      ...row,
+      attachments: row.attachments.map((attachment) => attachmentKey(attachment) === key ? { ...attachment, ...patch } : attachment),
+      dirty: true,
+    } : row));
+  }
+
   function selectRecord(recordId: string): void {
     const row = drafts.find((item) => item.record_id === recordId) ?? null;
     setSelectedRecordId(recordId);
-    setSelectedClipId(row?.preferred_clip_id || row?.attachments[0]?.clip_id || "");
+    setSelectedClipId(row?.preferred_clip_id || (row?.attachments[0] ? attachmentKey(row.attachments[0]) : ""));
     setParsed(null);
   }
 
-  function addBlank(seed?: Partial<Draft>): void {
+  function addBlank(seed?: Partial<Draft>): Draft {
     const row = blankDraft(seed);
     setDrafts((current) => [...current, row]);
     setSelectedRecordId(row.record_id);
@@ -258,6 +311,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
     setParsed(null);
     setQuickText("");
     setMessage("已新增空白场记；填写后保存。当前尚未写入项目。");
+    return row;
   }
 
   function nextSameScene(): void {
@@ -289,6 +343,65 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
     selectRecord(row.record_id);
     setMessage(`已定位 ${row.source_group_id}；编辑并保存后写入场记。`);
   }
+
+  function attachResolvedMedia(items: SlateResolvedMediaItem[]): void {
+    if (!items.length) return;
+    const additions = items.map(attachmentFromResolved);
+    if (selectedRecordId) {
+      setDrafts((current) => current.map((row) => row.record_id === selectedRecordId ? {
+        ...row,
+        attachments: mergeAttachments(row.attachments, additions),
+        dirty: true,
+      } : row));
+      setSelectedClipId(attachmentKey(additions[0]));
+    } else {
+      const row = blankDraft({ attachments: additions });
+      setDrafts((current) => [...current, row]);
+      setSelectedRecordId(row.record_id);
+      setSelectedClipId(attachmentKey(additions[0]));
+    }
+  }
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "enter" || event.payload.type === "over") {
+        setDropActive(true);
+        return;
+      }
+      if (event.payload.type === "leave") {
+        setDropActive(false);
+        return;
+      }
+      if (event.payload.type !== "drop") return;
+      setDropActive(false);
+      const paths = event.payload.paths;
+      if (!paths.length) return;
+      setBusy(true);
+      setMessage(`正在解析 ${paths.length} 个 Finder / Explorer 素材…`);
+      void slateMedia.resolveDrop(projectId, paths).then((payload) => {
+        if (disposed) return;
+        attachResolvedMedia(payload.items);
+        const suffix = payload.errors.length ? ` · ${payload.errors.length} 个文件未加入` : "";
+        setMessage(`已把 ${payload.items.length} 个素材加入当前场记行${suffix}；保存后才写入项目。`);
+      }).catch((error) => {
+        if (!disposed) setMessage(errorMessage(error));
+      }).finally(() => {
+        if (!disposed) setBusy(false);
+      });
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    }).catch((error) => {
+      if (!disposed) setMessage(`无法启用 Finder 拖入：${errorMessage(error)}`);
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [projectId, selectedRecordId, slateMedia]);
 
   async function saveDraft(draft: Draft, revision: number): Promise<SlateBoard> {
     if (!actor.trim()) throw new HostConnectionError("保存场记前需要操作者昵称");
@@ -325,18 +438,27 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
     if (!actor.trim()) { setMessage("保存场记前需要操作者昵称。"); return; }
     setBusy(true);
     setMessage(`正在顺序保存 ${pending.length} 行…`);
+    let nextBoard = board;
+    const savedIds = new Set<string>();
     try {
-      let nextBoard = board;
-      for (const row of pending) nextBoard = await saveDraft(row, nextBoard.revision);
-      setBoard(nextBoard);
-      setDrafts((current) => current.map((row) => {
-        const saved = nextBoard.records[row.record_id];
-        return saved ? draftFromRecord(saved, review?.take_groups.find((take) => take.group_id === saved.source_group_id) ?? null, row.xmlOrder) : row;
-      }));
+      for (const row of pending) {
+        nextBoard = await saveDraft(row, nextBoard.revision);
+        savedIds.add(row.record_id);
+      }
       setMessage(`全部保存完成 · Slate r${nextBoard.revision}`);
     } catch (error) {
       setMessage(`${errorMessage(error)}；顺序保存已停止，未执行的行保持 dirty。`);
-    } finally { setBusy(false); }
+    } finally {
+      if (savedIds.size) {
+        setBoard(nextBoard);
+        setDrafts((current) => current.map((row) => {
+          if (!savedIds.has(row.record_id)) return row;
+          const saved = nextBoard.records[row.record_id];
+          return saved ? draftFromRecord(saved, review?.take_groups.find((take) => take.group_id === saved.source_group_id) ?? null, row.xmlOrder) : row;
+        }));
+      }
+      setBusy(false);
+    }
   }
 
   async function deleteSelected(): Promise<void> {
@@ -344,7 +466,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
     if (!board.records[selected.record_id]) {
       setDrafts((current) => current.filter((row) => row.record_id !== selected.record_id));
       setSelectedRecordId(drafts[selectedIndex + 1]?.record_id || drafts[selectedIndex - 1]?.record_id || "");
-      setMessage("已移除尚未保存的空白场记。");
+      setMessage("已移除尚未保存的场记草稿；Review Take 本身没有删除。");
       return;
     }
     if (!actor.trim()) { setMessage("删除场记前需要操作者昵称。"); return; }
@@ -435,8 +557,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   function mediaCell(draft: Draft, camera: "A" | "B" | "C" | "AUX") {
     const row = primaryAttachment(draft, camera);
     if (!row) return <span className="golden-slate-empty-media">—</span>;
-    const take = draft.source_group_id ? review?.take_groups.find((item) => item.group_id === draft.source_group_id) ?? null : null;
-    const angle = take?.angles.find((item) => item.clip_id === row.item.clip_id || (row.item.media_id && item.media_id === row.item.media_id)) ?? null;
+    const angle = findReviewAngle(review, row.item.clip_id, row.item.media_id);
     const model = angle ? mediaCardFromAngle(angle, row.item) : mediaCardFromAttachment(row.item);
     model.duplicateCount = row.count;
     return <MirrorOrderMediaCard model={model} compact selected={draft.record_id === selectedRecordId && model.id === selectedClipId} preferred={draft.preferred_clip_id === model.id} onSelect={() => { selectRecord(draft.record_id); setSelectedClipId(model.id); }} />;
@@ -445,7 +566,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   const inspectorAttachments = selected?.attachments ?? [];
 
   return (
-    <section className={`golden-slate-workbench ${inspectorOpen ? "has-inspector" : ""}`}>
+    <section className={`golden-slate-workbench ${inspectorOpen ? "has-inspector" : ""} ${dropActive ? "is-file-drop-active" : ""}`}>
       <header className="golden-slate-toolbar">
         <div className="golden-slate-title">
           <p className="eyebrow">Production</p>
@@ -476,6 +597,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
 
       <div className="golden-slate-body">
         <div className="golden-slate-table-shell">
+          {dropActive ? <div className="golden-slate-drop-overlay">松开，把 Finder / Explorer 素材加入当前场记行</div> : null}
           <table className="golden-slate-table">
             <thead><tr><th className="col-index">序号</th><th className="col-number">集</th><th className="col-text">场号</th><th className="col-text">镜号</th><th className="col-number">次号</th><th className="col-media">A机</th><th className="col-media">B机</th><th className="col-media">C机</th><th className="col-media">辅助 / 特殊</th><th className="col-status">状态</th></tr></thead>
             <tbody>
@@ -495,7 +617,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
               ))}
             </tbody>
           </table>
-          {!drafts.length ? <div className="golden-slate-empty">当前没有场记记录或 Review Take。可以直接新建空白场记。</div> : null}
+          {!drafts.length ? <div className="golden-slate-empty">当前没有场记记录或 Review Take。可以直接新建空白场记，或从 Finder / Explorer 拖入素材。</div> : null}
         </div>
 
         {inspectorOpen ? (
@@ -507,16 +629,26 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
                 <div className="golden-slate-player">
                   {selectedAngle?.playback.url && selectedAngle.playback.available !== false ? (
                     <video ref={playerRef} key={selectedAngle.clip_id} src={selectedAngle.playback.url} controls preload="metadata" onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
-                  ) : <div className="golden-player-empty">选择可播放机位查看素材</div>}
+                  ) : <div className="golden-player-empty">选择已索引且可播放的机位查看素材</div>}
                 </div>
 
                 <div className="golden-inspector-media">
                   {inspectorAttachments.map((attachment) => {
-                    const angle = selectedTake?.angles.find((item) => item.clip_id === attachment.clip_id || (attachment.media_id && item.media_id === attachment.media_id)) ?? null;
+                    const key = attachmentKey(attachment);
+                    const angle = findReviewAngle(review, attachment.clip_id, attachment.media_id);
                     const model = angle ? mediaCardFromAngle(angle, attachment) : mediaCardFromAttachment(attachment);
-                    return <MirrorOrderMediaCard key={`${attachment.clip_id}-${attachment.media_id}`} model={model} selected={model.id === selectedClipId} preferred={selected.preferred_clip_id === model.id} showPreview={model.id === selectedClipId} onSelect={setSelectedClipId} onPrefer={(clipId) => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === clipId ? "" : clipId })} />;
+                    return (
+                      <div className="golden-angle-editor" key={`${attachment.clip_id}-${attachment.media_id}`}>
+                        <MirrorOrderMediaCard model={model} selected={key === selectedClipId} preferred={selected.preferred_clip_id === key} showPreview={key === selectedClipId} onSelect={setSelectedClipId} onPrefer={(clipId) => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === clipId ? "" : clipId })} />
+                        <div className="golden-angle-fields">
+                          <label><span>机位</span><input value={attachment.camera} onChange={(event) => patchAttachment(selected.record_id, key, { camera: event.target.value })} /></label>
+                          <label><span>景别</span><select value={attachment.shot_type || "unknown"} onChange={(event) => patchAttachment(selected.record_id, key, { shot_type: event.target.value })}>{SHOT_OPTIONS.map((shot) => <option value={shot} key={shot}>{shot}</option>)}</select></label>
+                          <label className="golden-angle-note"><span>素材备注</span><input value={attachment.note || ""} onChange={(event) => patchAttachment(selected.record_id, key, { note: event.target.value })} placeholder="该机位独立备注" /></label>
+                        </div>
+                      </div>
+                    );
                   })}
-                  {!inspectorAttachments.length ? <span className="golden-inspector-empty">当前行没有关联素材；独立场记允许先记录文字事实。</span> : null}
+                  {!inspectorAttachments.length ? <span className="golden-inspector-empty">当前行没有关联素材；独立场记允许先记录文字事实，也可以直接从 Finder / Explorer 拖入。</span> : null}
                 </div>
 
                 <div className="golden-io-row">
@@ -536,7 +668,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
         ) : null}
       </div>
 
-      <footer className="golden-slate-footer"><span>⌘N 新建 · ⌘S 顺序保存 · I/O 设置人工可用范围</span><span>preferred clip 是场记首选机位，不是 Editorial Best。</span></footer>
+      <footer className="golden-slate-footer"><span>⌘N 新建 · ⌘S 顺序保存 · I/O 设置人工可用范围 · Finder/Explorer 拖入附加到当前行</span><span>preferred clip 是场记首选机位，不是 Editorial Best。</span></footer>
 
       <details className="golden-slate-review-tools">
         <summary>Review 归集辅助 · 待归集 / 已归集 / 已排除 / 孤立素材 / 场景目标</summary>
