@@ -12,7 +12,7 @@ describe("sidebar project actions", () => {
     expect(library).toContain("团队审阅");
     expect(library).toContain("本机素材 / 换素材盘");
     expect(library).toContain("重整项目");
-    expect(library).toContain("Shift");
+    expect(library).toContain("event.shiftKey");
     expect(library).toContain('event.key === "F10"');
   });
 
