@@ -5,10 +5,12 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 const PERSISTENCE_VERSION: u32 = 2;
+static GENERATION_NONCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimelineDocument {
@@ -88,11 +90,17 @@ fn stable_hash(value: &str) -> u64 {
 }
 
 pub fn new_generation(project_id: &str) -> String {
+    let now_ns = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let nonce = GENERATION_NONCE.fetch_add(1, Ordering::Relaxed);
     format!(
-        "{:016x}-{:08x}-{:016x}",
-        now_ms(),
+        "{:032x}-{:08x}-{:016x}-{:016x}",
+        now_ns,
         std::process::id(),
-        stable_hash(project_id)
+        stable_hash(project_id),
+        nonce
     )
 }
 
@@ -352,6 +360,13 @@ mod tests {
     fn stable_project_key_does_not_collide_on_sanitized_names() {
         assert_ne!(safe_project_key("项目/一"), safe_project_key("项目:一"));
         assert_eq!(safe_project_key("p1"), safe_project_key("p1"));
+    }
+
+    #[test]
+    fn generations_are_unique_within_the_same_process_burst() {
+        let first = new_generation("p1");
+        let second = new_generation("p1");
+        assert_ne!(first, second);
     }
 
     #[test]
