@@ -6,7 +6,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { TimelineBridgeError, TimelineClient, type TimelineAuthority, type TimelineProject, type TimelineSnapshot } from "./timeline";
+import {
+  isTimelineAuthorityConflict,
+  TimelineBridgeError,
+  TimelineClient,
+  type TimelineAuthority,
+  type TimelineProject,
+  type TimelineSnapshot,
+} from "./timeline";
 
 const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
@@ -159,6 +166,19 @@ describe("TimelineClient", () => {
       command: { type: "set_marker", sequence_id: "main", marker: { marker_id: "m1", position: 1, label: "one" } },
       expectedAuthority: authority(2, "snapshot-generation"),
     });
+  });
+
+  it("classifies only Rust authority issues as recoverable authority conflicts", () => {
+    expect(isTimelineAuthorityConflict(new TimelineBridgeError("stale", [
+      { code: "stale_timeline_authority", path: "authority", message: "stale" },
+    ]))).toBe(true);
+    expect(isTimelineAuthorityConflict(new TimelineBridgeError("restore first", [
+      { code: "timeline_authority_required", path: "authority", message: "required" },
+    ]))).toBe(true);
+    expect(isTimelineAuthorityConflict(new TimelineBridgeError("overlap", [
+      { code: "track_overlap", path: "V1", message: "overlap" },
+    ]))).toBe(false);
+    expect(isTimelineAuthorityConflict(new Error("network"))).toBe(false);
   });
 
   it("keeps browser preview read-only", async () => {
