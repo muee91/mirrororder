@@ -11,10 +11,10 @@ import { TimelineBridgeError, TimelineClient, type TimelineAuthority, type Timel
 const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
 
-function project(): TimelineProject {
+function project(projectId = "p1"): TimelineProject {
   return {
     version: 1,
-    project_id: "p1",
+    project_id: projectId,
     sources: [],
     multicam_groups: [],
     sequences: [{ sequence_id: "main", name: "Main", frame_rate: { numerator: 24, denominator: 1 }, tracks: [{ track_id: "V1", kind: "video", clips: [] }], markers: [], transitions: [] }],
@@ -26,8 +26,8 @@ function authority(revision = 0, generation = "g1"): TimelineAuthority {
   return { generation, revision };
 }
 
-function snapshot(revision = 0, generation = "g1"): TimelineSnapshot {
-  return { project: project(), undo_depth: revision, redo_depth: 0, validation: [], authority: authority(revision, generation) };
+function snapshot(revision = 0, generation = "g1", projectId = "p1"): TimelineSnapshot {
+  return { project: project(projectId), undo_depth: revision, redo_depth: 0, validation: [], authority: authority(revision, generation) };
 }
 
 describe("TimelineClient", () => {
@@ -42,6 +42,39 @@ describe("TimelineClient", () => {
     const commands = [{ type: "set_marker" as const, sequence_id: "main", marker: { marker_id: "m1", position: 0, label: "start" } }];
     await expect(new TimelineClient().loadWithCommands(project(), commands)).resolves.toEqual(seeded);
     expect(mockedInvoke).toHaveBeenCalledWith("timeline_load_with_commands", { project: project(), commands });
+  });
+
+  it("carries the current Rust authority when replacing an already loaded project", async () => {
+    const loaded = snapshot(6, "before-reseed");
+    const replaced = { ...snapshot(0, "after-reseed"), undo_depth: 0 };
+    mockedInvoke.mockResolvedValueOnce(loaded as never).mockResolvedValueOnce(replaced as never);
+    const commands = [{ type: "set_marker" as const, sequence_id: "main", marker: { marker_id: "m1", position: 0, label: "start" } }];
+    const client = new TimelineClient();
+
+    await client.openPersisted("p1");
+    await expect(client.loadWithCommands(project(), commands)).resolves.toEqual(replaced);
+
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "timeline_load_with_commands", {
+      project: project(),
+      commands,
+      expectedAuthority: authority(6, "before-reseed"),
+    });
+  });
+
+  it("does not reuse another project's authority when seeding a new project", async () => {
+    const loaded = snapshot(3, "p1-generation", "p1");
+    const seeded = snapshot(0, "p2-generation", "p2");
+    mockedInvoke.mockResolvedValueOnce(loaded as never).mockResolvedValueOnce(seeded as never);
+    const commands = [{ type: "set_marker" as const, sequence_id: "main", marker: { marker_id: "m1", position: 0, label: "start" } }];
+    const client = new TimelineClient();
+
+    await client.openPersisted("p1");
+    await client.loadWithCommands(project("p2"), commands);
+
+    expect(mockedInvoke).toHaveBeenNthCalledWith(2, "timeline_load_with_commands", {
+      project: project("p2"),
+      commands,
+    });
   });
 
   it("opens crash-recovered project state by project id", async () => {
