@@ -18,7 +18,7 @@ interface Props {
   baseUrl: string;
   projectId: string;
   review: ReviewModelPayload | null;
-  actor: string;
+  actor?: string;
   onChanged: () => Promise<void>;
   onSelectTake?: (groupId: string) => void;
 }
@@ -30,6 +30,14 @@ function errorMessage(error: unknown): string {
 
 function needsRefresh(error: unknown): boolean {
   return error instanceof HostConnectionError && (error.status === 409 || error.message.includes("请刷新"));
+}
+
+function currentActor(fallback = ""): string {
+  try {
+    return globalThis.localStorage?.getItem("mirrororder.productionActor")?.trim() || fallback.trim();
+  } catch {
+    return fallback.trim();
+  }
 }
 
 function placementLabel(take: ReviewTakeGroup, targets: SlateSceneTarget[]): string {
@@ -64,7 +72,7 @@ function TakeCard({ take, detail, action, actionLabel, onSelect, onDragStart }: 
   );
 }
 
-export function SlatePlacementPools({ baseUrl, projectId, review, actor, onChanged, onSelectTake }: Props) {
+export function SlatePlacementPools({ baseUrl, projectId, review, actor = "", onChanged, onSelectTake }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const media = useMemo(() => new MediaRoleClient(baseUrl), [baseUrl]);
   const [inventory, setInventory] = useState<MediaInventoryItem[]>([]);
@@ -91,11 +99,12 @@ export function SlatePlacementPools({ baseUrl, projectId, review, actor, onChang
     return decodeSlateTakeDragPayload(event.dataTransfer.getData(SLATE_TAKE_MIME));
   }
 
-  async function write(action: () => Promise<unknown>, success: string): Promise<void> {
-    if (!actor.trim()) { setMessage("Review 归集操作前需要操作者昵称。"); return; }
+  async function write(action: (actorValue: string) => Promise<unknown>, success: string): Promise<void> {
+    const actorValue = currentActor(actor);
+    if (!actorValue) { setMessage("Review 归集操作前需要操作者昵称。"); return; }
     setBusy(true);
     try {
-      await action();
+      await action(actorValue);
       await onChanged();
       setMessage(success);
     } catch (error) {
@@ -113,9 +122,9 @@ export function SlatePlacementPools({ baseUrl, projectId, review, actor, onChang
     const take = takes.find((item) => item.group_id === drag.groupId);
     if (!take || isReviewExcluded(take)) { setMessage("该 Take 已排除或不在当前 Review；恢复后再归集。"); return; }
     void write(
-      () => host.setGroupPlacement(projectId, {
+      (actorValue) => host.setGroupPlacement(projectId, {
         groupId: drag.groupId,
-        actor,
+        actor: actorValue,
         expectedRevision: review.revisions.review,
         episodeIds: [target.episode],
         scriptSegmentIds: target.segmentIds,
@@ -136,12 +145,12 @@ export function SlatePlacementPools({ baseUrl, projectId, review, actor, onChang
     if (!take) return;
     if (isReviewExcluded(take)) {
       void write(
-        () => host.setGroupExclusion(projectId, { groupId: drag.groupId, actor, excluded: false, expectedRevision: review.revisions.review, sourceSurface: "golden-slate-placement-pools", sourceClipId: drag.sourceClipId }),
+        (actorValue) => host.setGroupExclusion(projectId, { groupId: drag.groupId, actor: actorValue, excluded: false, expectedRevision: review.revisions.review, sourceSurface: "golden-slate-placement-pools", sourceClipId: drag.sourceClipId }),
         `已恢复 ${drag.groupId} 到待归集`,
       );
     } else if (hasHumanPlacement(take)) {
       void write(
-        () => host.clearGroupPlacement(projectId, { groupId: drag.groupId, actor, expectedRevision: review.revisions.review, interaction: "drag", sourceSurface: "golden-slate-placement-pools", sourceKind: drag.sourceKind, sourceClipId: drag.sourceClipId }),
+        (actorValue) => host.clearGroupPlacement(projectId, { groupId: drag.groupId, actor: actorValue, expectedRevision: review.revisions.review, interaction: "drag", sourceSurface: "golden-slate-placement-pools", sourceKind: drag.sourceKind, sourceClipId: drag.sourceClipId }),
         `已清除 ${drag.groupId} 的人工归集；场记事实保留`,
       );
     } else setMessage("只有已归集或已排除 Take 可以拖回待归集。");
@@ -150,7 +159,7 @@ export function SlatePlacementPools({ baseUrl, projectId, review, actor, onChang
   function setExcluded(take: ReviewTakeGroup, excluded: boolean): void {
     if (!review) return;
     void write(
-      () => host.setGroupExclusion(projectId, { groupId: take.group_id, actor, excluded, expectedRevision: review.revisions.review, sourceSurface: "golden-slate-placement-pools", sourceClipId: take.angles[0]?.clip_id }),
+      (actorValue) => host.setGroupExclusion(projectId, { groupId: take.group_id, actor: actorValue, excluded, expectedRevision: review.revisions.review, sourceSurface: "golden-slate-placement-pools", sourceClipId: take.angles[0]?.clip_id }),
       excluded ? `已排除 ${take.group_id}；这是 Review 状态，不等于场记 NG` : `已恢复 ${take.group_id}`,
     );
   }
