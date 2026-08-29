@@ -1,27 +1,21 @@
 from __future__ import annotations
 
+import mimetypes
 import os
 import re
 import shutil
 import tempfile
 import time
 import urllib.parse
-import mimetypes
 from pathlib import Path
 from typing import Any
 
 from .automation_store import AutomationStore
 from .device_runtime_settings import (
-    application_support_root,
     load_project_intelligence_settings,
-    load_runtime_settings,
     save_project_intelligence_settings,
-    save_runtime_settings,
 )
 from .identity_library import IdentityLibrary
-from .identity_runtime import IdentityRuntime
-from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
-from .runtime_diagnostics import environment_payload
 from .workspace_db import WorkspaceDatabase
 
 _INSTALLED = False
@@ -88,39 +82,6 @@ def _replace_project_script(config_path: Path, raw_script: object) -> Path:
     return script
 
 
-def _directory_bytes(path: Path) -> int:
-    total = 0
-    try:
-        for item in path.rglob("*"):
-            if item.is_file():
-                try:
-                    total += item.stat().st_size
-                except OSError:
-                    pass
-    except OSError:
-        pass
-    return total
-
-
-def _runtime_payload() -> dict[str, Any]:
-    settings = load_runtime_settings()
-    runtime = LocalVisionRuntime(
-        LocalVisionRuntimeConfig.from_env(str(settings.get("local_vision_model", "") or ""))
-    )
-    root = application_support_root() / "models"
-    return {
-        "local_vision_enabled": bool(settings.get("local_vision_enabled")),
-        "local_vision_model": str(settings.get("local_vision_model", "") or ""),
-        "face_identity_enabled": bool(settings.get("face_identity_enabled")),
-        "speaker_identity_enabled": bool(settings.get("speaker_identity_enabled")),
-        "vision": runtime.public(),
-        "identity": IdentityRuntime.public(),
-        "mlx_cache_bytes": _directory_bytes(root / "huggingface"),
-        "model_root": str(root),
-        "environment": environment_payload(),
-    }
-
-
 def _project_relative_script(project: Any) -> str:
     try:
         relative = project.config.script.resolve().relative_to(project.config.project_dir.resolve())
@@ -177,7 +138,7 @@ def install_automation_runtime() -> None:
     if _INSTALLED:
         return
     from . import web_server
-    from .tasks import TASK_TYPES, TaskManager
+    from .tasks import TaskManager
     from .workspace import WorkspaceRegistry
 
     original_workspace_project = web_server.WorkspaceService.project
@@ -228,18 +189,7 @@ def install_automation_runtime() -> None:
         workspace_id = str(getattr(project, "workspace_id", "") or "")
         if workspace_id:
             try:
-                review = project.review.load()
-                database = WorkspaceDatabase(workspace_id)
-                database.sync_project_summary(
-                    project.project_id,
-                    name=project.config.name,
-                    input_kind=project.config.input_kind,
-                    config_path=str(project.config.config_path),
-                    analysis_revision=str(payload.get("analysis_revision", "") or ""),
-                    review_revision=int(review.get("revision", 0) or 0),
-                    stats=payload.get("stats", {}) if isinstance(payload.get("stats"), dict) else {},
-                )
-                payload["intelligence"] = database.project_intelligence(project.project_id)
+                payload["intelligence"] = WorkspaceDatabase(workspace_id).project_intelligence(project.project_id)
             except Exception:
                 payload["intelligence"] = {
                     "takes": 0,
@@ -316,10 +266,6 @@ def install_automation_runtime() -> None:
 
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
-                if parts == ["api", "v1", "local-runtime"]:
-                    self._local_only()
-                    self._send_json(_runtime_payload())
-                    return
                 if parts == ["api", "v1", "workspace-database"]:
                     self._local_only()
                     workspace = _workspace_for_service(service)
@@ -375,42 +321,6 @@ def install_automation_runtime() -> None:
                 if parts == ["api", "v1", "project-preflight"]:
                     self._local_only()
                     self._send_json(service.registry.preflight_create(web_server._body(self)))
-                    return
-                if parts == ["api", "v1", "local-runtime"]:
-                    self._local_only()
-                    payload = web_server._body(self)
-                    action = str(payload.get("action", "set") or "set")
-                    if action == "set":
-                        settings = save_runtime_settings(payload)
-                        if not settings.get("local_vision_enabled"):
-                            LocalVisionRuntime.stop()
-                    elif action == "prepare":
-                        settings = save_runtime_settings({
-                            "local_vision_enabled": True,
-                            **({"local_vision_model": payload["local_vision_model"]} if payload.get("local_vision_model") else {}),
-                        })
-                        runtime = LocalVisionRuntime(
-                            LocalVisionRuntimeConfig.from_env(str(settings.get("local_vision_model", "") or ""))
-                        )
-                        if not runtime.prepare_async():
-                            raise web_server.ApiError(
-                                web_server.HTTPStatus.SERVICE_UNAVAILABLE,
-                                runtime.public().get("last_error") or "本地视觉运行时不可用",
-                            )
-                    elif action == "prepare_identity":
-                        kind = str(payload.get("kind", "") or "")
-                        if kind not in {"face", "speaker"}:
-                            raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "身份识别类型必须是 face 或 speaker")
-                        save_runtime_settings({
-                            "face_identity_enabled" if kind == "face" else "speaker_identity_enabled": True
-                        })
-                        IdentityRuntime.prepare_async(kind)
-                    elif action == "stop":
-                        LocalVisionRuntime.stop()
-                    else:
-                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "未知本机运行时操作")
-                    response = _runtime_payload()
-                    self._send_json(response, web_server.HTTPStatus.ACCEPTED)
                     return
                 if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "identities":
                     self._local_only()
