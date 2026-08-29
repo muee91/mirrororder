@@ -1,0 +1,133 @@
+{
+  "contract": "mirrororder.golden_project.v1",
+  "project_id": "golden-mini-drama",
+  "workspace_id": "ws-golden-mini-drama",
+  "script": {
+    "segments": [
+      {"segment_id": "E1_SC1_H", "episode": 1, "scene_id": "E1_SC1", "order": 1, "type": "scene_heading", "raw_text": "1-1 客厅 日"},
+      {"segment_id": "E1_SC1_S1", "episode": 1, "scene_id": "E1_SC1", "order": 2, "type": "dialogue", "speaker": "林夏", "text": "门开了。"},
+      {"segment_id": "E1_SC1_S2", "episode": 1, "scene_id": "E1_SC1", "order": 3, "type": "dialogue", "speaker": "周川", "text": "别出声。"},
+      {"segment_id": "E1_SC2_H", "episode": 1, "scene_id": "E1_SC2", "order": 1, "type": "scene_heading", "raw_text": "1-2 走廊 日"},
+      {"segment_id": "E1_SC2_S1", "episode": 1, "scene_id": "E1_SC2", "order": 2, "type": "dialogue", "speaker": "林夏", "text": "我去看看。"},
+      {"segment_id": "E2_SC1_H", "episode": 2, "scene_id": "E2_SC1", "order": 1, "type": "scene_heading", "raw_text": "2-1 门口 夜"},
+      {"segment_id": "E2_SC1_S1", "episode": 2, "scene_id": "E2_SC1", "order": 2, "type": "dialogue", "speaker": "周川", "text": "我们走。"}
+    ]
+  },
+  "groups": [
+    {
+      "group_id": "G_E1_SC1_T1",
+      "start": 0.0,
+      "end": 10.0,
+      "duration": 10.0,
+      "members": [
+        {"clip_id": "C_E1_SC1_T1_A", "media_id": "M_E1_SC1_T1_A", "camera": "A", "name": "E1_SC1_T1_A.mov", "source_start": 0.0, "source_end": 10.0, "duration": 10.0},
+        {"clip_id": "C_E1_SC1_T1_B", "media_id": "M_E1_SC1_T1_B", "camera": "B", "name": "E1_SC1_T1_B.mov", "source_start": 0.0, "source_end": 10.0, "duration": 10.0}
+      ]
+    },
+    {
+      "group_id": "G_E1_SC1_T2",
+      "start": 12.0,
+      "end": 21.0,
+      "duration": 9.0,
+      "members": [
+        {"clip_id": "C_E1_SC1_T2_A", "media_id": "M_E1_SC1_T2_A", "camera": "A", "name": "E1_SC1_T2_A.mov", "source_start": 0.0, "source_end": 9.0, "duration": 9.0}
+      ]
+    },
+    {
+      "group_id": "G_E1_SC2_T1",
+      "start": 30.0,
+      "end": 37.0,
+      "duration": 7.0,
+      "members": [
+        {"clip_id": "C_E1_SC2_T1_A", "media_id": "M_E1_SC2_T1_A", "camera": "A", "name": "E1_SC2_T1_A.mov", "source_start": 0.0, "source_end": 7.0, "duration": 7.0},
+        {"clip_id": "C_E1_SC2_T1_B", "media_id": "M_E1_SC2_T1_B", "camera": "B", "name": "E1_SC2_T1_B.mov", "source_start": 0.0, "source_end": 7.0, "duration": 7.0}
+      ]
+    },
+    {
+      "group_id": "G_E2_SC1_T1",
+      "start": 45.0,
+      "end": 51.0,
+      "duration": 6.0,
+      "members": [
+        {"clip_id": "C_E2_SC1_T1_A", "media_id": "M_E2_SC1_T1_A", "camera": "A", "name": "E2_SC1_T1_A.mov", "source_start": 0.0, "source_end": 6.0, "duration": 6.0}
+      ]
+    },
+    {
+      "group_id": "G_UNPLACED",
+      "start": 60.0,
+      "end": 64.0,
+      "duration": 4.0,
+      "members": [
+        {"clip_id": "C_UNPLACED", "media_id": "M_UNPLACED", "camera": "A", "name": "UNPLACED.mov", "source_start": 0.0, "source_end": 4.0, "duration": 4.0}
+      ]
+    }
+  ],
+  "automation": {
+    "G_E1_SC1_T1": {"status": "auto_confirmed", "script_segment_ids": ["E1_SC1_S1", "E1_SC1_S2"], "episode_ids": [1], "confidence": 0.97},
+    "G_E1_SC1_T2": {"status": "auto_confirmed", "script_segment_ids": ["E1_SC1_S1", "E1_SC1_S2"], "episode_ids": [1], "confidence": 0.91},
+    "G_E1_SC2_T1": {"status": "needs_review", "script_segment_ids": ["E1_SC2_S1"], "episode_ids": [1], "confidence": 0.67},
+    "G_E2_SC1_T1": {"status": "auto_confirmed", "script_segment_ids": ["E2_SC1_S1"], "episode_ids": [2], "confidence": 0.95},
+    "G_UNPLACED": {"status": "unresolved", "script_segment_ids": [], "episode_ids": [], "confidence": 0.0}
+  },
+  "matches": {
+    "groups": {
+      "G_E1_SC1_T1": {"candidates": [{"candidate_id": "CAND_1", "script_segment_ids": ["E1_SC1_S1", "E1_SC1_S2"], "confidence": "exact_dialogue", "total_score": 0.97}]},
+      "G_E1_SC1_T2": {"candidates": [{"candidate_id": "CAND_2", "script_segment_ids": ["E1_SC1_S1", "E1_SC1_S2"], "confidence": "exact_dialogue", "total_score": 0.91}]},
+      "G_E1_SC2_T1": {"candidates": [{"candidate_id": "CAND_3", "script_segment_ids": ["E1_SC2_S1"], "confidence": "possible_dialogue", "total_score": 0.67}]},
+      "G_E2_SC1_T1": {"candidates": [{"candidate_id": "CAND_4", "script_segment_ids": ["E2_SC1_S1"], "confidence": "exact_dialogue", "total_score": 0.95}]}
+    },
+    "by_segment": {
+      "E1_SC1_S1": [
+        {"group_id": "G_E1_SC1_T1", "confidence": "exact_dialogue", "total_score": 0.97},
+        {"group_id": "G_E1_SC1_T2", "confidence": "exact_dialogue", "total_score": 0.91}
+      ],
+      "E1_SC1_S2": [
+        {"group_id": "G_E1_SC1_T1", "confidence": "exact_dialogue", "total_score": 0.97},
+        {"group_id": "G_E1_SC1_T2", "confidence": "exact_dialogue", "total_score": 0.91}
+      ],
+      "E1_SC2_S1": [
+        {"group_id": "G_E1_SC2_T1", "confidence": "possible_dialogue", "total_score": 0.67}
+      ],
+      "E2_SC1_S1": [
+        {"group_id": "G_E2_SC1_T1", "confidence": "exact_dialogue", "total_score": 0.95}
+      ]
+    }
+  },
+  "human_placements": [
+    {"group_id": "G_E1_SC2_T1", "episode_ids": [1], "script_segment_ids": ["E1_SC2_S1"], "actor": "场记甲"}
+  ],
+  "slate": [
+    {"group_id": "G_E1_SC1_T1", "actor": "场记甲", "entry": {"scene": "1-1", "shot": "1", "take_number": 1, "status": "partial", "note": "1秒后到7秒可用，B机位优先", "usable_range": {"start": 1.0, "end": 7.0}, "preferred_clip_id": "C_E1_SC1_T1_B"}},
+    {"group_id": "G_E1_SC1_T2", "actor": "场记甲", "entry": {"scene": "1-1", "shot": "1", "take_number": 2, "status": "ng", "note": "演员笑场"}},
+    {"group_id": "G_E2_SC1_T1", "actor": "场记甲", "entry": {"scene": "2-1", "shot": "1", "take_number": 1, "status": "usable", "note": "完整可用"}}
+  ],
+  "editorial_decisions": [
+    {"group_id": "G_E1_SC1_T1", "state": "best", "actor": "主剪"},
+    {"group_id": "G_E1_SC2_T1", "state": "keep", "actor": "主剪"},
+    {"group_id": "G_E2_SC1_T1", "state": "best", "actor": "主剪"}
+  ],
+  "audit": {
+    "G_E1_SC1_T1": {
+      "angles": {
+        "C_E1_SC1_T1_A": {"shot_type": "wide", "coverage_role": "master"},
+        "C_E1_SC1_T1_B": {"shot_type": "closeup", "coverage_role": "dialogue"}
+      },
+      "rough_cut": {"technical_usability": "good", "take_completeness": "complete", "coverage_role": "dialogue", "continuity_risk": "low"}
+    },
+    "G_E1_SC1_T2": {
+      "angles": {"C_E1_SC1_T2_A": {"shot_type": "medium", "coverage_role": "master"}},
+      "rough_cut": {"technical_usability": "good", "take_completeness": "complete", "coverage_role": "dialogue", "continuity_risk": "low"}
+    },
+    "G_E1_SC2_T1": {
+      "angles": {
+        "C_E1_SC2_T1_A": {"shot_type": "medium", "coverage_role": "master"},
+        "C_E1_SC2_T1_B": {"shot_type": "closeup", "coverage_role": "dialogue"}
+      },
+      "rough_cut": {"technical_usability": "good", "take_completeness": "complete", "coverage_role": "dialogue", "continuity_risk": "medium"}
+    },
+    "G_E2_SC1_T1": {
+      "angles": {"C_E2_SC1_T1_A": {"shot_type": "medium_closeup", "coverage_role": "dialogue"}},
+      "rough_cut": {"technical_usability": "good", "take_completeness": "complete", "coverage_role": "dialogue", "continuity_risk": "low"}
+    }
+  }
+}
