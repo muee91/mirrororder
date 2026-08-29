@@ -78,3 +78,29 @@ def test_automation_runtime_has_no_legacy_local_runtime_surface() -> None:
     assert "_runtime_payload" not in runtime
     assert "LocalVisionRuntime" not in runtime
     assert "IdentityRuntime" not in runtime
+
+
+def test_desktop_runtime_preparation_uses_device_tasks_not_unmanaged_threads() -> None:
+    runtime = (SRC / "desktop_runtime.py").read_text(encoding="utf-8")
+    assert '["api", "v1", "device-tasks"]' in runtime
+    assert '"local_vision_prepare"' in runtime
+    assert '"identity_runtime_prepare"' in runtime
+    assert ".prepare_async(" not in runtime
+    assert "initialize_device_tasks()" in runtime
+
+
+def test_device_task_module_has_no_import_time_manager_side_effect() -> None:
+    runtime = (SRC / "device_tasks.py").read_text(encoding="utf-8")
+    assert "DEVICE_TASKS = DeviceTaskManager()" not in runtime
+    assert "def initialize_device_tasks" in runtime
+    assert "manager.recover_interrupted()" in runtime
+    assert "scope\": \"device" in runtime
+
+
+def test_identity_durable_prepare_has_cooperative_cancel_points() -> None:
+    runtime = (SRC / "identity_runtime_v3.py").read_text(encoding="utf-8")
+    assert "def prepare_cancellable" in runtime
+    assert "subprocess.Popen(" in runtime
+    assert "IdentityPreparationCancelled" in runtime
+    assert "_raise_if_cancelled(cancel_requested)" in runtime
+    assert "response.read(1024 * 1024)" in runtime
