@@ -96,3 +96,16 @@ L4   GitHub CI / release automation
 ```
 
 L0.5 的 PASS 只能证明 Python/source contracts 在该 checkout 上真实执行成功；不得把它表述为 TypeScript、Vitest、Rust/Tauri、packaged runtime、真实媒体或 FCP smoke 的通过结果。`check_fast.py` 应复用 `check_python.py`，避免同一 Python smoke 清单维护两份并产生漂移。
+
+## ADR-009 — Python package 迁移按 domain slice 进行，import facade 只能短期存在
+
+- 状态：Accepted
+- 日期：2026-08-29
+
+`src/script_organizer/` 的 flat namespace 作为历史兼容区逐步收缩，不做一次性 mass move。目标边界、依赖方向和迁移顺序见 `PYTHON_PACKAGE_PLAN.md`。
+
+每个真实迁移必须使用独立 `refactor/*` worktree，一次只处理一个 coherent domain，并同时验证 source import、pytest、runtime installer、Desktop recursive staging 和 packaged import contract。当前 `fix/runtime-read-paths` 不执行真实文件搬迁。
+
+项目仍处雏形，因此**不保留废弃产品 route/API surface**。但内部 Python import facade 可以作为短期迁移脚手架，前提是它只 re-export、没有 import-time side effect，并有明确删除里程碑。新 first-party caller 不得继续增加对旧 import path 的依赖。
+
+首个建议迁移 slice 是 FCPXML adapter；Identity v2/v3/facade family 和 foundation central modules 在迁移机制经过前几个低风险 slice 验证前暂缓。
