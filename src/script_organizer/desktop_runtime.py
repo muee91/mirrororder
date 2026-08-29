@@ -69,9 +69,9 @@ def _local_runtime_payload(service: Any) -> dict[str, Any]:
         "speaker_identity_enabled": bool(settings.get("speaker_identity_enabled", False)),
         "vision": vision,
         "identity": identity,
-        # Retain the legacy field name used by the old SwiftUI status surface.
-        # The current runtime uses llama.cpp, so this is simply the device-local
-        # model cache byte count rather than a claim about a specific framework.
+        # Retain the historical field name used by the native status surface.
+        # The current runtime uses llama.cpp, so this is the lightweight cached
+        # model-size snapshot rather than a framework-specific live scan.
         "mlx_cache_bytes": int(vision.get("cache_bytes", 0) or 0),
         "model_root": str(application_support_root() / "models"),
         "environment": environment_payload([root]),
@@ -243,30 +243,24 @@ def install_desktop_runtime() -> None:
                             str(payload.get("candidate_path", "") or ""),
                         )
                         summary = store.summary(workspace_id, project.project_id, project.index)
-                    else:
-                        roots = _normalize_roots(payload.get("roots", []))
-                        if action == "replace_and_scan":
-                            store.replace_roots(workspace_id, project.project_id, roots)
-                        elif action != "scan":
-                            raise web_server.ApiError(
-                                web_server.HTTPStatus.BAD_REQUEST,
-                                "不支持的 media binding action",
-                            )
-                        if project.index.get("clips"):
-                            summary = store.scan(workspace_id, project.project_id, project.index, roots)
-                        else:
-                            summary = store.probe_roots(workspace_id, project.project_id, roots)
-                    # Re-apply device-local bindings immediately so subsequent
-                    # media/review-model reads observe the new device state.
-                    project.reload()
-                    self._send_json(
-                        {
-                            "contract": "media_binding.v1",
-                            "project_id": project.project_id,
-                            "summary": summary,
-                        }
+                        project.reload()
+                        self._send_json(
+                            {
+                                "contract": "media_binding.v1",
+                                "project_id": project.project_id,
+                                "summary": summary,
+                            }
+                        )
+                        return
+                    if action in {"scan", "replace_and_scan"}:
+                        raise web_server.ApiError(
+                            web_server.HTTPStatus.SERVICE_UNAVAILABLE,
+                            "素材扫描 durable runtime 未安装；禁止退回同步扫描",
+                        )
+                    raise web_server.ApiError(
+                        web_server.HTTPStatus.BAD_REQUEST,
+                        "不支持的 media binding action",
                     )
-                    return
                 return super()._app_post(parsed)
 
         return Handler
