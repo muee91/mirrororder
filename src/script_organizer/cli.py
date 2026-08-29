@@ -11,12 +11,11 @@ from .agent_store import AgentTokenStore
 from .analysis_runtime import analyze
 from .automation_runtime import install_automation_runtime
 from .device_media_runtime import install_device_media_runtime
-from .editorial_runtime import install_editorial_runtime
 from .runtime_diagnostics import environment_payload
 from .fcpxml_exporter import export
 from .local_vision_runtime import LocalVisionRuntime
 from .media_identity import DeviceMediaStore
-from .review_read_model import install_review_read_model_runtime
+from .runtime_stack import install_production_runtime
 from .semantic_search import SemanticSearcher
 from .tasks import TaskManager
 from .web_server import serve, serve_gateway
@@ -148,10 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "gateway":
         workspaces = [ensure_workspace_id(_workspace(value).config_path) for value in args.workspace]
-        install_device_media_runtime()
-        install_automation_runtime()
-        install_review_read_model_runtime()
-        install_editorial_runtime()
+        install_production_runtime()
         previous_sigterm = signal.getsignal(signal.SIGTERM)
 
         def stop_gateway(_signum, _frame) -> None:
@@ -174,10 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     workspace = ensure_workspace_id(_workspace(args.workspace).config_path)
 
     if args.command in {"serve", "run"}:
-        install_device_media_runtime()
-        install_automation_runtime()
-        install_review_read_model_runtime()
-        install_editorial_runtime()
+        install_production_runtime()
         previous_sigterm = signal.getsignal(signal.SIGTERM)
 
         def stop_host(_signum, _frame) -> None:
