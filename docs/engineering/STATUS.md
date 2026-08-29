@@ -16,6 +16,7 @@
 - Stage 1 — Runtime read-path safety：**70 / 100**
 - Stage 2 — Device-local model preparation durability：**72 / 100**
 - Stage 3 — Runtime installation order：**74 / 100**
+- Stage 4 — Golden production project：**76 / 100**
 - 评分只代表当前产品/工程就绪度判断，不替代 executable gate。
 
 ## 当前工作包
@@ -27,7 +28,8 @@
 | Runtime read-path safety | 源码收口 / 待本地验证 | 删除旧 `/api/v1/local-runtime` 和隐藏同步 fallback；Settings / Assistant / diagnostics 等普通读路径保持 snapshot/cache/read-only。 |
 | Device-local model preparation durability | 源码收口 / 待本地验证 | 本地视觉、Identity 模型/运行时准备进入 device-scope durable task，并统一进入 Status Center；不绑定随机项目。 |
 | Runtime install ordering | 源码收口 / 待本地验证 | Host 使用单一 runtime stack；Editorial 单职责；全栈失败可重试、禁止重入；Identity compatibility import 不再安装全局 wrapper。 |
-| Golden production project | 进行中 | 建立 synthetic/redacted 最小短剧 fixture，固定 Script → Slate → Mapping → Review → Coverage → Rough Cut → Delivery / reopen 的生产语义。 |
+| Golden production project | 源码收口 / 待本地验证 | synthetic 2 集 / 3 场 / 5 Take fixture 固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen 语义。 |
+| Delivery artifact path normalization | 进行中 | Golden 审阅发现 Selection Manifest 仍记录 Host 绝对 review/editorial artifact path；下一阶段收口。 |
 | Engineering control plane | 待本地验证 | worktree 规则、本地 gate、状态/决策/不变量文档和 repository guard 已接入；`main` 暂未修改。 |
 
 ## Stage 1 — Runtime read-path safety
@@ -65,14 +67,28 @@
 - `editorial_runtime.py` 恢复单职责，不再作为 Audit/Identity/Coverage/Desktop 等模块的隐藏 bootstrap；
 - `identity_runtime.py` compatibility import 不再执行 `install_identity_role_inference()`；Identity API installer 显式拥有该安装职责；
 - CLI `serve/run/gateway` 不再各自维护散落安装顺序；`agent-context` 保留有意的最小非 Host runtime；
-- 新增 runtime stack contract tests，覆盖失败重试、禁止重入、关键顺序和 import-time installer 副作用。
+- 新增 runtime stack contract tests，覆盖失败重试、禁止重入、关键顺序和 import-time installer 副作用；旧 Coverage/Rough Cut 测试已改为断言中央 runtime stack，不再守旧架构。
+
+## Stage 4 — Golden production project
+
+已完成源码收口：
+
+- 新增 `tests/fixtures/golden-mini-drama/scenario.json`：2 集、3 场、5 个逻辑 Take group，全为 synthetic logical IDs / filename；不保存真实媒体或设备绝对路径；
+- 场景包含双机位显式 Best、另一 Take 的 reviewer Best opinion + 场记 NG、人工 placement、Keep、不归集素材、明确 usable range 与 preferred angle；
+- 生命周期测试通过 `ReviewStore` / `ScriptSupervisorStore` / `EditorialStore` 写人工事实，而不是手写伪 authority JSON；
+- 固定 Coverage 的 effective mapping、candidate-only 禁止升级、NG 不等于 Delivery Reject、Keep 不自动升级 Best、显式 Best 才进入 Assembly primary；
+- 固定多段剧本共用同一 Take 时 Assembly 只生成一个 source block，并消费人工 1s–7s usable range 与 B 机位 preferred angle；
+- 固定 Delivery decision precedence 与 individual opinion 非 authority；
+- 重新实例化项目后 Coverage/RoughCut/Delivery 以及 Review/Editorial/Slate revision 必须稳定；
+- Golden contract 已进入 `scripts/check_fast.py` 的 Python production smoke 集合；
+- 本阶段明确没有覆盖 Rust Timeline authoritative command/reopen；已进入后续 Timeline golden lifecycle 工作包。
 
 ## 当前验证状态
 
 针对 `fix/runtime-read-paths`：
 
-- Source / diff review：PASS（仅代表已审阅分支 diff 和关键 runtime contract）
-- Stage 1–3 新增及更新 tests：已写入，**NOT RUN**
+- Source / diff review：PASS（仅代表已审阅分支 diff 和关键 runtime/production contract）
+- Stage 1–4 新增及更新 tests：已写入，**NOT RUN**
 - 临时环境直接 clone 分支：NOT RUN（运行环境无外网 DNS，无法获得完整 checkout）
 - `python scripts/check_fast.py`：NOT RUN
 - `python scripts/check_full.py`：NOT RUN
@@ -83,20 +99,20 @@
 
 ## 下一工作包
 
-### P1 — Golden production project
+### P1 — Delivery artifact path normalization
 
-目标：建立最小、合成、脱敏、可重建的短剧项目，固定生产闭环语义，而不是继续只依赖分散单元测试。
+目标：`delivery.v1` 的可持久化/可共享 manifest 不携带 Host 设备绝对路径。
 
-覆盖：
+重点：
 
-- 多集剧本与 scene/segment identity；
-- 多 Take / 多机位、NG/Keep/Best、孤立/辅助素材；
-- 人工场记与 placement；
-- Review / Editorial Decision 边界；
-- Coverage / continuity；
-- Rough Cut / Assembly proposal；
-- Delivery 输入与 reopen 后 revision/staleness 语义；
-- fixture 不保存真实媒体、设备绝对路径、模型 cache 或真实制作内容。
+- `manual_review_path` / `editorial_path` 改为项目相对或逻辑 artifact reference；
+- FCPXML source provenance 区分共享 source identity 与 Host-local source path；
+- path-safety contract 禁止 `/Volumes/...`、`/Users/...`、Windows 盘符进入共享 manifest；
+- 保持 FCPXML 实际导出仍可在 Host 内部使用真实本地路径，不把路径放进同步 artifact。
+
+### P2 — Timeline golden lifecycle
+
+为 Rust Timeline Core 增加 seed → edit command → undo/redo → serialize/reopen 的最小 golden command sequence，并保持 Python/React 无 Timeline authority。
 
 ### P2 — Python package migration plan
 
