@@ -295,7 +295,7 @@ def test_coverage_never_leaks_host_paths_or_infers_missing_shot_types(tmp_path: 
 def test_static_coverage_runtime_and_app_boundary() -> None:
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "coverage_runtime.py").read_text(encoding="utf-8")
-    editorial_runtime = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
+    runtime_stack = (root / "src" / "script_organizer" / "runtime_stack.py").read_text(encoding="utf-8")
     ui = (root / "web" / "coverage_ui.js").read_text(encoding="utf-8")
     css = (root / "web" / "coverage.css").read_text(encoding="utf-8")
     index = (root / "web" / "index.html").read_text(encoding="utf-8")
@@ -305,7 +305,7 @@ def test_static_coverage_runtime_and_app_boundary() -> None:
     assert 'self._agent("read", project_id)' in runtime
     assert '"write": False' in runtime
     assert '"delivery_authority": False' in runtime
-    assert editorial_runtime.index("install_audit_runtime()") < editorial_runtime.index("install_coverage_runtime()") < editorial_runtime.index("install_assistant_runtime()")
+    assert runtime_stack.index("install_audit_runtime()") < runtime_stack.index("install_coverage_runtime()") < runtime_stack.index("install_assistant_runtime()")
 
     assert "window.webkit?.messageHandlers?.mirrorOrder" in ui
     assert "projectApi('/coverage')" in ui
