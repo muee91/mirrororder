@@ -6,10 +6,11 @@
 
 - 主线：本地 `main@eb905cee72daeab1b7ee9a93b29435bc5e0bdc79`；`origin/main@4e112efebf70159ff2d1ef91b530947e5efb7c3e`
 - 稳定化基线：`fix/runtime-read-paths`
-- 当前功能链：`feature/timeline-audio-ux`，基于已完成的 Timeline source/edit/delivery/audio 分支继续演进。
-- 当前功能链相对本地 `main`：160 commits ahead / 0 behind；这不是允许原样进入主线的集成历史。
+- 已验证功能基线：`feature/timeline-audio-ux@20d0febdd226d551628f9f11b4285d9b6efacdd6`。
+- 当前恢复分支：`feature/swift-golden-product-parity`，从上述 Stage 17 基线独立演进；不直接合并到 `main`。
+- 当前恢复分支相对 Stage 17 基线：0 behind；当前 source diff 仅涉及 React/TS 产品层、Python local adapters/contracts 与工程文档，没有修改 Rust Timeline Core / Timeline bridge / Delivery authority。
 - GitHub Actions：当前无可用 status checks；不作为已通过 gate。
-- 当前原则：源码审阅不能替代 executable validation；未执行的 gate 一律 `NOT RUN`。
+- 当前原则：源码审阅不能替代 executable validation；未在当前 parity 分支执行的 gate 一律 `NOT RUN`，不得继承 Stage 17 基线的 PASS。
 
 ## 产品就绪度
 
@@ -32,73 +33,79 @@
 | Stage 14 — Authoritative Timeline → Delivery | 91 |
 | Stage 15 — Timeline multicam synchronization | 92 |
 | Stage 16 — Timeline audio semantics | **93** |
-| Stage 17 — Audio editing UX | **源码完成；native/FCP 阻塞，不计入关闭** |
+| Stage 17 — Audio editing UX | 源码完成；native/FCP 阻塞，不计入关闭 |
+| Stage 18 — Swift Golden product parity | **source candidate；当前分支 gates NOT RUN，暂不加分** |
 
-评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。
+评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。当前官方评分仍为 **93/100**。
 
-## 当前已收口的关键能力
+## 当前 parity 已接回的产品能力
 
-- Media Inventory 与 Waveform 的重工作已进入 durable task；普通 GET 只读 cache/snapshot。
-- Local Vision / Identity 模型准备属于 device-scope durable task，并统一进入 Status Center。
-- Production Host 使用单一 `runtime_stack` 安装编排；安装失败可重试，import 不再偷偷修改全局 runtime。
-- Synthetic Golden Project 固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen 语义。
-- Delivery 持久化 artifact 只保存逻辑引用；设备绝对路径仅存在于 localhost runtime response。
-- Rust Timeline 以 `generation + journal revision` 作为 authority token，保护 replacement/edit/undo/redo/checkpoint，并覆盖 journal replay / reopen。
-- Timeline Desktop 在 stale/authority-required 冲突时恢复最新 persisted Rust snapshot，但不自动重放失败编辑；已有 Timeline 从 Rough Cut 重建必须二次确认。
-- Timeline source pool 把当前 Review 中所有可播放 angle 注册为人工可选素材，但只有 `explicit_best` 自动进入 Rough Cut Timeline；非 Best 只有用户明确 Insert/Overwrite 后才获得 Timeline authority。
-- Source Monitor 支持独立 source preview、Source cursor、逐帧微调、Mark In/Out，并受 Review playable range ∩ persisted media duration 约束。
-- Timeline multicam synchronization evidence 使用版本化 `multicam_sync_v1` 持久化在 Rust-owned `TimelineClip.metadata`；Program Monitor 与 Delivery 使用同一同步证据，缺失/损坏时 fail closed。
-- Authoritative Timeline Delivery 从 Rust persisted snapshot 生成 FCPXML，保留 split / trim / move / Insert / Overwrite / selected angle，不从 Review 再推导另一条时间线。
-- Independent A-track 使用现有 Rust Timeline audio track 和标准 commands；FCPXML 导出为 connected audio-only `asset-clip`，视频资产的 embedded audio 继续 linked 保留。
-- Timeline audio delivery 已有独立 source/track/range/overlap/no-audio fail-closed contract；Delivery UI 已显示 audio track/clip 数和真实导出语义。
-- Git tracked workspace/shared structured fixture 有 device-path leakage guard；ignored 用户 workspace 不参与扫描。
-- `scripts/check_python.py` 可独立执行 Python compile + production contract smoke；`check_fast.py` 复用该入口。
-- `PYTHON_PACKAGE_PLAN.md` 已固定 flat namespace 的目标 ownership、依赖方向、slice 顺序、临时 import facade 与 staging/package contract；尚未执行 mass move。
-- `INTEGRATION_PLAN.md` 已固定综合功能链的本地 gate → squash integration worktree → 复验 → 单一主线 commit 流程。
+- Workspace 恢复后先进入 Project Home，不再自动钻入上次项目；最近项目和全局工具仍在 Sidebar。
+- Golden 多机位电子场记成为 Production 主场记：A/B/C/辅助列、独立空白记录、直接集/场/镜/次编辑、从 Take 加入、同场下一条、同上、dirty row 与顺序保存。
+- Slate Inspector 已恢复：播放器、全部机位、I/O 可用范围、每机位 camera/shot/note 编辑、首选机位、场记备注、Take/剧本关系；`preferred_clip_id` 明确不等于 Editorial Best。
+- Finder/Explorer 显式拖素材进入场记：只在 drop POST 解析 device-local media identity，项目持久化仍只保存 `media_id / clip_id` 等逻辑身份。
+- Review placement 已降回辅助区：待归集 / 已归集 / 已排除 / 孤立素材 / 场景目标保留，但不再拥有第二张生产场记表。
+- Material / Script 三栏产品结构恢复：左粗归集/精确剧本，中素材 Take，右 Take Inspector。
+- 粗归集保持 `preview → human confirm → Review authority`；确认必须携带当前 Review revision，stale 预览 409 且 batch 零写入。
+- `MirrorOrderMediaCard` 成为 Slate / Take / Inspector 共用视觉契约；`AngleEvidenceCard` 仅剩 ReviewAngle → MediaCard 适配，不再独立渲染素材状态。
+- 项目右键恢复 Team Review、Finder/Explorer、本机素材/换素材盘、重整项目；重整只提交 durable `prepare_project` 并转到 Status Center。
+- `本机素材` 成为正式 Production 页面，复用已有 DeviceMedia binding authority。
+- Slate 播放快捷键恢复：Space 播放/暂停、J 后退 1 秒、K 暂停、L 正向播放；不伪造 WebView 不可靠的负 playback rate。
+- Desktop Appearance 独立于 Team Web：System / Light / Dark 仅存 device-local storage；显式主题 root override 晚于 feature CSS 加载，覆盖 Project Home / Production / Slate / Material-Script / Status / Settings / Team Review 外壳。
+- `project-local-location` 仅用于本机显式 reveal；GET 只读 registry + `project.toml`，不读 media binding snapshot，不做 scan/hash/FFmpeg/model/network work。
+- 长期 parity 契约记录于 `docs/engineering/SWIFT_GOLDEN_PARITY.md`。
 
-## 已执行的局部验证证据
+## Authority 保持不变
+
+- Python MirrorOrder Core 仍拥有 Workspace/Project、Review、Slate/Script Supervisor、media identity/binding、Identity、Assistant proposals 与 Delivery semantics。
+- Rust Timeline Core 仍拥有 Timeline edit state、authority token、undo/redo、checkpoint/journal；Stage 18 没有修改其源码。
+- React/Tauri 只负责产品 UI、device integration 与显式用户动作，不成为第二真相。
+- AI 继续遵守 `evidence → proposal → human confirmation → authority`。
+- device-local path 只允许出现在明确 local response/action，不进入 shared project artifacts。
+
+## Stage 17 基线已执行的验证证据
+
+以下证据属于 `feature/timeline-audio-ux`/其验证工作树，**不自动覆盖当前 parity 分支**：
 
 - Stage 14 Timeline→FCPXML converter contract：11/11 pytest PASS。
-- Stage 15 Timeline sync normalizer + Stage 14 converter 组合：15/15 pytest PASS。
+- Stage 15 Timeline sync normalizer + Stage 14 converter：15/15 pytest PASS。
 - Stage 15 TS synchronization core：`tsc --strict` + runtime assertions PASS。
-- Stage 16 Timeline audio + Stage 14/15 converter 组合：21/21 pytest PASS。
+- Stage 16 Timeline audio + Stage 14/15 converter：21/21 pytest PASS。
 - Stage 16 Desktop audio command core：`tsc --strict` + runtime assertions PASS。
-- 上述结果都是精确子集验证，不等于整仓 gate。
+- `python scripts/check_python.py`：PASS，66 passed。
+- `python scripts/check_fast.py`：PASS，28 个 Vitest 文件/130 tests，Rust Timeline 10、Tauri timeline 5、Tauri persistence 7、Python 66。
+- `python scripts/check_full.py`：PASS，448 passed，1 个第三方 deprecation warning。
+- runtime staging、`verify:rc`、macOS Tauri build、`verify:macos-bundle`：PASS。
+- packaged Host/project/durable-task/cancel/restart/path-free smoke：部分 PASS；见 `docs/verification/2026-08-29-production-readiness.md`。
 
-## 当前未完成的代码项
+## 当前 parity 分支验证状态
 
-当前没有待完成的 Stage 17 代码接线；`TimelineWorkbench` 已接入四个 Video/Audio Source edit 动作，Audio 仍只通过 Rust A1 authority 写入。
-
-## 当前 P1 — Executable validation and integration
-
-- `python scripts/check_python.py`：PASS，66 passed，1.24s。
-- `python scripts/check_fast.py`：PASS，28 个 Vitest 文件/130 tests，Rust Timeline 10、Tauri timeline 5、Tauri persistence 7、Python 66，8.53s。
-- `python scripts/check_full.py`：PASS，448 passed，1 个第三方 deprecation warning，125.36s。
-- packaged runtime staging、`verify:rc`、Tauri macOS build、`verify:macos-bundle`：PASS。
-- packaged Host/project/durable-task/cancel/restart/path-free smoke：部分 PASS；详见 `docs/verification/2026-08-29-production-readiness.md`。
-- packaged 已建立 Timeline 的 checkpoint/journal reopen、stale authority UI recovery、真实 media playback、LAN/Finder smoke：NOT RUN。
-- Final Cut Pro 不存在；真实媒体与 FCPXML import 全部 NOT RUN。
-- 未创建 squash integration worktree；未生成新的 main commit。不能继承 feature branch 的 PASS。
-
-## 下一 P2
-
-- Program Monitor A/V clock 与音频监听：当前 Timeline 已有音频 authority 和 Delivery 语义，但实时监听/同步还未达到 NLE 成熟度。
-- Source browser scalability：大项目需要 Take 分组、搜索、camera/episode/scene filter；不能复制 Review decision authority。
-- First Python package migration slice：主线集成和 executable gates 完成后，独立 `refactor/python-fcpxml-package` worktree。
-- Validation ergonomics：记录真实 python/fast/full gate 耗时与失败分类。
-
-## 当前验证状态
-
-- Source / diff review：已完成；`git diff --check`：PASS。
-- Python converter/audio 局部 contracts：PASS；见上方证据。
-- `python scripts/check_python.py`：**PASS**，66 passed。
-- `python scripts/check_fast.py`：**PASS**，TS/Vitest/Rust/Tauri/Python 全部通过。
-- `python scripts/check_full.py`：**PASS**，448 passed，1 个第三方 deprecation warning。
-- `npm install`、runtime staging、`verify:rc`、macOS Tauri build、`verify:macos-bundle`：**PASS**。
-- Packaged Host/project/durable-task/cancel/restart/path-free smoke：**部分 PASS**；详见验证报告。
-- Packaged Timeline checkpoint/journal reopen、stale authority UI recovery、真实 media/LAN/Finder：**NOT RUN**。
-- Final Cut Pro / real media / authoritative FCPXML import smoke：**NOT RUN**，本机没有 Final Cut Pro。
+- Source / diff scope review：已完成当前功能边界审计；相对 Stage 17 基线未发现 Rust Timeline Core / Timeline bridge / Delivery authority 修改。
+- Python parity contract files：已写入，但 **NOT RUN**。
+- TypeScript typecheck / Vitest（含 parity、appearance、project actions、rough placement、playback shortcuts）：**NOT RUN**。
+- `python scripts/check_python.py`：**NOT RUN on parity branch**。
+- `python scripts/check_fast.py`：**NOT RUN on parity branch**。
+- `python scripts/check_full.py`：**NOT RUN on parity branch**。
+- Rust/Tauri executable gates：**NOT RUN on parity branch**；本轮未改 Rust authority，但不能继承旧 PASS。
+- packaged Desktop / native Finder drag-drop / appearance / real media smoke：**NOT RUN on parity branch**。
+- Final Cut Pro / real authoritative FCPXML import smoke：**NOT RUN**。
 - codesign/notarization、Windows native/installer gates、GitHub Actions：**NOT RUN**。
+
+## 当前尚未接回的 Golden 能力
+
+### Native speech / dictation
+
+- 不使用 Web Speech API 冒充已恢复：Tauri macOS 使用 WKWebView，嵌入式 Web Speech 的可用性历史上不可靠。
+- 当前可行路线需要独立的 microphone permission + local/native STT 生命周期（例如现有 ASR 复用或经过审计的 Tauri/local Whisper bridge）。
+- 该能力单独进入后续 device-runtime slice；在完成模型/权限/任务生命周期和真实 native smoke 前不计入 parity 完成。
+
+## 下一步
+
+1. 在完整 checkout 上运行 parity 分支的 TypeScript/Vitest 与 Python source gate，修复所有真实失败。
+2. 再跑 fast/full，确认新增 runtime wrapper 顺序、read-path 与产品 source contracts 没有破坏已有基线。
+3. 运行 packaged Desktop smoke：Project Home、Golden Slate、Finder drop、项目右键、本机素材、Appearance、Status Center。
+4. 语音听写独立分支实现，不与当前 parity source candidate 混为一体。
+5. 只有当前 parity 分支 gates 真实 PASS 后，才重新评估 Stage 18 分数与 integration/squash 路径。
 
 ## 状态维护规则
 
