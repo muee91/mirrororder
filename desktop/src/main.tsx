@@ -5,6 +5,7 @@ import { initializeDesktopAppearance } from "./app/desktopAppearance";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 import "./styles.css";
 import "./desktop-theme.css";
+import "./desktop-theme-tools.css";
 
 initializeDesktopAppearance();
 
