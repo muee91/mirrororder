@@ -19,6 +19,7 @@
 - Stage 4 — Golden production project：**76 / 100**
 - Stage 5 — Delivery artifact path normalization：**77 / 100**
 - Stage 6 — Rust Timeline authority lifecycle：**80 / 100**
+- Stage 7 — Repository tracked-data leakage guard：**81 / 100**
 - 评分只代表当前产品/工程就绪度判断，不替代 executable gate。
 
 ## 当前工作包
@@ -32,7 +33,8 @@
 | Runtime install ordering | 源码收口 / 待本地验证 | Host 使用单一 runtime stack；Editorial 单职责；全栈失败可重试、禁止重入；Identity compatibility import 不再安装全局 wrapper。 |
 | Golden production project | 源码收口 / 待本地验证 | synthetic 2 集 / 3 场 / 5 Take fixture 固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen 语义。 |
 | Delivery artifact path normalization | 源码收口 / 待本地验证 | delivery.v1 v4 / export report v2 只持久化逻辑 artifact ref；Desktop localhost response 才解析本机绝对路径。 |
-| Timeline authority lifecycle | 源码收口 / 待本地验证 | Rust generation + journal revision 成为 stale-edit token；golden lifecycle 覆盖 edit / undo / redo / replay / checkpoint / reopen。 |
+| Timeline authority lifecycle | 源码收口 / 待本地验证 | Rust generation + journal revision 统一保护 edit、undo/redo、checkpoint 与已有 Timeline replacement；golden lifecycle 覆盖 replay / reopen。 |
+| Repository tracked-data leakage guard | 源码收口 / 待本地验证 | fast gate 扫描 Git tracked workspace/shared structured fixture；ignored 本地 workspace 不参与扫描。 |
 | Engineering control plane | 待本地验证 | worktree 规则、本地 gate、状态/决策/不变量文档和 repository guard 已接入；`main` 暂未修改。 |
 
 ## Stage 1 — Runtime read-path safety
@@ -104,20 +106,33 @@
 
 - Tauri Timeline bridge 直接复用持久化层的 `generation + journal sequence` 形成 `TimelineAuthority`，没有在 Python 或 React 再造第二套 revision；
 - `apply` / `apply_batch` / `undo` / `redo` / `checkpoint` 必须携带上一份完整 Rust snapshot 返回的 `expected_authority`；过期 token 在 journal append 前以 `stale_timeline_authority` fail closed；
-- `TimelineClient` 只在创建、恢复、刷新或 mutation 返回完整 snapshot 时更新 authority；`persistenceStatus()` 即使看到更新 revision 也只用于展示，不能授予新的编辑 token；
+- 已有 Timeline 的 `timeline_load` / `timeline_load_with_commands` 也属于 authority replacement：同项目替换必须携带当前 token；进程内未加载但磁盘已持久化的项目必须先 `openPersisted`，不能用 proposal/seed 绕过 stale guard；
+- 初次创建或给全新、未持久化 project 建立 seed 可以不携带 authority；两个并发初次 seed 中只有先获得 manager mutex 并提交 checkpoint 的请求能成功，后一个会因 authority 已建立而 fail closed；
+- replacement 的 authority 校验、checkpoint 写入、内存 manager 替换在同一 Timeline mutex 临界区完成，避免“先校验后被另一命令改写”的 TOCTOU 窗口；
+- `TimelineClient` 只在创建、恢复、刷新或 mutation 返回完整 snapshot 时更新 authority，并记录 authority 所属 project；切换到全新 project 不会误带旧项目 token；`persistenceStatus()` 只用于展示；
 - manual checkpoint 会建立新 generation 并清空 snapshot undo/redo history，使 checkpoint 前窗口、Inspector 或旧 snapshot token 自动失效；
 - generation 使用高分辨率时间、PID、project hash 和进程内原子 nonce，避免同一进程同一时间窗口连续 checkpoint 发生 generation 重复；
 - checkpoint 的 atomic replace 一旦成功即视为 durable authority；journal truncate 只做 best-effort compaction，失败不会造成“磁盘已切 generation、内存仍停旧 generation”的分叉；
 - Rust golden lifecycle 固定 24000/1001 timebase、Trim、Split、MulticamSwitch、Overwrite、Undo、Redo、journal replay、checkpoint、reopen，并验证 authoritative project 等价；
 - fast gate 执行 Timeline Core 全部 lib tests、Tauri `timeline::tests::` 与 `persistence::tests::`，不使用可能出现 0 tests 假通过的 `--exact` 过滤方式。
 
+## Stage 7 — Repository tracked-data leakage guard
+
+已完成源码收口：
+
+- `projects/` 的 Git tracked 内容继续只允许 `projects/.gitkeep`；真实 registry、project config、review/output/cache 等 runtime workspace 不允许重新进入源码 Git；
+- leakage guard 通过 `git ls-files` 只检查真实 tracked 文件，不遍历 ignored 用户 workspace；
+- `workspace.toml` 与 `tests/fixtures/` 中 JSON/TOML/YAML/CSV 等共享结构化数据会拒绝 `/Users/...`、`/Volumes/...`、`/home/...`、`file:///...` 和 Windows drive absolute path；
+- 文档和源码中的规则说明不进入该内容扫描，避免因为工程文档本身展示禁止示例而产生假阳性；
+- guard 已包含在 fast gate 的 `tests/test_repository_layout_guard.py` 中；非 Git archive 环境会明确 skip tracked-content 子检查，而不是声称 PASS。
+
 ## 当前验证状态
 
 针对 `fix/runtime-read-paths`：
 
 - Source / diff review：PASS（仅代表已审阅分支 diff 和关键 runtime/production contract）
-- Stage 1–6 新增及更新 tests：已写入，**NOT RUN**
-- 当前会话运行环境没有完整 Git checkout / Desktop 依赖，无法把 source review 冒充 executable validation
+- Stage 1–7 新增及更新 tests：已写入，**NOT RUN**
+- 当前会话运行环境没有完整 Git checkout / Desktop 依赖，且容器无法解析 GitHub DNS；无法把 source review 冒充 executable validation
 - `python scripts/check_fast.py`：NOT RUN
 - `python scripts/check_full.py`：NOT RUN
 - Native packaged runtime smoke：NOT RUN
@@ -129,7 +144,7 @@
 
 ### P1 — Local executable validation and integration stabilization
 
-目标：停止继续用源码审阅代替运行事实；在完整本地 checkout 上验证当前 6 个阶段能同时成立，再决定是否进入 `main`。
+目标：停止继续用源码审阅代替运行事实；在完整本地 checkout 上验证当前 7 个阶段能同时成立，再决定是否进入 `main`。
 
 重点：
 
