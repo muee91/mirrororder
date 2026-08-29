@@ -16,6 +16,14 @@ import {
 import { EditorMonitors } from "./EditorMonitors";
 import { clampPlayhead } from "./editorPlayback";
 import { buildRoughCutTimelineProposal } from "./timelineSeed";
+import {
+  buildManualSourceCommand,
+  buildTimelineSourceOptions,
+  insertCutsExistingClip,
+  validateManualSourceRange,
+  type ManualSourceEditMode,
+  type TimelineSourceOption,
+} from "./timelineSourceEditing";
 
 interface Props {
   baseUrl: string;
@@ -68,6 +76,9 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const [selectedClipId, setSelectedClipId] = useState("");
   const [playhead, setPlayhead] = useState(0);
   const [moveStart, setMoveStart] = useState(0);
+  const [sourceId, setSourceId] = useState("");
+  const [sourceIn, setSourceIn] = useState(0);
+  const [sourceDuration, setSourceDuration] = useState(1);
   const [rateNumerator, setRateNumerator] = useState("");
   const [rateDenominator, setRateDenominator] = useState("");
   const [replaceProposalArmed, setReplaceProposalArmed] = useState(false);
@@ -89,6 +100,10 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setPersistence(null);
     setSelectedClipId("");
     setPlayhead(0);
+    setMoveStart(0);
+    setSourceId("");
+    setSourceIn(0);
+    setSourceDuration(1);
     setRateNumerator("");
     setRateDenominator("");
     setReplaceProposalArmed(false);
@@ -151,11 +166,33 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const timebaseDetected = plan?.timebase?.status === "confirmed";
   const sequence = activeSequence(snapshot);
   const selection = findClip(snapshot, selectedClipId);
+  const sourceOptions = useMemo(
+    () => snapshot && sequence ? buildTimelineSourceOptions(review, snapshot.project, sequence) : [],
+    [review, sequence, snapshot],
+  );
+  const sourceOption = sourceOptions.find((option) => option.source.source_id === sourceId) ?? null;
+  const sourceRangeError = validateManualSourceRange(sourceOption, sourceIn, sourceDuration);
+  const insertBlocked = sequence ? insertCutsExistingClip(sequence, playhead) : false;
   const maxEnd = Math.max(1, ...(sequence?.tracks.flatMap((track) => track.clips.map((clip) => clip.timeline_start + clip.duration)) ?? [1]));
   const selectedMulticamGroupId = selection?.clip.multicam_group_id ?? null;
   const selectedMulticam = selectedMulticamGroupId
     ? snapshot?.project.multicam_groups.find((group) => group.group_id === selectedMulticamGroupId) ?? null
     : null;
+
+  useEffect(() => {
+    if (!sourceOptions.length) {
+      setSourceId("");
+      setSourceIn(0);
+      setSourceDuration(1);
+      return;
+    }
+    if (sourceOptions.some((option) => option.source.source_id === sourceId)) return;
+    const selectedSourceId = selection?.clip.selected_angle_source_id ?? selection?.clip.source_id ?? "";
+    const next = sourceOptions.find((option) => option.source.source_id === selectedSourceId) ?? sourceOptions[0];
+    setSourceId(next.source.source_id);
+    setSourceIn(next.availableIn);
+    setSourceDuration(next.availableDuration);
+  }, [selection?.clip.selected_angle_source_id, selection?.clip.source_id, sourceId, sourceOptions]);
 
   const changePlayhead = useCallback((frame: number) => {
     if (!sequence) {
@@ -168,6 +205,25 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const stepPlayhead = useCallback((frames: number) => {
     setPlayhead((current) => sequence ? clampPlayhead(sequence, current + frames) : Math.max(0, current + frames));
   }, [sequence]);
+
+  function chooseSource(option: TimelineSourceOption): void {
+    setSourceId(option.source.source_id);
+    setSourceIn(option.availableIn);
+    setSourceDuration(option.availableDuration);
+  }
+
+  function selectTimelineClip(clip: TimelineClip): void {
+    setSelectedClipId(clip.clip_id);
+    setMoveStart(clip.timeline_start);
+    changePlayhead(clip.timeline_start);
+    const activeSourceId = clip.selected_angle_source_id ?? clip.source_id;
+    const option = sourceOptions.find((item) => item.source.source_id === activeSourceId);
+    if (option) {
+      setSourceId(option.source.source_id);
+      setSourceIn(clip.source_in);
+      setSourceDuration(clip.duration);
+    }
+  }
 
   function adoptEditedSnapshot(next: TimelineSnapshot): void {
     setSnapshot(next);
@@ -240,6 +296,30 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  function editFromSource(mode: ManualSourceEditMode): void {
+    if (!snapshot || !sequence || !sourceOption) {
+      setMessage("需要先选择一个可播放 Source。");
+      return;
+    }
+    if (sourceRangeError) {
+      setMessage(sourceRangeError);
+      return;
+    }
+    if (mode === "insert" && insertBlocked) {
+      setMessage("Insert 播放头位于现有视频片段内部；请先切分，或改用 Overwrite。");
+      return;
+    }
+    try {
+      const command = buildManualSourceCommand(mode, snapshot, sequence, sourceOption, sourceIn, sourceDuration, playhead);
+      void apply(
+        command,
+        `${mode === "insert" ? "Insert" : "Overwrite"} 完成 · ${sourceOption.label} · ${frameLabel(sourceDuration)} @ ${frameLabel(playhead)}`,
+      );
+    } catch (error) {
+      setMessage(errorMessage(error));
     }
   }
 
@@ -364,12 +444,58 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
             </span>
           </div>
 
+          <div className="timeline-source-edit production-panel">
+            <div className="parse-heading">
+              <div>
+                <p className="eyebrow">Source → Program</p>
+                <strong>人工 Insert / Overwrite</strong>
+              </div>
+              <span>{sourceOptions.length} 个可播放 Source</span>
+            </div>
+            {sourceOption ? (
+              <>
+                <div className="timeline-source-fields">
+                  <label className="production-field">
+                    <span>Source</span>
+                    <select
+                      value={sourceOption.source.source_id}
+                      onChange={(event) => {
+                        const next = sourceOptions.find((option) => option.source.source_id === event.target.value);
+                        if (next) chooseSource(next);
+                      }}
+                    >
+                      {sourceOptions.map((option) => <option value={option.source.source_id} key={option.source.source_id}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="production-field">
+                    <span>Source In</span>
+                    <input type="number" min={0} step={1} value={sourceIn} onChange={(event) => setSourceIn(Math.max(0, Math.round(Number(event.target.value) || 0)))} />
+                  </label>
+                  <label className="production-field">
+                    <span>Duration</span>
+                    <input type="number" min={1} step={1} value={sourceDuration} onChange={(event) => setSourceDuration(Math.max(1, Math.round(Number(event.target.value) || 1)))} />
+                  </label>
+                </div>
+                <div className="proposal-warnings">
+                  <span>可用范围 {frameLabel(sourceOption.availableIn)}–{frameLabel(sourceOption.availableIn + sourceOption.availableDuration)} · 目标 {frameLabel(playhead)}</span>
+                  {sourceRangeError ? <span>⚠️ {sourceRangeError}</span> : null}
+                  {insertBlocked ? <span>Insert 位置位于现有片段内部；先切分或使用 Overwrite。</span> : null}
+                </div>
+                <div className="timeline-edit-actions">
+                  <button type="button" className="secondary" disabled={busy || Boolean(sourceRangeError) || insertBlocked} onClick={() => editFromSource("insert")}>Insert @ {frameLabel(playhead)}</button>
+                  <button type="button" disabled={busy || Boolean(sourceRangeError)} onClick={() => editFromSource("overwrite")}>Overwrite @ {frameLabel(playhead)}</button>
+                </div>
+              </>
+            ) : <p className="empty-copy">当前 Timeline 没有已注册的可播放 Source。先从 Review / Rough Cut 建立 source pool。</p>}
+          </div>
+
           <EditorMonitors
             baseUrl={baseUrl}
             projectId={projectId}
             project={snapshot.project}
             sequence={sequence}
             selectedClip={selection?.clip ?? null}
+            sourcePreview={sourceOption ? { source: sourceOption.source, frame: sourceIn } : null}
             playhead={playhead}
             onPlayheadChange={changePlayhead}
             onStepFrames={stepPlayhead}
@@ -386,7 +512,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
                       className={`timeline-clip ${clip.clip_id === selectedClipId ? "is-selected" : ""} ${clip.enabled ? "" : "is-disabled"}`}
                       key={clip.clip_id}
                       style={{ left: `${(clip.timeline_start / maxEnd) * 100}%`, width: `${Math.max(1.5, (clip.duration / maxEnd) * 100)}%` }}
-                      onClick={() => { setSelectedClipId(clip.clip_id); setMoveStart(clip.timeline_start); changePlayhead(clip.timeline_start); }}
+                      onClick={() => selectTimelineClip(clip)}
                       title={`${clip.clip_id}\n${clip.timeline_start}–${clip.timeline_start + clip.duration}f`}
                     >
                       <strong>{clip.metadata.segment_id || clip.clip_id}</strong>
@@ -426,7 +552,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
                   <label className="production-field">
                     <span>多机位角度</span>
                     <select value={selection.clip.selected_angle_source_id ?? ""} onChange={(event) => { if (event.target.value) void apply({ type: "multicam_switch", sequence_id: sequence.sequence_id, clip_id: selection.clip.clip_id, source_id: event.target.value }, `已切换机位 → ${event.target.value}`); }}>
-                      {selectedMulticam.angle_source_ids.map((sourceId) => <option value={sourceId} key={sourceId}>{sourceId.replace(/^source:/, "")}</option>)}
+                      {selectedMulticam.angle_source_ids.map((nextSourceId) => <option value={nextSourceId} key={nextSourceId}>{nextSourceId.replace(/^source:/, "")}</option>)}
                     </select>
                   </label>
                 ) : null}
