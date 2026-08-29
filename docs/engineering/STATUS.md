@@ -23,7 +23,8 @@
 | Stage 6 — Rust Timeline authority lifecycle | 80 |
 | Stage 7 — Repository tracked-data leakage guard | 81 |
 | Stage 8 — Python-only source gate | 82 |
-| Stage 9 — Python package boundary plan | **83** |
+| Stage 9 — Python package boundary plan | 83 |
+| Stage 10 — Integration stabilization audit | **84** |
 
 评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。
 
@@ -38,12 +39,14 @@
 - Git tracked workspace/shared structured fixture 有 device-path leakage guard；ignored 用户 workspace 不参与扫描。
 - `scripts/check_python.py` 可独立执行 Python compile + production contract smoke；`check_fast.py` 复用该入口。
 - `PYTHON_PACKAGE_PLAN.md` 已固定 flat namespace 的目标 ownership、依赖方向、slice 顺序、临时 import facade 与 staging/package contract；当前分支明确不执行 mass move。
+- `INTEGRATION_PLAN.md` 已固定当前综合分支的本地 gate → squash integration worktree → 复验 → 单一主线 commit 流程；禁止直接把 100+ 个机械 API commits 合入 `main`。
 
 ## 当前验证状态
 
 针对 `fix/runtime-read-paths`：
 
 - Source / diff review：**PASS**（仅代表源码/contract 已审阅）
+- 当前分支相对 main 的最终范围审计：约 50+ files / 100+ Contents API commits；**需要 squash integration，不适合原样 merge**
 - `scripts/check_python.py` 本身：`py_compile` **PASS**（当前会话临时目录）
 - `scripts/check_python.py` 在不完整临时目录执行：**EXPECTED FAIL**，因 contract tests 缺失而退出 1；证明缺材料时 fail closed，不等于仓库测试已执行
 - Python production contract smoke：**NOT RUN**（当前环境没有完整 checkout）
@@ -66,15 +69,20 @@ python scripts/check_fast.py
 python scripts/check_full.py
 ```
 
-要求：
+全部通过后按 `INTEGRATION_PLAN.md`：
 
-- 失败回到对应 contract 修复，不允许通过删除/跳过测试取得绿灯；
-- fast/full 都真实通过后再决定如何把当前大分支整理、squash 并集成到 `main`；
-- packaged/native smoke 仍是独立验收层，不由 source gate 冒充。
+1. 从稳定 `main` 建 `integration/production-readiness-1` worktree；
+2. `git merge --squash fix/runtime-read-paths`；
+3. 审阅 staged final diff；
+4. 在 integration tree 重新执行 python/fast/full gates；
+5. 形成一个语义完整的 production-readiness 主线 commit；
+6. 未执行 native/package smoke 的部分继续明确为 `NOT RUN`。
+
+任何失败都回到对应 contract 修复，不允许通过删除/跳过测试取得绿灯。
 
 ## 下一 P2
 
-- First Python package migration slice：通过当前大分支 executable gates 后，独立 `refactor/python-fcpxml-package` worktree，按 `PYTHON_PACKAGE_PLAN.md` 迁 FCPXML adapter；不与产品功能混改。
+- First Python package migration slice：当前大分支成功集成后，独立 `refactor/python-fcpxml-package` worktree，按 `PYTHON_PACKAGE_PLAN.md` 迁 FCPXML adapter；不与产品功能混改。
 - Validation ergonomics：有完整 checkout 后记录 python/fast/full 的典型耗时和失败分类，再决定是否需要更窄 smoke。
 
 ## 状态维护规则
