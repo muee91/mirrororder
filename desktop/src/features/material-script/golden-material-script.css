@@ -1,0 +1,62 @@
+.golden-material-script { display: grid; height: 100%; min-height: 0; grid-template-rows: auto auto auto minmax(0,1fr); color: #dbe2e7; background: #0b0f13; }
+.golden-ms-toolbar { display: grid; grid-template-columns: minmax(220px,1fr) auto auto; gap: 14px; align-items: center; min-height: 56px; border-bottom: 1px solid #252d35; padding: 8px 12px; background: #11171c; }
+.golden-ms-toolbar h2 { margin: 2px 0 1px; font-size: 15px; }
+.golden-ms-toolbar > div:first-child > span { display: block; overflow: hidden; color: #6f7c87; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.golden-ms-mode { display: flex; border: 1px solid #303943; border-radius: 7px; padding: 2px; background: #0b1014; }
+.golden-ms-mode button { min-width: 84px; border: 0; padding: 5px 8px; color: #73808b; background: transparent; font-size: 9px; }
+.golden-ms-mode button.is-active { color: #e0e7ec; background: #202a33; }
+.golden-ms-actor { display: grid; gap: 3px; color: #74818c; font-size: 7px; }
+.golden-ms-actor input { width: 100px; border: 1px solid #303943; border-radius: 6px; padding: 6px 7px; color: #d9e1e7; background: #0a0f13; font-size: 9px; }
+.golden-ms-rough-entry { display: grid; grid-template-columns: auto minmax(260px,1fr) auto auto; gap: 7px; align-items: center; border-bottom: 1px solid #252d35; padding: 7px 10px; background: #0e1419; }
+.golden-ms-rough-entry > div:first-child { display: grid; gap: 1px; }
+.golden-ms-rough-entry strong { color: #cbd4db; font-size: 9px; }
+.golden-ms-rough-entry span { color: #6f7c87; font-size: 7px; }
+.golden-ms-rough-entry input { border: 1px solid #303943; border-radius: 6px; padding: 7px 8px; color: #d7dfe5; background: #090e12; font-size: 9px; }
+.golden-ms-rough-entry button { padding: 6px 8px; font-size: 8px; }
+.golden-ms-preview { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 5px; }
+.golden-ms-preview span { border-radius: 999px; padding: 3px 6px; color: #c8d7e6; background: #18283a; font-size: 8px; }
+.golden-ms-write { min-height: 25px; border-bottom: 1px solid #252d35; padding: 6px 10px; color: #6e7b86; background: #0c1115; font-size: 8px; }
+.golden-ms-write.write-error { color: #d68181; }
+.golden-ms-write.write-saving { color: #d2b45f; }
+.golden-ms-columns { display: grid; min-height: 0; grid-template-columns: minmax(280px, 360px) minmax(390px,1fr) minmax(300px, 350px); }
+.golden-ms-target-pane { min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid #28313a; background: #0f151a; }
+.golden-ms-target-pane > header { display: grid; gap: 2px; border-bottom: 1px solid #273039; padding: 9px 10px; }
+.golden-ms-target-pane > header strong { color: #cbd3d9; font-size: 9px; }
+.golden-ms-target-pane > header span { color: #6d7a85; font-size: 7px; line-height: 1.4; }
+.golden-ms-episode-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(66px,1fr)); gap: 5px; padding: 9px; }
+.golden-ms-episode-grid button { display: grid; gap: 2px; border-color: #303943; padding: 7px 6px; color: #9ba7b0; background: #151c22; font-size: 8px; }
+.golden-ms-episode-grid button small { color: #66737d; font-size: 7px; }
+.golden-ms-episode-grid button.is-active { border-color: #4d7cac; color: #dcecff; background: #17283a; }
+.golden-ms-episode-grid button.is-drop-target { box-shadow: inset 0 0 0 1px rgba(88,150,222,.22); }
+.golden-ms-target-note { margin: 0 9px; border-top: 1px solid #273039; padding: 9px 1px; color: #66737e; font-size: 8px; line-height: 1.55; }
+.golden-ms-episode-strip { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid #273039; padding: 7px; }
+.golden-ms-episode-strip button { flex: 0 0 auto; border-color: #303943; padding: 5px 7px; color: #798691; background: #151c22; font-size: 8px; }
+.golden-ms-episode-strip button.is-active { border-color: #4d7cac; color: #dbeaff; background: #17283a; }
+.golden-ms-script-scroll { height: calc(100% - 83px); overflow: auto; }
+.golden-ms-script-scroll .script-episode { min-width: 0; }
+.golden-ms-pool-pane { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0,1fr); background: #0b0f13; }
+.golden-ms-pool-pane > header { display: grid; gap: 7px; border-bottom: 1px solid #273039; padding: 8px 9px; }
+.golden-ms-pool-pane > header > div:first-child { display: flex; align-items: center; justify-content: space-between; }
+.golden-ms-pool-pane > header strong { color: #cbd3d9; font-size: 9px; }
+.golden-ms-pool-pane > header span { color: #6c7984; font-size: 8px; }
+.golden-ms-filters { display: flex; flex-wrap: wrap; gap: 4px; }
+.golden-ms-filters button { display: flex; align-items: center; gap: 5px; border-color: #303943; padding: 4px 6px; color: #75828d; background: #12181d; font-size: 8px; }
+.golden-ms-filters button small { color: #5e6b76; font-size: 7px; }
+.golden-ms-filters button.is-active { border-color: #405b76; color: #cbd9e7; background: #18222c; }
+.golden-ms-take-list { min-height: 0; }
+.golden-ms-take-list .take-virtual-scroll { height: 100%; }
+.golden-ms-columns > .take-inspector { min-width: 0; min-height: 0; overflow-y: auto; border-left: 1px solid #28313a; }
+.golden-ms-empty, .golden-ms-loading { display: grid; min-height: 180px; place-items: center; padding: 20px; color: #697681; font-size: 9px; }
+
+@media (max-width: 1220px) {
+  .golden-ms-columns { grid-template-columns: 290px minmax(360px,1fr) 300px; }
+}
+
+@media (prefers-color-scheme: light) {
+  .golden-material-script, .golden-ms-pool-pane { color: #27323b; background: #f7f8fa; }
+  .golden-ms-toolbar, .golden-ms-rough-entry, .golden-ms-target-pane { border-color: #d7dee4; background: #f2f5f7; }
+  .golden-ms-toolbar, .golden-ms-rough-entry, .golden-ms-write, .golden-ms-target-pane, .golden-ms-columns > .take-inspector { border-color: #d7dee4; }
+  .golden-ms-mode, .golden-ms-actor input, .golden-ms-rough-entry input { border-color: #cfd7df; color: #27313a; background: #fff; }
+  .golden-ms-mode button.is-active, .golden-ms-episode-grid button.is-active, .golden-ms-episode-strip button.is-active { color: #234c74; background: #e1effe; }
+  .golden-ms-episode-grid button, .golden-ms-episode-strip button, .golden-ms-filters button { border-color: #d5dde4; color: #596773; background: #fff; }
+}
