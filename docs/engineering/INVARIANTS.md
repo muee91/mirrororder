@@ -37,12 +37,15 @@
 - 普通 GET / page open / object switch / Inspector expand 只消费 cache、snapshot 或 lightweight read model。
 - 重工作由显式用户动作提交 durable task，并进入 Status Center。
 - durable task 目标保持 path-free；设备绝对路径留在 device-local state/request 中。
-- 取消尽可能传递到资源等待和外部子进程。
+- project-scope 与 device-scope durable task 分域；模型下载、本机可选运行时安装和模型加载不得为了复用项目 API 绑定到任意 project_id。
+- Host 重启后，前一个 runner 的 queued/running 设备任务必须恢复为明确的 `interrupted` / retryable 状态，不能假装仍在运行。
+- 取消尽可能传递到资源等待、下载循环、模型校验和外部子进程。
 
 ### MUST NOT
 
 - 从普通 GET 偷偷执行全目录媒体枚举、长 hash/stat 循环、FFmpeg/FFprobe、模型下载/加载、全项目 embedding/index rebuild 或分钟级 provider/network call。
-- 在项目页复制第二套完整 durable-task controller；Status Center 是唯一全局任务控制面。
+- 在项目页、设置页或设备 runtime 页复制第二套完整 durable-task controller；Status Center 是唯一全局任务控制面。
+- 将设备绝对路径、模型 cache root、provider secret 写入 device-task target。
 
 ## Authority 不变量
 
@@ -66,7 +69,7 @@ evidence → proposal → human confirmation → authority
 ### MUST NOT
 
 - 提交真实 `projects/registry.json`、`project.toml`、制作剧本/FCPXML/XML、副本、cache、output、review/tasks/locks。
-- 提交 `/Volumes/...`、`/Users/...`、Windows 盘符等真实设备绝对路径到共享项目 artifact 或源码 Git。
+- 提交 `/Volumes/...`、`/Users/...`、Windows 盘符等真实设备绝对路径到共享项目 artifact、源码 Git 或 durable task target。
 - 把模型 API Key / secret 写进 workspace、project、review、audit、editorial 或同步产物。
 
 ## Python package 不变量
