@@ -1,0 +1,91 @@
+.golden-slate-workbench { display: grid; height: 100%; min-height: 0; grid-template-rows: auto auto minmax(0,1fr) auto; color: #dbe2e7; background: #0b0f13; }
+.golden-slate-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 58px; border-bottom: 1px solid #252d35; padding: 8px 12px; background: #11171c; }
+.golden-slate-title { min-width: 0; }
+.golden-slate-title h2 { margin: 2px 0 1px; font-size: 16px; font-weight: 670; }
+.golden-slate-title > span { display: block; max-width: 480px; overflow: hidden; color: #6f7d88; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.golden-slate-actions { display: flex; align-items: center; gap: 6px; }
+.golden-slate-actions input { width: 96px; border: 1px solid #303944; border-radius: 6px; padding: 6px 7px; color: #dce3e8; background: #0c1115; font-size: 9px; }
+.golden-slate-actions button { min-height: 30px; padding: 5px 8px; font-size: 9px; }
+.golden-slate-actions button.is-active { border-color: #4a76a8; color: #cce1fb; background: #18283a; }
+
+.golden-slate-quick { display: grid; grid-template-columns: minmax(260px,1fr) auto; gap: 8px; border-bottom: 1px solid #252d35; padding: 7px 10px; background: #0e1419; }
+.golden-slate-quick textarea { width: 100%; min-height: 46px; resize: vertical; border: 1px solid #2d3740; border-radius: 7px; padding: 7px 8px; color: #d7dfe5; background: #090e12; font-size: 10px; line-height: 1.45; }
+.golden-slate-quick-actions { display: flex; align-items: center; gap: 5px; }
+.golden-slate-quick-actions button { padding: 6px 8px; font-size: 9px; }
+.golden-slate-parse { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto minmax(0,1fr); gap: 8px; align-items: baseline; border-top: 1px solid #26303a; padding-top: 6px; color: #87939e; font-size: 9px; }
+.golden-slate-parse strong { color: #d8b96d; }
+.golden-slate-parse span { color: #c7d0d7; }
+.golden-slate-parse small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.golden-slate-body { display: grid; min-height: 0; grid-template-columns: minmax(0,1fr); }
+.golden-slate-workbench.has-inspector .golden-slate-body { grid-template-columns: minmax(680px,1fr) 340px; }
+.golden-slate-table-shell { min-width: 0; min-height: 0; overflow: auto; }
+.golden-slate-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 9px; }
+.golden-slate-table thead { position: sticky; z-index: 8; top: 0; }
+.golden-slate-table th { height: 31px; border-right: 1px solid #283039; border-bottom: 1px solid #323b44; padding: 4px 6px; color: #8e9aa4; background: #141a20; font-size: 8px; font-weight: 650; text-align: left; }
+.golden-slate-table td { height: 62px; border-right: 1px solid #20272e; border-bottom: 1px solid #20272e; padding: 4px; background: #0d1216; vertical-align: middle; }
+.golden-slate-table tr:hover td { background: #11181e; }
+.golden-slate-table tr.is-selected td { background: #122033; }
+.golden-slate-table tr.is-dirty td:first-child { box-shadow: inset 2px 0 #d1a84c; }
+.golden-slate-table .col-index { width: 52px; text-align: center; }
+.golden-slate-table .col-number { width: 58px; }
+.golden-slate-table .col-text { width: 76px; }
+.golden-slate-table .col-media { width: 164px; }
+.golden-slate-table .col-status { width: 88px; }
+.golden-slate-table td.col-index strong { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.golden-slate-table td.col-index small { display: block; margin-top: 2px; color: #7c8994; font-size: 7px; }
+.golden-slate-table input, .golden-slate-table select { width: 100%; border: 1px solid transparent; border-radius: 5px; padding: 5px 5px; color: #d7dee4; background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; }
+.golden-slate-table input:hover, .golden-slate-table input:focus, .golden-slate-table select:hover, .golden-slate-table select:focus { border-color: #34414c; background: #0a0f13; }
+.golden-slate-table td.col-media .mo-media-card { margin: 0 auto; }
+.golden-slate-empty-media { display: grid; place-items: center; color: #4f5d68; }
+.golden-slate-empty { display: grid; min-height: 240px; place-items: center; color: #75828d; font-size: 10px; }
+
+.golden-slate-inspector { min-width: 0; overflow: auto; border-left: 1px solid #2a323a; padding: 10px; background: #10161b; }
+.golden-inspector-head { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+.golden-inspector-head strong { display: block; margin-top: 2px; color: #dfe6eb; font-size: 10px; line-height: 1.45; }
+.golden-inspector-head > span { border-radius: 999px; padding: 2px 6px; color: #87949f; background: #1d252c; font-size: 8px; white-space: nowrap; }
+.golden-slate-player { display: grid; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; place-items: center; border: 1px solid #2b343d; border-radius: 8px; background: #06090b; }
+.golden-slate-player video { width: 100%; height: 100%; object-fit: contain; }
+.golden-player-empty { color: #66737d; font-size: 9px; }
+.golden-inspector-media { display: grid; gap: 6px; margin: 9px 0; }
+.golden-inspector-media .mo-media-card { width: 100%; }
+.golden-inspector-empty { padding: 12px 4px; color: #687681; font-size: 9px; }
+.golden-io-row { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 5px; align-items: end; margin: 9px 0; }
+.golden-io-row button { min-height: 31px; padding: 5px 7px; font-size: 8px; }
+.golden-io-row label, .golden-inspector-field { display: grid; gap: 4px; color: #75838e; font-size: 8px; }
+.golden-io-row input, .golden-inspector-field input, .golden-inspector-field textarea { width: 100%; border: 1px solid #303a43; border-radius: 6px; padding: 6px 7px; color: #d8e0e6; background: #0a0f13; font-size: 9px; }
+.golden-inspector-field { margin-top: 8px; }
+.golden-inspector-field textarea { resize: vertical; line-height: 1.45; }
+.golden-inspector-link { display: grid; gap: 3px; margin-top: 9px; border-top: 1px solid #28313a; padding-top: 8px; }
+.golden-inspector-link > span { color: #6f7c87; font-size: 8px; }
+.golden-inspector-link strong { color: #d2dae0; font-size: 9px; }
+.golden-inspector-link small { color: #74818c; font-size: 8px; line-height: 1.45; }
+.golden-inspector-actions { display: flex; gap: 6px; margin-top: 10px; }
+.golden-inspector-actions button { flex: 1; font-size: 8px; }
+button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b1212; }
+
+.golden-slate-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 27px; border-top: 1px solid #252d35; padding: 5px 10px; color: #697681; background: #0d1216; font-size: 8px; }
+.golden-slate-review-tools { border-top: 1px solid #252d35; background: #0e1317; }
+.golden-slate-review-tools > summary { cursor: pointer; padding: 9px 11px; color: #8b98a3; font-size: 9px; }
+.golden-slate-review-tools[open] { max-height: 72vh; overflow: auto; }
+.golden-slate-review-note { border-top: 1px solid #242c34; border-bottom: 1px solid #242c34; padding: 7px 11px; color: #74818b; font-size: 8px; }
+
+@media (max-width: 1260px) {
+  .golden-slate-workbench.has-inspector .golden-slate-body { grid-template-columns: minmax(620px,1fr) 310px; }
+  .golden-slate-actions button:nth-of-type(1) { display: none; }
+}
+
+@media (prefers-color-scheme: light) {
+  .golden-slate-workbench { color: #27323b; background: #f7f8fa; }
+  .golden-slate-toolbar, .golden-slate-quick, .golden-slate-inspector { background: #f3f5f7; }
+  .golden-slate-toolbar, .golden-slate-quick, .golden-slate-inspector, .golden-slate-footer, .golden-slate-review-tools { border-color: #d7dee4; }
+  .golden-slate-title > span, .golden-slate-footer { color: #6f7d88; }
+  .golden-slate-actions input, .golden-slate-quick textarea, .golden-io-row input, .golden-inspector-field input, .golden-inspector-field textarea { border-color: #cfd7de; color: #26313a; background: #fff; }
+  .golden-slate-table th { border-color: #d7dee4; color: #65727d; background: #e9edf1; }
+  .golden-slate-table td { border-color: #e0e5e9; background: #fff; }
+  .golden-slate-table tr:hover td { background: #f6f8fa; }
+  .golden-slate-table tr.is-selected td { background: #edf5ff; }
+  .golden-slate-table input, .golden-slate-table select { color: #26313a; }
+  .golden-slate-table input:hover, .golden-slate-table input:focus, .golden-slate-table select:hover, .golden-slate-table select:focus { border-color: #c9d2da; background: #fff; }
+  .golden-slate-review-tools { background: #f4f6f8; }
+}
