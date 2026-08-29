@@ -48,14 +48,15 @@ def main() -> None:
         DESKTOP,
     )
     run(
-        "Rust Timeline bridge golden lifecycle",
+        "Rust Timeline bridge contracts",
         CARGO,
-        [
-            "test",
-            "--manifest-path",
-            "src-tauri/Cargo.toml",
-            "golden_timeline_lifecycle_replays_undo_redo_and_reopens_deterministically",
-        ],
+        ["test", "--manifest-path", "src-tauri/Cargo.toml", "timeline::tests::"],
+        DESKTOP,
+    )
+    run(
+        "Rust Timeline persistence contracts",
+        CARGO,
+        ["test", "--manifest-path", "src-tauri/Cargo.toml", "persistence::tests::"],
         DESKTOP,
     )
     run(
