@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,9 +39,20 @@ LEGACY_ROOT_ARCHITECTURE_DOCS = (
     "SYNC_MODEL.md",
 )
 
+SHARED_STRUCTURED_SUFFIXES = {".json", ".toml", ".yaml", ".yml", ".csv", ".tsv"}
+DEVICE_PATH_PATTERNS = (
+    re.compile(r"(?<![A-Za-z0-9])/(?:Users|Volumes|home)/[^\s\"']+"),
+    re.compile(r"(?i)file:///(?:Users|Volumes|home)/[^\s\"']+"),
+    re.compile(r"(?i)(?<![A-Za-z0-9])[A-Z]:\\[^\s\"']+"),
+)
 
-def _git_ls_files(path: str) -> list[str]:
-    if not (ROOT / ".git").exists() or shutil.which("git") is None:
+
+def _git_available() -> bool:
+    return (ROOT / ".git").exists() and shutil.which("git") is not None
+
+
+def _git_ls_files(path: str = ".") -> list[str]:
+    if not _git_available():
         return []
     result = subprocess.run(
         ["git", "-C", str(ROOT), "ls-files", "--", path],
@@ -47,6 +61,28 @@ def _git_ls_files(path: str) -> list[str]:
         check=True,
     )
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _shared_structured_tracked_files() -> list[str]:
+    tracked = _git_ls_files(".")
+    if not tracked:
+        return []
+    result: list[str] = []
+    for relative in tracked:
+        path = Path(relative)
+        if relative == "workspace.toml":
+            result.append(relative)
+            continue
+        if path.parts[:2] == ("tests", "fixtures") and path.suffix.lower() in SHARED_STRUCTURED_SUFFIXES:
+            result.append(relative)
+    return sorted(result)
+
+
+def _device_path_matches(text: str) -> list[str]:
+    matches: list[str] = []
+    for pattern in DEVICE_PATH_PATTERNS:
+        matches.extend(match.group(0) for match in pattern.finditer(text))
+    return matches
 
 
 def test_cross_layer_architecture_docs_have_one_home() -> None:
@@ -68,7 +104,7 @@ def test_live_workspace_projects_are_not_source_repository_files() -> None:
     assert any(line.strip() == "projects/*" for line in ignore.splitlines())
     assert any(line.strip() == "!projects/.gitkeep" for line in ignore.splitlines())
     assert (ROOT / "projects" / ".gitkeep").is_file()
-    if (ROOT / ".git").exists() and shutil.which("git") is not None:
+    if _git_available():
         assert _git_ls_files("projects") == ["projects/.gitkeep"]
 
 
@@ -76,8 +112,22 @@ def test_repository_workspace_descriptor_is_path_neutral() -> None:
     workspace = (ROOT / "workspace.toml").read_text(encoding="utf-8")
     assert 'registry = "./projects/registry.json"' in workspace
     assert 'web_directory = "./web"' in workspace
-    for device_path_marker in ("/Volumes/", "/Users/", "C:\\Users\\"):
-        assert device_path_marker not in workspace
+    assert _device_path_matches(workspace) == []
+
+
+def test_tracked_shared_structured_data_has_no_device_absolute_paths() -> None:
+    if not _git_available():
+        pytest.skip("tracked-file leakage guard requires a Git checkout")
+
+    violations: list[str] = []
+    for relative in _shared_structured_tracked_files():
+        path = ROOT / relative
+        text = path.read_text(encoding="utf-8")
+        matches = _device_path_matches(text)
+        if matches:
+            violations.append(f"{relative}: {', '.join(sorted(set(matches)))}")
+
+    assert violations == [], "tracked shared data leaked device-local absolute paths:\n" + "\n".join(violations)
 
 
 def test_repository_entry_docs_point_to_normalized_paths() -> None:
