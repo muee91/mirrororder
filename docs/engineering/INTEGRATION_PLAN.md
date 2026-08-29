@@ -1,36 +1,32 @@
 # Production Readiness Integration Plan
 
-状态：**Prepared / merge blocked by executable gates**  
+状态：**Prepared / merge blocked by executable and native gates**  
 日期：2026-08-29
 
-## 背景
+## 当前候选树
 
-`fix/runtime-read-paths` 从 `main@4e112efebf70159ff2d1ef91b530947e5efb7c3e` 开始，经过远端 Contents API 逐文件推进，目前形成大量机械小提交。最终 diff 是可审阅的工程工作包，但提交历史不是适合进入 `main` 的形态。
+- `main`: `4e112efebf70159ff2d1ef91b530947e5efb7c3e`
+- 当前最终候选功能链：`feature/timeline-audio-ux`
+- 当前 Stage 17 文档/Delivery 状态 commit：`2f219ff7e7e6f51733003a7ce1dff0af35328d1e`
+- 当前候选树相对 `main`：约 147 个开发/API 小提交，0 behind
+- `main` 仍未修改
 
-截至制定本计划时：
+这些提交记录了 Stage 1–17 的逐步实现和远端 API 写入历史，但**不是适合直接进入主线的提交历史**。最终进入 `main` 的对象必须是经过完整本地 gate、native smoke 和重新验证的最终树。
 
-- branch：`fix/runtime-read-paths`
-- merge base：`main@4e112ef...`
-- changed files：约 50
-- branch commits：约 105 个 Contents/API 小提交
-- `main`：仍未修改
+## 禁止直接 merge 当前开发历史
 
-**不得直接把这 100+ 个机械提交 merge 到 `main`。**
+不得把 100+ 个机械/API 小提交原样 merge 到 `main`。原因：
 
-## 为什么不在远端直接 squash
+- 多个 Stage 修改同一 runtime / Timeline / Delivery 文件；
+- 中间提交包含后来被纠正的过渡设计；
+- 当前远端环境没有完整 executable evidence；
+- 只有最终树经过真实 gates 才能作为主线证据。
 
-当前环境没有完整 checkout，也没有可执行 Rust/Node toolchain。远端重写 branch history 会同时带来：
+不要为了“提交看起来更小”人为构造未经验证的中间状态。
 
-- 无法在 squash 后真实运行 local gates；
-- force-push / commit graph 重写风险；
-- 很难证明重构后的每个中间 commit 都可构建；
-- 当前多个 Stage 修改同一文件，按历史 stage 强拆 commit 可能制造从未真实存在过的半状态。
+## 前置条件
 
-因此采用**本地最终树验证后 squash integration**，而不是在 GitHub API 上重放 100+ 个 commit。
-
-## 集成前置条件
-
-必须在完整本地 checkout 的 `fix/runtime-read-paths` 上真实执行：
+在完整 checkout 上检出最终候选分支后，先完成 Stage 17 的唯一剩余 UI 接线，再运行：
 
 ```bash
 python scripts/check_python.py
@@ -38,29 +34,64 @@ python scripts/check_fast.py
 python scripts/check_full.py
 ```
 
-只有实际成功才可以记录 PASS。任一失败都在当前 branch 修复并重跑，不通过删除测试、关闭 guard 或跳过 Rust/Tauri 来取绿灯。
-
-涉及真实应用验收时，source gates 之后仍需单独执行适用的 packaged/native smoke：
-
-- packaged macOS/Windows runtime；
-- real media / FFmpeg / FFprobe；
-- LAN / Team Web；
-- FCPXML / Final Cut Pro；
-- installer / reopen / crash recovery。
-
-## 推荐集成方式
-
-### 1. 保留工作分支作为原始审计历史
-
-不要先删除或 force-push `fix/runtime-read-paths`。它保留 Stage 1–9 的逐步修改证据。
-
-可选在本地/远端创建只读归档引用：
+Desktop 可单独执行：
 
 ```bash
-git branch archive/production-readiness-20260829 fix/runtime-read-paths
+cd desktop
+npm install
+npm run typecheck
+npm test
+npm run build
+cargo test --manifest-path src-tauri/crates/timeline-core/Cargo.toml --lib
+cargo test --manifest-path src-tauri/Cargo.toml timeline::tests::
+cargo test --manifest-path src-tauri/Cargo.toml persistence::tests::
+cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-### 2. 从稳定 main 创建 integration worktree
+只有实际成功才记录 PASS。失败必须修代码并重跑，禁止删除测试、降低 guard、跳过 Rust/Tauri 或把 `0 tests` 当成功。
+
+## Native / packaged 验证
+
+Source gates 通过后仍必须单独验证：
+
+- `npm run stage:runtime`
+- `npm run verify:rc`
+- `npm run tauri -- build`（macOS 主验证环境）
+- `npm run verify:macos-bundle`
+- packaged App 启动 / reopen / crash-recovery smoke
+- real media / FFmpeg / FFprobe
+- device task submit / cancel / restart recovery
+- Team Web / LAN 基本 smoke（若本次发布包含）
+- Timeline → FCPXML → Final Cut Pro 真实导入
+- embedded audio + independent A1 connected-audio playback
+
+Packaged/native/FCP smoke 未运行时必须继续写 `NOT RUN`。
+
+## 推荐最终集成方式
+
+### 1. 保留开发分支作为审计历史
+
+不要先删除 `fix/runtime-read-paths`、Timeline feature branches 或 `feature/timeline-audio-ux`。
+
+可选建立归档 tag/branch：
+
+```bash
+git branch archive/production-readiness-20260829 feature/timeline-audio-ux
+```
+
+### 2. 在最终候选分支先跑 gates
+
+```bash
+git switch feature/timeline-audio-ux
+git pull --ff-only
+python scripts/check_python.py
+python scripts/check_fast.py
+python scripts/check_full.py
+```
+
+全部成功后再继续。
+
+### 3. 从干净 main 建 integration worktree
 
 ```bash
 git switch main
@@ -69,17 +100,15 @@ git worktree add ../mirrororder-integration -b integration/production-readiness-
 cd ../mirrororder-integration
 ```
 
-### 3. 只带入最终树，不 cherry-pick 105 个机械提交
+### 4. 只带入最终树
 
 ```bash
-git merge --squash fix/runtime-read-paths
+git merge --squash feature/timeline-audio-ux
 ```
 
-此时**先不 commit**。
+先不要 commit。
 
-### 4. 审阅 staged final diff
-
-至少检查：
+### 5. 审阅 staged final diff
 
 ```bash
 git diff --cached --stat
@@ -87,20 +116,21 @@ git diff --cached --check
 git diff --cached --name-status
 ```
 
-预期变化域只能来自：
+允许的主要变化域：
 
-- engineering control / local gates / docs；
-- runtime read-path / installation hardening；
-- device-scope model tasks / Status Center；
-- Golden Production / Delivery path safety；
-- Rust Timeline authority / persistence；
-- package migration plan/contracts。
+- engineering control / source gates / docs
+- runtime read-path / deterministic install / device durable tasks
+- Golden Production / repository leakage guard
+- Rust Timeline authority / journal / stale protection
+- Source Monitor / Insert / Overwrite / Mark In-Out
+- multicam synchronization evidence
+- authoritative Timeline → FCPXML Delivery
+- linked embedded audio + independent A-track delivery
+- package migration plan/contracts
 
-出现真实 workspace、media、cache、output、model weights、secret、无关产品功能或未知二进制时立即停止集成。
+如出现真实 workspace、media、cache、model weights、secrets、未知二进制或无关实验，立即停止。
 
-### 5. 在 integration worktree 再跑一次 gates
-
-即使源工作分支已经 PASS，squash 后仍重新执行：
+### 6. 在 squash tree 重新运行全部 gates
 
 ```bash
 python scripts/check_python.py
@@ -108,36 +138,27 @@ python scripts/check_fast.py
 python scripts/check_full.py
 ```
 
-原因：最终要进入 `main` 的对象是 squash 后的**集成树**，验证证据必须绑定它，而不是继承工作分支的 PASS。
+随后运行 applicable packaged/native/FCP smoke。工作分支上的 PASS **不能继承**给 squash commit。
 
-### 6. 使用一个语义完整的主线提交
+### 7. 创建一个语义完整的主线提交
 
-当前 diff 的 Stage 1–9 已经互相交织，例如：
-
-- `desktop_runtime.py` 同时承载 read-path 与 device-task 收口；
-- Timeline Rust/TS/tests 共同形成 authority contract；
-- `check_python.py` / repository guard 引用本轮新增 docs/tests；
-- runtime stack 与多个 domain installer 顺序互相约束。
-
-因此不为了“看起来提交更小”而人为构造未经验证的中间状态。推荐一个经过完整 gates 的 squash commit：
+推荐：
 
 ```text
-feat: harden production runtime and timeline authority
+feat: harden production runtime and authoritative editing workflow
 ```
 
-提交正文应概括：
+提交正文至少概括：
 
-- local engineering gates/control layer；
-- durable device model preparation；
-- deterministic runtime stack；
-- golden production lifecycle；
-- path-safe delivery artifacts；
-- Rust Timeline stale-authority + persistence lifecycle；
-- repository leakage and package migration contracts。
+- deterministic runtime + durable device work
+- engineering gates and repository guards
+- Golden Production lifecycle
+- Rust Timeline authority / persistence / stale recovery
+- Source → Program manual editing and multicam sync
+- authoritative Timeline FCPXML delivery
+- linked + independent audio delivery
 
-以后新的工作恢复小 slice / worktree，不再继续扩大该综合提交。
-
-### 7. 集成后验证
+### 8. main 更新后最后复验
 
 ```bash
 git status --short
@@ -145,50 +166,44 @@ git log -1 --stat
 python scripts/check_fast.py
 ```
 
-如执行 native smoke，把结果写入 `docs/verification/`，再把 `STATUS.md` 的对应 gate 从 `NOT RUN` 改为真实结果。
+把真实执行证据写入 `docs/verification/`，并更新 `STATUS.md`。未运行的 native smoke 继续保持 `NOT RUN`。
 
 ## 风险排序
 
 ### Critical
 
-- Rust Timeline `generation + revision` stale-authority contract；
-- checkpoint / journal crash recovery；
-- replacement path (`load` / `load_with_commands`) 不得绕过 authority。
+- Rust Timeline generation + revision stale-authority
+- checkpoint / journal crash recovery
+- load / load_with_commands replacement guard
+- Timeline snapshot → FCPXML source-time / multicam sync correctness
 
 ### High
 
-- device-scope durable model tasks 与取消传播；
-- runtime installer order / retry / import side-effect；
-- Desktop Status Center 对 project/device task 的统一控制。
+- independent audio source range / connected-audio export
+- device durable model tasks / cancellation / restart recovery
+- runtime installer retry / import side-effect
+- Status Center project/device task unification
 
 ### Medium
 
-- Delivery logical artifact refs 与 localhost path resolution；
-- Golden Production cross-domain semantics；
-- repository leakage guard。
+- Delivery logical refs / localhost path decoration
+- Golden Production cross-domain semantics
+- repository leakage guard
 
 ### Low
 
-- engineering docs、score/status、future package plan 本身。
+- status/score/docs themselves
 
-低风险文档不能用来抵消 Critical/High executable gate 的缺失。
-
-## 禁止事项
-
-- 不在当前无完整 checkout 的环境 force-push/squash remote branch。
-- 不直接 merge 105 个机械 API commits 到 `main`。
-- 不把旧 GitHub Actions 结果继承到 squash commit。
-- 不因为 squash final tree 与工作分支文件内容相同，就跳过 integration worktree 的本地验证。
-- 不在这个 integration commit 顺手执行 Python package 文件搬迁、自动配乐、自动剪辑新功能或其他新 scope。
+低风险文档不能抵消 Critical/High executable evidence 的缺失。
 
 ## 完成定义
 
-Integration stabilization 只有同时满足以下条件才算关闭：
+本轮 Production Readiness 只有同时满足以下条件才关闭：
 
-1. 工作分支完整 checkout 上适用 gates 真实通过；
-2. squash integration tree diff 审阅通过；
-3. integration tree 上 gates 重新通过；
-4. 单一主线 commit 创建；
-5. `main` 更新后工作区 clean；
-6. `STATUS.md` 绑定最终 commit 记录真实 gate 证据；
-7. native/package smoke 未执行的部分继续明确写 `NOT RUN`。
+1. Stage 17 Audio Editing UX 完成；
+2. 最终候选分支 Python / TS / Rust/Tauri source gates 实际通过；
+3. squash integration tree 上重新通过同一 gates；
+4. packaged Desktop smoke 通过；
+5. 一个真实最小项目完成媒体 → Review → Timeline → audio → FCPXML → Final Cut Pro 导入；
+6. integration 以经过验证的最终树进入 `main`；
+7. `STATUS.md` 与 `docs/verification/` 绑定最终 commit 记录真实证据。
