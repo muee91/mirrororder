@@ -19,15 +19,20 @@ describe("Swift golden product parity", () => {
     expect(slate).not.toContain("track.clips =");
   });
 
-  it("keeps the shared media card fixed, selected and missing-aware", () => {
+  it("uses one shared media-card visual contract across Slate, Take and Inspector", () => {
     const card = source("../media/MirrorOrderMediaCard.tsx");
     const css = source("../media/mirrororder-media-card.css");
+    const reviewAdapter = source("../material-script/AngleEvidenceCard.tsx");
     expect(card).toContain("当前设备缺失 / 不可播放");
     expect(card).toContain("场记首选机位，不等于 Editorial Best");
     expect(css).toContain("width: 154px; height: 54px");
     expect(css).toContain("min-height: 92px");
     expect(css).toContain("border: 2px solid");
     expect(css).toContain("mo-media-selected");
+    expect(reviewAdapter).toContain("MirrorOrderMediaCard");
+    expect(reviewAdapter).toContain("mediaCardFromAngle(angle)");
+    expect(reviewAdapter).not.toContain("fixed-angle-card");
+    expect(reviewAdapter).not.toContain("angle-media-state");
   });
 
   it("restores project-home-first navigation instead of auto-opening the last project", () => {
@@ -50,5 +55,15 @@ describe("Swift golden product parity", () => {
     expect(slate).toContain("保存后才写入项目");
     expect(slate).not.toContain("source_media_path");
     expect(slate).not.toContain("resolved_media_path");
+  });
+
+  it("restores explicit Slate transport keys without pretending reverse video is supported", () => {
+    const shortcuts = source("./SlatePlaybackShortcuts.tsx");
+    expect(shortcuts).toContain("Space 播放/暂停");
+    expect(shortcuts).toContain("J 后退 1 秒");
+    expect(shortcuts).toContain("K 暂停");
+    expect(shortcuts).toContain("L 播放");
+    expect(shortcuts).toContain("Math.max(0, video.currentTime - 1)");
+    expect(shortcuts).not.toContain("playbackRate = -");
   });
 });
