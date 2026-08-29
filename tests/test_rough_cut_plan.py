@@ -242,7 +242,7 @@ def test_static_rough_cut_runtime_and_app_boundary() -> None:
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "rough_cut_runtime.py").read_text(encoding="utf-8")
     planner = (root / "src" / "script_organizer" / "rough_cut_plan.py").read_text(encoding="utf-8")
-    editorial_runtime = (root / "src" / "script_organizer" / "editorial_runtime.py").read_text(encoding="utf-8")
+    runtime_stack = (root / "src" / "script_organizer" / "runtime_stack.py").read_text(encoding="utf-8")
     ui = (root / "web" / "rough_cut_ui.js").read_text(encoding="utf-8")
     css = (root / "web" / "rough_cut.css").read_text(encoding="utf-8")
     index = (root / "web" / "index.html").read_text(encoding="utf-8")
@@ -255,7 +255,7 @@ def test_static_rough_cut_runtime_and_app_boundary() -> None:
     assert 'resolve_delivery_state' in planner
     assert 'automatic_state="keep"' in planner
     assert '"keep_promoted_to_best": False' in planner
-    assert editorial_runtime.index("install_coverage_runtime()") < editorial_runtime.index("install_rough_cut_runtime()") < editorial_runtime.index("install_assistant_runtime()")
+    assert runtime_stack.index("install_coverage_runtime()") < runtime_stack.index("install_rough_cut_runtime()") < runtime_stack.index("install_assistant_runtime()")
 
     assert "window.webkit?.messageHandlers?.mirrorOrder" in ui
     assert "projectApi('/rough-cut-plan')" in ui
