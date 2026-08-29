@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ReviewModelPayload } from "../../api/host";
+import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import type { RoughCutPlan } from "../../api/production";
 import { buildRoughCutTimelineProposal } from "./timelineSeed";
 
@@ -38,6 +38,31 @@ function review(): ReviewModelPayload {
     ],
     script_gaps: [],
     review_state: {},
+  };
+}
+
+function alternateTake(): ReviewTakeGroup {
+  return {
+    group_id: "g2",
+    parent_group_id: "",
+    kind: "single",
+    take_index: 2,
+    split_reason: "",
+    start: 0,
+    end: 8,
+    duration: 8,
+    cameras: ["A"],
+    angles: [
+      { clip_id: "c", media_id: "mc", camera: "A", name: "C.mov", timeline_start: 0, timeline_end: 8, duration: 8, source_start: 40, source_end: 48, playback: { url: "", source_start: 40, source_end: 48, available: true } },
+    ],
+    transcript: { text: "", source: "none" },
+    people: { faces: [], speakers: [] },
+    candidates: [],
+    context: { episode_ids: [], script_segment_ids: [] },
+    automatic_state: {},
+    editorial_state: {},
+    effective_mapping: { source: "human", mapping_status: "confirmed", script_segment_ids: ["s1"], episode_ids: [1] },
+    issues: [],
   };
 }
 
@@ -110,6 +135,39 @@ describe("buildRoughCutTimelineProposal", () => {
     expect(result.skipped).toEqual([
       { segmentId: "s2", status: "needs_editorial_choice", reason: "没有单一、显式的人工作品 Best，不自动进入 Timeline" },
     ]);
+  });
+
+  it("registers playable non-Best review media in the source pool without auto inserting it", () => {
+    const nextReview = review();
+    nextReview.take_groups.push(alternateTake());
+    nextReview.summary.take_groups = 2;
+    const result = buildRoughCutTimelineProposal(nextReview, plan(), ntsc23976);
+
+    expect(result.baseProject.sources.map((source) => source.source_id)).toEqual([
+      "source:a",
+      "source:b",
+      "source:c",
+    ]);
+    expect(result.commands).toHaveLength(1);
+    const command = result.commands[0];
+    expect(command.type).toBe("insert");
+    if (command.type !== "insert") throw new Error("expected insert");
+    expect(command.clip.source_id).toBe("source:b");
+    expect(result.warnings.some((warning) => warning.includes("非 Best 素材只有人工 Insert/Overwrite"))).toBe(true);
+  });
+
+  it("never registers or auto-selects an unavailable playback angle", () => {
+    const nextReview = review();
+    nextReview.take_groups[0].angles[1].playback.available = false;
+    const result = buildRoughCutTimelineProposal(nextReview, plan(), ntsc23976);
+    const command = result.commands[0];
+    expect(command.type).toBe("insert");
+    if (command.type !== "insert") throw new Error("expected insert");
+    expect(command.clip.source_id).toBe("source:a");
+    expect(command.clip.multicam_group_id).toBeNull();
+    expect(command.clip.selected_angle_source_id).toBeNull();
+    expect(result.baseProject.sources.map((source) => source.source_id)).toEqual(["source:a"]);
+    expect(result.baseProject.multicam_groups).toEqual([]);
   });
 
   it("preserves 24000/1001 timebase while quantizing seconds to frames", () => {
