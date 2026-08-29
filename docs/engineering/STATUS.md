@@ -4,163 +4,80 @@
 
 ## 当前基线
 
-- 主线：`main`
-- 建立工程控制层时的主线 commit：`4e112efebf70159ff2d1ef91b530947e5efb7c3e`
-- 工程控制层：`chore/engineering-control-plane`
+- 主线：`main@4e112efebf70159ff2d1ef91b530947e5efb7c3e`
 - 当前工作分支：`fix/runtime-read-paths`
-- GitHub Actions：当前不可作为必要 gate；本地验证优先。
+- 工程控制层起始分支：`chore/engineering-control-plane`
+- GitHub Actions：当前额度不可用；不作为必要 gate。
+- 当前原则：源码审阅不能替代 executable validation；未执行的 gate 一律 `NOT RUN`。
 
 ## 产品就绪度
 
-- 初始评估：**68 / 100**
-- Stage 1 — Runtime read-path safety：**70 / 100**
-- Stage 2 — Device-local model preparation durability：**72 / 100**
-- Stage 3 — Runtime installation order：**74 / 100**
-- Stage 4 — Golden production project：**76 / 100**
-- Stage 5 — Delivery artifact path normalization：**77 / 100**
-- Stage 6 — Rust Timeline authority lifecycle：**80 / 100**
-- Stage 7 — Repository tracked-data leakage guard：**81 / 100**
-- 评分只代表当前产品/工程就绪度判断，不替代 executable gate。
+| 阶段 | 总评分 |
+| --- | ---: |
+| 初始评估 | 68 |
+| Stage 1 — Runtime read-path safety | 70 |
+| Stage 2 — Device-local model preparation durability | 72 |
+| Stage 3 — Runtime installation order | 74 |
+| Stage 4 — Golden production project | 76 |
+| Stage 5 — Delivery artifact path normalization | 77 |
+| Stage 6 — Rust Timeline authority lifecycle | 80 |
+| Stage 7 — Repository tracked-data leakage guard | 81 |
+| Stage 8 — Python-only source gate | **82** |
 
-## 当前工作包
+评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。
 
-| 工作包 | 状态 | 说明 |
-| --- | --- | --- |
-| Media inventory durable scan | 已收口 | GET 只读 device-local snapshot；显式扫描进入 `media_inventory_scan` durable task。 |
-| Waveform durable build | 已收口 | GET 只读 cache；显式生成进入 `waveform_build` durable task。 |
-| Runtime read-path safety | 源码收口 / 待本地验证 | 删除旧 `/api/v1/local-runtime` 和隐藏同步 fallback；Settings / Assistant / diagnostics 等普通读路径保持 snapshot/cache/read-only。 |
-| Device-local model preparation durability | 源码收口 / 待本地验证 | 本地视觉、Identity 模型/运行时准备进入 device-scope durable task，并统一进入 Status Center；不绑定随机项目。 |
-| Runtime install ordering | 源码收口 / 待本地验证 | Host 使用单一 runtime stack；Editorial 单职责；全栈失败可重试、禁止重入；Identity compatibility import 不再安装全局 wrapper。 |
-| Golden production project | 源码收口 / 待本地验证 | synthetic 2 集 / 3 场 / 5 Take fixture 固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen 语义。 |
-| Delivery artifact path normalization | 源码收口 / 待本地验证 | delivery.v1 v4 / export report v2 只持久化逻辑 artifact ref；Desktop localhost response 才解析本机绝对路径。 |
-| Timeline authority lifecycle | 源码收口 / 待本地验证 | Rust generation + journal revision 统一保护 edit、undo/redo、checkpoint 与已有 Timeline replacement；golden lifecycle 覆盖 replay / reopen。 |
-| Repository tracked-data leakage guard | 源码收口 / 待本地验证 | fast gate 扫描 Git tracked workspace/shared structured fixture；ignored 本地 workspace 不参与扫描。 |
-| Engineering control plane | 待本地验证 | worktree 规则、本地 gate、状态/决策/不变量文档和 repository guard 已接入；`main` 暂未修改。 |
+## 当前已收口的关键能力
 
-## Stage 1 — Runtime read-path safety
-
-已完成源码收口：
-
-- 删除 `automation_runtime.py` 中旧 `/api/v1/local-runtime` GET/POST；`desktop-local-runtime` 成为唯一 Desktop 本机运行时入口；
-- Local Vision 状态 GET 不做 localhost health probe / 模型目录递归扫描；Identity 状态 GET 不加载 native module、不 SHA 全量权重；
-- Assistant GET 只读取 `assistant.json` snapshot；
-- runtime diagnostics GET 不再创建/删除写探针；
-- 删除旧 `media_role_runtime.py` media-inventory 全目录枚举；
-- 删除 Desktop 同步 media scan/probe fallback；
-- `automation_runtime.project_payload()` 不再在读路径同步写 Workspace DB；
-- 已加入 read-path contract guard。
-
-## Stage 2 — Device-local model preparation durability
-
-已完成源码收口：
-
-- 新增 device-scope durable task；本地视觉和 Identity runtime 准备不再伪装成随机 project task；
-- task target 只保存逻辑模型 ID / `face|speaker`，不保存设备绝对路径；
-- Host 启动恢复旧 runner 的 queued/running device task 为 `interrupted`；普通 GET 只读 snapshot；
-- Settings 只提交任务；Status Center 统一查看、轮询、取消、重试；
-- Local Vision 取消进入 llama-server 启动/加载循环；Identity 取消可传播到 pip、下载 chunk、SHA chunk；
-- 切换模型或关闭视觉/人脸/声纹会取消冲突 active task；
-- 新增 device task 与 Desktop contract tests；ADR-007 固化 project/device task 分域。
-
-## Stage 3 — Runtime installation order
-
-已完成源码收口：
-
-- 新增 `src/script_organizer/runtime_stack.py`，Production Host / Gateway 使用单一 `install_production_runtime()`；
-- `RUNTIME_INSTALL_ORDER` 显式记录 18 个 first-party runtime layer；Media Role 明确先于 Coverage/Rough Cut，Desktop 明确先于 durable media inventory adapter；
-- stack 只有全部 installer 成功后才置 `installed=true`；失败保留错误并允许再次执行；重复调用幂等；重入直接拒绝；
-- `editorial_runtime.py` 恢复单职责，不再作为 Audit/Identity/Coverage/Desktop 等模块的隐藏 bootstrap；
-- `identity_runtime.py` compatibility import 不再执行 `install_identity_role_inference()`；Identity API installer 显式拥有该安装职责；
-- CLI `serve/run/gateway` 不再各自维护散落安装顺序；`agent-context` 保留有意的最小非 Host runtime；
-- 新增 runtime stack contract tests，覆盖失败重试、禁止重入、关键顺序和 import-time installer 副作用；旧 Coverage/Rough Cut 测试已改为断言中央 runtime stack，不再守旧架构。
-
-## Stage 4 — Golden production project
-
-已完成源码收口：
-
-- 新增 `tests/fixtures/golden-mini-drama/scenario.json`：2 集、3 场、5 个逻辑 Take group，全为 synthetic logical IDs / filename；不保存真实媒体或设备绝对路径；
-- 场景包含双机位显式 Best、另一 Take 的 reviewer Best opinion + 场记 NG、人工 placement、Keep、不归集素材、明确 usable range 与 preferred angle；
-- 生命周期测试通过 `ReviewStore` / `ScriptSupervisorStore` / `EditorialStore` 写人工事实，而不是手写伪 authority JSON；
-- 固定 Coverage 的 effective mapping、candidate-only 禁止升级、NG 不等于 Delivery Reject、Keep 不自动升级 Best、显式 Best 才进入 Assembly primary；
-- 固定多段剧本共用同一 Take 时 Assembly 只生成一个 source block，并消费人工 1s–7s usable range 与 B 机位 preferred angle；
-- 固定 Delivery decision precedence 与 individual opinion 非 authority；
-- 重新实例化项目后 Coverage/RoughCut/Delivery 以及 Review/Editorial/Slate revision 必须稳定；
-- Golden contract 已进入 `scripts/check_fast.py` 的 Python production smoke 集合。
-
-## Stage 5 — Delivery artifact path normalization
-
-已完成源码收口：
-
-- `delivery.v1` manifest 升为 v4；项目仍处雏形阶段，因此直接删除 `manual_review_path`、`editorial_path`、绝对 `source_fcpxml`，不保留 deprecated alias；
-- manifest 使用 `source.input_kind` / `source.fcpxml_name` 和 `artifacts.review/editorial` 逻辑引用，并声明 `device_paths_exposed=false`；
-- `delivery_export_report.v1` 升为 v2，只持久化 `organized.fcpxml` / `selection_manifest.json` 项目输出逻辑引用，不再持久化绝对 output path；
-- Host 内部仍以真实 `Path` 进行 FCPXML 解析、复制和 keyword 注入；路径只存在于当前进程；
-- `delivery_runtime` 的 localhost-only API 响应通过 allowlist 将固定逻辑引用解析成本机路径，继续支持 Desktop Finder/FCP 打开；持久化 report 不变；
-- `../../outside.json`、绝对路径等非 allowlist artifact ref 不会被解析；
-- Desktop Delivery 类型显式区分 `<artifact>_ref`、本地 resolved path、`persisted_report_path_safe` 和 `device_paths_scope`；
-- 新增 delivery path-safety tests，并加入 fast gate。
-
-## Stage 6 — Rust Timeline authority lifecycle
-
-已完成源码收口：
-
-- Tauri Timeline bridge 直接复用持久化层的 `generation + journal sequence` 形成 `TimelineAuthority`，没有在 Python 或 React 再造第二套 revision；
-- `apply` / `apply_batch` / `undo` / `redo` / `checkpoint` 必须携带上一份完整 Rust snapshot 返回的 `expected_authority`；过期 token 在 journal append 前以 `stale_timeline_authority` fail closed；
-- 已有 Timeline 的 `timeline_load` / `timeline_load_with_commands` 也属于 authority replacement：同项目替换必须携带当前 token；进程内未加载但磁盘已持久化的项目必须先 `openPersisted`，不能用 proposal/seed 绕过 stale guard；
-- 初次创建或给全新、未持久化 project 建立 seed 可以不携带 authority；两个并发初次 seed 中只有先获得 manager mutex 并提交 checkpoint 的请求能成功，后一个会因 authority 已建立而 fail closed；
-- replacement 的 authority 校验、checkpoint 写入、内存 manager 替换在同一 Timeline mutex 临界区完成，避免“先校验后被另一命令改写”的 TOCTOU 窗口；
-- `TimelineClient` 只在创建、恢复、刷新或 mutation 返回完整 snapshot 时更新 authority，并记录 authority 所属 project；切换到全新 project 不会误带旧项目 token；`persistenceStatus()` 只用于展示；
-- manual checkpoint 会建立新 generation 并清空 snapshot undo/redo history，使 checkpoint 前窗口、Inspector 或旧 snapshot token 自动失效；
-- generation 使用高分辨率时间、PID、project hash 和进程内原子 nonce，避免同一进程同一时间窗口连续 checkpoint 发生 generation 重复；
-- checkpoint 的 atomic replace 一旦成功即视为 durable authority；journal truncate 只做 best-effort compaction，失败不会造成“磁盘已切 generation、内存仍停旧 generation”的分叉；
-- Rust golden lifecycle 固定 24000/1001 timebase、Trim、Split、MulticamSwitch、Overwrite、Undo、Redo、journal replay、checkpoint、reopen，并验证 authoritative project 等价；
-- fast gate 执行 Timeline Core 全部 lib tests、Tauri `timeline::tests::` 与 `persistence::tests::`，不使用可能出现 0 tests 假通过的 `--exact` 过滤方式。
-
-## Stage 7 — Repository tracked-data leakage guard
-
-已完成源码收口：
-
-- `projects/` 的 Git tracked 内容继续只允许 `projects/.gitkeep`；真实 registry、project config、review/output/cache 等 runtime workspace 不允许重新进入源码 Git；
-- leakage guard 通过 `git ls-files` 只检查真实 tracked 文件，不遍历 ignored 用户 workspace；
-- `workspace.toml` 与 `tests/fixtures/` 中 JSON/TOML/YAML/CSV 等共享结构化数据会拒绝 `/Users/...`、`/Volumes/...`、`/home/...`、`file:///...` 和 Windows drive absolute path；
-- 文档和源码中的规则说明不进入该内容扫描，避免因为工程文档本身展示禁止示例而产生假阳性；
-- guard 已包含在 fast gate 的 `tests/test_repository_layout_guard.py` 中；非 Git archive 环境会明确 skip tracked-content 子检查，而不是声称 PASS。
+- Media Inventory 与 Waveform 的重工作已进入 durable task；普通 GET 只读 cache/snapshot。
+- Local Vision / Identity 模型准备属于 device-scope durable task，并统一进入 Status Center。
+- Production Host 使用单一 `runtime_stack` 安装编排；安装失败可重试，import 不再偷偷修改全局 runtime。
+- Synthetic Golden Project 固定 Script → Slate → Mapping → Review/Editorial → Coverage → Rough Cut → Assembly → Delivery / reopen 语义。
+- Delivery 持久化 artifact 只保存逻辑引用；设备绝对路径仅存在于 localhost runtime response。
+- Rust Timeline 以 `generation + journal revision` 作为 authority token，保护 replacement/edit/undo/redo/checkpoint，并覆盖 journal replay / reopen。
+- Git tracked workspace/shared structured fixture 有 device-path leakage guard；ignored 用户 workspace 不参与扫描。
+- 新增 `scripts/check_python.py`，在缺少 Node/Rust 工具链时可独立执行 Python compile + production contract smoke；`check_fast.py` 复用该入口，不维护第二份 Python 测试清单。
 
 ## 当前验证状态
 
 针对 `fix/runtime-read-paths`：
 
-- Source / diff review：PASS（仅代表已审阅分支 diff 和关键 runtime/production contract）
-- Stage 1–7 新增及更新 tests：已写入，**NOT RUN**
-- 当前会话运行环境没有完整 Git checkout / Desktop 依赖，且容器无法解析 GitHub DNS；无法把 source review 冒充 executable validation
-- `python scripts/check_fast.py`：NOT RUN
-- `python scripts/check_full.py`：NOT RUN
-- Native packaged runtime smoke：NOT RUN
-- GitHub Actions：NOT RUN / 当前额度不可用，不作为必要条件
+- Source / diff review：**PASS**（仅代表源码/contract 已审阅）
+- `scripts/check_python.py` 本身：`py_compile` **PASS**（当前会话临时目录）
+- `scripts/check_python.py` 在不完整临时目录执行：**EXPECTED FAIL**，因 contract tests 缺失而退出 1；证明缺材料时 fail closed，不等于仓库测试已执行
+- Python production contract smoke：**NOT RUN**（当前环境没有完整 checkout）
+- `python scripts/check_fast.py`：**NOT RUN**
+- `python scripts/check_full.py`：**NOT RUN**
+- Rust/Tauri executable tests：**NOT RUN**（当前环境无 Rust toolchain）
+- TypeScript/Vitest executable tests：**NOT RUN**（当前环境无完整 Desktop checkout / `node_modules`）
+- Native packaged runtime / real media / LAN / FCP smoke：**NOT RUN**
+- GitHub Actions：**NOT RUN** / 当前额度不可用
 
-任何未实际执行的命令都不得标为 PASS。
+## 当前 P1
 
-## 下一工作包
+### Local executable validation and integration stabilization
 
-### P1 — Local executable validation and integration stabilization
+在完整本地 checkout 上依次执行：
 
-目标：停止继续用源码审阅代替运行事实；在完整本地 checkout 上验证当前 7 个阶段能同时成立，再决定是否进入 `main`。
+```bash
+python scripts/check_python.py
+python scripts/check_fast.py
+python scripts/check_full.py
+```
 
-重点：
+要求：
 
-- 执行 `python scripts/check_fast.py`，确保 Python / TypeScript / Vitest / Rust Timeline Core / Tauri Timeline persistence contracts 全部真实运行；
-- 执行 `python scripts/check_full.py`，覆盖 Vite build、完整 Rust tests、完整 pytest；
-- 失败按 contract 回到对应 Stage 修复，不通过“跳过测试”或缩小断言取得绿灯；
-- 对 `main...fix/runtime-read-paths` 做集成 diff review，确认没有隐藏的第二 authority、同步 heavy path 或 device path persistence 回流；
-- local fast + full 都通过后，才进入 main 集成决策。
+- 失败回到对应 contract 修复，不允许通过删除/跳过测试取得绿灯；
+- fast/full 都真实通过后再决定如何把当前大分支整理、squash 并集成到 `main`；
+- packaged/native smoke 仍是独立验收层，不由 source gate 冒充。
 
-### P2 — Python package migration plan
+## 下一 P2
 
-`src/script_organizer/` 的 flat namespace 是历史兼容区。先划分 coherent domains 和兼容 import / packaging / stage-runtime contract，再独立迁移；不与产品功能混改。
+- Python package boundary：先形成迁移计划与兼容 contract，不与产品功能混改。
+- Validation ergonomics：有完整 checkout 后记录 python/fast/full 的典型耗时和失败分类，再决定是否需要更窄 smoke。
 
 ## 状态维护规则
 
-- `STATUS.md` 只写“现在是什么状态”，不要堆实现日志。
-- 完成的历史验收证据移到 `docs/verification/`；这里保留当前结论。
-- 新发现但不属于当前 scope 的事项进入 `BACKLOG.md`。
-- 新长期约束进入 `DECISIONS.md` 或 `INVARIANTS.md`，而不是永久挂在 backlog。
+- `STATUS.md` 只保留当前事实，不继续堆阶段实现日志。
+- 长期决策进入 `DECISIONS.md` / `INVARIANTS.md`。
+- 历史验收证据进入 `docs/verification/`。
+- 未进入当前工作包的事项进入 `BACKLOG.md`。
