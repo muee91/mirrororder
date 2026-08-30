@@ -5,46 +5,80 @@ function source(relative: string): string {
   return readFileSync(new URL(relative, import.meta.url), "utf-8");
 }
 
-describe("Swift golden product parity", () => {
-  it("keeps the multicam slate as a real production table with inspector actions", () => {
-    const slate = source("./GoldenSlateWorkbench.tsx");
-    for (const label of ["多机位电子场记", "A机", "B机", "C机", "辅助 / 特殊", "从 Take 加入", "同场下一条", "同上", "空白", "I 设入点", "O 设出点", "保存当前行"]) {
-      expect(slate).toContain(label);
-    }
-    expect(slate).toContain("SlateRecordClient");
-    expect(slate).toContain("MirrorOrderMediaCard");
-    expect(slate).toContain("onDragDropEvent");
-    expect(slate).toContain("slateMedia.resolveDrop");
-    expect(slate).toContain("preferred clip 是场记首选机位，不是 Editorial Best");
-    expect(slate).not.toContain("track.clips =");
+describe("Swift golden product fidelity", () => {
+  it("keeps editing out of the Production workspace and removes duplicate web navigation", () => {
+    const workbench = source("../production/ProjectWorkbench.tsx");
+    expect(workbench).not.toContain("TimelineWorkbench");
+    expect(workbench).not.toContain("DeliveryWorkbench");
+    expect(workbench).not.toContain("RoughCutWorkbench");
+    expect(workbench).not.toContain("AssemblyWorkbench");
+    expect(workbench).not.toContain('label: "剪辑"');
+    expect(workbench).not.toContain("project-workbench-primary");
+    expect(workbench).toContain("owns-chrome");
+    expect(workbench).toContain("‹ 返回多机位场记");
   });
 
-  it("uses one shared media-card visual contract across Slate, Take and Inspector", () => {
+  it("restores the multicam slate workflow rather than only its column labels", () => {
+    const slate = source("./GoldenSlateWorkbench.tsx");
+    const css = source("./golden-slate.css");
+    for (const label of [
+      "A 机",
+      "B 机",
+      "C 机",
+      "辅助 / 特殊",
+      "加入 Take / 镜头",
+      "同场下一条",
+      "同上",
+      "空白",
+      "已按剧本归位",
+      "待标记 · 保持 XML 顺序",
+      "I 设入点",
+      "O 设出点",
+      "第 {selected.episode} 集候选",
+      "− 移除",
+    ]) expect(slate).toContain(label);
+    expect(slate).toContain("golden-take-picker");
+    expect(slate).toContain("golden-status-control");
+    expect(slate).toContain("removeAttachment");
+    expect(slate).toContain("onDragDropEvent");
+    expect(slate).toContain("slateMedia.resolveDrop");
+    expect(slate).not.toContain("track.clips =");
+    expect(css).toContain("height: 52px");
+    expect(css).toContain("height: 38px");
+    expect(css).toContain("grid-template-rows: minmax(150px,1fr) minmax(180px,1.15fr)");
+  });
+
+  it("uses the frozen Swift media-card geometry and real source thumbnails", () => {
     const card = source("../media/MirrorOrderMediaCard.tsx");
     const css = source("../media/mirrororder-media-card.css");
     const reviewAdapter = source("../material-script/AngleEvidenceCard.tsx");
-    expect(card).toContain("当前设备缺失 / 不可播放");
-    expect(card).toContain("场记首选机位，不等于 Editorial Best");
-    expect(css).toContain("width: 154px; height: 54px");
-    expect(css).toContain("min-height: 92px");
+    expect(css).toContain("width: 180px; height: 88px");
+    expect(css).toContain("width: min(286px, 100%); height: 112px");
+    expect(css).toContain("grid-template-columns: 70px");
+    expect(css).toContain("grid-template-columns: 132px");
     expect(css).toContain("border: 2px solid");
-    expect(css).toContain("mo-media-selected");
+    expect(card).toContain("compact || showPreview");
+    expect(card).toContain("source_start");
+    expect(card).toContain("当前设备缺失");
     expect(reviewAdapter).toContain("MirrorOrderMediaCard");
-    expect(reviewAdapter).toContain("mediaCardFromAngle(angle)");
     expect(reviewAdapter).not.toContain("fixed-angle-card");
-    expect(reviewAdapter).not.toContain("angle-media-state");
   });
 
-  it("restores project-home-first navigation instead of auto-opening the last project", () => {
+  it("restores the fixed macOS-style project home instead of fluid dashboard cards", () => {
     const app = source("../../app/App.tsx");
     const home = source("../projects/ProjectHome.tsx");
+    const css = source("../projects/project-home.css");
     const library = source("../projects/ProjectLibrary.tsx");
     expect(app).toContain("<ProjectHome");
     expect(app).toContain("setSelectedProject(null)");
-    expect(app).toContain("恢复完成后先进入项目主页，不会自动钻入上次项目");
     expect(home).toContain("全部项目");
-    expect(home).toContain("project-home-grid");
-    expect(library).toContain("项目主页");
+    expect(home).toContain("FCPXML");
+    expect(home).toContain("原始素材");
+    expect(css).toContain("grid-template-columns: repeat(auto-fill, 260px)");
+    expect(css).toContain("width: 260px; height: 176px");
+    expect(css).toContain("grid-template-rows: 108px 68px");
+    expect(library).toContain("project-row-icon");
+    expect(library).toContain("待处理");
   });
 
   it("keeps explicit file-drop identity path-free and human-save gated", () => {
