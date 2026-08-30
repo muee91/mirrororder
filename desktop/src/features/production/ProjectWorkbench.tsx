@@ -88,10 +88,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
               <header className="golden-secondary-return">
                 <button type="button" className="secondary" onClick={() => setPage("slate")}>‹ 返回多机位场记</button>
                 <span>{project.name || project.project_id}</span>
-                <div>
-                  <button type="button" className={page === "takes" ? "is-active" : ""} onClick={() => setPage("takes")}>粗归集</button>
-                  <button type="button" className={page === "script" ? "is-active" : ""} onClick={() => setPage("script")}>精确剧本</button>
-                </div>
+                <small>素材 / 剧本</small>
               </header>
               <GoldenMaterialScriptWorkbench
                 baseUrl={baseUrl}
