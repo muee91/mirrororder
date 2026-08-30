@@ -29,14 +29,17 @@ describe("Desktop appearance product contract", () => {
     expect(appearance).not.toContain("FrontendSettings");
   });
 
-  it("keeps Desktop appearance independent from Team Web theme settings", () => {
+  it("keeps Desktop appearance independent from Team Web and makes Settings its product home", () => {
     const control = read("../features/settings/DesktopAppearanceControl.tsx");
+    const settings = read("../features/settings/SettingsStatusWorkbench.tsx");
     const library = read("../features/projects/ProjectLibrary.tsx");
     expect(control).toContain("Desktop 外观模式");
-    expect(control).toContain("系统");
+    expect(control).toContain("跟随系统");
     expect(control).toContain("浅色");
     expect(control).toContain("深色");
-    expect(library).toContain("<DesktopAppearanceControl />");
+    expect(settings).toContain("<DesktopAppearanceControl />");
+    expect(settings).toContain("通用");
+    expect(library).not.toContain("DesktopAppearanceControl");
     expect(control).not.toContain("TeamWeb");
     expect(control).not.toContain("FrontendSettings");
   });
