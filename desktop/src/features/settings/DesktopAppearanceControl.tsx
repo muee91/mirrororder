@@ -8,7 +8,7 @@ import {
 import "./desktop-appearance.css";
 
 const OPTIONS: Array<{ value: DesktopAppearance; label: string }> = [
-  { value: "system", label: "系统" },
+  { value: "system", label: "跟随系统" },
   { value: "light", label: "浅色" },
   { value: "dark", label: "深色" },
 ];
@@ -31,8 +31,11 @@ export function DesktopAppearanceControl() {
 
   return (
     <div className="desktop-appearance-control" aria-label="Desktop 外观">
-      <span>外观</span>
-      <div role="group" aria-label="Desktop 外观模式">
+      <div className="desktop-appearance-copy">
+        <strong>外观</strong>
+        <span>控制当前 Desktop 应用；与 Team Web 的浏览器主题独立。</span>
+      </div>
+      <div className="desktop-appearance-options" role="group" aria-label="Desktop 外观模式">
         {OPTIONS.map((option) => (
           <button
             type="button"
