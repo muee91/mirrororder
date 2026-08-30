@@ -27,6 +27,25 @@ describe("Swift Demo fidelity guards", () => {
     expect(slate).not.toContain("linkedScene(");
   });
 
+  it("keeps a direct Slate assistant entry without shrinking Slate and does not advertise deferred dictation", () => {
+    const workbench = source("../production/ProjectWorkbench.tsx");
+    const slate = source("./GoldenSlateWorkbench.tsx");
+    const slateCss = source("./golden-slate.css");
+    const experience = source("../production/product-experience.css");
+    expect(workbench).toContain('const slateAssistantVisible = assistantOpen && page === "slate"');
+    expect(workbench).toContain("assistantOpen={slateAssistantVisible}");
+    expect(workbench).toContain("onToggleAssistant={() => setAssistantOpen((value) => !value)}");
+    expect(workbench).toContain('slateAssistantVisible ? "slate-assistant-drawer" : ""');
+    expect(slate).toContain("onToggleAssistant?: () => void");
+    expect(slate).toContain('aria-label={assistantOpen ? "关闭小镜" : "打开小镜"}');
+    expect(slate).toContain(">✦</button>");
+    expect(experience).toContain(".has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }");
+    expect(experience).toContain(".slate-assistant-drawer { position: absolute");
+    expect(slate).not.toContain("quick-mic");
+    expect(slateCss).not.toContain(".quick-mic");
+    expect(slateCss).toContain("grid-template-columns: minmax(220px,1fr) auto 1px auto auto auto");
+  });
+
   it("keeps the material and script workspace readable at Swift production density", () => {
     const css = source("../material-script/golden-material-script.css");
     expect(css).not.toContain("font-size: 7px");
