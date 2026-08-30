@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
+import type { ProjectActivitySummary } from "./projectActivity";
 import "./project-context-menu.css";
 import "./project-home.css";
 import "./project-library-fidelity.css";
@@ -8,12 +9,15 @@ import "./project-library-fidelity.css";
 interface Props {
   baseUrl: string;
   workspace: WorkspacePayload;
+  activities?: Record<string, ProjectActivitySummary>;
   revealLabel?: string;
   onOpenProject: (project: ProjectSummary) => void;
   onOpenTeamProject: (project: ProjectSummary) => void;
+  onCopyShareLink: (project: ProjectSummary) => void | Promise<void>;
   onRevealProject: (project: ProjectSummary) => void | Promise<void>;
   onPrepareProject: (project: ProjectSummary) => void | Promise<void>;
   onOpenMediaBinding: (project: ProjectSummary) => void;
+  onDeleteProject: (project: ProjectSummary) => void | Promise<void>;
   onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
 }
 
@@ -47,12 +51,15 @@ function backdropSymbol(project: ProjectSummary): string {
 export function ProjectHome({
   baseUrl,
   workspace,
+  activities = {},
   revealLabel = "Finder / Explorer",
   onOpenProject,
   onOpenTeamProject,
+  onCopyShareLink,
   onRevealProject,
   onPrepareProject,
   onOpenMediaBinding,
+  onDeleteProject,
   onWorkspaceChanged,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -79,7 +86,7 @@ export function ProjectHome({
 
   function openMenu(project: ProjectSummary, x: number, y: number): void {
     const width = 190;
-    const height = 244;
+    const height = 326;
     const viewportWidth = globalThis.innerWidth || 1280;
     const viewportHeight = globalThis.innerHeight || 800;
     setMenu({
@@ -113,10 +120,13 @@ export function ProjectHome({
             const takes = numberStat(project, "groups", "takes");
             const clips = numberStat(project, "clips", "media");
             const needsAttention = attention(project);
+            const activity = activities[project.project_id];
+            const taskFailed = activity?.state === "failed";
+            const taskActive = activity?.state === "active";
             return (
               <button
                 type="button"
-                className={`project-home-card ${project.error ? "has-error" : ""}`}
+                className={`project-home-card ${project.error || taskFailed ? "has-error" : ""} ${taskActive ? "is-active" : ""}`}
                 key={project.project_id}
                 aria-haspopup="menu"
                 title="打开项目；右键查看项目操作"
@@ -137,12 +147,13 @@ export function ProjectHome({
                 <div className="project-home-copy">
                   <div className="project-home-title-row">
                     <strong>{project.name || project.project_id}</strong>
-                    {project.error ? <span className="project-home-error">!</span> : null}
+                    {taskActive ? <span className="project-activity-spinner" title={activity.label || "后台处理中"} /> : null}
+                    {project.error || taskFailed ? <span className="project-home-error" title={activity?.message || project.error || "整理异常"}>!</span> : null}
                   </div>
                   <div className="project-home-stats">
                     <span>{takes} Take</span>
                     <span>{clips} 素材</span>
-                    {needsAttention > 0 ? <em>{needsAttention} 待处理</em> : null}
+                    {taskFailed ? <em className="is-error">整理异常</em> : needsAttention > 0 ? <em>{needsAttention} 待处理</em> : null}
                   </div>
                 </div>
               </button>
@@ -161,9 +172,11 @@ export function ProjectHome({
           <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small></div>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenProject(menu.project))}>打开项目</button>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenTeamProject(menu.project))}>团队审阅</button>
+          <button type="button" role="menuitem" onClick={() => run(() => onCopyShareLink(menu.project))}>复制局域网协作链接</button>
           <button type="button" role="menuitem" onClick={() => run(() => onRevealProject(menu.project))}>在 {revealLabel} 中显示</button>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenMediaBinding(menu.project))}>本机素材 / 换素材盘</button>
           <button type="button" role="menuitem" onClick={() => run(() => onPrepareProject(menu.project))}>重整项目</button>
+          <button type="button" role="menuitem" className="project-context-danger" onClick={() => run(() => onDeleteProject(menu.project))}>永久删除项目…</button>
         </div>
       ) : null}
     </section>
