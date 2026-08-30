@@ -1,16 +1,3 @@
-.project-workbench-navigation { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 7px; border-bottom: 1px solid #232b33; }
-.project-workbench-nav { display: flex; gap: 2px; overflow-x: auto; }
-.project-workbench-primary { padding: 0 0 0 2px; }
-.project-workbench-nav button { flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 9px 13px 8px; color: #7f8b97; background: transparent; font-size: 12px; font-weight: 620; }
-.project-workbench-nav button:hover { color: #b6c0c9; background: #11171c; }
-.project-workbench-nav button.is-active { border-bottom-color: #d7dee5; color: #e6ebef; background: transparent; }
-.project-workbench-utility { display: flex; gap: 4px; padding-bottom: 6px; }
-.project-workbench-utility button { border-color: #2b3540; padding: 5px 8px; color: #788592; background: #12181e; font-size: 9px; }
-.project-workbench-utility button.is-active { color: #11161b; background: #e9eef2; }
-.project-workbench-secondary { display: flex; gap: 4px; margin-bottom: 13px; overflow-x: auto; padding: 1px 2px 3px; }
-.project-workbench-secondary button { flex: 0 0 auto; border: 0; border-radius: 6px; padding: 5px 9px; color: #74818d; background: transparent; font-size: 10px; }
-.project-workbench-secondary button:hover { color: #aeb8c1; background: #151b21; }
-.project-workbench-secondary button.is-active { color: #d6dde4; background: #202830; }
 .phase3-workbench, .timeline-workbench { min-width: 0; }
 .production-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .production-heading h2 { margin: 3px 0 0; }
@@ -66,21 +53,13 @@
 .assistant-answer { max-height: 360px; overflow-y: auto; border: 1px solid #29343e; border-radius: 9px; padding: 11px; color: #c0cad4; background: #11171c; white-space: pre-wrap; line-height: 1.55; }
 
 @media (max-width: 1180px) {
-  .project-workbench-navigation { align-items: stretch; flex-direction: column; }
-  .project-workbench-utility { align-self: flex-end; }
   .slate-grid, .identity-grid, .assistant-grid { grid-template-columns: minmax(0, 1fr); }
   .identity-inspector { position: static; }
   .production-state { max-width: 100%; }
 }
 
 @media (prefers-color-scheme: light) {
-  .project-workbench-navigation, .slate-current, .identity-occurrences { border-color: #dde3e9; }
-  .project-workbench-nav button { color: #66727e; }
-  .project-workbench-nav button.is-active { border-bottom-color: #1d2730; color: #1d2730; }
-  .project-workbench-secondary button { color: #65717c; }
-  .project-workbench-secondary button.is-active { color: #fff; background: #24303a; }
-  .project-workbench-utility button { border-color: #d7dee5; color: #64707b; background: #eef2f5; }
-  .project-workbench-utility button.is-active { color: #fff; background: #17212a; }
+  .slate-current, .identity-occurrences { border-color: #dde3e9; }
   .production-panel, .parse-preview, .identity-row, .assistant-item, .occurrence-row { border-color: #dde3e9; background: #fff; }
   .identity-row.is-selected { border-color: #9aa9b8; background: #f1f5f8; }
   .production-field input, .production-field select, .slate-capture textarea, .assistant-chat textarea, .assistant-answer { border-color: #d5dde5; color: #27313a; background: #f7f9fb; }
