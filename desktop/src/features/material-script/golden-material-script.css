@@ -1,7 +1,12 @@
 .golden-material-script { display: grid; height: 100%; min-height: 0; grid-template-rows: auto auto auto minmax(0,1fr); color: #dbe2e7; background: #0b0f13; }
+.golden-material-script.is-loading { grid-template-rows: auto minmax(0,1fr); }
 .golden-ms-toolbar { display: grid; grid-template-columns: minmax(220px,1fr) auto auto; gap: 14px; align-items: center; min-height: 56px; border-bottom: 1px solid #252d35; padding: 8px 12px; background: #11171c; }
-.golden-ms-toolbar h2 { margin: 2px 0 1px; font-size: 15px; }
-.golden-ms-toolbar > div:first-child > span { display: block; overflow: hidden; color: #6f7c87; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.golden-ms-heading { display: grid; min-width: 0; grid-template-columns: auto minmax(0,1fr); gap: 9px; align-items: center; }
+.golden-ms-title { min-width: 0; }
+.golden-ms-title h2 { margin: 2px 0 1px; font-size: 15px; }
+.golden-ms-title > span { display: block; overflow: hidden; color: #6f7c87; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.golden-ms-back { min-height: 30px; border-color: transparent; padding: 5px 8px; color: #8b99a4; background: transparent; font-size: 10px; }
+.golden-ms-back:hover { color: #d6dde3; background: #1b232a; }
 .golden-ms-mode { display: flex; border: 1px solid #303943; border-radius: 7px; padding: 2px; background: #0b1014; }
 .golden-ms-mode button { min-width: 84px; border: 0; padding: 5px 8px; color: #73808b; background: transparent; font-size: 10px; }
 .golden-ms-mode button.is-active { color: #e0e7ec; background: #202a33; }
@@ -61,3 +66,62 @@
   .golden-ms-mode button.is-active, .golden-ms-episode-grid button.is-active, .golden-ms-episode-strip button.is-active { color: #234c74; background: #e1effe; }
   .golden-ms-episode-grid button, .golden-ms-episode-strip button, .golden-ms-filters button { border-color: #d5dde4; color: #596773; background: #fff; }
 }
+
+/* Explicit Desktop appearance must win even when the OS scheme differs. */
+html[data-mirrororder-theme="light"] .golden-material-script,
+html[data-mirrororder-theme="light"] .golden-ms-pool-pane { color: #27323b; background: #f7f8fa; }
+html[data-mirrororder-theme="light"] .golden-ms-toolbar,
+html[data-mirrororder-theme="light"] .golden-ms-rough-entry,
+html[data-mirrororder-theme="light"] .golden-ms-target-pane { border-color: #d7dee4; background: #f2f5f7; }
+html[data-mirrororder-theme="light"] .golden-ms-write { border-color: #d7dee4; color: #687581; background: #f7f8fa; }
+html[data-mirrororder-theme="light"] .golden-ms-columns > .take-inspector { border-color: #d7dee4; background: #fff; }
+html[data-mirrororder-theme="light"] .golden-ms-title h2,
+html[data-mirrororder-theme="light"] .golden-ms-target-pane > header strong,
+html[data-mirrororder-theme="light"] .golden-ms-pool-pane > header strong { color: #27313a; }
+html[data-mirrororder-theme="light"] .golden-ms-title > span,
+html[data-mirrororder-theme="light"] .golden-ms-actor,
+html[data-mirrororder-theme="light"] .golden-ms-target-pane > header span,
+html[data-mirrororder-theme="light"] .golden-ms-target-note,
+html[data-mirrororder-theme="light"] .golden-ms-pool-pane > header span { color: #687581; }
+html[data-mirrororder-theme="light"] .golden-ms-back { color: #596773; background: transparent; }
+html[data-mirrororder-theme="light"] .golden-ms-back:hover { color: #26313a; background: #e6ebef; }
+html[data-mirrororder-theme="light"] .golden-ms-mode,
+html[data-mirrororder-theme="light"] .golden-ms-actor input,
+html[data-mirrororder-theme="light"] .golden-ms-rough-entry input { border-color: #cfd7df; color: #27313a; background: #fff; }
+html[data-mirrororder-theme="light"] .golden-ms-mode button { color: #596773; }
+html[data-mirrororder-theme="light"] .golden-ms-mode button.is-active,
+html[data-mirrororder-theme="light"] .golden-ms-episode-grid button.is-active,
+html[data-mirrororder-theme="light"] .golden-ms-episode-strip button.is-active { border-color: #90b8df; color: #234c74; background: #e1effe; }
+html[data-mirrororder-theme="light"] .golden-ms-episode-grid button,
+html[data-mirrororder-theme="light"] .golden-ms-episode-strip button,
+html[data-mirrororder-theme="light"] .golden-ms-filters button { border-color: #d5dde4; color: #596773; background: #fff; }
+html[data-mirrororder-theme="light"] .golden-ms-filters button.is-active { border-color: #aabfd3; color: #2f526f; background: #eaf2fa; }
+
+html[data-mirrororder-theme="dark"] .golden-material-script,
+html[data-mirrororder-theme="dark"] .golden-ms-pool-pane { color: #dbe2e7; background: #0b0f13; }
+html[data-mirrororder-theme="dark"] .golden-ms-toolbar { border-color: #252d35; background: #11171c; }
+html[data-mirrororder-theme="dark"] .golden-ms-rough-entry { border-color: #252d35; background: #0e1419; }
+html[data-mirrororder-theme="dark"] .golden-ms-write { border-color: #252d35; color: #6e7b86; background: #0c1115; }
+html[data-mirrororder-theme="dark"] .golden-ms-target-pane { border-color: #28313a; background: #0f151a; }
+html[data-mirrororder-theme="dark"] .golden-ms-columns > .take-inspector { border-color: #28313a; background: #0d1115; }
+html[data-mirrororder-theme="dark"] .golden-ms-title h2,
+html[data-mirrororder-theme="dark"] .golden-ms-target-pane > header strong,
+html[data-mirrororder-theme="dark"] .golden-ms-pool-pane > header strong { color: #cbd3d9; }
+html[data-mirrororder-theme="dark"] .golden-ms-title > span,
+html[data-mirrororder-theme="dark"] .golden-ms-actor,
+html[data-mirrororder-theme="dark"] .golden-ms-target-pane > header span,
+html[data-mirrororder-theme="dark"] .golden-ms-target-note,
+html[data-mirrororder-theme="dark"] .golden-ms-pool-pane > header span { color: #6f7c87; }
+html[data-mirrororder-theme="dark"] .golden-ms-back { color: #8b99a4; background: transparent; }
+html[data-mirrororder-theme="dark"] .golden-ms-back:hover { color: #d6dde3; background: #1b232a; }
+html[data-mirrororder-theme="dark"] .golden-ms-mode { border-color: #303943; background: #0b1014; }
+html[data-mirrororder-theme="dark"] .golden-ms-mode button { color: #73808b; background: transparent; }
+html[data-mirrororder-theme="dark"] .golden-ms-mode button.is-active { color: #e0e7ec; background: #202a33; }
+html[data-mirrororder-theme="dark"] .golden-ms-actor input,
+html[data-mirrororder-theme="dark"] .golden-ms-rough-entry input { border-color: #303943; color: #d9e1e7; background: #0a0f13; }
+html[data-mirrororder-theme="dark"] .golden-ms-episode-grid button,
+html[data-mirrororder-theme="dark"] .golden-ms-episode-strip button,
+html[data-mirrororder-theme="dark"] .golden-ms-filters button { border-color: #303943; color: #798691; background: #151c22; }
+html[data-mirrororder-theme="dark"] .golden-ms-episode-grid button.is-active,
+html[data-mirrororder-theme="dark"] .golden-ms-episode-strip button.is-active { border-color: #4d7cac; color: #dbeaff; background: #17283a; }
+html[data-mirrororder-theme="dark"] .golden-ms-filters button.is-active { border-color: #405b76; color: #cbd9e7; background: #18222c; }
