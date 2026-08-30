@@ -11,9 +11,10 @@ STATUS_CENTER = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenter
 SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
 LEGACY_TASK_PANEL = ROOT / "desktop" / "src" / "features" / "settings" / "TaskStatusPanel.tsx"
 SEARCH = ROOT / "desktop" / "src" / "features" / "search" / "SemanticSearchPalette.tsx"
-SLATE = ROOT / "desktop" / "src" / "features" / "slate" / "SlateWorkbench.tsx"
+SLATE = ROOT / "desktop" / "src" / "features" / "slate" / "GoldenSlateWorkbench.tsx"
 ANGLE_CARD = ROOT / "desktop" / "src" / "features" / "material-script" / "AngleEvidenceCard.tsx"
-ANGLE_CARD_CSS = ROOT / "desktop" / "src" / "features" / "material-script" / "fixed-evidence-cards.css"
+MEDIA_CARD = ROOT / "desktop" / "src" / "features" / "media" / "MirrorOrderMediaCard.tsx"
+MEDIA_CARD_CSS = ROOT / "desktop" / "src" / "features" / "media" / "mirrororder-media-card.css"
 CONFIDENCE_CARD = ROOT / "desktop" / "src" / "features" / "material-script" / "CandidateEvidence.tsx"
 CONFIDENCE_CSS = ROOT / "desktop" / "src" / "features" / "material-script" / "candidate-evidence.css"
 TAKE_LIST = ROOT / "desktop" / "src" / "features" / "material-script" / "VirtualTakeList.tsx"
@@ -73,6 +74,9 @@ def test_project_resume_restores_last_canvas_and_defaults_to_slate() -> None:
 def test_frontend_parity_surfaces_are_reachable_from_product_ia() -> None:
     workbench = WORKBENCH.read_text(encoding="utf-8")
 
+    assert "GoldenMaterialScriptWorkbench" in workbench
+    assert 'page === "takes" ? <GoldenMaterialScriptWorkbench' in workbench
+    assert 'page === "script" ? <GoldenMaterialScriptWorkbench' in workbench
     assert "MediaLibraryWorkbench" in workbench
     assert "CoverageWorkbench" in workbench
     assert "RoughCutWorkbench" in workbench
@@ -99,13 +103,12 @@ def test_project_search_and_assistant_are_contextual_tools_not_new_tabs() -> Non
 def test_slate_is_dense_table_and_preserves_keyboard_flow() -> None:
     slate = SLATE.read_text(encoding="utf-8")
 
-    assert '<table className="slate-table">' in slate
-    for column in ("Take", "集", "场", "镜", "条", "机位 / 景别", "状态", "备注", "记录人"):
+    assert '<table className="golden-slate-table">' in slate
+    for column in ("集", "场号", "镜号", "次号", "A机", "B机", "C机", "辅助 / 特殊", "状态"):
         assert f">{column}<" in slate
-    assert 'event.altKey && event.key === "ArrowUp"' in slate
-    assert 'event.altKey && event.key === "ArrowDown"' in slate
-    assert '(event.metaKey || event.ctrlKey) && event.key === "Enter"' in slate
-    assert "expectedRevision: board.revision" in slate
+    assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s"' in slate
+    assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n"' in slate
+    assert "expectedRevision: revision" in slate
 
 
 def test_project_creation_is_low_frequency_modal_not_sidebar_form() -> None:
@@ -120,21 +123,22 @@ def test_project_creation_is_low_frequency_modal_not_sidebar_form() -> None:
 
 
 def test_fixed_angle_card_is_one_shared_geometry_contract() -> None:
-    component = ANGLE_CARD.read_text(encoding="utf-8")
-    css = ANGLE_CARD_CSS.read_text(encoding="utf-8")
+    component = MEDIA_CARD.read_text(encoding="utf-8")
+    css = MEDIA_CARD_CSS.read_text(encoding="utf-8")
     take_list = TAKE_LIST.read_text(encoding="utf-8")
     inspector = TAKE_INSPECTOR.read_text(encoding="utf-8")
+    adapter = ANGLE_CARD.read_text(encoding="utf-8")
 
-    assert "fixed-angle-card" in component
-    assert "width: 220px" in css
-    assert "min-width: 220px" in css
-    assert "max-width: 220px" in css
-    assert "height: 76px" in css
-    assert "min-height: 76px" in css
-    assert "max-height: 76px" in css
+    assert "MirrorOrderMediaCard" in component
+    assert "width: 154px; height: 54px" in css
+    assert "min-height: 92px" in css
+    assert "mo-media-card" in css
     assert "AngleEvidenceCard" in take_list
     assert "AngleEvidenceCard" in inspector
     assert "inspector-angle-cards" in inspector
+    assert "MirrorOrderMediaCard" in adapter
+    assert "mediaCardFromAngle(angle)" in adapter
+    assert "fixed-angle-card" not in adapter
 
 
 def test_fixed_confidence_card_cannot_expand_with_content() -> None:

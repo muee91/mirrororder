@@ -6,6 +6,7 @@ import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import "../editor/timeline.css";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
+import { GoldenMaterialScriptWorkbench } from "../material-script/GoldenMaterialScriptWorkbench";
 import { MaterialScriptWorkbench } from "../material-script/MaterialScriptWorkbench";
 import "../material-script/material-script.css";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
@@ -107,10 +108,10 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
         <div className="project-workbench-main">
           {page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "media-binding" ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-          {page === "takes" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial={false} /> : null}
+          {page === "takes" ? <GoldenMaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialMode="rough" showEditorial={false} /> : null}
           {page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "slate" ? <><GoldenSlateWorkbench baseUrl={baseUrl} projectId={project.project_id} /><SlatePlaybackShortcuts /></> : null}
-          {page === "script" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="script" showEditorial={false} /> : null}
+          {page === "script" ? <GoldenMaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialMode="precise" showEditorial={false} /> : null}
           {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "rough-cut" ? <RoughCutWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "assembly" ? <AssemblyWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}

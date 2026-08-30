@@ -24,7 +24,7 @@ describe("ProjectActionClient", () => {
   });
 
   it("reads an explicit device-local project location without persisting it", async () => {
-    const browserFetch = vi.fn(async () => jsonResponse({
+    const browserFetch = vi.fn<typeof fetch>(async () => jsonResponse({
       contract: "project_local_location.v1",
       project_id: "p/1",
       project_dir: "/Users/editor/MirrorOrder/projects/p1",

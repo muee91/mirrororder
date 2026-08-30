@@ -24,7 +24,7 @@ describe("RoughPlacementClient", () => {
   });
 
   it("keeps preview read-only and does not invent a review revision", async () => {
-    const browserFetch = vi.fn(async () => jsonResponse({
+    const browserFetch = vi.fn<typeof fetch>(async () => jsonResponse({
       contract: "rough_placement.v1",
       text: "1-10 第1集",
       plans: [],
@@ -44,7 +44,7 @@ describe("RoughPlacementClient", () => {
   });
 
   it("requires the current Review revision when confirming a coarse placement", async () => {
-    const browserFetch = vi.fn(async () => jsonResponse({
+    const browserFetch = vi.fn<typeof fetch>(async () => jsonResponse({
       contract: "rough_placement.v1",
       text: "1-10 第1集",
       plans: [],

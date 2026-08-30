@@ -37,9 +37,9 @@ def test_small_mirror_is_button_only_on_team_web_and_reuses_rough_preview() -> N
 
 
 def test_native_slate_keeps_shot_type_as_per_attachment_fact() -> None:
-    source = (ROOT / "desktop/src/features/slate/SlateWorkbench.tsx").read_text(encoding="utf-8")
+    source = (ROOT / "desktop/src/features/slate/GoldenSlateWorkbench.tsx").read_text(encoding="utf-8")
     runtime = (ROOT / "src/script_organizer/script_supervisor_runtime.py").read_text(encoding="utf-8")
-    assert "const angles: SlateEntry[\"angles\"]" in source
-    assert "const shotType = parsed.angle_shots[camera]" in source
-    assert "angles[angle.clip_id]" in source
+    assert "const shot = parsed.angle_shots[cameraKey(attachment.camera)]" in source
+    assert "return shot ? { ...attachment, shot_type: shot } : attachment" in source
+    assert "mediaCardFromAngle(angle, row.item)" in source
     assert '"shot_type": str(_as_dict(row).get("shot_type", "unknown")' in runtime
