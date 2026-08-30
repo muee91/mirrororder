@@ -4,6 +4,7 @@ import { DesktopAppearanceControl } from "../settings/DesktopAppearanceControl";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import "./project-context-menu.css";
 import "./projects.css";
+import "./project-library-fidelity.css";
 
 interface Props {
   baseUrl: string;
