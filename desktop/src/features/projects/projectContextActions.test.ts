@@ -18,22 +18,29 @@ describe("project actions", () => {
     expect(library).not.toContain('>团队审阅</span><small>');
   });
 
-  it("restores direct card actions on Project Home without a second authority", () => {
+  it("restores the complete Project Home card menu through the existing app authority", () => {
     expect(home).toContain("onContextMenu");
-    expect(home).toContain("在 Finder / Explorer 中显示");
-    expect(home).toContain("开始 / 重新整理");
-    expect(home).toContain("projectActions.localLocation");
-    expect(home).toContain("platform.reveal(location.project_dir)");
-    expect(home).toContain("desktop.prepareProject(project.project_id)");
+    expect(home).toContain("团队审阅");
+    expect(home).toContain("本机素材 / 换素材盘");
+    expect(home).toContain("重整项目");
+    expect(home).toContain("onOpenTeamProject");
+    expect(home).toContain("onRevealProject");
+    expect(home).toContain("onPrepareProject");
+    expect(home).toContain("onOpenMediaBinding");
+    expect(home).not.toContain("new ProjectActionClient");
+    expect(home).not.toContain("new PlatformClient");
+    expect(home).not.toContain("new DesktopClient");
   });
 
-  it("routes the complete sidebar actions through existing Desktop authorities", () => {
+  it("routes Project Home and sidebar actions through existing Desktop authorities", () => {
     expect(app).toContain("new ProjectActionClient(snapshot.baseUrl).localLocation");
     expect(app).toContain("platform.reveal(location.project_dir)");
     expect(app).toContain("new DesktopClient(snapshot.baseUrl).prepareProject");
     expect(app).toContain('setSurface("status")');
     expect(app).toContain('openProjectPage(project, "media-binding")');
     expect(app).toContain('setSurface("team")');
+    expect(app).toContain("onOpenTeamProject={openTeamProject}");
+    expect(app).toContain("onOpenMediaBinding={(project) => openProjectPage(project, \"media-binding\")}");
   });
 
   it("keeps device media binding reachable without restoring duplicate Production navigation", () => {
