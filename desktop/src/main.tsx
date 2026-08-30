@@ -6,6 +6,7 @@ import { ErrorBoundary } from "./app/ErrorBoundary";
 import "./styles.css";
 import "./desktop-theme.css";
 import "./desktop-theme-tools.css";
+import "./features/material-script/golden-material-script-theme.css";
 
 initializeDesktopAppearance();
 
