@@ -11,14 +11,6 @@ interface ThemeRootLike {
   style: Pick<CSSStyleDeclaration, "colorScheme">;
 }
 
-interface MediaQueryListLike {
-  matches: boolean;
-  addEventListener?: (type: "change", listener: () => void) => void;
-  removeEventListener?: (type: "change", listener: () => void) => void;
-  addListener?: (listener: () => void) => void;
-  removeListener?: (listener: () => void) => void;
-}
-
 const APPEARANCE_KEY = "mirrororder.desktop.appearance";
 const APPEARANCE_EVENT = "mirrororder:desktop-appearance";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
@@ -36,7 +28,7 @@ function systemDarkPreference(): boolean {
   try { return globalThis.matchMedia?.(DARK_QUERY).matches ?? false; } catch { return false; }
 }
 
-function systemThemeQuery(): MediaQueryListLike | null {
+function systemThemeQuery(): MediaQueryList | null {
   try { return globalThis.matchMedia?.(DARK_QUERY) ?? null; } catch { return null; }
 }
 
@@ -90,15 +82,13 @@ function installSystemAppearanceListener(): void {
   const sync = () => {
     if (readDesktopAppearance() === "system") applyDesktopAppearance("system");
   };
-  if (query.addEventListener && query.removeEventListener) {
+  if (typeof query.addEventListener === "function") {
     query.addEventListener("change", sync);
-    detachSystemListener = () => query.removeEventListener?.("change", sync);
+    detachSystemListener = () => query.removeEventListener("change", sync);
     return;
   }
-  if (query.addListener && query.removeListener) {
-    query.addListener(sync);
-    detachSystemListener = () => query.removeListener?.(sync);
-  }
+  query.addListener(sync);
+  detachSystemListener = () => query.removeListener(sync);
 }
 
 export function initializeDesktopAppearance(): DesktopAppearance {
