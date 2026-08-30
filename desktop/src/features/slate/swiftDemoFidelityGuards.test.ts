@@ -21,11 +21,46 @@ describe("Swift Demo fidelity guards", () => {
     const css = source("../material-script/golden-material-script.css");
     expect(css).not.toContain("font-size: 7px");
     expect(css).not.toContain("font-size: 8px");
-    expect(css).toContain(".golden-ms-toolbar > div:first-child > span");
+    expect(css).toContain(".golden-ms-title > span");
     expect(css).toContain("font-size: 10px");
     expect(css).toContain(".golden-ms-target-pane > header strong");
     expect(css).toContain("font-size: 11px");
     expect(css).toContain("grid-template-columns: 280px minmax(360px,1fr) 300px");
+  });
+
+  it("keeps Material Script on one chrome layer with explicit desktop appearance", () => {
+    const workbench = source("../production/ProjectWorkbench.tsx");
+    const material = source("../material-script/GoldenMaterialScriptWorkbench.tsx");
+    const css = source("../material-script/golden-material-script.css");
+    const experience = source("../production/product-experience.css");
+    expect(workbench).toContain('onBack={() => setPage("slate")}');
+    expect(workbench).not.toContain("golden-secondary-workspace");
+    expect(material).toContain("golden-ms-back");
+    expect(material).toContain("‹ 场记");
+    expect(experience).not.toContain("golden-secondary-return");
+    expect(css).toContain('html[data-mirrororder-theme="light"] .golden-material-script');
+    expect(css).toContain('html[data-mirrororder-theme="dark"] .golden-material-script');
+    expect(css).toContain('html[data-mirrororder-theme="light"] .golden-ms-columns > .take-inspector');
+    expect(css).toContain('html[data-mirrororder-theme="dark"] .golden-ms-columns > .take-inspector');
+  });
+
+  it("does not mount the legacy Review Slate workload while its details is collapsed", () => {
+    const helper = source("./SlateWorkbench.tsx");
+    expect(helper).toContain('host?.closest("details")');
+    expect(helper).toContain('details.addEventListener("toggle", sync)');
+    expect(helper).toContain("expanded ? <SlateWorkbenchContent {...props} /> : null");
+    expect(helper).toContain("function SlateWorkbenchContent");
+    expect(helper).not.toContain("export function SlateWorkbench({ baseUrl, projectId }: Props)");
+  });
+
+  it("does not poll every project at active-task cadence", () => {
+    const activity = source("../projects/projectActivity.ts");
+    expect(activity).toContain("const ACTIVE_POLL_MS = 2000");
+    expect(activity).toContain("const IDLE_FULL_POLL_MS = 15000");
+    expect(activity).toContain("ACTIVE_TICKS_BEFORE_FULL_REFRESH");
+    expect(activity).toContain("refreshActive(projectIds)");
+    expect(activity).toContain("activeMonitor(active, 0)");
+    expect(activity).not.toContain("active ? 1000 : 8000");
   });
 
   it("aligns the native and DOM minimum window with the existing Golden layouts", () => {
