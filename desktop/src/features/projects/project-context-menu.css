@@ -13,9 +13,9 @@
   backdrop-filter: blur(14px);
 }
 .project-context-heading { display: grid; gap: 2px; border-bottom: 1px solid #273039; margin-bottom: 4px; padding: 7px 8px 8px; }
-.project-context-heading strong { overflow: hidden; color: #e2e8ed; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.project-context-heading small { overflow: hidden; color: #677581; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-.project-context-menu > button { width: 100%; border: 0; border-radius: 6px; padding: 7px 8px; color: #aeb8c1; background: transparent; font-size: 9px; font-weight: 550; text-align: left; }
+.project-context-heading strong { overflow: hidden; color: #e2e8ed; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.project-context-heading small { overflow: hidden; color: #677581; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.project-context-menu > button { width: 100%; border: 0; border-radius: 6px; padding: 7px 8px; color: #aeb8c1; background: transparent; font-size: 10px; font-weight: 550; text-align: left; }
 .project-context-menu > button:hover:not(:disabled), .project-context-menu > button:focus-visible { color: #eef2f5; background: #202830; outline: none; }
 .project-context-menu > button:disabled { color: #596671; background: transparent; }
 
