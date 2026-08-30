@@ -146,11 +146,14 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
   .golden-slate-actions button { padding-inline: 6px; }
 }
 
+@media (max-width: 1200px) {
+  .golden-slate-workbench.has-inspector .golden-slate-body { grid-template-columns: minmax(620px,1fr) 285px; }
+}
+
 @media (max-width: 1080px) {
   .golden-slate-toolbar { grid-template-columns: minmax(120px,1fr) auto; }
   .golden-slate-mode { display: none; }
   .golden-slate-actions button.secondary:nth-of-type(2) { display: none; }
-  .golden-slate-workbench.has-inspector .golden-slate-body { grid-template-columns: minmax(620px,1fr) 285px; }
 }
 
 @media (prefers-color-scheme: light) {
