@@ -29,14 +29,25 @@ interface ProjectMenuState {
   y: number;
 }
 
+function stat(project: ProjectSummary, key: string): number {
+  const value = project.stats?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function projectAttention(project: ProjectSummary): number {
+  return stat(project, "missing_media") + stat(project, "unknown_groups") + stat(project, "script_gap_blocks");
+}
+
 function projectSubtitle(project: ProjectSummary): string {
-  if (project.error) return "需要处理";
-  const stats = project.stats ?? {};
-  const takeCount = typeof stats.groups === "number" ? stats.groups : typeof stats.takes === "number" ? stats.takes : null;
-  const clipCount = typeof stats.clips === "number" ? stats.clips : null;
-  if (takeCount !== null) return `${takeCount} Take${clipCount !== null ? ` · ${clipCount} 素材` : ""}`;
-  if (clipCount !== null) return `${clipCount} 素材`;
-  return "Production 项目";
+  if (project.error) return "整理异常";
+  const takes = stat(project, "groups") || stat(project, "takes");
+  const attention = projectAttention(project);
+  if (takes > 0) return `${takes} Take${attention > 0 ? ` · ${attention} 待处理` : ""}`;
+  return attention > 0 ? `${attention} 待处理` : "待整理";
+}
+
+function projectIcon(project: ProjectSummary): string {
+  return project.input_kind === "fcpxml" ? "▥" : "▰";
 }
 
 export function ProjectLibrary({
@@ -95,35 +106,21 @@ export function ProjectLibrary({
     <div className="project-library">
       <button type="button" className="project-library-brand project-library-brand-button" onClick={onOpenHome} aria-label="返回项目主页">
         <span className="mirror-mark" aria-hidden="true">镜</span>
-        <span className="project-library-brand-copy">
-          <strong>镜序</strong>
-          <span>MirrorOrder</span>
-        </span>
+        <span className="project-library-brand-copy"><strong>镜序</strong><span>MirrorOrder</span></span>
       </button>
 
       <button type="button" className={`project-library-home ${homeActive ? "is-active" : ""}`} onClick={onOpenHome}>
-        <span>项目主页</span>
-        <small>全部项目</small>
+        <span>项目主页</span><small>全部项目</small>
       </button>
 
       <div className="project-library-section-heading">
-        <div>
-          <span>最近项目</span>
-          <small>{workspace.projects.length}</small>
-        </div>
-        <ProjectLifecyclePanel
-          baseUrl={baseUrl}
-          selectedProject={selectedProject}
-          onWorkspaceChanged={onWorkspaceChanged}
-        />
+        <div><span>最近项目</span><small>{workspace.projects.length}</small></div>
+        <ProjectLifecyclePanel baseUrl={baseUrl} selectedProject={selectedProject} onWorkspaceChanged={onWorkspaceChanged} />
       </div>
 
       <div className="project-list">
         {workspace.projects.length === 0 ? (
-          <div className="project-list-empty">
-            <strong>还没有项目</strong>
-            <span>使用上方“新建”创建第一个制作项目。</span>
-          </div>
+          <div className="project-list-empty"><strong>还没有项目</strong><span>使用上方“新建”创建第一个制作项目。</span></div>
         ) : (
           workspace.projects.slice(0, 12).map((project) => (
             <button
@@ -133,10 +130,7 @@ export function ProjectLibrary({
               aria-haspopup="menu"
               title="打开项目；右键查看项目操作"
               onClick={() => onSelectProject(project)}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                openMenu(project, event.clientX, event.clientY);
-              }}
+              onContextMenu={(event) => { event.preventDefault(); openMenu(project, event.clientX, event.clientY); }}
               onKeyDown={(event) => {
                 if (event.key === "F10" && event.shiftKey) {
                   event.preventDefault();
@@ -145,11 +139,8 @@ export function ProjectLibrary({
                 }
               }}
             >
-              <span className="project-row-leading" aria-hidden="true" />
-              <span className="project-row-copy">
-                <strong>{project.name || project.project_id}</strong>
-                <small>{projectSubtitle(project)}</small>
-              </span>
+              <span className="project-row-icon" aria-hidden="true">{projectIcon(project)}</span>
+              <span className="project-row-copy"><strong>{project.name || project.project_id}</strong><small>{projectSubtitle(project)}</small></span>
               {project.error ? <span className="project-row-alert" title={project.error}>!</span> : null}
             </button>
           ))
@@ -159,26 +150,14 @@ export function ProjectLibrary({
       <DesktopAppearanceControl />
 
       <nav className="project-library-global-tools" aria-label="全局工具">
-        <button type="button" className={utilityActive === "status" ? "is-active" : ""} onClick={onOpenStatusCenter}>
-          <span>状态中心</span>
-          <small>后台任务与失败恢复</small>
-        </button>
-        <button type="button" className={utilityActive === "team" ? "is-active" : ""} onClick={onOpenTeam}>
-          <span>团队审阅</span>
-          <small>共享、配对与意见协作</small>
-        </button>
-        <button type="button" className={utilityActive === "settings" ? "is-active" : ""} onClick={onOpenSettings}>
-          <span>设置</span>
-          <small>本地模型与制作环境</small>
-        </button>
+        <button type="button" className={utilityActive === "status" ? "is-active" : ""} onClick={onOpenStatusCenter}><span>状态中心</span><small>后台任务与失败恢复</small></button>
+        <button type="button" className={utilityActive === "team" ? "is-active" : ""} onClick={onOpenTeam}><span>团队审阅</span><small>共享、配对与意见协作</small></button>
+        <button type="button" className={utilityActive === "settings" ? "is-active" : ""} onClick={onOpenSettings}><span>设置</span><small>本地模型与制作环境</small></button>
       </nav>
 
       {menu ? (
         <div className="project-context-menu" role="menu" aria-label={`${menu.project.name || menu.project.project_id} 项目操作`} style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
-          <div className="project-context-heading">
-            <strong>{menu.project.name || menu.project.project_id}</strong>
-            <small>{menu.project.project_id}</small>
-          </div>
+          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small></div>
           <button type="button" role="menuitem" onClick={() => run(() => onSelectProject(menu.project))}>打开项目</button>
           <button type="button" role="menuitem" disabled={!onOpenTeamProject} onClick={() => run(() => onOpenTeamProject?.(menu.project))}>团队审阅</button>
           <button type="button" role="menuitem" disabled={!onRevealProject} onClick={() => run(() => onRevealProject?.(menu.project))}>{revealLabel}</button>
