@@ -9,7 +9,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { width: 100%; min-width: 1040px; min-height: 100%; margin: 0; }
+html, body, #root { width: 100%; min-width: 1180px; min-height: 100%; margin: 0; }
 body { min-height: 100vh; overflow: hidden; background: #0b0e11; }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; border: 1px solid #d6dce2; border-radius: 7px; padding: 7px 10px; color: #11161a; background: #edf1f4; font-weight: 650; }
