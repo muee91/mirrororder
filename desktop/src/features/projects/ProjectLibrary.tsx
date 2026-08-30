@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
-import { DesktopAppearanceControl } from "../settings/DesktopAppearanceControl";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
 import "./project-context-menu.css";
@@ -160,11 +159,9 @@ export function ProjectLibrary({
         )}
       </div>
 
-      <DesktopAppearanceControl />
-
       <nav className="project-library-global-tools" aria-label="全局工具">
         <button type="button" className={utilityActive === "status" ? "is-active" : ""} onClick={onOpenStatusCenter}><span>状态中心</span><small>后台任务与失败恢复</small></button>
-        <button type="button" className={utilityActive === "settings" ? "is-active" : ""} onClick={onOpenSettings}><span>设置</span><small>本地模型与制作环境</small></button>
+        <button type="button" className={utilityActive === "settings" ? "is-active" : ""} onClick={onOpenSettings}><span>设置</span><small>外观、模型与团队审阅</small></button>
       </nav>
 
       {menu ? (
