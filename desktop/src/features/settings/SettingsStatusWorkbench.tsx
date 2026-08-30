@@ -1,12 +1,11 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
-import baseline from "../../../development-baseline.json";
 import { DesktopClient, type DesktopStatusPayload, type FrontendSettings } from "../../api/desktop";
 import { HostConnection, HostConnectionError, type HostProcessStatus } from "../../api/host";
 import { PlatformClient, type PlatformInfo } from "../../api/platform";
-import { TimelineClient, type TimelineRuntimeStatus } from "../../api/timeline";
 import { AssistantModelsPanel } from "../assistant/AssistantModelsPanel";
 import { CollaborationPanel } from "./CollaborationPanel";
+import { DesktopAppearanceControl } from "./DesktopAppearanceControl";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
 
 interface Props { baseUrl: string; projectId?: string | null }
@@ -30,13 +29,10 @@ export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
   const desktop = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const platform = useMemo(() => new PlatformClient(), []);
-  const timeline = useMemo(() => new TimelineClient(), []);
   const [status, setStatus] = useState<DesktopStatusPayload | null>(null);
   const [settings, setSettings] = useState<FrontendSettings | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [hostProcess, setHostProcess] = useState<HostProcessStatus | null>(null);
-  const [timelineStatus, setTimelineStatus] = useState<TimelineRuntimeStatus | null>(null);
-  const [timelineNote, setTimelineNote] = useState(projectId ? "未读取" : "选择项目后可查看时间线恢复状态。");
   const [message, setMessage] = useState("正在读取设置…");
   const [busy, setBusy] = useState(false);
 
@@ -55,24 +51,6 @@ export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
         const [nextPlatform, nextHost] = await Promise.all([platform.info(), host.managedStatus().catch(() => null)]);
         setPlatformInfo(nextPlatform);
         setHostProcess(nextHost);
-        if (projectId) {
-          try {
-            const nextTimeline = await timeline.persistenceStatus();
-            if (nextTimeline.project_id === projectId) {
-              setTimelineStatus(nextTimeline);
-              setTimelineNote(`generation ${nextTimeline.persistence.generation || "-"} · checkpoint #${nextTimeline.persistence.checkpoint_sequence}`);
-            } else {
-              setTimelineStatus(null);
-              setTimelineNote(`当前时间线状态属于项目 ${nextTimeline.project_id}`);
-            }
-          } catch {
-            setTimelineStatus(null);
-            setTimelineNote("当前项目尚未加载时间线；打开“剪辑 → 时间线”后会建立或恢复状态。");
-          }
-        } else {
-          setTimelineStatus(null);
-          setTimelineNote("选择项目后可查看时间线恢复状态。");
-        }
       }
       setMessage("设置已更新。");
     } catch (error) {
@@ -80,7 +58,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
     } finally { setBusy(false); }
   }
 
-  useEffect(() => { void reload(); }, [desktop, projectId]);
+  useEffect(() => { void reload(); }, [desktop, host, platform]);
 
   async function saveSettings(): Promise<void> {
     if (!settings) return;
@@ -97,58 +75,86 @@ export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
 
   const requiredModules = status?.environment.python_modules.filter((item) => item.required) ?? [];
   const optionalModules = status?.environment.python_modules.filter((item) => !item.required) ?? [];
-  const baselineCapabilities = Object.entries(baseline.capabilities);
-  const nativeGateCount = Object.values(baseline.release_gates).filter((value) => value === "required").length;
 
   return (
     <section className="phase3-workbench settings-status-workbench">
-      <header className="production-heading">
-        <div><p className="eyebrow">工作区</p><h2>设置</h2></div>
+      <header className="production-heading settings-heading">
+        <div><p className="eyebrow">MirrorOrder Desktop</p><h2>设置</h2></div>
         <div className="assistant-heading-actions"><span className="production-state">{message}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>刷新</button></div>
       </header>
 
-      <p className="production-note">后台任务统一在“状态中心”查看。这里保留团队审阅偏好、本机模型与团队访问权限；工程诊断放在页面底部的高级区域。</p>
+      <p className="production-note settings-intro">这里管理当前设备的外观、智能能力、小镜模型和团队审阅偏好。后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
 
-      <div className="production-grid settings-status-grid">
-        <div className="production-panel status-card frontend-settings-card">
-          <div className="parse-heading"><div><p className="eyebrow">Team Web</p><h3>团队审阅偏好</h3></div><button type="button" disabled={busy || !settings} onClick={() => void saveSettings()}>保存</button></div>
-          <p className="production-note">这些选项只控制浏览器团队审阅界面，不改变 Desktop 项目的默认场记画布。</p>
-          {settings ? (
-            <div className="settings-form-grid">
-              <label className="production-field"><span>主题</span><select value={settings.theme} onChange={(event) => patchSettings({ theme: event.target.value as FrontendSettings["theme"] })}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
-              <label className="production-field"><span>密度</span><select value={settings.density} onChange={(event) => patchSettings({ density: event.target.value as FrontendSettings["density"] })}><option value="comfortable">舒适</option><option value="compact">紧凑</option></select></label>
-              <label className="production-field"><span>默认视图</span><select value={settings.default_mode} onChange={(event) => patchSettings({ default_mode: event.target.value as FrontendSettings["default_mode"] })}><option value="script">剧本</option><option value="unassigned">待归集</option></select></label>
-              <label className="production-field"><span>默认集数</span><input value={String(settings.default_episode)} onChange={(event) => patchSettings({ default_episode: defaultEpisode(event.target.value) })} placeholder="first / all / 1" /></label>
-              <label className="production-field"><span>刷新间隔</span><select value={settings.poll_interval_ms} onChange={(event) => patchSettings({ poll_interval_ms: pollInterval(event.target.value) })}><option value={1000}>1 秒</option><option value={2500}>2.5 秒</option><option value={5000}>5 秒</option><option value={10000}>10 秒</option></select></label>
-              <label className="settings-check"><input type="checkbox" checked={settings.update_sound} onChange={(event) => patchSettings({ update_sound: event.target.checked })} /><span>更新提示音</span></label>
-              <label className="settings-check"><input type="checkbox" checked={settings.show_unknown_count} onChange={(event) => patchSettings({ show_unknown_count: event.target.checked })} /><span>显示未归类数量</span></label>
-            </div>
-          ) : <p className="empty-copy">尚未读取团队审阅偏好。</p>}
-        </div>
-
-        <LocalRuntimePanel baseUrl={baseUrl} />
-        {projectId ? (
-          <AssistantModelsPanel baseUrl={baseUrl} projectId={projectId} />
-        ) : (
-          <div className="production-panel status-card model-connections-card">
-            <p className="eyebrow">本机模型</p><h3>外部 / 自定义模型连接</h3>
-            <p className="production-note">先从左侧选择一个项目，即可读取和编辑当前设备的语言、视觉与语义检索连接。连接本身仍是设备本机配置，不会写入项目。</p>
+      <div className="settings-preference-stack">
+        <section className="settings-preference-section" aria-labelledby="settings-general-title">
+          <header className="settings-section-heading">
+            <div><p className="eyebrow">通用</p><h3 id="settings-general-title">Desktop</h3></div>
+            <span>仅当前设备</span>
+          </header>
+          <div className="settings-preference-surface settings-general-card">
+            <DesktopAppearanceControl />
           </div>
-        )}
-        <CollaborationPanel baseUrl={baseUrl} />
+        </section>
+
+        <section className="settings-preference-section" aria-labelledby="settings-local-title">
+          <header className="settings-section-heading">
+            <div><p className="eyebrow">本机智能</p><h3 id="settings-local-title">视觉与身份识别</h3></div>
+            <span>模型与缓存留在本机</span>
+          </header>
+          <LocalRuntimePanel baseUrl={baseUrl} />
+        </section>
+
+        <section className="settings-preference-section" aria-labelledby="settings-assistant-title">
+          <header className="settings-section-heading">
+            <div><p className="eyebrow">小镜</p><h3 id="settings-assistant-title">模型连接</h3></div>
+            <span>低频高级设置</span>
+          </header>
+          {projectId ? (
+            <AssistantModelsPanel baseUrl={baseUrl} projectId={projectId} />
+          ) : (
+            <div className="production-panel status-card model-connections-card">
+              <h3>外部 / 自定义模型连接</h3>
+              <p className="production-note">先从左侧选择一个项目，即可读取和编辑当前设备的语言、视觉与语义检索连接。连接本身仍是设备本机配置，不会写入项目。</p>
+            </div>
+          )}
+        </section>
+
+        <section className="settings-preference-section" aria-labelledby="settings-team-title">
+          <header className="settings-section-heading">
+            <div><p className="eyebrow">团队审阅</p><h3 id="settings-team-title">Team Web</h3></div>
+            <span>浏览器审阅界面与访问权限</span>
+          </header>
+          <div className="settings-team-grid">
+            <div className="production-panel status-card frontend-settings-card">
+              <div className="parse-heading"><div><h3>审阅界面</h3><p className="production-note">这些选项只控制 Team Web，不改变 Desktop 场记画布。</p></div><button type="button" disabled={busy || !settings} onClick={() => void saveSettings()}>保存</button></div>
+              {settings ? (
+                <>
+                  <div className="settings-form-grid">
+                    <label className="production-field"><span>Web 外观</span><select value={settings.theme} onChange={(event) => patchSettings({ theme: event.target.value as FrontendSettings["theme"] })}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+                    <label className="production-field"><span>界面密度</span><select value={settings.density} onChange={(event) => patchSettings({ density: event.target.value as FrontendSettings["density"] })}><option value="comfortable">舒适</option><option value="compact">紧凑</option></select></label>
+                    <label className="production-field"><span>默认视图</span><select value={settings.default_mode} onChange={(event) => patchSettings({ default_mode: event.target.value as FrontendSettings["default_mode"] })}><option value="script">剧本</option><option value="unassigned">待归集</option></select></label>
+                    <label className="production-field"><span>默认集数</span><input value={String(settings.default_episode)} onChange={(event) => patchSettings({ default_episode: defaultEpisode(event.target.value) })} placeholder="first / all / 1" /></label>
+                    <label className="settings-check"><input type="checkbox" checked={settings.update_sound} onChange={(event) => patchSettings({ update_sound: event.target.checked })} /><span>更新提示音</span></label>
+                    <label className="settings-check"><input type="checkbox" checked={settings.show_unknown_count} onChange={(event) => patchSettings({ show_unknown_count: event.target.checked })} /><span>显示未归类数量</span></label>
+                  </div>
+                  <details className="team-web-advanced">
+                    <summary>高级</summary>
+                    <label className="production-field"><span>自动刷新频率</span><select value={settings.poll_interval_ms} onChange={(event) => patchSettings({ poll_interval_ms: pollInterval(event.target.value) })}><option value={1000}>1 秒</option><option value={2500}>2.5 秒</option><option value={5000}>5 秒</option><option value={10000}>10 秒</option></select></label>
+                  </details>
+                </>
+              ) : <p className="empty-copy">尚未读取团队审阅偏好。</p>}
+            </div>
+            <CollaborationPanel baseUrl={baseUrl} />
+          </div>
+        </section>
 
         <details className="settings-advanced-diagnostics">
           <summary>
-            <div><strong>高级诊断</strong><span>运行环境、发布门、时间线恢复与设备状态</span></div>
+            <div><strong>高级诊断</strong><span>工作区、运行环境、平台适配与当前设备</span></div>
             <small>{status ? `${status.environment.platform} · Python ${status.environment.python.version}` : "尚未读取"}</small>
           </summary>
+          <p className="production-note settings-diagnostics-note">这里用于排查安装和设备环境问题；任务进度与失败恢复仍以状态中心为准。</p>
           <div className="settings-diagnostics-grid">
-            <div className="production-panel status-card baseline-gate-card">
-              <div className="parse-heading"><div><p className="eyebrow">开发 / 发布</p><h3>当前能力基线</h3></div><span>{nativeGateCount} 个发布门</span></div>
-              <div className="baseline-gate-list">{baselineCapabilities.map(([name, capability]) => <div className="baseline-gate-row" key={name}><strong>{name.replaceAll("_", " ")}</strong><span className={capability.code_status === "implemented" ? "is-ready" : "is-missing"}>{capability.code_status}</span><small>{capability.native_smoke_required ? "需要原生实机验证" : "源码验证"}</small></div>)}</div>
-              <p className="production-warning">发布质量门只有在源码构建和打包 App 上实际验证后才算通过。</p>
-            </div>
-
             <div className="production-panel status-card">
               <p className="eyebrow">工作区 / Python</p><h3>{status?.workspace.name || "工作区"}</h3>
               <dl className="status-facts"><div><dt>路径</dt><dd>{status?.workspace.path || "-"}</dd></div><div><dt>项目</dt><dd>{status?.workspace.projects ?? "-"}</dd></div><div><dt>Python</dt><dd>{status ? `${status.environment.python.version} · ${status.environment.python.executable}` : "-"}</dd></div><div><dt>Host</dt><dd>{status ? `${status.environment.host} · ${status.environment.platform}` : "-"}</dd></div><div><dt>可写</dt><dd>{availabilityLabel(Boolean(status?.environment.workspaces[0]?.writable))}</dd></div></dl>
@@ -164,11 +170,6 @@ export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
               <p className="eyebrow">平台适配</p>
               {isTauri() && platformInfo ? <div className="status-capabilities"><span className="is-ready">{platformInfo.os}</span><span className={platformInfo.native_dialog ? "is-ready" : "is-missing"}>文件选择</span><span className={platformInfo.reveal_path ? "is-ready" : "is-missing"}>文件定位</span><span className={platformInfo.open_path ? "is-ready" : "is-missing"}>打开路径</span><span className={platformInfo.open_url ? "is-ready" : "is-missing"}>打开链接</span><span className={platformInfo.fcp_adapter ? "is-ready" : "is-missing"}>Final Cut</span><span className={platformInfo.security_scoped_media ? "is-ready" : "is-pending"}>安全媒体访问</span><span className={platformInfo.resolve_adapter ? "is-ready" : "is-pending"}>Resolve</span><span className={platformInfo.premiere_adapter ? "is-ready" : "is-pending"}>Premiere</span></div> : <p className="empty-copy">浏览器预览不加载原生平台适配。</p>}
               <p className="production-note">本机 Host：{hostProcess ? `${hostProcess.running ? "运行中" : "已停止"} · pid ${hostProcess.pid ?? "-"}` : "浏览器预览 / 未托管"}</p>
-            </div>
-
-            <div className="production-panel status-card">
-              <p className="eyebrow">时间线恢复</p><h3>{timelineStatus ? `${timelineStatus.persistence.journal_operations} 条 journal 操作` : "未挂载"}</h3><p className="production-note">{timelineNote}</p>
-              {timelineStatus ? <dl className="status-facts"><div><dt>checkpoint</dt><dd>{timelineStatus.persistence.checkpoint_path}</dd></div><div><dt>journal</dt><dd>{timelineStatus.persistence.journal_path}</dd></div><div><dt>已恢复</dt><dd>{timelineStatus.recovered_operations}</dd></div><div><dt>来源</dt><dd>{timelineStatus.used_backup ? "备份" : "主文件"}</dd></div><div><dt>尾部损坏</dt><dd>{timelineStatus.ignored_partial_tail ? "已安全忽略" : "无"}</dd></div></dl> : null}
             </div>
 
             <div className="production-panel status-card">
