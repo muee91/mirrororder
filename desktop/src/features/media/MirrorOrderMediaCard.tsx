@@ -75,12 +75,13 @@ export function MirrorOrderMediaCard({
   const cardRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [compactPreviewActive, setCompactPreviewActive] = useState(!compact);
+  const [previewReady, setPreviewReady] = useState(false);
 
   // The frozen Swift card used a static AVAssetImageGenerator thumbnail. The
   // current Host exposes an authorized playback descriptor but no thumbnail
-  // endpoint, so compact cards lazily load that descriptor only when they are
-  // near the viewport. This keeps the visual contract without creating a grid
-  // of eagerly-loading video decoders.
+  // endpoint, so compact cards only instantiate a video when they are close to
+  // the visible table. Keeping the margin tight avoids a large off-screen grid
+  // of metadata requests / decoder surfaces on long slate boards.
   useEffect(() => {
     if (!compact) {
       setCompactPreviewActive(true);
@@ -94,7 +95,7 @@ export function MirrorOrderMediaCard({
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.some((entry) => entry.isIntersecting || entry.intersectionRatio > 0);
       setCompactPreviewActive(visible);
-    }, { rootMargin: "140px 220px" });
+    }, { rootMargin: "48px 96px" });
     observer.observe(element);
     return () => observer.disconnect();
   }, [compact]);
@@ -103,24 +104,46 @@ export function MirrorOrderMediaCard({
   const label = useMemo(() => [model.camera, model.name, shotLabel(model.shotType)].filter(Boolean).join(" · "), [model]);
 
   useEffect(() => {
+    setPreviewReady(false);
+  }, [model.playbackUrl, model.sourceStart, previewEnabled]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video || !previewEnabled) return;
+    const start = Number(model.sourceStart ?? 0);
+    const target = Number.isFinite(start) && start >= 0 ? start : 0;
+    const markReady = () => setPreviewReady(true);
     const seek = () => {
-      const start = Number(model.sourceStart ?? 0);
-      if (Number.isFinite(start) && start >= 0) {
-        try { video.currentTime = start; } catch { /* metadata may not be seekable yet */ }
+      if (target <= 0) {
+        if (video.readyState >= 2) markReady();
+        return;
       }
+      if (Math.abs(video.currentTime - target) <= 0.04 && video.readyState >= 2) {
+        markReady();
+        return;
+      }
+      try { video.currentTime = target; } catch { /* metadata may not be seekable yet */ }
     };
+    const loadedData = () => { if (target <= 0) markReady(); };
     video.addEventListener("loadedmetadata", seek);
+    video.addEventListener("loadeddata", loadedData);
+    video.addEventListener("seeked", markReady);
     if (video.readyState >= 1) seek();
-    return () => video.removeEventListener("loadedmetadata", seek);
+    return () => {
+      video.removeEventListener("loadedmetadata", seek);
+      video.removeEventListener("loadeddata", loadedData);
+      video.removeEventListener("seeked", markReady);
+    };
   }, [model.sourceStart, previewEnabled]);
 
   const content = (
     <>
       <div className="mo-media-thumb" aria-hidden="true">
         {previewEnabled ? (
-          <video ref={videoRef} src={model.playbackUrl} preload="metadata" muted playsInline tabIndex={-1} />
+          <>
+            <span className="mo-media-preview-fallback">{model.camera || "▶"}</span>
+            <video ref={videoRef} className={previewReady ? "is-ready" : ""} src={model.playbackUrl} preload="metadata" muted playsInline tabIndex={-1} />
+          </>
         ) : (
           <span className={model.available === false ? "is-missing" : ""}>{model.available === false ? "▧" : model.camera || "▶"}</span>
         )}
