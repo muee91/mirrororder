@@ -22,8 +22,13 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).toContain('onBack={() => setPage("slate")}');
     expect(workbench).not.toContain("golden-secondary-workspace");
     expect(material).toContain("‹ 场记");
-    expect(workbench).toContain("assistantVisible = assistantOpen && secondarySurface");
+    expect(workbench).toContain('const slateAssistantVisible = assistantOpen && page === "slate"');
+    expect(workbench).toContain('const assistantVisible = assistantOpen && (secondarySurface || page === "slate")');
+    expect(workbench).toContain("assistantOpen={slateAssistantVisible}");
+    expect(workbench).toContain("onToggleAssistant={() => setAssistantOpen((value) => !value)}");
     expect(workbench).toContain("onOpenTeamReview ?? (() => setPage(\"watch\"))");
+    expect(experience).toContain(".has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }");
+    expect(experience).toContain(".slate-assistant-drawer { position: absolute");
     expect(experience).not.toContain(".project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body");
     expect(experience).not.toContain("golden-secondary-return");
   });
@@ -56,6 +61,12 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("已把 T${take.take_index} 填入当前场记");
     expect(slate).toContain("row.record_id === selected.record_id || row.source_group_id !== take.group_id");
     expect(slate).toContain("take_number: take.take_index || null");
+    expect(slate).toContain("onToggleAssistant");
+    expect(slate).toContain('aria-label={assistantOpen ? "关闭小镜" : "打开小镜"}');
+    expect(slate).toContain(">✦</button>");
+    expect(slate).not.toContain("quick-mic");
+    expect(css).not.toContain(".quick-mic");
+    expect(css).toContain("grid-template-columns: minmax(220px,1fr) auto 1px auto auto auto");
     expect(slate).toContain("shortcutActionsRef");
     expect(slate).toContain('globalThis.addEventListener("keydown", keydown)');
     expect(slate).toContain("}, []);");
