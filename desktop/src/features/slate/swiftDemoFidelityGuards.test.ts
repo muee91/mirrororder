@@ -88,9 +88,11 @@ describe("Swift Demo fidelity guards", () => {
     expect(shell).toContain("min-width: 1180px");
     expect(shell).not.toContain("min-width: 1040px");
     expect(shell).toContain("grid-template-columns: 216px minmax(0, 1fr)");
-    expect(slateCss).toContain("@media (max-width: 1200px)");
+    expect(slateCss).toContain("@media (max-width: 1208px)");
     expect(slateCss).toContain("grid-template-columns: minmax(620px,1fr) 285px");
     expect(experience).not.toContain(".project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body");
+    const fullInspectorThreshold = 216 + 680 + 312;
+    expect(fullInspectorThreshold).toBe(1208);
     const minimumStageWidth = 1180 - 216;
     expect(620 + 285).toBeLessThanOrEqual(minimumStageWidth);
   });
