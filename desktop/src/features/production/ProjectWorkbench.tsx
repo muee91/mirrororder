@@ -72,7 +72,13 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
         <div className={`project-workbench-main ${page === "slate" || materialScript ? "owns-chrome" : ""}`}>
           {page === "slate" ? (
             <>
-              <GoldenSlateWorkbench baseUrl={baseUrl} projectId={project.project_id} />
+              <GoldenSlateWorkbench
+                baseUrl={baseUrl}
+                projectId={project.project_id}
+                onOpenMaterialScript={() => setPage("takes")}
+                onOpenIdentity={() => setPage("identity")}
+                onOpenReview={() => setPage("watch")}
+              />
               <SlatePlaybackShortcuts />
             </>
           ) : null}
