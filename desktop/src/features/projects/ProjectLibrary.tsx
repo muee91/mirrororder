@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import { DesktopAppearanceControl } from "../settings/DesktopAppearanceControl";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
+import type { ProjectActivitySummary } from "./projectActivity";
 import "./project-context-menu.css";
 import "./projects.css";
 import "./project-library-fidelity.css";
@@ -9,6 +10,7 @@ import "./project-library-fidelity.css";
 interface Props {
   baseUrl: string;
   workspace: WorkspacePayload;
+  activities?: Record<string, ProjectActivitySummary>;
   selectedProjectId: string | null;
   utilityActive?: "status" | "team" | "settings" | null;
   revealLabel?: string;
@@ -18,9 +20,11 @@ interface Props {
   onOpenTeam?: () => void;
   onOpenSettings?: () => void;
   onOpenTeamProject?: (project: ProjectSummary) => void;
+  onCopyShareLink?: (project: ProjectSummary) => void | Promise<void>;
   onRevealProject?: (project: ProjectSummary) => void | Promise<void>;
   onPrepareProject?: (project: ProjectSummary) => void | Promise<void>;
   onOpenMediaBinding?: (project: ProjectSummary) => void;
+  onDeleteProject?: (project: ProjectSummary) => void | Promise<void>;
   onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
 }
 
@@ -39,8 +43,9 @@ function projectAttention(project: ProjectSummary): number {
   return stat(project, "missing_media") + stat(project, "unknown_groups") + stat(project, "script_gap_blocks");
 }
 
-function projectSubtitle(project: ProjectSummary): string {
-  if (project.error) return "整理异常";
+function projectSubtitle(project: ProjectSummary, activity?: ProjectActivitySummary): string {
+  if (project.error || activity?.state === "failed") return "整理异常";
+  if (activity?.state === "active") return activity.label || "后台处理中";
   const takes = stat(project, "groups") || stat(project, "takes");
   const attention = projectAttention(project);
   if (takes > 0) return `${takes} Take${attention > 0 ? ` · ${attention} 待处理` : ""}`;
@@ -54,6 +59,7 @@ function projectIcon(project: ProjectSummary): string {
 export function ProjectLibrary({
   baseUrl,
   workspace,
+  activities = {},
   selectedProjectId,
   utilityActive = null,
   revealLabel = "Finder / Explorer",
@@ -62,9 +68,11 @@ export function ProjectLibrary({
   onOpenStatusCenter,
   onOpenSettings,
   onOpenTeamProject,
+  onCopyShareLink,
   onRevealProject,
   onPrepareProject,
   onOpenMediaBinding,
+  onDeleteProject,
   onWorkspaceChanged,
 }: Props) {
   const selectedProject = workspace.projects.find((project) => project.project_id === selectedProjectId) ?? null;
@@ -87,7 +95,7 @@ export function ProjectLibrary({
 
   function openMenu(project: ProjectSummary, x: number, y: number): void {
     const width = 190;
-    const height = 220;
+    const height = 310;
     const viewportWidth = globalThis.innerWidth || 1280;
     const viewportHeight = globalThis.innerHeight || 800;
     setMenu({
@@ -99,7 +107,7 @@ export function ProjectLibrary({
 
   function run(action: () => void | Promise<void>): void {
     setMenu(null);
-    void action();
+    void Promise.resolve(action()).catch(() => undefined);
   }
 
   return (
@@ -122,28 +130,33 @@ export function ProjectLibrary({
         {workspace.projects.length === 0 ? (
           <div className="project-list-empty"><strong>还没有项目</strong><span>使用上方“新建”创建第一个制作项目。</span></div>
         ) : (
-          workspace.projects.slice(0, 8).map((project) => (
-            <button
-              className={`project-row ${utilityActive === null && selectedProjectId === project.project_id ? "is-selected" : ""}`}
-              key={project.project_id}
-              type="button"
-              aria-haspopup="menu"
-              title="打开项目；右键查看项目操作"
-              onClick={() => onSelectProject(project)}
-              onContextMenu={(event) => { event.preventDefault(); openMenu(project, event.clientX, event.clientY); }}
-              onKeyDown={(event) => {
-                if (event.key === "F10" && event.shiftKey) {
-                  event.preventDefault();
-                  const box = event.currentTarget.getBoundingClientRect();
-                  openMenu(project, box.left + 24, box.top + 24);
-                }
-              }}
-            >
-              <span className="project-row-icon" aria-hidden="true">{projectIcon(project)}</span>
-              <span className="project-row-copy"><strong>{project.name || project.project_id}</strong><small>{projectSubtitle(project)}</small></span>
-              {project.error ? <span className="project-row-alert" title={project.error}>!</span> : null}
-            </button>
-          ))
+          workspace.projects.slice(0, 8).map((project) => {
+            const activity = activities[project.project_id];
+            const taskActive = activity?.state === "active";
+            const taskFailed = activity?.state === "failed";
+            return (
+              <button
+                className={`project-row ${utilityActive === null && selectedProjectId === project.project_id ? "is-selected" : ""} ${taskActive ? "is-active-task" : ""}`}
+                key={project.project_id}
+                type="button"
+                aria-haspopup="menu"
+                title="打开项目；右键查看项目操作"
+                onClick={() => onSelectProject(project)}
+                onContextMenu={(event) => { event.preventDefault(); openMenu(project, event.clientX, event.clientY); }}
+                onKeyDown={(event) => {
+                  if (event.key === "F10" && event.shiftKey) {
+                    event.preventDefault();
+                    const box = event.currentTarget.getBoundingClientRect();
+                    openMenu(project, box.left + 24, box.top + 24);
+                  }
+                }}
+              >
+                <span className="project-row-icon" aria-hidden="true">{projectIcon(project)}</span>
+                <span className="project-row-copy"><strong>{project.name || project.project_id}</strong><small>{projectSubtitle(project, activity)}</small></span>
+                {taskActive ? <span className="project-activity-spinner" title={activity.label || "后台处理中"} /> : project.error || taskFailed ? <span className="project-row-alert" title={activity?.message || project.error || "整理异常"}>!</span> : null}
+              </button>
+            );
+          })
         )}
       </div>
 
@@ -159,9 +172,11 @@ export function ProjectLibrary({
           <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small></div>
           <button type="button" role="menuitem" onClick={() => run(() => onSelectProject(menu.project))}>打开项目</button>
           <button type="button" role="menuitem" disabled={!onOpenTeamProject} onClick={() => run(() => onOpenTeamProject?.(menu.project))}>团队审阅</button>
+          <button type="button" role="menuitem" disabled={!onCopyShareLink} onClick={() => run(() => onCopyShareLink?.(menu.project))}>复制局域网协作链接</button>
           <button type="button" role="menuitem" disabled={!onRevealProject} onClick={() => run(() => onRevealProject?.(menu.project))}>{revealLabel}</button>
           <button type="button" role="menuitem" disabled={!onOpenMediaBinding} onClick={() => run(() => onOpenMediaBinding?.(menu.project))}>本机素材 / 换素材盘</button>
           <button type="button" role="menuitem" disabled={!onPrepareProject} onClick={() => run(() => onPrepareProject?.(menu.project))}>重整项目</button>
+          <button type="button" role="menuitem" className="project-context-danger" disabled={!onDeleteProject} onClick={() => run(() => onDeleteProject?.(menu.project))}>永久删除项目…</button>
         </div>
       ) : null}
     </div>
