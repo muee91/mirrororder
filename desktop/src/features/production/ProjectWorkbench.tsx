@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
-import { readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
+import { rememberProjectPage, type ProductionPage } from "../../app/resumeState";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
 import { GoldenMaterialScriptWorkbench } from "../material-script/GoldenMaterialScriptWorkbench";
@@ -38,12 +38,8 @@ function safeProductionPage(page: ProductionPage): ProductionPage {
   return PRODUCTION_PAGES.has(page) ? page : "slate";
 }
 
-function initialPage(projectId: string): ProductionPage {
-  return safeProductionPage(readProjectPage(projectId));
-}
-
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props) {
-  const [page, setPage] = useState<ProductionPage>(() => initialPage(project.project_id));
+  const [page, setPage] = useState<ProductionPage>("slate");
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
 
