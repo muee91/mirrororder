@@ -10,26 +10,25 @@ interface Props {
   onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
 }
 
-function numberStat(project: ProjectSummary, ...keys: string[]): number | null {
+function numberStat(project: ProjectSummary, ...keys: string[]): number {
   for (const key of keys) {
     const value = project.stats?.[key];
     if (typeof value === "number" && Number.isFinite(value)) return value;
   }
-  return null;
-}
-
-function subtitle(project: ProjectSummary): string {
-  if (project.error) return "需要处理";
-  const takes = numberStat(project, "groups", "takes");
-  const clips = numberStat(project, "clips", "media");
-  if (takes !== null && clips !== null) return `${takes} Take · ${clips} 素材`;
-  if (takes !== null) return `${takes} Take`;
-  if (clips !== null) return `${clips} 素材`;
-  return project.input_kind === "fcpxml" ? "Final Cut Pro 项目" : "Production 项目";
+  return 0;
 }
 
 function attention(project: ProjectSummary): number {
-  return numberStat(project, "attention", "issues", "pending_review") ?? 0;
+  const explicit = numberStat(project, "attention", "issues", "pending_review");
+  if (explicit > 0) return explicit;
+  return numberStat(project, "missing_media") + numberStat(project, "unknown_groups") + numberStat(project, "script_gap_blocks");
+}
+
+function backdropSymbol(project: ProjectSummary): string {
+  const values = ["▤", "◫", "◉", "▥", "▶"];
+  let checksum = 0;
+  for (const char of project.project_id) checksum = ((checksum * 31) + char.charCodeAt(0)) & 0x7fffffff;
+  return values[checksum % values.length];
 }
 
 export function ProjectHome({ baseUrl, workspace, onOpenProject, onWorkspaceChanged }: Props) {
@@ -44,12 +43,11 @@ export function ProjectHome({ baseUrl, workspace, onOpenProject, onWorkspaceChan
     <section className="project-home-canvas">
       <header className="project-home-heading">
         <div>
-          <p className="eyebrow">Production</p>
           <h1>全部项目</h1>
-          <span>{workspace.projects.length} 个制作项目</span>
+          <span>{workspace.projects.length} 个项目 · Production</span>
         </div>
         <div className="project-home-actions">
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目" aria-label="搜索项目" />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目…" aria-label="搜索项目" />
           <ProjectLifecyclePanel baseUrl={baseUrl} selectedProject={null} onWorkspaceChanged={onWorkspaceChanged} />
         </div>
       </header>
@@ -57,18 +55,24 @@ export function ProjectHome({ baseUrl, workspace, onOpenProject, onWorkspaceChan
       {visible.length ? (
         <div className="project-home-grid">
           {visible.map((project) => {
+            const takes = numberStat(project, "groups", "takes");
+            const clips = numberStat(project, "clips", "media");
             const needsAttention = attention(project);
             return (
               <button type="button" className={`project-home-card ${project.error ? "has-error" : ""}`} key={project.project_id} onClick={() => onOpenProject(project)}>
                 <div className="project-home-visual" aria-hidden="true">
-                  <span>{project.input_kind === "fcpxml" ? "▤" : "镜"}</span>
+                  <span className="project-home-kind">{project.input_kind === "fcpxml" ? "FCPXML" : "原始素材"}</span>
+                  <strong>{backdropSymbol(project)}</strong>
                 </div>
                 <div className="project-home-copy">
-                  <strong>{project.name || project.project_id}</strong>
-                  <span>{subtitle(project)}</span>
-                  <div className="project-home-meta">
-                    {needsAttention > 0 ? <em>{needsAttention} 待处理</em> : <small>制作就绪</small>}
-                    {project.error ? <em className="is-error">需要处理</em> : null}
+                  <div className="project-home-title-row">
+                    <strong>{project.name || project.project_id}</strong>
+                    {project.error ? <span className="project-home-error">!</span> : null}
+                  </div>
+                  <div className="project-home-stats">
+                    <span>{takes} Take</span>
+                    <span>{clips} 素材</span>
+                    {needsAttention > 0 ? <em>{needsAttention} 待处理</em> : null}
                   </div>
                 </div>
               </button>
