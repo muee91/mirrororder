@@ -113,9 +113,13 @@ function linkedScene(review: ReviewModelPayload, groupId: string): SceneLink | n
   return null;
 }
 
+function automaticMappingConfirmed(take: ReviewTakeGroup): boolean {
+  return take.automatic_state.status === "auto_confirmed" || take.automatic_state.status === "ai_confirmed";
+}
+
 function mappedScene(review: ReviewModelPayload, take: ReviewTakeGroup): SceneLink | null {
   const effectiveIds = take.effective_mapping.script_segment_ids;
-  const automaticIds = take.automatic_state.script_segment_ids ?? [];
+  const automaticIds = automaticMappingConfirmed(take) ? take.automatic_state.script_segment_ids ?? [] : [];
   const ids = effectiveIds.length ? effectiveIds : automaticIds;
   if (!ids.length) return null;
   const wanted = new Set(ids);
@@ -130,8 +134,9 @@ function mappedScene(review: ReviewModelPayload, take: ReviewTakeGroup): SceneLi
 }
 
 function derivedEpisode(take: ReviewTakeGroup, mapped: SceneLink | null): number | null {
+  const confirmedAutomaticEpisode = automaticMappingConfirmed(take) ? take.automatic_state.episode_ids?.[0] : undefined;
   return take.effective_mapping.episode_ids[0]
-    ?? take.automatic_state.episode_ids?.[0]
+    ?? confirmedAutomaticEpisode
     ?? mapped?.episode
     ?? take.candidates.find((candidate) => candidate.episode_ids.length > 0 && candidate.confidence !== "context_only")?.episode_ids[0]
     ?? null;
@@ -139,7 +144,7 @@ function derivedEpisode(take: ReviewTakeGroup, mapped: SceneLink | null): number
 
 function takeMatchesEpisode(take: ReviewTakeGroup, episode: number): boolean {
   if (take.effective_mapping.episode_ids.includes(episode)) return true;
-  if (take.automatic_state.episode_ids?.includes(episode) && take.automatic_state.status !== "unresolved") return true;
+  if (automaticMappingConfirmed(take) && take.automatic_state.episode_ids?.includes(episode)) return true;
   return take.candidates.some((candidate) => candidate.episode_ids.includes(episode) && candidate.confidence !== "context_only");
 }
 
