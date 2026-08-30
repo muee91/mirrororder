@@ -404,7 +404,17 @@ export function App() {
               pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
             />
           ) : (
-            <ProjectHome baseUrl={snapshot.baseUrl} workspace={snapshot.workspace} onOpenProject={selectProject} onWorkspaceChanged={refreshWorkspace} />
+            <ProjectHome
+              baseUrl={snapshot.baseUrl}
+              workspace={snapshot.workspace}
+              revealLabel={revealLabel}
+              onOpenProject={selectProject}
+              onOpenTeamProject={openTeamProject}
+              onRevealProject={(project) => revealProject(project)}
+              onPrepareProject={(project) => prepareProject(project)}
+              onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
+              onWorkspaceChanged={refreshWorkspace}
+            />
           )}
         </section>
       </section>
