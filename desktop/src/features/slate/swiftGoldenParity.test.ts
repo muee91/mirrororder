@@ -20,6 +20,7 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).toContain("owns-chrome");
     expect(workbench).toContain("‹ 返回多机位场记");
     expect(workbench).toContain("assistantVisible = assistantOpen && secondarySurface");
+    expect(workbench).toContain("onOpenTeamReview ?? (() => setPage(\"watch\"))");
     expect(experience).toContain("grid-template-columns: minmax(0, 1fr) 312px");
   });
 
@@ -32,6 +33,7 @@ describe("Swift golden product fidelity", () => {
       "C 机",
       "辅助 / 特殊",
       "加入 Take / 镜头",
+      "团队审阅",
       "同场下一条",
       "同上",
       "空白",
@@ -49,7 +51,10 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("slateMedia.resolveDrop");
     expect(slate).toContain("已把 T${take.take_index} 填入当前场记");
     expect(slate).toContain("row.record_id === selected.record_id || row.source_group_id !== take.group_id");
-    expect(slate).toContain("take_number: take.take_index || row.take_number || null");
+    expect(slate).toContain("take_number: take.take_index || null");
+    expect(slate).toContain("shortcutActionsRef");
+    expect(slate).toContain('globalThis.addEventListener("keydown", keydown)');
+    expect(slate).toContain("}, []);");
     expect(slate).not.toContain("track.clips =");
     expect(css).toContain("height: 52px");
     expect(css).toContain("height: 38px");
@@ -68,7 +73,7 @@ describe("Swift golden product fidelity", () => {
     expect(slate).not.toContain("script_scene_id: take.effective_mapping.script_segment_ids[0]");
   });
 
-  it("uses the frozen Swift media-card geometry and lazily loads real source thumbnails", () => {
+  it("uses the frozen Swift media-card geometry while limiting live thumbnail pressure", () => {
     const card = source("../media/MirrorOrderMediaCard.tsx");
     const css = source("../media/mirrororder-media-card.css");
     const reviewAdapter = source("../material-script/AngleEvidenceCard.tsx");
@@ -78,34 +83,50 @@ describe("Swift golden product fidelity", () => {
     expect(css).toContain("grid-template-columns: 132px");
     expect(css).toContain("border: 2px solid");
     expect(card).toContain("IntersectionObserver");
-    expect(card).toContain('rootMargin: "140px 220px"');
+    expect(card).toContain('rootMargin: "48px 96px"');
     expect(card).toContain("compact && compactPreviewActive");
+    expect(card).toContain("previewReady");
+    expect(card).toContain('video.addEventListener("seeked", markReady)');
     expect(card).toContain("sourceStart");
     expect(card).toContain("当前设备缺失");
+    expect(css).toContain(".mo-media-thumb video.is-ready");
+    expect(css).toContain(".mo-media-preview-fallback");
     expect(reviewAdapter).toContain("MirrorOrderMediaCard");
     expect(reviewAdapter).not.toContain("fixed-angle-card");
   });
 
-  it("restores the fixed macOS-style project home and sidebar geometry", () => {
+  it("restores the fixed macOS-style project home and sidebar geometry plus project actions", () => {
     const app = source("../../app/App.tsx");
     const home = source("../projects/ProjectHome.tsx");
     const css = source("../projects/project-home.css");
     const library = source("../projects/ProjectLibrary.tsx");
     const libraryFidelity = source("../projects/project-library-fidelity.css");
+    const activity = source("../projects/projectActivity.ts");
     const shell = source("../../styles.css");
     expect(app).toContain("<ProjectHome");
     expect(app).toContain("setSelectedProject(null)");
+    expect(app).toContain("teamWorkbenchUrl");
+    expect(app).toContain("deleteProject(project: ProjectSummary)");
+    expect(app).toContain("useProjectActivities");
     expect(home).toContain("全部项目");
     expect(home).toContain("FCPXML");
     expect(home).toContain("原始素材");
     expect(home).toContain("onContextMenu");
     expect(home).toContain("团队审阅");
+    expect(home).toContain("复制局域网协作链接");
     expect(home).toContain("本机素材 / 换素材盘");
+    expect(home).toContain("永久删除项目…");
+    expect(home).toContain("project-activity-spinner");
+    expect(activity).toContain("ProjectTaskClient");
+    expect(activity).toContain('state: "active"');
+    expect(activity).toContain('state: "failed"');
     expect(css).toContain("grid-template-columns: repeat(auto-fill, 260px)");
     expect(css).toContain("width: 260px; height: 176px");
     expect(css).toContain("grid-template-rows: 108px 68px");
     expect(library).toContain('import "./project-library-fidelity.css"');
     expect(library).toContain("workspace.projects.slice(0, 8)");
+    expect(library).toContain("复制局域网协作链接");
+    expect(library).toContain("永久删除项目…");
     expect(library).not.toContain('<button type="button" className={utilityActive === "team"');
     expect(libraryFidelity).toContain("min-height: 38px");
     expect(libraryFidelity).not.toContain("::before");
