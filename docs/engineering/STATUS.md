@@ -8,6 +8,7 @@
 - 稳定化基线：`fix/runtime-read-paths`
 - 已验证功能基线：`feature/timeline-audio-ux@20d0febdd226d551628f9f11b4285d9b6efacdd6`。
 - 当前恢复分支：`feature/swift-golden-product-parity`，从上述 Stage 17 基线独立演进；不直接合并到 `main`。
+- 当前 source-freeze / 最终 packaged smoke 验证目标：`feature/swift-golden-product-parity@597f9c7081aed40c8f8f454993bc207ad819a448`；本轮后续仅更新验收记录，不改变产品源代码。
 - 当前恢复分支相对 Stage 17 基线：0 behind；当前 source diff 仅涉及 React/TS 产品层、Python local adapters/contracts 与工程文档，没有修改 Rust Timeline Core / Timeline bridge / Delivery authority。
 - GitHub Actions：当前无可用 status checks；不作为已通过 gate。
 - 当前原则：源码审阅不能替代 executable validation；本分支的原生 Desktop、Python/Rust/Tauri 与 packaged build gates 已真实执行，未执行的 native smoke 仍明确标为 `NOT RUN`，不得继承 Stage 17 基线的 PASS。
@@ -102,7 +103,7 @@
 - `python3 scripts/check_full.py`：**PASS；457 passed，1 个第三方 `huggingface_hub` deprecation warning**。
 - Rust/Tauri executable gates：由 fast/full 与独立命令真实执行并通过；Timeline 10、Tauri host 31。
 - Packaged staging / RC / Tauri release build / macOS bundle verification：**PASS**。
-- Packaged product smoke：除 Finder/Explorer 跨窗口拖入外，其余 closeout 项目已实测 **PASS**；粗归集 stale confirmation 已验证无额外写入。
+- Packaged product smoke：除 Finder/Explorer 跨窗口拖入外，其余 closeout 项目已实测 **PASS**；最终 bundle fresh launch、bundled Host `/api/v1/ping` identity 与粗归集 stale confirmation 均已验证。
 - Finder/Explorer native drag-drop：**NOT RUN**；GUI 自动化服务两次返回 `noWindowsAvailable`，未伪造 PASS。
 - Final Cut Pro / real authoritative FCPXML import smoke：**NOT RUN**。
 - codesign/notarization、Windows native/installer gates、GitHub Actions：**NOT RUN**。
