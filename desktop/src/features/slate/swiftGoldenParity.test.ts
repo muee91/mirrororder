@@ -15,6 +15,8 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).not.toContain("AssemblyWorkbench");
     expect(workbench).not.toContain('label: "剪辑"');
     expect(workbench).not.toContain("project-workbench-primary");
+    expect(workbench).not.toContain("readProjectPage");
+    expect(workbench).toContain('useState<ProductionPage>("slate")');
     expect(workbench).toContain("owns-chrome");
     expect(workbench).toContain("‹ 返回多机位场记");
     expect(workbench).toContain("assistantVisible = assistantOpen && secondarySurface");
@@ -47,9 +49,11 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("slateMedia.resolveDrop");
     expect(slate).toContain("已把 T${take.take_index} 填入当前场记");
     expect(slate).toContain("row.record_id === selected.record_id || row.source_group_id !== take.group_id");
+    expect(slate).toContain("take_number: take.take_index || row.take_number || null");
     expect(slate).not.toContain("track.clips =");
     expect(css).toContain("height: 52px");
     expect(css).toContain("height: 38px");
+    expect(css).toContain("@media (max-width: 1320px)");
     expect(css).toContain("grid-template-rows: minmax(150px,1fr) minmax(180px,1.15fr)");
   });
 
@@ -95,6 +99,8 @@ describe("Swift golden product fidelity", () => {
     expect(home).toContain("FCPXML");
     expect(home).toContain("原始素材");
     expect(home).toContain("onContextMenu");
+    expect(home).toContain("团队审阅");
+    expect(home).toContain("本机素材 / 换素材盘");
     expect(css).toContain("grid-template-columns: repeat(auto-fill, 260px)");
     expect(css).toContain("width: 260px; height: 176px");
     expect(css).toContain("grid-template-rows: 108px 68px");
