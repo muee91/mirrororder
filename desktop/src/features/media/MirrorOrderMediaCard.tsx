@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReviewAngle } from "../../api/host";
 import type { SlateAttachment } from "../../api/production";
 import "./mirrororder-media-card.css";
@@ -72,11 +72,34 @@ export function MirrorOrderMediaCard({
   onSelect,
   onPrefer,
 }: Props) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  // Swift Golden compact cards always carried a real source thumbnail. In the
-  // WebView we use the already-authorized local playback descriptor and seek a
-  // muted metadata-only video to source_start; no new media authority is made.
-  const previewEnabled = Boolean((compact || showPreview) && model.playbackUrl && model.available !== false);
+  const [compactPreviewActive, setCompactPreviewActive] = useState(!compact);
+
+  // The frozen Swift card used a static AVAssetImageGenerator thumbnail. The
+  // current Host exposes an authorized playback descriptor but no thumbnail
+  // endpoint, so compact cards lazily load that descriptor only when they are
+  // near the viewport. This keeps the visual contract without creating a grid
+  // of eagerly-loading video decoders.
+  useEffect(() => {
+    if (!compact) {
+      setCompactPreviewActive(true);
+      return;
+    }
+    const element = cardRef.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setCompactPreviewActive(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.some((entry) => entry.isIntersecting || entry.intersectionRatio > 0);
+      setCompactPreviewActive(visible);
+    }, { rootMargin: "140px 220px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [compact]);
+
+  const previewEnabled = Boolean((showPreview || (compact && compactPreviewActive)) && model.playbackUrl && model.available !== false);
   const label = useMemo(() => [model.camera, model.name, shotLabel(model.shotType)].filter(Boolean).join(" · "), [model]);
 
   useEffect(() => {
@@ -121,7 +144,7 @@ export function MirrorOrderMediaCard({
   );
 
   return (
-    <div className={`mo-media-card ${compact ? "is-compact" : "is-inspector"} ${selected ? "is-selected" : ""} ${model.available === false ? "is-missing" : ""}`} aria-label={label}>
+    <div ref={cardRef} className={`mo-media-card ${compact ? "is-compact" : "is-inspector"} ${selected ? "is-selected" : ""} ${model.available === false ? "is-missing" : ""}`} aria-label={label}>
       {onSelect ? (
         <button type="button" className="mo-media-select" onClick={() => onSelect(model.id)} aria-pressed={selected}>{content}</button>
       ) : <div className="mo-media-select">{content}</div>}
