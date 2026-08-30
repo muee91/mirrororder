@@ -2,7 +2,6 @@
 .project-workbench-canvas { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
 .project-workbench-main { min-width: 0; min-height: 0; overflow: auto; padding: 10px 12px 14px; }
 .project-workbench-main.owns-chrome { overflow: hidden; padding: 0; }
-.project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body { grid-template-columns: minmax(0, 1fr) 312px; }
 .has-assistant-drawer .project-workbench-canvas { grid-template-columns: minmax(0, 1fr) 340px; }
 .has-assistant-drawer .project-workbench-main { border-right: 1px solid #232b33; }
 
