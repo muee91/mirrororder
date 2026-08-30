@@ -7,6 +7,7 @@ import { AssistantModelsPanel } from "../assistant/AssistantModelsPanel";
 import { CollaborationPanel } from "./CollaborationPanel";
 import { DesktopAppearanceControl } from "./DesktopAppearanceControl";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
+import "./settings-preferences.css";
 
 interface Props { baseUrl: string; projectId?: string | null }
 
