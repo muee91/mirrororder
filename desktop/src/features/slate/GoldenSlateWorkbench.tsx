@@ -443,7 +443,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
         .map((row) => row.record_id === selected.record_id ? {
           ...row,
           source_group_id: take.group_id,
-          take_number: take.take_index || row.take_number || null,
+          take_number: take.take_index || null,
           episode: row.episode ?? episode,
           script_scene_id: row.script_scene_id || link?.sceneId || "",
           attachments,
@@ -658,18 +658,23 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
     }
   }
 
+  const shortcutActionsRef = useRef({ saveAll, addBlank, setIO });
+  useEffect(() => {
+    shortcutActionsRef.current = { saveAll, addBlank, setIO };
+  });
+
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const editing = Boolean(target?.closest("input, textarea, select, [contenteditable=true]"));
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void saveAll(); return; }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") { event.preventDefault(); addBlank(); return; }
-      if (!editing && event.key.toLowerCase() === "i") { event.preventDefault(); setIO("in"); }
-      if (!editing && event.key.toLowerCase() === "o") { event.preventDefault(); setIO("out"); }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void shortcutActionsRef.current.saveAll(); return; }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") { event.preventDefault(); shortcutActionsRef.current.addBlank(); return; }
+      if (!editing && event.key.toLowerCase() === "i") { event.preventDefault(); shortcutActionsRef.current.setIO("in"); }
+      if (!editing && event.key.toLowerCase() === "o") { event.preventDefault(); shortcutActionsRef.current.setIO("out"); }
     };
     globalThis.addEventListener("keydown", keydown);
     return () => globalThis.removeEventListener("keydown", keydown);
-  });
+  }, []);
 
   function mediaCell(draft: Draft, camera: "A" | "B" | "C" | "AUX") {
     const row = primaryAttachment(draft, camera);
@@ -736,7 +741,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
         <div className="golden-slate-actions">
           <input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="操作者" aria-label="场记操作者" />
           {onOpenMaterialScript ? <button type="button" className="secondary" onClick={onOpenMaterialScript}>素材 / 剧本</button> : null}
-          {onOpenReview ? <button type="button" className="secondary" onClick={onOpenReview}>审阅</button> : null}
+          {onOpenReview ? <button type="button" className="secondary" onClick={onOpenReview}>团队审阅</button> : null}
           {onOpenIdentity ? <button type="button" className="secondary compact-action" onClick={onOpenIdentity}>人物</button> : null}
           <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>加入 Take / 镜头</button>
           <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={() => setInspectorOpen((value) => !value)} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>▥</button>
