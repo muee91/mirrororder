@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -6,7 +7,11 @@ import { assertManifestToolMatches, buildToolMetadata } from "./runtime-tools.mj
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(here, "..");
+const repoRoot = path.resolve(desktopRoot, "..");
 const bundleRoot = path.join(desktopRoot, "src-tauri", "target", "release", "bundle", "macos");
+const canonicalIcon = path.join(repoRoot, "branding", "app-icon.png");
+const generatedIcns = path.join(desktopRoot, "src-tauri", "icons", "generated", "icon.icns");
+const EXPECTED_BRAND_ICON_GIT_BLOB = "6ec6f9e08cb89c43a1cb09385ace7c88832bf0b8";
 
 function fail(message) {
   console.error(`macOS bundle verification failed: ${message}`);
@@ -31,6 +36,10 @@ function assertFile(value, label) {
   if (!fs.existsSync(value) || !fs.statSync(value).isFile()) fail(`${label} missing: ${value}`);
 }
 
+function sha256(value) {
+  return crypto.createHash("sha256").update(fs.readFileSync(value)).digest("hex");
+}
+
 function inspectMachO(binary, appRoot) {
   const output = run("otool", ["-L", binary], `otool ${path.basename(binary)}`);
   const forbidden = [];
@@ -53,8 +62,31 @@ function inspectMachO(binary, appRoot) {
 
 if (process.platform !== "darwin") fail("this verification gate must run on macOS");
 
+assertFile(canonicalIcon, "canonical branded app icon");
+const canonicalIconBlob = run("git", ["hash-object", canonicalIcon], "canonical branded app icon git hash", { cwd: repoRoot });
+if (canonicalIconBlob !== EXPECTED_BRAND_ICON_GIT_BLOB) {
+  fail(`canonical branded app icon changed unexpectedly: expected git blob ${EXPECTED_BRAND_ICON_GIT_BLOB}, got ${canonicalIconBlob}`);
+}
+assertFile(generatedIcns, "generated macOS app icon");
+
 const app = findApp();
+const infoPlist = path.join(app, "Contents", "Info.plist");
 const resources = path.join(app, "Contents", "Resources");
+assertFile(infoPlist, "app Info.plist");
+const configuredIconName = run("plutil", ["-extract", "CFBundleIconFile", "raw", infoPlist], "CFBundleIconFile");
+if (!configuredIconName) fail("Info.plist has an empty CFBundleIconFile");
+const packagedIconName = path.extname(configuredIconName) ? configuredIconName : `${configuredIconName}.icns`;
+if (path.extname(packagedIconName).toLowerCase() !== ".icns") {
+  fail(`CFBundleIconFile must resolve to an .icns resource on macOS; got ${configuredIconName}`);
+}
+const packagedIcon = path.join(resources, packagedIconName);
+assertFile(packagedIcon, "packaged macOS app icon");
+const generatedIconSha256 = sha256(generatedIcns);
+const packagedIconSha256 = sha256(packagedIcon);
+if (generatedIconSha256 !== packagedIconSha256) {
+  fail(`packaged macOS app icon does not match generated branded icon: generated=${generatedIconSha256} packaged=${packagedIconSha256}`);
+}
+
 const core = path.join(resources, "mirrororder-core");
 const pythonRoot = path.join(resources, "mirrororder-python");
 const tools = path.join(resources, "mirrororder-tools", "bin");
@@ -139,6 +171,7 @@ if (process.env.MIRRORORDER_REQUIRE_CODESIGN === "1") {
 }
 
 console.log(`macOS bundle gate passed: ${app}`);
+console.log(`app icon: source_blob=${canonicalIconBlob} · packaged=${packagedIconName} · sha256=${packagedIconSha256}`);
 console.log(`runtime: ${pythonOutput}`);
 console.log(`ffmpeg: ${ffmpegMetadata.version} · configuration=${ffmpegMetadata.configuration} · sha256=${ffmpegMetadata.sha256}`);
 console.log(`ffprobe: ${ffprobeMetadata.version} · configuration=${ffprobeMetadata.configuration} · sha256=${ffprobeMetadata.sha256}`);
