@@ -20,6 +20,7 @@ interface Props {
   baseUrl: string;
   project: ProjectSummary;
   pageRequest?: { page: ProductionPage; nonce: number } | null;
+  onOpenTeamReview?: () => void;
 }
 
 const PRODUCTION_PAGES = new Set<ProductionPage>([
@@ -38,7 +39,7 @@ function safeProductionPage(page: ProductionPage): ProductionPage {
   return PRODUCTION_PAGES.has(page) ? page : "slate";
 }
 
-export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props) {
+export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview }: Props) {
   const [page, setPage] = useState<ProductionPage>("slate");
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
                 onOpenMaterialScript={() => setPage("takes")}
                 onOpenIdentity={() => setPage("identity")}
                 onOpenReview={() => setPage("watch")}
+                onOpenTeamReview={onOpenTeamReview}
               />
               <SlatePlaybackShortcuts />
             </>
