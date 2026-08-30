@@ -12,6 +12,8 @@ import "./golden-slate.css";
 interface Props {
   baseUrl: string;
   projectId: string;
+  assistantOpen?: boolean;
+  onToggleAssistant?: () => void;
   onOpenMaterialScript?: () => void;
   onOpenIdentity?: () => void;
   onOpenReview?: () => void;
@@ -279,7 +281,7 @@ function statusLabel(status: SlateStatus): string {
   return STATUS_OPTIONS.find((item) => item.value === status)?.label ?? status;
 }
 
-export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript, onOpenIdentity, onOpenReview }: Props) {
+export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false, onToggleAssistant, onOpenMaterialScript, onOpenIdentity, onOpenReview }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
   const records = useMemo(() => new SlateRecordClient(baseUrl), [baseUrl]);
@@ -739,6 +741,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
           {onOpenMaterialScript ? <button type="button" className="secondary" onClick={onOpenMaterialScript}>素材 / 剧本</button> : null}
           {onOpenReview ? <button type="button" className="secondary" onClick={onOpenReview}>团队审阅</button> : null}
           {onOpenIdentity ? <button type="button" className="secondary compact-action" onClick={onOpenIdentity}>人物</button> : null}
+          {onToggleAssistant ? <button type="button" className={`icon-action ${assistantOpen ? "is-active" : ""}`} onClick={onToggleAssistant} aria-label={assistantOpen ? "关闭小镜" : "打开小镜"} title={assistantOpen ? "关闭小镜" : "打开小镜"}>✦</button> : null}
           <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>加入 Take / 镜头</button>
           <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={() => setInspectorOpen((value) => !value)} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>▥</button>
           <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} title="刷新项目">↻</button>
@@ -747,7 +750,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
       </header>
 
       <section className="golden-slate-quick">
-        <span className="quick-mic" aria-hidden="true">⌁</span>
         <input value={quickText} onChange={(event) => setQuickText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void applyQuickEntry(); } }} placeholder="快速录入：EP3 12场 B近 可用 / 同场下一条 C中" />
         <button type="button" className="quick-fill" disabled={!selected || busy || !quickText.trim()} onClick={() => void applyQuickEntry()}>填入</button>
         <span className="quick-divider" />
