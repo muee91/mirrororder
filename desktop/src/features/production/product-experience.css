@@ -6,23 +6,14 @@
 .has-assistant-drawer .project-workbench-canvas { grid-template-columns: minmax(0, 1fr) 340px; }
 .has-assistant-drawer .project-workbench-main { border-right: 1px solid #232b33; }
 
-.golden-secondary-workspace,
 .production-secondary-workspace { display: grid; width: 100%; height: 100%; min-width: 0; min-height: 0; grid-template-rows: 38px minmax(0, 1fr); background: #0b0f13; }
-.golden-secondary-return,
 .production-secondary-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 38px; border-bottom: 1px solid #252d35; padding: 0 10px; background: #11171c; }
-.golden-secondary-return > span,
 .production-secondary-bar > strong { min-width: 0; overflow: hidden; color: #aeb8c1; font-size: 10px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
-.golden-secondary-return > div,
 .production-secondary-bar nav { display: flex; align-items: center; gap: 4px; }
-.golden-secondary-return button,
 .production-secondary-bar button { min-height: 27px; border-color: transparent; border-radius: 6px; padding: 4px 8px; color: #7c8994; background: transparent; font-size: 9px; }
-.golden-secondary-return button:hover,
 .production-secondary-bar button:hover { color: #c7d0d7; background: #1a2127; }
-.golden-secondary-return button.is-active,
 .production-secondary-bar button.is-active { color: #e4e9ed; background: #242c33; }
-.golden-secondary-workspace > .golden-material-script,
-.production-secondary-canvas { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
-.production-secondary-canvas { overflow: auto; padding: 10px 12px 14px; }
+.production-secondary-canvas { min-width: 0; min-height: 0; height: 100%; overflow: auto; padding: 10px 12px 14px; }
 
 .assistant-context-drawer { position: static; min-width: 0; max-height: none; height: 100%; overflow-y: auto; border: 0; border-radius: 0; padding: 11px; background: #0c1115; box-shadow: none; }
 .assistant-drawer-heading { position: sticky; z-index: 2; top: -11px; margin: -11px -11px 10px; border-bottom: 1px solid #252d36; padding: 10px 11px 9px; background: #0c1115; }
@@ -42,25 +33,17 @@
 @media (max-width: 1040px) {
   .has-assistant-drawer .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }
   .assistant-context-drawer { position: fixed; z-index: 50; top: 12px; right: 12px; bottom: 12px; width: min(380px, calc(100vw - 24px)); height: auto; border: 1px solid #2d3740; border-radius: 9px; box-shadow: 0 20px 60px rgba(0, 0, 0, .34); }
-  .golden-secondary-return,
   .production-secondary-bar { grid-template-columns: auto minmax(0, 1fr); }
-  .golden-secondary-return > div,
   .production-secondary-bar nav { grid-column: 1 / -1; display: none; }
 }
 
 @media (prefers-color-scheme: light) {
   .project-production-workbench,
-  .golden-secondary-workspace,
   .production-secondary-workspace { background: #f7f8fa; }
-  .golden-secondary-return,
   .production-secondary-bar { border-color: #dce3e9; background: #fff; }
-  .golden-secondary-return > span,
   .production-secondary-bar > strong { color: #40505c; }
-  .golden-secondary-return button,
   .production-secondary-bar button { color: #65717c; }
-  .golden-secondary-return button:hover,
   .production-secondary-bar button:hover { color: #26313a; background: #eef2f5; }
-  .golden-secondary-return button.is-active,
   .production-secondary-bar button.is-active { color: #fff; background: #303d48; }
   .has-assistant-drawer .project-workbench-main { border-color: #dce3e9; }
   .assistant-context-drawer, .assistant-drawer-heading { background: #fff; }
