@@ -18,6 +18,8 @@
 .project-context-menu > button { width: 100%; border: 0; border-radius: 6px; padding: 7px 8px; color: #aeb8c1; background: transparent; font-size: 10px; font-weight: 550; text-align: left; }
 .project-context-menu > button:hover:not(:disabled), .project-context-menu > button:focus-visible { color: #eef2f5; background: #202830; outline: none; }
 .project-context-menu > button:disabled { color: #596671; background: transparent; }
+.project-context-menu > button.project-context-danger { margin-top: 4px; border-top: 1px solid #2b3239; border-radius: 0 0 6px 6px; padding-top: 9px; color: #ce8585; }
+.project-context-menu > button.project-context-danger:hover:not(:disabled), .project-context-menu > button.project-context-danger:focus-visible { color: #f0aaaa; background: rgba(137,55,55,.16); }
 
 @media (prefers-color-scheme: light) {
   .project-context-menu { border-color: #cbd5dd; color: #27313a; background: rgba(255, 255, 255, .98); box-shadow: 0 18px 54px rgba(38, 49, 60, .16); }
@@ -27,4 +29,6 @@
   .project-context-menu > button { color: #53616d; }
   .project-context-menu > button:hover:not(:disabled), .project-context-menu > button:focus-visible { color: #1f2a33; background: #eef2f5; }
   .project-context-menu > button:disabled { color: #a4adb5; }
+  .project-context-menu > button.project-context-danger { border-color: #e5d7d7; color: #ae4f4f; }
+  .project-context-menu > button.project-context-danger:hover:not(:disabled), .project-context-menu > button.project-context-danger:focus-visible { color: #8f3030; background: #fff0f0; }
 }
