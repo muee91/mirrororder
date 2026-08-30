@@ -61,10 +61,11 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
 
   const materialScript = page === "takes" || page === "script";
   const secondarySurface = !materialScript && page !== "slate";
-  const assistantVisible = assistantOpen && secondarySurface;
+  const slateAssistantVisible = assistantOpen && page === "slate";
+  const assistantVisible = assistantOpen && (secondarySurface || page === "slate");
 
   return (
-    <section className={`project-production-workbench ${assistantVisible ? "has-assistant-drawer" : ""}`}>
+    <section className={`project-production-workbench ${assistantVisible ? "has-assistant-drawer" : ""} ${slateAssistantVisible ? "has-slate-assistant" : ""}`}>
       <div className="project-workbench-canvas">
         <div className={`project-workbench-main ${page === "slate" || materialScript ? "owns-chrome" : ""}`}>
           {page === "slate" ? (
@@ -72,6 +73,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               <GoldenSlateWorkbench
                 baseUrl={baseUrl}
                 projectId={project.project_id}
+                assistantOpen={slateAssistantVisible}
+                onToggleAssistant={() => setAssistantOpen((value) => !value)}
                 onOpenMaterialScript={() => setPage("takes")}
                 onOpenIdentity={() => setPage("identity")}
                 onOpenReview={onOpenTeamReview ?? (() => setPage("watch"))}
@@ -119,7 +122,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
         </div>
 
         {assistantVisible ? (
-          <aside className="assistant-context-drawer" aria-label="小镜上下文助手">
+          <aside className={`assistant-context-drawer ${slateAssistantVisible ? "slate-assistant-drawer" : ""}`} aria-label="小镜上下文助手">
             <div className="assistant-drawer-heading">
               <div><p className="eyebrow">当前项目</p><strong>小镜</strong></div>
               <button type="button" className="secondary" onClick={() => setAssistantOpen(false)} aria-label="关闭小镜">关闭</button>
