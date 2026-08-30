@@ -9,6 +9,7 @@ __pycache__/
 # Generated desktop applications and browser QA artifacts.
 *.app/
 output/
+desktop/src-tauri/icons/generated/
 
 # Live workspace/project runtime state belongs to the user's workspace, not the source repository.
 # Keep only the empty directory placeholder so a fresh checkout can pass project preflight.
