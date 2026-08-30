@@ -63,7 +63,7 @@ describe("Swift golden product fidelity", () => {
     expect(css).toContain("height: 52px");
     expect(css).toContain("height: 38px");
     expect(css).toContain("@media (max-width: 1320px)");
-    expect(css).toContain("@media (max-width: 1200px)");
+    expect(css).toContain("@media (max-width: 1208px)");
     expect(css).toContain("grid-template-columns: minmax(620px,1fr) 285px");
     expect(css).toContain("grid-template-rows: minmax(150px,1fr) minmax(180px,1.15fr)");
   });
