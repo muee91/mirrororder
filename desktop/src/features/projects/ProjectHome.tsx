@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import "./project-home.css";
+import "./project-library-fidelity.css";
 
 interface Props {
   baseUrl: string;
