@@ -12,9 +12,11 @@ import {
 } from "../api/host";
 import { PlatformClient, type PlatformInfo } from "../api/platform";
 import { ProjectActionClient } from "../api/projectActions";
+import { TeamGatewayClient, teamWorkbenchUrl } from "../api/team";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectHome } from "../features/projects/ProjectHome";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
+import { useProjectActivities } from "../features/projects/projectActivity";
 import { SettingsStatusWorkbench } from "../features/settings/SettingsStatusWorkbench";
 import { StatusCenterWorkbench } from "../features/status/StatusCenterWorkbench";
 import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
@@ -25,6 +27,8 @@ import {
   rememberWorkspace,
   type ProductionPage,
 } from "./resumeState";
+
+const EMPTY_PROJECTS: ProjectSummary[] = [];
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
@@ -72,6 +76,11 @@ export function App() {
     }
   }, [baseUrl]);
   const platform = useMemo(() => new PlatformClient(), []);
+  const teamGateway = useMemo(() => new TeamGatewayClient(), []);
+  const { activities: projectActivities, refreshActivities } = useProjectActivities(
+    snapshot?.baseUrl ?? baseUrl,
+    snapshot?.projects ?? EMPTY_PROJECTS,
+  );
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -252,6 +261,28 @@ export function App() {
     setMessage(`团队审阅 · ${project.name || project.project_id}`);
   }
 
+  async function copyProjectShareLink(project: ProjectSummary): Promise<void> {
+    if (!snapshot || !isTauri()) {
+      setMessage("协作链接只能从桌面 App 的团队审阅服务复制。");
+      return;
+    }
+    try {
+      const status = await teamGateway.status();
+      const shareUrl = status.running && status.healthy
+        ? teamWorkbenchUrl(status, snapshot.workspace.workspace_id, project.project_id)
+        : null;
+      if (!shareUrl) {
+        openTeamProject(project);
+        setMessage("团队审阅尚未就绪；已打开团队审阅，请先开启共享服务。");
+        return;
+      }
+      await navigator.clipboard.writeText(shareUrl);
+      setMessage(`已复制 ${project.name || project.project_id} 的局域网协作链接。`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
   async function revealProject(project: ProjectSummary): Promise<void> {
     if (!snapshot || !isTauri()) return;
     try {
@@ -271,10 +302,28 @@ export function App() {
     if (!snapshot) return;
     try {
       const task = await new DesktopClient(snapshot.baseUrl).prepareProject(project.project_id);
-      setSelectedProject(project);
-      setPageRequest(null);
-      setSurface("status");
-      setMessage(`已提交重整任务${task.task_id ? ` · ${task.task_id}` : ""}；在状态中心查看进度。`);
+      await refreshActivities();
+      setMessage(`已提交 ${project.name || project.project_id} 的重整任务${task.task_id ? ` · ${task.task_id}` : ""}；后台状态会直接显示在项目卡与 Sidebar。`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  async function deleteProject(project: ProjectSummary): Promise<void> {
+    if (!snapshot) return;
+    const title = project.name || project.project_id;
+    const confirmed = globalThis.confirm(`永久删除项目“${title}”？\n\n会删除工作区内生成的项目目录、分析缓存和项目记录；原始媒体、剧本与 FCPXML 不会删除。`);
+    if (!confirmed) return;
+    try {
+      await new DesktopClient(snapshot.baseUrl).deleteProject(project.project_id);
+      if (selectedProject?.project_id === project.project_id) {
+        setSelectedProject(null);
+        setPageRequest(null);
+        setSurface("production");
+      }
+      await refreshWorkspace();
+      await refreshActivities();
+      setMessage(`已永久删除项目 · ${title}`);
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -352,6 +401,7 @@ export function App() {
           <ProjectLibrary
             baseUrl={snapshot.baseUrl}
             workspace={snapshot.workspace}
+            activities={projectActivities}
             selectedProjectId={selectedProject?.project_id ?? null}
             utilityActive={utilityActive}
             revealLabel={revealLabel}
@@ -361,9 +411,11 @@ export function App() {
             onOpenTeam={() => setSurface("team")}
             onOpenSettings={() => setSurface("settings")}
             onOpenTeamProject={openTeamProject}
+            onCopyShareLink={(project) => copyProjectShareLink(project)}
             onRevealProject={(project) => revealProject(project)}
             onPrepareProject={(project) => prepareProject(project)}
             onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
+            onDeleteProject={(project) => deleteProject(project)}
             onWorkspaceChanged={refreshWorkspace}
           />
 
@@ -402,17 +454,21 @@ export function App() {
               baseUrl={snapshot.baseUrl}
               project={selectedProject}
               pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
+              onOpenTeamReview={() => openTeamProject(selectedProject)}
             />
           ) : (
             <ProjectHome
               baseUrl={snapshot.baseUrl}
               workspace={snapshot.workspace}
+              activities={projectActivities}
               revealLabel={revealLabel}
               onOpenProject={selectProject}
               onOpenTeamProject={openTeamProject}
+              onCopyShareLink={(project) => copyProjectShareLink(project)}
               onRevealProject={(project) => revealProject(project)}
               onPrepareProject={(project) => prepareProject(project)}
               onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
+              onDeleteProject={(project) => deleteProject(project)}
               onWorkspaceChanged={refreshWorkspace}
             />
           )}
