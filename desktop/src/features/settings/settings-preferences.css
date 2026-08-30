@@ -1,0 +1,52 @@
+.settings-status-workbench { overflow: auto; }
+.settings-heading { position: sticky; z-index: 12; top: 0; }
+.settings-intro { width: min(900px, calc(100% - 48px)); margin: 18px auto 4px; }
+.settings-preference-stack { display: grid; width: min(900px, calc(100% - 48px)); gap: 22px; margin: 0 auto; padding: 14px 0 34px; }
+.settings-preference-section { display: grid; gap: 8px; }
+.settings-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; padding: 0 2px; }
+.settings-section-heading > div { display: grid; gap: 2px; }
+.settings-section-heading h3 { margin: 0; color: #cfd7de; font-size: 13px; font-weight: 650; }
+.settings-section-heading > span { color: #66737e; font-size: 9px; text-align: right; }
+.settings-preference-surface,
+.settings-preference-section > .production-panel,
+.settings-team-grid > .production-panel { border: 1px solid #29323a; border-radius: 10px; background: #10161b; box-shadow: none; }
+.settings-general-card { overflow: hidden; }
+.settings-team-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.settings-team-grid .frontend-settings-card,
+.settings-team-grid .collaboration-card { width: 100%; }
+.settings-team-grid .parse-heading { align-items: flex-start; }
+.settings-team-grid .parse-heading > div { display: grid; gap: 3px; }
+.settings-team-grid .parse-heading .production-note { margin: 0; }
+.team-web-advanced { margin-top: 2px; border-top: 1px solid #252d36; padding-top: 8px; }
+.team-web-advanced > summary { width: fit-content; cursor: pointer; color: #8996a1; font-size: 9px; font-weight: 600; }
+.team-web-advanced[open] > summary { margin-bottom: 8px; }
+.team-web-advanced .production-field { width: min(300px, 100%); margin: 0; }
+.settings-advanced-diagnostics { border: 1px solid #252d36; border-radius: 10px; padding: 0; background: #0e1317; }
+.settings-advanced-diagnostics > summary { padding: 12px 14px; }
+.settings-advanced-diagnostics[open] > summary { margin-bottom: 0; border-bottom: 1px solid #252d36; }
+.settings-diagnostics-note { margin: 12px 14px 0; }
+.settings-diagnostics-grid { padding: 10px 12px 12px; }
+.settings-diagnostics-grid > .production-panel { box-shadow: none; }
+
+html[data-mirrororder-theme="light"] .settings-section-heading h3 { color: #26313a; }
+html[data-mirrororder-theme="light"] .settings-section-heading > span { color: #6a7782; }
+html[data-mirrororder-theme="light"] .settings-preference-surface,
+html[data-mirrororder-theme="light"] .settings-preference-section > .production-panel,
+html[data-mirrororder-theme="light"] .settings-team-grid > .production-panel { border-color: #d8e0e6; background: #fff; }
+html[data-mirrororder-theme="light"] .team-web-advanced { border-color: #dde3e9; }
+html[data-mirrororder-theme="light"] .team-web-advanced > summary { color: #65727d; }
+html[data-mirrororder-theme="light"] .settings-advanced-diagnostics { border-color: #d8e0e6; background: #f8fafb; }
+html[data-mirrororder-theme="light"] .settings-advanced-diagnostics[open] > summary { border-color: #d8e0e6; }
+
+html[data-mirrororder-theme="dark"] .settings-section-heading h3 { color: #cfd7de; }
+html[data-mirrororder-theme="dark"] .settings-preference-surface,
+html[data-mirrororder-theme="dark"] .settings-preference-section > .production-panel,
+html[data-mirrororder-theme="dark"] .settings-team-grid > .production-panel { border-color: #29323a; background: #10161b; }
+html[data-mirrororder-theme="dark"] .settings-advanced-diagnostics { border-color: #252d36; background: #0e1317; }
+
+@media (max-width: 1180px) {
+  .settings-intro,
+  .settings-preference-stack { width: calc(100% - 32px); }
+  .settings-section-heading { align-items: start; }
+  .settings-section-heading > span { max-width: 250px; }
+}
