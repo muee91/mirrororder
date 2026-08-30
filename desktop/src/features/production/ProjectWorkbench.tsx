@@ -12,7 +12,6 @@ import "../media/media.css";
 import { ProjectOverviewWorkbench, ReviewAttentionWorkbench } from "../review/ReviewWorkbenches";
 import { GoldenSlateWorkbench } from "../slate/GoldenSlateWorkbench";
 import { SlatePlaybackShortcuts } from "../slate/SlatePlaybackShortcuts";
-import "../slate/slate-playback-shortcuts.css";
 import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
@@ -65,9 +64,10 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
 
   const materialScript = page === "takes" || page === "script";
   const secondarySurface = !materialScript && page !== "slate";
+  const assistantVisible = assistantOpen && secondarySurface;
 
   return (
-    <section className={`project-production-workbench ${assistantOpen ? "has-assistant-drawer" : ""}`}>
+    <section className={`project-production-workbench ${assistantVisible ? "has-assistant-drawer" : ""}`}>
       <div className="project-workbench-canvas">
         <div className={`project-workbench-main ${page === "slate" || materialScript ? "owns-chrome" : ""}`}>
           {page === "slate" ? (
@@ -112,7 +112,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
                   <button type="button" className={page === "watch" ? "is-active" : ""} onClick={() => setPage("watch")}>审阅</button>
                   <button type="button" className={page === "attention" ? "is-active" : ""} onClick={() => setPage("attention")}>待处理</button>
                   <button type="button" className={page === "overview" ? "is-active" : ""} onClick={() => setPage("overview")}>概览</button>
-                  <button type="button" className={assistantOpen ? "is-active" : ""} onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
+                  <button type="button" className={assistantVisible ? "is-active" : ""} onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
                 </nav>
               </header>
               <div className="production-secondary-canvas">
@@ -127,7 +127,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null }: Props
           ) : null}
         </div>
 
-        {assistantOpen ? (
+        {assistantVisible ? (
           <aside className="assistant-context-drawer" aria-label="小镜上下文助手">
             <div className="assistant-drawer-heading">
               <div><p className="eyebrow">当前项目</p><strong>小镜</strong></div>
