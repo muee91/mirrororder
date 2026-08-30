@@ -26,6 +26,7 @@ interface Props {
   initialGroupId?: string | null;
   initialMode?: "rough" | "precise";
   showEditorial?: boolean;
+  onBack?: () => void;
 }
 
 type WriteState = "idle" | "saving" | "error";
@@ -67,6 +68,7 @@ export function GoldenMaterialScriptWorkbench({
   initialGroupId = null,
   initialMode = "rough",
   showEditorial = false,
+  onBack,
 }: Props) {
   const connection = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const rough = useMemo(() => new RoughPlacementClient(baseUrl), [baseUrl]);
@@ -250,20 +252,29 @@ export function GoldenMaterialScriptWorkbench({
     if (groupId) void placeTake(groupId, [episode], [], "drag", "golden-material-script-rough-episode");
   }
 
-  if (!model) {
-    return <section className="golden-material-script"><div className="golden-ms-loading">{message}</div></section>;
-  }
-
-  return (
-    <section className="golden-material-script">
+  function toolbar() {
+    return (
       <header className="golden-ms-toolbar">
-        <div><p className="eyebrow">Production</p><h2>素材 / 剧本</h2><span>{message}</span></div>
+        <div className="golden-ms-heading">
+          {onBack ? <button type="button" className="golden-ms-back secondary" onClick={onBack}>‹ 场记</button> : null}
+          <div className="golden-ms-title"><p className="eyebrow">Production</p><h2>素材 / 剧本</h2><span>{message}</span></div>
+        </div>
         <div className="golden-ms-mode" aria-label="工作阶段">
           <button type="button" className={mode === "rough" ? "is-active" : ""} onClick={() => setMode("rough")}>粗归集</button>
           <button type="button" className={mode === "precise" ? "is-active" : ""} onClick={() => setMode("precise")}>精确剧本</button>
         </div>
         <label className="golden-ms-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="写入时必填" /></label>
       </header>
+    );
+  }
+
+  if (!model) {
+    return <section className="golden-material-script is-loading">{toolbar()}<div className="golden-ms-loading">{message}</div></section>;
+  }
+
+  return (
+    <section className="golden-material-script">
+      {toolbar()}
 
       {mode === "rough" ? (
         <section className="golden-ms-rough-entry">
