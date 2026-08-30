@@ -146,7 +146,7 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
   .golden-slate-actions button { padding-inline: 6px; }
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1208px) {
   .golden-slate-workbench.has-inspector .golden-slate-body { grid-template-columns: minmax(620px,1fr) 285px; }
 }
 
