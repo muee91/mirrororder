@@ -60,7 +60,7 @@ function seconds(value?: number): string {
 
 function shotLabel(value?: string): string {
   if (!value || value === "unknown") return "景别—";
-  return value;
+  return `景别${value}`;
 }
 
 export function MirrorOrderMediaCard({
@@ -73,7 +73,10 @@ export function MirrorOrderMediaCard({
   onPrefer,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const previewEnabled = Boolean(showPreview && model.playbackUrl && model.available !== false);
+  // Swift Golden compact cards always carried a real source thumbnail. In the
+  // WebView we use the already-authorized local playback descriptor and seek a
+  // muted metadata-only video to source_start; no new media authority is made.
+  const previewEnabled = Boolean((compact || showPreview) && model.playbackUrl && model.available !== false);
   const label = useMemo(() => [model.camera, model.name, shotLabel(model.shotType)].filter(Boolean).join(" · "), [model]);
 
   useEffect(() => {
@@ -98,22 +101,22 @@ export function MirrorOrderMediaCard({
         ) : (
           <span className={model.available === false ? "is-missing" : ""}>{model.available === false ? "▧" : model.camera || "▶"}</span>
         )}
+        <span className="mo-media-camera-badge">{model.camera || "—"}</span>
       </div>
       <div className="mo-media-copy">
         <div className="mo-media-topline">
-          <strong className="mo-media-camera">{model.camera || "—"}</strong>
-          {preferred ? <span className="mo-media-preferred" title="场记首选机位，不等于 Editorial Best">★</span> : null}
+          <span className="mo-media-name" title={model.name}>{model.name}</span>
           {model.duplicateCount && model.duplicateCount > 1 ? <span className="mo-media-count">×{model.duplicateCount}</span> : null}
-          {selected ? <span className="mo-media-selected" aria-label="已选择">✓</span> : null}
         </div>
-        <span className="mo-media-name" title={model.name}>{model.name}</span>
+        <span className={`mo-media-shot ${!model.shotType || model.shotType === "unknown" ? "is-unknown" : ""}`}>{shotLabel(model.shotType)}</span>
         <div className="mo-media-meta">
-          <span>{shotLabel(model.shotType)}</span>
-          {model.sourceRole ? <span>{model.sourceRole}</span> : null}
-          {seconds(model.duration) ? <span>{seconds(model.duration)}</span> : null}
+          <span>{seconds(model.duration) || "时长—"}</span>
+          <span className={preferred ? "is-preferred" : ""}>{preferred ? "首选" : "非首选"}</span>
         </div>
-        {model.available === false ? <span className="mo-media-missing">当前设备缺失 / 不可播放</span> : null}
+        {!compact && model.sourceRole ? <span className="mo-media-role">{model.sourceRole}</span> : null}
+        {model.available === false ? <span className="mo-media-missing">当前设备缺失</span> : null}
       </div>
+      {selected ? <span className="mo-media-selected" aria-label="已选择">✓</span> : null}
     </>
   );
 
