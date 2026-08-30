@@ -12,6 +12,7 @@
     "check:baseline": "node scripts/check-baseline.mjs",
     "test:runtime-tools": "node --test scripts/runtime-tools.node-test.mjs",
     "verify:rc": "node scripts/verify-local-rc.mjs",
+    "prepare:icons": "tauri icon ../branding/app-icon.png --output src-tauri/icons/generated",
     "stage:runtime": "node scripts/stage-runtime.mjs",
     "verify:macos-bundle": "node scripts/verify-macos-bundle.mjs",
     "smoke:host": "node scripts/host-smoke.mjs",
