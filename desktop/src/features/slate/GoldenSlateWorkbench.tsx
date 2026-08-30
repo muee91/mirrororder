@@ -443,7 +443,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
         .map((row) => row.record_id === selected.record_id ? {
           ...row,
           source_group_id: take.group_id,
-          take_number: row.take_number ?? take.take_index,
+          take_number: take.take_index || row.take_number || null,
           episode: row.episode ?? episode,
           script_scene_id: row.script_scene_id || link?.sceneId || "",
           attachments,
