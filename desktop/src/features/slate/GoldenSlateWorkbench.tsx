@@ -104,15 +104,6 @@ function mergeTakeAttachments(record: SlateRecord, take: ReviewTakeGroup | null)
   return mergeAttachments(reviewAttachments, record.attachments);
 }
 
-function linkedScene(review: ReviewModelPayload, groupId: string): SceneLink | null {
-  for (const episode of review.episodes) {
-    for (const scene of episode.scenes) {
-      if (scene.take_group_ids.includes(groupId)) return { episode: episode.episode, sceneId: scene.scene_id };
-    }
-  }
-  return null;
-}
-
 function automaticMappingConfirmed(take: ReviewTakeGroup): boolean {
   return take.automatic_state.status === "auto_confirmed" || take.automatic_state.status === "ai_confirmed";
 }
@@ -439,8 +430,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
   function addTake(take: ReviewTakeGroup): void {
     const existing = drafts.find((row) => row.source_group_id === take.group_id);
     const attachments = take.angles.map(attachmentFromAngle);
-    const link = review && take.effective_mapping.script_segment_ids.length ? linkedScene(review, take.group_id) : null;
-    const episode = take.effective_mapping.episode_ids[0] ?? link?.episode ?? null;
+    const mapped = review ? mappedScene(review, take) : null;
+    const episode = review ? derivedEpisode(take, mapped) : take.effective_mapping.episode_ids[0] ?? null;
 
     if (selected && !selected.source_group_id && selected.attachments.length === 0) {
       setDrafts((current) => current
@@ -450,7 +441,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
           source_group_id: take.group_id,
           take_number: take.take_index || null,
           episode: row.episode ?? episode,
-          script_scene_id: row.script_scene_id || link?.sceneId || "",
+          script_scene_id: row.script_scene_id || mapped?.sceneId || "",
           attachments,
           dirty: true,
           derived: false,
@@ -476,7 +467,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
     addBlank({
       source_group_id: take.group_id,
       episode: episode ?? selected?.episode ?? null,
-      script_scene_id: link?.sceneId ?? "",
+      script_scene_id: mapped?.sceneId ?? "",
       scene: selected?.scene ?? "",
       shot: selected?.shot ?? "",
       take_number: take.take_index || null,
