@@ -1,13 +1,20 @@
-.project-library > .project-list { flex: 1 1 auto; }
-.desktop-appearance-control { display: grid; flex: 0 0 auto; gap: 5px; border-top: 1px solid #222930; padding: 8px 4px 9px; }
-.desktop-appearance-control > span { color: #65727d; font-size: 8px; font-weight: 620; }
-.desktop-appearance-control > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; border: 1px solid #29323b; border-radius: 7px; padding: 2px; background: #0b1014; }
-.desktop-appearance-control button { border: 0; border-radius: 5px; padding: 4px 5px; color: #6e7a85; background: transparent; font-size: 8px; font-weight: 600; }
-.desktop-appearance-control button:hover { color: #bdc6cd; background: #161d23; }
+.desktop-appearance-control { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 22px; align-items: center; min-height: 62px; padding: 13px 15px; }
+.desktop-appearance-copy { display: grid; gap: 3px; min-width: 0; }
+.desktop-appearance-copy strong { color: #d8e0e6; font-size: 11px; font-weight: 650; }
+.desktop-appearance-copy span { color: #71808c; font-size: 9px; line-height: 1.45; }
+.desktop-appearance-options { display: grid; grid-template-columns: repeat(3, minmax(72px, 1fr)); gap: 3px; border: 1px solid #29323b; border-radius: 7px; padding: 2px; background: #0b1014; }
+.desktop-appearance-control button { min-height: 28px; border: 0; border-radius: 5px; padding: 4px 9px; color: #788590; background: transparent; font-size: 9px; font-weight: 600; white-space: nowrap; }
+.desktop-appearance-control button:hover { color: #c8d0d7; background: #161d23; }
 .desktop-appearance-control button.is-active { color: #11161a; background: #e4e9ed; }
 
-html[data-mirrororder-theme="light"] .desktop-appearance-control { border-color: #dce3e9; }
-html[data-mirrororder-theme="light"] .desktop-appearance-control > div { border-color: #d4dce3; background: #eef2f5; }
+html[data-mirrororder-theme="light"] .desktop-appearance-copy strong { color: #26313a; }
+html[data-mirrororder-theme="light"] .desktop-appearance-copy span { color: #66737d; }
+html[data-mirrororder-theme="light"] .desktop-appearance-options { border-color: #d4dce3; background: #eef2f5; }
 html[data-mirrororder-theme="light"] .desktop-appearance-control button { color: #65717c; }
 html[data-mirrororder-theme="light"] .desktop-appearance-control button:hover { color: #26313a; background: #e5eaee; }
 html[data-mirrororder-theme="light"] .desktop-appearance-control button.is-active { color: #fff; background: #33414c; }
+
+@media (max-width: 1180px) {
+  .desktop-appearance-control { grid-template-columns: minmax(0,1fr); gap: 9px; }
+  .desktop-appearance-options { width: min(320px, 100%); }
+}
