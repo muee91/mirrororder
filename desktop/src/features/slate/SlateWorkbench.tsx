@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload } from "../../api/host";
 import { SlatePlacementPools } from "./SlatePlacementPools";
 
@@ -22,11 +22,32 @@ function storedActor(): string {
 
 /**
  * Compatibility-sized adapter for the placement helper that used to own the
- * entire Desktop Slate page. The primary production canvas is now
- * GoldenSlateWorkbench. Keeping this export avoids duplicating Review placement
- * logic while the helper is embedded below the Golden Slate table.
+ * entire Desktop Slate page. GoldenSlateWorkbench keeps the helper inside a
+ * collapsed <details>; only mount the old Review workload after that details is
+ * actually opened, so the primary Slate canvas does not issue duplicate Review
+ * reads or construct placement pools in the background.
  */
-export function SlateWorkbench({ baseUrl, projectId }: Props) {
+export function SlateWorkbench(props: Props) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const details = host?.closest("details");
+    if (!(details instanceof HTMLDetailsElement)) {
+      setExpanded(true);
+      return;
+    }
+    const sync = () => setExpanded(details.open);
+    sync();
+    details.addEventListener("toggle", sync);
+    return () => details.removeEventListener("toggle", sync);
+  }, []);
+
+  return <div ref={hostRef} className="golden-review-helper-host">{expanded ? <SlateWorkbenchContent {...props} /> : null}</div>;
+}
+
+function SlateWorkbenchContent({ baseUrl, projectId }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const [review, setReview] = useState<ReviewModelPayload | null>(null);
   const [message, setMessage] = useState("正在读取 Review placement…");
