@@ -81,20 +81,14 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
           ) : null}
 
           {materialScript ? (
-            <section className="golden-secondary-workspace">
-              <header className="golden-secondary-return">
-                <button type="button" className="secondary" onClick={() => setPage("slate")}>‹ 返回多机位场记</button>
-                <span>{project.name || project.project_id}</span>
-                <small>素材 / 剧本</small>
-              </header>
-              <GoldenMaterialScriptWorkbench
-                baseUrl={baseUrl}
-                project={project}
-                initialGroupId={materialFocusGroupId}
-                initialMode={page === "takes" ? "rough" : "precise"}
-                showEditorial={false}
-              />
-            </section>
+            <GoldenMaterialScriptWorkbench
+              baseUrl={baseUrl}
+              project={project}
+              initialGroupId={materialFocusGroupId}
+              initialMode={page === "takes" ? "rough" : "precise"}
+              showEditorial={false}
+              onBack={() => setPage("slate")}
+            />
           ) : null}
 
           {secondarySurface ? (
