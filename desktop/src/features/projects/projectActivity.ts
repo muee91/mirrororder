@@ -13,6 +13,11 @@ export interface ProjectActivitySummary {
   total: number | null;
 }
 
+const EMPTY_ACTIVITY: ProjectActivitySummary = { state: "idle", label: "", stage: "", message: "", done: null, total: null };
+const ACTIVE_POLL_MS = 2000;
+const IDLE_FULL_POLL_MS = 15000;
+const ACTIVE_TICKS_BEFORE_FULL_REFRESH = 5;
+
 function isActive(task: ProjectTaskRecord): boolean {
   return task.status === "queued" || task.status === "running";
 }
@@ -91,7 +96,7 @@ function taskProgress(task: ProjectTaskRecord): { done: number | null; total: nu
 export function summarizeProjectActivity(tasks: ProjectTaskRecord[]): ProjectActivitySummary {
   const latest = latestTaskAttempts(tasks).sort((left, right) => taskTime(right).localeCompare(taskTime(left)));
   const task = latest.find(isActive) ?? latest[0];
-  if (!task) return { state: "idle", label: "", stage: "", message: "", done: null, total: null };
+  if (!task) return EMPTY_ACTIVITY;
   const progress = taskProgress(task);
   if (isActive(task)) {
     return {
@@ -118,40 +123,72 @@ export function useProjectActivities(baseUrl: string, projects: ProjectSummary[]
   const client = useMemo(() => new ProjectTaskClient(baseUrl), [baseUrl]);
   const [activities, setActivities] = useState<Record<string, ProjectActivitySummary>>({});
 
+  const readProjects = useCallback(async (targets: ProjectSummary[]): Promise<Record<string, ProjectActivitySummary>> => {
+    const rows = await Promise.all(targets.map(async (project) => {
+      try {
+        return [project.project_id, summarizeProjectActivity(await client.list(project.project_id))] as const;
+      } catch {
+        return [project.project_id, EMPTY_ACTIVITY] as const;
+      }
+    }));
+    return Object.fromEntries(rows) as Record<string, ProjectActivitySummary>;
+  }, [client]);
+
   const refresh = useCallback(async (): Promise<Record<string, ProjectActivitySummary>> => {
     if (!projects.length) {
       setActivities({});
       return {};
     }
-    const rows = await Promise.all(projects.map(async (project) => {
-      try {
-        return [project.project_id, summarizeProjectActivity(await client.list(project.project_id))] as const;
-      } catch {
-        return [project.project_id, { state: "idle", label: "", stage: "", message: "", done: null, total: null } satisfies ProjectActivitySummary] as const;
-      }
-    }));
-    const next = Object.fromEntries(rows) as Record<string, ProjectActivitySummary>;
+    const next = await readProjects(projects);
     setActivities(next);
     return next;
-  }, [client, projects]);
+  }, [projects, readProjects]);
+
+  const refreshActive = useCallback(async (projectIds: string[]): Promise<Record<string, ProjectActivitySummary>> => {
+    const wanted = new Set(projectIds);
+    const targets = projects.filter((project) => wanted.has(project.project_id));
+    if (!targets.length) return {};
+    const next = await readProjects(targets);
+    setActivities((current) => ({ ...current, ...next }));
+    return next;
+  }, [projects, readProjects]);
 
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
-    async function monitor(): Promise<void> {
-      const next = await refresh();
-      if (cancelled) return;
-      const active = Object.values(next).some((item) => item.state === "active");
-      timer = globalThis.setTimeout(() => { void monitor(); }, active ? 1000 : 8000);
+    function activeIds(snapshot: Record<string, ProjectActivitySummary>): string[] {
+      return Object.entries(snapshot).filter(([, item]) => item.state === "active").map(([projectId]) => projectId);
     }
 
-    void monitor();
+    async function fullMonitor(): Promise<void> {
+      const next = await refresh();
+      if (cancelled) return;
+      const active = activeIds(next);
+      if (!active.length) {
+        timer = globalThis.setTimeout(() => { void fullMonitor(); }, IDLE_FULL_POLL_MS);
+        return;
+      }
+      timer = globalThis.setTimeout(() => { void activeMonitor(active, 0); }, ACTIVE_POLL_MS);
+    }
+
+    async function activeMonitor(projectIds: string[], tick: number): Promise<void> {
+      const next = await refreshActive(projectIds);
+      if (cancelled) return;
+      const active = activeIds(next);
+      if (!active.length || tick + 1 >= ACTIVE_TICKS_BEFORE_FULL_REFRESH) {
+        timer = globalThis.setTimeout(() => { void fullMonitor(); }, active.length ? ACTIVE_POLL_MS : IDLE_FULL_POLL_MS);
+        return;
+      }
+      timer = globalThis.setTimeout(() => { void activeMonitor(active, tick + 1); }, ACTIVE_POLL_MS);
+    }
+
+    void fullMonitor();
     return () => {
       cancelled = true;
       if (timer !== undefined) globalThis.clearTimeout(timer);
     };
-  }, [refresh]);
+  }, [refresh, refreshActive]);
 
   return { activities, refreshActivities: refresh };
 }
