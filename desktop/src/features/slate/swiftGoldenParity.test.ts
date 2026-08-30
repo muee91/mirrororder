@@ -8,6 +8,7 @@ function source(relative: string): string {
 describe("Swift golden product fidelity", () => {
   it("keeps editing out of the Production workspace and removes duplicate web navigation", () => {
     const workbench = source("../production/ProjectWorkbench.tsx");
+    const material = source("../material-script/GoldenMaterialScriptWorkbench.tsx");
     const experience = source("../production/product-experience.css");
     expect(workbench).not.toContain("TimelineWorkbench");
     expect(workbench).not.toContain("DeliveryWorkbench");
@@ -18,10 +19,13 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).not.toContain("readProjectPage");
     expect(workbench).toContain('useState<ProductionPage>("slate")');
     expect(workbench).toContain("owns-chrome");
-    expect(workbench).toContain("‹ 返回多机位场记");
+    expect(workbench).toContain('onBack={() => setPage("slate")}');
+    expect(workbench).not.toContain("golden-secondary-workspace");
+    expect(material).toContain("‹ 场记");
     expect(workbench).toContain("assistantVisible = assistantOpen && secondarySurface");
     expect(workbench).toContain("onOpenTeamReview ?? (() => setPage(\"watch\"))");
     expect(experience).toContain("grid-template-columns: minmax(0, 1fr) 312px");
+    expect(experience).not.toContain("golden-secondary-return");
   });
 
   it("restores the multicam slate workflow rather than only its column labels", () => {
