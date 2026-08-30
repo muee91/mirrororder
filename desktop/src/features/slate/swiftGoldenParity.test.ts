@@ -53,6 +53,17 @@ describe("Swift golden product fidelity", () => {
     expect(css).toContain("grid-template-rows: minmax(150px,1fr) minmax(180px,1.15fr)");
   });
 
+  it("maps script segments to real scenes before deciding placed versus pending", () => {
+    const slate = source("./GoldenSlateWorkbench.tsx");
+    expect(slate).toContain("function mappedScene");
+    expect(slate).toContain("scene.script_blocks.some((block) => wanted.has(block.segment_id))");
+    expect(slate).toContain("script_scene_id: mapped?.sceneId ?? \"\"");
+    expect(slate).toContain("function isPlacedDraft");
+    expect(slate).toContain("draft.script_scene_id.trim() || draft.scene.trim()");
+    expect(slate).toContain("take.automatic_state.episode_ids?.[0]");
+    expect(slate).not.toContain("script_scene_id: take.effective_mapping.script_segment_ids[0]");
+  });
+
   it("uses the frozen Swift media-card geometry and lazily loads real source thumbnails", () => {
     const card = source("../media/MirrorOrderMediaCard.tsx");
     const css = source("../media/mirrororder-media-card.css");
