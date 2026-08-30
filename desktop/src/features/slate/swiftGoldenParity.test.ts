@@ -8,6 +8,7 @@ function source(relative: string): string {
 describe("Swift golden product fidelity", () => {
   it("keeps editing out of the Production workspace and removes duplicate web navigation", () => {
     const workbench = source("../production/ProjectWorkbench.tsx");
+    const experience = source("../production/product-experience.css");
     expect(workbench).not.toContain("TimelineWorkbench");
     expect(workbench).not.toContain("DeliveryWorkbench");
     expect(workbench).not.toContain("RoughCutWorkbench");
@@ -16,6 +17,8 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).not.toContain("project-workbench-primary");
     expect(workbench).toContain("owns-chrome");
     expect(workbench).toContain("‹ 返回多机位场记");
+    expect(workbench).toContain("assistantVisible = assistantOpen && secondarySurface");
+    expect(experience).toContain("grid-template-columns: minmax(0, 1fr) 312px");
   });
 
   it("restores the multicam slate workflow rather than only its column labels", () => {
@@ -50,7 +53,7 @@ describe("Swift golden product fidelity", () => {
     expect(css).toContain("grid-template-rows: minmax(150px,1fr) minmax(180px,1.15fr)");
   });
 
-  it("uses the frozen Swift media-card geometry and real source thumbnails", () => {
+  it("uses the frozen Swift media-card geometry and lazily loads real source thumbnails", () => {
     const card = source("../media/MirrorOrderMediaCard.tsx");
     const css = source("../media/mirrororder-media-card.css");
     const reviewAdapter = source("../material-script/AngleEvidenceCard.tsx");
@@ -59,8 +62,10 @@ describe("Swift golden product fidelity", () => {
     expect(css).toContain("grid-template-columns: 70px");
     expect(css).toContain("grid-template-columns: 132px");
     expect(css).toContain("border: 2px solid");
-    expect(card).toContain("compact || showPreview");
-    expect(card).toContain("source_start");
+    expect(card).toContain("IntersectionObserver");
+    expect(card).toContain('rootMargin: "140px 220px"');
+    expect(card).toContain("compact && compactPreviewActive");
+    expect(card).toContain("sourceStart");
     expect(card).toContain("当前设备缺失");
     expect(reviewAdapter).toContain("MirrorOrderMediaCard");
     expect(reviewAdapter).not.toContain("fixed-angle-card");
@@ -71,18 +76,22 @@ describe("Swift golden product fidelity", () => {
     const home = source("../projects/ProjectHome.tsx");
     const css = source("../projects/project-home.css");
     const library = source("../projects/ProjectLibrary.tsx");
+    const libraryFidelity = source("../projects/project-library-fidelity.css");
     const shell = source("../../styles.css");
     expect(app).toContain("<ProjectHome");
     expect(app).toContain("setSelectedProject(null)");
     expect(home).toContain("全部项目");
     expect(home).toContain("FCPXML");
     expect(home).toContain("原始素材");
+    expect(home).toContain("onContextMenu");
     expect(css).toContain("grid-template-columns: repeat(auto-fill, 260px)");
     expect(css).toContain("width: 260px; height: 176px");
     expect(css).toContain("grid-template-rows: 108px 68px");
     expect(library).toContain('import "./project-library-fidelity.css"');
-    expect(library).toContain("project-row-icon");
-    expect(library).toContain("待处理");
+    expect(library).toContain("workspace.projects.slice(0, 8)");
+    expect(library).not.toContain('<button type="button" className={utilityActive === "team"');
+    expect(libraryFidelity).toContain("min-height: 38px");
+    expect(libraryFidelity).not.toContain("::before");
     expect(shell).toContain("grid-template-columns: 216px minmax(0, 1fr)");
   });
 
