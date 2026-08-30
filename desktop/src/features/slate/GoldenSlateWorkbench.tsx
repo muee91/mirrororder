@@ -382,13 +382,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
 
   function addTake(take: ReviewTakeGroup): void {
     const existing = drafts.find((row) => row.source_group_id === take.group_id);
-    if (existing?.derived) {
-      selectRecord(existing.record_id);
-      setTakePickerOpen(false);
-      setMessage(`已选中 T${take.take_index}；编辑后保存即可成为人工场记。`);
-      return;
-    }
     const attachments = take.angles.map(attachmentFromAngle);
+
     if (selected && !selected.source_group_id && selected.attachments.length === 0) {
       setDrafts((current) => current
         .filter((row) => row.record_id === selected.record_id || row.source_group_id !== take.group_id)
@@ -404,17 +399,31 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, onOpenMaterialScript,
           derivedSource: "",
         } : row));
       setSelectedClipId(attachments[0] ? attachmentKey(attachments[0]) : "");
-    } else {
-      addBlank({
-        source_group_id: take.group_id,
-        episode: take.effective_mapping.episode_ids[0] ?? selected?.episode ?? null,
-        script_scene_id: take.effective_mapping.script_segment_ids[0] || "",
-        scene: selected?.scene ?? "",
-        shot: selected?.shot ?? "",
-        take_number: take.take_index || null,
-        attachments,
-      });
+      setTakePickerOpen(false);
+      setTakeSearch("");
+      setMessage(`已把 T${take.take_index} 填入当前场记 · ${take.angles.length} 机位；保存后才写入项目。`);
+      return;
     }
+
+    if (existing) {
+      selectRecord(existing.record_id);
+      setTakePickerOpen(false);
+      setTakeSearch("");
+      setMessage(existing.derived
+        ? `已选中 T${take.take_index}；编辑后保存即可成为人工场记。`
+        : `T${take.take_index} 已在场记中，已定位现有记录。`);
+      return;
+    }
+
+    addBlank({
+      source_group_id: take.group_id,
+      episode: take.effective_mapping.episode_ids[0] ?? selected?.episode ?? null,
+      script_scene_id: take.effective_mapping.script_segment_ids[0] || "",
+      scene: selected?.scene ?? "",
+      shot: selected?.shot ?? "",
+      take_number: take.take_index || null,
+      attachments,
+    });
     setTakePickerOpen(false);
     setTakeSearch("");
     setMessage(`已加入 T${take.take_index} · ${take.angles.length} 机位；保存后才写入项目。`);
