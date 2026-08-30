@@ -60,7 +60,6 @@ export function ProjectLibrary({
   onSelectProject,
   onOpenHome,
   onOpenStatusCenter,
-  onOpenTeam,
   onOpenSettings,
   onOpenTeamProject,
   onRevealProject,
@@ -111,7 +110,7 @@ export function ProjectLibrary({
       </button>
 
       <button type="button" className={`project-library-home ${homeActive ? "is-active" : ""}`} onClick={onOpenHome}>
-        <span>项目主页</span><small>全部项目</small>
+        <span>项目</span><small>全部项目</small>
       </button>
 
       <div className="project-library-section-heading">
@@ -123,7 +122,7 @@ export function ProjectLibrary({
         {workspace.projects.length === 0 ? (
           <div className="project-list-empty"><strong>还没有项目</strong><span>使用上方“新建”创建第一个制作项目。</span></div>
         ) : (
-          workspace.projects.slice(0, 12).map((project) => (
+          workspace.projects.slice(0, 8).map((project) => (
             <button
               className={`project-row ${utilityActive === null && selectedProjectId === project.project_id ? "is-selected" : ""}`}
               key={project.project_id}
@@ -152,7 +151,6 @@ export function ProjectLibrary({
 
       <nav className="project-library-global-tools" aria-label="全局工具">
         <button type="button" className={utilityActive === "status" ? "is-active" : ""} onClick={onOpenStatusCenter}><span>状态中心</span><small>后台任务与失败恢复</small></button>
-        <button type="button" className={utilityActive === "team" ? "is-active" : ""} onClick={onOpenTeam}><span>团队审阅</span><small>共享、配对与意见协作</small></button>
         <button type="button" className={utilityActive === "settings" ? "is-active" : ""} onClick={onOpenSettings}><span>设置</span><small>本地模型与制作环境</small></button>
       </nav>
 
