@@ -32,6 +32,8 @@ describe("Swift Demo fidelity guards", () => {
     const workbench = source("../production/ProjectWorkbench.tsx");
     const material = source("../material-script/GoldenMaterialScriptWorkbench.tsx");
     const css = source("../material-script/golden-material-script.css");
+    const theme = source("../material-script/golden-material-script-theme.css");
+    const main = source("../../main.tsx");
     const experience = source("../production/product-experience.css");
     expect(workbench).toContain('onBack={() => setPage("slate")}');
     expect(workbench).not.toContain("golden-secondary-workspace");
@@ -40,8 +42,9 @@ describe("Swift Demo fidelity guards", () => {
     expect(experience).not.toContain("golden-secondary-return");
     expect(css).toContain('html[data-mirrororder-theme="light"] .golden-material-script');
     expect(css).toContain('html[data-mirrororder-theme="dark"] .golden-material-script');
-    expect(css).toContain('html[data-mirrororder-theme="light"] .golden-ms-columns > .take-inspector');
-    expect(css).toContain('html[data-mirrororder-theme="dark"] .golden-ms-columns > .take-inspector');
+    expect(theme).toContain('html[data-mirrororder-theme="light"] .golden-material-script .angle-card');
+    expect(theme).toContain('html[data-mirrororder-theme="dark"] .golden-material-script .inspector-angle-tabs button');
+    expect(main).toContain('import "./features/material-script/golden-material-script-theme.css"');
   });
 
   it("does not mount the legacy Review Slate workload while its details is collapsed", () => {
