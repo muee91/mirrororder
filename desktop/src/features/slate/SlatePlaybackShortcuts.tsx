@@ -44,9 +44,8 @@ export function SlatePlaybackShortcuts() {
     return () => globalThis.removeEventListener("keydown", keydown);
   }, []);
 
-  return (
-    <div className="slate-playback-shortcut-hint" aria-label="场记播放快捷键">
-      Space 播放/暂停 · J 后退 1 秒 · K 暂停 · L 播放
-    </div>
-  );
+  // Space: play/pause. J: step backward one second. K: pause. L: play.
+  // Keep the professional transport keys without a permanent teaching badge
+  // over the production canvas; the frozen Swift workbench did not show one.
+  return null;
 }
