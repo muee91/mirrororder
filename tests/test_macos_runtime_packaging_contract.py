@@ -13,12 +13,34 @@ def read(path: str) -> str:
 
 def test_tauri_build_stages_packaged_runtime_before_bundle() -> None:
     config = json.loads(read("desktop/src-tauri/tauri.conf.json"))
-    assert config["build"]["beforeBuildCommand"] == "npm run stage:runtime && npm run build"
+    assert config["build"]["beforeBuildCommand"] == "npm run prepare:icons && npm run stage:runtime && npm run build"
     resources = config["bundle"]["resources"]
     assert resources["resources/mirrororder-core/"] == "mirrororder-core/"
     assert resources["resources/mirrororder-python/"] == "mirrororder-python/"
     assert resources["resources/mirrororder-tools/"] == "mirrororder-tools/"
     assert resources["resources/mirrororder-runtime/"] == "mirrororder-runtime/"
+
+
+def test_tauri_bundle_pins_branded_icon_generation_and_packaged_verification() -> None:
+    config = json.loads(read("desktop/src-tauri/tauri.conf.json"))
+    package = json.loads(read("desktop/package.json"))
+    verifier = read("desktop/scripts/verify-macos-bundle.mjs")
+    ignore = read(".gitignore")
+
+    assert (ROOT / "branding" / "app-icon.png").is_file()
+    assert package["scripts"]["prepare:icons"] == "tauri icon ../branding/app-icon.png --output src-tauri/icons/generated"
+    assert config["bundle"]["icon"] == [
+        "icons/generated/32x32.png",
+        "icons/generated/128x128.png",
+        "icons/generated/128x128@2x.png",
+        "icons/generated/icon.icns",
+        "icons/generated/icon.ico",
+    ]
+    assert "desktop/src-tauri/icons/generated/" in ignore
+    assert "EXPECTED_BRAND_ICON_GIT_BLOB" in verifier
+    assert '"CFBundleIconFile"' in verifier
+    assert "generatedIcns" in verifier
+    assert "packaged macOS app icon does not match generated branded icon" in verifier
 
 
 def test_packaged_runtime_is_fail_closed_and_used_by_host_and_gateway() -> None:
