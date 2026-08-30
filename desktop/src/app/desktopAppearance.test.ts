@@ -3,6 +3,7 @@ import {
   applyDesktopAppearance,
   normalizeDesktopAppearance,
   readDesktopAppearance,
+  resolveDesktopTheme,
   saveDesktopAppearance,
 } from "./desktopAppearance";
 
@@ -22,21 +23,41 @@ describe("Desktop appearance", () => {
     expect(normalizeDesktopAppearance(null)).toBe("system");
   });
 
+  it("resolves system from the OS while manual choices stay authoritative", () => {
+    expect(resolveDesktopTheme("system", false)).toBe("light");
+    expect(resolveDesktopTheme("system", true)).toBe("dark");
+    expect(resolveDesktopTheme("light", true)).toBe("light");
+    expect(resolveDesktopTheme("dark", false)).toBe("dark");
+  });
+
   it("stores Desktop appearance only in device-local browser storage", () => {
     const storage = new MemoryStorage();
     const target = root();
     expect(saveDesktopAppearance("dark", storage, target)).toBe("dark");
     expect(readDesktopAppearance(storage)).toBe("dark");
+    expect(target.dataset.mirrororderAppearance).toBe("dark");
     expect(target.dataset.mirrororderTheme).toBe("dark");
     expect(target.style.colorScheme).toBe("dark");
   });
 
-  it("system mode removes the explicit DOM override", () => {
+  it("system mode keeps the preference marker while applying a concrete theme", () => {
     const target = root();
-    applyDesktopAppearance("light", target);
+    applyDesktopAppearance("system", target, false);
+    expect(target.dataset.mirrororderAppearance).toBe("system");
     expect(target.dataset.mirrororderTheme).toBe("light");
-    applyDesktopAppearance("system", target);
-    expect(target.dataset.mirrororderTheme).toBeUndefined();
-    expect(target.style.colorScheme).toBe("light dark");
+    expect(target.style.colorScheme).toBe("light");
+    applyDesktopAppearance("system", target, true);
+    expect(target.dataset.mirrororderTheme).toBe("dark");
+    expect(target.style.colorScheme).toBe("dark");
+  });
+
+  it("manual light and dark ignore the opposite OS preference", () => {
+    const target = root();
+    applyDesktopAppearance("light", target, true);
+    expect(target.dataset.mirrororderTheme).toBe("light");
+    expect(target.style.colorScheme).toBe("light");
+    applyDesktopAppearance("dark", target, false);
+    expect(target.dataset.mirrororderTheme).toBe("dark");
+    expect(target.style.colorScheme).toBe("dark");
   });
 });
