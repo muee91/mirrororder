@@ -1,9 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
-import { DesktopClient } from "../../api/desktop";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
-import { PlatformClient } from "../../api/platform";
-import { ProjectActionClient } from "../../api/projectActions";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import "./project-context-menu.css";
 import "./project-home.css";
@@ -12,7 +8,12 @@ import "./project-library-fidelity.css";
 interface Props {
   baseUrl: string;
   workspace: WorkspacePayload;
+  revealLabel?: string;
   onOpenProject: (project: ProjectSummary) => void;
+  onOpenTeamProject: (project: ProjectSummary) => void;
+  onRevealProject: (project: ProjectSummary) => void | Promise<void>;
+  onPrepareProject: (project: ProjectSummary) => void | Promise<void>;
+  onOpenMediaBinding: (project: ProjectSummary) => void;
   onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
 }
 
@@ -43,12 +44,19 @@ function backdropSymbol(project: ProjectSummary): string {
   return values[checksum % values.length];
 }
 
-export function ProjectHome({ baseUrl, workspace, onOpenProject, onWorkspaceChanged }: Props) {
+export function ProjectHome({
+  baseUrl,
+  workspace,
+  revealLabel = "Finder / Explorer",
+  onOpenProject,
+  onOpenTeamProject,
+  onRevealProject,
+  onPrepareProject,
+  onOpenMediaBinding,
+  onWorkspaceChanged,
+}: Props) {
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<HomeMenuState | null>(null);
-  const platform = useMemo(() => new PlatformClient(), []);
-  const projectActions = useMemo(() => new ProjectActionClient(baseUrl), [baseUrl]);
-  const desktop = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const visible = useMemo(() => {
     const value = query.trim().toLowerCase();
     if (!value) return workspace.projects;
@@ -71,7 +79,7 @@ export function ProjectHome({ baseUrl, workspace, onOpenProject, onWorkspaceChan
 
   function openMenu(project: ProjectSummary, x: number, y: number): void {
     const width = 190;
-    const height = 170;
+    const height = 244;
     const viewportWidth = globalThis.innerWidth || 1280;
     const viewportHeight = globalThis.innerHeight || 800;
     setMenu({
@@ -84,17 +92,6 @@ export function ProjectHome({ baseUrl, workspace, onOpenProject, onWorkspaceChan
   function run(action: () => void | Promise<void>): void {
     setMenu(null);
     void Promise.resolve(action()).catch(() => undefined);
-  }
-
-  async function revealProject(project: ProjectSummary): Promise<void> {
-    if (!isTauri()) return;
-    const location = await projectActions.localLocation(project.project_id);
-    if (!location.project_exists) return;
-    await platform.reveal(location.project_dir);
-  }
-
-  async function prepareProject(project: ProjectSummary): Promise<void> {
-    await desktop.prepareProject(project.project_id);
   }
 
   return (
@@ -163,8 +160,10 @@ export function ProjectHome({ baseUrl, workspace, onOpenProject, onWorkspaceChan
         <div className="project-context-menu" role="menu" aria-label={`${menu.project.name || menu.project.project_id} 项目操作`} style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
           <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small></div>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenProject(menu.project))}>打开项目</button>
-          <button type="button" role="menuitem" disabled={!isTauri()} onClick={() => run(() => revealProject(menu.project))}>在 Finder / Explorer 中显示</button>
-          <button type="button" role="menuitem" onClick={() => run(() => prepareProject(menu.project))}>开始 / 重新整理</button>
+          <button type="button" role="menuitem" onClick={() => run(() => onOpenTeamProject(menu.project))}>团队审阅</button>
+          <button type="button" role="menuitem" onClick={() => run(() => onRevealProject(menu.project))}>在 {revealLabel} 中显示</button>
+          <button type="button" role="menuitem" onClick={() => run(() => onOpenMediaBinding(menu.project))}>本机素材 / 换素材盘</button>
+          <button type="button" role="menuitem" onClick={() => run(() => onPrepareProject(menu.project))}>重整项目</button>
         </div>
       ) : null}
     </section>
