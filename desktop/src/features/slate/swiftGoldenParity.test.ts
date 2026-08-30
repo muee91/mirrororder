@@ -42,6 +42,8 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("removeAttachment");
     expect(slate).toContain("onDragDropEvent");
     expect(slate).toContain("slateMedia.resolveDrop");
+    expect(slate).toContain("已把 T${take.take_index} 填入当前场记");
+    expect(slate).toContain("row.record_id === selected.record_id || row.source_group_id !== take.group_id");
     expect(slate).not.toContain("track.clips =");
     expect(css).toContain("height: 52px");
     expect(css).toContain("height: 38px");
@@ -64,11 +66,12 @@ describe("Swift golden product fidelity", () => {
     expect(reviewAdapter).not.toContain("fixed-angle-card");
   });
 
-  it("restores the fixed macOS-style project home instead of fluid dashboard cards", () => {
+  it("restores the fixed macOS-style project home and sidebar geometry", () => {
     const app = source("../../app/App.tsx");
     const home = source("../projects/ProjectHome.tsx");
     const css = source("../projects/project-home.css");
     const library = source("../projects/ProjectLibrary.tsx");
+    const shell = source("../../styles.css");
     expect(app).toContain("<ProjectHome");
     expect(app).toContain("setSelectedProject(null)");
     expect(home).toContain("全部项目");
@@ -77,8 +80,10 @@ describe("Swift golden product fidelity", () => {
     expect(css).toContain("grid-template-columns: repeat(auto-fill, 260px)");
     expect(css).toContain("width: 260px; height: 176px");
     expect(css).toContain("grid-template-rows: 108px 68px");
+    expect(library).toContain('import "./project-library-fidelity.css"');
     expect(library).toContain("project-row-icon");
     expect(library).toContain("待处理");
+    expect(shell).toContain("grid-template-columns: 216px minmax(0, 1fr)");
   });
 
   it("keeps explicit file-drop identity path-free and human-save gated", () => {
@@ -91,13 +96,12 @@ describe("Swift golden product fidelity", () => {
     expect(slate).not.toContain("resolved_media_path");
   });
 
-  it("restores explicit Slate transport keys without pretending reverse video is supported", () => {
+  it("keeps Slate transport keys without a permanent teaching badge", () => {
     const shortcuts = source("./SlatePlaybackShortcuts.tsx");
-    expect(shortcuts).toContain("Space 播放/暂停");
-    expect(shortcuts).toContain("J 后退 1 秒");
-    expect(shortcuts).toContain("K 暂停");
-    expect(shortcuts).toContain("L 播放");
+    expect(shortcuts).toContain('key !== "j" && key !== "k" && key !== "l" && key !== " "');
     expect(shortcuts).toContain("Math.max(0, video.currentTime - 1)");
+    expect(shortcuts).toContain("return null");
+    expect(shortcuts).not.toContain("slate-playback-shortcut-hint");
     expect(shortcuts).not.toContain("playbackRate = -");
   });
 });
