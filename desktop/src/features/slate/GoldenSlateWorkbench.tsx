@@ -202,11 +202,16 @@ function blankDraft(seed?: Partial<Draft>): Draft {
 
 function buildDrafts(board: SlateBoard, review: ReviewModelPayload): Draft[] {
   const takes = new Map(review.take_groups.map((take) => [take.group_id, take]));
-  const persisted = Object.values(board.records).map((record, index) => draftFromRecord(record, takes.get(record.source_group_id) ?? null, index));
+  const xmlOrderByGroup = new Map(review.take_groups.map((take, index) => [take.group_id, index]));
+  const persisted = Object.values(board.records).map((record) => draftFromRecord(
+    record,
+    takes.get(record.source_group_id) ?? null,
+    xmlOrderByGroup.get(record.source_group_id) ?? Number.MAX_SAFE_INTEGER,
+  ));
   const represented = new Set(persisted.map((record) => record.source_group_id).filter(Boolean));
   const derived = review.take_groups
     .filter((take) => !represented.has(take.group_id))
-    .map((take, index) => draftFromTake(review, take, persisted.length + index));
+    .map((take, index) => draftFromTake(review, take, xmlOrderByGroup.get(take.group_id) ?? index));
   return [...persisted, ...derived];
 }
 
