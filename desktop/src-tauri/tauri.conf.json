@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run stage:runtime && npm run build",
+    "beforeBuildCommand": "npm run prepare:icons && npm run stage:runtime && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -27,6 +27,13 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "icon": [
+      "icons/generated/32x32.png",
+      "icons/generated/128x128.png",
+      "icons/generated/128x128@2x.png",
+      "icons/generated/icon.icns",
+      "icons/generated/icon.ico"
+    ],
     "resources": {
       "resources/mirrororder-core/": "mirrororder-core/",
       "resources/mirrororder-python/": "mirrororder-python/",
