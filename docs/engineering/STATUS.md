@@ -10,7 +10,7 @@
 - 当前恢复分支：`feature/swift-golden-product-parity`，从上述 Stage 17 基线独立演进；不直接合并到 `main`。
 - 当前恢复分支相对 Stage 17 基线：0 behind；当前 source diff 仅涉及 React/TS 产品层、Python local adapters/contracts 与工程文档，没有修改 Rust Timeline Core / Timeline bridge / Delivery authority。
 - GitHub Actions：当前无可用 status checks；不作为已通过 gate。
-- 当前原则：源码审阅不能替代 executable validation；未在当前 parity 分支执行的 gate 一律 `NOT RUN`，不得继承 Stage 17 基线的 PASS。
+- 当前原则：源码审阅不能替代 executable validation；本分支的原生 Desktop、Python/Rust/Tauri 与 packaged build gates 已真实执行，未执行的 native smoke 仍明确标为 `NOT RUN`，不得继承 Stage 17 基线的 PASS。
 
 ## 产品就绪度
 
@@ -34,7 +34,7 @@
 | Stage 15 — Timeline multicam synchronization | 92 |
 | Stage 16 — Timeline audio semantics | **93** |
 | Stage 17 — Audio editing UX | 源码完成；native/FCP 阻塞，不计入关闭 |
-| Stage 18 — Swift Golden product parity | **targeted executable PASS；full gates NOT RUN，暂不加分** |
+| Stage 18 — Swift Golden product parity | **source/native gates PASS；packaged smoke partial，Finder drag-drop NOT RUN，暂不关闭** |
 
 评分代表当前产品/工程就绪度判断，不替代 fast/full/native gate。当前官方评分仍为 **93/100**。
 
@@ -79,9 +79,9 @@
 - runtime staging、`verify:rc`、macOS Tauri build、`verify:macos-bundle`：PASS。
 - packaged Host/project/durable-task/cancel/restart/path-free smoke：部分 PASS；见 `docs/verification/2026-08-29-production-readiness.md`。
 
-## 当前 parity 分支已执行的局部验证
+## 当前 parity 分支已执行的验证
 
-验证记录：`docs/verification/2026-08-30-swift-golden-parity-targeted.md`。
+验证记录：`docs/verification/2026-08-30-swift-golden-parity-full.md`；早期 targeted 证据仍见 `docs/verification/2026-08-30-swift-golden-parity-targeted.md`。
 
 - GitHub 当前源逻辑隔离物化 + 最小 Tauri/React/Host stubs：全局 TypeScript strict compile **PASS**。
 - Node 22 runtime assertions：`PARITY_TS_RUNTIME_PASS appearance=3 playback=6 roughPlacement=5 projectActions=3`，共 17 项 **PASS**。
@@ -89,20 +89,21 @@
 - Review stale batch behavioral probe：先建立 r1，再以 stale r0 提交两条 placement；`ReviewConflictError` 后 reopen 仍 `revision=1`、`placements={}`：**PASS**。
 - Project-location safety probe：正常路径、registry escape、output escape：**3/3 PASS**。
 - 当前仓库 `tests/test_project_location_runtime.py` + `tests/test_rough_placement_runtime_contract.py` 在最小依赖物化下由真实 pytest 执行：**6/6 PASS，0.07s**。
-- 这些是 targeted executable evidence，不等于仓库原生 Vitest、Python source gate、fast/full 或 packaged gate。
+- 仓库原生 Vitest：**35 files / 155 tests PASS**；Desktop typecheck、Vite build、Python source gate、fast/full、runtime staging、RC、Tauri build/bundle verification 均已在本分支执行并通过。
+- packaged product smoke：项目主页、Golden Slate、项目操作、本机素材、Appearance、Status Center 路径、粗归集 stale rejection 与 Material / Script 三栏均 PASS；Finder/Explorer 原生跨窗口拖入因 GUI 自动化服务 `noWindowsAvailable` 保持 **NOT RUN**。
+- tracked/shared path guard：**6 passed**；权威 Review/Slate/Script Supervisor/Editorial/Audit/Delivery report JSON 均无设备绝对路径。合成 FCPXML 的本机分析索引、离线 learning-case 结果路径及交付 FCPXML 的本机媒体 URL 已在 full verification 中单独记录。
 
 ## 当前 parity 分支验证状态
 
 - Source / diff scope review：已完成当前功能边界审计；相对 Stage 17 基线未发现 Rust Timeline Core / Timeline bridge / Delivery authority 修改。
-- Targeted TypeScript strict compile + runtime assertions：**PASS**。
-- Existing parity TS test files under compatibility runner：**12/12 PASS**；原生 Vitest runner 仍 NOT RUN。
-- Targeted Python contract pytest：**6/6 PASS**；Review stale batch 和 project-location containment 已有真实执行证据。
-- 当前 parity 分支原生 Vitest / 完整 Desktop typecheck：**NOT RUN**。
-- `python scripts/check_python.py`：**NOT RUN on parity branch**。
-- `python scripts/check_fast.py`：**NOT RUN on parity branch**。
-- `python scripts/check_full.py`：**NOT RUN on parity branch**。
-- Rust/Tauri executable gates：**NOT RUN on parity branch**；本轮未改 Rust authority，但不能继承旧 PASS。
-- packaged Desktop / native Finder drag-drop / appearance / real media smoke：**NOT RUN on parity branch**。
+- Native TypeScript typecheck + Vitest：**PASS；35 files / 155 tests**。
+- `python3 scripts/check_python.py`：**PASS；75 passed**。
+- `python3 scripts/check_fast.py`：**PASS**。
+- `python3 scripts/check_full.py`：**PASS；457 passed，1 个第三方 `huggingface_hub` deprecation warning**。
+- Rust/Tauri executable gates：由 fast/full 与独立命令真实执行并通过；Timeline 10、Tauri host 31。
+- Packaged staging / RC / Tauri release build / macOS bundle verification：**PASS**。
+- Packaged product smoke：除 Finder/Explorer 跨窗口拖入外，其余 closeout 项目已实测 **PASS**；粗归集 stale confirmation 已验证无额外写入。
+- Finder/Explorer native drag-drop：**NOT RUN**；GUI 自动化服务两次返回 `noWindowsAvailable`，未伪造 PASS。
 - Final Cut Pro / real authoritative FCPXML import smoke：**NOT RUN**。
 - codesign/notarization、Windows native/installer gates、GitHub Actions：**NOT RUN**。
 
@@ -116,11 +117,10 @@
 
 ## 下一步
 
-1. 在完整 checkout 上运行 parity 分支的原生 TypeScript/Vitest 与 Python source gate，修复所有真实失败。
-2. 再跑 fast/full，确认新增 runtime wrapper 顺序、read-path 与产品 source contracts 没有破坏已有基线。
-3. 运行 packaged Desktop smoke：Project Home、Golden Slate、Finder drop、项目右键、本机素材、Appearance、Status Center。
-4. 语音听写独立分支实现，不与当前 parity source candidate 混为一体。
-5. 只有当前 parity 分支 full gates 真实 PASS 后，才重新评估 Stage 18 分数与 integration/squash 路径。
+1. 补跑真实 Finder/Explorer 跨窗口拖入，并核对 drop 后 `media_id / clip_id` 与共享产物路径安全。
+2. Final Cut Pro 可用时执行 authoritative FCPXML import smoke；在此之前保持 `NOT RUN`。
+3. 语音听写独立分支实现，不与当前 parity source candidate 混为一体。
+4. Finder drop 与适用的 FCP smoke 完成后，才重新评估 Stage 18 关闭与 integration/squash 路径。
 
 ## 状态维护规则
 
