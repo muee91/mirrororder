@@ -1,9 +1,11 @@
-.project-production-workbench { display: flex; min-width: 0; min-height: 0; height: 100%; flex-direction: column; background: #0b0f13; }
+.project-production-workbench { position: relative; display: flex; min-width: 0; min-height: 0; height: 100%; flex-direction: column; background: #0b0f13; }
 .project-workbench-canvas { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
 .project-workbench-main { min-width: 0; min-height: 0; overflow: auto; padding: 10px 12px 14px; }
 .project-workbench-main.owns-chrome { overflow: hidden; padding: 0; }
 .has-assistant-drawer .project-workbench-canvas { grid-template-columns: minmax(0, 1fr) 340px; }
 .has-assistant-drawer .project-workbench-main { border-right: 1px solid #232b33; }
+.has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }
+.has-slate-assistant .project-workbench-main { border-right: 0; }
 
 .production-secondary-workspace { display: grid; width: 100%; height: 100%; min-width: 0; min-height: 0; grid-template-rows: 38px minmax(0, 1fr); background: #0b0f13; }
 .production-secondary-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 38px; border-bottom: 1px solid #252d35; padding: 0 10px; background: #11171c; }
@@ -15,6 +17,7 @@
 .production-secondary-canvas { min-width: 0; min-height: 0; height: 100%; overflow: auto; padding: 10px 12px 14px; }
 
 .assistant-context-drawer { position: static; min-width: 0; max-height: none; height: 100%; overflow-y: auto; border: 0; border-radius: 0; padding: 11px; background: #0c1115; box-shadow: none; }
+.slate-assistant-drawer { position: absolute; z-index: 50; top: 12px; right: 12px; bottom: 12px; width: 340px; height: auto; border: 1px solid #2d3740; border-radius: 9px; box-shadow: 0 20px 60px rgba(0, 0, 0, .34); }
 .assistant-drawer-heading { position: sticky; z-index: 2; top: -11px; margin: -11px -11px 10px; border-bottom: 1px solid #252d36; padding: 10px 11px 9px; background: #0c1115; }
 .assistant-drawer-heading strong { font-size: 12px; }
 .assistant-context-drawer .production-panel { border-radius: 8px; }
