@@ -17,6 +17,16 @@ describe("Swift Demo fidelity guards", () => {
     expect(slate).not.toContain("const ids = effectiveIds.length ? effectiveIds : take.automatic_state.script_segment_ids");
   });
 
+  it("uses the same script-segment scene resolver for derived and manually added Takes", () => {
+    const slate = source("./GoldenSlateWorkbench.tsx");
+    expect(slate).toContain("const mapped = mappedScene(review, take)");
+    expect(slate).toContain("const mapped = review ? mappedScene(review, take) : null");
+    expect(slate).toContain("const episode = review ? derivedEpisode(take, mapped)");
+    expect(slate).toContain("script_scene_id: row.script_scene_id || mapped?.sceneId || \"\"");
+    expect(slate).toContain("script_scene_id: mapped?.sceneId ?? \"\"");
+    expect(slate).not.toContain("linkedScene(");
+  });
+
   it("keeps the material and script workspace readable at Swift production density", () => {
     const css = source("../material-script/golden-material-script.css");
     expect(css).not.toContain("font-size: 7px");
@@ -66,9 +76,11 @@ describe("Swift Demo fidelity guards", () => {
     expect(activity).not.toContain("active ? 1000 : 8000");
   });
 
-  it("aligns the native and DOM minimum window with the existing Golden layouts", () => {
+  it("aligns the native and DOM minimum window with a Slate layout that fits it", () => {
     const tauri = source("../../../src-tauri/tauri.conf.json");
     const shell = source("../../styles.css");
+    const slateCss = source("./golden-slate.css");
+    const experience = source("../production/product-experience.css");
     expect(tauri).toContain('"width": 1360');
     expect(tauri).toContain('"height": 860');
     expect(tauri).toContain('"minWidth": 1180');
@@ -76,5 +88,10 @@ describe("Swift Demo fidelity guards", () => {
     expect(shell).toContain("min-width: 1180px");
     expect(shell).not.toContain("min-width: 1040px");
     expect(shell).toContain("grid-template-columns: 216px minmax(0, 1fr)");
+    expect(slateCss).toContain("@media (max-width: 1200px)");
+    expect(slateCss).toContain("grid-template-columns: minmax(620px,1fr) 285px");
+    expect(experience).not.toContain(".project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body");
+    const minimumStageWidth = 1180 - 216;
+    expect(620 + 285).toBeLessThanOrEqual(minimumStageWidth);
   });
 });
