@@ -74,8 +74,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
                 projectId={project.project_id}
                 onOpenMaterialScript={() => setPage("takes")}
                 onOpenIdentity={() => setPage("identity")}
-                onOpenReview={() => setPage("watch")}
-                onOpenTeamReview={onOpenTeamReview}
+                onOpenReview={onOpenTeamReview ?? (() => setPage("watch"))}
               />
               <SlatePlaybackShortcuts />
             </>
