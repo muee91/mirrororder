@@ -14,11 +14,14 @@ describe("Desktop appearance product contract", () => {
     expect(main.indexOf("initializeDesktopAppearance();")).toBeLessThan(main.indexOf("createRoot("));
   });
 
-  it("stores only a device-local Desktop preference", () => {
+  it("stores only a device-local Desktop preference and always resolves a concrete DOM theme", () => {
     const appearance = read("./desktopAppearance.ts");
     expect(appearance).toContain('"mirrororder.desktop.appearance"');
     expect(appearance).toContain("localStorage");
-    expect(appearance).toContain("mirrororderTheme");
+    expect(appearance).toContain("mirrororderAppearance");
+    expect(appearance).toContain("mirrororderTheme = resolved");
+    expect(appearance).toContain('"(prefers-color-scheme: dark)"');
+    expect(appearance).toContain('addEventListener("change", sync)');
     expect(appearance).not.toContain("workspace");
     expect(appearance).not.toContain("project_id");
     expect(appearance).not.toContain("FrontendSettings");
@@ -36,13 +39,23 @@ describe("Desktop appearance product contract", () => {
     expect(control).not.toContain("FrontendSettings");
   });
 
-  it("provides explicit root-prefixed light and dark overrides", () => {
+  it("provides explicit root-prefixed light and dark overrides across frozen Demo surfaces", () => {
     const css = read("../desktop-theme.css");
+    const tools = read("../desktop-theme-tools.css");
+    const material = read("../features/material-script/golden-material-script-theme.css");
     expect(css).toContain('html[data-mirrororder-theme="light"]');
     expect(css).toContain('html[data-mirrororder-theme="dark"]');
     expect(css).toContain(".golden-slate-workbench");
     expect(css).toContain(".mo-media-card");
     expect(css).toContain(".project-home-card");
     expect(css).toContain(".take-card");
+    expect(tools).toContain('.settings-status-workbench');
+    expect(material).toContain('.golden-material-script .angle-card');
+  });
+
+  it("does not let Golden Slate bypass the resolved Desktop theme with an OS-only light query", () => {
+    const slate = read("../features/slate/golden-slate.css");
+    expect(slate).not.toContain("@media (prefers-color-scheme: light)");
+    expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-slate-workbench');
   });
 });
