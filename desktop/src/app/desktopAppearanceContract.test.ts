@@ -12,6 +12,7 @@ describe("Desktop appearance product contract", () => {
     expect(main).toContain("initializeDesktopAppearance();");
     expect(main.indexOf('import "./styles.css"')).toBeLessThan(main.indexOf('import "./desktop-theme.css"'));
     expect(main.indexOf('import "./features/material-script/golden-material-script-theme.css"')).toBeLessThan(main.indexOf('import "./desktop-theme-slate.css"'));
+    expect(main.indexOf('import "./desktop-theme-slate.css"')).toBeLessThan(main.indexOf('import "./desktop-theme-frozen-surfaces.css"'));
     expect(main.indexOf("initializeDesktopAppearance();")).toBeLessThan(main.indexOf("createRoot("));
   });
 
@@ -45,15 +46,18 @@ describe("Desktop appearance product contract", () => {
     const tools = read("../desktop-theme-tools.css");
     const material = read("../features/material-script/golden-material-script-theme.css");
     const slate = read("../desktop-theme-slate.css");
+    const frozen = read("../desktop-theme-frozen-surfaces.css");
     expect(css).toContain('html[data-mirrororder-theme="light"]');
     expect(css).toContain('html[data-mirrororder-theme="dark"]');
-    expect(css).toContain(".project-home-card");
-    expect(css).toContain(".mo-media-card");
     expect(tools).toContain('.settings-status-workbench');
     expect(material).toContain('.golden-material-script .angle-card');
     expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-take-picker');
     expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-take-picker');
     expect(slate).toContain('.golden-inspector-field textarea');
     expect(slate).toContain('.golden-episode-candidates > button');
+    expect(frozen).toContain('html[data-mirrororder-theme="light"] .project-home-heading');
+    expect(frozen).toContain('html[data-mirrororder-theme="dark"] .project-home-heading');
+    expect(frozen).toContain('html[data-mirrororder-theme="light"] .mo-media-prefer');
+    expect(frozen).toContain('html[data-mirrororder-theme="dark"] .mo-media-prefer');
   });
 });
