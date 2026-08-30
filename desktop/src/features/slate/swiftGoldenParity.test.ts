@@ -24,7 +24,7 @@ describe("Swift golden product fidelity", () => {
     expect(material).toContain("‹ 场记");
     expect(workbench).toContain("assistantVisible = assistantOpen && secondarySurface");
     expect(workbench).toContain("onOpenTeamReview ?? (() => setPage(\"watch\"))");
-    expect(experience).toContain("grid-template-columns: minmax(0, 1fr) 312px");
+    expect(experience).not.toContain(".project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body");
     expect(experience).not.toContain("golden-secondary-return");
   });
 
@@ -63,6 +63,8 @@ describe("Swift golden product fidelity", () => {
     expect(css).toContain("height: 52px");
     expect(css).toContain("height: 38px");
     expect(css).toContain("@media (max-width: 1320px)");
+    expect(css).toContain("@media (max-width: 1200px)");
+    expect(css).toContain("grid-template-columns: minmax(620px,1fr) 285px");
     expect(css).toContain("grid-template-rows: minmax(150px,1fr) minmax(180px,1.15fr)");
   });
 
@@ -71,6 +73,10 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("function mappedScene");
     expect(slate).toContain("scene.script_blocks.some((block) => wanted.has(block.segment_id))");
     expect(slate).toContain("script_scene_id: mapped?.sceneId ?? \"\"");
+    expect(slate).toContain("const mapped = review ? mappedScene(review, take) : null");
+    expect(slate).toContain("const episode = review ? derivedEpisode(take, mapped)");
+    expect(slate).toContain("script_scene_id: row.script_scene_id || mapped?.sceneId || \"\"");
+    expect(slate).not.toContain("linkedScene(");
     expect(slate).toContain("function isPlacedDraft");
     expect(slate).toContain("draft.script_scene_id.trim() || draft.scene.trim()");
     expect(slate).toContain("take.automatic_state.episode_ids?.[0]");
