@@ -21,6 +21,13 @@
 .project-context-menu > button.project-context-danger { margin-top: 4px; border-top: 1px solid #2b3239; border-radius: 0 0 6px 6px; padding-top: 9px; color: #ce8585; }
 .project-context-menu > button.project-context-danger:hover:not(:disabled), .project-context-menu > button.project-context-danger:focus-visible { color: #f0aaaa; background: rgba(137,55,55,.16); }
 
+.project-activity-spinner { display: inline-block; width: 13px; height: 13px; flex: 0 0 auto; border: 1.5px solid rgba(113,164,224,.28); border-top-color: #75aeea; border-radius: 50%; animation: project-activity-spin .8s linear infinite; }
+@keyframes project-activity-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .project-activity-spinner { animation-duration: 1.8s; }
+}
+
 @media (prefers-color-scheme: light) {
   .project-context-menu { border-color: #cbd5dd; color: #27313a; background: rgba(255, 255, 255, .98); box-shadow: 0 18px 54px rgba(38, 49, 60, .16); }
   .project-context-heading { border-color: #e1e6eb; }
@@ -31,4 +38,5 @@
   .project-context-menu > button:disabled { color: #a4adb5; }
   .project-context-menu > button.project-context-danger { border-color: #e5d7d7; color: #ae4f4f; }
   .project-context-menu > button.project-context-danger:hover:not(:disabled), .project-context-menu > button.project-context-danger:focus-visible { color: #8f3030; background: #fff0f0; }
+  .project-activity-spinner { border-color: rgba(52,113,174,.20); border-top-color: #3979ba; }
 }
