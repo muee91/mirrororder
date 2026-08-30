@@ -11,6 +11,7 @@ describe("Desktop appearance product contract", () => {
     const main = read("../main.tsx");
     expect(main).toContain("initializeDesktopAppearance();");
     expect(main.indexOf('import "./styles.css"')).toBeLessThan(main.indexOf('import "./desktop-theme.css"'));
+    expect(main.indexOf('import "./features/material-script/golden-material-script-theme.css"')).toBeLessThan(main.indexOf('import "./desktop-theme-slate.css"'));
     expect(main.indexOf("initializeDesktopAppearance();")).toBeLessThan(main.indexOf("createRoot("));
   });
 
@@ -43,19 +44,16 @@ describe("Desktop appearance product contract", () => {
     const css = read("../desktop-theme.css");
     const tools = read("../desktop-theme-tools.css");
     const material = read("../features/material-script/golden-material-script-theme.css");
+    const slate = read("../desktop-theme-slate.css");
     expect(css).toContain('html[data-mirrororder-theme="light"]');
     expect(css).toContain('html[data-mirrororder-theme="dark"]');
-    expect(css).toContain(".golden-slate-workbench");
-    expect(css).toContain(".mo-media-card");
     expect(css).toContain(".project-home-card");
-    expect(css).toContain(".take-card");
+    expect(css).toContain(".mo-media-card");
     expect(tools).toContain('.settings-status-workbench');
     expect(material).toContain('.golden-material-script .angle-card');
-  });
-
-  it("does not let Golden Slate bypass the resolved Desktop theme with an OS-only light query", () => {
-    const slate = read("../features/slate/golden-slate.css");
-    expect(slate).not.toContain("@media (prefers-color-scheme: light)");
-    expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-slate-workbench');
+    expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-take-picker');
+    expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-take-picker');
+    expect(slate).toContain('.golden-inspector-field textarea');
+    expect(slate).toContain('.golden-episode-candidates > button');
   });
 });
