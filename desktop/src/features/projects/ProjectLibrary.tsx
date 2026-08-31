@@ -50,10 +50,6 @@ function projectSubtitle(project: ProjectSummary, activity?: ProjectActivitySumm
   return attention > 0 ? `${attention} 待处理` : "待整理";
 }
 
-function projectIcon(project: ProjectSummary): string {
-  return project.input_kind === "fcpxml" ? "▥" : "▰";
-}
-
 export function ProjectLibrary({
   workspace,
   activities = {},
@@ -108,7 +104,7 @@ export function ProjectLibrary({
   return (
     <div className="project-library">
       <button type="button" className="project-library-brand project-library-brand-button" onClick={onOpenHome} aria-label="返回项目主页">
-        <span className="mirror-mark" aria-hidden="true">镜</span>
+        <span className="mirror-mark" aria-hidden="true" />
         <span className="project-library-brand-copy"><strong>镜序</strong><span>MirrorOrder</span></span>
       </button>
 
@@ -145,7 +141,6 @@ export function ProjectLibrary({
                   }
                 }}
               >
-                <span className="project-row-icon" aria-hidden="true">{projectIcon(project)}</span>
                 <span className="project-row-copy"><strong>{project.name || project.project_id}</strong><small>{projectSubtitle(project, activity)}</small></span>
                 {taskActive ? <span className="project-activity-spinner" title={activity.label || "后台处理中"} /> : project.error || taskFailed ? <span className="project-row-alert" title={activity?.message || project.error || "整理异常"}>!</span> : null}
               </button>
