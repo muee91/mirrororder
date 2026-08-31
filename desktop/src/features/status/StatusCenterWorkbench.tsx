@@ -60,8 +60,8 @@ function recent(task: ProjectTaskRecord): boolean {
   return task.status === "completed" || task.status === "cancelled";
 }
 
-function taskTimestamp(task: ProjectTaskRecord): number {
-  for (const value of [task.created_at, task.started_at, task.completed_at]) {
+function firstTimestamp(values: Array<string | null | undefined>): number {
+  for (const value of values) {
     if (!value) continue;
     const timestamp = Date.parse(value);
     if (Number.isFinite(timestamp)) return timestamp;
@@ -69,9 +69,17 @@ function taskTimestamp(task: ProjectTaskRecord): number {
   return 0;
 }
 
+function attemptTimestamp(task: ProjectTaskRecord): number {
+  return firstTimestamp([task.created_at, task.started_at, task.completed_at]);
+}
+
+function activityTimestamp(task: ProjectTaskRecord): number {
+  return firstTimestamp([task.completed_at, task.started_at, task.created_at]);
+}
+
 export function latestTaskAttempts(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
   const ordered = tasks
-    .map((task, index) => ({ task, index, timestamp: taskTimestamp(task) }))
+    .map((task, index) => ({ task, index, timestamp: attemptTimestamp(task) }))
     .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index)
     .map(({ task }) => task);
   const seen = new Set<string>();
@@ -171,24 +179,26 @@ function statusLabel(task: ProjectTaskRecord): string {
 
 function sortTasks(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
   const rank = (task: ProjectTaskRecord) => active(task) ? 0 : taskNeedsAttention(task) ? 1 : recent(task) ? 2 : 3;
-  return [...tasks].sort((left, right) => rank(left) - rank(right) || taskTimestamp(right) - taskTimestamp(left));
+  return [...tasks].sort((left, right) => rank(left) - rank(right) || activityTimestamp(right) - activityTimestamp(left));
 }
 
 function hasActive(snapshot: ReloadSnapshot): boolean {
   return snapshot.deviceTasks.some(active) || snapshot.rows.some((row) => row.tasks.some(active));
 }
 
-function summaryMessage(snapshot: ReloadSnapshot): string {
+function summaryMessage(snapshot: ReloadSnapshot, deviceError = ""): string {
   const tasks = [...snapshot.deviceTasks, ...snapshot.rows.flatMap((row) => row.tasks)];
   const activeCount = tasks.filter(active).length;
-  const attentionCount = tasks.filter(taskNeedsAttention).length + snapshot.rows.filter((row) => row.error).length;
+  const attentionCount = tasks.filter(taskNeedsAttention).length
+    + snapshot.rows.filter((row) => row.error).length
+    + (deviceError ? 1 : 0);
   if (attentionCount) return `${attentionCount} 个事项需要处理${activeCount ? ` · ${activeCount} 个任务进行中` : ""}`;
   if (activeCount) return `${activeCount} 个任务正在处理`;
   return "后台工作当前正常。";
 }
 
 function relativeTime(task: ProjectTaskRecord): string {
-  const timestamp = taskTimestamp(task);
+  const timestamp = activityTimestamp(task);
   if (!timestamp) return "时间未知";
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
   if (seconds < 10) return "刚刚";
@@ -264,7 +274,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
       setRows(nextRows);
       setDeviceTasks(nextDevice.tasks);
       setDeviceError(nextDevice.error);
-      setMessage(nextDevice.error ? `本机运行时状态读取失败 · ${summaryMessage(snapshot)}` : summaryMessage(snapshot));
+      setMessage(summaryMessage(snapshot, nextDevice.error));
       return snapshot;
     } finally {
       if (!quiet) setBusy(false);
@@ -293,16 +303,16 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     ...rows.flatMap((row) => row.tasks.map((task) => ({ task, project: row.project }))),
   ], [deviceTasks, rows]);
 
-  const activeTasks = useMemo(() => allContexts.filter(({ task }) => active(task)).sort((left, right) => taskTimestamp(right.task) - taskTimestamp(left.task)), [allContexts]);
-  const attentionTasks = useMemo(() => allContexts.filter(({ task }) => taskNeedsAttention(task)).sort((left, right) => taskTimestamp(right.task) - taskTimestamp(left.task)), [allContexts]);
-  const recentTasks = useMemo(() => allContexts.filter(({ task }) => recent(task)).sort((left, right) => taskTimestamp(right.task) - taskTimestamp(left.task)), [allContexts]);
+  const activeTasks = useMemo(() => allContexts.filter(({ task }) => active(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [allContexts]);
+  const attentionTasks = useMemo(() => allContexts.filter(({ task }) => taskNeedsAttention(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [allContexts]);
+  const recentTasks = useMemo(() => allContexts.filter(({ task }) => recent(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [allContexts]);
   const projectErrors = rows.filter((row) => row.error);
 
   const totals = useMemo(() => ({
     active: activeTasks.length,
     attention: attentionTasks.length + projectErrors.length + (deviceError ? 1 : 0),
-    completed: allContexts.filter(({ task }) => completed(task)).length,
-  }), [activeTasks.length, allContexts, attentionTasks.length, deviceError, projectErrors.length]);
+    recent: recentTasks.length,
+  }), [activeTasks.length, attentionTasks.length, deviceError, projectErrors.length, recentTasks.length]);
 
   async function cancelProject(projectId: string, task: ProjectTaskRecord): Promise<void> {
     if (!canCancelTask(task) || actionTaskId) return;
@@ -421,7 +431,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
       <div className="status-center-summary">
         <span><strong>{totals.active}</strong>正在处理</span>
         <span className={totals.attention ? "needs-attention" : ""}><strong>{totals.attention}</strong>需要处理</span>
-        <button type="button" className={showRecent ? "is-active" : ""} aria-pressed={showRecent} onClick={() => setShowRecent((value) => !value)}><strong>{totals.completed}</strong>{showRecent ? "隐藏最近记录" : "显示已完成"}</button>
+        <button type="button" className={showRecent ? "is-active" : ""} aria-pressed={showRecent} onClick={() => setShowRecent((value) => !value)}><strong>{totals.recent}</strong>{showRecent ? "隐藏最近记录" : "显示最近记录"}</button>
       </div>
 
       <p className="status-center-note">优先显示需要处理和正在运行的工作。失败可直接重试并跳到相关位置；主动取消不会继续占据问题列表。</p>
@@ -451,7 +461,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
           </section>
         ) : null}
 
-        {noCurrentWork && !showRecent ? <div className="status-center-empty"><strong>后台工作正常</strong><span>当前没有运行中或需要处理的任务。已完成任务可通过“显示已完成”查看最新结果。</span></div> : null}
+        {noCurrentWork && !showRecent ? <div className="status-center-empty"><strong>后台工作正常</strong><span>当前没有运行中或需要处理的任务。可通过“显示最近记录”查看每条逻辑任务的最新已完成或已取消结果。</span></div> : null}
       </div>
     </section>
   );
