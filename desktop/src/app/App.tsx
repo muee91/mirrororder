@@ -342,6 +342,12 @@ export function App() {
     selectProject(project);
   }
 
+  function openProjectPageFromStatus(projectId: string, page: ProductionPage): void {
+    const project = snapshot?.projects.find((item) => item.project_id === projectId) ?? null;
+    if (!project) return;
+    openProjectPage(project, page);
+  }
+
   function disableAutomaticResume(): void {
     forgetWorkspaceResume();
     setResumeEnabledForSession(false);
@@ -443,11 +449,17 @@ export function App() {
 
         <section className="workbench-shell main-stage">
           {surface === "status" ? (
-            <StatusCenterWorkbench baseUrl={snapshot.baseUrl} projects={snapshot.projects} onOpenProject={openProjectFromStatus} />
+            <StatusCenterWorkbench
+              baseUrl={snapshot.baseUrl}
+              projects={snapshot.projects}
+              onOpenProject={openProjectFromStatus}
+              onOpenProjectPage={openProjectPageFromStatus}
+              onOpenSettings={() => setSurface("settings")}
+            />
           ) : surface === "team" ? (
             <TeamWebWorkbench workspacePath={workspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
           ) : surface === "settings" ? (
-            <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} projectId={selectedProject?.project_id ?? ""} />
+            <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} />
           ) : selectedProject ? (
             <ProjectWorkbench
               key={selectedProject.project_id}
