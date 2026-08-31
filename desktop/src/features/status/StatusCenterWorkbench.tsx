@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import { HostConnectionError } from "../../api/host";
+import type { ProductionPage } from "../../app/resumeState";
 import {
   DeviceTaskClient,
   ProjectTaskClient,
@@ -14,6 +15,8 @@ interface Props {
   baseUrl: string;
   projects: ProjectSummary[];
   onOpenProject: (projectId: string) => void;
+  onOpenProjectPage?: (projectId: string, page: ProductionPage) => void;
+  onOpenSettings?: () => void;
 }
 
 interface ProjectTasks {
@@ -27,6 +30,14 @@ interface ReloadSnapshot {
   deviceTasks: ProjectTaskRecord[];
 }
 
+interface TaskContext {
+  task: ProjectTaskRecord;
+  project: ProjectSummary | null;
+}
+
+const ACTIVE_POLL_MS = 1000;
+const IDLE_POLL_MS = 8000;
+
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
   return error instanceof Error ? error.message : String(error);
@@ -36,7 +47,8 @@ function active(task: ProjectTaskRecord): boolean {
   return task.status === "queued" || task.status === "running";
 }
 
-function attention(task: ProjectTaskRecord): boolean {
+export function taskNeedsAttention(task: ProjectTaskRecord): boolean {
+  if (task.status === "cancelled" || task.status === "completed") return false;
   return task.status === "failed" || task.status === "interrupted" || Boolean(task.error);
 }
 
@@ -44,19 +56,37 @@ function completed(task: ProjectTaskRecord): boolean {
   return task.status === "completed";
 }
 
+function recent(task: ProjectTaskRecord): boolean {
+  return task.status === "completed" || task.status === "cancelled";
+}
+
+function taskTimestamp(task: ProjectTaskRecord): number {
+  for (const value of [task.created_at, task.started_at, task.completed_at]) {
+    if (!value) continue;
+    const timestamp = Date.parse(value);
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return 0;
+}
+
 export function latestTaskAttempts(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
+  const ordered = tasks
+    .map((task, index) => ({ task, index, timestamp: taskTimestamp(task) }))
+    .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index)
+    .map(({ task }) => task);
   const seen = new Set<string>();
   const latest: ProjectTaskRecord[] = [];
-  // Both project and device task lists are newest attempt first. Retries may
-  // reuse an idempotency key, so only the newest attempt contributes to the
-  // current status badge; older attempts remain durable history on disk.
-  for (const task of tasks) {
+  for (const task of ordered) {
     const key = task.idempotency_key?.trim() || task.task_id;
     if (seen.has(key)) continue;
     seen.add(key);
     latest.push(task);
   }
   return latest;
+}
+
+export function statusPollDelay(hasActiveTasks: boolean): number {
+  return hasActiveTasks ? ACTIVE_POLL_MS : IDLE_POLL_MS;
 }
 
 function progress(task: ProjectTaskRecord): { done: number; total: number } | null {
@@ -133,22 +163,77 @@ function statusLabel(task: ProjectTaskRecord): string {
     queued: "排队中",
     running: "进行中",
     completed: "已完成",
-    failed: "失败",
+    failed: "需要处理",
     cancelled: "已取消",
     interrupted: "已中断",
   }[task.status] ?? task.status;
 }
 
 function sortTasks(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
-  const rank = (task: ProjectTaskRecord) => active(task) ? 0 : attention(task) ? 1 : canRetryTask(task) ? 2 : 3;
-  return [...tasks].sort((left, right) => rank(left) - rank(right) || String(right.created_at || "").localeCompare(String(left.created_at || "")));
+  const rank = (task: ProjectTaskRecord) => active(task) ? 0 : taskNeedsAttention(task) ? 1 : recent(task) ? 2 : 3;
+  return [...tasks].sort((left, right) => rank(left) - rank(right) || taskTimestamp(right) - taskTimestamp(left));
 }
 
 function hasActive(snapshot: ReloadSnapshot): boolean {
   return snapshot.deviceTasks.some(active) || snapshot.rows.some((row) => row.tasks.some(active));
 }
 
-export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Props) {
+function summaryMessage(snapshot: ReloadSnapshot): string {
+  const tasks = [...snapshot.deviceTasks, ...snapshot.rows.flatMap((row) => row.tasks)];
+  const activeCount = tasks.filter(active).length;
+  const attentionCount = tasks.filter(taskNeedsAttention).length + snapshot.rows.filter((row) => row.error).length;
+  if (attentionCount) return `${attentionCount} 个事项需要处理${activeCount ? ` · ${activeCount} 个任务进行中` : ""}`;
+  if (activeCount) return `${activeCount} 个任务正在处理`;
+  return "后台工作当前正常。";
+}
+
+function relativeTime(task: ProjectTaskRecord): string {
+  const timestamp = taskTimestamp(task);
+  if (!timestamp) return "时间未知";
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 10) return "刚刚";
+  if (seconds < 60) return `${seconds} 秒前`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  return `${Math.floor(hours / 24)} 天前`;
+}
+
+function duration(task: ProjectTaskRecord): string {
+  if (!task.started_at) return "";
+  const start = Date.parse(task.started_at);
+  const end = task.completed_at ? Date.parse(task.completed_at) : Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "";
+  const seconds = Math.max(0, Math.floor((end - start) / 1000));
+  if (seconds < 60) return `运行 ${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  if (minutes < 60) return `运行 ${minutes}:${String(remaining).padStart(2, "0")}`;
+  const hours = Math.floor(minutes / 60);
+  return `运行 ${hours} 小时 ${minutes % 60} 分钟`;
+}
+
+function taskTarget(task: ProjectTaskRecord): { label: string; page?: ProductionPage; settings?: boolean } {
+  if (task.scope === "device" || task.type === "local_vision_prepare" || task.type === "identity_runtime_prepare") {
+    return { label: "本机智能设置", settings: true };
+  }
+  if (task.type === "media_inventory_scan") return { label: "本机素材", page: "media-binding" };
+  if (["identity_index", "face", "speaker"].includes(task.type)) return { label: "人物", page: "identity" };
+  if (["auto_resolve", "semantic_index", "incremental_analyze", "transcribe", "transcription", "evidence_extract", "perception", "analysis", "audit"].includes(task.type)) {
+    return { label: "素材 / 剧本", page: "takes" };
+  }
+  return { label: "打开项目" };
+}
+
+function taskPrimaryMessage(task: ProjectTaskRecord): string {
+  if (taskNeedsAttention(task)) return task.message || "任务没有完成。可重新尝试，或打开相关位置检查输入与本机能力。";
+  if (task.status === "cancelled") return task.message || "任务已按请求停止。";
+  if (completed(task)) return task.message || "任务已完成。";
+  return task.message || "后台处理中。";
+}
+
+export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpenProjectPage, onOpenSettings }: Props) {
   const projectClient = useMemo(() => new ProjectTaskClient(baseUrl), [baseUrl]);
   const deviceClient = useMemo(() => new DeviceTaskClient(baseUrl), [baseUrl]);
   const [rows, setRows] = useState<ProjectTasks[]>([]);
@@ -157,7 +242,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Prop
   const [message, setMessage] = useState("正在读取所有后台工作…");
   const [busy, setBusy] = useState(false);
   const [actionTaskId, setActionTaskId] = useState<string | null>(null);
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [showRecent, setShowRecent] = useState(false);
 
   const reload = useCallback(async (quiet = false): Promise<ReloadSnapshot> => {
     if (!quiet) setBusy(true);
@@ -175,14 +260,12 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Prop
           .then((tasks) => ({ tasks: sortTasks(latestTaskAttempts(tasks)), error: "" }))
           .catch((error) => ({ tasks: [] as ProjectTaskRecord[], error: errorMessage(error) })),
       ]);
+      const snapshot = { rows: nextRows, deviceTasks: nextDevice.tasks };
       setRows(nextRows);
       setDeviceTasks(nextDevice.tasks);
       setDeviceError(nextDevice.error);
-      const all = [...nextDevice.tasks, ...nextRows.flatMap((row) => row.tasks)];
-      const activeCount = all.filter(active).length;
-      const failedCount = all.filter(attention).length;
-      if (!quiet) setMessage(activeCount ? `${activeCount} 个任务正在处理 · ${failedCount} 个需要注意` : failedCount ? `${failedCount} 个任务需要注意` : "后台任务当前正常。");
-      return { rows: nextRows, deviceTasks: nextDevice.tasks };
+      setMessage(nextDevice.error ? `本机运行时状态读取失败 · ${summaryMessage(snapshot)}` : summaryMessage(snapshot));
+      return snapshot;
     } finally {
       if (!quiet) setBusy(false);
     }
@@ -192,35 +275,34 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Prop
     let cancelled = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
-    async function monitor(): Promise<void> {
-      const next = await reload(true);
+    async function monitor(initial = false): Promise<void> {
+      const next = await reload(!initial);
       if (cancelled) return;
-      if (hasActive(next)) {
-        timer = globalThis.setTimeout(() => { void monitor(); }, 1000);
-      }
+      timer = globalThis.setTimeout(() => { void monitor(); }, statusPollDelay(hasActive(next)));
     }
 
-    void reload(false).then((next) => {
-      if (!cancelled && hasActive(next)) {
-        timer = globalThis.setTimeout(() => { void monitor(); }, 1000);
-      }
-    });
-
+    void monitor(true);
     return () => {
       cancelled = true;
       if (timer !== undefined) globalThis.clearTimeout(timer);
     };
   }, [reload]);
 
-  const totals = useMemo(() => {
-    const tasks = [...deviceTasks, ...rows.flatMap((row) => row.tasks)];
-    return {
-      active: tasks.filter(active).length,
-      attention: tasks.filter(attention).length,
-      retryable: tasks.filter(canRetryTask).length,
-      completed: tasks.filter(completed).length,
-    };
-  }, [deviceTasks, rows]);
+  const allContexts = useMemo<TaskContext[]>(() => [
+    ...deviceTasks.map((task) => ({ task, project: null })),
+    ...rows.flatMap((row) => row.tasks.map((task) => ({ task, project: row.project }))),
+  ], [deviceTasks, rows]);
+
+  const activeTasks = useMemo(() => allContexts.filter(({ task }) => active(task)).sort((left, right) => taskTimestamp(right.task) - taskTimestamp(left.task)), [allContexts]);
+  const attentionTasks = useMemo(() => allContexts.filter(({ task }) => taskNeedsAttention(task)).sort((left, right) => taskTimestamp(right.task) - taskTimestamp(left.task)), [allContexts]);
+  const recentTasks = useMemo(() => allContexts.filter(({ task }) => recent(task)).sort((left, right) => taskTimestamp(right.task) - taskTimestamp(left.task)), [allContexts]);
+  const projectErrors = rows.filter((row) => row.error);
+
+  const totals = useMemo(() => ({
+    active: activeTasks.length,
+    attention: attentionTasks.length + projectErrors.length + (deviceError ? 1 : 0),
+    completed: allContexts.filter(({ task }) => completed(task)).length,
+  }), [activeTasks.length, allContexts, attentionTasks.length, deviceError, projectErrors.length]);
 
   async function cancelProject(projectId: string, task: ProjectTaskRecord): Promise<void> {
     if (!canCancelTask(task) || actionTaskId) return;
@@ -282,83 +364,94 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject }: Prop
     }
   }
 
-  const relevant = (task: ProjectTaskRecord): boolean => active(task) || attention(task) || canRetryTask(task) || (showCompleted && completed(task));
-  const visibleDeviceTasks = deviceTasks.filter(relevant).slice(0, 12);
-  const visibleRows = rows.filter((row) => row.error || row.tasks.some(relevant));
+  function openTarget(context: TaskContext): void {
+    const target = taskTarget(context.task);
+    if (target.settings) {
+      onOpenSettings?.();
+      return;
+    }
+    if (!context.project) return;
+    if (target.page && onOpenProjectPage) {
+      onOpenProjectPage(context.project.project_id, target.page);
+      return;
+    }
+    onOpenProject(context.project.project_id);
+  }
+
+  function renderTask(context: TaskContext) {
+    const { task, project } = context;
+    const taskProgress = progress(task);
+    const stage = task.stage ? stageLabel(task.stage) : "";
+    const target = taskTarget(task);
+    const elapsed = duration(task);
+    const source = project ? (project.name || project.project_id) : "本机运行时";
+    return (
+      <article className={`status-center-task status-${task.status}`} key={`${project?.project_id || "device"}:${task.task_id}`}>
+        <div className="status-center-task-main">
+          <span className="status-center-task-indicator" aria-hidden="true" />
+          <div className="status-center-task-name">
+            <strong>{taskLabel(task)}</strong>
+            <span>{source} · {statusLabel(task)}{stage && stage !== statusLabel(task) ? ` · ${stage}` : ""}</span>
+          </div>
+        </div>
+        <div className="status-center-task-body">
+          <p>{taskPrimaryMessage(task)}</p>
+          <div className="status-center-task-meta"><span>{relativeTime(task)}</span>{elapsed ? <span>{elapsed}</span> : null}</div>
+          {taskProgress ? <div className="status-center-progress"><progress value={taskProgress.done} max={taskProgress.total} /><span>{taskProgress.done} / {taskProgress.total}</span></div> : null}
+          {task.error ? <details className="status-center-technical"><summary>技术详情</summary><code>{task.error}</code></details> : null}
+        </div>
+        <div className="status-center-actions">
+          {canCancelTask(task) ? <button type="button" className="secondary" disabled={Boolean(actionTaskId) || Boolean(task.cancel_requested)} onClick={() => project ? void cancelProject(project.project_id, task) : void cancelDevice(task)}>{task.cancel_requested ? "正在取消" : "取消"}</button> : null}
+          {canRetryTask(task) ? <button type="button" disabled={Boolean(actionTaskId)} onClick={() => project ? void retryProject(project.project_id, task) : void retryDevice(task)}>{task.status === "cancelled" ? "重新开始" : "重试"}</button> : null}
+          {(project || target.settings) ? <button type="button" className="secondary" onClick={() => openTarget(context)}>{target.label}</button> : null}
+        </div>
+      </article>
+    );
+  }
+
+  const noCurrentWork = !deviceError && !projectErrors.length && !attentionTasks.length && !activeTasks.length;
 
   return (
     <section className="status-center-workbench">
-      <header className="production-heading">
+      <header className="production-heading status-center-heading">
         <div><p className="eyebrow">后台工作</p><h2>状态中心</h2></div>
         <div className="assistant-heading-actions"><span className="production-state">{message}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload(false)}>刷新</button></div>
       </header>
 
       <div className="status-center-summary">
         <span><strong>{totals.active}</strong>正在处理</span>
-        <span className={totals.attention ? "needs-attention" : ""}><strong>{totals.attention}</strong>需要注意</span>
-        <span><strong>{totals.retryable}</strong>可重试</span>
-        <button type="button" className={showCompleted ? "is-active" : ""} aria-pressed={showCompleted} onClick={() => setShowCompleted((value) => !value)}><strong>{totals.completed}</strong>{showCompleted ? "隐藏已完成" : "查看已完成"}</button>
+        <span className={totals.attention ? "needs-attention" : ""}><strong>{totals.attention}</strong>需要处理</span>
+        <button type="button" className={showRecent ? "is-active" : ""} aria-pressed={showRecent} onClick={() => setShowRecent((value) => !value)}><strong>{totals.completed}</strong>{showRecent ? "隐藏最近记录" : "显示已完成"}</button>
       </div>
 
-      <p className="status-center-note">本机模型准备、素材扫描、波形生成、同步、转写、素材分析、内容识别、人物 / 声纹、语义索引与剧本归集等后台工作统一在这里查看、取消和重试。</p>
+      <p className="status-center-note">优先显示需要处理和正在运行的工作。失败可直接重试并跳到相关位置；主动取消不会继续占据问题列表。</p>
 
-      <div className="status-center-projects">
-        {deviceError || visibleDeviceTasks.length ? (
-          <section className="status-center-project">
-            <div className="status-center-project-head">
-              <div><strong>本机运行时</strong><span>{deviceError || `${visibleDeviceTasks.length} 个${showCompleted ? "显示事项" : "当前事项"}`}</span></div>
-            </div>
-            {deviceError ? <p className="status-center-error">{deviceError}</p> : null}
-            <div className="status-center-task-list">
-              {visibleDeviceTasks.map((task) => {
-                const taskProgress = progress(task);
-                const stage = task.stage ? stageLabel(task.stage) : "";
-                return (
-                  <article className={`status-center-task status-${task.status}`} key={task.task_id}>
-                    <div className="status-center-task-name"><strong>{taskLabel(task)}</strong><span>{statusLabel(task)}{stage ? ` · ${stage}` : ""}</span></div>
-                    {taskProgress ? <div className="status-center-progress"><progress value={taskProgress.done} max={taskProgress.total} /><span>{taskProgress.done} / {taskProgress.total}</span></div> : <div />}
-                    <p>{task.error || task.message || (completed(task) ? "已完成" : "")}</p>
-                    <div className="status-center-actions">
-                      {canCancelTask(task) ? <button type="button" className="secondary" disabled={Boolean(actionTaskId) || Boolean(task.cancel_requested)} onClick={() => void cancelDevice(task)}>{task.cancel_requested ? "正在取消" : "取消"}</button> : null}
-                      {canRetryTask(task) ? <button type="button" disabled={Boolean(actionTaskId)} onClick={() => void retryDevice(task)}>重试</button> : null}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+      <div className="status-center-sections">
+        {deviceError || projectErrors.length || attentionTasks.length ? (
+          <section className="status-center-section is-attention">
+            <header><div><span className="status-center-section-dot" /><strong>需要处理</strong></div><small>{totals.attention}</small></header>
+            {deviceError ? <article className="status-center-read-error"><div><strong>本机运行时状态读取失败</strong><span>{deviceError}</span></div>{onOpenSettings ? <button type="button" className="secondary" onClick={onOpenSettings}>本机智能设置</button> : null}</article> : null}
+            {projectErrors.map((row) => <article className="status-center-read-error" key={`error:${row.project.project_id}`}><div><strong>{row.project.name || row.project.project_id}</strong><span>无法读取后台任务：{row.error}</span></div><button type="button" className="secondary" onClick={() => onOpenProject(row.project.project_id)}>打开项目</button></article>)}
+            <div className="status-center-task-list">{attentionTasks.map(renderTask)}</div>
           </section>
         ) : null}
 
-        {visibleRows.map((row) => {
-          const visibleTasks = row.tasks.filter(relevant).slice(0, 12);
-          return (
-            <section className="status-center-project" key={row.project.project_id}>
-              <div className="status-center-project-head">
-                <div><strong>{row.project.name || row.project.project_id}</strong><span>{row.error || `${visibleTasks.length} 个${showCompleted ? "显示事项" : "当前事项"}`}</span></div>
-                <button type="button" className="secondary" onClick={() => onOpenProject(row.project.project_id)}>打开项目</button>
-              </div>
-              {row.error ? <p className="status-center-error">{row.error}</p> : null}
-              <div className="status-center-task-list">
-                {visibleTasks.map((task) => {
-                  const taskProgress = progress(task);
-                  const stage = task.stage ? stageLabel(task.stage) : "";
-                  return (
-                    <article className={`status-center-task status-${task.status}`} key={task.task_id}>
-                      <div className="status-center-task-name"><strong>{taskLabel(task)}</strong><span>{statusLabel(task)}{stage ? ` · ${stage}` : ""}</span></div>
-                      {taskProgress ? <div className="status-center-progress"><progress value={taskProgress.done} max={taskProgress.total} /><span>{taskProgress.done} / {taskProgress.total}</span></div> : <div />}
-                      <p>{task.error || task.message || (completed(task) ? "已完成" : "")}</p>
-                      <div className="status-center-actions">
-                        {canCancelTask(task) ? <button type="button" className="secondary" disabled={Boolean(actionTaskId) || Boolean(task.cancel_requested)} onClick={() => void cancelProject(row.project.project_id, task)}>{task.cancel_requested ? "正在取消" : "取消"}</button> : null}
-                        {canRetryTask(task) ? <button type="button" disabled={Boolean(actionTaskId)} onClick={() => void retryProject(row.project.project_id, task)}>重试</button> : null}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
-        {!deviceError && !visibleDeviceTasks.length && !visibleRows.length ? <div className="status-center-empty"><strong>后台工作正常</strong><span>{showCompleted ? "当前没有可显示的后台任务记录。" : "当前没有运行中、失败或可重试任务；可展开“已完成”查看历史。"}</span></div> : null}
+        {activeTasks.length ? (
+          <section className="status-center-section is-active">
+            <header><div><span className="status-center-section-dot" /><strong>正在处理</strong></div><small>{activeTasks.length}</small></header>
+            <div className="status-center-task-list">{activeTasks.map(renderTask)}</div>
+          </section>
+        ) : null}
+
+        {showRecent ? (
+          <section className="status-center-section is-recent">
+            <header><div><span className="status-center-section-dot" /><strong>最近记录</strong></div><small>{recentTasks.length}</small></header>
+            <p className="status-center-section-note">这里显示每条逻辑任务的最新结果，不等同于完整 attempt 历史。</p>
+            {recentTasks.length ? <div className="status-center-task-list">{recentTasks.map(renderTask)}</div> : <div className="status-center-section-empty">当前没有已完成或已取消的任务。</div>}
+          </section>
+        ) : null}
+
+        {noCurrentWork && !showRecent ? <div className="status-center-empty"><strong>后台工作正常</strong><span>当前没有运行中或需要处理的任务。已完成任务可通过“显示已完成”查看最新结果。</span></div> : null}
       </div>
     </section>
   );
