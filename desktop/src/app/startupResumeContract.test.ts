@@ -44,11 +44,16 @@ describe("startup and production resume product contract", () => {
     expect(source).toContain("当前工作现场保持打开");
   });
 
-  it("restores a project canvas and defaults new projects to the script-supervisor canvas", () => {
+  it("returns automatic workspace resume to Project Home and opens every project on Slate", () => {
+    const app = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     const workbench = readFileSync(fileURLToPath(new URL("../features/production/ProjectWorkbench.tsx", import.meta.url)), "utf8");
     const resume = readFileSync(fileURLToPath(new URL("./resumeState.ts", import.meta.url)), "utf8");
-    expect(workbench).toContain("readProjectPage(project.project_id)");
+
+    expect(app).toContain("setSelectedProject(null)");
+    expect(app).toContain("恢复完成后先进入项目主页，不会自动钻入上次项目");
+    expect(workbench).toContain('useState<ProductionPage>("slate")');
     expect(workbench).toContain("rememberProjectPage(project.project_id, page)");
+    expect(workbench).not.toContain("readProjectPage(project.project_id)");
     expect(workbench).not.toContain('useState<ProductionPage>("takes")');
     expect(resume).toContain('const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"');
   });
