@@ -190,6 +190,7 @@ class TaskManager:
             payload = self._load(config)
             task = self._task(payload, task_id)
             if task["status"] == "queued":
+                task["cancel_requested"] = True
                 task["status"] = "cancelled"
                 task["stage"] = "cancelled"
                 task["message"] = "任务在启动前取消"
@@ -403,6 +404,8 @@ class TaskManager:
         with self._lock:
             payload = self._load(config)
             task = self._task(payload, task_id)
+            if status == "running" and task.get("status") == "cancelled":
+                return
             if status:
                 task["status"] = status
                 if status == "running":
