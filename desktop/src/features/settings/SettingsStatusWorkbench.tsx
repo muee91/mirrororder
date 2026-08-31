@@ -9,7 +9,7 @@ import { DesktopAppearanceControl } from "./DesktopAppearanceControl";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
 import "./settings-preferences.css";
 
-interface Props { baseUrl: string; projectId?: string | null }
+interface Props { baseUrl: string }
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
@@ -26,7 +26,7 @@ function defaultEpisode(value: string): FrontendSettings["default_episode"] {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 9999 ? parsed : "first";
 }
 
-export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
+export function SettingsStatusWorkbench({ baseUrl }: Props) {
   const desktop = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const platform = useMemo(() => new PlatformClient(), []);
@@ -100,7 +100,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
         <section className="settings-preference-section" aria-labelledby="settings-local-title">
           <header className="settings-section-heading">
             <div><p className="eyebrow">本机智能</p><h3 id="settings-local-title">视觉与身份识别</h3></div>
-            <span>模型与缓存留在本机</span>
+            <span>启用一次 · 当前设备自动恢复</span>
           </header>
           <LocalRuntimePanel baseUrl={baseUrl} />
         </section>
@@ -108,16 +108,9 @@ export function SettingsStatusWorkbench({ baseUrl, projectId = null }: Props) {
         <section className="settings-preference-section" aria-labelledby="settings-assistant-title">
           <header className="settings-section-heading">
             <div><p className="eyebrow">小镜</p><h3 id="settings-assistant-title">模型连接</h3></div>
-            <span>低频高级设置</span>
+            <span>当前设备 · 与项目无关</span>
           </header>
-          {projectId ? (
-            <AssistantModelsPanel baseUrl={baseUrl} projectId={projectId} />
-          ) : (
-            <div className="production-panel status-card model-connections-card">
-              <h3>外部 / 自定义模型连接</h3>
-              <p className="production-note">先从左侧选择一个项目，即可读取和编辑当前设备的语言、视觉与语义检索连接。连接本身仍是设备本机配置，不会写入项目。</p>
-            </div>
-          )}
+          <AssistantModelsPanel baseUrl={baseUrl} />
         </section>
 
         <section className="settings-preference-section" aria-labelledby="settings-team-title">
