@@ -22,6 +22,7 @@ RUNTIME_INSTALL_ORDER = (
     "semantic",
     "delivery",
     "desktop",
+    "device_model",
     "media_inventory_task",
     "slate_media",
     "project_location",
@@ -38,11 +39,13 @@ def _install_stack_once() -> None:
 
     Imports are intentionally staged. Media-role projections must be installed
     before Coverage/Rough Cut modules bind their module-level projection
-    functions. Desktop installs before the durable media-inventory adapter so
-    the latter owns scan submission while Desktop retains only lightweight
-    binding/status surfaces. Explicit Slate file-drop resolution installs after
-    device-media identity. Project-location installs last because it only adds a
-    local, lightweight path resolver for explicit Desktop reveal actions.
+    functions. Desktop installs before device-model restoration so the durable
+    device task manager and local runtime management surface exist first. The
+    durable media-inventory adapter then owns scan submission while Desktop
+    retains only lightweight binding/status surfaces. Explicit Slate file-drop
+    resolution installs after device-media identity. Project-location installs
+    last because it only adds a local, lightweight path resolver for explicit
+    Desktop reveal actions.
     """
 
     from .device_media_runtime import install_device_media_runtime
@@ -97,6 +100,9 @@ def _install_stack_once() -> None:
 
     from .desktop_runtime import install_desktop_runtime
     install_desktop_runtime()
+
+    from .device_model_runtime import install_device_model_runtime
+    install_device_model_runtime()
 
     from .media_inventory_task_runtime import install_media_inventory_task_runtime
     install_media_inventory_task_runtime()
