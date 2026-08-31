@@ -106,3 +106,11 @@ export function latestTaskFamilies(tasks: ProjectTaskRecord[]): ProjectTaskRecor
   }
   return latest;
 }
+
+export function currentTaskStates(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
+  const attempts = latestTaskAttempts(tasks);
+  const active = attempts.filter(isTaskActive);
+  const activeFamilies = new Set(active.map(taskFamilyKey));
+  const settled = latestTaskFamilies(attempts).filter((task) => !activeFamilies.has(taskFamilyKey(task)));
+  return [...active, ...settled].sort((left, right) => taskAttemptTimestamp(right) - taskAttemptTimestamp(left));
+}
