@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ProjectSummary } from "../../api/host";
 import type { ProjectActivitySummary } from "./projectActivity";
@@ -46,17 +48,24 @@ describe("project presentation model", () => {
     expect(result.sidebarSubtitle).toBe("8 Take · 3 待处理");
   });
 
-  it("lets active task state override static stats", () => {
+  it("lets active background work override static stats while it is actually running", () => {
     const result = projectPresentation(project({ groups: 0, clips: 0 }), activity("active", "素材扫描"));
     expect(result.statusTone).toBe("active");
     expect(result.statusLabel).toBe("素材扫描");
     expect(result.sidebarSubtitle).toBe("素材扫描");
   });
 
-  it("lets failure state override static stats", () => {
-    const result = projectPresentation(project({ groups: 10, clips: 30 }), activity("failed"));
+  it("uses project data error as the persistent error authority", () => {
+    const result = projectPresentation(project({ groups: 10, clips: 30 }, { error: "项目源损坏" }));
     expect(result.statusTone).toBe("error");
     expect(result.statusLabel).toBe("需要处理");
-    expect(result.sidebarSubtitle).toBe("整理异常");
+    expect(result.sidebarSubtitle).toBe("项目异常");
+  });
+
+  it("does not expose a failed task activity state as a project-card authority", () => {
+    const activitySource = readFileSync(fileURLToPath(new URL("./projectActivity.ts", import.meta.url)), "utf8");
+    const presentationSource = readFileSync(fileURLToPath(new URL("./projectPresentation.ts", import.meta.url)), "utf8");
+    expect(activitySource).toContain('export type ProjectActivityState = "idle" | "active";');
+    expect(presentationSource).not.toContain('activity?.state === "failed"');
   });
 });
