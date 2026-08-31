@@ -6,6 +6,7 @@ import "./projects.css";
 import "./project-library-fidelity.css";
 
 interface Props {
+  baseUrl?: string;
   workspace: WorkspacePayload;
   activities?: Record<string, ProjectActivitySummary>;
   selectedProjectId: string | null;
@@ -22,6 +23,7 @@ interface Props {
   onPrepareProject?: (project: ProjectSummary) => void | Promise<void>;
   onOpenMediaBinding?: (project: ProjectSummary) => void;
   onDeleteProject?: (project: ProjectSummary) => void | Promise<void>;
+  onWorkspaceChanged?: (preferredProjectId?: string) => Promise<void>;
 }
 
 interface ProjectMenuState {
