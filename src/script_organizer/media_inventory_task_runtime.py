@@ -6,10 +6,10 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 from uuid import uuid4
 
-from .media_identity import DeviceMediaStore, media_id_for_path
+from .media_identity import DeviceMediaStore, MediaScanCancelled, media_id_for_path
 from .media_reader import infer_camera_label
 from .media_role_store import MediaRoleStore
 from .resource_scheduler import ResourceCancelled
@@ -335,23 +335,31 @@ def install_media_inventory_task_runtime() -> None:
         project_id: str,
         index: dict[str, Any],
         roots: Iterable[str],
+        *,
+        media_rows: list[tuple[str, str]] | None = None,
+        replace: bool = False,
+        cancelled: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
-        media_rows: list[tuple[str, str]] = []
+        captured_rows: list[tuple[str, str]] = []
         summary = original_scan(
             store,
             workspace_id,
             project_id,
             index,
             roots,
-            media_rows=media_rows,
+            media_rows=captured_rows,
+            replace=replace,
+            cancelled=cancelled,
         )
+        if media_rows is not None:
+            media_rows.extend(captured_rows)
         state = store.project_snapshot(workspace_id, project_id)
         _write_inventory_snapshot(
             store,
             workspace_id,
             project_id,
             state.get("roots", []),
-            media_rows=media_rows,
+            media_rows=captured_rows,
         )
         return summary
 
@@ -360,22 +368,30 @@ def install_media_inventory_task_runtime() -> None:
         workspace_id: str,
         project_id: str,
         roots: Iterable[str],
+        *,
+        media_files: list[Path] | None = None,
+        replace: bool = False,
+        cancelled: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
-        media_files: list[Path] = []
+        captured_files: list[Path] = []
         summary = original_probe(
             store,
             workspace_id,
             project_id,
             roots,
-            media_files=media_files,
+            media_files=captured_files,
+            replace=replace,
+            cancelled=cancelled,
         )
+        if media_files is not None:
+            media_files.extend(captured_files)
         state = store.project_snapshot(workspace_id, project_id)
         _write_inventory_snapshot(
             store,
             workspace_id,
             project_id,
             state.get("roots", []),
-            media_files=media_files,
+            media_files=captured_files,
         )
         return summary
 
@@ -420,22 +436,31 @@ def install_media_inventory_task_runtime() -> None:
             roots = [str(value) for value in request.get("roots", []) if str(value)]
             if not roots:
                 raise ValueError("素材扫描请求没有媒体目录")
-            if bool(request.get("replace", False)):
-                store.replace_roots(workspace_id, project_id, roots)
-                try:
-                    _snapshot_path(store, workspace_id, project_id).unlink(missing_ok=True)
-                except OSError:
-                    pass
+            replace = bool(request.get("replace", False))
 
             with manager._resource(config, task, "cpu", "media_inventory", "素材扫描"):
                 try:
                     index = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     index = {}
+                cancelled = lambda: manager._cancel_requested(config, task_id)
                 if isinstance(index, dict) and (index.get("clips") or index.get("groups")):
-                    summary = store.scan(workspace_id, project_id, index, roots)
+                    summary = store.scan(
+                        workspace_id,
+                        project_id,
+                        index,
+                        roots,
+                        replace=replace,
+                        cancelled=cancelled,
+                    )
                 else:
-                    summary = store.probe_roots(workspace_id, project_id, roots)
+                    summary = store.probe_roots(
+                        workspace_id,
+                        project_id,
+                        roots,
+                        replace=replace,
+                        cancelled=cancelled,
+                    )
 
             project = type("InventoryProject", (), {})()
             project.project_id = project_id
@@ -444,16 +469,6 @@ def install_media_inventory_task_runtime() -> None:
             project.config = config
             inventory = inventory_payload(project, store, MediaRoleStore(config.output_dir))
             result = _safe_task_result(summary, inventory)
-            if manager._cancel_requested(config, task_id):
-                manager._update(
-                    config,
-                    task_id,
-                    status="cancelled",
-                    stage="cancelled",
-                    result=result,
-                    message="素材扫描阶段完成后已停止",
-                )
-                return
             manager._update(
                 config,
                 task_id,
@@ -462,10 +477,12 @@ def install_media_inventory_task_runtime() -> None:
                 result=result,
                 message=f"素材扫描完成 · {result['files_seen']} 个文件",
             )
+        except MediaScanCancelled:
+            manager._update(config, task_id, status="cancelled", stage="cancelled", message="素材扫描已取消；原有本机素材绑定保持不变")
         except ResourceCancelled:
             manager._update(config, task_id, status="cancelled", stage="cancelled", message="等待素材扫描资源时已取消")
         except Exception as error:
-            manager._update(config, task_id, status="failed", stage="failed", error=str(error), message="素材扫描失败")
+            manager._update(config, task_id, status="failed", stage="failed", error=str(error), message="素材扫描失败；原有本机素材绑定保持不变")
         finally:
             manager._threads.pop(task_id, None)
 
@@ -508,6 +525,19 @@ def install_media_inventory_task_runtime() -> None:
                     self._local_only()
                     current = _current_service(service)
                     project = current.project(parts[3])
+                    active_scan = next(
+                        (
+                            task for task in current.tasks.list(project.project_id)
+                            if str(task.get("type", "")) == _TASK_TYPE
+                            and str(task.get("status", "")) in {"queued", "running"}
+                        ),
+                        None,
+                    )
+                    if active_scan is not None:
+                        raise web_server.ApiError(
+                            web_server.HTTPStatus.CONFLICT,
+                            "当前项目已有本机素材扫描正在进行；请等待完成或先取消当前扫描，再提交新的素材位置。",
+                        )
                     roots = _normalize_roots(body.get("roots", []))
                     store = DeviceMediaStore()
                     workspace_id = _workspace_id(current)
