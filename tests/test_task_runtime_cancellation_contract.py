@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from script_organizer.device_tasks import DeviceTaskManager
 from script_organizer.multicam_sync_engine import _run
 from script_organizer.resource_scheduler import ResourceCancelled
 from script_organizer.tasks_v2 import PROCESS_RUNNER_ID, TaskManager
@@ -122,9 +123,46 @@ def test_queued_cancel_cannot_be_promoted_back_to_running(tmp_path: Path) -> Non
     assert saved["started_at"] == ""
 
 
+def test_queued_device_cancel_cannot_be_promoted_back_to_running(tmp_path: Path) -> None:
+    path = tmp_path / "device-tasks.json"
+    row = {
+        "task_id": "device-race",
+        "scope": "device",
+        "project_id": "",
+        "type": "identity_runtime_prepare",
+        "targets": {"kind": "face"},
+        "affected_group_ids": [],
+        "idempotency_key": "device-race",
+        "runner_id": "device-test",
+        "status": "queued",
+        "stage": "queued",
+        "progress": {},
+        "actor": "desktop",
+        "created_at": "2026-09-01T00:00:00+00:00",
+        "started_at": "",
+        "completed_at": "",
+        "error": "",
+        "result": {},
+        "logs": [],
+    }
+    path.write_text(json.dumps({"version": 1, "tasks": [row]}, ensure_ascii=False), encoding="utf-8")
+    manager = DeviceTaskManager(path)
+
+    cancelled = manager.cancel("device-race")
+    manager._update("device-race", status="running", stage="starting", message="设备运行时准备开始")
+    saved = manager.list()[0]
+
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["cancel_requested"] is True
+    assert saved["status"] == "cancelled"
+    assert saved["stage"] == "cancelled"
+    assert saved["started_at"] == ""
+
+
 def test_cancelled_task_message_is_not_reported_as_completed() -> None:
     base_tasks = read("src/script_organizer/tasks_v2.py")
     compat_tasks = read("src/script_organizer/tasks.py")
+    device_tasks = read("src/script_organizer/device_tasks.py")
 
     assert 'except ResourceCancelled as error:' in base_tasks
     assert 'status="cancelled"' in base_tasks
@@ -132,3 +170,4 @@ def test_cancelled_task_message_is_not_reported_as_completed() -> None:
     assert 'status == "running" and task.get("status") == "cancelled"' in base_tasks
     assert 'except ResourceCancelled as error:' in compat_tasks
     assert 'status="cancelled"' in compat_tasks
+    assert 'status == "running" and task.get("status") == "cancelled"' in device_tasks
