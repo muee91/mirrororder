@@ -9,6 +9,8 @@ import "./desktop-theme-tools.css";
 import "./features/material-script/golden-material-script-theme.css";
 import "./desktop-theme-slate.css";
 import "./desktop-theme-frozen-surfaces.css";
+import "./features/status/status-center-recovery.css";
+import "./features/media/media-binding-recovery.css";
 
 initializeDesktopAppearance();
 
