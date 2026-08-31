@@ -65,11 +65,13 @@ describe("startup and production resume product contract", () => {
     expect(source).toContain("setActiveWorkspacePath(normalizedPath)");
   });
 
-  it("does not invent a local path when connecting to a different already-running Host", () => {
+  it("clears project and local-path context when advanced connection crosses workspace identity", () => {
     const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     const connectBlock = source.slice(source.indexOf("async function connect()"), source.indexOf("async function refreshWorkspace"));
-    expect(connectBlock).toContain("previousSnapshot?.workspace.workspace_id === next.workspace.workspace_id");
-    expect(connectBlock).toContain('? activeWorkspacePath\n        : ""');
+    expect(connectBlock).toContain("const sameWorkspace = previousSnapshot?.workspace.workspace_id === next.workspace.workspace_id");
+    expect(connectBlock).toContain("const project = sameWorkspace && selectedProject ? projectById(next, selectedProject.project_id) : null");
+    expect(connectBlock).toContain('const connectedWorkspacePath = sameWorkspace ? activeWorkspacePath : ""');
+    expect(connectBlock).toContain("setSelectedProject(project)");
     expect(connectBlock).toContain("setActiveWorkspacePath(connectedWorkspacePath)");
     expect(connectBlock).toContain("本机路径未知");
   });
