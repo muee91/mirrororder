@@ -1,8 +1,8 @@
 /* Frozen Demo surfaces that still carry OS media-query fallbacks. */
 
 /* Official MirrorOrder logo staged inside Desktop src so Vite always fingerprints and bundles it. */
-.mirror-mark,
-.startup-logo {
+.global-sidebar .mirror-mark,
+html .startup-logo {
   background-image: url("./assets/mirrororder-logo.svg");
   background-position: center;
   background-repeat: no-repeat;
