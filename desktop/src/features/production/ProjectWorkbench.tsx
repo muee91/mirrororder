@@ -76,7 +76,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   return (
     <section className={`project-production-workbench ${assistantVisible ? "has-assistant-drawer" : ""} ${slateAssistantVisible ? "has-slate-assistant" : ""}`}>
       <div className="project-workbench-canvas">
-        <div className={`project-workbench-main ${page === "slate" || materialScript ? "owns-chrome" : ""}`}>
+        <div className="project-workbench-main owns-chrome">
           {page === "slate" ? (
             <>
               <GoldenSlateWorkbench
