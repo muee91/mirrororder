@@ -257,7 +257,6 @@ export function App() {
     setPageRequest(null);
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
-    setMessage(`已打开 ${project.name || project.project_id}`);
   }
 
   function openProjectPage(project: ProjectSummary, page: ProductionPage): void {
@@ -266,7 +265,6 @@ export function App() {
     setPageRequest({ projectId: project.project_id, page, nonce: pageRequestNonce.current });
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
-    setMessage(`已打开 ${project.name || project.project_id} · ${page === "media-binding" ? "本机素材" : page}`);
   }
 
   function openTeamProject(project: ProjectSummary): void {
@@ -274,7 +272,6 @@ export function App() {
     setPageRequest(null);
     setSurface("team");
     if (resumeEnabledForSession) rememberProject(project.project_id);
-    setMessage(`团队审阅 · ${project.name || project.project_id}`);
   }
 
   async function copyProjectShareLink(project: ProjectSummary): Promise<void> {
@@ -349,7 +346,6 @@ export function App() {
     setSelectedProject(null);
     setPageRequest(null);
     setSurface("production");
-    setMessage(`项目主页 · ${snapshot?.projects.length ?? 0} 个项目`);
   }
 
   function openProjectFromStatus(projectId: string): void {
