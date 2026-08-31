@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import { HostConnectionError } from "../../api/host";
 import {
+  currentTaskStates,
   isTaskActive,
   latestTaskAttempts,
-  latestTaskFamilies,
 } from "../../api/taskSemantics";
 import type { ProductionPage } from "../../app/resumeState";
 import {
@@ -171,8 +171,8 @@ function sortTasks(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
 
 function currentTasks(snapshot: ReloadSnapshot): ProjectTaskRecord[] {
   return [
-    ...latestTaskFamilies(snapshot.deviceTasks),
-    ...snapshot.rows.flatMap((row) => latestTaskFamilies(row.tasks)),
+    ...currentTaskStates(snapshot.deviceTasks),
+    ...snapshot.rows.flatMap((row) => currentTaskStates(row.tasks)),
   ];
 }
 
@@ -303,8 +303,8 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
   ], [deviceTasks, rows]);
 
   const currentContexts = useMemo<TaskContext[]>(() => [
-    ...latestTaskFamilies(deviceTasks).map((task) => ({ task, project: null })),
-    ...rows.flatMap((row) => latestTaskFamilies(row.tasks).map((task) => ({ task, project: row.project }))),
+    ...currentTaskStates(deviceTasks).map((task) => ({ task, project: null })),
+    ...rows.flatMap((row) => currentTaskStates(row.tasks).map((task) => ({ task, project: row.project }))),
   ], [deviceTasks, rows]);
 
   const currentIds = useMemo(() => new Set(currentContexts.map(contextId)), [currentContexts]);
@@ -446,7 +446,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         <button type="button" className={showHistory ? "is-active" : ""} aria-pressed={showHistory} onClick={() => setShowHistory((value) => !value)}><strong>{totals.history}</strong>{showHistory ? "隐藏历史记录" : "显示历史记录"}</button>
       </div>
 
-      <p className="status-center-note">这里只把每类工作的最新状态算作当前事项。后续尝试已经取代的旧失败会进入历史，不再重复占据“需要处理”。</p>
+      <p className="status-center-note">这里只把每类工作的最新状态算作当前事项；仍在排队或运行的实例全部保留。后续尝试已经取代的旧失败会进入历史，不再重复占据“需要处理”。</p>
 
       <div className="status-center-sections">
         {activeTasks.length ? (
