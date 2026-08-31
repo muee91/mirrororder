@@ -131,7 +131,7 @@ export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged }: Props) {
 
   return (
     <>
-      <button type="button" className="project-new-button project-home-new-button" onClick={() => setOpen(true)}>＋ 新建项目</button>
+      <button type="button" className="project-new-button project-home-new-button" onClick={() => setOpen(true)}>新建项目</button>
 
       {open ? (
         <div className="project-lifecycle-overlay" role="presentation" onMouseDown={() => !busy && setOpen(false)}>
