@@ -8,12 +8,12 @@ import {
   type MediaRoleStore,
   type MediaSourceRole,
 } from "../../api/mediaRoles";
-import { MediaBindingWorkbench } from "./MediaBindingWorkbench";
 import "./media-library.css";
 
 interface Props {
   baseUrl: string;
   projectId: string;
+  onOpenMediaBinding?: () => void;
 }
 
 type Filter = "all" | "auxiliary" | "unindexed" | "labeled";
@@ -73,7 +73,7 @@ function inventoryUpdatedLabel(value: string): string {
   return date.toLocaleString("zh-CN", { hour12: false });
 }
 
-export function MediaLibraryWorkbench({ baseUrl, projectId }: Props) {
+export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }: Props) {
   const client = useMemo(() => new MediaRoleClient(baseUrl), [baseUrl]);
   const [inventory, setInventory] = useState<MediaInventory | null>(null);
   const [roles, setRoles] = useState<MediaRoleStore | null>(null);
@@ -84,7 +84,6 @@ export function MediaLibraryWorkbench({ baseUrl, projectId }: Props) {
   const [actor, setActor] = useState(storedActor);
   const [message, setMessage] = useState("正在读取本机素材清单与共享素材角色…");
   const [busy, setBusy] = useState(false);
-  const [showBinding, setShowBinding] = useState(false);
 
   async function reload(preferredId = selectedId): Promise<void> {
     setBusy(true);
@@ -246,10 +245,11 @@ export function MediaLibraryWorkbench({ baseUrl, projectId }: Props) {
         </aside>
       </div>
 
-      <div className="media-binding-disclosure">
-        <button type="button" className="secondary" onClick={() => setShowBinding((current) => !current)}>{showBinding ? "收起本机素材恢复" : "本机素材缺失或换盘？打开素材恢复"}</button>
-        {showBinding ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={projectId} /> : null}
-      </div>
+      {onOpenMediaBinding ? (
+        <div className="media-binding-disclosure">
+          <button type="button" className="secondary" onClick={onOpenMediaBinding}>本机素材缺失或换盘？打开素材恢复</button>
+        </div>
+      ) : null}
     </section>
   );
 }
