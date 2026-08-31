@@ -105,17 +105,37 @@ def _apply_runtime_action(service: Any, payload: dict[str, Any]) -> dict[str, An
         if update:
             old_model = str(settings.get("local_vision_model", "") or "")
             settings = save_runtime_settings(update)
-            vision_changed = (
-                not bool(settings.get("local_vision_enabled", False))
-                or str(settings.get("local_vision_model", "") or "") != old_model
-            )
+            new_model = str(settings.get("local_vision_model", "") or "")
+            vision_enabled = bool(settings.get("local_vision_enabled", False))
+            vision_changed = not vision_enabled or new_model != old_model
             if vision_changed:
                 _cancel_active_device_tasks(device_tasks, "local_vision_prepare")
                 LocalVisionRuntime.stop()
+                if not vision_enabled:
+                    device_tasks.supersede(
+                        "local_vision_prepare",
+                        reason="本地视觉已关闭；过去的模型准备失败不再需要处理",
+                    )
+                elif old_model and new_model != old_model:
+                    device_tasks.supersede(
+                        "local_vision_prepare",
+                        model=old_model,
+                        reason=f"视觉模型已切换为 {new_model}；旧模型 {old_model} 的准备失败已被取代",
+                    )
             if "face_identity_enabled" in update and not bool(settings.get("face_identity_enabled", False)):
                 _cancel_active_device_tasks(device_tasks, "identity_runtime_prepare", kind="face")
+                device_tasks.supersede(
+                    "identity_runtime_prepare",
+                    kind="face",
+                    reason="人脸身份能力已关闭；过去的人脸运行时准备失败不再需要处理",
+                )
             if "speaker_identity_enabled" in update and not bool(settings.get("speaker_identity_enabled", False)):
                 _cancel_active_device_tasks(device_tasks, "identity_runtime_prepare", kind="speaker")
+                device_tasks.supersede(
+                    "identity_runtime_prepare",
+                    kind="speaker",
+                    reason="声纹身份能力已关闭；过去的声纹运行时准备失败不再需要处理",
+                )
     elif action == "prepare":
         model = str(settings.get("local_vision_model", "") or "")
         submitted = device_tasks.submit(
