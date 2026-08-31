@@ -12,15 +12,23 @@
 .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled) { border-color: #5a4a4a; color: #d59a93; background: transparent; }
 .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled):hover { border-color: #765858; color: #e2ada6; background: #1a1313; }
 
-/* A large backlog must not push current control surfaces off-screen. */
+/* A large current backlog must not push control surfaces off-screen. */
 .status-center-section.is-attention .status-center-task-list { max-height: min(520px, 52vh); overflow-y: auto; overscroll-behavior: contain; }
 .status-center-section.is-attention .status-center-task-list::-webkit-scrollbar { width: 10px; }
 .status-center-section.is-attention .status-center-task-list::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background-clip: padding-box; background-color: rgba(120, 134, 146, .42); }
+
+/* Superseded failures are history, not current alarms. */
+.status-center-section.is-recent .status-center-task.is-history { background: #0d1216; }
+.status-center-section.is-recent .status-center-task.is-history .status-center-task-indicator { background: #6f7880; }
+.status-center-section.is-recent .status-center-task.is-history .status-center-task-body > p { color: #74818c; }
 
 html[data-mirrororder-theme="light"] .status-center-section.is-active { border-color: #bdd0e1; }
 html[data-mirrororder-theme="light"] .status-center-section.is-active > header { background: #f3f8fc; }
 html[data-mirrororder-theme="light"] .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled) { border-color: #dfc0bc; color: #a4574f; background: #fff; }
 html[data-mirrororder-theme="light"] .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled):hover { border-color: #d4a9a3; color: #93473f; background: #fff5f3; }
+html[data-mirrororder-theme="light"] .status-center-section.is-recent .status-center-task.is-history { background: #fbfcfd; }
+html[data-mirrororder-theme="light"] .status-center-section.is-recent .status-center-task.is-history .status-center-task-body > p { color: #6c7883; }
 
 html[data-mirrororder-theme="dark"] .status-center-section.is-active { border-color: #33495d; }
 html[data-mirrororder-theme="dark"] .status-center-section.is-active > header { background: rgba(76, 133, 189, .06); }
+html[data-mirrororder-theme="dark"] .status-center-section.is-recent .status-center-task.is-history { background: #0d1216; }
