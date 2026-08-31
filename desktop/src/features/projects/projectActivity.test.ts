@@ -57,4 +57,27 @@ describe("project activity health semantics", () => {
     expect(result.state).toBe("active");
     expect(result.label).toBe("人物识别");
   });
+
+  it("never hides an older live attempt behind a newer settled task from the same family", () => {
+    const result = summarizeProjectActivity([
+      task("running", "identity_index", "running", "2026-08-31T10:00:00Z", {
+        idempotency_key: "identity:running",
+        stage: "waiting_cpu",
+        targets: { kind: "both", group_ids: ["G1"] },
+      }),
+      task("newer-failed", "identity_index", "failed", "2026-08-31T10:01:00Z", {
+        idempotency_key: "identity:failed",
+        targets: { kind: "both", group_ids: ["G2"] },
+        error: "worker failed",
+      }),
+    ]);
+    expect(result.state).toBe("active");
+    expect(result.label).toBe("人物 / 声纹索引 · 等待处理资源");
+  });
+
+  it("keeps the task identity in generic queued and waiting labels", () => {
+    expect(summarizeProjectActivity([
+      task("scan", "media_inventory_scan", "queued", "2026-08-31T10:00:00Z"),
+    ]).label).toBe("素材扫描 · 等待开始");
+  });
 });
