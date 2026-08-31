@@ -26,16 +26,27 @@ describe("Desktop UI polish contract", () => {
     expect(lifecycle).not.toContain("＋ 新建项目");
   });
 
-  it("reuses the packaged app icon inside the Desktop UI instead of inventing another logo", () => {
+  it("bundles the canonical MirrorOrder logo through the Desktop source asset graph", () => {
     const frozen = read("../desktop-theme-frozen-surfaces.css");
+    const logo = read("../assets/mirrororder-logo.svg");
+    const canonicalLogo = read("../../../branding/logo.svg");
     const styles = read("../styles.css");
     const projects = read("../features/projects/projects.css");
 
-    expect(frozen).toContain('background-image: url("../src-tauri/icons/icon.png")');
-    expect(projects).toContain('background-image: url("../../../src-tauri/icons/icon.png")');
-    expect(projects).not.toContain("branding/app-icon.png");
+    expect(frozen).toContain('background-image: url("./assets/mirrororder-logo.svg")');
+    expect(logo).toBe(canonicalLogo);
     expect(styles).not.toContain(".startup-logo::before");
     expect(projects).not.toContain(".mirror-mark::before");
+  });
+
+  it("keeps project copy out of the removed three-pixel icon column", () => {
+    const projects = read("../features/projects/projects.css");
+    const fidelity = read("../features/projects/project-library-fidelity.css");
+
+    expect(projects).toContain(".project-row { display: grid; grid-template-columns: minmax(0, 1fr) auto;");
+    expect(projects).not.toContain("grid-template-columns: 3px minmax(0, 1fr) auto");
+    expect(projects).not.toContain(".project-row-leading");
+    expect(fidelity).toContain(".project-row { grid-template-columns: minmax(0,1fr) auto;");
   });
 
   it("uses one project presentation model across home and sidebar and keeps status visible at minimum width", () => {
