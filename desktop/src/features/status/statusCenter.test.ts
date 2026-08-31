@@ -88,6 +88,13 @@ describe("status center recovery semantics", () => {
     expect(source).not.toContain(".slice(0, 12)");
   });
 
+  it("keeps internal sync-wait stages out of user-visible task chrome", () => {
+    const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
+    const activity = readFileSync(fileURLToPath(new URL("../projects/projectActivity.ts", import.meta.url)), "utf8");
+    expect(source).toContain('waiting_sync: "等待多机位同步资源"');
+    expect(activity).toContain('waiting_sync: "等待多机位同步资源"');
+  });
+
   it("surfaces a compact failure cause before technical details", () => {
     const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
     expect(source).toContain("function compactError");
