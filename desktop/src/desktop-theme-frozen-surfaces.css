@@ -1,9 +1,9 @@
 /* Frozen Demo surfaces that still carry OS media-query fallbacks. */
 
-/* The in-app brand reuses the exact packaged app icon blob from Desktop root. */
+/* Official MirrorOrder logo staged inside Desktop src so Vite always fingerprints and bundles it. */
 .mirror-mark,
 .startup-logo {
-  background-image: url("../src-tauri/icons/icon.png");
+  background-image: url("./assets/mirrororder-logo.svg");
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
