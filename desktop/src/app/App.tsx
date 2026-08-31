@@ -60,6 +60,7 @@ export function App() {
   const [surface, setSurface] = useState<AppSurface>("production");
   const [baseUrl, setBaseUrl] = useState(defaultHostBaseUrl);
   const [workspacePath, setWorkspacePath] = useState(launchResume.workspacePath);
+  const [activeWorkspacePath, setActiveWorkspacePath] = useState("");
   const [state, setState] = useState<HostConnectionState>("idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
@@ -71,10 +72,10 @@ export function App() {
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
   const pageRequestNonce = useRef(0);
 
-  // baseUrl is an editable advanced-connection draft. Once a workspace is
-  // open, snapshot.baseUrl is the active connection authority. Merely typing a
-  // different address must never redirect background refreshes away from the
-  // production that is already open.
+  // baseUrl and workspacePath are editable advanced-control drafts. Once a
+  // workspace is open, snapshot.baseUrl and activeWorkspacePath are the active
+  // production authority. Merely typing into either field must not redirect
+  // background refreshes, Finder reveal, or Team Web away from the open work.
   const connection = useMemo(() => {
     try {
       return new HostConnection(baseUrl);
@@ -119,6 +120,7 @@ export function App() {
       const rememberedProject = projectById(next, launchResume.projectId);
       setBaseUrl(next.baseUrl);
       setWorkspacePath(launchResume.workspacePath);
+      setActiveWorkspacePath(launchResume.workspacePath);
       setSnapshot(next);
       setSelectedProject(null);
       setPageRequest(null);
@@ -131,6 +133,7 @@ export function App() {
         : `工作区已恢复 · ${next.projects.length} 个项目`);
     }).catch((error: unknown) => {
       if (!active) return;
+      setActiveWorkspacePath("");
       setSnapshot(null);
       setSelectedProject(null);
       setPageRequest(null);
@@ -161,6 +164,7 @@ export function App() {
       const next = await new HostConnection(defaultHostBaseUrl).startAndConnect(normalizedPath);
       setBaseUrl(next.baseUrl);
       setWorkspacePath(normalizedPath);
+      setActiveWorkspacePath(normalizedPath);
       setSnapshot(next);
       setSelectedProject(null);
       setPageRequest(null);
@@ -171,13 +175,13 @@ export function App() {
       setMessage(`工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       if (previousSnapshot) {
-        setBaseUrl(previousSnapshot.baseUrl);
         setWorkspacePath(previousPath);
         setSnapshot(previousSnapshot);
         setSelectedProject(previousProject);
         setState("connected");
         setMessage(`未能切换工作区：${errorMessage(error)} · 当前工作现场保持打开`);
       } else {
+        setActiveWorkspacePath("");
         setSnapshot(null);
         setSelectedProject(null);
         setPageRequest(null);
@@ -206,9 +210,13 @@ export function App() {
   }
 
   async function revealWorkspace(): Promise<void> {
-    if (!workspacePath.trim()) return;
+    const target = snapshot ? activeWorkspacePath : workspacePath;
+    if (!target.trim()) {
+      setMessage("当前工作区没有可定位的本机路径。");
+      return;
+    }
     try {
-      await platform.reveal(workspacePath);
+      await platform.reveal(target);
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -229,17 +237,25 @@ export function App() {
     try {
       const next = await connection.connect();
       const project = selectedProject ? projectById(next, selectedProject.project_id) : null;
+      const connectedWorkspacePath = previousSnapshot?.workspace.workspace_id === next.workspace.workspace_id
+        ? activeWorkspacePath
+        : "";
       setBaseUrl(next.baseUrl);
+      setWorkspacePath(connectedWorkspacePath);
+      setActiveWorkspacePath(connectedWorkspacePath);
       setSnapshot(next);
       setSelectedProject(project);
       setPageRequest(null);
       setSurface("production");
       setResumeEnabledForSession(false);
       setState("connected");
-      setMessage(project ? `已重新连接 · ${project.name || project.project_id}` : `工作区已就绪 · ${next.projects.length} 个项目`);
+      setMessage(project
+        ? `已重新连接 · ${project.name || project.project_id}`
+        : connectedWorkspacePath
+          ? `工作区已就绪 · ${next.projects.length} 个项目`
+          : `工作区已就绪 · ${next.projects.length} 个项目 · 本机路径未知，可在团队审阅中按需添加工作区路径`);
     } catch (error) {
       if (previousSnapshot) {
-        setBaseUrl(previousSnapshot.baseUrl);
         setSnapshot(previousSnapshot);
         setSelectedProject(previousProject);
         setPageRequest(previousPageRequest);
@@ -247,6 +263,7 @@ export function App() {
         setState("connected");
         setMessage(`未能连接新的本机服务：${errorMessage(error)} · 当前工作现场保持打开`);
       } else {
+        setActiveWorkspacePath("");
         setSnapshot(null);
         setSelectedProject(null);
         setPageRequest(null);
@@ -471,7 +488,7 @@ export function App() {
               <label><span>工作区</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
               <div className="workspace-control-actions">
                 <button type="button" className="secondary" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>切换</button>
-                <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !workspacePath.trim()}>{revealLabel}</button>
+                <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>{revealLabel}</button>
               </div>
               <details className="workspace-advanced">
                 <summary>高级连接</summary>
@@ -493,7 +510,7 @@ export function App() {
               onOpenSettings={() => setSurface("settings")}
             />
           ) : surface === "team" ? (
-            <TeamWebWorkbench workspacePath={workspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
+            <TeamWebWorkbench workspacePath={activeWorkspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
           ) : surface === "settings" ? (
             <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} />
           ) : selectedProject ? (
