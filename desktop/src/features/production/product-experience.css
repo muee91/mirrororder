@@ -7,14 +7,20 @@
 .has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }
 .has-slate-assistant .project-workbench-main { border-right: 0; }
 
-.production-secondary-workspace { display: grid; width: 100%; height: 100%; min-width: 0; min-height: 0; grid-template-rows: 38px minmax(0, 1fr); background: #0b0f13; }
-.production-secondary-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 38px; border-bottom: 1px solid #252d35; padding: 0 10px; background: #11171c; }
-.production-secondary-bar > strong { min-width: 0; overflow: hidden; color: #aeb8c1; font-size: 10px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
-.production-secondary-bar nav { display: flex; align-items: center; gap: 4px; }
-.production-secondary-bar button { min-height: 27px; border-color: transparent; border-radius: 6px; padding: 4px 8px; color: #7c8994; background: transparent; font-size: 9px; }
-.production-secondary-bar button:hover { color: #c7d0d7; background: #1a2127; }
-.production-secondary-bar button.is-active { color: #e4e9ed; background: #242c33; }
-.production-secondary-canvas { min-width: 0; min-height: 0; height: 100%; overflow: auto; padding: 10px 12px 14px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.production-secondary-workspace { display: grid; width: 100%; height: 100%; min-width: 0; min-height: 0; grid-template-rows: 44px minmax(0, 1fr); background: #0b0f13; }
+.production-secondary-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 44px; border-bottom: 1px solid #252d35; padding: 0 14px; background: #11171c; }
+.production-secondary-bar > strong { min-width: 0; overflow: hidden; color: #aeb8c1; font-size: 11px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+.production-secondary-back,
+.production-secondary-actions button { min-height: 28px; border-color: transparent; border-radius: 6px; padding: 4px 8px; color: #7c8994; background: transparent; font-size: 9px; }
+.production-secondary-back:hover,
+.production-secondary-actions button:hover { color: #c7d0d7; background: #1a2127; }
+.production-secondary-actions { display: flex; align-items: center; gap: 6px; }
+.production-secondary-actions button.is-active { color: #e4e9ed; background: #242c33; }
+.production-secondary-switcher { display: block; }
+.production-secondary-switcher select { min-width: 102px; height: 28px; border: 1px solid #2c353e; border-radius: 6px; padding: 0 26px 0 8px; color: #aeb8c1; background: #151b21; font-size: 9px; outline: none; }
+.production-secondary-switcher select:focus { border-color: #566675; }
+.production-secondary-canvas { min-width: 0; min-height: 0; height: 100%; overflow: auto; padding: 18px 22px 30px; }
 
 .assistant-context-drawer { position: static; min-width: 0; max-height: none; height: 100%; overflow-y: auto; border: 0; border-radius: 0; padding: 11px; background: #0c1115; box-shadow: none; }
 .slate-assistant-drawer { position: absolute; z-index: 50; top: 96px; right: 12px; bottom: 12px; width: 340px; height: auto; border: 1px solid #2d3740; border-radius: 9px; box-shadow: 0 20px 60px rgba(0, 0, 0, .34); }
@@ -23,8 +29,8 @@
 .assistant-context-drawer .production-panel { border-radius: 8px; }
 
 .phase3-workbench, .timeline-workbench { min-width: 0; }
-.production-heading { margin-bottom: 10px; }
-.production-heading h2 { font-size: 16px; }
+.production-heading { margin-bottom: 14px; }
+.production-heading h2 { font-size: 18px; }
 .production-panel { border-radius: 8px; }
 .main-stage > .status-center-workbench,
 .main-stage > .settings-status-workbench,
@@ -32,24 +38,55 @@
 .main-stage > .settings-status-workbench .production-heading,
 .main-stage > .status-center-workbench .production-heading { position: sticky; z-index: 3; top: -12px; margin: -12px -14px 12px; border-bottom: 1px solid #232b33; padding: 12px 14px 10px; background: #0f1419; }
 
+/* The app's resolved theme is authoritative. These project utilities must never fall back to the OS theme. */
+html[data-mirrororder-theme="light"] .project-production-workbench,
+html[data-mirrororder-theme="light"] .production-secondary-workspace,
+html[data-mirrororder-theme="light"] .production-secondary-canvas { color: #27313a; background: #f5f6f8; }
+html[data-mirrororder-theme="light"] .production-secondary-bar { border-color: #dce3e9; background: #fff; }
+html[data-mirrororder-theme="light"] .production-secondary-bar > strong { color: #40505c; }
+html[data-mirrororder-theme="light"] .production-secondary-back,
+html[data-mirrororder-theme="light"] .production-secondary-actions button { color: #65717c; }
+html[data-mirrororder-theme="light"] .production-secondary-back:hover,
+html[data-mirrororder-theme="light"] .production-secondary-actions button:hover { color: #26313a; background: #eef2f5; }
+html[data-mirrororder-theme="light"] .production-secondary-actions button.is-active { color: #fff; background: #303d48; }
+html[data-mirrororder-theme="light"] .production-secondary-switcher select { border-color: #d2dbe2; color: #34414b; background: #f7f9fb; }
+html[data-mirrororder-theme="light"] .has-assistant-drawer .project-workbench-main { border-color: #dce3e9; }
+html[data-mirrororder-theme="light"] .assistant-context-drawer,
+html[data-mirrororder-theme="light"] .assistant-drawer-heading { background: #fff; }
+html[data-mirrororder-theme="light"] .assistant-drawer-heading { border-bottom-color: #dce3e9; }
+html[data-mirrororder-theme="light"] .production-secondary-canvas .production-panel,
+html[data-mirrororder-theme="light"] .production-secondary-canvas .parse-preview,
+html[data-mirrororder-theme="light"] .production-secondary-canvas .identity-row,
+html[data-mirrororder-theme="light"] .production-secondary-canvas .assistant-item,
+html[data-mirrororder-theme="light"] .production-secondary-canvas .occurrence-row { border-color: #dce3e9; color: #27313a; background: #fff; }
+html[data-mirrororder-theme="light"] .production-secondary-canvas .production-heading h2 { color: #202a33; }
+html[data-mirrororder-theme="light"] .production-secondary-canvas .production-field input,
+html[data-mirrororder-theme="light"] .production-secondary-canvas .production-field select,
+html[data-mirrororder-theme="light"] .production-secondary-canvas .slate-capture textarea,
+html[data-mirrororder-theme="light"] .production-secondary-canvas .assistant-chat textarea,
+html[data-mirrororder-theme="light"] .production-secondary-canvas .assistant-answer { border-color: #d5dde5; color: #27313a; background: #f7f9fb; }
+html[data-mirrororder-theme="light"] .main-stage > .settings-status-workbench .production-heading,
+html[data-mirrororder-theme="light"] .main-stage > .status-center-workbench .production-heading { border-color: #dce3e9; background: #fff; }
+
+html[data-mirrororder-theme="dark"] .project-production-workbench,
+html[data-mirrororder-theme="dark"] .production-secondary-workspace,
+html[data-mirrororder-theme="dark"] .production-secondary-canvas { color: #dbe2e8; background: #0b0f13; }
+html[data-mirrororder-theme="dark"] .production-secondary-bar { border-color: #252d35; background: #11171c; }
+html[data-mirrororder-theme="dark"] .production-secondary-bar > strong { color: #aeb8c1; }
+html[data-mirrororder-theme="dark"] .production-secondary-switcher select { border-color: #2c353e; color: #aeb8c1; background: #151b21; }
+html[data-mirrororder-theme="dark"] .production-secondary-canvas .production-panel,
+html[data-mirrororder-theme="dark"] .production-secondary-canvas .parse-preview,
+html[data-mirrororder-theme="dark"] .production-secondary-canvas .identity-row,
+html[data-mirrororder-theme="dark"] .production-secondary-canvas .assistant-item,
+html[data-mirrororder-theme="dark"] .production-secondary-canvas .occurrence-row { border-color: #252d36; color: #dbe2e8; background: #0d1115; }
+
+@media (max-width: 1180px) {
+  .production-secondary-canvas { padding-inline: 16px; }
+}
+
 @media (max-width: 1040px) {
   .has-assistant-drawer .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }
   .assistant-context-drawer { position: fixed; z-index: 50; top: 12px; right: 12px; bottom: 12px; width: min(380px, calc(100vw - 24px)); height: auto; border: 1px solid #2d3740; border-radius: 9px; box-shadow: 0 20px 60px rgba(0, 0, 0, .34); }
   .production-secondary-bar { grid-template-columns: auto minmax(0, 1fr); }
-  .production-secondary-bar nav { grid-column: 1 / -1; display: none; }
-}
-
-@media (prefers-color-scheme: light) {
-  .project-production-workbench,
-  .production-secondary-workspace { background: #f7f8fa; }
-  .production-secondary-bar { border-color: #dce3e9; background: #fff; }
-  .production-secondary-bar > strong { color: #40505c; }
-  .production-secondary-bar button { color: #65717c; }
-  .production-secondary-bar button:hover { color: #26313a; background: #eef2f5; }
-  .production-secondary-bar button.is-active { color: #fff; background: #303d48; }
-  .has-assistant-drawer .project-workbench-main { border-color: #dce3e9; }
-  .assistant-context-drawer, .assistant-drawer-heading { background: #fff; }
-  .assistant-drawer-heading { border-bottom-color: #dce3e9; }
-  .main-stage > .settings-status-workbench .production-heading,
-  .main-stage > .status-center-workbench .production-heading { border-color: #dce3e9; background: #fff; }
+  .production-secondary-actions { grid-column: 1 / -1; display: none; }
 }
