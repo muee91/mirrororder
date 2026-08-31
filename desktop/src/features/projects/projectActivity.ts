@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
+import {
+  isProjectHealthTask,
+  isTaskActive,
+  isTaskFailed,
+  latestTaskFamilies,
+  taskAttemptTimestamp,
+} from "../../api/taskSemantics";
 import { ProjectTaskClient, type ProjectTaskRecord } from "../../api/tasks";
 
 export type ProjectActivityState = "idle" | "active" | "failed";
@@ -17,30 +24,6 @@ const EMPTY_ACTIVITY: ProjectActivitySummary = { state: "idle", label: "", stage
 const ACTIVE_POLL_MS = 2000;
 const IDLE_FULL_POLL_MS = 15000;
 const ACTIVE_TICKS_BEFORE_FULL_REFRESH = 5;
-
-function isActive(task: ProjectTaskRecord): boolean {
-  return task.status === "queued" || task.status === "running";
-}
-
-function isFailed(task: ProjectTaskRecord): boolean {
-  return task.status === "failed" || task.status === "interrupted" || Boolean(task.error);
-}
-
-function latestTaskAttempts(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
-  const seen = new Set<string>();
-  const rows: ProjectTaskRecord[] = [];
-  for (const task of tasks) {
-    const key = task.idempotency_key?.trim() || task.task_id;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    rows.push(task);
-  }
-  return rows;
-}
-
-function taskTime(task: ProjectTaskRecord): string {
-  return task.created_at || task.started_at || task.completed_at || "";
-}
 
 function stageLabel(stage: string): string {
   const labels: Record<string, string> = {
@@ -94,29 +77,31 @@ function taskProgress(task: ProjectTaskRecord): { done: number | null; total: nu
 }
 
 export function summarizeProjectActivity(tasks: ProjectTaskRecord[]): ProjectActivitySummary {
-  const latest = latestTaskAttempts(tasks).sort((left, right) => taskTime(right).localeCompare(taskTime(left)));
-  const task = latest.find(isActive) ?? latest[0];
-  if (!task) return EMPTY_ACTIVITY;
-  const progress = taskProgress(task);
-  if (isActive(task)) {
+  const current = latestTaskFamilies(tasks).sort((left, right) => taskAttemptTimestamp(right) - taskAttemptTimestamp(left));
+  const activeTask = current.find(isTaskActive);
+  if (activeTask) {
     return {
       state: "active",
-      label: taskLabel(task),
-      stage: task.stage,
-      message: task.message || "",
-      ...progress,
+      label: taskLabel(activeTask),
+      stage: activeTask.stage,
+      message: activeTask.message || "",
+      ...taskProgress(activeTask),
     };
   }
-  if (isFailed(task)) {
+
+  const failedProjectTask = current.find((task) => isProjectHealthTask(task) && isTaskFailed(task));
+  if (failedProjectTask) {
     return {
       state: "failed",
       label: "整理异常",
-      stage: task.stage,
-      message: task.error || task.message || "任务未完成",
-      ...progress,
+      stage: failedProjectTask.stage,
+      message: failedProjectTask.error || failedProjectTask.message || "项目主流程未完成",
+      ...taskProgress(failedProjectTask),
     };
   }
-  return { state: "idle", label: "", stage: task.stage, message: "", done: null, total: null };
+
+  const latest = current[0];
+  return { state: "idle", label: "", stage: latest?.stage || "", message: "", done: null, total: null };
 }
 
 export function useProjectActivities(baseUrl: string, projects: ProjectSummary[]) {
