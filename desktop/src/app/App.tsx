@@ -29,6 +29,8 @@ import {
 } from "./resumeState";
 
 const EMPTY_PROJECTS: ProjectSummary[] = [];
+const NOTICE_DURATION_MS = 3200;
+const ERROR_NOTICE_DURATION_MS = 7000;
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
@@ -64,6 +66,7 @@ export function App() {
   const [pageRequest, setPageRequest] = useState<ProjectPageRequest | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "打开一个工作区开始制作。");
+  const [noticeVisible, setNoticeVisible] = useState(false);
   const [resumeEnabledForSession, setResumeEnabledForSession] = useState(false);
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
   const pageRequestNonce = useRef(0);
@@ -86,6 +89,19 @@ export function App() {
     if (!isTauri()) return;
     void platform.info().then(setPlatformInfo).catch(() => setPlatformInfo(null));
   }, [platform]);
+
+  useEffect(() => {
+    if (!snapshot || !message) {
+      setNoticeVisible(false);
+      return;
+    }
+    setNoticeVisible(true);
+    const timer = globalThis.setTimeout(
+      () => setNoticeVisible(false),
+      state === "error" ? ERROR_NOTICE_DURATION_MS : NOTICE_DURATION_MS,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [message, snapshot, state]);
 
   useEffect(() => {
     if (!isTauri() || !launchResume.workspacePath) return;
@@ -364,7 +380,7 @@ export function App() {
       <main className="startup-shell">
         <section className={`startup-home ${recoveryFailed ? "is-recovery" : ""}`}>
           <div className="startup-brand">
-            <div className="startup-logo" aria-hidden="true">镜</div>
+            <div className="startup-logo" aria-hidden="true" />
             <div>
               <strong>镜序</strong>
               <span>MirrorOrder</span>
@@ -486,7 +502,15 @@ export function App() {
           )}
         </section>
       </section>
-      <div className={`app-notice ${state === "error" ? "is-error" : ""}`} aria-live="polite">{message}</div>
+      {noticeVisible ? (
+        <div
+          className={`app-notice ${state === "error" ? "is-error" : ""}`}
+          role={state === "error" ? "alert" : "status"}
+          aria-live={state === "error" ? "assertive" : "polite"}
+        >
+          {message}
+        </div>
+      ) : null}
     </main>
   );
 }
