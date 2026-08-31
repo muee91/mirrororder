@@ -15,6 +15,7 @@ import { SlatePlaybackShortcuts } from "../slate/SlatePlaybackShortcuts";
 import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
+import "./secondary-tools-theme.css";
 
 interface Props {
   baseUrl: string;
