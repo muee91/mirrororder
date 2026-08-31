@@ -169,6 +169,7 @@ class DeviceTaskManager:
             payload = self._load()
             task = self._task(payload, task_id)
             if task.get("status") == "queued":
+                task["cancel_requested"] = True
                 task["status"] = "cancelled"
                 task["stage"] = "cancelled"
                 task["completed_at"] = _now()
@@ -243,6 +244,8 @@ class DeviceTaskManager:
         with self._lock:
             payload = self._load()
             task = self._task(payload, task_id)
+            if status == "running" and task.get("status") == "cancelled":
+                return
             if status:
                 task["status"] = status
                 if status == "running" and not task.get("started_at"):
