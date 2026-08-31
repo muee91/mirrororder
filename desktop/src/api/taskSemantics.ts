@@ -24,6 +24,10 @@ export function isTaskActive(task: Pick<ProjectTaskRecord, "status">): boolean {
   return task.status === "queued" || task.status === "running";
 }
 
+export function isTaskSuperseded(task: Pick<ProjectTaskRecord, "superseded_at">): boolean {
+  return Boolean(task.superseded_at?.trim());
+}
+
 export function taskFamilyKey(task: ProjectTaskRecord): string {
   const kind = targetString(task, "kind");
   const clipId = targetString(task, "clip_id");
@@ -91,8 +95,15 @@ export function latestTaskFamilies(tasks: ProjectTaskRecord[]): ProjectTaskRecor
 
 export function currentTaskStates(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
   const attempts = latestTaskAttempts(tasks);
-  const active = attempts.filter(isTaskActive);
+  const active = attempts.filter((task) => isTaskActive(task) && !isTaskSuperseded(task));
   const activeFamilies = new Set(active.map(taskFamilyKey));
-  const settled = latestTaskFamilies(attempts).filter((task) => !activeFamilies.has(taskFamilyKey(task)));
+  // Select the latest settled row before filtering superseded entries. This is
+  // deliberate: once current settings supersede the latest failure for a
+  // workflow, an older failure from the same family must not reappear as a new
+  // current issue. The whole settled family has become history until a new
+  // attempt is submitted.
+  const settled = latestTaskFamilies(attempts).filter(
+    (task) => !activeFamilies.has(taskFamilyKey(task)) && !isTaskSuperseded(task),
+  );
   return [...active, ...settled].sort((left, right) => taskAttemptTimestamp(right) - taskAttemptTimestamp(left));
 }
