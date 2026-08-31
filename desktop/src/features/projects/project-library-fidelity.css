@@ -1,6 +1,4 @@
-.project-row { grid-template-columns: 18px minmax(0,1fr) auto; gap: 9px; min-height: 38px; padding: 7px 9px; border-radius: 6px; }
-.project-row-icon { display: grid; width: 18px; height: 24px; place-items: center; color: #74828e; font-size: 13px; font-weight: 600; }
-.project-row.is-selected .project-row-icon { color: #8fc1fa; }
+.project-row { grid-template-columns: minmax(0,1fr) auto; gap: 9px; min-height: 38px; padding: 7px 9px; border-radius: 6px; }
 .project-row-copy strong { font-size: 13px; font-weight: 600; }
 .project-row-copy small { font-size: 10px; }
 .project-row.is-selected { border-color: transparent; background: rgba(82,142,207,.12); }
@@ -10,8 +8,6 @@
 .golden-secondary-return > small { color: #788590; font-size: 10px; font-weight: 600; }
 
 @media (prefers-color-scheme: light) {
-  .project-row-icon { color: #6b7883; }
-  .project-row.is-selected .project-row-icon { color: #2e6fae; }
   .project-row.is-selected { background: #e8f2fc; }
   .project-row.is-active-task .project-row-copy small { color: #3979ba; }
   .golden-secondary-return > small { color: #66737d; }
