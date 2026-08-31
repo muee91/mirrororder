@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import { HostConnectionError } from "../../api/host";
+import {
+  isTaskActive,
+  latestTaskAttempts,
+  latestTaskFamilies,
+} from "../../api/taskSemantics";
 import type { ProductionPage } from "../../app/resumeState";
 import {
   DeviceTaskClient,
@@ -10,6 +15,8 @@ import {
   type ProjectTaskRecord,
 } from "../../api/tasks";
 import "./status-center.css";
+
+export { latestTaskAttempts };
 
 interface Props {
   baseUrl: string;
@@ -44,7 +51,7 @@ function errorMessage(error: unknown): string {
 }
 
 function active(task: ProjectTaskRecord): boolean {
-  return task.status === "queued" || task.status === "running";
+  return isTaskActive(task);
 }
 
 export function taskNeedsAttention(task: ProjectTaskRecord): boolean {
@@ -56,7 +63,7 @@ function completed(task: ProjectTaskRecord): boolean {
   return task.status === "completed";
 }
 
-function recent(task: ProjectTaskRecord): boolean {
+function completedOrCancelled(task: ProjectTaskRecord): boolean {
   return task.status === "completed" || task.status === "cancelled";
 }
 
@@ -69,28 +76,8 @@ function firstTimestamp(values: Array<string | null | undefined>): number {
   return 0;
 }
 
-function attemptTimestamp(task: ProjectTaskRecord): number {
-  return firstTimestamp([task.created_at, task.started_at, task.completed_at]);
-}
-
 function activityTimestamp(task: ProjectTaskRecord): number {
   return firstTimestamp([task.completed_at, task.started_at, task.created_at]);
-}
-
-export function latestTaskAttempts(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
-  const ordered = tasks
-    .map((task, index) => ({ task, index, timestamp: attemptTimestamp(task) }))
-    .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index)
-    .map(({ task }) => task);
-  const seen = new Set<string>();
-  const latest: ProjectTaskRecord[] = [];
-  for (const task of ordered) {
-    const key = task.idempotency_key?.trim() || task.task_id;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    latest.push(task);
-  }
-  return latest;
 }
 
 export function statusPollDelay(hasActiveTasks: boolean): number {
@@ -178,21 +165,28 @@ function statusLabel(task: ProjectTaskRecord): string {
 }
 
 function sortTasks(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
-  const rank = (task: ProjectTaskRecord) => active(task) ? 0 : taskNeedsAttention(task) ? 1 : recent(task) ? 2 : 3;
+  const rank = (task: ProjectTaskRecord) => active(task) ? 0 : taskNeedsAttention(task) ? 1 : completedOrCancelled(task) ? 2 : 3;
   return [...tasks].sort((left, right) => rank(left) - rank(right) || activityTimestamp(right) - activityTimestamp(left));
 }
 
+function currentTasks(snapshot: ReloadSnapshot): ProjectTaskRecord[] {
+  return [
+    ...latestTaskFamilies(snapshot.deviceTasks),
+    ...snapshot.rows.flatMap((row) => latestTaskFamilies(row.tasks)),
+  ];
+}
+
 function hasActive(snapshot: ReloadSnapshot): boolean {
-  return snapshot.deviceTasks.some(active) || snapshot.rows.some((row) => row.tasks.some(active));
+  return currentTasks(snapshot).some(active);
 }
 
 function summaryMessage(snapshot: ReloadSnapshot, deviceError = ""): string {
-  const tasks = [...snapshot.deviceTasks, ...snapshot.rows.flatMap((row) => row.tasks)];
+  const tasks = currentTasks(snapshot);
   const activeCount = tasks.filter(active).length;
   const attentionCount = tasks.filter(taskNeedsAttention).length
     + snapshot.rows.filter((row) => row.error).length
     + (deviceError ? 1 : 0);
-  if (attentionCount) return `${attentionCount} 个事项需要处理${activeCount ? ` · ${activeCount} 个任务进行中` : ""}`;
+  if (attentionCount) return `${attentionCount} 个当前事项需要处理${activeCount ? ` · ${activeCount} 个任务进行中` : ""}`;
   if (activeCount) return `${activeCount} 个任务正在处理`;
   return "后台工作当前正常。";
 }
@@ -236,11 +230,16 @@ function taskTarget(task: ProjectTaskRecord): { label: string; page?: Production
   return { label: "打开项目" };
 }
 
-function taskPrimaryMessage(task: ProjectTaskRecord): string {
+function taskPrimaryMessage(task: ProjectTaskRecord, historical = false): string {
+  if (historical && taskNeedsAttention(task)) return "该失败已被后续尝试取代；这里只保留用于追溯。";
   if (taskNeedsAttention(task)) return task.message || "任务没有完成。可重新尝试，或打开相关位置检查输入与本机能力。";
   if (task.status === "cancelled") return task.message || "任务已按请求停止。";
   if (completed(task)) return task.message || "任务已完成。";
   return task.message || "后台处理中。";
+}
+
+function contextId(context: TaskContext): string {
+  return `${context.project?.project_id || "device"}:${context.task.task_id}`;
 }
 
 export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpenProjectPage, onOpenSettings }: Props) {
@@ -252,7 +251,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
   const [message, setMessage] = useState("正在读取所有后台工作…");
   const [busy, setBusy] = useState(false);
   const [actionTaskId, setActionTaskId] = useState<string | null>(null);
-  const [showRecent, setShowRecent] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const reload = useCallback(async (quiet = false): Promise<ReloadSnapshot> => {
     if (!quiet) setBusy(true);
@@ -303,16 +302,26 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     ...rows.flatMap((row) => row.tasks.map((task) => ({ task, project: row.project }))),
   ], [deviceTasks, rows]);
 
-  const activeTasks = useMemo(() => allContexts.filter(({ task }) => active(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [allContexts]);
-  const attentionTasks = useMemo(() => allContexts.filter(({ task }) => taskNeedsAttention(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [allContexts]);
-  const recentTasks = useMemo(() => allContexts.filter(({ task }) => recent(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [allContexts]);
+  const currentContexts = useMemo<TaskContext[]>(() => [
+    ...latestTaskFamilies(deviceTasks).map((task) => ({ task, project: null })),
+    ...rows.flatMap((row) => latestTaskFamilies(row.tasks).map((task) => ({ task, project: row.project }))),
+  ], [deviceTasks, rows]);
+
+  const currentIds = useMemo(() => new Set(currentContexts.map(contextId)), [currentContexts]);
+  const activeTasks = useMemo(() => currentContexts.filter(({ task }) => active(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [currentContexts]);
+  const attentionTasks = useMemo(() => currentContexts.filter(({ task }) => taskNeedsAttention(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [currentContexts]);
+  const historyTasks = useMemo(() => allContexts.filter((context) => {
+    if (active(context.task)) return false;
+    if (currentIds.has(contextId(context))) return completedOrCancelled(context.task);
+    return true;
+  }).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [allContexts, currentIds]);
   const projectErrors = rows.filter((row) => row.error);
 
   const totals = useMemo(() => ({
     active: activeTasks.length,
     attention: attentionTasks.length + projectErrors.length + (deviceError ? 1 : 0),
-    recent: recentTasks.length,
-  }), [activeTasks.length, attentionTasks.length, deviceError, projectErrors.length, recentTasks.length]);
+    history: historyTasks.length,
+  }), [activeTasks.length, attentionTasks.length, deviceError, historyTasks.length, projectErrors.length]);
 
   async function cancelProject(projectId: string, task: ProjectTaskRecord): Promise<void> {
     if (!canCancelTask(task) || actionTaskId) return;
@@ -388,31 +397,34 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     onOpenProject(context.project.project_id);
   }
 
-  function renderTask(context: TaskContext) {
+  function renderTask(context: TaskContext, historical = false) {
     const { task, project } = context;
     const taskProgress = progress(task);
     const stage = task.stage ? stageLabel(task.stage) : "";
     const target = taskTarget(task);
     const elapsed = duration(task);
     const source = project ? (project.name || project.project_id) : "本机运行时";
+    const displayedStatus = historical && taskNeedsAttention(task)
+      ? (task.status === "interrupted" ? "历史中断" : "历史失败")
+      : statusLabel(task);
     return (
-      <article className={`status-center-task status-${task.status}`} key={`${project?.project_id || "device"}:${task.task_id}`}>
+      <article className={`status-center-task status-${task.status}${historical ? " is-history" : ""}`} key={`${project?.project_id || "device"}:${task.task_id}`}>
         <div className="status-center-task-main">
           <span className="status-center-task-indicator" aria-hidden="true" />
           <div className="status-center-task-name">
             <strong>{taskLabel(task)}</strong>
-            <span>{source} · {statusLabel(task)}{stage && stage !== statusLabel(task) ? ` · ${stage}` : ""}</span>
+            <span>{source} · {displayedStatus}{stage && stage !== displayedStatus ? ` · ${stage}` : ""}</span>
           </div>
         </div>
         <div className="status-center-task-body">
-          <p>{taskPrimaryMessage(task)}</p>
+          <p>{taskPrimaryMessage(task, historical)}</p>
           <div className="status-center-task-meta"><span>{relativeTime(task)}</span>{elapsed ? <span>{elapsed}</span> : null}</div>
           {taskProgress ? <div className="status-center-progress"><progress value={taskProgress.done} max={taskProgress.total} /><span>{taskProgress.done} / {taskProgress.total}</span></div> : null}
           {task.error ? <details className="status-center-technical"><summary>技术详情</summary><code>{task.error}</code></details> : null}
         </div>
         <div className="status-center-actions">
-          {canCancelTask(task) ? <button type="button" className="secondary" disabled={Boolean(actionTaskId) || Boolean(task.cancel_requested)} onClick={() => project ? void cancelProject(project.project_id, task) : void cancelDevice(task)}>{task.cancel_requested ? "正在取消" : "取消"}</button> : null}
-          {canRetryTask(task) ? <button type="button" disabled={Boolean(actionTaskId)} onClick={() => project ? void retryProject(project.project_id, task) : void retryDevice(task)}>{task.status === "cancelled" ? "重新开始" : "重试"}</button> : null}
+          {!historical && canCancelTask(task) ? <button type="button" className="secondary" disabled={Boolean(actionTaskId) || Boolean(task.cancel_requested)} onClick={() => project ? void cancelProject(project.project_id, task) : void cancelDevice(task)}>{task.cancel_requested ? "正在取消" : "取消"}</button> : null}
+          {!historical && canRetryTask(task) ? <button type="button" disabled={Boolean(actionTaskId)} onClick={() => project ? void retryProject(project.project_id, task) : void retryDevice(task)}>{task.status === "cancelled" ? "重新开始" : "重试"}</button> : null}
           {(project || target.settings) ? <button type="button" className="secondary" onClick={() => openTarget(context)}>{target.label}</button> : null}
         </div>
       </article>
@@ -431,37 +443,37 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
       <div className="status-center-summary">
         <span><strong>{totals.active}</strong>正在处理</span>
         <span className={totals.attention ? "needs-attention" : ""}><strong>{totals.attention}</strong>需要处理</span>
-        <button type="button" className={showRecent ? "is-active" : ""} aria-pressed={showRecent} onClick={() => setShowRecent((value) => !value)}><strong>{totals.recent}</strong>{showRecent ? "隐藏最近记录" : "显示最近记录"}</button>
+        <button type="button" className={showHistory ? "is-active" : ""} aria-pressed={showHistory} onClick={() => setShowHistory((value) => !value)}><strong>{totals.history}</strong>{showHistory ? "隐藏历史记录" : "显示历史记录"}</button>
       </div>
 
-      <p className="status-center-note">优先显示需要处理和正在运行的工作。失败可直接重试并跳到相关位置；主动取消不会继续占据问题列表。</p>
+      <p className="status-center-note">这里只把每类工作的最新状态算作当前事项。后续尝试已经取代的旧失败会进入历史，不再重复占据“需要处理”。</p>
 
       <div className="status-center-sections">
-        {deviceError || projectErrors.length || attentionTasks.length ? (
-          <section className="status-center-section is-attention">
-            <header><div><span className="status-center-section-dot" /><strong>需要处理</strong></div><small>{totals.attention}</small></header>
-            {deviceError ? <article className="status-center-read-error"><div><strong>本机运行时状态读取失败</strong><span>{deviceError}</span></div>{onOpenSettings ? <button type="button" className="secondary" onClick={onOpenSettings}>本机智能设置</button> : null}</article> : null}
-            {projectErrors.map((row) => <article className="status-center-read-error" key={`error:${row.project.project_id}`}><div><strong>{row.project.name || row.project.project_id}</strong><span>无法读取后台任务：{row.error}</span></div><button type="button" className="secondary" onClick={() => onOpenProject(row.project.project_id)}>打开项目</button></article>)}
-            <div className="status-center-task-list">{attentionTasks.map(renderTask)}</div>
-          </section>
-        ) : null}
-
         {activeTasks.length ? (
           <section className="status-center-section is-active">
             <header><div><span className="status-center-section-dot" /><strong>正在处理</strong></div><small>{activeTasks.length}</small></header>
-            <div className="status-center-task-list">{activeTasks.map(renderTask)}</div>
+            <div className="status-center-task-list">{activeTasks.map((context) => renderTask(context))}</div>
           </section>
         ) : null}
 
-        {showRecent ? (
+        {deviceError || projectErrors.length || attentionTasks.length ? (
+          <section className="status-center-section is-attention">
+            <header><div><span className="status-center-section-dot" /><strong>当前需要处理</strong></div><small>{totals.attention}</small></header>
+            {deviceError ? <article className="status-center-read-error"><div><strong>本机运行时状态读取失败</strong><span>{deviceError}</span></div>{onOpenSettings ? <button type="button" className="secondary" onClick={onOpenSettings}>本机智能设置</button> : null}</article> : null}
+            {projectErrors.map((row) => <article className="status-center-read-error" key={`error:${row.project.project_id}`}><div><strong>{row.project.name || row.project.project_id}</strong><span>无法读取后台任务：{row.error}</span></div><button type="button" className="secondary" onClick={() => onOpenProject(row.project.project_id)}>打开项目</button></article>)}
+            <div className="status-center-task-list">{attentionTasks.map((context) => renderTask(context))}</div>
+          </section>
+        ) : null}
+
+        {showHistory ? (
           <section className="status-center-section is-recent">
-            <header><div><span className="status-center-section-dot" /><strong>最近记录</strong></div><small>{recentTasks.length}</small></header>
-            <p className="status-center-section-note">这里显示每条逻辑任务的最新结果，不等同于完整 attempt 历史。</p>
-            {recentTasks.length ? <div className="status-center-task-list">{recentTasks.map(renderTask)}</div> : <div className="status-center-section-empty">当前没有已完成或已取消的任务。</div>}
+            <header><div><span className="status-center-section-dot" /><strong>历史记录</strong></div><small>{historyTasks.length}</small></header>
+            <p className="status-center-section-note">包含已完成、已取消，以及被后续尝试取代的旧失败。历史失败只用于追溯，不提供重试入口。</p>
+            {historyTasks.length ? <div className="status-center-task-list">{historyTasks.map((context) => renderTask(context, true))}</div> : <div className="status-center-section-empty">当前没有历史任务记录。</div>}
           </section>
         ) : null}
 
-        {noCurrentWork && !showRecent ? <div className="status-center-empty"><strong>后台工作正常</strong><span>当前没有运行中或需要处理的任务。可通过“显示最近记录”查看每条逻辑任务的最新已完成或已取消结果。</span></div> : null}
+        {noCurrentWork && !showHistory ? <div className="status-center-empty"><strong>后台工作正常</strong><span>当前没有运行中或需要处理的任务。可通过“显示历史记录”查看已经结束或被后续尝试取代的任务。</span></div> : null}
       </div>
     </section>
   );
