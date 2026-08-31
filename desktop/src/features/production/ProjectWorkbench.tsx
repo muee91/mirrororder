@@ -35,6 +35,15 @@ const PRODUCTION_PAGES = new Set<ProductionPage>([
   "overview",
 ]);
 
+const SECONDARY_PAGES: Array<{ value: ProductionPage; label: string }> = [
+  { value: "media-library", label: "素材库" },
+  { value: "media-binding", label: "本机素材" },
+  { value: "identity", label: "人物" },
+  { value: "watch", label: "审阅" },
+  { value: "attention", label: "待处理" },
+  { value: "overview", label: "概览" },
+];
+
 function safeProductionPage(page: ProductionPage): ProductionPage {
   return PRODUCTION_PAGES.has(page) ? page : "slate";
 }
@@ -97,17 +106,17 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
           {secondarySurface ? (
             <section className="production-secondary-workspace">
               <header className="production-secondary-bar">
-                <button type="button" className="secondary" onClick={() => setPage("slate")}>‹ 返回场记</button>
+                <button type="button" className="production-secondary-back" onClick={() => setPage("slate")}>返回场记</button>
                 <strong>{project.name || project.project_id}</strong>
-                <nav aria-label="制作辅助工作区">
-                  <button type="button" className={page === "media-library" ? "is-active" : ""} onClick={() => setPage("media-library")}>素材库</button>
-                  <button type="button" className={page === "media-binding" ? "is-active" : ""} onClick={() => setPage("media-binding")}>本机素材</button>
-                  <button type="button" className={page === "identity" ? "is-active" : ""} onClick={() => setPage("identity")}>人物</button>
-                  <button type="button" className={page === "watch" ? "is-active" : ""} onClick={() => setPage("watch")}>审阅</button>
-                  <button type="button" className={page === "attention" ? "is-active" : ""} onClick={() => setPage("attention")}>待处理</button>
-                  <button type="button" className={page === "overview" ? "is-active" : ""} onClick={() => setPage("overview")}>概览</button>
+                <div className="production-secondary-actions">
+                  <label className="production-secondary-switcher">
+                    <span className="sr-only">项目工具</span>
+                    <select value={page} aria-label="项目工具" onChange={(event) => setPage(event.target.value as ProductionPage)}>
+                      {SECONDARY_PAGES.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
+                    </select>
+                  </label>
                   <button type="button" className={assistantVisible ? "is-active" : ""} onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
-                </nav>
+                </div>
               </header>
               <div className="production-secondary-canvas">
                 {page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
