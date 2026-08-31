@@ -94,6 +94,26 @@ describe("Swift golden product fidelity", () => {
     expect(slate).not.toContain("script_scene_id: take.effective_mapping.script_segment_ids[0]");
   });
 
+  it("keeps visible Slate order, scene identity, row numbering and delete semantics aligned", () => {
+    const slate = source("./GoldenSlateWorkbench.tsx");
+    expect(slate).toContain("function sceneOrderValue");
+    expect(slate).toContain("draft.scene.trim() || draft.script_scene_id.trim()");
+    expect(slate).toContain("function displayOrder");
+    expect(slate).toContain("const displayedDrafts = displayOrder(drafts)");
+    expect(slate).toContain('script_scene_id: selected?.script_scene_id ?? ""');
+    expect(slate).toContain("displayedDrafts[visualIndex - 1]");
+    expect(slate).toContain("script_scene_id: previous.script_scene_id");
+    expect(slate).toContain("const rowNumber = displayIndex >= 0 ? displayIndex + 1 : 0");
+    expect(slate).toContain("placeholder={mappedScenePlaceholder}");
+    expect(slate).toContain("selected.scene || selected.script_scene_id || \"—\"");
+    expect(slate).toContain("requestDeleteSelected");
+    expect(slate).toContain("globalThis.confirm(prompt)");
+    expect(slate).toContain("删除人工场记…");
+    expect(slate).toContain("移除草稿…");
+    expect(slate).not.toContain("drafts.indexOf(draft)");
+    expect(slate).not.toContain("drafts[selectedIndex - 1]");
+  });
+
   it("uses the frozen Swift media-card geometry while limiting live thumbnail pressure", () => {
     const card = source("../media/MirrorOrderMediaCard.tsx");
     const css = source("../media/mirrororder-media-card.css");
