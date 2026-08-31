@@ -31,6 +31,26 @@
 .review-overview-takes button strong { color: #bec8d1; font-size: 10px; }
 .review-overview-takes button span { color: #d2bb78; font-size: 9px; }
 
+html[data-mirrororder-theme="light"] .review-attention-summary { border-color: #dce3e9; }
+html[data-mirrororder-theme="light"] .review-attention-summary strong,
+html[data-mirrororder-theme="light"] .review-overview-strip strong,
+html[data-mirrororder-theme="light"] .review-state-bars strong,
+html[data-mirrororder-theme="light"] .review-fact-list dd,
+html[data-mirrororder-theme="light"] .review-overview-takes button strong,
+html[data-mirrororder-theme="light"] .review-attention-name strong { color: #2c363f; }
+html[data-mirrororder-theme="light"] .review-attention-row,
+html[data-mirrororder-theme="light"] .review-overview-pane { border-color: #dce3e9; color: #27313a; background: #fff; }
+html[data-mirrororder-theme="light"] .review-overview-strip { border-color: #dce3e9; background: #dce3e9; }
+html[data-mirrororder-theme="light"] .review-overview-strip span { background: #fff; }
+html[data-mirrororder-theme="light"] .review-state-bars span,
+html[data-mirrororder-theme="light"] .review-fact-list div { border-color: #e4e9ed; }
+html[data-mirrororder-theme="light"] .review-overview-takes button { border-color: #d8dfe6; color: #56636f; background: #f6f8fa; }
+
+html[data-mirrororder-theme="dark"] .review-attention-row { border-color: #28313a; background: #10161b; }
+html[data-mirrororder-theme="dark"] .review-overview-pane { border-color: #28313a; background: #0f1419; }
+html[data-mirrororder-theme="dark"] .review-overview-strip { border-color: #28313a; background: #28313a; }
+html[data-mirrororder-theme="dark"] .review-overview-strip span { background: #0f1419; }
+
 @media (max-width: 980px) {
   .review-attention-row { grid-template-columns: minmax(0, 1fr) auto; }
   .review-attention-issues, .review-attention-row > p { grid-column: 1 / -1; }
@@ -42,14 +62,4 @@
   .review-overview-strip { overflow-x: auto; }
   .review-overview-strip span { flex: 0 0 105px; }
   .review-overview-grid { grid-template-columns: minmax(0, 1fr); }
-}
-
-@media (prefers-color-scheme: light) {
-  .review-attention-summary { border-color: #dce3e9; }
-  .review-attention-summary strong, .review-overview-strip strong, .review-state-bars strong, .review-fact-list dd, .review-overview-takes button strong { color: #2c363f; }
-  .review-attention-row, .review-overview-pane { border-color: #dce3e9; background: #fff; }
-  .review-overview-strip { border-color: #dce3e9; background: #dce3e9; }
-  .review-overview-strip span { background: #fff; }
-  .review-state-bars span, .review-fact-list div { border-color: #e4e9ed; }
-  .review-overview-takes button { border-color: #d8dfe6; color: #56636f; background: #f6f8fa; }
 }
