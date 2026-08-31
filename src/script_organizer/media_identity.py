@@ -10,10 +10,14 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 MEDIA_SUFFIXES = {".mp4", ".mov", ".m4v", ".mxf", ".mts", ".avi", ".mkv", ".wav", ".aif", ".aiff", ".m4a"}
 _SAMPLE_BYTES = 1024 * 1024
+
+
+class MediaScanCancelled(RuntimeError):
+    """Raised before a device-local media scan commits any new binding state."""
 
 
 def _now() -> str:
@@ -164,16 +168,27 @@ class DeviceMediaStore:
         }
 
     @staticmethod
-    def _media_files(roots: Iterable[str]) -> list[Path]:
+    def _check_cancelled(cancelled: Callable[[], bool] | None) -> None:
+        if cancelled and cancelled():
+            raise MediaScanCancelled("素材扫描已取消")
+
+    @classmethod
+    def _media_files(
+        cls,
+        roots: Iterable[str],
+        cancelled: Callable[[], bool] | None = None,
+    ) -> list[Path]:
         files: list[Path] = []
         seen: set[str] = set()
         for root_text in roots:
+            cls._check_cancelled(cancelled)
             root = Path(root_text).expanduser()
             if not root.exists() or not root.is_dir():
                 continue
             try:
                 candidates = root.rglob("*")
                 for path in candidates:
+                    cls._check_cancelled(cancelled)
                     if not path.is_file() or path.suffix.lower() not in MEDIA_SUFFIXES or path.name.startswith("._"):
                         continue
                     try:
@@ -285,6 +300,7 @@ class DeviceMediaStore:
             "resolved": len(resolved),
             "missing": len(missing),
             "items": resolved + missing,
+            "pending_analysis": bool(project["roots"] and not inventory),
         }
 
     def scan(
@@ -295,26 +311,34 @@ class DeviceMediaStore:
         roots: Iterable[str],
         *,
         media_rows: list[tuple[str, str]] | None = None,
+        replace: bool = False,
+        cancelled: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
+        """Scan candidate roots and atomically commit bindings only on success.
+
+        Replacement reconnect is intentionally transactional: existing roots and
+        bindings stay untouched while candidate media are enumerated and hashed.
+        A wrong folder, cancellation, or scan error therefore cannot destroy the
+        last known-good device-local binding state.
+        """
         payload = self.load()
         workspaces = payload.setdefault("workspaces", {})
         workspace = workspaces.setdefault(workspace_id, {"projects": {}})
         projects = workspace.setdefault("projects", {})
-        project = projects.get(project_id)
-        if not isinstance(project, dict):
+        current = projects.get(project_id)
+        if not isinstance(current, dict):
             legacy_projects = payload.get("projects", {})
-            legacy = legacy_projects.pop(project_id, None) if isinstance(legacy_projects, dict) else None
-            project = legacy if isinstance(legacy, dict) else self._empty_project()
-            projects[project_id] = project
-        project.setdefault("bindings", {})
-        project.setdefault("candidates", {})
-        project.setdefault("confirmed_provisional", {})
-        stored_roots = [str(value) for value in project.get("roots", []) if str(value)]
+            legacy = legacy_projects.get(project_id) if isinstance(legacy_projects, dict) else None
+            current = legacy if isinstance(legacy, dict) else self._empty_project()
+
+        existing_roots = [str(value) for value in current.get("roots", []) if str(value)]
+        selected_roots: list[str] = [] if replace else list(existing_roots)
         for raw_root in roots:
-            root = str(Path(raw_root).expanduser())
-            if root and root not in stored_roots:
-                stored_roots.append(root)
-        project["roots"] = stored_roots
+            root = str(Path(raw_root).expanduser().resolve())
+            if root and root not in selected_roots:
+                selected_roots.append(root)
+        if not selected_roots:
+            raise ValueError("至少选择一个媒体目录")
 
         inventory = iter_project_media(index)
         expected_by_id = {
@@ -327,27 +351,30 @@ class DeviceMediaStore:
             if not str(item.get("media_id", "")).startswith("M_"):
                 provisional_by_name[str(item.get("name", "")).casefold()].append(item)
 
-        files = self._media_files(stored_roots)
+        self._check_cancelled(cancelled)
+        files = self._media_files(selected_roots, cancelled)
         files_by_name: defaultdict[str, list[Path]] = defaultdict(list)
         for path in files:
+            self._check_cancelled(cancelled)
             files_by_name[path.name.casefold()].append(path)
 
-        bindings = dict(project.get("bindings", {}))
-        confirmed = dict(project.get("confirmed_provisional", {}))
+        existing_bindings = {} if replace else dict(current.get("bindings", {}))
+        existing_confirmed = {} if replace else dict(current.get("confirmed_provisional", {}))
         # Version-2 stores could contain provisional bindings created solely by
         # a filename match. Ignore and remove every unconfirmed MP_ binding so
         # upgrading immediately closes the unsafe path instead of waiting for a
         # manual re-scan.
         bindings = {
             key: value
-            for key, value in bindings.items()
-            if not str(key).startswith("MP_") or str(confirmed.get(str(key), "") or "") == str(value)
+            for key, value in existing_bindings.items()
+            if not str(key).startswith("MP_") or str(existing_confirmed.get(str(key), "") or "") == str(value)
         }
         candidates: dict[str, str] = {}
         matched_verified = 0
         provisional_candidates = 0
 
         for name, rows in provisional_by_name.items():
+            self._check_cancelled(cancelled)
             paths = files_by_name.get(name, [])
             if len(rows) == 1 and len(paths) == 1:
                 media_id = str(rows[0]["media_id"])
@@ -356,6 +383,7 @@ class DeviceMediaStore:
                 provisional_candidates += 1
 
         for path in files:
+            self._check_cancelled(cancelled)
             media_id = media_id_for_path(path)
             if media_id and media_rows is not None:
                 media_rows.append((media_id, str(path)))
@@ -363,14 +391,23 @@ class DeviceMediaStore:
                 bindings[media_id] = str(path)
                 matched_verified += 1
 
-        project["bindings"] = bindings
-        project["candidates"] = candidates
-        project["confirmed_provisional"] = {
-            key: value
-            for key, value in confirmed.items()
-            if str(key).startswith("MP_") and Path(str(value)).is_file()
+        self._check_cancelled(cancelled)
+        next_project = {
+            **current,
+            "roots": selected_roots,
+            "bindings": bindings,
+            "candidates": candidates,
+            "confirmed_provisional": {
+                key: value
+                for key, value in existing_confirmed.items()
+                if str(key).startswith("MP_") and Path(str(value)).is_file()
+            },
+            "updated_at": _now(),
         }
-        project["updated_at"] = _now()
+        projects[project_id] = next_project
+        legacy_projects = payload.get("projects", {})
+        if isinstance(legacy_projects, dict):
+            legacy_projects.pop(project_id, None)
         self._save(payload)
         summary = self.summary(workspace_id, project_id, index)
         summary["scan"] = {
@@ -471,17 +508,26 @@ class DeviceMediaStore:
         roots: Iterable[str],
         *,
         media_files: list[Path] | None = None,
+        replace: bool = False,
+        cancelled: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
-        """Register and enumerate local media before a project index exists.
+        """Enumerate roots before a project index exists, then commit on success.
 
         A new media-directory project has no material_index.json until the first
-        sync/analysis completes. The desktop UI still needs immediate feedback
-        that the selected root is readable and contains media. This probe does
-        not create shared project facts or pretend the files are bound to clip
-        IDs; the normal post-analysis scan performs the authoritative binding.
+        sync/analysis completes. Replacement still stays transactional: the old
+        device roots are preserved until the proposed roots have been enumerated.
         """
-        snapshot = self.add_roots(workspace_id, project_id, roots)
-        files = self._media_files(snapshot.get("roots", []))
+        current = self.project_snapshot(workspace_id, project_id)
+        selected: list[str] = [] if replace else [str(value) for value in current.get("roots", []) if str(value)]
+        for raw_root in roots:
+            root = str(Path(raw_root).expanduser().resolve())
+            if root and root not in selected:
+                selected.append(root)
+        if not selected:
+            raise ValueError("至少选择一个媒体目录")
+        files = self._media_files(selected, cancelled)
+        self._check_cancelled(cancelled)
+        snapshot = self.replace_roots(workspace_id, project_id, selected) if replace else self.add_roots(workspace_id, project_id, selected)
         if media_files is not None:
             media_files.extend(files)
         payload = self.load()
