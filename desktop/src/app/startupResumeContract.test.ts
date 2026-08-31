@@ -27,14 +27,14 @@ describe("startup and production resume product contract", () => {
     expect(source).toContain("projectById(next, launchResume.projectId)");
   });
 
-  it("trusts only startAndConnect as an automatic workspace resume source", () => {
+  it("trusts only managed startAndConnect as an automatic workspace resume source", () => {
     const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     const connectBlock = source.slice(source.indexOf("async function connect()"), source.indexOf("async function refreshWorkspace"));
     const openBlock = source.slice(source.indexOf("async function openWorkspacePath"), source.indexOf("async function chooseWorkspace"));
     expect(connectBlock).not.toContain("rememberWorkspace(");
     expect(connectBlock).not.toContain("rememberProject(");
-    expect(openBlock).toContain("await connection.startAndConnect(normalizedPath)");
-    expect(openBlock.indexOf("await connection.startAndConnect(normalizedPath)")).toBeLessThan(openBlock.indexOf("rememberWorkspace(normalizedPath)"));
+    expect(openBlock).toContain("new HostConnection(defaultHostBaseUrl).startAndConnect(normalizedPath)");
+    expect(openBlock.indexOf("startAndConnect(normalizedPath)")).toBeLessThan(openBlock.indexOf("rememberWorkspace(normalizedPath)"));
   });
 
   it("preserves the existing production canvas when a workspace switch fails", () => {
@@ -42,6 +42,29 @@ describe("startup and production resume product contract", () => {
     expect(source).toContain("const previousSnapshot = snapshot");
     expect(source).toContain("setSnapshot(previousSnapshot)");
     expect(source).toContain("当前工作现场保持打开");
+  });
+
+  it("keeps an uncommitted advanced Host address away from active workspace refreshes", () => {
+    const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
+    const refreshBlock = source.slice(source.indexOf("async function refreshWorkspace"), source.indexOf("function selectProject"));
+    expect(source).toContain("baseUrl is an editable advanced-connection draft");
+    expect(refreshBlock).toContain("const activeBaseUrl = snapshot?.baseUrl ?? baseUrl");
+    expect(refreshBlock).toContain("activeConnection = new HostConnection(activeBaseUrl)");
+    expect(refreshBlock).toContain("await activeConnection.connect()");
+    expect(refreshBlock).not.toContain("await connection.connect()");
+  });
+
+  it("keeps the current workspace open when an advanced connection attempt fails", () => {
+    const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
+    const connectBlock = source.slice(source.indexOf("async function connect()"), source.indexOf("async function refreshWorkspace"));
+    expect(connectBlock).toContain("const previousSnapshot = snapshot");
+    expect(connectBlock).toContain("setBaseUrl(previousSnapshot.baseUrl)");
+    expect(connectBlock).toContain("setSnapshot(previousSnapshot)");
+    expect(connectBlock).toContain("setSelectedProject(previousProject)");
+    expect(connectBlock).toContain("setPageRequest(previousPageRequest)");
+    expect(connectBlock).toContain("setSurface(previousSurface)");
+    expect(connectBlock).toContain('setState("connected")');
+    expect(connectBlock).toContain("当前工作现场保持打开");
   });
 
   it("returns automatic workspace resume to Project Home and opens every project on Slate", () => {
