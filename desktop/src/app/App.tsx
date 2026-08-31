@@ -236,10 +236,9 @@ export function App() {
     setMessage("正在连接已有的本机服务…");
     try {
       const next = await connection.connect();
-      const project = selectedProject ? projectById(next, selectedProject.project_id) : null;
-      const connectedWorkspacePath = previousSnapshot?.workspace.workspace_id === next.workspace.workspace_id
-        ? activeWorkspacePath
-        : "";
+      const sameWorkspace = previousSnapshot?.workspace.workspace_id === next.workspace.workspace_id;
+      const project = sameWorkspace && selectedProject ? projectById(next, selectedProject.project_id) : null;
+      const connectedWorkspacePath = sameWorkspace ? activeWorkspacePath : "";
       setBaseUrl(next.baseUrl);
       setWorkspacePath(connectedWorkspacePath);
       setActiveWorkspacePath(connectedWorkspacePath);
