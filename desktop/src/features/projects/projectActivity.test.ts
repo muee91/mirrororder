@@ -79,5 +79,9 @@ describe("project activity health semantics", () => {
     expect(summarizeProjectActivity([
       task("scan", "media_inventory_scan", "queued", "2026-08-31T10:00:00Z"),
     ]).label).toBe("素材扫描 · 等待开始");
+
+    expect(summarizeProjectActivity([
+      task("sync", "multicam_sync", "running", "2026-08-31T10:01:00Z", { stage: "waiting_sync" }),
+    ]).label).toBe("多机位同步 · 等待多机位同步资源");
   });
 });
