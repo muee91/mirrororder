@@ -70,16 +70,24 @@ describe("status center recovery semantics", () => {
 
   it("keeps the UI recovery-first instead of exposing a bounded project task table", () => {
     const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
-    expect(source).toContain("需要处理");
+    expect(source).toContain("当前需要处理");
     expect(source).toContain("正在处理");
-    expect(source).toContain("最近记录");
-    expect(source).toContain("不等同于完整 attempt 历史");
+    expect(source).toContain("历史记录");
+    expect(source).toContain("被后续尝试取代的旧失败");
+    expect(source).toContain("历史失败只用于追溯，不提供重试入口");
     expect(source).toContain("技术详情");
+    expect(source).toContain("latestTaskFamilies");
     expect(source).toContain("onOpenProjectPage");
     expect(source).toContain("onOpenSettings");
-    expect(source).not.toContain("可重试</");
     expect(source).not.toContain(".slice(0, 12)");
-    expect(source).not.toContain("查看历史");
+  });
+
+  it("keeps historical failures from exposing retry controls", () => {
+    const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
+    expect(source).toContain("!historical && canRetryTask(task)");
+    expect(source).toContain("!historical && canCancelTask(task)");
+    expect(source).toContain("历史失败");
+    expect(source).toContain("历史中断");
   });
 
   it("keeps live task cancellation above a long failure backlog", () => {
@@ -88,6 +96,7 @@ describe("status center recovery semantics", () => {
     const main = readFileSync(fileURLToPath(new URL("../../main.tsx", import.meta.url)), "utf8");
 
     expect(source).toContain('>{task.cancel_requested ? "正在取消" : "取消"}</button>');
+    expect(source.indexOf('className="status-center-section is-active"')).toBeLessThan(source.indexOf('className="status-center-section is-attention"'));
     expect(recovery).toContain(".status-center-section.is-active { order: -20; }");
     expect(recovery).toContain(".status-center-section.is-attention { order: -10; }");
     expect(recovery).toContain("max-height: min(520px, 52vh)");
