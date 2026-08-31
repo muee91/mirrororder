@@ -16,7 +16,8 @@ describe("Desktop UI polish contract", () => {
     expect(library).not.toContain("▰");
     expect(library).not.toContain('aria-hidden="true">镜</span>');
     expect(library).not.toContain(">!</span>");
-    expect(library).toContain('<span className="mirror-mark" aria-hidden="true" />');
+    expect(library).toContain('import mirrororderLogo from "../../assets/mirrororder-logo.svg"');
+    expect(library).toContain('<img className="mirror-mark" src={mirrororderLogo} alt="" aria-hidden="true" />');
 
     expect(home).not.toContain("▥");
     expect(home).not.toContain("▰");
@@ -27,13 +28,13 @@ describe("Desktop UI polish contract", () => {
   });
 
   it("bundles the canonical MirrorOrder logo through the Desktop source asset graph", () => {
-    const frozen = read("../desktop-theme-frozen-surfaces.css");
+    const library = read("../features/projects/ProjectLibrary.tsx");
     const logo = read("../assets/mirrororder-logo.svg");
     const canonicalLogo = read("../../../branding/logo.svg");
     const styles = read("../styles.css");
     const projects = read("../features/projects/projects.css");
 
-    expect(frozen).toContain('background-image: url("./assets/mirrororder-logo.svg")');
+    expect(library).toContain('import mirrororderLogo from "../../assets/mirrororder-logo.svg"');
     expect(logo).toBe(canonicalLogo);
     expect(styles).not.toContain(".startup-logo::before");
     expect(projects).not.toContain(".mirror-mark::before");
