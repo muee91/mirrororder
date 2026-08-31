@@ -58,6 +58,12 @@ describe("Desktop appearance product contract", () => {
     expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-take-picker');
     expect(slate).toContain('.golden-inspector-field textarea');
     expect(slate).toContain('.golden-episode-candidates > button');
+    expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-slate-actions .icon-action.is-active');
+    expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-slate-table input { border-color: transparent;');
+    expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-slate-table input { border-color: transparent;');
+    expect(slate).toContain('html[data-mirrororder-theme="light"] button.danger-subtle');
+    expect(slate).toContain('html[data-mirrororder-theme="dark"] button.danger-subtle');
+    expect(slate).toContain('.golden-inspector-actions .danger-subtle { flex: 0 0 auto;');
     expect(frozen).toContain('html[data-mirrororder-theme="light"] .project-home-heading');
     expect(frozen).toContain('html[data-mirrororder-theme="dark"] .project-home-heading');
     expect(frozen).toContain('html[data-mirrororder-theme="light"] .mo-media-prefer');
