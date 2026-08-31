@@ -1,6 +1,6 @@
 .project-library { display: flex; min-height: 0; flex: 1; flex-direction: column; padding: 12px 10px 0; }
 .project-library-brand { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 2px 7px 12px; }
-.mirror-mark { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid #343d46; border-radius: 8px; color: #e5ebf0; background: #1a2026; font-size: 13px; font-weight: 750; }
+.mirror-mark { display: block; flex: 0 0 auto; width: 28px; height: 28px; border: 1px solid #343d46; border-radius: 8px; background-color: #1a2026; background-image: url("../../../../branding/app-icon.png"); background-position: center; background-repeat: no-repeat; background-size: cover; }
 .project-library-brand div { display: grid; gap: 0; }
 .project-library-brand strong { color: #e2e8ed; font-size: 13px; line-height: 1.15; }
 .project-library-brand span:not(.mirror-mark) { color: #697681; font-size: 9px; letter-spacing: .03em; }
@@ -91,7 +91,7 @@ html[data-mirrororder-theme="dark"] .lifecycle-kind button { border-color: #3039
 html[data-mirrororder-theme="dark"] .lifecycle-kind button.is-active { color: #10151a; background: #e8edf2; }
 
 @media (prefers-color-scheme: light) {
-  .mirror-mark { border-color: #cfd8e0; color: #24303a; background: #eef2f5; }
+  .mirror-mark { border-color: #cfd8e0; background-color: #eef2f5; }
   .project-library-brand strong { color: #24303a; }
   .project-library-section-heading, .project-library-global-tools { border-color: #dce3e9; }
   .project-new-button, .project-manage-button { border-color: #d2dbe3; color: #596672; background: #f5f7f9; }
