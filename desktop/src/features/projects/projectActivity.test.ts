@@ -35,12 +35,11 @@ describe("project activity health semantics", () => {
     expect(result.state).toBe("idle");
   });
 
-  it("does surface a current project preparation failure", () => {
+  it("keeps even an old prepare failure in Status Center instead of poisoning the project card forever", () => {
     const result = summarizeProjectActivity([
-      task("prepare", "prepare_project", "failed", "2026-08-31T10:00:00Z", { error: "source unavailable" }),
+      task("prepare", "prepare_project", "failed", "2026-08-24T10:00:00Z", { error: "source unavailable" }),
     ]);
-    expect(result.state).toBe("failed");
-    expect(result.label).toBe("整理异常");
+    expect(result.state).toBe("idle");
   });
 
   it("lets a newer successful prepare supersede an older failed prepare", () => {
@@ -51,7 +50,7 @@ describe("project activity health semantics", () => {
     expect(result.state).toBe("idle");
   });
 
-  it("still shows auxiliary work while it is actively running", () => {
+  it("still shows background work while it is actively running", () => {
     const result = summarizeProjectActivity([
       task("identity", "identity_index", "running", "2026-08-31T10:00:00Z", { stage: "face_identity" }),
     ]);
