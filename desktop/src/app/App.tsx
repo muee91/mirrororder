@@ -316,7 +316,7 @@ export function App() {
     try {
       const task = await new DesktopClient(snapshot.baseUrl).prepareProject(project.project_id);
       await refreshActivities();
-      setMessage(`已提交 ${project.name || project.project_id} 的重整任务${task.task_id ? ` · ${task.task_id}` : ""}；后台状态会直接显示在项目卡与 Sidebar。`);
+      setMessage(`已提交 ${project.name || project.project_id} 的重整任务${task.task_id ? ` · ${task.task_id}` : ""}；运行中状态会显示在项目卡与 Sidebar，失败恢复统一在状态中心。`);
     } catch (error) {
       setMessage(errorMessage(error));
     }
