@@ -18,6 +18,7 @@ from .config import ProjectConfig
 from .media_identity import DeviceMediaStore
 from .models import Clip
 from .multicam_sync_engine import run_multicam_sync
+from .resource_scheduler import ResourceCancelled
 from .transcript import TranscriptStore
 
 
@@ -172,6 +173,7 @@ class TaskManager:
                 "started_at": "",
                 "completed_at": "",
                 "error": "",
+                "message": "任务已排队",
                 "result": {},
                 "logs": ["任务已排队"],
             }
@@ -189,11 +191,14 @@ class TaskManager:
             task = self._task(payload, task_id)
             if task["status"] == "queued":
                 task["status"] = "cancelled"
+                task["stage"] = "cancelled"
+                task["message"] = "任务在启动前取消"
                 task["completed_at"] = _now()
                 task["logs"].append("任务在启动前取消")
             elif task["status"] == "running":
                 task["cancel_requested"] = True
-                task["logs"].append("已请求取消；当前阶段结束后停止")
+                task["message"] = "已请求取消；当前可中断阶段会停止"
+                task["logs"].append("已请求取消；当前可中断阶段会停止")
             self._save(config, payload)
             return task
 
@@ -210,9 +215,16 @@ class TaskManager:
             task = self._task(self._load(config), task_id)
             if task["type"] == "prepare_project":
                 result = self._prepare_project(project_id, config, task)
+                if result.get("cancelled"):
+                    self._update(config, task_id, status="cancelled", stage="cancelled", result=result, message="任务已取消")
+                    return
             elif task["type"] == "multicam_sync":
                 self._update(config, task_id, stage="sync")
-                result = run_multicam_sync(config, lambda text: self._update(config, task_id, message=text))
+                result = run_multicam_sync(
+                    config,
+                    lambda text: self._update(config, task_id, message=text),
+                    cancel_requested=lambda: self._cancel_requested(config, task_id),
+                )
             elif task["type"] == "incremental_analyze":
                 self._update(config, task_id, stage="analysis")
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
@@ -241,6 +253,14 @@ class TaskManager:
                 self._update(config, task_id, stage="evidence")
                 result = self._extract_evidence(config, task)
             self._update(config, task_id, status="completed", stage="completed", result=result, message="任务完成")
+        except ResourceCancelled as error:
+            self._update(
+                config,
+                task_id,
+                status="cancelled",
+                stage="cancelled",
+                message=str(error).strip() or "任务已取消",
+            )
         except Exception as error:
             self._update(config, task_id, status="failed", stage="failed", error=str(error), message="任务失败")
         finally:
@@ -250,7 +270,11 @@ class TaskManager:
         result: dict[str, Any] = {}
         if config.is_media_directory:
             self._update(config, task["task_id"], stage="sync", message="开始多机位音频同步")
-            result["sync"] = run_multicam_sync(config, lambda text: self._update(config, task["task_id"], message=text))
+            result["sync"] = run_multicam_sync(
+                config,
+                lambda text: self._update(config, task["task_id"], message=text),
+                cancel_requested=lambda: self._cancel_requested(config, task["task_id"]),
+            )
             if self._cancel_requested(config, task["task_id"]):
                 return {**result, "cancelled": True}
         if not _analysis_inputs_available(config):
@@ -394,6 +418,7 @@ class TaskManager:
             if error:
                 task["error"] = error
             if message:
+                task["message"] = str(message)[:500]
                 task.setdefault("logs", []).append(f"{_now()} {message}")
             self._save(config, payload)
 
