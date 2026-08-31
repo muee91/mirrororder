@@ -230,9 +230,22 @@ function taskTarget(task: ProjectTaskRecord): { label: string; page?: Production
   return { label: "打开项目" };
 }
 
+function compactError(value: string | null | undefined): string {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  return normalized.length > 220 ? `${normalized.slice(0, 217)}…` : normalized;
+}
+
 function taskPrimaryMessage(task: ProjectTaskRecord, historical = false): string {
   if (historical && taskNeedsAttention(task)) return "该失败已被后续尝试取代；这里只保留用于追溯。";
-  if (taskNeedsAttention(task)) return task.message || "任务没有完成。可重新尝试，或打开相关位置检查输入与本机能力。";
+  if (taskNeedsAttention(task)) {
+    const detail = compactError(task.error);
+    const message = String(task.message || "").trim();
+    const generic = !message || ["任务失败", "素材扫描失败", "设备运行时准备失败"].includes(message);
+    if (detail && generic) return detail;
+    if (detail && !message.includes(detail)) return `${message}：${detail}`;
+    return message || detail || "任务没有完成。可重新尝试，或打开相关位置检查输入与本机能力。";
+  }
   if (task.status === "cancelled") return task.message || "任务已按请求停止。";
   if (completed(task)) return task.message || "任务已完成。";
   return task.message || "后台处理中。";
@@ -250,7 +263,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
   const [deviceError, setDeviceError] = useState("");
   const [message, setMessage] = useState("正在读取所有后台工作…");
   const [busy, setBusy] = useState(false);
-  const [actionTaskId, setActionTaskId] = useState<string | null>(null);
+  const [actionTaskIds, setActionTaskIds] = useState<Set<string>>(() => new Set());
   const [showHistory, setShowHistory] = useState(false);
 
   const reload = useCallback(async (quiet = false): Promise<ReloadSnapshot> => {
@@ -323,24 +336,40 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     history: historyTasks.length,
   }), [activeTasks.length, attentionTasks.length, deviceError, historyTasks.length, projectErrors.length]);
 
+  function actionBusy(taskId: string): boolean {
+    return actionTaskIds.has(taskId);
+  }
+
+  function beginAction(taskId: string): void {
+    setActionTaskIds((current) => new Set(current).add(taskId));
+  }
+
+  function endAction(taskId: string): void {
+    setActionTaskIds((current) => {
+      const next = new Set(current);
+      next.delete(taskId);
+      return next;
+    });
+  }
+
   async function cancelProject(projectId: string, task: ProjectTaskRecord): Promise<void> {
-    if (!canCancelTask(task) || actionTaskId) return;
-    setActionTaskId(task.task_id);
-    setMessage("正在请求安全取消后台任务…");
+    if (!canCancelTask(task) || actionBusy(task.task_id)) return;
+    beginAction(task.task_id);
+    setMessage(`正在取消 ${taskLabel(task)}…`);
     try {
       await projectClient.cancel(projectId, task.task_id);
       await reload(true);
-      setMessage("取消请求已提交；任务会在当前可中断阶段停止。");
+      setMessage(`${taskLabel(task)} 已提交取消请求；其他任务仍可独立操作。`);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
-      setActionTaskId(null);
+      endAction(task.task_id);
     }
   }
 
   async function retryProject(projectId: string, task: ProjectTaskRecord): Promise<void> {
-    if (!canRetryTask(task) || actionTaskId) return;
-    setActionTaskId(task.task_id);
+    if (!canRetryTask(task) || actionBusy(task.task_id)) return;
+    beginAction(task.task_id);
     setMessage(`正在重新排队 ${taskLabel(task)}…`);
     try {
       await projectClient.retry(projectId, task);
@@ -349,13 +378,13 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
-      setActionTaskId(null);
+      endAction(task.task_id);
     }
   }
 
   async function cancelDevice(task: ProjectTaskRecord): Promise<void> {
-    if (!canCancelTask(task) || actionTaskId) return;
-    setActionTaskId(task.task_id);
+    if (!canCancelTask(task) || actionBusy(task.task_id)) return;
+    beginAction(task.task_id);
     setMessage(`正在取消 ${taskLabel(task)}…`);
     try {
       await deviceClient.cancel(task.task_id);
@@ -364,13 +393,13 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
-      setActionTaskId(null);
+      endAction(task.task_id);
     }
   }
 
   async function retryDevice(task: ProjectTaskRecord): Promise<void> {
-    if (!canRetryTask(task) || actionTaskId) return;
-    setActionTaskId(task.task_id);
+    if (!canRetryTask(task) || actionBusy(task.task_id)) return;
+    beginAction(task.task_id);
     setMessage(`正在重新排队 ${taskLabel(task)}…`);
     try {
       await deviceClient.retry(task);
@@ -379,7 +408,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
-      setActionTaskId(null);
+      endAction(task.task_id);
     }
   }
 
@@ -407,6 +436,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     const displayedStatus = historical && taskNeedsAttention(task)
       ? (task.status === "interrupted" ? "历史中断" : "历史失败")
       : statusLabel(task);
+    const operating = actionBusy(task.task_id);
     return (
       <article className={`status-center-task status-${task.status}${historical ? " is-history" : ""}`} key={`${project?.project_id || "device"}:${task.task_id}`}>
         <div className="status-center-task-main">
@@ -423,8 +453,8 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
           {task.error ? <details className="status-center-technical"><summary>技术详情</summary><code>{task.error}</code></details> : null}
         </div>
         <div className="status-center-actions">
-          {!historical && canCancelTask(task) ? <button type="button" className="secondary" disabled={Boolean(actionTaskId) || Boolean(task.cancel_requested)} onClick={() => project ? void cancelProject(project.project_id, task) : void cancelDevice(task)}>{task.cancel_requested ? "正在取消" : "取消"}</button> : null}
-          {!historical && canRetryTask(task) ? <button type="button" disabled={Boolean(actionTaskId)} onClick={() => project ? void retryProject(project.project_id, task) : void retryDevice(task)}>{task.status === "cancelled" ? "重新开始" : "重试"}</button> : null}
+          {!historical && canCancelTask(task) ? <button type="button" className="secondary" disabled={operating || Boolean(task.cancel_requested)} onClick={() => project ? void cancelProject(project.project_id, task) : void cancelDevice(task)}>{task.cancel_requested ? "正在取消" : operating ? "处理中" : "取消"}</button> : null}
+          {!historical && canRetryTask(task) ? <button type="button" disabled={operating} onClick={() => project ? void retryProject(project.project_id, task) : void retryDevice(task)}>{operating ? "处理中" : task.status === "cancelled" ? "重新开始" : "重试"}</button> : null}
           {(project || target.settings) ? <button type="button" className="secondary" onClick={() => openTarget(context)}>{target.label}</button> : null}
         </div>
       </article>
