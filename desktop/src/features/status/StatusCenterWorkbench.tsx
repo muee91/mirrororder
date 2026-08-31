@@ -143,6 +143,7 @@ function stageLabel(stage: string): string {
     face_identity: "人脸索引",
     speaker_identity: "声纹索引",
     waiting_cpu: "等待处理资源",
+    waiting_sync: "等待多机位同步资源",
     waiting_mlx: "等待本地模型资源",
     waiting_vision: "等待视觉资源",
     waiting_embedding: "等待语义索引资源",
