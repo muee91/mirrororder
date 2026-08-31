@@ -81,12 +81,28 @@ def test_disabled_device_capabilities_do_not_auto_restore(monkeypatch) -> None:
     assert tasks.rows == []
 
 
+def test_auto_restore_failure_is_diagnostic_not_host_startup_failure(monkeypatch) -> None:
+    monkeypatch.setattr(
+        device_model_runtime,
+        "restore_enabled_device_runtimes",
+        lambda: (_ for _ in ()).throw(RuntimeError("model cache unavailable")),
+    )
+    monkeypatch.setattr(device_model_runtime, "_LAST_RESTORE_ERROR", "")
+
+    # This helper is deliberately non-raising because optional model recovery
+    # must never prevent the Host and project workspace from opening.
+    device_model_runtime._restore_enabled_device_runtimes_best_effort()
+
+    assert device_model_runtime._LAST_RESTORE_ERROR == "RuntimeError: model cache unavailable"
+
+
 def test_device_model_payload_never_requires_a_project(monkeypatch) -> None:
     class _Registry:
         def public(self):
             return {"contract": "models.v1"}
 
     monkeypatch.setattr(device_model_runtime, "ModelRegistry", _Registry)
+    monkeypatch.setattr(device_model_runtime, "_LAST_RESTORE_ERROR", "")
     monkeypatch.setattr(
         device_model_runtime,
         "load_model_connections",
@@ -97,4 +113,5 @@ def test_device_model_payload_never_requires_a_project(monkeypatch) -> None:
     assert payload["contract"] == "device_models.v1"
     assert payload["models"] == {"contract": "models.v1"}
     assert payload["connections"]["include_secrets"] is False
+    assert payload["restore_error"] == ""
     assert "project_id" not in payload
