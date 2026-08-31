@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import {
-  isProjectHealthTask,
   isTaskActive,
-  isTaskFailed,
   latestTaskFamilies,
   taskAttemptTimestamp,
 } from "../../api/taskSemantics";
@@ -89,17 +87,9 @@ export function summarizeProjectActivity(tasks: ProjectTaskRecord[]): ProjectAct
     };
   }
 
-  const failedProjectTask = current.find((task) => isProjectHealthTask(task) && isTaskFailed(task));
-  if (failedProjectTask) {
-    return {
-      state: "failed",
-      label: "整理异常",
-      stage: failedProjectTask.stage,
-      message: failedProjectTask.error || failedProjectTask.message || "项目主流程未完成",
-      ...taskProgress(failedProjectTask),
-    };
-  }
-
+  // Project cards describe the project's current data state, not the lifetime
+  // history of background jobs. Durable task failures belong in Status Center;
+  // ProjectSummary.error and project statistics remain the project-health authority.
   const latest = current[0];
   return { state: "idle", label: "", stage: latest?.stage || "", message: "", done: null, total: null };
 }
