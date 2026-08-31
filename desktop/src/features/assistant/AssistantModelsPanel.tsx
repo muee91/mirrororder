@@ -3,7 +3,6 @@ import { ModelSettingsClient, type AssistantModelsPayload, type ModelConnection,
 
 interface Props {
   baseUrl: string;
-  projectId: string;
 }
 
 interface Draft extends ModelConnectionWrite {
@@ -33,11 +32,11 @@ function emptyDraft(): Record<ModelRole, Draft> {
   return { text: { ...base }, vision: { ...base }, embedding: { ...base } };
 }
 
-export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
+export function AssistantModelsPanel({ baseUrl }: Props) {
   const client = useMemo(() => new ModelSettingsClient(baseUrl), [baseUrl]);
   const [payload, setPayload] = useState<AssistantModelsPayload | null>(null);
   const [drafts, setDrafts] = useState<Record<ModelRole, Draft>>(emptyDraft);
-  const [message, setMessage] = useState("正在读取模型连接…");
+  const [message, setMessage] = useState("正在读取当前设备的模型连接…");
   const [busy, setBusy] = useState(false);
 
   function applyPayload(next: AssistantModelsPayload): void {
@@ -51,16 +50,16 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    void client.read(projectId).then((next) => {
+    void client.read().then((next) => {
       if (cancelled) return;
       applyPayload(next);
       const enabled = ROLES.filter(({ role }) => next.connections[role].enabled).length;
-      setMessage(enabled ? `${enabled} 类外部 / 自定义模型连接已启用` : "当前没有启用外部 / 自定义模型连接");
+      setMessage(enabled ? `${enabled} 类设备模型连接已启用` : "当前设备没有启用外部 / 自定义模型连接");
     }).catch((error: unknown) => {
       if (!cancelled) setMessage(error instanceof Error ? error.message : String(error));
     });
     return () => { cancelled = true; };
-  }, [client, projectId]);
+  }, [client]);
 
   function patch(role: ModelRole, value: Partial<Draft>): void {
     setDrafts((current) => ({ ...current, [role]: { ...current[role], ...value } }));
@@ -68,7 +67,7 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
 
   async function save(): Promise<void> {
     setBusy(true);
-    setMessage("正在保存本机模型连接…");
+    setMessage("正在保存当前设备的模型连接…");
     try {
       const writes = Object.fromEntries(ROLES.map(({ role }) => {
         const row = drafts[role];
@@ -81,9 +80,9 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
         if (row.api_key.trim()) value.api_key = row.api_key.trim();
         return [role, value];
       })) as Record<ModelRole, ModelConnectionWrite>;
-      const next = await client.save(projectId, writes);
+      const next = await client.save(writes);
       applyPayload(next);
-      setMessage("模型连接已保存。密钥只保存在当前设备，不会在界面中回显。");
+      setMessage("设备模型连接已保存。密钥只保存在当前设备，不会在界面中回显。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -117,7 +116,7 @@ export function AssistantModelsPanel({ baseUrl, projectId }: Props) {
         </div>
       ) : <p className="production-note">{message}</p>}
       <button type="button" disabled={busy || !payload} onClick={() => void save()}>保存模型连接</button>
-      <p className="production-note">这是当前设备的低频连接设置。小镜本身只显示项目事项与对话，不暴露 Provider、地址或密钥配置。</p>
+      <p className="production-note">这些连接属于当前设备，不属于某个项目。切换项目不会要求重新启用；密钥保存在设备 secret store。</p>
     </details>
   );
 }
