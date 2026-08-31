@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ProjectTaskRecord } from "./tasks";
 import {
   currentTaskStates,
+  isTaskSuperseded,
   latestTaskAttempts,
   latestTaskFamilies,
   taskFamilyKey,
@@ -57,6 +58,32 @@ describe("task presentation semantics", () => {
       task("new-failure", "identity_index", "failed", "2026-08-31T10:00:00Z", { idempotency_key: "identity:new", targets: { kind: "both", group_ids: ["G2"] } }),
     ]);
     expect(rows.map((row) => row.task_id)).toEqual(["new-failure"]);
+  });
+
+  it("moves a superseded latest failure out of current state without reviving an older failure", () => {
+    const rows = currentTaskStates([
+      task("old-failure", "local_vision_prepare", "failed", "2026-08-31T09:00:00Z", { idempotency_key: "vision:old" }),
+      task("superseded", "local_vision_prepare", "failed", "2026-08-31T10:00:00Z", {
+        idempotency_key: "vision:new",
+        superseded_at: "2026-08-31T10:05:00Z",
+        superseded_reason: "视觉模型已切换",
+      }),
+    ]);
+    expect(isTaskSuperseded(latestTaskAttempts([
+      task("superseded", "local_vision_prepare", "failed", "2026-08-31T10:00:00Z", { superseded_at: "2026-08-31T10:05:00Z" }),
+    ])[0])).toBe(true);
+    expect(rows).toEqual([]);
+  });
+
+  it("keeps a new active attempt current after an older failure was superseded", () => {
+    const rows = currentTaskStates([
+      task("superseded", "identity_runtime_prepare", "failed", "2026-08-31T10:00:00Z", {
+        targets: { kind: "face" },
+        superseded_at: "2026-08-31T10:05:00Z",
+      }),
+      task("new-run", "identity_runtime_prepare", "running", "2026-08-31T10:10:00Z", { targets: { kind: "face" } }),
+    ]);
+    expect(rows.map((row) => row.task_id)).toEqual(["new-run"]);
   });
 
   it("keeps face and speaker identity requests distinct when explicitly requested", () => {
