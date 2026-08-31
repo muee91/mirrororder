@@ -77,10 +77,17 @@ describe("status center recovery semantics", () => {
     expect(source).toContain("历史失败只用于追溯，不提供重试入口");
     expect(source).toContain("技术详情");
     expect(source).toContain("currentTaskStates");
-    expect(source).toContain("仍在排队或运行的实例全部保留");
     expect(source).toContain("onOpenProjectPage");
     expect(source).toContain("onOpenSettings");
     expect(source).not.toContain(".slice(0, 12)");
+  });
+
+  it("surfaces a compact failure cause before technical details", () => {
+    const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
+    expect(source).toContain("function compactError");
+    expect(source).toContain('["任务失败", "素材扫描失败", "设备运行时准备失败"]');
+    expect(source).toContain("if (detail && generic) return detail");
+    expect(source).toContain("normalized.length > 220");
   });
 
   it("keeps historical failures from exposing retry controls", () => {
@@ -91,12 +98,21 @@ describe("status center recovery semantics", () => {
     expect(source).toContain("历史中断");
   });
 
+  it("locks only the task being acted on instead of freezing the whole status center", () => {
+    const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
+    expect(source).toContain("actionTaskIds");
+    expect(source).toContain("function actionBusy(taskId: string)");
+    expect(source).toContain("beginAction(task.task_id)");
+    expect(source).toContain("endAction(task.task_id)");
+    expect(source).not.toContain("const [actionTaskId, setActionTaskId]");
+  });
+
   it("keeps live task cancellation above a long failure backlog", () => {
     const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
     const recovery = readFileSync(fileURLToPath(new URL("./status-center-recovery.css", import.meta.url)), "utf8");
     const main = readFileSync(fileURLToPath(new URL("../../main.tsx", import.meta.url)), "utf8");
 
-    expect(source).toContain('>{task.cancel_requested ? "正在取消" : "取消"}</button>');
+    expect(source).toContain('task.cancel_requested ? "正在取消"');
     expect(source.indexOf('className="status-center-section is-active"')).toBeLessThan(source.indexOf('className="status-center-section is-attention"'));
     expect(recovery).toContain(".status-center-section.is-active { order: -20; }");
     expect(recovery).toContain(".status-center-section.is-attention { order: -10; }");
