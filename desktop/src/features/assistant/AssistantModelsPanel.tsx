@@ -96,6 +96,7 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
         <span>外部 / 自定义模型连接</span>
         <small>{message}</small>
       </summary>
+      {payload?.restore_error ? <p className="production-warning">上次设备模型自动恢复未完成：{payload.restore_error}</p> : null}
       {payload ? (
         <div className="assistant-model-grid">
           {ROLES.map(({ role, label, description }) => {
