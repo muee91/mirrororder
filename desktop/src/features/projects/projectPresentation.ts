@@ -75,7 +75,7 @@ export function projectPresentation(
     };
   }
 
-  if (takes === 0 && clips === 0) {
+  if (takes === 0) {
     return {
       kind,
       takes,
@@ -83,7 +83,7 @@ export function projectPresentation(
       attention,
       statusLabel: "待整理",
       statusTone: "idle",
-      sidebarSubtitle: "待整理",
+      sidebarSubtitle: clips > 0 ? `${clips} 素材 · 待整理` : "待整理",
     };
   }
 
@@ -94,6 +94,6 @@ export function projectPresentation(
     attention,
     statusLabel: "就绪",
     statusTone: "ready",
-    sidebarSubtitle: takes > 0 ? `${takes} Take` : `${clips} 素材`,
+    sidebarSubtitle: `${takes} Take`,
   };
 }
