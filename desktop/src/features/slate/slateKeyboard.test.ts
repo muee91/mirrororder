@@ -13,6 +13,8 @@ describe("golden slate keyboard flow", () => {
     expect(source).toContain("同场下一条");
     expect(source).toContain("同上");
     expect(source).toContain("空白");
-    expect(source).toContain("解析结果已填入当前行；仍需保存才会写入项目");
+    expect(source).toContain("已填入解析结果");
+    expect(source).toContain("；仍需保存。");
+    expect(source).toContain("保存后才写入项目");
   });
 });
