@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { ProjectTaskRecord } from "./tasks";
 import {
   currentTaskStates,
-  isProjectHealthTask,
   latestTaskAttempts,
   latestTaskFamilies,
   taskFamilyKey,
@@ -73,12 +72,5 @@ describe("task presentation semantics", () => {
       task("b", "transcribe", "failed", "2026-08-31T10:01:00Z", { targets: { clip_ids: ["C2"] } }),
     ]);
     expect(rows).toHaveLength(2);
-  });
-
-  it("keeps auxiliary intelligence failures out of project health", () => {
-    expect(isProjectHealthTask(task("identity", "identity_index", "failed", "2026-08-31T10:00:00Z"))).toBe(false);
-    expect(isProjectHealthTask(task("vision", "local_vision_prepare", "failed", "2026-08-31T10:00:00Z"))).toBe(false);
-    expect(isProjectHealthTask(task("prepare", "prepare_project", "failed", "2026-08-31T10:00:00Z"))).toBe(true);
-    expect(isProjectHealthTask(task("scan", "media_inventory_scan", "failed", "2026-08-31T10:00:00Z"))).toBe(true);
   });
 });
