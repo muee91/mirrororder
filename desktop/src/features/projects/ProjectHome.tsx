@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
+import { projectPresentation } from "./projectPresentation";
 import "./project-context-menu.css";
 import "./project-home.css";
 import "./project-library-fidelity.css";
@@ -25,32 +26,6 @@ interface HomeMenuState {
   project: ProjectSummary;
   x: number;
   y: number;
-}
-
-function numberStat(project: ProjectSummary, ...keys: string[]): number {
-  for (const key of keys) {
-    const value = project.stats?.[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-  }
-  return 0;
-}
-
-function attention(project: ProjectSummary): number {
-  const explicit = numberStat(project, "attention", "issues", "pending_review");
-  if (explicit > 0) return explicit;
-  return numberStat(project, "missing_media") + numberStat(project, "unknown_groups") + numberStat(project, "script_gap_blocks");
-}
-
-function projectKind(project: ProjectSummary): string {
-  return project.input_kind === "fcpxml" ? "FCPXML" : "素材目录";
-}
-
-function projectStatus(project: ProjectSummary, activity?: ProjectActivitySummary): { label: string; tone: string } {
-  if (project.error || activity?.state === "failed") return { label: "需要处理", tone: "error" };
-  if (activity?.state === "active") return { label: activity.label || "后台整理中", tone: "active" };
-  const needsAttention = attention(project);
-  if (needsAttention > 0) return { label: `${needsAttention} 待处理`, tone: "attention" };
-  return { label: "就绪", tone: "ready" };
 }
 
 export function ProjectHome({
@@ -122,13 +97,11 @@ export function ProjectHome({
       {visible.length ? (
         <div className="project-home-list" aria-label="项目列表">
           {visible.map((project) => {
-            const takes = numberStat(project, "groups", "takes");
-            const clips = numberStat(project, "clips", "media");
             const activity = activities[project.project_id];
-            const status = projectStatus(project, activity);
+            const presentation = projectPresentation(project, activity);
             return (
               <article
-                className={`project-home-card status-${status.tone}`}
+                className={`project-home-card status-${presentation.statusTone}`}
                 key={project.project_id}
                 onContextMenu={(event) => { event.preventDefault(); openMenu(project, event.clientX, event.clientY); }}
               >
@@ -146,12 +119,12 @@ export function ProjectHome({
                   }}
                 >
                   <span className="project-home-project-copy">
-                    <span className="project-home-title-row"><strong>{project.name || project.project_id}</strong><small>{projectKind(project)}</small></span>
-                    <span className="project-home-stats"><span>{takes} Take</span><span>{clips} 素材</span></span>
+                    <span className="project-home-title-row"><strong>{project.name || project.project_id}</strong><small>{presentation.kind}</small></span>
+                    <span className="project-home-stats"><span>{presentation.takes} Take</span><span>{presentation.clips} 素材</span></span>
                   </span>
-                  <span className={`project-home-state status-${status.tone}`}>
+                  <span className={`project-home-state status-${presentation.statusTone}`}>
                     {activity?.state === "active" ? <span className="project-activity-spinner" aria-hidden="true" /> : <span className="project-home-state-dot" aria-hidden="true" />}
-                    <span>{status.label}</span>
+                    <span>{presentation.statusLabel}</span>
                   </span>
                 </button>
                 <button
@@ -165,7 +138,7 @@ export function ProjectHome({
                     const box = event.currentTarget.getBoundingClientRect();
                     openMenu(project, box.right - 190, box.bottom + 4);
                   }}
-                >•••</button>
+                >更多</button>
               </article>
             );
           })}
