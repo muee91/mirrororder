@@ -393,6 +393,7 @@ class TaskManager(_impl.TaskManager):
                             task_id,
                             progress={"done": done, "total": total},
                         ),
+                        cancel_requested=lambda: self._cancel_requested(config, task_id),
                     )
             elif task_type == "incremental_analyze":
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
@@ -442,8 +443,9 @@ class TaskManager(_impl.TaskManager):
                     result["identity"] = self._identity_after_analysis(config, task, group_ids=group_ids, explicit=True)
 
             self._update(config, task_id, status="completed", stage="completed", result=result, message="任务完成")
-        except ResourceCancelled:
-            self._update(config, task_id, status="cancelled", stage="cancelled", message="等待计算资源或本地感知时任务已取消")
+        except ResourceCancelled as error:
+            message = str(error).strip() or "任务已取消"
+            self._update(config, task_id, status="cancelled", stage="cancelled", message=message)
         except Exception as error:
             self._update(config, task_id, status="failed", stage="failed", error=str(error), message="任务失败")
         finally:
@@ -473,6 +475,7 @@ class TaskManager(_impl.TaskManager):
                         task["task_id"],
                         progress={"done": done, "total": total},
                     ),
+                    cancel_requested=lambda: self._cancel_requested(config, task_id),
                 )
             if self._cancel_requested(config, task_id):
                 return {**result, "cancelled": True}
