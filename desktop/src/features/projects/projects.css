@@ -1,6 +1,6 @@
 .project-library { display: flex; min-height: 0; flex: 1; flex-direction: column; padding: 12px 10px 0; }
 .project-library-brand { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 2px 7px 12px; }
-.mirror-mark { display: block; flex: 0 0 auto; width: 28px; height: 28px; border: 1px solid #343d46; border-radius: 8px; background-color: #1a2026; background-image: url("../../../../branding/app-icon.png"); background-position: center; background-repeat: no-repeat; background-size: cover; }
+.mirror-mark { display: block; flex: 0 0 auto; width: 28px; height: 28px; border: 1px solid #343d46; border-radius: 8px; background-color: #1a2026; background-image: url("../../../src-tauri/icons/icon.png"); background-position: center; background-repeat: no-repeat; background-size: cover; }
 .project-library-brand div { display: grid; gap: 0; }
 .project-library-brand strong { color: #e2e8ed; font-size: 13px; line-height: 1.15; }
 .project-library-brand span:not(.mirror-mark) { color: #697681; font-size: 9px; letter-spacing: .03em; }
@@ -13,15 +13,13 @@
 .project-manage-button { min-width: 28px; padding: 4px 6px; letter-spacing: .08em; }
 .project-new-button:hover, .project-manage-button:hover { color: #e1e7ec; background: #1d242b; }
 .project-list { display: grid; min-height: 0; gap: 2px; overflow-y: auto; padding: 1px 0 8px; }
-.project-row { display: grid; grid-template-columns: 3px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; border: 1px solid transparent; border-radius: 6px; padding: 7px 7px 7px 4px; color: #cbd3da; background: transparent; text-align: left; }
+.project-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%; border: 1px solid transparent; border-radius: 6px; padding: 7px 9px; color: #cbd3da; background: transparent; text-align: left; }
 .project-row:hover { background: #13191f; }
-.project-row-leading { width: 3px; height: 28px; border-radius: 999px; background: transparent; }
 .project-row-copy { display: grid; min-width: 0; gap: 2px; }
 .project-row-copy strong { overflow: hidden; color: inherit; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .project-row-copy small { overflow: hidden; color: #65727e; font-size: 8px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
-.project-row-alert { display: grid; width: 16px; height: 16px; place-items: center; border-radius: 50%; color: #e6ac84; background: #38271f; font-size: 9px; font-weight: 750; }
+.project-row-alert { display: inline-flex; min-height: 18px; align-items: center; justify-content: center; border-radius: 5px; padding: 2px 5px; color: #e6ac84; background: #38271f; font-size: 8px; font-weight: 700; white-space: nowrap; }
 .project-row.is-selected { border-color: #2f3943; color: #edf1f4; background: #192027; }
-.project-row.is-selected .project-row-leading { background: #cfd7df; }
 .project-list-empty { display: grid; gap: 4px; margin: 8px 5px; border: 1px dashed #2e3740; border-radius: 8px; padding: 12px; }
 .project-list-empty strong { color: #9ca7b1; font-size: 10px; }
 .project-list-empty span { color: #65717c; font-size: 9px; line-height: 1.45; }
@@ -82,6 +80,7 @@ html[data-mirrororder-theme="light"] .lifecycle-kind button { border-color: #d5d
 html[data-mirrororder-theme="light"] .lifecycle-kind button.is-active { color: #fff; background: #17202a; }
 html[data-mirrororder-theme="light"] .lifecycle-checkbox strong { color: #34414b; }
 html[data-mirrororder-theme="light"] .lifecycle-checkbox small { color: #74808b; }
+html[data-mirrororder-theme="light"] .project-row-alert { color: #a76031; background: #f8e7db; }
 
 html[data-mirrororder-theme="dark"] .project-lifecycle-overlay { background: rgba(3, 5, 7, .62); }
 html[data-mirrororder-theme="dark"] .project-lifecycle-dialog { border-color: #313a44; color: #dbe2e8; background: #11161b; }
@@ -98,7 +97,6 @@ html[data-mirrororder-theme="dark"] .lifecycle-kind button.is-active { color: #1
   .project-row { color: #34404a; }
   .project-row:hover { background: #f5f7f9; }
   .project-row.is-selected { border-color: #c9d3dc; color: #1e2932; background: #edf2f5; }
-  .project-row.is-selected .project-row-leading { background: #394854; }
   .project-list-empty { border-color: #d5dde4; }
   .project-library-global-tools button:hover { color: #35414b; background: #f5f7f9; }
   .project-library-global-tools button.is-active { border-color: #c4cfd8; color: #24303a; background: #edf2f5; }
