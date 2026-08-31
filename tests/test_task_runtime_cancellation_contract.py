@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +17,36 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def task_payload(task_id: str, status: str) -> dict[str, object]:
+    return {
+        "task_id": task_id,
+        "project_id": "project-1",
+        "type": "multicam_sync",
+        "targets": {},
+        "affected_group_ids": [],
+        "idempotency_key": task_id,
+        "runner_id": PROCESS_RUNNER_ID,
+        "status": status,
+        "stage": status,
+        "progress": {},
+        "actor": "desktop",
+        "created_at": "2026-09-01T00:00:00+00:00",
+        "started_at": "",
+        "completed_at": "",
+        "error": "",
+        "message": "任务已排队",
+        "result": {},
+        "logs": [],
+    }
+
+
+def write_task(tmp_path: Path, row: dict[str, object]) -> None:
+    (tmp_path / "tasks.json").write_text(
+        json.dumps({"version": 2, "tasks": [row]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def test_vendor_stage_can_be_cancelled_while_child_is_silent(tmp_path: Path) -> None:
@@ -62,32 +91,11 @@ def test_multicam_cancel_targets_only_the_spawned_process_tree() -> None:
 
 def test_durable_task_update_persists_user_visible_message(tmp_path: Path) -> None:
     config = SimpleNamespace(output_dir=tmp_path)
-    payload = {
-        "version": 2,
-        "tasks": [
-            {
-                "task_id": "task-message",
-                "project_id": "project-1",
-                "type": "multicam_sync",
-                "targets": {},
-                "affected_group_ids": [],
-                "idempotency_key": "sync",
-                "runner_id": PROCESS_RUNNER_ID,
-                "status": "running",
-                "stage": "sync",
-                "progress": {},
-                "actor": "desktop",
-                "created_at": "2026-09-01T00:00:00+00:00",
-                "started_at": "2026-09-01T00:00:00+00:00",
-                "completed_at": "",
-                "error": "",
-                "message": "任务开始",
-                "result": {},
-                "logs": [],
-            }
-        ],
-    }
-    (tmp_path / "tasks.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    row = task_payload("task-message", "running")
+    row["stage"] = "sync"
+    row["started_at"] = "2026-09-01T00:00:00+00:00"
+    row["message"] = "任务开始"
+    write_task(tmp_path, row)
     manager = TaskManager(lambda _project_id: config)
 
     manager._update(config, "task-message", message="音频互相关同步 day1")
@@ -97,6 +105,23 @@ def test_durable_task_update_persists_user_visible_message(tmp_path: Path) -> No
     assert saved["logs"][-1].endswith("音频互相关同步 day1")
 
 
+def test_queued_cancel_cannot_be_promoted_back_to_running(tmp_path: Path) -> None:
+    config = SimpleNamespace(output_dir=tmp_path)
+    write_task(tmp_path, task_payload("task-race", "queued"))
+    manager = TaskManager(lambda _project_id: config)
+
+    cancelled = manager.cancel("project-1", "task-race")
+    manager._update(config, "task-race", status="running", stage="starting", message="任务开始")
+    saved = manager.list("project-1")[0]
+
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["cancel_requested"] is True
+    assert saved["status"] == "cancelled"
+    assert saved["stage"] == "cancelled"
+    assert saved["message"] == "任务在启动前取消"
+    assert saved["started_at"] == ""
+
+
 def test_cancelled_task_message_is_not_reported_as_completed() -> None:
     base_tasks = read("src/script_organizer/tasks_v2.py")
     compat_tasks = read("src/script_organizer/tasks.py")
@@ -104,5 +129,6 @@ def test_cancelled_task_message_is_not_reported_as_completed() -> None:
     assert 'except ResourceCancelled as error:' in base_tasks
     assert 'status="cancelled"' in base_tasks
     assert 'if result.get("cancelled"):' in base_tasks
+    assert 'status == "running" and task.get("status") == "cancelled"' in base_tasks
     assert 'except ResourceCancelled as error:' in compat_tasks
     assert 'status="cancelled"' in compat_tasks
