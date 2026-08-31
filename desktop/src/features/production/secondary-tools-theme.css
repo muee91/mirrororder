@@ -1,0 +1,49 @@
+/*
+ * Project secondary tools must follow MirrorOrder's resolved Desktop theme.
+ * This layer loads after legacy feature CSS so manual Light/Dark wins even
+ * when the macOS appearance is the opposite value.
+ */
+
+html[data-mirrororder-theme="light"] .material-script-workbench .take-card,
+html[data-mirrororder-theme="light"] .material-script-workbench .script-scene,
+html[data-mirrororder-theme="light"] .material-script-workbench .take-inspector { border-color: #dde3e9; background: #fff; }
+html[data-mirrororder-theme="light"] .material-script-workbench .angle-card,
+html[data-mirrororder-theme="light"] .material-script-workbench .script-block { border-color: #dde3e9; background: #f7f9fb; }
+html[data-mirrororder-theme="light"] .material-script-workbench .take-card.is-selected { border-color: #aebbc7; box-shadow: inset 0 0 0 1px #d2dbe4; }
+html[data-mirrororder-theme="light"] .material-script-workbench .camera-label { color: #17202a; }
+html[data-mirrororder-theme="light"] .material-script-workbench .take-select,
+html[data-mirrororder-theme="light"] .material-script-workbench .inspector-angle-tabs button,
+html[data-mirrororder-theme="light"] .material-script-workbench .script-block-actions button,
+html[data-mirrororder-theme="light"] .material-script-workbench .status-filter button,
+html[data-mirrororder-theme="light"] .material-script-workbench .episode-filter button,
+html[data-mirrororder-theme="light"] .material-script-workbench .episode-strip button { border-color: #d5dde5; color: #5c6875; background: #eef2f6; }
+html[data-mirrororder-theme="light"] .material-script-workbench .status-filter button.is-active,
+html[data-mirrororder-theme="light"] .material-script-workbench .episode-filter button.is-active,
+html[data-mirrororder-theme="light"] .material-script-workbench .episode-strip button.is-active,
+html[data-mirrororder-theme="light"] .material-script-workbench .inspector-angle-tabs button.is-active { color: #fff; background: #17202a; }
+html[data-mirrororder-theme="light"] .material-script-workbench .review-actor-field input { border-color: #cfd7df; color: #17202a; background: #fff; }
+html[data-mirrororder-theme="light"] .material-script-workbench .dialogue-panel,
+html[data-mirrororder-theme="light"] .material-script-workbench .candidate-panel { border-top-color: #dde3e9; }
+html[data-mirrororder-theme="light"] .material-script-workbench .selected-take-drag { border-color: #d2dae2; color: #34404b; background: #f3f6f8; }
+
+html[data-mirrororder-theme="dark"] .material-script-workbench .take-card,
+html[data-mirrororder-theme="dark"] .material-script-workbench .script-scene,
+html[data-mirrororder-theme="dark"] .material-script-workbench .take-inspector { border-color: #252d36; background: #0d1115; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .angle-card { border-color: #252e38; background: #141a20; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .script-block { border-color: transparent; border-left-color: #2d3742; background: #12171c; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .take-card.is-selected { border-color: #536170; box-shadow: inset 0 0 0 1px #384451; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .camera-label { color: #eef2f6; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .take-select,
+html[data-mirrororder-theme="dark"] .material-script-workbench .inspector-angle-tabs button,
+html[data-mirrororder-theme="dark"] .material-script-workbench .script-block-actions button { border-color: #303a44; color: #98a5b1; background: #171d23; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .status-filter button,
+html[data-mirrororder-theme="dark"] .material-script-workbench .episode-filter button,
+html[data-mirrororder-theme="dark"] .material-script-workbench .episode-strip button { border-color: #2d3742; color: #8793a0; background: #151b21; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .status-filter button.is-active,
+html[data-mirrororder-theme="dark"] .material-script-workbench .episode-filter button.is-active,
+html[data-mirrororder-theme="dark"] .material-script-workbench .episode-strip button.is-active,
+html[data-mirrororder-theme="dark"] .material-script-workbench .inspector-angle-tabs button.is-active { color: #11151a; background: #eef2f6; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .review-actor-field input { border-color: #303844; color: #eef2f6; background: #0d1014; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .dialogue-panel,
+html[data-mirrororder-theme="dark"] .material-script-workbench .candidate-panel { border-top-color: #242c34; }
+html[data-mirrororder-theme="dark"] .material-script-workbench .selected-take-drag { border-color: #34404b; color: #aab5c0; background: #151b21; }
