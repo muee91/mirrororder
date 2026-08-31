@@ -19,12 +19,19 @@ describe("project secondary workspace product contract", () => {
   });
 
   it("follows the resolved Desktop theme instead of the raw OS color scheme", () => {
-    const css = read("./product-experience.css");
+    const experience = read("./product-experience.css");
+    const production = read("./production.css");
+    const review = read("../review/review.css");
 
-    expect(css).toContain('html[data-mirrororder-theme="light"] .production-secondary-workspace');
-    expect(css).toContain('html[data-mirrororder-theme="dark"] .production-secondary-workspace');
-    expect(css).toContain('html[data-mirrororder-theme="light"] .production-secondary-canvas .production-panel');
-    expect(css).not.toContain("@media (prefers-color-scheme: light)");
+    expect(experience).toContain('html[data-mirrororder-theme="light"] .production-secondary-workspace');
+    expect(experience).toContain('html[data-mirrororder-theme="dark"] .production-secondary-workspace');
+    expect(production).toContain('html[data-mirrororder-theme="light"] .identity-filter button');
+    expect(production).toContain('html[data-mirrororder-theme="dark"] .identity-row');
+    expect(review).toContain('html[data-mirrororder-theme="light"] .review-attention-row');
+    expect(review).toContain('html[data-mirrororder-theme="dark"] .review-overview-pane');
+    expect(experience).not.toContain("@media (prefers-color-scheme: light)");
+    expect(production).not.toContain("@media (prefers-color-scheme: light)");
+    expect(review).not.toContain("@media (prefers-color-scheme: light)");
   });
 
   it("presents local media recovery as an ordered flow rather than a two-card dashboard", () => {
@@ -39,6 +46,7 @@ describe("project secondary workspace product contract", () => {
     expect(workbench).not.toContain('className="production-panel"');
     expect(workbench).not.toContain("media-binding-counts");
     expect(css).not.toContain(".media-binding-grid");
+    expect(css).not.toContain("@media (prefers-color-scheme: light)");
     expect(css).toContain('html[data-mirrororder-theme="light"] .media-binding-content');
     expect(css).toContain('html[data-mirrororder-theme="dark"] .media-binding-content');
   });
