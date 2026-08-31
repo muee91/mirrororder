@@ -145,7 +145,6 @@ export function ProjectHome({
                     }
                   }}
                 >
-                  <span className="project-home-project-icon" aria-hidden="true">{project.input_kind === "fcpxml" ? "▥" : "▰"}</span>
                   <span className="project-home-project-copy">
                     <span className="project-home-title-row"><strong>{project.name || project.project_id}</strong><small>{projectKind(project)}</small></span>
                     <span className="project-home-stats"><span>{takes} Take</span><span>{clips} 素材</span></span>
