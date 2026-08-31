@@ -47,18 +47,37 @@ describe("startup and production resume product contract", () => {
   it("keeps an uncommitted advanced Host address away from active workspace refreshes", () => {
     const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     const refreshBlock = source.slice(source.indexOf("async function refreshWorkspace"), source.indexOf("function selectProject"));
-    expect(source).toContain("baseUrl is an editable advanced-connection draft");
+    expect(source).toContain("baseUrl and workspacePath are editable advanced-control drafts");
     expect(refreshBlock).toContain("const activeBaseUrl = snapshot?.baseUrl ?? baseUrl");
     expect(refreshBlock).toContain("activeConnection = new HostConnection(activeBaseUrl)");
     expect(refreshBlock).toContain("await activeConnection.connect()");
     expect(refreshBlock).not.toContain("await connection.connect()");
   });
 
+  it("keeps an uncommitted workspace path away from Finder reveal and Team Web", () => {
+    const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
+    expect(source).toContain('const [activeWorkspacePath, setActiveWorkspacePath] = useState("")');
+    expect(source).toContain("snapshot.baseUrl and activeWorkspacePath are the active");
+    expect(source).toContain("const target = snapshot ? activeWorkspacePath : workspacePath");
+    expect(source).toContain("disabled={!isTauri() || !activeWorkspacePath.trim()}");
+    expect(source).toContain("<TeamWebWorkbench workspacePath={activeWorkspacePath}");
+    expect(source).toContain("setActiveWorkspacePath(launchResume.workspacePath)");
+    expect(source).toContain("setActiveWorkspacePath(normalizedPath)");
+  });
+
+  it("does not invent a local path when connecting to a different already-running Host", () => {
+    const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
+    const connectBlock = source.slice(source.indexOf("async function connect()"), source.indexOf("async function refreshWorkspace"));
+    expect(connectBlock).toContain("previousSnapshot?.workspace.workspace_id === next.workspace.workspace_id");
+    expect(connectBlock).toContain('? activeWorkspacePath\n        : ""');
+    expect(connectBlock).toContain("setActiveWorkspacePath(connectedWorkspacePath)");
+    expect(connectBlock).toContain("本机路径未知");
+  });
+
   it("keeps the current workspace open when an advanced connection attempt fails", () => {
     const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     const connectBlock = source.slice(source.indexOf("async function connect()"), source.indexOf("async function refreshWorkspace"));
     expect(connectBlock).toContain("const previousSnapshot = snapshot");
-    expect(connectBlock).toContain("setBaseUrl(previousSnapshot.baseUrl)");
     expect(connectBlock).toContain("setSnapshot(previousSnapshot)");
     expect(connectBlock).toContain("setSelectedProject(previousProject)");
     expect(connectBlock).toContain("setPageRequest(previousPageRequest)");
