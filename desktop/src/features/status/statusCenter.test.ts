@@ -56,11 +56,16 @@ describe("status center recovery semantics", () => {
     expect(rows.map((row) => row.task_id)).toEqual(["new-a", "new-b", "legacy-1"]);
   });
 
-  it("does not treat a user-cancelled task as an unresolved problem", () => {
+  it("does not treat a user-cancelled or settings-superseded task as an unresolved problem", () => {
     expect(taskNeedsAttention(task("failed", "failed"))).toBe(true);
     expect(taskNeedsAttention(task("interrupted", "interrupted"))).toBe(true);
     expect(taskNeedsAttention(task("cancelled", "cancelled"))).toBe(false);
     expect(taskNeedsAttention(task("completed", "completed"))).toBe(false);
+    expect(taskNeedsAttention({
+      ...task("old-runtime", "failed"),
+      superseded_at: "2026-08-31T10:10:00Z",
+      superseded_reason: "人脸身份已关闭",
+    })).toBe(false);
   });
 
   it("continues monitoring while idle at a lower frequency", () => {
@@ -73,8 +78,9 @@ describe("status center recovery semantics", () => {
     expect(source).toContain("当前需要处理");
     expect(source).toContain("正在处理");
     expect(source).toContain("历史记录");
-    expect(source).toContain("被后续尝试取代的旧失败");
-    expect(source).toContain("历史失败只用于追溯，不提供重试入口");
+    expect(source).toContain("后续尝试或当前设置已经取代的旧失败");
+    expect(source).toContain("历史已解除");
+    expect(source).toContain("按当前设置已经不需要处理");
     expect(source).toContain("技术详情");
     expect(source).toContain("currentTaskStates");
     expect(source).toContain("onOpenProjectPage");
@@ -90,12 +96,14 @@ describe("status center recovery semantics", () => {
     expect(source).toContain("normalized.length > 220");
   });
 
-  it("keeps historical failures from exposing retry controls", () => {
+  it("keeps historical failures and resolved history from exposing retry controls", () => {
     const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
     expect(source).toContain("!historical && canRetryTask(task)");
     expect(source).toContain("!historical && canCancelTask(task)");
     expect(source).toContain("历史失败");
     expect(source).toContain("历史中断");
+    expect(source).toContain("历史已解除");
+    expect(source).toContain("task.superseded_reason");
   });
 
   it("locks only the task being acted on instead of freezing the whole status center", () => {
