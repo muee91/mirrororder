@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectTaskRecord } from "./tasks";
 import {
+  currentTaskStates,
   isProjectHealthTask,
   latestTaskAttempts,
   latestTaskFamilies,
@@ -40,6 +41,23 @@ describe("task presentation semantics", () => {
       task("current", "identity_index", "completed", "2026-08-31T10:10:00Z", { idempotency_key: "identity:3", targets: { kind: "both", group_ids: ["G4"] } }),
     ]);
     expect(rows.map((row) => row.task_id)).toEqual(["current"]);
+  });
+
+  it("never hides simultaneous active instances from cancellation", () => {
+    const rows = currentTaskStates([
+      task("old-failure", "identity_index", "failed", "2026-08-31T09:00:00Z", { idempotency_key: "identity:old", targets: { kind: "both", group_ids: ["G1"] } }),
+      task("running-a", "identity_index", "running", "2026-08-31T10:00:00Z", { idempotency_key: "identity:a", targets: { kind: "both", group_ids: ["G2"] } }),
+      task("queued-b", "identity_index", "queued", "2026-08-31T10:01:00Z", { idempotency_key: "identity:b", targets: { kind: "both", group_ids: ["G3"] } }),
+    ]);
+    expect(rows.map((row) => row.task_id)).toEqual(["queued-b", "running-a"]);
+  });
+
+  it("returns to one settled row per family after active instances end", () => {
+    const rows = currentTaskStates([
+      task("old-failure", "identity_index", "failed", "2026-08-31T09:00:00Z", { idempotency_key: "identity:old", targets: { kind: "both", group_ids: ["G1"] } }),
+      task("new-failure", "identity_index", "failed", "2026-08-31T10:00:00Z", { idempotency_key: "identity:new", targets: { kind: "both", group_ids: ["G2"] } }),
+    ]);
+    expect(rows.map((row) => row.task_id)).toEqual(["new-failure"]);
   });
 
   it("keeps face and speaker identity requests distinct when explicitly requested", () => {
