@@ -77,11 +77,17 @@ describe("Desktop UI polish contract", () => {
     expect(app).not.toContain('setMessage(`项目主页 · ${snapshot?.projects.length');
   });
 
-  it("does not expose placeholder Slate glyphs in the frozen toolbar", () => {
+  it("uses semantic Slate utility controls instead of placeholder glyphs and pseudo labels", () => {
+    const slate = read("../features/slate/GoldenSlateWorkbench.tsx");
     const slateTheme = read("../desktop-theme-slate.css");
 
     expect(slateTheme).toContain(".golden-slate-mode .slate-mode-icon { display: none; }");
-    expect(slateTheme).toContain('content: "检视";');
-    expect(slateTheme).toContain('content: "刷新";');
+    expect(slate).toContain(">检视</button>");
+    expect(slate).toContain(">刷新</button>");
+    expect(slate).toContain("aria-pressed={inspectorOpen}");
+    expect(slate).not.toContain(">▥</button>");
+    expect(slate).not.toContain(">↻</button>");
+    expect(slateTheme).not.toContain('content: "检视";');
+    expect(slateTheme).not.toContain('content: "刷新";');
   });
 });
