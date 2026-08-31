@@ -14,19 +14,21 @@ describe("project actions", () => {
     expect(library).toContain("团队审阅");
     expect(library).toContain("复制局域网协作链接");
     expect(library).toContain("本机素材 / 换素材盘");
-    expect(library).toContain("重整项目");
+    expect(library).toContain("重新整理项目");
     expect(library).toContain("永久删除项目…");
     expect(library).toContain("event.shiftKey");
     expect(library).toContain('event.key === "F10"');
     expect(library).not.toContain('>团队审阅</span><small>');
   });
 
-  it("restores the complete Project Home card menu through the existing app authority", () => {
+  it("keeps Project Home management actions explicit and on existing app authority", () => {
+    expect(home).toContain("project-home-more");
+    expect(home).toContain('aria-haspopup="menu"');
     expect(home).toContain("onContextMenu");
     expect(home).toContain("团队审阅");
     expect(home).toContain("复制局域网协作链接");
     expect(home).toContain("本机素材 / 换素材盘");
-    expect(home).toContain("重整项目");
+    expect(home).toContain("重新整理项目");
     expect(home).toContain("永久删除项目…");
     expect(home).toContain("onOpenTeamProject");
     expect(home).toContain("onCopyShareLink");
