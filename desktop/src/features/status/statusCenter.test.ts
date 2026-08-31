@@ -81,4 +81,17 @@ describe("status center recovery semantics", () => {
     expect(source).not.toContain(".slice(0, 12)");
     expect(source).not.toContain("查看历史");
   });
+
+  it("keeps live task cancellation above a long failure backlog", () => {
+    const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
+    const recovery = readFileSync(fileURLToPath(new URL("./status-center-recovery.css", import.meta.url)), "utf8");
+    const main = readFileSync(fileURLToPath(new URL("../../main.tsx", import.meta.url)), "utf8");
+
+    expect(source).toContain('>{task.cancel_requested ? "正在取消" : "取消"}</button>');
+    expect(recovery).toContain(".status-center-section.is-active { order: -20; }");
+    expect(recovery).toContain(".status-center-section.is-attention { order: -10; }");
+    expect(recovery).toContain("max-height: min(520px, 52vh)");
+    expect(main).toContain('import "./features/status/status-center-recovery.css"');
+    expect(main.indexOf('import "./features/status/status-center-recovery.css"')).toBeGreaterThan(main.indexOf('import "./desktop-theme-frozen-surfaces.css"'));
+  });
 });
