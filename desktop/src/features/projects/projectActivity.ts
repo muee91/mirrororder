@@ -7,7 +7,7 @@ import {
 } from "../../api/taskSemantics";
 import { ProjectTaskClient, type ProjectTaskRecord } from "../../api/tasks";
 
-export type ProjectActivityState = "idle" | "active" | "failed";
+export type ProjectActivityState = "idle" | "active";
 
 export interface ProjectActivitySummary {
   state: ProjectActivityState;
