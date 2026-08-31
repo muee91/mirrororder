@@ -38,7 +38,7 @@ export function projectPresentation(
   const attention = attentionCount(project);
   const kind = project.input_kind === "fcpxml" ? "FCPXML" : "素材目录";
 
-  if (project.error || activity?.state === "failed") {
+  if (project.error) {
     return {
       kind,
       takes,
@@ -46,7 +46,7 @@ export function projectPresentation(
       attention,
       statusLabel: "需要处理",
       statusTone: "error",
-      sidebarSubtitle: "整理异常",
+      sidebarSubtitle: "项目异常",
     };
   }
 
