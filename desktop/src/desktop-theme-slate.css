@@ -18,18 +18,22 @@ html[data-mirrororder-theme="light"] .golden-slate-review-tools,
 html[data-mirrororder-theme="light"] .golden-slate-section { border-color: #d7dee4; }
 html[data-mirrororder-theme="light"] .golden-slate-title > strong,
 html[data-mirrororder-theme="light"] .golden-inspector-head strong { color: #26313a; }
-html[data-mirrororder-theme="light"] .golden-slate-title > span { color: #687580; }
+html[data-mirrororder-theme="light"] .golden-slate-title > span,
+html[data-mirrororder-theme="light"] .golden-inspector-head span { color: #687580; }
 html[data-mirrororder-theme="light"] .golden-slate-actions input,
 html[data-mirrororder-theme="light"] .golden-take-picker > header input,
 html[data-mirrororder-theme="light"] .golden-io-row input,
 html[data-mirrororder-theme="light"] .golden-inspector-field textarea,
 html[data-mirrororder-theme="light"] .golden-angle-fields input,
 html[data-mirrororder-theme="light"] .golden-angle-fields select { border-color: #cfd7de; color: #26313a; background: #fff; }
+html[data-mirrororder-theme="light"] .golden-slate-actions .icon-action { color: #697681; background: transparent; }
+html[data-mirrororder-theme="light"] .golden-slate-actions .icon-action:hover { color: #26313a; background: #eef2f5; }
+html[data-mirrororder-theme="light"] .golden-slate-actions .icon-action.is-active { color: #26313a; background: #e7edf2; box-shadow: inset 0 0 0 1px #cbd5dd; }
 html[data-mirrororder-theme="light"] .golden-slate-table th { border-color: #d7dee4; color: #65727d; background: #e9edf1; }
-html[data-mirrororder-theme="light"] .golden-slate-table td { border-color: #e0e5e9; background: #fff; }
+html[data-mirrororder-theme="light"] .golden-slate-table td { border-color: #e5eaee; background: #fff; }
 html[data-mirrororder-theme="light"] .golden-slate-table tr:hover td { background: #f6f8fa; }
 html[data-mirrororder-theme="light"] .golden-slate-table tr.is-selected td { background: #edf5ff; }
-html[data-mirrororder-theme="light"] .golden-slate-table input { color: #26313a; }
+html[data-mirrororder-theme="light"] .golden-slate-table input { border-color: transparent; color: #26313a; background: transparent; }
 html[data-mirrororder-theme="light"] .golden-slate-table input:hover,
 html[data-mirrororder-theme="light"] .golden-slate-table input:focus { border-color: #c9d2da; background: #fff; }
 html[data-mirrororder-theme="light"] .golden-slate-empty-media { border-color: #d7dee4; color: #7b8791; background: #f3f5f7; }
@@ -44,6 +48,19 @@ html[data-mirrororder-theme="light"] .golden-episode-candidates > button strong 
 html[data-mirrororder-theme="light"] .golden-take-picker-list span { color: #596773; }
 html[data-mirrororder-theme="light"] .golden-take-picker-list small,
 html[data-mirrororder-theme="light"] .golden-take-picker-empty { color: #74818c; }
+html[data-mirrororder-theme="light"] .golden-angle-editor,
+html[data-mirrororder-theme="light"] .golden-inspector-link { border-color: #dfe5ea; }
+html[data-mirrororder-theme="light"] .golden-inspector-media > header,
+html[data-mirrororder-theme="light"] .golden-angle-fields label,
+html[data-mirrororder-theme="light"] .golden-io-row label,
+html[data-mirrororder-theme="light"] .golden-inspector-field,
+html[data-mirrororder-theme="light"] .golden-inspector-link > span { color: #687580; }
+html[data-mirrororder-theme="light"] .golden-inspector-media > header strong,
+html[data-mirrororder-theme="light"] .golden-inspector-link strong { color: #46535e; }
+html[data-mirrororder-theme="light"] .golden-inspector-link small { color: #6b7883; }
+html[data-mirrororder-theme="light"] .golden-angle-actions .danger-text { color: #a55b5b; }
+html[data-mirrororder-theme="light"] button.danger-subtle { border-color: #e1c5c5; color: #a74f4f; background: transparent; }
+html[data-mirrororder-theme="light"] button.danger-subtle:hover:not(:disabled) { border-color: #d7a7a7; color: #933f3f; background: #fff4f4; }
 html[data-mirrororder-theme="light"] .golden-slate-review-tools { background: #f4f6f8; }
 
 html[data-mirrororder-theme="dark"] .golden-slate-workbench { color: #dbe2e7; background: #0b0f13; }
@@ -71,7 +88,7 @@ html[data-mirrororder-theme="dark"] .golden-slate-table th { border-color: #323b
 html[data-mirrororder-theme="dark"] .golden-slate-table td { border-color: #20272e; background: #0d1216; }
 html[data-mirrororder-theme="dark"] .golden-slate-table tr:hover td { background: #11181e; }
 html[data-mirrororder-theme="dark"] .golden-slate-table tr.is-selected td { background: #122033; }
-html[data-mirrororder-theme="dark"] .golden-slate-table input { color: #d7dee4; background: transparent; }
+html[data-mirrororder-theme="dark"] .golden-slate-table input { border-color: transparent; color: #d7dee4; background: transparent; }
 html[data-mirrororder-theme="dark"] .golden-slate-table input:hover,
 html[data-mirrororder-theme="dark"] .golden-slate-table input:focus { border-color: #34414c; background: #0a0f13; }
 html[data-mirrororder-theme="dark"] .golden-slate-empty-media { border-color: #28323b; color: #596671; background: #12181d; }
@@ -86,13 +103,21 @@ html[data-mirrororder-theme="dark"] .golden-take-picker-list small,
 html[data-mirrororder-theme="dark"] .golden-take-picker-empty { color: #6f7c87; }
 html[data-mirrororder-theme="dark"] .golden-episode-candidates > button { border-color: #2b3946; color: #9aa7b1; background: #121b23; }
 html[data-mirrororder-theme="dark"] .golden-episode-candidates > button strong { color: #d7dfe5; }
+html[data-mirrororder-theme="dark"] .golden-angle-editor,
+html[data-mirrororder-theme="dark"] .golden-inspector-link { border-color: #28313a; }
+html[data-mirrororder-theme="dark"] button.danger-subtle { border-color: #533636; color: #d58b8b; background: transparent; }
+html[data-mirrororder-theme="dark"] button.danger-subtle:hover:not(:disabled) { border-color: #714747; background: #1b1212; }
 html[data-mirrororder-theme="dark"] .golden-slate-review-tools { background: #0e1317; }
 
-/* Frozen toolbar cleanup: do not expose placeholder Unicode glyphs as product icons. */
+/* Keep editable cells quiet until the user points at them. */
+.golden-slate-table input[type="number"]::-webkit-inner-spin-button { opacity: 0; }
+.golden-slate-table input[type="number"]:hover::-webkit-inner-spin-button,
+.golden-slate-table input[type="number"]:focus::-webkit-inner-spin-button { opacity: 1; }
+
+/* Destructive actions must not compete visually with Save. */
+.golden-inspector-actions .danger-subtle { flex: 0 0 auto; min-width: 94px; }
+
+/* Toolbar utilities are real text controls, not placeholder glyphs. */
 .golden-slate-mode .slate-mode-icon { display: none; }
 .golden-slate-actions .icon-action[title*="Inspector"],
-.golden-slate-actions .icon-action[title="刷新项目"] { min-width: 42px; padding-inline: 8px; font-size: 0; }
-.golden-slate-actions .icon-action[title*="Inspector"]::after,
-.golden-slate-actions .icon-action[title="刷新项目"]::after { font-size: 10px; font-weight: 650; line-height: 1; }
-.golden-slate-actions .icon-action[title*="Inspector"]::after { content: "检视"; }
-.golden-slate-actions .icon-action[title="刷新项目"]::after { content: "刷新"; }
+.golden-slate-actions .icon-action[title="刷新项目"] { min-width: 42px; padding-inline: 8px; font-size: 10px; font-weight: 650; line-height: 1; }
