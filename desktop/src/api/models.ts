@@ -31,6 +31,7 @@ export interface AssistantModelsPayload {
   contract?: string;
   models: ModelInventory;
   connections: ModelConnections;
+  restore_error?: string;
   agent_api?: Record<string, unknown>;
 }
 
