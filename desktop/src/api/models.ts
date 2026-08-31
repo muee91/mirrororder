@@ -28,6 +28,7 @@ export interface ModelInventory {
 }
 
 export interface AssistantModelsPayload {
+  contract?: string;
   models: ModelInventory;
   connections: ModelConnections;
   agent_api?: Record<string, unknown>;
@@ -41,11 +42,7 @@ export interface ModelConnectionWrite {
   api_key?: string;
 }
 
-function projectPath(projectId: string): string {
-  const value = projectId.trim();
-  if (!value) throw new HostConnectionError("模型设置需要 project_id");
-  return `/api/v1/projects/${encodeURIComponent(value)}/assistant/models`;
-}
+const DEVICE_MODEL_PATH = "/api/v1/assistant/models";
 
 async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
@@ -77,12 +74,12 @@ export class ModelSettingsClient {
     if (!/^https?:\/\//i.test(this.baseUrl)) throw new HostConnectionError("模型设置 Host 地址无效");
   }
 
-  read(projectId: string): Promise<AssistantModelsPayload> {
-    return request<AssistantModelsPayload>(this.baseUrl, projectPath(projectId));
+  read(): Promise<AssistantModelsPayload> {
+    return request<AssistantModelsPayload>(this.baseUrl, DEVICE_MODEL_PATH);
   }
 
-  save(projectId: string, connections: Record<ModelRole, ModelConnectionWrite>): Promise<AssistantModelsPayload> {
-    return request<AssistantModelsPayload>(this.baseUrl, projectPath(projectId), {
+  save(connections: Record<ModelRole, ModelConnectionWrite>): Promise<AssistantModelsPayload> {
+    return request<AssistantModelsPayload>(this.baseUrl, DEVICE_MODEL_PATH, {
       method: "POST",
       body: JSON.stringify(connections),
     });
