@@ -16,6 +16,8 @@ export interface ProjectTaskRecord {
   idempotency_key?: string;
   actor?: string;
   cancel_requested?: boolean;
+  superseded_at?: string | null;
+  superseded_reason?: string | null;
   created_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
