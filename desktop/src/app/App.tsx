@@ -71,6 +71,10 @@ export function App() {
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
   const pageRequestNonce = useRef(0);
 
+  // baseUrl is an editable advanced-connection draft. Once a workspace is
+  // open, snapshot.baseUrl is the active connection authority. Merely typing a
+  // different address must never redirect background refreshes away from the
+  // production that is already open.
   const connection = useMemo(() => {
     try {
       return new HostConnection(baseUrl);
@@ -138,11 +142,6 @@ export function App() {
   }, [launchResume.projectId, launchResume.workspacePath]);
 
   async function openWorkspacePath(path: string): Promise<void> {
-    if (!connection) {
-      setState("error");
-      setMessage("本机服务地址无效。");
-      return;
-    }
     const normalizedPath = path.trim();
     if (!normalizedPath) {
       setState("error");
@@ -156,7 +155,10 @@ export function App() {
     setState("starting");
     setMessage("正在打开工作区…");
     try {
-      const next = await connection.startAndConnect(normalizedPath);
+      // Starting the managed local Host does not depend on the editable
+      // advanced service-address field. startAndConnect() uses the base URL
+      // returned by Rust after it has launched/verified the managed Host.
+      const next = await new HostConnection(defaultHostBaseUrl).startAndConnect(normalizedPath);
       setBaseUrl(next.baseUrl);
       setWorkspacePath(normalizedPath);
       setSnapshot(next);
@@ -169,10 +171,11 @@ export function App() {
       setMessage(`工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       if (previousSnapshot) {
+        setBaseUrl(previousSnapshot.baseUrl);
         setWorkspacePath(previousPath);
         setSnapshot(previousSnapshot);
         setSelectedProject(previousProject);
-        setState("error");
+        setState("connected");
         setMessage(`未能切换工作区：${errorMessage(error)} · 当前工作现场保持打开`);
       } else {
         setSnapshot(null);
@@ -213,15 +216,20 @@ export function App() {
 
   async function connect(): Promise<void> {
     if (!connection) {
-      setState("error");
-      setMessage("高级连接地址无效。");
+      setState(snapshot ? "connected" : "error");
+      setMessage(snapshot ? "高级连接地址无效；当前工作现场保持打开。" : "高级连接地址无效。");
       return;
     }
+    const previousSnapshot = snapshot;
+    const previousProject = selectedProject;
+    const previousPageRequest = pageRequest;
+    const previousSurface = surface;
     setState("connecting");
     setMessage("正在连接已有的本机服务…");
     try {
       const next = await connection.connect();
       const project = selectedProject ? projectById(next, selectedProject.project_id) : null;
+      setBaseUrl(next.baseUrl);
       setSnapshot(next);
       setSelectedProject(project);
       setPageRequest(null);
@@ -230,18 +238,34 @@ export function App() {
       setState("connected");
       setMessage(project ? `已重新连接 · ${project.name || project.project_id}` : `工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
-      setSnapshot(null);
-      setSelectedProject(null);
-      setPageRequest(null);
-      setResumeEnabledForSession(false);
-      setState("error");
-      setMessage(errorMessage(error));
+      if (previousSnapshot) {
+        setBaseUrl(previousSnapshot.baseUrl);
+        setSnapshot(previousSnapshot);
+        setSelectedProject(previousProject);
+        setPageRequest(previousPageRequest);
+        setSurface(previousSurface);
+        setState("connected");
+        setMessage(`未能连接新的本机服务：${errorMessage(error)} · 当前工作现场保持打开`);
+      } else {
+        setSnapshot(null);
+        setSelectedProject(null);
+        setPageRequest(null);
+        setResumeEnabledForSession(false);
+        setState("error");
+        setMessage(errorMessage(error));
+      }
     }
   }
 
   async function refreshWorkspace(preferredProjectId?: string): Promise<void> {
-    if (!connection) throw new HostConnectionError("本机服务地址无效");
-    const next = await connection.connect();
+    const activeBaseUrl = snapshot?.baseUrl ?? baseUrl;
+    let activeConnection: HostConnection;
+    try {
+      activeConnection = new HostConnection(activeBaseUrl);
+    } catch {
+      throw new HostConnectionError("当前工作现场的本机服务地址无效");
+    }
+    const next = await activeConnection.connect();
     const preferred = projectById(next, preferredProjectId);
     const existing = selectedProject ? projectById(next, selectedProject.project_id) : null;
     const project = preferred ?? existing;
