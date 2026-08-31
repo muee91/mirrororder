@@ -87,3 +87,12 @@ html[data-mirrororder-theme="dark"] .golden-take-picker-empty { color: #6f7c87; 
 html[data-mirrororder-theme="dark"] .golden-episode-candidates > button { border-color: #2b3946; color: #9aa7b1; background: #121b23; }
 html[data-mirrororder-theme="dark"] .golden-episode-candidates > button strong { color: #d7dfe5; }
 html[data-mirrororder-theme="dark"] .golden-slate-review-tools { background: #0e1317; }
+
+/* Frozen toolbar cleanup: do not expose placeholder Unicode glyphs as product icons. */
+.golden-slate-mode .slate-mode-icon { display: none; }
+.golden-slate-actions .icon-action[title*="Inspector"],
+.golden-slate-actions .icon-action[title="刷新项目"] { min-width: 42px; padding-inline: 8px; font-size: 0; }
+.golden-slate-actions .icon-action[title*="Inspector"]::after,
+.golden-slate-actions .icon-action[title="刷新项目"]::after { font-size: 10px; font-weight: 650; line-height: 1; }
+.golden-slate-actions .icon-action[title*="Inspector"]::after { content: "检视"; }
+.golden-slate-actions .icon-action[title="刷新项目"]::after { content: "刷新"; }
