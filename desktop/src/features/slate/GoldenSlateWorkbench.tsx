@@ -309,6 +309,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
   const [dropActive, setDropActive] = useState(false);
   const [takePickerOpen, setTakePickerOpen] = useState(false);
   const [takeSearch, setTakeSearch] = useState("");
+  const [playbackFailedClipId, setPlaybackFailedClipId] = useState("");
   const playerRef = useRef<HTMLVideoElement | null>(null);
 
   async function reload(preferredRecordId?: string): Promise<void> {
@@ -326,6 +327,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     setSelectedRecordId(nextSelected);
     const selected = nextDrafts.find((row) => row.record_id === nextSelected) ?? null;
     setSelectedClipId(selected?.preferred_clip_id || (selected?.attachments[0] ? attachmentKey(selected.attachments[0]) : ""));
+    setPlaybackFailedClipId("");
     setMessage(`Slate r${nextBoard.revision} · ${nextDrafts.length} 条`);
   }
 
@@ -351,6 +353,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
   const selectedTake = selected?.source_group_id ? review?.take_groups.find((take) => take.group_id === selected.source_group_id) ?? null : null;
   const selectedAttachment = selected?.attachments.find((item) => attachmentKey(item) === selectedClipId) ?? null;
   const selectedAngle = selectedAttachment ? findReviewAngle(review, selectedAttachment.clip_id, selectedAttachment.media_id) : findReviewAngle(review, selectedClipId);
+  const selectedPlaybackKey = selectedAngle?.clip_id || selectedClipId;
+  const selectedPlaybackFailed = Boolean(selectedPlaybackKey && playbackFailedClipId === selectedPlaybackKey);
+  const selectedPersisted = Boolean(selected && board?.records[selected.record_id]);
+  const selectedCanDelete = Boolean(selected && (selectedPersisted || !selected.derived));
   const dirtyCount = drafts.filter((row) => row.dirty).length;
   const displayedDrafts = displayOrder(drafts);
   const placedDrafts = displayedDrafts.filter(isPlacedDraft);
@@ -407,6 +413,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     const row = drafts.find((item) => item.record_id === recordId) ?? null;
     setSelectedRecordId(recordId);
     setSelectedClipId(row?.preferred_clip_id || (row?.attachments[0] ? attachmentKey(row.attachments[0]) : ""));
+    setPlaybackFailedClipId("");
   }
 
   function addBlank(seed?: Partial<Draft>): Draft {
@@ -607,8 +614,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
 
   async function deleteSelected(): Promise<void> {
     if (!selected || !board || busy) return;
+    const persisted = Boolean(board.records[selected.record_id]);
+    if (!persisted && selected.derived) {
+      setMessage("自动派生场记来自 Review Take，不能在这里删除；需要排除素材时请使用 Review 归集辅助。");
+      return;
+    }
     const visualIndex = displayedDrafts.findIndex((row) => row.record_id === selected.record_id);
-    if (!board.records[selected.record_id]) {
+    if (!persisted) {
       const fallback = displayedDrafts[visualIndex + 1] ?? displayedDrafts[visualIndex - 1] ?? null;
       setDrafts((current) => current.filter((row) => row.record_id !== selected.record_id));
       setSelectedRecordId(fallback?.record_id ?? "");
@@ -634,6 +646,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
   async function requestDeleteSelected(): Promise<void> {
     if (!selected || !board || busy) return;
     const persisted = Boolean(board.records[selected.record_id]);
+    if (!persisted && selected.derived) {
+      setMessage("自动派生场记来自 Review Take，不能在这里删除；需要排除素材时请使用 Review 归集辅助。");
+      return;
+    }
     const prompt = persisted
       ? "删除这条人工场记记录？关联 Take 不会被删除；如果 Review 中仍有这个 Take，它会继续作为派生候选出现。"
       : "移除这条尚未保存的场记草稿？";
@@ -814,9 +830,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
               <>
                 <div className="golden-inspector-head"><div><strong>选中素材</strong><span>EP {selected.episode ?? "—"} / 场 {selected.scene || selected.script_scene_id || "—"} / 镜 {selected.shot || "—"} / 次 {selected.take_number ?? "—"}</span></div>{selected.dirty ? <em>未保存</em> : null}</div>
                 <div className="golden-slate-player">
-                  {selectedAngle?.playback.url && selectedAngle.playback.available !== false ? (
-                    <video ref={playerRef} key={selectedAngle.clip_id} src={selectedAngle.playback.url} controls preload="metadata" onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
-                  ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
+                  {selectedAngle?.playback.url && selectedAngle.playback.available !== false && !selectedPlaybackFailed ? (
+                    <video ref={playerRef} key={selectedAngle.clip_id} src={selectedAngle.playback.url} controls preload="metadata" onError={() => setPlaybackFailedClipId(selectedPlaybackKey)} onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
+                  ) : <div className="golden-player-empty">{selectedPlaybackFailed ? "当前设备无法读取或解码这个素材" : selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                 </div>
 
                 {episodeCandidates.length ? <section className="golden-episode-candidates"><header><strong>第 {selected.episode} 集候选</strong><span>{episodeCandidates.length} Take</span></header>{episodeCandidates.map((take) => <button type="button" key={take.group_id} onClick={() => addTake(take)}><strong>T{take.take_index}</strong><span>{take.angles.map((angle) => angle.camera || "?").join(" / ")}</span><small>{take.transcript.text || `${take.duration.toFixed(1)}s`}</small></button>)}</section> : null}
@@ -844,7 +860,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
                 <div className="golden-io-row"><button type="button" className="secondary" onClick={() => setIO("in")}>I 设入点</button><label><span>入点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.start ?? ""} onChange={(event) => { const start = event.target.value ? Number(event.target.value) : 0; const end = selected.usable_range?.end ?? start + 0.04; patchRecord(selected.record_id, { usable_range: { start, end: Math.max(end, start + 0.04) } }); }} /></label><label><span>出点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.end ?? ""} onChange={(event) => { const end = event.target.value ? Number(event.target.value) : 0; const start = selected.usable_range?.start ?? 0; if (end > start) patchRecord(selected.record_id, { usable_range: { start, end } }); }} /></label><button type="button" className="secondary" onClick={() => setIO("out")}>O 设出点</button></div>
                 <label className="golden-inspector-field"><span>备注</span><textarea rows={4} value={selected.note} onChange={(event) => patchRecord(selected.record_id, { note: event.target.value })} placeholder="场记原话、可用范围描述、连续性提醒…" /></label>
                 <div className="golden-inspector-link"><span>关联</span><strong>{selected.source_group_id ? `Take · ${selected.source_group_id}` : "独立场记"}</strong>{selected.script_scene_id ? <small>剧本场景 · {selected.script_scene_id}</small> : null}<small>{selectedTake?.transcript.text || "没有 Take 转写证据"}</small></div>
-                <div className="golden-inspector-actions"><button type="button" disabled={busy || !selected.dirty || !actor.trim()} onClick={() => void saveSelected()}>保存当前行</button><button type="button" className="danger-subtle" disabled={busy} onClick={() => void requestDeleteSelected()}>{board?.records[selected.record_id] ? "删除人工场记…" : "移除草稿…"}</button></div>
+                <div className="golden-inspector-actions"><button type="button" disabled={busy || !selected.dirty || !actor.trim()} onClick={() => void saveSelected()}>保存当前行</button>{selectedCanDelete ? <button type="button" className="danger-subtle" disabled={busy} onClick={() => void requestDeleteSelected()}>{selectedPersisted ? "删除人工场记…" : "移除草稿…"}</button> : null}</div>
               </>
             ) : <div className="golden-inspector-empty">选择一行或一张机位卡。</div>}
           </aside>
