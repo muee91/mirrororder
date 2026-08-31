@@ -12,6 +12,7 @@ from .model_registry import ModelRegistry
 
 
 _INSTALLED = False
+_LAST_RESTORE_ERROR = ""
 
 
 def device_models_payload() -> dict[str, Any]:
@@ -19,6 +20,7 @@ def device_models_payload() -> dict[str, Any]:
         "contract": "device_models.v1",
         "models": ModelRegistry().public(),
         "connections": load_model_connections(include_secrets=False),
+        "restore_error": _LAST_RESTORE_ERROR,
     }
 
 
@@ -64,6 +66,19 @@ def restore_enabled_device_runtimes() -> list[dict[str, Any]]:
     return submitted
 
 
+def _restore_enabled_device_runtimes_best_effort() -> None:
+    global _LAST_RESTORE_ERROR
+    try:
+        restore_enabled_device_runtimes()
+    except Exception as error:
+        # Optional local intelligence must never prevent the production Host
+        # from opening. Keep the device preference enabled and expose the
+        # failure through the model settings payload so the user can recover.
+        _LAST_RESTORE_ERROR = f"{type(error).__name__}: {error}"[:2000]
+    else:
+        _LAST_RESTORE_ERROR = ""
+
+
 def install_device_model_runtime() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -71,9 +86,9 @@ def install_device_model_runtime() -> None:
 
     from . import web_server
 
-    # Recover interrupted device work first, then re-establish every capability
-    # whose persisted device preference is still enabled.
-    restore_enabled_device_runtimes()
+    # Re-establish every capability whose persisted device preference is still
+    # enabled, but never make optional model recovery a Host-startup dependency.
+    _restore_enabled_device_runtimes_best_effort()
     original_make_handler = web_server.make_handler
 
     def make_handler_with_device_models(service: Any, web_root: Path):
