@@ -42,7 +42,7 @@ function newestActiveScan(tasks: ProjectTaskRecord[]): ProjectTaskRecord | null 
 
 function scanStage(task: ProjectTaskRecord): string {
   if (task.cancel_requested) return "正在取消";
-  return {
+  const labels: Record<string, string> = {
     queued: "等待开始",
     starting: "正在启动",
     waiting_cpu: "等待扫描资源",
@@ -50,7 +50,8 @@ function scanStage(task: ProjectTaskRecord): string {
     completed: "扫描完成",
     cancelled: "已取消",
     failed: "扫描失败",
-  }[task.stage || task.status] ?? (task.status === "queued" ? "等待开始" : "正在扫描本机素材");
+  };
+  return labels[task.stage || task.status] ?? (task.status === "queued" ? "等待开始" : "正在扫描本机素材");
 }
 
 function taskProgress(task: ProjectTaskRecord): { done: number; total: number } | null {
@@ -105,12 +106,16 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
   }, [client, tasks, projectId]);
 
   useEffect(() => {
-    if (!scanTask || !activeMediaScan(scanTask)) return;
+    const taskId = scanTask?.task_id;
+    if (!taskId || !scanTask || !activeMediaScan(scanTask)) return;
     let disposed = false;
-    const timer = globalThis.setTimeout(() => {
-      void tasks.list(projectId).then(async (rows) => {
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+    async function poll(): Promise<void> {
+      try {
+        const rows = await tasks.list(projectId);
         if (disposed) return;
-        const current = rows.find((task) => task.task_id === scanTask.task_id) ?? newestActiveScan(rows);
+        const current = rows.find((task) => task.task_id === taskId) ?? newestActiveScan(rows);
         if (!current) {
           setScanTask(null);
           await reload();
@@ -119,6 +124,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
         setScanTask(current);
         if (activeMediaScan(current)) {
           setMessage(`${scanStage(current)}；完成后连接结果会自动刷新。`);
+          timer = globalThis.setTimeout(() => { void poll(); }, 1000);
           return;
         }
         await reload();
@@ -130,17 +136,21 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
         } else if (current.status === "failed" || current.error) {
           setMessage(`素材扫描失败：${current.error || current.message || "未知错误"}；原有本机素材连接保持不变。`);
         }
-      }).catch((error) => {
-        if (!disposed) setMessage(`读取素材扫描状态失败：${errorMessage(error)}`);
-      });
-    }, 1000);
+      } catch (error) {
+        if (disposed) return;
+        setMessage(`读取素材扫描状态失败：${errorMessage(error)}；将继续重试。`);
+        timer = globalThis.setTimeout(() => { void poll(); }, 2000);
+      }
+    }
+
+    timer = globalThis.setTimeout(() => { void poll(); }, 800);
     return () => {
       disposed = true;
-      globalThis.clearTimeout(timer);
+      if (timer !== undefined) globalThis.clearTimeout(timer);
     };
-    // reload is intentionally reached through the latest render after each poll.
+    // reload is intentionally reached through the current project/task clients.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, scanTask?.task_id, scanTask?.status, scanTask?.stage, scanTask?.cancel_requested, tasks]);
+  }, [projectId, scanTask?.task_id, tasks]);
 
   async function chooseDirectories(title: string): Promise<string[]> {
     if (!isTauri()) {
@@ -191,7 +201,15 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       }
       const taskId = String(payload.task.task_id || "");
       const listed = await tasks.list(projectId).catch(() => [] as ProjectTaskRecord[]);
-      const submitted = listed.find((task) => task.task_id === taskId) ?? newestActiveScan(listed);
+      const submitted = listed.find((task) => task.task_id === taskId)
+        ?? newestActiveScan(listed)
+        ?? (taskId ? {
+          task_id: taskId,
+          project_id: projectId,
+          type: "media_inventory_scan",
+          status: String(payload.task.status || "queued"),
+          stage: String(payload.task.stage || payload.task.status || "queued"),
+        } : null);
       setScanTask(submitted);
       if (intent === "reconnect") {
         setMessage("正在重新连接已移动素材；旧绑定会保留到新位置扫描成功，失败或取消不会破坏原有连接。");
@@ -200,6 +218,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       } else {
         setMessage("正在扫描当前搜索位置；完成后连接结果会自动刷新。");
       }
+      if (submitted && !activeMediaScan(submitted)) await reload();
     } catch (error) {
       if (error instanceof HostConnectionError && error.status === 409) {
         const active = await discoverActiveScan();
