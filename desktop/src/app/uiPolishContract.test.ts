@@ -10,15 +10,20 @@ describe("Desktop UI polish contract", () => {
   it("does not render placeholder Unicode project icons or a fake text brand mark", () => {
     const library = read("../features/projects/ProjectLibrary.tsx");
     const home = read("../features/projects/ProjectHome.tsx");
+    const lifecycle = read("../features/projects/ProjectLifecyclePanel.tsx");
 
     expect(library).not.toContain("▥");
     expect(library).not.toContain("▰");
     expect(library).not.toContain('aria-hidden="true">镜</span>');
+    expect(library).not.toContain(">!</span>");
     expect(library).toContain('<span className="mirror-mark" aria-hidden="true" />');
 
     expect(home).not.toContain("▥");
     expect(home).not.toContain("▰");
+    expect(home).not.toContain("•••");
     expect(home).not.toContain("project-home-project-icon");
+    expect(home).toContain(">更多</button>");
+    expect(lifecycle).not.toContain("＋ 新建项目");
   });
 
   it("reuses the packaged app icon inside the Desktop UI instead of inventing another logo", () => {
@@ -27,8 +32,23 @@ describe("Desktop UI polish contract", () => {
     const projects = read("../features/projects/projects.css");
 
     expect(frozen).toContain('background-image: url("../src-tauri/icons/icon.png")');
+    expect(projects).toContain('background-image: url("../../../src-tauri/icons/icon.png")');
+    expect(projects).not.toContain("branding/app-icon.png");
     expect(styles).not.toContain(".startup-logo::before");
     expect(projects).not.toContain(".mirror-mark::before");
+  });
+
+  it("uses one project presentation model across home and sidebar and keeps status visible at minimum width", () => {
+    const home = read("../features/projects/ProjectHome.tsx");
+    const library = read("../features/projects/ProjectLibrary.tsx");
+    const css = read("../features/projects/project-home.css");
+
+    expect(home).toContain("projectPresentation(project, activity)");
+    expect(library).toContain("projectPresentation(project, activity)");
+    expect(home).not.toContain("function projectStatus(");
+    expect(library).not.toContain("function projectSubtitle(");
+    expect(css).toContain(".project-home-state.status-idle");
+    expect(css).not.toContain(".project-home-state { display: none; }");
   });
 
   it("keeps navigation out of the toast channel and expires real action feedback", () => {
