@@ -25,7 +25,14 @@ describe("project presentation model", () => {
     expect(result.sidebarSubtitle).toBe("待整理");
   });
 
-  it("uses one ready state for both home and sidebar after material exists", () => {
+  it("does not call a media-only project ready before Takes exist", () => {
+    const result = projectPresentation(project({ groups: 0, clips: 18 }));
+    expect(result.statusTone).toBe("idle");
+    expect(result.statusLabel).toBe("待整理");
+    expect(result.sidebarSubtitle).toBe("18 素材 · 待整理");
+  });
+
+  it("uses one ready state for both home and sidebar after Takes exist", () => {
     const result = projectPresentation(project({ groups: 12, clips: 36 }));
     expect(result.statusTone).toBe("ready");
     expect(result.statusLabel).toBe("就绪");
