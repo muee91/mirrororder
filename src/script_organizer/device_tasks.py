@@ -183,6 +183,47 @@ class DeviceTaskManager:
             LocalVisionRuntime.stop(preserve_error=True)
         return result
 
+    def supersede(
+        self,
+        task_type: str,
+        *,
+        kind: str = "",
+        model: str = "",
+        reason: str = "当前设置已变化，旧失败不再需要处理",
+    ) -> int:
+        """Mark obsolete terminal failures as historical without rewriting them.
+
+        A disabled capability or changed model can make a previous preparation
+        failure irrelevant. Preserve the original failed/interrupted status for
+        audit, but annotate that current user intent has superseded it so Status
+        Center can move it out of the current recovery queue.
+        """
+        if task_type not in DEVICE_TASK_TYPES:
+            raise ValueError("不支持的 device task 类型")
+        wanted_kind = str(kind or "").strip().lower()
+        wanted_model = str(model or "").strip()
+        now = _now()
+        count = 0
+        with self._lock:
+            payload = self._load()
+            for task in payload["tasks"]:
+                if task.get("type") != task_type or task.get("status") not in {"failed", "interrupted"}:
+                    continue
+                targets = task.get("targets", {}) if isinstance(task.get("targets"), dict) else {}
+                if wanted_kind and str(targets.get("kind", "") or "").strip().lower() != wanted_kind:
+                    continue
+                if wanted_model and str(targets.get("model", "") or "").strip() != wanted_model:
+                    continue
+                if task.get("superseded_at"):
+                    continue
+                task["superseded_at"] = now
+                task["superseded_reason"] = str(reason or "当前设置已变化，旧失败不再需要处理")[:500]
+                task.setdefault("logs", []).append(task["superseded_reason"])
+                count += 1
+            if count:
+                self._save(payload)
+        return count
+
     def _cancel_requested(self, task_id: str) -> bool:
         try:
             return bool(self._task(self._load(), task_id).get("cancel_requested"))
