@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
-import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
 import "./project-context-menu.css";
 import "./projects.css";
 import "./project-library-fidelity.css";
 
 interface Props {
-  baseUrl: string;
   workspace: WorkspacePayload;
   activities?: Record<string, ProjectActivitySummary>;
   selectedProjectId: string | null;
@@ -24,7 +22,6 @@ interface Props {
   onPrepareProject?: (project: ProjectSummary) => void | Promise<void>;
   onOpenMediaBinding?: (project: ProjectSummary) => void;
   onDeleteProject?: (project: ProjectSummary) => void | Promise<void>;
-  onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
 }
 
 interface ProjectMenuState {
@@ -56,7 +53,6 @@ function projectIcon(project: ProjectSummary): string {
 }
 
 export function ProjectLibrary({
-  baseUrl,
   workspace,
   activities = {},
   selectedProjectId,
@@ -72,9 +68,7 @@ export function ProjectLibrary({
   onPrepareProject,
   onOpenMediaBinding,
   onDeleteProject,
-  onWorkspaceChanged,
 }: Props) {
-  const selectedProject = workspace.projects.find((project) => project.project_id === selectedProjectId) ?? null;
   const homeActive = utilityActive === null && selectedProjectId === null;
   const [menu, setMenu] = useState<ProjectMenuState | null>(null);
 
@@ -117,17 +111,16 @@ export function ProjectLibrary({
       </button>
 
       <button type="button" className={`project-library-home ${homeActive ? "is-active" : ""}`} onClick={onOpenHome}>
-        <span>项目</span><small>全部项目</small>
+        <span>项目</span><small>{workspace.projects.length}</small>
       </button>
 
       <div className="project-library-section-heading">
-        <div><span>最近项目</span><small>{workspace.projects.length}</small></div>
-        <ProjectLifecyclePanel baseUrl={baseUrl} selectedProject={selectedProject} onWorkspaceChanged={onWorkspaceChanged} />
+        <div><span>最近项目</span><small>快速切换</small></div>
       </div>
 
       <div className="project-list">
         {workspace.projects.length === 0 ? (
-          <div className="project-list-empty"><strong>还没有项目</strong><span>使用上方“新建”创建第一个制作项目。</span></div>
+          <div className="project-list-empty"><strong>还没有项目</strong><span>返回项目主页创建第一个制作项目。</span></div>
         ) : (
           workspace.projects.slice(0, 8).map((project) => {
             const activity = activities[project.project_id];
@@ -172,7 +165,7 @@ export function ProjectLibrary({
           <button type="button" role="menuitem" disabled={!onCopyShareLink} onClick={() => run(() => onCopyShareLink?.(menu.project))}>复制局域网协作链接</button>
           <button type="button" role="menuitem" disabled={!onRevealProject} onClick={() => run(() => onRevealProject?.(menu.project))}>{revealLabel}</button>
           <button type="button" role="menuitem" disabled={!onOpenMediaBinding} onClick={() => run(() => onOpenMediaBinding?.(menu.project))}>本机素材 / 换素材盘</button>
-          <button type="button" role="menuitem" disabled={!onPrepareProject} onClick={() => run(() => onPrepareProject?.(menu.project))}>重整项目</button>
+          <button type="button" role="menuitem" disabled={!onPrepareProject} onClick={() => run(() => onPrepareProject?.(menu.project))}>重新整理项目</button>
           <button type="button" role="menuitem" className="project-context-danger" disabled={!onDeleteProject} onClick={() => run(() => onDeleteProject?.(menu.project))}>永久删除项目…</button>
         </div>
       ) : null}
