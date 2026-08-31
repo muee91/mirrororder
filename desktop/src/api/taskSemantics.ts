@@ -1,11 +1,5 @@
 import type { ProjectTaskRecord } from "./tasks";
 
-const PROJECT_HEALTH_TASK_TYPES = new Set([
-  "prepare_project",
-  "media_inventory_scan",
-  "multicam_sync",
-]);
-
 function targetString(task: ProjectTaskRecord, key: string): string {
   const value = task.targets?.[key];
   return typeof value === "string" ? value.trim() : "";
@@ -28,18 +22,6 @@ export function taskAttemptTimestamp(task: ProjectTaskRecord): number {
 
 export function isTaskActive(task: Pick<ProjectTaskRecord, "status">): boolean {
   return task.status === "queued" || task.status === "running";
-}
-
-export function isTaskFailed(task: Pick<ProjectTaskRecord, "status" | "error">): boolean {
-  return task.status === "failed" || task.status === "interrupted" || Boolean(task.error);
-}
-
-export function isTaskTerminal(task: Pick<ProjectTaskRecord, "status">): boolean {
-  return ["completed", "cancelled", "failed", "interrupted"].includes(task.status);
-}
-
-export function isProjectHealthTask(task: Pick<ProjectTaskRecord, "type">): boolean {
-  return PROJECT_HEALTH_TASK_TYPES.has(task.type);
 }
 
 export function taskFamilyKey(task: ProjectTaskRecord): string {
