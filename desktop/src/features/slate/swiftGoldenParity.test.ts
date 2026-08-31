@@ -116,10 +116,11 @@ describe("Swift golden product fidelity", () => {
     expect(reviewAdapter).not.toContain("fixed-angle-card");
   });
 
-  it("restores the fixed macOS-style project home and sidebar geometry plus project actions", () => {
+  it("keeps project management on Home while the sidebar stays a fast switcher", () => {
     const app = source("../../app/App.tsx");
     const home = source("../projects/ProjectHome.tsx");
     const css = source("../projects/project-home.css");
+    const lifecycle = source("../projects/ProjectLifecyclePanel.tsx");
     const library = source("../projects/ProjectLibrary.tsx");
     const libraryFidelity = source("../projects/project-library-fidelity.css");
     const activity = source("../projects/projectActivity.ts");
@@ -129,23 +130,34 @@ describe("Swift golden product fidelity", () => {
     expect(app).toContain("teamWorkbenchUrl");
     expect(app).toContain("deleteProject(project: ProjectSummary)");
     expect(app).toContain("useProjectActivities");
-    expect(home).toContain("全部项目");
-    expect(home).toContain("FCPXML");
-    expect(home).toContain("原始素材");
+    expect(home).toContain("管理工作区内的制作项目");
+    expect(home).toContain("<ProjectLifecyclePanel");
+    expect(home).toContain("project-home-list");
+    expect(home).toContain("project-home-more");
+    expect(home).toContain("aria-haspopup=\"menu\"");
     expect(home).toContain("onContextMenu");
     expect(home).toContain("团队审阅");
     expect(home).toContain("复制局域网协作链接");
     expect(home).toContain("本机素材 / 换素材盘");
     expect(home).toContain("永久删除项目…");
     expect(home).toContain("project-activity-spinner");
+    expect(home).not.toContain("backdropSymbol");
     expect(activity).toContain("ProjectTaskClient");
     expect(activity).toContain('state: "active"');
     expect(activity).toContain('state: "failed"');
-    expect(css).toContain("grid-template-columns: repeat(auto-fill, 260px)");
-    expect(css).toContain("width: 260px; height: 176px");
-    expect(css).toContain("grid-template-rows: 108px 68px");
+    expect(css).toContain("width: min(980px, 100%)");
+    expect(css).toContain("min-height: 72px");
+    expect(css).toContain("grid-template-columns: minmax(0,1fr) 34px");
+    expect(lifecycle).toContain("＋ 新建项目");
+    expect(lifecycle).toContain("创建并整理");
+    expect(lifecycle).toContain("client.preflightProject(payload())");
+    expect(lifecycle).not.toContain("项目管理");
+    expect(lifecycle).not.toContain("removeSelected");
     expect(library).toContain('import "./project-library-fidelity.css"');
     expect(library).toContain("workspace.projects.slice(0, 8)");
+    expect(library).toContain("快速切换");
+    expect(library).not.toContain("ProjectLifecyclePanel");
+    expect(library).not.toContain("project-manage-button");
     expect(library).toContain("复制局域网协作链接");
     expect(library).toContain("永久删除项目…");
     expect(library).not.toContain('<button type="button" className={utilityActive === "team"');
