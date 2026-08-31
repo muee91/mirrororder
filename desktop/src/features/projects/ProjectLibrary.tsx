@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import type { ProjectActivitySummary } from "./projectActivity";
+import { projectPresentation } from "./projectPresentation";
 import "./project-context-menu.css";
 import "./projects.css";
 import "./project-library-fidelity.css";
@@ -30,24 +31,6 @@ interface ProjectMenuState {
   project: ProjectSummary;
   x: number;
   y: number;
-}
-
-function stat(project: ProjectSummary, key: string): number {
-  const value = project.stats?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function projectAttention(project: ProjectSummary): number {
-  return stat(project, "missing_media") + stat(project, "unknown_groups") + stat(project, "script_gap_blocks");
-}
-
-function projectSubtitle(project: ProjectSummary, activity?: ProjectActivitySummary): string {
-  if (project.error || activity?.state === "failed") return "整理异常";
-  if (activity?.state === "active") return activity.label || "后台处理中";
-  const takes = stat(project, "groups") || stat(project, "takes");
-  const attention = projectAttention(project);
-  if (takes > 0) return `${takes} Take${attention > 0 ? ` · ${attention} 待处理` : ""}`;
-  return attention > 0 ? `${attention} 待处理` : "待整理";
 }
 
 export function ProjectLibrary({
@@ -122,8 +105,8 @@ export function ProjectLibrary({
         ) : (
           workspace.projects.slice(0, 8).map((project) => {
             const activity = activities[project.project_id];
+            const presentation = projectPresentation(project, activity);
             const taskActive = activity?.state === "active";
-            const taskFailed = activity?.state === "failed";
             return (
               <button
                 className={`project-row ${utilityActive === null && selectedProjectId === project.project_id ? "is-selected" : ""} ${taskActive ? "is-active-task" : ""}`}
@@ -141,8 +124,8 @@ export function ProjectLibrary({
                   }
                 }}
               >
-                <span className="project-row-copy"><strong>{project.name || project.project_id}</strong><small>{projectSubtitle(project, activity)}</small></span>
-                {taskActive ? <span className="project-activity-spinner" title={activity.label || "后台处理中"} /> : project.error || taskFailed ? <span className="project-row-alert" title={activity?.message || project.error || "整理异常"}>!</span> : null}
+                <span className="project-row-copy"><strong>{project.name || project.project_id}</strong><small>{presentation.sidebarSubtitle}</small></span>
+                {taskActive ? <span className="project-activity-spinner" title={activity.label || "后台处理中"} /> : presentation.statusTone === "error" ? <span className="project-row-alert" title={activity?.message || project.error || "整理异常"}>异常</span> : null}
               </button>
             );
           })
