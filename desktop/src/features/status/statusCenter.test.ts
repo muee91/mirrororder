@@ -76,7 +76,8 @@ describe("status center recovery semantics", () => {
     expect(source).toContain("被后续尝试取代的旧失败");
     expect(source).toContain("历史失败只用于追溯，不提供重试入口");
     expect(source).toContain("技术详情");
-    expect(source).toContain("latestTaskFamilies");
+    expect(source).toContain("currentTaskStates");
+    expect(source).toContain("仍在排队或运行的实例全部保留");
     expect(source).toContain("onOpenProjectPage");
     expect(source).toContain("onOpenSettings");
     expect(source).not.toContain(".slice(0, 12)");
