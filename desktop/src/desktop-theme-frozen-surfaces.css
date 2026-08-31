@@ -1,5 +1,14 @@
 /* Frozen Demo surfaces that still carry OS media-query fallbacks. */
 
+/* The in-app brand reuses the exact packaged app icon blob from Desktop root. */
+.mirror-mark,
+.startup-logo {
+  background-image: url("../src-tauri/icons/icon.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
 /* Project Home / Sidebar */
 html[data-mirrororder-theme="light"] .project-library-brand-button:hover,
 html[data-mirrororder-theme="light"] .project-library-home:hover { background: #e8edf1; }
@@ -16,8 +25,6 @@ html[data-mirrororder-theme="light"] .project-home-visual > strong { color: rgba
 html[data-mirrororder-theme="light"] .project-home-kind { border-color: rgba(0,0,0,.08); color: #34414b; background: rgba(255,255,255,.72); }
 html[data-mirrororder-theme="light"] .project-home-title-row > strong { color: #26313a; }
 html[data-mirrororder-theme="light"] .project-home-stats { color: #65727e; }
-html[data-mirrororder-theme="light"] .project-row-icon { color: #6b7883; }
-html[data-mirrororder-theme="light"] .project-row.is-selected .project-row-icon { color: #2e6fae; }
 html[data-mirrororder-theme="light"] .project-row.is-selected { background: #e8f2fc; }
 html[data-mirrororder-theme="light"] .project-row.is-active-task .project-row-copy small { color: #3979ba; }
 
@@ -36,8 +43,6 @@ html[data-mirrororder-theme="dark"] .project-home-visual > strong { color: rgba(
 html[data-mirrororder-theme="dark"] .project-home-kind { border-color: rgba(255,255,255,.10); color: #d8e1e8; background: rgba(13,18,22,.68); }
 html[data-mirrororder-theme="dark"] .project-home-title-row > strong { color: #e0e7ec; }
 html[data-mirrororder-theme="dark"] .project-home-stats { color: #778590; }
-html[data-mirrororder-theme="dark"] .project-row-icon { color: #74828e; }
-html[data-mirrororder-theme="dark"] .project-row.is-selected .project-row-icon { color: #8fc1fa; }
 html[data-mirrororder-theme="dark"] .project-row.is-selected { background: rgba(82,142,207,.12); }
 html[data-mirrororder-theme="dark"] .project-row.is-active-task .project-row-copy small { color: #76a8df; }
 
