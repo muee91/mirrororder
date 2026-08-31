@@ -14,10 +14,27 @@ describe("Desktop settings information architecture", () => {
     }
     expect(settings).toContain("<DesktopAppearanceControl />");
     expect(settings).toContain("<LocalRuntimePanel baseUrl={baseUrl} />");
-    expect(settings).toContain("<AssistantModelsPanel baseUrl={baseUrl} projectId={projectId} />");
+    expect(settings).toContain("<AssistantModelsPanel baseUrl={baseUrl} />");
     expect(settings).toContain("<CollaborationPanel baseUrl={baseUrl} />");
     expect(settings).toContain('className="team-web-advanced"');
     expect(settings).toContain("自动刷新频率");
+  });
+
+  it("keeps model and runtime activation device scoped instead of project gated", () => {
+    const settings = read("./SettingsStatusWorkbench.tsx");
+    const models = read("../../api/models.ts");
+    const panel = read("../assistant/AssistantModelsPanel.tsx");
+    const runtime = read("./LocalRuntimePanel.tsx");
+    expect(settings).not.toContain("projectId");
+    expect(settings).not.toContain("先从左侧选择一个项目");
+    expect(models).toContain('const DEVICE_MODEL_PATH = "/api/v1/assistant/models"');
+    expect(models).not.toContain("模型设置需要 project_id");
+    expect(panel).not.toContain("projectId");
+    expect(runtime).toContain("切换项目不需要重新激活");
+    expect(runtime).toContain("setCapability");
+    expect(runtime).toContain("重新准备");
+    expect(runtime).not.toContain("准备 / 启动");
+    expect(runtime).not.toContain(">停止</button>");
   });
 
   it("does not leak frozen Timeline or release-gate concepts into normal Settings", () => {
