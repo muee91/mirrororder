@@ -4,6 +4,7 @@ import { HostConnectionError } from "../../api/host";
 import {
   currentTaskStates,
   isTaskActive,
+  isTaskSuperseded,
   latestTaskAttempts,
 } from "../../api/taskSemantics";
 import type { ProductionPage } from "../../app/resumeState";
@@ -55,6 +56,7 @@ function active(task: ProjectTaskRecord): boolean {
 }
 
 export function taskNeedsAttention(task: ProjectTaskRecord): boolean {
+  if (isTaskSuperseded(task)) return false;
   if (task.status === "cancelled" || task.status === "completed") return false;
   return task.status === "failed" || task.status === "interrupted" || Boolean(task.error);
 }
@@ -237,6 +239,9 @@ function compactError(value: string | null | undefined): string {
 }
 
 function taskPrimaryMessage(task: ProjectTaskRecord, historical = false): string {
+  if (historical && isTaskSuperseded(task)) {
+    return task.superseded_reason?.trim() || "该失败已被当前设置取代；仅保留用于追溯。";
+  }
   if (historical && taskNeedsAttention(task)) return "该失败已被后续尝试取代；这里只保留用于追溯。";
   if (taskNeedsAttention(task)) {
     const detail = compactError(task.error);
@@ -433,9 +438,11 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     const target = taskTarget(task);
     const elapsed = duration(task);
     const source = project ? (project.name || project.project_id) : "本机运行时";
-    const displayedStatus = historical && taskNeedsAttention(task)
-      ? (task.status === "interrupted" ? "历史中断" : "历史失败")
-      : statusLabel(task);
+    const displayedStatus = historical && isTaskSuperseded(task)
+      ? "历史已解除"
+      : historical && taskNeedsAttention(task)
+        ? (task.status === "interrupted" ? "历史中断" : "历史失败")
+        : statusLabel(task);
     const operating = actionBusy(task.task_id);
     return (
       <article className={`status-center-task status-${task.status}${historical ? " is-history" : ""}`} key={`${project?.project_id || "device"}:${task.task_id}`}>
@@ -476,7 +483,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         <button type="button" className={showHistory ? "is-active" : ""} aria-pressed={showHistory} onClick={() => setShowHistory((value) => !value)}><strong>{totals.history}</strong>{showHistory ? "隐藏历史记录" : "显示历史记录"}</button>
       </div>
 
-      <p className="status-center-note">这里只把每类工作的最新状态算作当前事项；仍在排队或运行的实例全部保留。后续尝试已经取代的旧失败会进入历史，不再重复占据“需要处理”。</p>
+      <p className="status-center-note">这里只把每类工作的最新状态算作当前事项；仍在排队或运行的实例全部保留。后续尝试或当前设置已经取代的旧失败会进入历史，不再重复占据“需要处理”。</p>
 
       <div className="status-center-sections">
         {activeTasks.length ? (
@@ -498,12 +505,12 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         {showHistory ? (
           <section className="status-center-section is-recent">
             <header><div><span className="status-center-section-dot" /><strong>历史记录</strong></div><small>{historyTasks.length}</small></header>
-            <p className="status-center-section-note">包含已完成、已取消，以及被后续尝试取代的旧失败。历史失败只用于追溯，不提供重试入口。</p>
+            <p className="status-center-section-note">包含已完成、已取消，以及被后续尝试或当前设置取代的旧失败。“历史已解除”表示当时确实失败，但按当前设置已经不需要处理；历史记录不提供重试入口。</p>
             {historyTasks.length ? <div className="status-center-task-list">{historyTasks.map((context) => renderTask(context, true))}</div> : <div className="status-center-section-empty">当前没有历史任务记录。</div>}
           </section>
         ) : null}
 
-        {noCurrentWork && !showHistory ? <div className="status-center-empty"><strong>后台工作正常</strong><span>当前没有运行中或需要处理的任务。可通过“显示历史记录”查看已经结束或被后续尝试取代的任务。</span></div> : null}
+        {noCurrentWork && !showHistory ? <div className="status-center-empty"><strong>后台工作正常</strong><span>当前没有运行中或需要处理的任务。可通过“显示历史记录”查看已经结束或被后续尝试、当前设置取代的任务。</span></div> : null}
       </div>
     </section>
   );
