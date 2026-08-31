@@ -146,9 +146,9 @@ describe("Swift golden product fidelity", () => {
     expect(activity).toContain('state: "active"');
     expect(activity).toContain('state: "failed"');
     expect(css).toContain("width: min(980px, 100%)");
-    expect(css).toContain("min-height: 72px");
-    expect(css).toContain("grid-template-columns: minmax(0,1fr) 34px");
-    expect(lifecycle).toContain("＋ 新建项目");
+    expect(css).toContain("min-height: 66px");
+    expect(css).toContain("grid-template-columns: minmax(0,1fr) 52px");
+    expect(lifecycle).toContain(">新建项目</button>");
     expect(lifecycle).toContain("创建并整理");
     expect(lifecycle).toContain("client.preflightProject(payload())");
     expect(lifecycle).not.toContain("项目管理");
