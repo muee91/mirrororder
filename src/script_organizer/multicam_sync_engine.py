@@ -4,15 +4,20 @@ import csv
 import importlib.util
 import json
 import os
+from queue import Empty, Queue
+import signal
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from threading import Thread
+from time import monotonic
 from typing import Any, Callable
 
 from .config import ProjectConfig
 from .media_reader import infer_camera_label
 from .media_role_store import MediaRoleStore
+from .resource_scheduler import ResourceCancelled
 
 
 class MulticamSyncUnavailable(RuntimeError):
@@ -96,6 +101,65 @@ def _engine_origin(path: Path) -> str:
     return "workspace-first-party"
 
 
+def _terminate_process_tree(process: subprocess.Popen[str], grace_seconds: float = 2.0) -> None:
+    """Stop only the subprocess tree created for one vendor stage.
+
+    Vendor scripts may spawn ffmpeg/ffprobe descendants. Killing only the Python
+    wrapper leaves those children consuming CPU and disk after the user presses
+    Cancel. Each stage is therefore started in its own process group/session and
+    cancellation targets that group, never a process name shared with unrelated
+    applications.
+    """
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                capture_output=True,
+                text=True,
+                timeout=max(1.0, grace_seconds),
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            try:
+                process.kill()
+            except OSError:
+                pass
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            try:
+                process.terminate()
+            except OSError:
+                pass
+
+    try:
+        process.wait(timeout=max(0.25, grace_seconds))
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    if os.name == "nt":
+        try:
+            process.kill()
+        except OSError:
+            pass
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            try:
+                process.kill()
+            except OSError:
+                pass
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def _run(
     script_dir: Path,
     script: str,
@@ -103,11 +167,13 @@ def _run(
     log: Callable[[str], None] | None = None,
     timeout: int = 60 * 60 * 6,
     config_path: Path | None = None,
+    cancel_requested: Callable[[], bool] | None = None,
 ) -> str:
     command = [sys.executable, str(script_dir / script), *args]
     environment = os.environ.copy()
     if config_path is not None:
         environment["MIRRORORDER_MULTICAM_CONFIG"] = str(config_path)
+    creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
     process = subprocess.Popen(
         command,
         cwd=script_dir,
@@ -116,20 +182,59 @@ def _run(
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        start_new_session=os.name != "nt",
+        creationflags=creationflags,
     )
-    lines = []
+    output: Queue[str | None] = Queue()
+    lines: list[str] = []
+
+    def read_output() -> None:
+        try:
+            assert process.stdout is not None
+            for raw in process.stdout:
+                output.put(raw.rstrip())
+        finally:
+            output.put(None)
+
+    reader = Thread(target=read_output, daemon=True, name=f"multicam-output-{process.pid}")
+    reader.start()
+    deadline = monotonic() + max(0.1, float(timeout))
+    reader_done = False
     try:
-        assert process.stdout is not None
-        for line in process.stdout:
-            text = line.rstrip()
-            lines.append(text)
-            if log and text:
-                log(text[-500:])
-        return_code = process.wait(timeout=timeout)
-    except Exception:
-        process.kill()
-        process.wait()
+        while True:
+            if cancel_requested is not None and cancel_requested():
+                _terminate_process_tree(process)
+                raise ResourceCancelled(f"多机位同步已取消 · {script}")
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                _terminate_process_tree(process)
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                item = output.get(timeout=min(0.1, remaining))
+            except Empty:
+                item = ""
+            if item is None:
+                reader_done = True
+            elif item:
+                lines.append(item)
+                if log:
+                    log(item[-500:])
+            if process.poll() is not None and reader_done:
+                break
+        return_code = process.wait(timeout=1)
+    except BaseException:
+        if process.poll() is None:
+            _terminate_process_tree(process)
         raise
+    finally:
+        reader.join(timeout=1)
+        if process.stdout is not None:
+            try:
+                process.stdout.close()
+            except OSError:
+                pass
+    if cancel_requested is not None and cancel_requested():
+        raise ResourceCancelled(f"多机位同步已取消 · {script}")
     if return_code != 0:
         tail = "\n".join(lines[-20:])
         raise RuntimeError(f"{script} 失败 (exit {return_code})\n{tail}")
@@ -317,7 +422,7 @@ def _sync_media_roles(config: ProjectConfig) -> tuple[dict[str, dict[str, str]],
     projected into its temporary config.
     """
     payload = MediaRoleStore(config.output_dir).load()
-    rows = payload.get("media", {}) if isinstance(payload.get("media", {}), dict) else {}
+    rows = payload.get("media", {}) if isinstance(payload.get("media"), dict) else {}
     projected: dict[str, dict[str, str]] = {}
     camera_labels: set[str] = set()
     excluded = 0
@@ -405,7 +510,13 @@ def run_multicam_sync(
     log: Callable[[str], None] | None = None,
     compress_gaps: bool = True,
     progress: Callable[[int, int], None] | None = None,
+    cancel_requested: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
+    def check_cancelled() -> None:
+        if cancel_requested is not None and cancel_requested():
+            raise ResourceCancelled("多机位同步已按请求取消")
+
+    check_cancelled()
     roots = tuple(config.media_roots or ((config.media_root,) if config.media_root else ()))
     if not config.is_media_directory or not roots:
         if config.fcpxml and config.fcpxml.exists():
@@ -416,6 +527,7 @@ def run_multicam_sync(
         raise FileNotFoundError("素材目录不存在: " + "、".join(str(root) for root in missing))
 
     _check_prerequisites()
+    check_cancelled()
     project_runtime = config.output_dir / ".multicam-sync"
     project_config = project_runtime / "config.json"
     work = config.output_dir / ".multicam-sync" / "work"
@@ -434,6 +546,7 @@ def run_multicam_sync(
         stage,
         config.camera_patterns,
     )
+    check_cancelled()
     media_roles, camera_labels, media_role_summary = _sync_media_roles(config)
 
     def write_builder_config(out_name: str, output: Path = xml_delivery) -> None:
@@ -458,6 +571,17 @@ def run_multicam_sync(
         if progress:
             progress(done, total)
 
+    def run_stage(script: str, args: list[str]) -> str:
+        check_cancelled()
+        return _run(
+            script_dir,
+            script,
+            args,
+            emit,
+            config_path=project_config,
+            cancel_requested=cancel_requested,
+        )
+
     write_builder_config("synchronized.fcpxml")
     emit(f"素材对齐算法引擎：项目内第一方（{engine_origin}）")
     emit(f"素材布局：{layout}")
@@ -467,19 +591,20 @@ def run_multicam_sync(
         emit(f"机位覆盖：{media_role_summary['camera_overrides']} 条人工机位标记")
     emit("盘点素材与时间码")
     update_progress(0, 1)
-    _run(script_dir, "make_index.py", [], emit, config_path=project_config)
+    run_stage("make_index.py", [])
     update_progress(1, 1)
     emit("提取同步音频缓存")
     workers = str(max(2, min(10, (os.cpu_count() or 4))))
-    _run(script_dir, "extract_parallel.py", [workers], emit, config_path=project_config)
+    run_stage("extract_parallel.py", [workers])
     update_progress(2, 2)
+    check_cancelled()
     days = _days_from_index(work)
     total_steps = 2 + len(days) * 3 + 3
     update_progress(2, total_steps)
     positions = []
     for index, day in enumerate(days, start=1):
         emit(f"音频互相关同步 {day}")
-        _run(script_dir, "sync.py", [day], emit, config_path=project_config)
+        run_stage("sync.py", [day])
         update_progress(2 + (index - 1) * 3 + 1, total_steps)
         raw = work / f"positions_{day}.tsv"
         if not raw.exists():
@@ -487,24 +612,27 @@ def run_multicam_sync(
         compressed = work / f"positions_{day}_compressed.tsv"
         if compress_gaps:
             emit(f"压缩全机停机间隙 {day}")
-            _run(script_dir, "compress_gaps.py", [str(raw)], emit, config_path=project_config)
+            run_stage("compress_gaps.py", [str(raw)])
         else:
+            check_cancelled()
             shutil.copyfile(raw, compressed)
         update_progress(2 + (index - 1) * 3 + 2, total_steps)
         if not compressed.exists():
             raise RuntimeError(f"压缩后位置表缺失: {compressed}")
         positions.append(compressed)
 
+    check_cancelled()
     emit("生成标准 FCPXML 1.8 多机位时间线（相对素材路径）")
     write_builder_config("synchronized.fcpxml")
-    _run(script_dir, "build_fcpxml.py", [], emit, config_path=project_config)
+    run_stage("build_fcpxml.py", [])
     update_progress(total_steps - 2, total_steps)
     fcpxml = xml_delivery / "synchronized.fcpxml"
     if not fcpxml.is_file():
         raise RuntimeError("同步完成但 synchronized.fcpxml 未生成")
     emit("校验 FCPXML 帧边界、素材引用与结构")
-    _run(script_dir, "validate_fcpxml.py", [str(fcpxml), str(fcpxml.parent)], emit, config_path=project_config)
+    run_stage("validate_fcpxml.py", [str(fcpxml), str(fcpxml.parent)])
     update_progress(total_steps - 1, total_steps)
+    check_cancelled()
     analysis_path, analysis_reference_mode = _refresh_analysis_reference(
         report_dir / "synchronized.fcpxml",
         fcpxml,
@@ -518,17 +646,13 @@ def run_multicam_sync(
         try:
             emit("生成标准 FCPXML 1.8 剪映兼容时间线（相对素材路径）")
             write_builder_config("synchronized_final.fcpxml")
-            _run(script_dir, "build_capcut_fcpxml.py", [], emit, config_path=project_config)
+            run_stage("build_capcut_fcpxml.py", [])
             capcut_path = xml_delivery / "synchronized_capcut.fcpxml"
             if capcut_path.is_file():
-                _run(
-                    script_dir,
-                    "validate_fcpxml.py",
-                    [str(capcut_path), str(capcut_path.parent)],
-                    emit,
-                    config_path=project_config,
-                )
+                run_stage("validate_fcpxml.py", [str(capcut_path), str(capcut_path.parent)])
                 capcut = str(capcut_path)
+        except ResourceCancelled:
+            raise
         except Exception as error:
             emit(f"剪映 / CapCut FCPXML 可选生成失败：{error}")
 
@@ -536,19 +660,15 @@ def run_multicam_sync(
         try:
             emit("生成剪映原生 3+1 多机位草稿")
             write_builder_config("synchronized.fcpxml")
-            _run(script_dir, "build_capcut_draft_31.py", [], emit, config_path=project_config)
+            run_stage("build_capcut_draft_31.py", [])
             draft_path = xml_delivery / f"{config.name}_音频同步多机位_capcut_draft"
             if draft_path.is_dir():
                 capcut_draft = str(draft_path)
                 emit("校验剪映 3+1 草稿结构")
-                _run(
-                    script_dir,
-                    "validate_capcut_draft.py",
-                    [str(draft_path), "--mode=raw"],
-                    emit,
-                    config_path=project_config,
-                )
+                run_stage("validate_capcut_draft.py", [str(draft_path), "--mode=raw"])
                 capcut_draft_validation = "passed"
+        except ResourceCancelled:
+            raise
         except Exception as error:
             capcut_draft_validation = f"failed: {error}"
             emit(f"剪映 3+1 草稿可选生成或校验失败：{error}")
@@ -557,13 +677,16 @@ def run_multicam_sync(
         try:
             emit("生成 Premiere FCP7/xmeml v4 同步 XML")
             write_builder_config("synchronized_premiere.xml")
-            _run(script_dir, "build_pr_xml.py", [], emit, config_path=project_config)
+            run_stage("build_pr_xml.py", [])
             premiere_path = xml_delivery / "synchronized_premiere.xml"
             if premiere_path.is_file():
                 premiere = str(premiere_path)
+        except ResourceCancelled:
+            raise
         except Exception as error:
             emit(f"Premiere XML 可选生成失败：{error}")
 
+    check_cancelled()
     report = {
         "status": "completed",
         "engine_source": "project-first-party",
@@ -599,5 +722,6 @@ def run_multicam_sync(
         "project_promoted_to_fcpxml": False,
     }
     (report_dir / "sync_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    check_cancelled()
     update_progress(total_steps, total_steps)
     return report
