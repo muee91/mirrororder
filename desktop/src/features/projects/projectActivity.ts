@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import {
+  currentTaskStates,
   isTaskActive,
-  latestTaskFamilies,
   taskAttemptTimestamp,
 } from "../../api/taskSemantics";
 import { ProjectTaskClient, type ProjectTaskRecord } from "../../api/tasks";
@@ -22,11 +22,21 @@ const EMPTY_ACTIVITY: ProjectActivitySummary = { state: "idle", label: "", stage
 const ACTIVE_POLL_MS = 2000;
 const IDLE_FULL_POLL_MS = 15000;
 const ACTIVE_TICKS_BEFORE_FULL_REFRESH = 5;
+const GENERIC_ACTIVE_STAGES = new Set([
+  "queued",
+  "starting",
+  "running",
+  "waiting_cpu",
+  "waiting_mlx",
+  "waiting_vision",
+  "waiting_embedding",
+]);
 
 function stageLabel(stage: string): string {
   const labels: Record<string, string> = {
     queued: "等待开始",
     starting: "正在启动",
+    running: "处理中",
     media_inventory: "素材扫描",
     waveform: "波形生成",
     sync: "多机位同步",
@@ -46,9 +56,9 @@ function stageLabel(stage: string): string {
   return labels[stage] || stage;
 }
 
-function taskLabel(task: ProjectTaskRecord): string {
+function taskTypeLabel(task: ProjectTaskRecord): string {
   const labels: Record<string, string> = {
-    prepare_project: "正在整理",
+    prepare_project: "项目整理",
     media_inventory_scan: "素材扫描",
     waveform_build: "波形生成",
     multicam_sync: "多机位同步",
@@ -61,7 +71,15 @@ function taskLabel(task: ProjectTaskRecord): string {
     audit: "素材审计",
     perception: "内容识别",
   };
-  return stageLabel(task.stage) || labels[task.type] || task.type || "后台处理中";
+  return labels[task.type] || task.type || "后台任务";
+}
+
+function taskLabel(task: ProjectTaskRecord): string {
+  const type = taskTypeLabel(task);
+  const stage = stageLabel(task.stage);
+  if (!task.stage) return type;
+  if (GENERIC_ACTIVE_STAGES.has(task.stage)) return `${type} · ${stage}`;
+  return stage || type;
 }
 
 function taskProgress(task: ProjectTaskRecord): { done: number | null; total: number | null } {
@@ -75,7 +93,9 @@ function taskProgress(task: ProjectTaskRecord): { done: number | null; total: nu
 }
 
 export function summarizeProjectActivity(tasks: ProjectTaskRecord[]): ProjectActivitySummary {
-  const current = latestTaskFamilies(tasks).sort((left, right) => taskAttemptTimestamp(right) - taskAttemptTimestamp(left));
+  // Current project chrome must never hide a real queued/running attempt merely
+  // because a newer settled attempt exists in the same user-facing task family.
+  const current = currentTaskStates(tasks).sort((left, right) => taskAttemptTimestamp(right) - taskAttemptTimestamp(left));
   const activeTask = current.find(isTaskActive);
   if (activeTask) {
     return {
