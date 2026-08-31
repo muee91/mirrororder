@@ -61,6 +61,17 @@ describe("project secondary workspace product contract", () => {
     expect(css).toContain('html[data-mirrororder-theme="dark"] .media-binding-content');
   });
 
+  it("routes media recovery as a sibling project tool instead of nesting a workbench inside the media library", () => {
+    const projectWorkbench = read("./ProjectWorkbench.tsx");
+    const mediaLibrary = read("../media/MediaLibraryWorkbench.tsx");
+
+    expect(projectWorkbench).toContain('onOpenMediaBinding={() => setPage("media-binding")}');
+    expect(mediaLibrary).toContain("onOpenMediaBinding?: () => void");
+    expect(mediaLibrary).not.toContain('import { MediaBindingWorkbench }');
+    expect(mediaLibrary).not.toContain("<MediaBindingWorkbench");
+    expect(mediaLibrary).not.toContain("showBinding");
+  });
+
   it("keeps the official Vite-bundled logo authoritative in the sidebar", () => {
     const frozen = read("../../desktop-theme-frozen-surfaces.css");
 
