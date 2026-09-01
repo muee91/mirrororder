@@ -14,6 +14,7 @@ import "./features/media/media-binding-recovery.css";
 import "./features/status/status-center-redesign.css";
 import "./app/mirrororder-redesign.css";
 import "./app/mirrororder-workspaces-redesign.css";
+import "./app/project-context-redesign.css";
 
 initializeDesktopAppearance();
 
