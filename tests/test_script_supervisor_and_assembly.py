@@ -218,6 +218,6 @@ def test_static_supervisor_and_assembly_runtime_ui_boundaries() -> None:
     for group in ("素材", "剧本", "剪辑", "审阅"):
         assert group in production
     assert '/script_supervisor.css' in index and '/script_supervisor_ui.js' in index
-    assert tauri["build"]["beforeBuildCommand"] == "npm run stage:runtime && npm run build"
+    assert tauri["build"]["beforeBuildCommand"] == "npm run prepare:icons && npm run stage:runtime && npm run build"
     assert tauri["bundle"]["resources"]["resources/mirrororder-runtime/"] == "mirrororder-runtime/"
     assert tauri_macos["bundle"]["targets"] == ["app", "dmg"]
