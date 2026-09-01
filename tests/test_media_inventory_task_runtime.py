@@ -138,8 +138,12 @@ def test_media_inventory_runtime_installs_after_desktop_and_uses_durable_contrac
     assert 'task_runtime.TASK_TYPES.add(_TASK_TYPE)' in runtime
     assert 'manager._resource(config, task, "cpu", "media_inventory", "素材扫描")' in runtime
     assert 'except ResourceCancelled:' in runtime
+    assert 'except MediaScanCancelled:' in runtime
     assert '{"request_id": request_id}' in runtime
     assert '"contract": "media_inventory_scan.v1"' in runtime
     assert 'web_server.HTTPStatus.ACCEPTED' in runtime
-    assert 'media_rows=media_rows' in runtime
-    assert 'media_files=media_files' in runtime
+    assert 'media_rows=captured_rows' in runtime
+    assert 'media_files=captured_files' in runtime
+    assert 'replace=replace' in runtime
+    assert 'cancelled=cancelled' in runtime
+    assert "原有本机素材绑定保持不变" in runtime
