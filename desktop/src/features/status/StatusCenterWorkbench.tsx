@@ -45,6 +45,7 @@ interface TaskContext {
 
 const ACTIVE_POLL_MS = 1000;
 const IDLE_POLL_MS = 8000;
+const DISMISSED_TASK_IDS_KEY = "mirrororder.status.dismissed-task-ids.v1";
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
@@ -59,6 +60,32 @@ export function taskNeedsAttention(task: ProjectTaskRecord): boolean {
   if (isTaskSuperseded(task)) return false;
   if (task.status === "cancelled" || task.status === "completed") return false;
   return task.status === "failed" || task.status === "interrupted" || Boolean(task.error);
+}
+
+export function canDismissStatusTask(task: ProjectTaskRecord): boolean {
+  return !active(task);
+}
+
+function loadDismissedTaskIds(): Set<string> {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return new Set();
+    const raw = storage.getItem(DISMISSED_TASK_IDS_KEY);
+    if (!raw) return new Set();
+    const values = JSON.parse(raw);
+    if (!Array.isArray(values)) return new Set();
+    return new Set(values.filter((value): value is string => typeof value === "string" && Boolean(value.trim())));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissedTaskIds(values: Set<string>): void {
+  try {
+    globalThis.localStorage?.setItem(DISMISSED_TASK_IDS_KEY, JSON.stringify([...values]));
+  } catch {
+    // Dismissing a status row is a local convenience; storage failures must not break task controls.
+  }
 }
 
 function completed(task: ProjectTaskRecord): boolean {
@@ -183,8 +210,8 @@ function hasActive(snapshot: ReloadSnapshot): boolean {
   return currentTasks(snapshot).some(active);
 }
 
-function summaryMessage(snapshot: ReloadSnapshot, deviceError = ""): string {
-  const tasks = currentTasks(snapshot);
+function summaryMessage(snapshot: ReloadSnapshot, deviceError = "", dismissedTaskIds: Set<string> = new Set()): string {
+  const tasks = currentTasks(snapshot).filter((task) => active(task) || !dismissedTaskIds.has(task.task_id));
   const activeCount = tasks.filter(active).length;
   const attentionCount = tasks.filter(taskNeedsAttention).length
     + snapshot.rows.filter((row) => row.error).length
@@ -271,6 +298,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
   const [busy, setBusy] = useState(false);
   const [actionTaskIds, setActionTaskIds] = useState<Set<string>>(() => new Set());
   const [showHistory, setShowHistory] = useState(false);
+  const [dismissedTaskIds, setDismissedTaskIds] = useState<Set<string>>(() => loadDismissedTaskIds());
 
   const reload = useCallback(async (quiet = false): Promise<ReloadSnapshot> => {
     if (!quiet) setBusy(true);
@@ -292,12 +320,12 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
       setRows(nextRows);
       setDeviceTasks(nextDevice.tasks);
       setDeviceError(nextDevice.error);
-      setMessage(summaryMessage(snapshot, nextDevice.error));
+      setMessage(summaryMessage(snapshot, nextDevice.error, dismissedTaskIds));
       return snapshot;
     } finally {
       if (!quiet) setBusy(false);
     }
-  }, [deviceClient, projectClient, projects]);
+  }, [deviceClient, dismissedTaskIds, projectClient, projects]);
 
   useEffect(() => {
     let cancelled = false;
@@ -321,20 +349,33 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     ...rows.flatMap((row) => row.tasks.map((task) => ({ task, project: row.project }))),
   ], [deviceTasks, rows]);
 
+  const visibleContexts = useMemo(
+    () => allContexts.filter(({ task }) => active(task) || !dismissedTaskIds.has(task.task_id)),
+    [allContexts, dismissedTaskIds],
+  );
+
   const currentContexts = useMemo<TaskContext[]>(() => [
-    ...currentTaskStates(deviceTasks).map((task) => ({ task, project: null })),
-    ...rows.flatMap((row) => currentTaskStates(row.tasks).map((task) => ({ task, project: row.project }))),
-  ], [deviceTasks, rows]);
+    ...currentTaskStates(deviceTasks)
+      .filter((task) => active(task) || !dismissedTaskIds.has(task.task_id))
+      .map((task) => ({ task, project: null })),
+    ...rows.flatMap((row) => currentTaskStates(row.tasks)
+      .filter((task) => active(task) || !dismissedTaskIds.has(task.task_id))
+      .map((task) => ({ task, project: row.project }))),
+  ], [deviceTasks, dismissedTaskIds, rows]);
 
   const currentIds = useMemo(() => new Set(currentContexts.map(contextId)), [currentContexts]);
   const activeTasks = useMemo(() => currentContexts.filter(({ task }) => active(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [currentContexts]);
   const attentionTasks = useMemo(() => currentContexts.filter(({ task }) => taskNeedsAttention(task)).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [currentContexts]);
-  const historyTasks = useMemo(() => allContexts.filter((context) => {
+  const historyTasks = useMemo(() => visibleContexts.filter((context) => {
     if (active(context.task)) return false;
     if (currentIds.has(contextId(context))) return completedOrCancelled(context.task);
     return true;
-  }).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [allContexts, currentIds]);
+  }).sort((left, right) => activityTimestamp(right.task) - activityTimestamp(left.task)), [currentIds, visibleContexts]);
   const projectErrors = rows.filter((row) => row.error);
+  const dismissibleCount = useMemo(
+    () => allContexts.filter(({ task }) => canDismissStatusTask(task) && !dismissedTaskIds.has(task.task_id)).length,
+    [allContexts, dismissedTaskIds],
+  );
 
   const totals = useMemo(() => ({
     active: activeTasks.length,
@@ -356,6 +397,32 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
       next.delete(taskId);
       return next;
     });
+  }
+
+  function dismissTask(context: TaskContext): void {
+    if (!canDismissStatusTask(context.task) || actionBusy(context.task.task_id)) return;
+    setDismissedTaskIds((current) => {
+      const next = new Set(current);
+      next.add(context.task.task_id);
+      saveDismissedTaskIds(next);
+      return next;
+    });
+    setMessage(`${taskLabel(context.task)} 已从状态中心删除；后台审计记录仍保留。`);
+  }
+
+  function clearSettledRecords(): void {
+    const ids = allContexts
+      .filter(({ task }) => canDismissStatusTask(task))
+      .map(({ task }) => task.task_id);
+    if (!ids.length) return;
+    setDismissedTaskIds((current) => {
+      const next = new Set(current);
+      ids.forEach((taskId) => next.add(taskId));
+      saveDismissedTaskIds(next);
+      return next;
+    });
+    setShowHistory(false);
+    setMessage(`已从状态中心删除 ${ids.length} 条已结束记录；运行中的任务仍保留。`);
   }
 
   async function cancelProject(projectId: string, task: ProjectTaskRecord): Promise<void> {
@@ -464,6 +531,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
           {!historical && canCancelTask(task) ? <button type="button" className="secondary" disabled={operating || Boolean(task.cancel_requested)} onClick={() => project ? void cancelProject(project.project_id, task) : void cancelDevice(task)}>{task.cancel_requested ? "正在取消" : operating ? "处理中" : "取消"}</button> : null}
           {!historical && canRetryTask(task) ? <button type="button" disabled={operating} onClick={() => project ? void retryProject(project.project_id, task) : void retryDevice(task)}>{operating ? "处理中" : task.status === "cancelled" ? "重新开始" : "重试"}</button> : null}
           {(project || target.settings) ? <button type="button" className="secondary" onClick={() => openTarget(context)}>{target.label}</button> : null}
+          {canDismissStatusTask(task) ? <button type="button" className="secondary" disabled={operating} onClick={() => dismissTask(context)}>删除记录</button> : null}
         </div>
       </article>
     );
@@ -475,7 +543,11 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     <section className="status-center-workbench">
       <header className="production-heading status-center-heading">
         <div><p className="eyebrow">后台工作</p><h2>状态中心</h2></div>
-        <div className="assistant-heading-actions"><span className="production-state">{message}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload(false)}>刷新</button></div>
+        <div className="assistant-heading-actions">
+          <span className="production-state">{message}</span>
+          <button type="button" className="secondary" disabled={!dismissibleCount} onClick={clearSettledRecords}>删除已结束</button>
+          <button type="button" className="secondary" disabled={busy} onClick={() => void reload(false)}>刷新</button>
+        </div>
       </header>
 
       <div className="status-center-summary">
@@ -484,7 +556,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         <button type="button" className={showHistory ? "is-active" : ""} aria-pressed={showHistory} onClick={() => setShowHistory((value) => !value)}><strong>{totals.history}</strong>{showHistory ? "隐藏历史记录" : "显示历史记录"}</button>
       </div>
 
-      <p className="status-center-note">这里只把每类工作的最新状态算作当前事项；仍在排队或运行的实例全部保留。后续尝试或当前设置已经取代的旧失败会进入历史，不再重复占据“需要处理”。</p>
+      <p className="status-center-note">这里只把每类工作的最新状态算作当前事项；仍在排队或运行的实例全部保留。后续尝试或当前设置已经取代的旧失败会进入历史，不再重复占据“需要处理”。已结束记录可以从这台设备的状态中心删除，底层任务审计仍保留。</p>
 
       <div className="status-center-sections">
         {activeTasks.length ? (
@@ -506,7 +578,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         {showHistory ? (
           <section className="status-center-section is-recent">
             <header><div><span className="status-center-section-dot" /><strong>历史记录</strong></div><small>{historyTasks.length}</small></header>
-            <p className="status-center-section-note">包含已完成、已取消，以及被后续尝试或当前设置取代的旧失败。“历史已解除”表示当时确实失败，但按当前设置已经不需要处理；历史记录不提供重试入口。</p>
+            <p className="status-center-section-note">包含已完成、已取消，以及被后续尝试或当前设置取代的旧失败。“历史已解除”表示当时确实失败，但按当前设置已经不需要处理；历史记录不提供重试入口，可按需删除。</p>
             {historyTasks.length ? <div className="status-center-task-list">{historyTasks.map((context) => renderTask(context, true))}</div> : <div className="status-center-section-empty">当前没有历史任务记录。</div>}
           </section>
         ) : null}
