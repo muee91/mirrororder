@@ -150,7 +150,7 @@ export function ProjectLibrary({
             <button type="button" className={primaryActive === null && projectPageActive(activeProjectPage, ["slate", "takes", "script"]) ? "is-active" : ""} onClick={() => openPage("slate")}><NavIcon name="slate" /><span>场记</span></button>
             <button type="button" className={primaryActive === null && projectPageActive(activeProjectPage, ["media-library", "media-binding"]) ? "is-active" : ""} onClick={() => openPage("media-library")}><NavIcon name="media" /><span>素材</span></button>
             <button type="button" className={primaryActive === null && activeProjectPage === "identity" ? "is-active" : ""} onClick={() => openPage("identity")}><NavIcon name="people" /><span>人物</span></button>
-            <button type="button" className={primaryActive === "team" || (primaryActive === null && projectPageActive(activeProjectPage, ["watch", "attention"])) ? "is-active" : ""} onClick={() => onOpenTeamProject?.(selectedProject)}><NavIcon name="review" /><span>审阅</span></button>
+            <button type="button" className={primaryActive === null && projectPageActive(activeProjectPage, ["watch", "attention"]) ? "is-active" : ""} onClick={() => openPage("watch")}><NavIcon name="review" /><span>审阅</span></button>
             <button type="button" className={primaryActive === null && activeProjectPage === "overview" ? "is-active" : ""} onClick={() => openPage("overview")}><NavIcon name="overview" /><span>概览</span></button>
           </nav>
         </section>
