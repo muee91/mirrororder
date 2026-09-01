@@ -44,7 +44,9 @@ def test_desktop_uses_workspace_home_project_management_and_frozen_production_su
     assert "GoldenMaterialScriptWorkbench" in workbench
     for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
-    assert 'aria-label="项目工具"' in workbench
+    assert 'aria-label="项目工具"' not in workbench
+    assert 'className="production-secondary-tabs"' not in workbench
+    assert 'className="production-secondary-back"' in workbench
     assert "TimelineWorkbench" not in workbench
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
@@ -52,6 +54,7 @@ def test_desktop_uses_workspace_home_project_management_and_frozen_production_su
 
     assert 'aria-label="主导航"' in library
     assert 'aria-label="当前项目制作导航"' in library
+    assert 'onClick={() => openPage("watch")}' in library
     assert "状态中心" in library
     assert ">设置<" in library
 
