@@ -500,7 +500,7 @@ export function App() {
             workspace={snapshot.workspace}
             activities={projectActivities}
             selectedProjectId={selectedProject?.project_id ?? null}
-            primaryActive={primaryActive === "production" ? null : primaryActive}
+            primaryActive={primaryActive}
             activeProjectPage={activeProjectPage}
             revealLabel={revealLabel}
             onSelectProject={selectProject}
