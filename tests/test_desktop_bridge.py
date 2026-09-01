@@ -86,12 +86,14 @@ def test_desktop_project_navigation_matches_frozen_demo_surfaces() -> None:
     assert "GoldenMaterialScriptWorkbench" in workbench
     for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
-    assert 'aria-label="项目工具"' in workbench
-    assert 'className="production-secondary-tabs"' in workbench
+    assert 'aria-label="项目工具"' not in workbench
+    assert 'className="production-secondary-tabs"' not in workbench
+    assert 'className="production-secondary-back"' in workbench
     assert ">小镜</button>" in workbench
     assert "onOpenTake={openTakeFromEvidence}" in workbench
     assert "initialGroupId={materialFocusGroupId}" in workbench
     assert 'aria-label="当前项目制作导航"' in library
+    assert 'onClick={() => openPage("watch")}' in library
     assert "TimelineWorkbench" not in workbench
 
 
