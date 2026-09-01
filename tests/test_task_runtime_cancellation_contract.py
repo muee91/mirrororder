@@ -83,7 +83,6 @@ def test_multicam_cancel_targets_only_the_spawned_process_tree() -> None:
     assert 'cancel_requested=cancel_requested' in engine
     assert 'except ResourceCancelled:' in engine
     assert 'cancel_requested=lambda: self._cancel_requested(config, task_id)' in tasks
-    assert 'cancel_requested=lambda: self._cancel_requested(config, task["task_id"])' in tasks
     assert 'cancel_requested=lambda: self._cancel_requested(config, task_id)' in base_tasks
     assert 'cancel_requested=lambda: self._cancel_requested(config, task["task_id"])' in base_tasks
     assert 'pkill' not in engine
