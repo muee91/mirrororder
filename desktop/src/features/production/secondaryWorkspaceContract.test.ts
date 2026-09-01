@@ -7,18 +7,25 @@ function read(relative: string): string {
 }
 
 describe("project secondary workspace product contract", () => {
-  it("uses one compact project tool tab bar under the global production navigation", () => {
+  it("keeps project-level navigation authoritative in the sidebar and secondary headers contextual", () => {
     const workbench = read("./ProjectWorkbench.tsx");
+    const library = read("../projects/ProjectLibrary.tsx");
+    const contextCss = read("../../app/project-context-redesign.css");
 
-    expect(workbench).toContain("const SECONDARY_PAGES");
-    expect(workbench).toContain('aria-label="项目工具"');
-    expect(workbench).toContain('className="production-secondary-tabs"');
-    expect(workbench).toContain('className="project-workbench-main owns-chrome"');
+    expect(library).toContain('aria-label="当前项目制作导航"');
+    expect(library).toContain('onClick={() => openPage("watch")}');
+    expect(library).toContain(">团队审阅</button>");
+    expect(workbench).toContain("const SECONDARY_PAGE_LABELS");
+    expect(workbench).toContain('className="production-secondary-back"');
+    expect(workbench).toContain('aria-label="返回场记"');
     expect(workbench).toContain('onClick={() => navigate("slate")}');
-    expect(workbench).toContain('onClick={() => navigate(item.value)}');
-    expect(workbench).not.toContain('className="production-secondary-switcher"');
-    expect(workbench).not.toContain('<nav aria-label="制作辅助工作区">');
-    expect(workbench).not.toContain("‹ 返回场记");
+    expect(workbench).toContain('className="project-workbench-main owns-chrome"');
+    expect(workbench).not.toContain('aria-label="项目工具"');
+    expect(workbench).not.toContain('className="production-secondary-tabs"');
+    expect(workbench).not.toContain("const SECONDARY_PAGES");
+    expect(contextCss).toContain("grid-template-rows: 42px minmax(0, 1fr)");
+    expect(contextCss).toContain("grid-template-columns: auto minmax(0, 1fr) auto");
+    expect(contextCss).not.toContain("production-secondary-tabs");
   });
 
   it("follows the resolved Desktop theme instead of the raw OS color scheme", () => {
