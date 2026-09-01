@@ -1,0 +1,461 @@
+/* Specialist workspace presentation for the redesigned MirrorOrder shell.
+   Domain semantics remain owned by each workbench; this layer only normalizes
+   hierarchy, density and inspector geometry. */
+
+/* Media library */
+.mirrororder-redesign-shell .media-library-workbench {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--mo-surface) !important;
+  box-shadow: none !important;
+  color: var(--mo-text);
+}
+
+.mirrororder-redesign-shell .media-library-workbench > .production-heading {
+  min-height: 56px;
+  padding: 11px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--mo-border);
+  background: var(--mo-surface);
+}
+
+.mirrororder-redesign-shell .media-library-workbench > .production-heading h2 {
+  margin: 1px 0 0;
+  color: var(--mo-text);
+  font-size: 15px;
+}
+
+.mirrororder-redesign-shell .media-library-workbench > .production-heading .production-state {
+  max-width: 520px;
+  overflow: hidden;
+  color: var(--mo-text-3);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mirrororder-redesign-shell .media-library-summary {
+  min-height: 48px;
+  padding: 8px 14px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  border-bottom: 1px solid var(--mo-border);
+  background: var(--mo-surface-soft);
+}
+
+.mirrororder-redesign-shell .media-library-summary > span {
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 9px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--mo-border);
+  border-radius: 7px;
+  background: var(--mo-surface);
+  color: var(--mo-text-3);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.mirrororder-redesign-shell .media-library-summary > span strong {
+  color: var(--mo-text);
+  font-size: 12px;
+}
+
+.mirrororder-redesign-shell .media-library-summary > span.needs-attention {
+  border-color: color-mix(in srgb, var(--mo-warning) 35%, var(--mo-border));
+  background: var(--mo-warning-soft);
+  color: var(--mo-warning);
+}
+
+.mirrororder-redesign-shell .media-library-toolbar {
+  min-height: 47px;
+  padding: 7px 14px;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto 170px;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid var(--mo-border);
+  background: var(--mo-surface);
+}
+
+.mirrororder-redesign-shell .media-library-toolbar > input,
+.mirrororder-redesign-shell .media-library-actor input {
+  height: 31px;
+  box-sizing: border-box;
+  border: 1px solid var(--mo-border);
+  border-radius: 7px;
+  background: var(--mo-surface-soft);
+  color: var(--mo-text);
+}
+
+.mirrororder-redesign-shell .media-library-filters {
+  padding: 2px;
+  display: flex;
+  gap: 1px;
+  border-radius: 8px;
+  background: var(--mo-surface-muted);
+}
+
+.mirrororder-redesign-shell .media-library-filters button {
+  min-height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mo-text-2);
+  font-size: 9px;
+}
+
+.mirrororder-redesign-shell .media-library-filters button.is-active {
+  background: var(--mo-surface);
+  color: var(--mo-accent);
+  box-shadow: 0 1px 2px rgba(24, 38, 53, .08);
+}
+
+.mirrororder-redesign-shell .media-library-actor {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--mo-text-3);
+  font-size: 9px;
+}
+
+.mirrororder-redesign-shell .media-library-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  overflow: hidden;
+}
+
+.mirrororder-redesign-shell .media-library-list {
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+  border-right: 1px solid var(--mo-border);
+  background: var(--mo-surface);
+}
+
+.mirrororder-redesign-shell .media-library-row {
+  min-height: 55px;
+  padding: 7px 12px;
+  grid-template-columns: 48px minmax(180px, 1fr) minmax(130px, .7fr) 64px;
+  border: 0;
+  border-bottom: 1px solid var(--mo-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--mo-text);
+}
+
+.mirrororder-redesign-shell .media-library-row:hover { background: var(--mo-surface-soft); }
+.mirrororder-redesign-shell .media-library-row.is-selected {
+  background: var(--mo-accent-soft);
+  box-shadow: inset 3px 0 0 var(--mo-accent);
+}
+
+.mirrororder-redesign-shell .media-library-row .media-library-name strong,
+.mirrororder-redesign-shell .media-library-row .media-library-role strong { color: var(--mo-text); }
+.mirrororder-redesign-shell .media-library-row small { color: var(--mo-text-3); }
+
+.mirrororder-redesign-shell .media-role-inspector {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  border: 0;
+  background: var(--mo-surface-soft);
+}
+
+.mirrororder-redesign-shell .media-role-inspector-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--mo-border);
+}
+
+.mirrororder-redesign-shell .media-role-inspector .production-field {
+  margin-top: 10px;
+}
+
+.mirrororder-redesign-shell .media-role-inspector > button:not(.secondary) {
+  width: 100%;
+  min-height: 32px;
+  margin-top: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--mo-accent);
+  color: #fff;
+  font-weight: 650;
+}
+
+.mirrororder-redesign-shell .media-binding-disclosure {
+  min-height: 42px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  border-top: 1px solid var(--mo-border);
+  background: var(--mo-surface-soft);
+}
+
+/* Identity */
+.mirrororder-redesign-shell .phase3-workbench:has(.identity-grid) {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--mo-surface) !important;
+  box-shadow: none !important;
+}
+
+.mirrororder-redesign-shell .phase3-workbench:has(.identity-grid) > .production-heading {
+  min-height: 56px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--mo-border);
+}
+
+.mirrororder-redesign-shell .phase3-workbench:has(.identity-grid) > .identity-filter {
+  min-height: 43px;
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border-bottom: 1px solid var(--mo-border);
+  background: var(--mo-surface-soft);
+}
+
+.mirrororder-redesign-shell .identity-filter button {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mo-text-2);
+  font-size: 9px;
+}
+
+.mirrororder-redesign-shell .identity-filter button.is-active {
+  background: var(--mo-surface);
+  color: var(--mo-accent);
+  box-shadow: 0 1px 2px rgba(24, 38, 53, .08);
+}
+
+.mirrororder-redesign-shell .identity-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(270px, .75fr) minmax(340px, 1.25fr);
+  gap: 0;
+  overflow: hidden;
+}
+
+.mirrororder-redesign-shell .identity-grid > .production-panel {
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: var(--mo-surface);
+  box-shadow: none;
+}
+
+.mirrororder-redesign-shell .identity-list {
+  border-right: 1px solid var(--mo-border) !important;
+}
+
+.mirrororder-redesign-shell .identity-row {
+  width: 100%;
+  min-height: 58px;
+  margin: 0;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--mo-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--mo-text);
+  text-align: left;
+}
+
+.mirrororder-redesign-shell .identity-row:hover { background: var(--mo-surface-soft); }
+.mirrororder-redesign-shell .identity-row.is-selected {
+  background: var(--mo-accent-soft);
+  box-shadow: inset 3px 0 0 var(--mo-accent);
+}
+
+.mirrororder-redesign-shell .identity-row .identity-kind {
+  grid-row: 1 / span 2;
+  align-self: center;
+  padding: 4px 5px;
+  border-radius: 6px;
+  background: var(--mo-surface-muted);
+  color: var(--mo-text-2);
+  font-size: 8px;
+  text-align: center;
+}
+
+.mirrororder-redesign-shell .identity-row strong { color: var(--mo-text); font-size: 10px; }
+.mirrororder-redesign-shell .identity-row > span:not(.identity-kind) { color: var(--mo-text-3); font-size: 9px; }
+.mirrororder-redesign-shell .identity-row em { color: var(--mo-accent); font-size: 8px; font-style: normal; }
+
+.mirrororder-redesign-shell .identity-inspector {
+  padding: 16px 18px;
+  background: var(--mo-surface-soft) !important;
+}
+
+.mirrororder-redesign-shell .identity-inspector > button:not(.secondary) {
+  min-height: 32px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--mo-accent);
+  color: #fff;
+  font-weight: 650;
+}
+
+.mirrororder-redesign-shell .identity-suggestion,
+.mirrororder-redesign-shell .identity-occurrences {
+  margin-top: 13px;
+  padding: 11px;
+  border: 1px solid var(--mo-border);
+  border-radius: 9px;
+  background: var(--mo-surface);
+}
+
+.mirrororder-redesign-shell .occurrence-row {
+  border-color: var(--mo-border);
+  background: var(--mo-surface-soft);
+}
+
+/* Settings */
+.mirrororder-redesign-shell .settings-status-workbench {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 26px clamp(24px, 3vw, 42px) 42px;
+  background: var(--mo-bg);
+  color: var(--mo-text);
+}
+
+.mirrororder-redesign-shell .settings-status-workbench > .settings-heading,
+.mirrororder-redesign-shell .settings-status-workbench > .settings-intro,
+.mirrororder-redesign-shell .settings-preference-stack {
+  width: 100%;
+  max-width: 1040px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.mirrororder-redesign-shell .settings-status-workbench > .settings-heading {
+  min-height: 54px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--mo-border);
+  background: transparent;
+}
+
+.mirrororder-redesign-shell .settings-status-workbench > .settings-heading h2 {
+  margin: 1px 0 0;
+  color: var(--mo-text);
+  font-size: 24px;
+  letter-spacing: -.02em;
+}
+
+.mirrororder-redesign-shell .settings-intro {
+  margin-top: 12px;
+  margin-bottom: 20px;
+  color: var(--mo-text-2);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.mirrororder-redesign-shell .settings-preference-stack {
+  display: grid;
+  gap: 13px;
+}
+
+.mirrororder-redesign-shell .settings-preference-section,
+.mirrororder-redesign-shell .settings-advanced-diagnostics {
+  overflow: hidden;
+  border: 1px solid var(--mo-border);
+  border-radius: var(--mo-radius);
+  background: var(--mo-surface);
+  box-shadow: 0 1px 0 rgba(38, 55, 73, .02);
+}
+
+.mirrororder-redesign-shell .settings-section-heading {
+  min-height: 56px;
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--mo-border);
+  background: var(--mo-surface-soft);
+}
+
+.mirrororder-redesign-shell .settings-section-heading h3 { margin: 1px 0 0; color: var(--mo-text); font-size: 13px; }
+.mirrororder-redesign-shell .settings-section-heading > span { color: var(--mo-text-3); font-size: 9px; }
+.mirrororder-redesign-shell .settings-preference-surface,
+.mirrororder-redesign-shell .settings-preference-section > .local-runtime-panel,
+.mirrororder-redesign-shell .settings-preference-section > .assistant-models-panel { border: 0; border-radius: 0; box-shadow: none; }
+
+.mirrororder-redesign-shell .settings-team-grid {
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, .7fr);
+  gap: 10px;
+}
+
+.mirrororder-redesign-shell .settings-team-grid > .production-panel,
+.mirrororder-redesign-shell .settings-team-grid > * {
+  border-color: var(--mo-border);
+  border-radius: 9px;
+  background: var(--mo-surface-soft);
+  box-shadow: none;
+}
+
+.mirrororder-redesign-shell .settings-advanced-diagnostics > summary {
+  min-height: 58px;
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--mo-text);
+  list-style: none;
+}
+
+.mirrororder-redesign-shell .settings-advanced-diagnostics > summary::-webkit-details-marker { display: none; }
+.mirrororder-redesign-shell .settings-advanced-diagnostics > summary > div { display: grid; gap: 2px; }
+.mirrororder-redesign-shell .settings-advanced-diagnostics > summary span,
+.mirrororder-redesign-shell .settings-advanced-diagnostics > summary small { color: var(--mo-text-3); font-size: 9px; }
+.mirrororder-redesign-shell .settings-diagnostics-note { padding: 0 14px; }
+.mirrororder-redesign-shell .settings-diagnostics-grid { padding: 12px; gap: 10px; }
+
+@media (max-width: 1100px) {
+  .mirrororder-redesign-shell .media-library-toolbar { grid-template-columns: minmax(180px, 1fr) auto; }
+  .mirrororder-redesign-shell .media-library-actor { display: none; }
+  .mirrororder-redesign-shell .media-library-layout { grid-template-columns: minmax(0, 1fr) 270px; }
+  .mirrororder-redesign-shell .settings-team-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  .mirrororder-redesign-shell .media-library-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mirrororder-redesign-shell .media-library-layout,
+  .mirrororder-redesign-shell .identity-grid { grid-template-columns: 1fr; }
+  .mirrororder-redesign-shell .media-role-inspector,
+  .mirrororder-redesign-shell .identity-inspector { display: none; }
+}
