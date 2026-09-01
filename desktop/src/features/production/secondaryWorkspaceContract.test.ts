@@ -44,14 +44,17 @@ describe("project secondary workspace product contract", () => {
     expect(mediaLibrary).not.toContain("@media (prefers-color-scheme: light)");
   });
 
-  it("presents local media recovery as an ordered flow rather than a two-card dashboard", () => {
+  it("presents local media recovery as an ordered reconnect flow rather than a two-card dashboard", () => {
     const workbench = read("../media/MediaBindingWorkbench.tsx");
     const css = read("../media/media.css");
 
     expect(workbench).toContain('className="media-binding-section media-binding-setup"');
     expect(workbench).toContain('className="media-binding-section media-binding-results"');
-    expect(workbench).toContain("关于本机素材恢复");
-    expect(workbench).toContain("扫描新增目录");
+    expect(workbench).toContain("重连规则");
+    expect(workbench).toContain("重新连接已移动素材…");
+    expect(workbench).toContain("添加搜索位置…");
+    expect(workbench).not.toContain("扫描新增目录");
+    expect(workbench).not.toContain("替换目录并重扫");
     expect(workbench).not.toContain("production-grid media-binding-grid");
     expect(workbench).not.toContain('className="production-panel"');
     expect(workbench).not.toContain("media-binding-counts");
