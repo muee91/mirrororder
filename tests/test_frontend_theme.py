@@ -69,14 +69,18 @@ def test_review_media_cards_share_fixed_low_noise_visual_contract() -> None:
     assert ".camera-run.repeated{min-width:0;width:max-content" in css
 
 
-def test_active_desktop_surface_uses_project_home_and_frozen_production_workbenches() -> None:
+def test_active_desktop_surface_uses_workspace_home_and_frozen_production_workbenches() -> None:
     app = (ROOT / "desktop" / "src" / "app" / "App.tsx").read_text(encoding="utf-8")
     library = (ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx").read_text(encoding="utf-8")
+    workspace_home = (ROOT / "desktop" / "src" / "features" / "projects" / "WorkspaceHome.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
+    assert "WorkspaceHome" in app
     assert "ProjectLibrary" in app
     assert "ProjectWorkbench" in app
-    assert "project-list" in library
+    assert 'aria-label="主导航"' in library
+    assert 'aria-label="当前项目制作导航"' in library
+    assert "最近项目" in workspace_home
     assert "GoldenSlateWorkbench" in workbench
     assert "GoldenMaterialScriptWorkbench" in workbench
     assert 'label: "素材库"' in workbench
