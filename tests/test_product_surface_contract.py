@@ -10,20 +10,14 @@ PROJECT_LIFECYCLE = ROOT / "desktop" / "src" / "features" / "projects" / "Projec
 STATUS_CENTER = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenterWorkbench.tsx"
 SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
 LEGACY_TASK_PANEL = ROOT / "desktop" / "src" / "features" / "settings" / "TaskStatusPanel.tsx"
-SEARCH = ROOT / "desktop" / "src" / "features" / "search" / "SemanticSearchPalette.tsx"
 SLATE = ROOT / "desktop" / "src" / "features" / "slate" / "GoldenSlateWorkbench.tsx"
-ANGLE_CARD = ROOT / "desktop" / "src" / "features" / "material-script" / "AngleEvidenceCard.tsx"
 MEDIA_CARD = ROOT / "desktop" / "src" / "features" / "media" / "MirrorOrderMediaCard.tsx"
 MEDIA_CARD_CSS = ROOT / "desktop" / "src" / "features" / "media" / "mirrororder-media-card.css"
-CONFIDENCE_CARD = ROOT / "desktop" / "src" / "features" / "material-script" / "CandidateEvidence.tsx"
-CONFIDENCE_CSS = ROOT / "desktop" / "src" / "features" / "material-script" / "candidate-evidence.css"
-TAKE_LIST = ROOT / "desktop" / "src" / "features" / "material-script" / "VirtualTakeList.tsx"
-TAKE_INSPECTOR = ROOT / "desktop" / "src" / "features" / "material-script" / "TakeInspector.tsx"
 TEAM = ROOT / "desktop" / "src" / "features" / "team" / "TeamWebWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
-def test_desktop_is_project_first_production_surface() -> None:
+def test_desktop_is_project_first_frozen_production_surface() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
@@ -36,67 +30,52 @@ def test_desktop_is_project_first_production_surface() -> None:
     assert "制作台" not in app
     assert "app-workspace-switch" not in app
 
-    for label in ("素材", "剧本", "剪辑", "审阅"):
+    assert 'useState<ProductionPage>("slate")' in workbench
+    assert "GoldenSlateWorkbench" in workbench
+    assert "GoldenMaterialScriptWorkbench" in workbench
+    for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
-
-    for label in (
-        "场记",
-        "素材库",
-        "Take",
-        "人物",
-        "覆盖",
-        "粗剪",
-        "组接",
-        "时间线",
-        "交付",
-        "看片",
-        "待处理",
-        "概览",
-    ):
-        assert f'label: "{label}"' in workbench
+    assert 'aria-label="项目工具"' in workbench
+    assert "TimelineWorkbench" not in workbench
+    assert "RoughCutWorkbench" not in workbench
+    assert "AssemblyWorkbench" not in workbench
+    assert 'label: "交付"' not in workbench
 
     assert "状态中心" in library
-    assert "团队审阅" in library
     assert ">设置<" in library
-    assert 'label: "小镜"' not in workbench
 
 
-def test_project_resume_restores_last_canvas_and_defaults_to_slate() -> None:
+def test_project_resume_defaults_to_slate_without_auto_drilling_into_last_subpage() -> None:
     resume = RESUME.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
 
     assert 'const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"' in resume
-    assert "readProjectPage(project.project_id)" in workbench
+    assert 'useState<ProductionPage>("slate")' in workbench
     assert "rememberProjectPage(project.project_id, page)" in workbench
-    assert '{ id: "material", label: "素材", pages: [{ id: "slate", label: "场记" }, { id: "media-library", label: "素材库" }' in workbench
+    assert "readProjectPage(project.project_id)" not in workbench
 
 
-def test_frontend_parity_surfaces_are_reachable_from_product_ia() -> None:
+def test_frozen_demo_surfaces_are_reachable_from_project_ia() -> None:
     workbench = WORKBENCH.read_text(encoding="utf-8")
 
+    assert 'const materialScript = page === "takes" || page === "script"' in workbench
     assert "GoldenMaterialScriptWorkbench" in workbench
-    assert 'page === "takes" ? <GoldenMaterialScriptWorkbench' in workbench
-    assert 'page === "script" ? <GoldenMaterialScriptWorkbench' in workbench
+    assert 'initialMode={page === "takes" ? "rough" : "precise"}' in workbench
     assert "MediaLibraryWorkbench" in workbench
-    assert "CoverageWorkbench" in workbench
-    assert "RoughCutWorkbench" in workbench
-    assert "AssemblyWorkbench" in workbench
+    assert "MediaBindingWorkbench" in workbench
+    assert "IdentityWorkbench" in workbench
     assert "ReviewAttentionWorkbench" in workbench
     assert "ProjectOverviewWorkbench" in workbench
-    assert "showEditorial" in workbench
+    assert "showEditorial={false}" in workbench
 
 
-def test_project_search_and_assistant_are_contextual_tools_not_new_tabs() -> None:
+def test_assistant_is_a_contextual_tool_not_a_project_tab() -> None:
     workbench = WORKBENCH.read_text(encoding="utf-8")
-    search = SEARCH.read_text(encoding="utf-8")
 
-    assert "SemanticSearchPalette" in workbench
-    assert "onOpenTake={openTakeFromEvidence}" in workbench
-    assert 'event.key.toLowerCase() === "k"' in search
-    assert "画面、对白和人工场记证据" in search
     assert "assistant-context-drawer" in workbench
     assert "has-assistant-drawer" in workbench
     assert "setAssistantOpen" in workbench
+    assert 'aria-label="小镜上下文助手"' in workbench
     assert 'label: "小镜"' not in workbench
 
 
@@ -104,57 +83,34 @@ def test_slate_is_dense_table_and_preserves_keyboard_flow() -> None:
     slate = SLATE.read_text(encoding="utf-8")
 
     assert '<table className="golden-slate-table">' in slate
-    for column in ("集", "场号", "镜号", "次号", "A机", "B机", "C机", "辅助 / 特殊", "状态"):
+    for column in ("集", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
         assert f">{column}<" in slate
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s"' in slate
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n"' in slate
     assert "expectedRevision: revision" in slate
+    assert "displayedDrafts.findIndex" in slate
 
 
 def test_project_creation_is_low_frequency_modal_not_sidebar_form() -> None:
     lifecycle = PROJECT_LIFECYCLE.read_text(encoding="utf-8")
 
-    assert 'className="project-new-button"' in lifecycle
+    assert 'className="project-new-button project-home-new-button"' in lifecycle
     assert 'className="project-lifecycle-overlay"' in lifecycle
     assert 'role="dialog"' in lifecycle
-    assert "创建后在后台自动整理素材、转写并匹配剧本" in lifecycle
+    assert "创建后自动整理" in lifecycle
+    assert "后台整理素材、转写并匹配剧本" in lifecycle
     assert "Python WorkspaceRegistry" not in lifecycle
-    assert "prepare task" not in lifecycle
 
 
-def test_fixed_angle_card_is_one_shared_geometry_contract() -> None:
+def test_media_card_has_one_shared_compact_and_inspector_geometry() -> None:
     component = MEDIA_CARD.read_text(encoding="utf-8")
     css = MEDIA_CARD_CSS.read_text(encoding="utf-8")
-    take_list = TAKE_LIST.read_text(encoding="utf-8")
-    inspector = TAKE_INSPECTOR.read_text(encoding="utf-8")
-    adapter = ANGLE_CARD.read_text(encoding="utf-8")
 
     assert "MirrorOrderMediaCard" in component
-    assert "width: 154px; height: 54px" in css
-    assert "min-height: 92px" in css
+    assert ".mo-media-card.is-compact { width: 180px; height: 88px; }" in css
+    assert ".mo-media-card.is-inspector { width: min(286px, 100%); height: 112px; }" in css
     assert "mo-media-card" in css
-    assert "AngleEvidenceCard" in take_list
-    assert "AngleEvidenceCard" in inspector
-    assert "inspector-angle-cards" in inspector
-    assert "MirrorOrderMediaCard" in adapter
-    assert "mediaCardFromAngle(angle)" in adapter
-    assert "fixed-angle-card" not in adapter
-
-
-def test_fixed_confidence_card_cannot_expand_with_content() -> None:
-    component = CONFIDENCE_CARD.read_text(encoding="utf-8")
-    css = CONFIDENCE_CSS.read_text(encoding="utf-8")
-
-    assert "fixed-confidence-card" in component
-    assert ">置信度<" in component
-    assert 'ScoreRow label="对白"' in component
-    assert 'ScoreRow label="时序"' in component
-    assert 'ScoreRow label="上下文"' in component
-    assert "height: 263px" in css
-    assert "min-height: 263px" in css
-    assert "max-height: 263px" in css
-    assert "-webkit-line-clamp: 2" in css
-    assert "candidate.evidence.slice(0, 4)" in component
+    assert "mo-media-select" in component
 
 
 def test_background_tasks_have_one_global_status_center_home() -> None:
@@ -169,20 +125,22 @@ def test_background_tasks_have_one_global_status_center_home() -> None:
     assert "ProjectTaskClient" in status_center
     assert "canCancelTask" in status_center
     assert "canRetryTask" in status_center
-    assert "showCompleted" in status_center
+    assert "showHistory" in status_center
+    assert "currentTaskStates" in status_center
     for label in ("准备项目", "多机位同步", "增量素材分析", "剧本归集整理", "转写", "证据提取", "人物 / 声纹索引"):
         assert label in status_center
     assert not LEGACY_TASK_PANEL.exists()
-    assert "后台任务统一在“状态中心”查看" in settings
+    assert "后台任务、下载进度与失败恢复统一在“状态中心”查看" in settings
 
 
 def test_settings_do_not_confuse_team_web_preferences_with_desktop_canvas() -> None:
     settings = SETTINGS.read_text(encoding="utf-8")
 
     assert "团队审阅偏好" in settings
-    assert "这些选项只控制浏览器团队审阅界面，不改变 Desktop 项目的默认场记画布" in settings
+    assert "这些选项只控制 Team Web，不改变 Desktop 场记画布" in settings
     assert ">默认视图<" in settings
     assert ">默认工作台<" not in settings
+    assert "DesktopAppearanceControl" in settings
     assert "settings-advanced-diagnostics" in settings
     assert "高级诊断" in settings
 
