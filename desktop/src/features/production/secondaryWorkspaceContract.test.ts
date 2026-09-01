@@ -7,14 +7,16 @@ function read(relative: string): string {
 }
 
 describe("project secondary workspace product contract", () => {
-  it("uses one compact project context bar instead of a second tab navigation system", () => {
+  it("uses one compact project tool tab bar under the global production navigation", () => {
     const workbench = read("./ProjectWorkbench.tsx");
 
     expect(workbench).toContain("const SECONDARY_PAGES");
     expect(workbench).toContain('aria-label="项目工具"');
-    expect(workbench).toContain('className="production-secondary-switcher"');
+    expect(workbench).toContain('className="production-secondary-tabs"');
     expect(workbench).toContain('className="project-workbench-main owns-chrome"');
-    expect(workbench).toContain(">返回场记</button>");
+    expect(workbench).toContain('onClick={() => navigate("slate")}');
+    expect(workbench).toContain('onClick={() => navigate(item.value)}');
+    expect(workbench).not.toContain('className="production-secondary-switcher"');
     expect(workbench).not.toContain('<nav aria-label="制作辅助工作区">');
     expect(workbench).not.toContain("‹ 返回场记");
   });
@@ -68,7 +70,7 @@ describe("project secondary workspace product contract", () => {
     const projectWorkbench = read("./ProjectWorkbench.tsx");
     const mediaLibrary = read("../media/MediaLibraryWorkbench.tsx");
 
-    expect(projectWorkbench).toContain('onOpenMediaBinding={() => setPage("media-binding")}');
+    expect(projectWorkbench).toContain('onOpenMediaBinding={() => navigate("media-binding")}');
     expect(mediaLibrary).toContain("onOpenMediaBinding?: () => void");
     expect(mediaLibrary).not.toContain('import { MediaBindingWorkbench }');
     expect(mediaLibrary).not.toContain("<MediaBindingWorkbench");
@@ -76,9 +78,9 @@ describe("project secondary workspace product contract", () => {
   });
 
   it("keeps the official Vite-bundled logo authoritative in the sidebar", () => {
-    const frozen = read("../../desktop-theme-frozen-surfaces.css");
+    const library = read("../projects/ProjectLibrary.tsx");
 
-    expect(frozen).toContain(".global-sidebar .mirror-mark");
-    expect(frozen).toContain('background-image: url("./assets/mirrororder-logo.svg")');
+    expect(library).toContain('import mirrororderLogo from "../../assets/mirrororder-logo.svg"');
+    expect(library).toContain('className="mirror-mark" src={mirrororderLogo}');
   });
 });
