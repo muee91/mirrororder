@@ -23,11 +23,23 @@
 .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled) { border-color: #5a4a4a; color: #d59a93; background: transparent; }
 .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled):hover { border-color: #765858; color: #e2ada6; background: #1a1313; }
 
-/* The backlog belongs to the scrollable content region. Do not create an
- * unbounded page or a second nested failure-list scrollbar. */
+/* Current recovery work is a bounded control panel, not an endless log. At the
+ * standard Golden viewport this keeps roughly six compact failures visible and
+ * leaves the running-task/cancel surface in view. */
 .status-center-section.is-attention .status-center-task-list {
-  max-height: none;
-  overflow: visible;
+  max-height: min(320px, 38vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.status-center-section.is-attention .status-center-task-list::-webkit-scrollbar,
+.status-center-section.is-active .status-center-task-list::-webkit-scrollbar { width: 10px; }
+.status-center-section.is-attention .status-center-task-list::-webkit-scrollbar-thumb,
+.status-center-section.is-active .status-center-task-list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: rgba(120, 134, 146, .42);
 }
 
 /* Superseded failures are history, not current alarms. */
