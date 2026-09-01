@@ -37,21 +37,21 @@ const PRODUCTION_PAGES = new Set<ProductionPage>([
   "overview",
 ]);
 
-const SECONDARY_PAGES: Array<{ value: ProductionPage; label: string }> = [
-  { value: "media-library", label: "素材库" },
-  { value: "media-binding", label: "本机素材" },
-  { value: "identity", label: "人物" },
-  { value: "watch", label: "审阅" },
-  { value: "attention", label: "待处理" },
-  { value: "overview", label: "概览" },
-];
+const SECONDARY_PAGE_LABELS: Partial<Record<ProductionPage, string>> = {
+  "media-library": "素材库",
+  "media-binding": "本机素材",
+  identity: "人物",
+  watch: "审阅",
+  attention: "待处理",
+  overview: "概览",
+};
 
 function safeProductionPage(page: ProductionPage): ProductionPage {
   return PRODUCTION_PAGES.has(page) ? page : "slate";
 }
 
 function pageLabel(page: ProductionPage): string {
-  return SECONDARY_PAGES.find((item) => item.value === page)?.label ?? (page === "takes" ? "Take" : page === "script" ? "剧本" : "场记");
+  return SECONDARY_PAGE_LABELS[page] ?? (page === "takes" ? "Take" : page === "script" ? "剧本" : "场记");
 }
 
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
@@ -119,14 +119,11 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
           {secondarySurface ? (
             <section className="production-secondary-workspace">
               <header className="production-secondary-bar production-secondary-bar-redesign">
+                <button type="button" className="production-secondary-back" onClick={() => navigate("slate")} aria-label="返回场记">← 场记</button>
                 <div className="production-secondary-title">
                   <p className="eyebrow">{project.name || project.project_id}</p>
                   <strong>{pageLabel(page)}</strong>
                 </div>
-                <nav className="production-secondary-tabs" aria-label="项目工具">
-                  <button type="button" onClick={() => navigate("slate")}>场记</button>
-                  {SECONDARY_PAGES.map((item) => <button type="button" className={page === item.value ? "is-active" : ""} key={item.value} onClick={() => navigate(item.value)}>{item.label}</button>)}
-                </nav>
                 <button type="button" className={`production-secondary-assistant ${assistantVisible ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
               </header>
               <div className="production-secondary-canvas">
