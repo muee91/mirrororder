@@ -48,25 +48,26 @@ def test_camera_specific_shot_facts_stay_clip_level() -> None:
     assert "shot_type: shot" in ui
 
 
-def test_range_hint_never_invents_seconds() -> None:
+def test_range_hint_stays_verbatim_and_never_invents_seconds() -> None:
     ui = source("desktop/src/features/slate/GoldenSlateWorkbench.tsx")
     parser = source("src/script_organizer/script_supervisor_parser.py")
 
     assert "parsed.range_hint" in ui
-    assert "不推导秒数" in ui
+    assert "范围原话" in ui
     deterministic = parser.split("def deterministic_parse", 1)[1].split("def _sanitize_model", 1)[0]
     assert 'result["range_hint"] = "first_half"' in deterministic
     assert 'result["range_hint"] = "second_half"' in deterministic
     assert "usable_range" not in deterministic
 
 
-def test_slate_authority_stays_human_and_not_editorial_best() -> None:
+def test_slate_authority_stays_human_and_requires_explicit_save() -> None:
     ui = source("desktop/src/features/slate/GoldenSlateWorkbench.tsx")
     runtime = source("src/script_organizer/script_supervisor_runtime.py")
     store = source("src/script_organizer/script_supervisor_store.py")
 
-    assert "先核对，再应用到当前行。不会自动保存。" in ui
-    assert "仍需保存才会写入项目。" in ui
+    assert "patchRecord(selected.record_id" in ui
+    assert "已填入解析结果" in ui
+    assert "仍需保存" in ui
     assert "records.upsert(projectId" in ui
     assert '"script_supervisor_is_editorial_authority": False' in runtime
     assert "ScriptSupervisorConflictError" in store
