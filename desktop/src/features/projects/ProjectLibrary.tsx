@@ -129,7 +129,7 @@ export function ProjectLibrary({
                 {taskActive ? <span className="project-activity-spinner" title={activity.label || "后台处理中"} /> : presentation.statusTone === "error" ? <span className="project-row-alert" title={activity?.message || project.error || "整理异常"}>异常</span> : null}
               </button>
             );
-          })}
+          })
         )}
       </div>
 
