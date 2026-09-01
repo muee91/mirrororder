@@ -126,7 +126,7 @@ def test_desktop_build_can_bundle_sync_engine() -> None:
     assert "MIRRORORDER_MEDIA_TOOLS_ROOT" in stage
     assert ".agents/skills/multicam-audio-sync" not in stage
     assert 'path.join(core, "vendor", "multicam-audio-sync")' in bundle
-    assert tauri["build"]["beforeBuildCommand"] == "npm run stage:runtime && npm run build"
+    assert tauri["build"]["beforeBuildCommand"] == "npm run prepare:icons && npm run stage:runtime && npm run build"
     assert tauri["bundle"]["resources"]["resources/mirrororder-core/"] == "mirrororder-core/"
     assert '"prepare_project"' in tasks
     assert '"auto_resolve"' in tasks
