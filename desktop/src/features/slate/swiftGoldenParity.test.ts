@@ -6,7 +6,7 @@ function source(relative: string): string {
 }
 
 describe("Swift golden product fidelity", () => {
-  it("keeps editing out of the Production workspace and removes duplicate web navigation", () => {
+  it("keeps editing out of the Production workspace while using the new project navigation authority", () => {
     const workbench = source("../production/ProjectWorkbench.tsx");
     const material = source("../material-script/GoldenMaterialScriptWorkbench.tsx");
     const experience = source("../production/product-experience.css");
@@ -19,14 +19,15 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).not.toContain("readProjectPage");
     expect(workbench).toContain('useState<ProductionPage>("slate")');
     expect(workbench).toContain("owns-chrome");
-    expect(workbench).toContain('onBack={() => setPage("slate")}');
+    expect(workbench).toContain('onBack={() => navigate("slate")}');
     expect(workbench).not.toContain("golden-secondary-workspace");
     expect(material).toContain("‹ 场记");
     expect(workbench).toContain('const slateAssistantVisible = assistantOpen && page === "slate"');
     expect(workbench).toContain('const assistantVisible = assistantOpen && (secondarySurface || page === "slate")');
     expect(workbench).toContain("assistantOpen={slateAssistantVisible}");
     expect(workbench).toContain("onToggleAssistant={() => setAssistantOpen((value) => !value)}");
-    expect(workbench).toContain("onOpenTeamReview ?? (() => setPage(\"watch\"))");
+    expect(workbench).toContain('onOpenReview={onOpenTeamReview ?? (() => navigate("watch"))}');
+    expect(workbench).toContain('className="production-secondary-tabs"');
     expect(experience).toContain(".has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }");
     expect(experience).toContain(".slate-assistant-drawer { position: absolute");
     expect(experience).not.toContain(".project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body");
@@ -136,20 +137,24 @@ describe("Swift golden product fidelity", () => {
     expect(reviewAdapter).not.toContain("fixed-angle-card");
   });
 
-  it("keeps project management on Home while the sidebar stays a fast switcher", () => {
+  it("separates Workspace Home, project management and project production navigation", () => {
     const app = source("../../app/App.tsx");
+    const workspaceHome = source("../projects/WorkspaceHome.tsx");
     const home = source("../projects/ProjectHome.tsx");
-    const css = source("../projects/project-home.css");
     const lifecycle = source("../projects/ProjectLifecyclePanel.tsx");
     const library = source("../projects/ProjectLibrary.tsx");
-    const libraryFidelity = source("../projects/project-library-fidelity.css");
     const activity = source("../projects/projectActivity.ts");
-    const shell = source("../../styles.css");
+    const redesign = source("../../app/mirrororder-redesign.css");
+    expect(app).toContain("<WorkspaceHome");
     expect(app).toContain("<ProjectHome");
-    expect(app).toContain("setSelectedProject(null)");
+    expect(app).toContain('type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings"');
+    expect(app).toContain('setSurface("home")');
     expect(app).toContain("teamWorkbenchUrl");
     expect(app).toContain("deleteProject(project: ProjectSummary)");
     expect(app).toContain("useProjectActivities");
+    expect(workspaceHome).toContain("今晚继续哪里？");
+    expect(workspaceHome).toContain("最近项目");
+    expect(workspaceHome).toContain("状态中心");
     expect(home).toContain("管理工作区内的制作项目");
     expect(home).toContain("<ProjectLifecyclePanel");
     expect(home).toContain("project-home-list");
@@ -161,29 +166,22 @@ describe("Swift golden product fidelity", () => {
     expect(home).toContain("本机素材 / 换素材盘");
     expect(home).toContain("永久删除项目…");
     expect(home).toContain("project-activity-spinner");
-    expect(home).not.toContain("backdropSymbol");
     expect(activity).toContain("ProjectTaskClient");
     expect(activity).toContain('state: "active"');
     expect(activity).not.toContain('state: "failed"');
-    expect(css).toContain("width: min(980px, 100%)");
-    expect(css).toContain("min-height: 66px");
-    expect(css).toContain("grid-template-columns: minmax(0,1fr) 52px");
     expect(lifecycle).toContain(">新建项目</button>");
     expect(lifecycle).toContain("创建并整理");
     expect(lifecycle).toContain("client.preflightProject(payload())");
-    expect(lifecycle).not.toContain("项目管理");
-    expect(lifecycle).not.toContain("removeSelected");
-    expect(library).toContain('import "./project-library-fidelity.css"');
-    expect(library).toContain("workspace.projects.slice(0, 8)");
-    expect(library).toContain("快速切换");
-    expect(library).not.toContain("ProjectLifecyclePanel");
-    expect(library).not.toContain("project-manage-button");
+    expect(library).toContain('aria-label="主导航"');
+    expect(library).toContain('aria-label="当前项目制作导航"');
+    expect(library).toContain("workspace.projects.slice(0, 3)");
+    expect(library).toContain("最近项目");
     expect(library).toContain("复制局域网协作链接");
     expect(library).toContain("永久删除项目…");
-    expect(library).not.toContain('<button type="button" className={utilityActive === "team"');
-    expect(libraryFidelity).toContain("min-height: 38px");
-    expect(libraryFidelity).not.toContain("::before");
-    expect(shell).toContain("grid-template-columns: 216px minmax(0, 1fr)");
+    expect(redesign).toContain("grid-template-columns: 208px minmax(0, 1fr)");
+    expect(redesign).toContain(".workspace-home-grid");
+    expect(redesign).toContain(".project-home-list");
+    expect(redesign).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
   });
 
   it("keeps explicit file-drop identity path-free and human-save gated", () => {
