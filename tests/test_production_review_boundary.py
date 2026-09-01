@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_app_production_is_native_and_does_not_embed_team_web() -> None:
+def test_app_production_is_native_and_does_not_embed_team_web_or_timeline() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
@@ -14,8 +14,10 @@ def test_app_production_is_native_and_does_not_embed_team_web() -> None:
     assert "TeamWebWorkbench" in app
     assert "ProjectWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
-    assert "SlateWorkbench" in workbench
-    assert "TimelineWorkbench" in workbench
+    assert "GoldenSlateWorkbench" in workbench
+    assert "TimelineWorkbench" not in workbench
+    assert "RoughCutWorkbench" not in workbench
+    assert "AssemblyWorkbench" not in workbench
 
 
 def test_native_production_navigation_starts_at_project_home_then_multicam_slate() -> None:
@@ -23,9 +25,9 @@ def test_native_production_navigation_starts_at_project_home_then_multicam_slate
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
     assert 'useState<AppSurface>("production")' in app
-    for label in ("素材", "剧本", "剪辑", "审阅"):
+    assert 'useState<ProductionPage>("slate")' in workbench
+    for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
-    assert 'label: "场记"' in workbench
     assert 'onOpenTeam={() => setSurface("team")}' in app
     assert '>小镜</button>' in workbench
 
