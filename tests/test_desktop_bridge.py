@@ -53,8 +53,9 @@ def test_team_web_is_not_embedded_in_project_workbench() -> None:
     app = read("desktop/src/app/App.tsx")
     project = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
-    assert 'type AppSurface = "production" | "status" | "team" | "settings"' in app
+    assert 'type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings"' in app
     assert "TeamWebWorkbench" in app
+    assert 'surface === "team"' in app
     assert "TeamWebWorkbench" not in project
     assert 'label: "团队协作"' not in project
 
@@ -77,6 +78,7 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
 
 def test_desktop_project_navigation_matches_frozen_demo_surfaces() -> None:
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
+    library = read("desktop/src/features/projects/ProjectLibrary.tsx")
 
     assert 'useState<ProductionPage>("slate")' in workbench
     assert "GoldenSlateWorkbench" in workbench
@@ -85,9 +87,11 @@ def test_desktop_project_navigation_matches_frozen_demo_surfaces() -> None:
     for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
     assert 'aria-label="项目工具"' in workbench
+    assert 'className="production-secondary-tabs"' in workbench
     assert ">小镜</button>" in workbench
     assert "onOpenTake={openTakeFromEvidence}" in workbench
     assert "initialGroupId={materialFocusGroupId}" in workbench
+    assert 'aria-label="当前项目制作导航"' in library
     assert "TimelineWorkbench" not in workbench
 
 
