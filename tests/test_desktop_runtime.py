@@ -17,6 +17,7 @@ class _FakeDeviceTasks:
     def __init__(self) -> None:
         self.submitted: list[tuple[str, dict[str, object], str, str]] = []
         self.tasks: list[dict[str, object]] = []
+        self.superseded: list[tuple[str, dict[str, object]]] = []
 
     def submit(self, task_type, targets=None, idempotency_key="", actor="desktop"):
         normalized = dict(targets or {})
@@ -36,6 +37,10 @@ class _FakeDeviceTasks:
 
     def cancel(self, task_id):
         return {"task_id": task_id, "status": "cancelled"}
+
+    def supersede(self, task_type, **kwargs):
+        self.superseded.append((task_type, dict(kwargs)))
+        return 0
 
 
 def test_normalize_roots_deduplicates_and_resolves(tmp_path: Path) -> None:
