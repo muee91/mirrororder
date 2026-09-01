@@ -2,10 +2,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+APP = ROOT / "desktop" / "src" / "app" / "App.tsx"
 ASSISTANT = ROOT / "desktop" / "src" / "features" / "assistant" / "AssistantWorkbench.tsx"
 SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
 STATUS = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenterWorkbench.tsx"
-PROJECT_LIFECYCLE = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLifecyclePanel.tsx"
 LEGACY_TASK_PANEL = ROOT / "desktop" / "src" / "features" / "settings" / "TaskStatusPanel.tsx"
 SEMANTIC_RUNTIME = ROOT / "src" / "script_organizer" / "semantic_runtime.py"
 DOCS_INDEX = ROOT / "docs" / "README.md"
@@ -23,8 +23,9 @@ def test_model_connection_configuration_has_one_global_settings_home() -> None:
     assert "Base URL" not in assistant
     assert "API Key" not in assistant
     assert "AssistantModelsPanel" in settings
-    assert "外部 / 自定义模型连接" in settings
-    assert "连接本身仍是设备本机配置，不会写入项目" in settings
+    assert "模型连接" in settings
+    assert "当前设备 · 与项目无关" in settings
+    assert "密钥保存在设备 secret store" in settings
 
 
 def test_status_center_is_the_single_durable_task_surface() -> None:
@@ -32,14 +33,15 @@ def test_status_center_is_the_single_durable_task_surface() -> None:
     settings = SETTINGS.read_text(encoding="utf-8")
 
     assert not LEGACY_TASK_PANEL.exists()
-    assert "showCompleted" in status
-    assert "查看已完成" in status
+    assert "showHistory" in status
+    assert "显示历史记录" in status
     assert "canCancelTask" in status
     assert "canRetryTask" in status
+    assert "currentTaskStates" in status
     assert "semantic_index" in status
     assert "语义索引" in status
     assert "waiting_embedding" in status
-    assert "后台任务统一在“状态中心”查看" in settings
+    assert "后台任务、下载进度与失败恢复统一在“状态中心”查看" in settings
 
 
 def test_semantic_refresh_is_durable_instead_of_hidden_daemon_work() -> None:
@@ -56,10 +58,11 @@ def test_semantic_refresh_is_durable_instead_of_hidden_daemon_work() -> None:
 
 
 def test_project_removal_copy_uses_user_language_and_matches_backend_boundary() -> None:
-    source = PROJECT_LIFECYCLE.read_text(encoding="utf-8")
+    source = APP.read_text(encoding="utf-8")
 
-    assert "工作区内生成的项目目录和项目记录" in source
-    assert "你原来的媒体、剧本与 FCPXML 文件不会被删除" in source
+    assert "永久删除项目" in source
+    assert "工作区内生成的项目目录、分析缓存和项目记录" in source
+    assert "原始媒体、剧本与 FCPXML 不会删除" in source
     assert "quarantine" not in source
     assert "Core 会" not in source
 
