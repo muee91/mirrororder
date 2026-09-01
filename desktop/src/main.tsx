@@ -11,6 +11,7 @@ import "./desktop-theme-slate.css";
 import "./desktop-theme-frozen-surfaces.css";
 import "./features/status/status-center-recovery.css";
 import "./features/media/media-binding-recovery.css";
+import "./features/status/status-center-redesign.css";
 
 initializeDesktopAppearance();
 
