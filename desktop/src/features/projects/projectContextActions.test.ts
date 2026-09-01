@@ -57,10 +57,10 @@ describe("project actions", () => {
     expect(app).not.toContain("已提交重整任务${task.task_id ? ` · ${task.task_id}` : \"\"}；在状态中心查看进度。");
   });
 
-  it("projects task activity into Home and Sidebar without creating another backend", () => {
+  it("projects only live task activity into Home and Sidebar without turning task history into project health", () => {
     expect(activity).toContain("new ProjectTaskClient(baseUrl)");
     expect(activity).toContain('state: "active"');
-    expect(activity).toContain('state: "failed"');
+    expect(activity).not.toContain('state: "failed"');
     expect(home).toContain("project-activity-spinner");
     expect(library).toContain("project-activity-spinner");
     expect(home).not.toContain("ProjectTaskClient");
