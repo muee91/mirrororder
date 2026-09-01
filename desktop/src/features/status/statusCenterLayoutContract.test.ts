@@ -2,32 +2,44 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-describe("status center bounded workspace contract", () => {
+describe("status center desktop triage contract", () => {
   it("keeps the application shell bounded instead of growing into a task log page", () => {
-    const css = readFileSync(fileURLToPath(new URL("./status-center.css", import.meta.url)), "utf8");
-    expect(css).toContain("grid-template-rows: auto auto auto minmax(0, 1fr)");
-    expect(css).toContain("height: 100%");
-    expect(css).toContain("overflow: hidden");
-    expect(css).toContain(".status-center-sections {");
-    expect(css).toContain("min-height: 0");
-    expect(css).toContain("overflow-y: auto");
-    expect(css).toContain("scrollbar-gutter: stable");
+    const base = readFileSync(fileURLToPath(new URL("./status-center.css", import.meta.url)), "utf8");
+    const redesign = readFileSync(fileURLToPath(new URL("./status-center-redesign.css", import.meta.url)), "utf8");
+    expect(base).toContain("height: 100%");
+    expect(base).toContain("overflow: hidden");
+    expect(redesign).toContain("grid-template-rows: auto auto minmax(0, 1fr)");
+    expect(redesign).toContain(".status-center-sections {");
+    expect(redesign).toContain("overflow-y: auto");
+    expect(redesign).toContain("scrollbar-gutter: stable");
   });
 
-  it("keeps live cancellation pinned above a large recovery backlog", () => {
-    const recovery = readFileSync(fileURLToPath(new URL("./status-center-recovery.css", import.meta.url)), "utf8");
-    expect(recovery).toContain(".status-center-section.is-active {");
-    expect(recovery).toContain("position: sticky");
-    expect(recovery).toContain("order: -20");
-    expect(recovery).toContain("max-height: min(250px, 30vh)");
-    expect(recovery).toContain(".status-center-section.is-attention { order: -10; }");
+  it("uses a recovery canvas plus a dedicated live-task rail", () => {
+    const redesign = readFileSync(fileURLToPath(new URL("./status-center-redesign.css", import.meta.url)), "utf8");
+    expect(redesign).toContain(".status-center-section.is-attention {");
+    expect(redesign).toContain("flex: 1 1 610px");
+    expect(redesign).toContain(".status-center-section.is-active {");
+    expect(redesign).toContain("position: sticky");
+    expect(redesign).toContain("flex: 0 1 310px");
+    expect(redesign).toContain("max-height: min(520px, 62vh)");
+    expect(redesign).toContain(".status-center-section.is-recent {");
+    expect(redesign).toContain("flex: 1 0 100%");
   });
 
-  it("does not present stale failure progress as if failed work were still running", () => {
-    const css = readFileSync(fileURLToPath(new URL("./status-center.css", import.meta.url)), "utf8");
-    expect(css).toContain(".status-center-section.is-attention .status-center-task.status-failed .status-center-progress");
-    expect(css).toContain(".status-center-section.is-attention .status-center-task.status-interrupted .status-center-progress");
-    expect(css).toContain("display: none");
-    expect(css).toContain("-webkit-line-clamp: 2");
+  it("keeps current issues compact and removes stale failure progress", () => {
+    const redesign = readFileSync(fileURLToPath(new URL("./status-center-redesign.css", import.meta.url)), "utf8");
+    expect(redesign).toContain("max-height: min(430px, 52vh)");
+    expect(redesign).toContain(".status-center-section.is-attention .status-center-progress { display: none; }");
+    expect(redesign).toContain("-webkit-line-clamp: 2");
+    expect(redesign).toContain("Actions: recovery first, navigation second, record cleanup tertiary");
+  });
+
+  it("makes the resolved Desktop theme the final visual authority", () => {
+    const redesign = readFileSync(fileURLToPath(new URL("./status-center-redesign.css", import.meta.url)), "utf8");
+    const main = readFileSync(fileURLToPath(new URL("../../main.tsx", import.meta.url)), "utf8");
+    expect(redesign).toContain('html[data-mirrororder-theme="light"] .status-center-workbench');
+    expect(redesign).toContain('html[data-mirrororder-theme="dark"] .status-center-workbench');
+    expect(main).toContain('import "./features/status/status-center-redesign.css"');
+    expect(main.indexOf('import "./features/status/status-center-redesign.css"')).toBeGreaterThan(main.indexOf('import "./features/status/status-center-recovery.css"'));
   });
 });
