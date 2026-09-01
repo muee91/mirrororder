@@ -22,6 +22,7 @@ interface Props {
   project: ProjectSummary;
   pageRequest?: { page: ProductionPage; nonce: number } | null;
   onOpenTeamReview?: () => void;
+  onPageChange?: (page: ProductionPage) => void;
 }
 
 const PRODUCTION_PAGES = new Set<ProductionPage>([
@@ -49,24 +50,35 @@ function safeProductionPage(page: ProductionPage): ProductionPage {
   return PRODUCTION_PAGES.has(page) ? page : "slate";
 }
 
-export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview }: Props) {
+function pageLabel(page: ProductionPage): string {
+  return SECONDARY_PAGES.find((item) => item.value === page)?.label ?? (page === "takes" ? "Take" : page === "script" ? "剧本" : "场记");
+}
+
+export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>("slate");
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
 
-  useEffect(() => {
-    rememberProjectPage(project.project_id, page);
-  }, [page, project.project_id]);
+  function navigate(next: ProductionPage): void {
+    const safe = safeProductionPage(next);
+    setPage(safe);
+    onPageChange?.(safe);
+  }
 
   useEffect(() => {
-    if (pageRequest) setPage(safeProductionPage(pageRequest.page));
+    rememberProjectPage(project.project_id, page);
+    onPageChange?.(page);
+  }, [onPageChange, page, project.project_id]);
+
+  useEffect(() => {
+    if (pageRequest) navigate(pageRequest.page);
   }, [pageRequest?.nonce]);
 
   function openTakeFromEvidence(groupId: string): void {
     const value = groupId.trim();
     if (!value) return;
     setMaterialFocusGroupId(value);
-    setPage("watch");
+    navigate("watch");
   }
 
   const materialScript = page === "takes" || page === "script";
@@ -85,9 +97,9 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
                 projectId={project.project_id}
                 assistantOpen={slateAssistantVisible}
                 onToggleAssistant={() => setAssistantOpen((value) => !value)}
-                onOpenMaterialScript={() => setPage("takes")}
-                onOpenIdentity={() => setPage("identity")}
-                onOpenReview={onOpenTeamReview ?? (() => setPage("watch"))}
+                onOpenMaterialScript={() => navigate("takes")}
+                onOpenIdentity={() => navigate("identity")}
+                onOpenReview={onOpenTeamReview ?? (() => navigate("watch"))}
               />
               <SlatePlaybackShortcuts />
             </>
@@ -100,27 +112,25 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               initialGroupId={materialFocusGroupId}
               initialMode={page === "takes" ? "rough" : "precise"}
               showEditorial={false}
-              onBack={() => setPage("slate")}
+              onBack={() => navigate("slate")}
             />
           ) : null}
 
           {secondarySurface ? (
             <section className="production-secondary-workspace">
-              <header className="production-secondary-bar">
-                <button type="button" className="production-secondary-back" onClick={() => setPage("slate")}>返回场记</button>
-                <strong>{project.name || project.project_id}</strong>
-                <div className="production-secondary-actions">
-                  <label className="production-secondary-switcher">
-                    <span className="sr-only">项目工具</span>
-                    <select value={page} aria-label="项目工具" onChange={(event) => setPage(event.target.value as ProductionPage)}>
-                      {SECONDARY_PAGES.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
-                    </select>
-                  </label>
-                  <button type="button" className={assistantVisible ? "is-active" : ""} onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
+              <header className="production-secondary-bar production-secondary-bar-redesign">
+                <div className="production-secondary-title">
+                  <p className="eyebrow">{project.name || project.project_id}</p>
+                  <strong>{pageLabel(page)}</strong>
                 </div>
+                <nav className="production-secondary-tabs" aria-label="项目工具">
+                  <button type="button" onClick={() => navigate("slate")}>场记</button>
+                  {SECONDARY_PAGES.map((item) => <button type="button" className={page === item.value ? "is-active" : ""} key={item.value} onClick={() => navigate(item.value)}>{item.label}</button>)}
+                </nav>
+                <button type="button" className={`production-secondary-assistant ${assistantVisible ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
               </header>
               <div className="production-secondary-canvas">
-                {page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenMediaBinding={() => setPage("media-binding")} /> : null}
+                {page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenMediaBinding={() => navigate("media-binding")} /> : null}
                 {page === "media-binding" ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
                 {page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
                 {page === "watch" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial /> : null}
