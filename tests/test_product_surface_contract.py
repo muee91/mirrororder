@@ -4,8 +4,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "desktop" / "src" / "app" / "App.tsx"
 RESUME = ROOT / "desktop" / "src" / "app" / "resumeState.ts"
+REDESIGN = ROOT / "desktop" / "src" / "app" / "mirrororder-redesign.css"
 WORKBENCH = ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
 PROJECT_LIBRARY = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx"
+WORKSPACE_HOME = ROOT / "desktop" / "src" / "features" / "projects" / "WorkspaceHome.tsx"
 PROJECT_LIFECYCLE = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLifecyclePanel.tsx"
 STATUS_CENTER = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenterWorkbench.tsx"
 SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
@@ -17,18 +19,25 @@ TEAM = ROOT / "desktop" / "src" / "features" / "team" / "TeamWebWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
-def test_desktop_is_project_first_frozen_production_surface() -> None:
+def test_desktop_uses_workspace_home_project_management_and_frozen_production_surfaces() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
+    workspace_home = WORKSPACE_HOME.read_text(encoding="utf-8")
+    redesign = REDESIGN.read_text(encoding="utf-8")
 
+    assert "WorkspaceHome" in app
+    assert "ProjectHome" in app
     assert "ProjectLibrary" in app
     assert "ProjectWorkbench" in app
-    assert 'type AppSurface = "production" | "status" | "team" | "settings"' in app
+    assert 'type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings"' in app
     assert 'className="global-sidebar"' in app
-    assert 'className="workbench-shell main-stage"' in app
+    assert 'workbench-shell main-stage surface-${surface}' in app
+    assert 'className="app-global-topbar"' in app
+    assert "今晚继续哪里？" in workspace_home
     assert "制作台" not in app
     assert "app-workspace-switch" not in app
+    assert "grid-template-columns: 208px minmax(0, 1fr)" in redesign
 
     assert 'useState<ProductionPage>("slate")' in workbench
     assert "GoldenSlateWorkbench" in workbench
@@ -41,15 +50,21 @@ def test_desktop_is_project_first_frozen_production_surface() -> None:
     assert "AssemblyWorkbench" not in workbench
     assert 'label: "交付"' not in workbench
 
+    assert 'aria-label="主导航"' in library
+    assert 'aria-label="当前项目制作导航"' in library
     assert "状态中心" in library
     assert ">设置<" in library
 
 
-def test_project_resume_defaults_to_slate_without_auto_drilling_into_last_subpage() -> None:
+def test_project_resume_defaults_to_home_context_and_slate_when_opened() -> None:
+    app = APP.read_text(encoding="utf-8")
     resume = RESUME.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
 
     assert 'const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"' in resume
+    assert 'useState<AppSurface>("home")' in app
+    assert 'setSelectedProject(rememberedProject)' in app
+    assert 'setSurface("home")' in app
     assert 'useState<ProductionPage>("slate")' in workbench
     assert "rememberProjectPage(project.project_id, page)" in workbench
     assert "readProjectPage(project.project_id)" not in workbench
@@ -57,6 +72,7 @@ def test_project_resume_defaults_to_slate_without_auto_drilling_into_last_subpag
 
 def test_frozen_demo_surfaces_are_reachable_from_project_ia() -> None:
     workbench = WORKBENCH.read_text(encoding="utf-8")
+    library = PROJECT_LIBRARY.read_text(encoding="utf-8")
 
     assert 'const materialScript = page === "takes" || page === "script"' in workbench
     assert "GoldenMaterialScriptWorkbench" in workbench
@@ -67,6 +83,8 @@ def test_frozen_demo_surfaces_are_reachable_from_project_ia() -> None:
     assert "ReviewAttentionWorkbench" in workbench
     assert "ProjectOverviewWorkbench" in workbench
     assert "showEditorial={false}" in workbench
+    for label in ("场记", "素材", "人物", "审阅", "概览"):
+        assert f">{label}<" in library
 
 
 def test_assistant_is_a_contextual_tool_not_a_project_tab() -> None:
@@ -165,13 +183,14 @@ def test_team_web_and_settings_are_global_utilities_not_project_tabs() -> None:
     assert "Isolated Collaboration Workspace" not in primary
 
 
-def test_product_shell_hides_runtime_connection_chrome_from_primary_surface() -> None:
+def test_product_shell_keeps_runtime_connection_chrome_secondary_to_global_navigation() -> None:
     app = APP.read_text(encoding="utf-8")
 
     assert 'className="workspace-control"' in app
     assert 'className="workspace-advanced"' in app
     assert "connection-panel" not in app
-    assert "topbar" not in app
+    assert 'className="app-global-topbar"' in app
+    assert 'className="app-global-context"' in app
     assert "app-workspace-switch" not in app
     assert "platform-capabilities" not in app
     assert "Python Core" not in app
