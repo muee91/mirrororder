@@ -37,13 +37,13 @@ const PRODUCTION_PAGES = new Set<ProductionPage>([
   "overview",
 ]);
 
-const SECONDARY_PAGE_LABELS: Partial<Record<ProductionPage, string>> = {
-  "media-library": "素材库",
-  "media-binding": "本机素材",
-  identity: "人物",
-  watch: "审阅",
-  attention: "待处理",
-  overview: "概览",
+const SECONDARY_PAGE_LABELS: Partial<Record<ProductionPage, { label: string }>> = {
+  "media-library": { label: "素材库" },
+  "media-binding": { label: "本机素材" },
+  identity: { label: "人物" },
+  watch: { label: "审阅" },
+  attention: { label: "待处理" },
+  overview: { label: "概览" },
 };
 
 function safeProductionPage(page: ProductionPage): ProductionPage {
@@ -51,7 +51,7 @@ function safeProductionPage(page: ProductionPage): ProductionPage {
 }
 
 function pageLabel(page: ProductionPage): string {
-  return SECONDARY_PAGE_LABELS[page] ?? (page === "takes" ? "Take" : page === "script" ? "剧本" : "场记");
+  return SECONDARY_PAGE_LABELS[page]?.label ?? (page === "takes" ? "Take" : page === "script" ? "剧本" : "场记");
 }
 
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
