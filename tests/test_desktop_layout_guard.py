@@ -37,9 +37,13 @@ def test_top_level_workspace_and_team_switching_stays_outside_project_tools() ->
     assert 'surface === "team"' in app
     assert "TeamWebWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
-    assert 'aria-label="项目工具"' in workbench
+    assert 'aria-label="项目工具"' not in workbench
+    assert 'className="production-secondary-tabs"' not in workbench
+    assert 'className="production-secondary-back"' in workbench
     assert 'aria-label="主导航"' in library
     assert 'aria-label="当前项目制作导航"' in library
+    assert 'onClick={() => openPage("watch")}' in library
+    assert ">团队审阅</button>" in library
 
 
 def test_removed_swiftui_layout_is_not_a_regression_dependency() -> None:
