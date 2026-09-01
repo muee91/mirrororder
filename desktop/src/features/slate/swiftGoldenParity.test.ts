@@ -164,7 +164,7 @@ describe("Swift golden product fidelity", () => {
     expect(home).not.toContain("backdropSymbol");
     expect(activity).toContain("ProjectTaskClient");
     expect(activity).toContain('state: "active"');
-    expect(activity).toContain('state: "failed"');
+    expect(activity).not.toContain('state: "failed"');
     expect(css).toContain("width: min(980px, 100%)");
     expect(css).toContain("min-height: 66px");
     expect(css).toContain("grid-template-columns: minmax(0,1fr) 52px");
