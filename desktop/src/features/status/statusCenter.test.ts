@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ProjectTaskRecord } from "../../api/tasks";
-import { latestTaskAttempts, statusPollDelay, taskNeedsAttention } from "./StatusCenterWorkbench";
+import { canDismissStatusTask, latestTaskAttempts, statusPollDelay, taskNeedsAttention } from "./StatusCenterWorkbench";
 
 function task(taskId: string, status: string, key?: string, createdAt?: string, completedAt?: string): ProjectTaskRecord {
   return {
@@ -68,6 +68,15 @@ describe("status center recovery semantics", () => {
     })).toBe(false);
   });
 
+  it("allows manual dismissal only after a task has settled", () => {
+    expect(canDismissStatusTask(task("failed", "failed"))).toBe(true);
+    expect(canDismissStatusTask(task("interrupted", "interrupted"))).toBe(true);
+    expect(canDismissStatusTask(task("completed", "completed"))).toBe(true);
+    expect(canDismissStatusTask(task("cancelled", "cancelled"))).toBe(true);
+    expect(canDismissStatusTask(task("queued", "queued"))).toBe(false);
+    expect(canDismissStatusTask(task("running", "running"))).toBe(false);
+  });
+
   it("continues monitoring while idle at a lower frequency", () => {
     expect(statusPollDelay(true)).toBe(1000);
     expect(statusPollDelay(false)).toBe(8000);
@@ -86,6 +95,20 @@ describe("status center recovery semantics", () => {
     expect(source).toContain("onOpenProjectPage");
     expect(source).toContain("onOpenSettings");
     expect(source).not.toContain(".slice(0, 12)");
+  });
+
+  it("keeps manual cleanup local and never hides a running task", () => {
+    const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
+    expect(source).toContain("DISMISSED_TASK_IDS_KEY");
+    expect(source).toContain("mirrororder.status.dismissed-task-ids.v1");
+    expect(source).toContain("globalThis.localStorage");
+    expect(source).toContain("canDismissStatusTask(task)");
+    expect(source).toContain("删除记录");
+    expect(source).toContain("删除已结束");
+    expect(source).toContain("底层任务审计仍保留");
+    expect(source).toContain("active(task) || !dismissedTaskIds.has(task.task_id)");
+    expect(source).not.toContain("projectClient.delete");
+    expect(source).not.toContain("deviceClient.delete");
   });
 
   it("keeps internal sync-wait stages out of user-visible task chrome", () => {
