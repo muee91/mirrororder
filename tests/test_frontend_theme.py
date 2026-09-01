@@ -69,7 +69,7 @@ def test_review_media_cards_share_fixed_low_noise_visual_contract() -> None:
     assert ".camera-run.repeated{min-width:0;width:max-content" in css
 
 
-def test_active_desktop_surface_uses_project_home_and_production_workbenches() -> None:
+def test_active_desktop_surface_uses_project_home_and_frozen_production_workbenches() -> None:
     app = (ROOT / "desktop" / "src" / "app" / "App.tsx").read_text(encoding="utf-8")
     library = (ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx").read_text(encoding="utf-8")
@@ -77,9 +77,14 @@ def test_active_desktop_surface_uses_project_home_and_production_workbenches() -
     assert "ProjectLibrary" in app
     assert "ProjectWorkbench" in app
     assert "project-list" in library
-    assert 'label: "场记"' in workbench
-    assert 'label: "剪辑"' in workbench
-    assert 'label: "交付"' in workbench
+    assert "GoldenSlateWorkbench" in workbench
+    assert "GoldenMaterialScriptWorkbench" in workbench
+    assert 'label: "素材库"' in workbench
+    assert 'label: "本机素材"' in workbench
+    assert 'label: "人物"' in workbench
+    assert 'label: "审阅"' in workbench
+    assert "TimelineWorkbench" not in workbench
+    assert 'label: "交付"' not in workbench
 
 
 def test_active_work_has_one_global_status_center_not_settings_task_panel() -> None:
