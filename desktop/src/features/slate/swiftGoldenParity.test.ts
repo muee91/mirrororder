@@ -27,7 +27,9 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).toContain("assistantOpen={slateAssistantVisible}");
     expect(workbench).toContain("onToggleAssistant={() => setAssistantOpen((value) => !value)}");
     expect(workbench).toContain('onOpenReview={onOpenTeamReview ?? (() => navigate("watch"))}');
-    expect(workbench).toContain('className="production-secondary-tabs"');
+    expect(workbench).toContain('className="production-secondary-back"');
+    expect(workbench).not.toContain('className="production-secondary-tabs"');
+    expect(workbench).not.toContain('aria-label="项目工具"');
     expect(experience).toContain(".has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }");
     expect(experience).toContain(".slate-assistant-drawer { position: absolute");
     expect(experience).not.toContain(".project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body");
@@ -174,6 +176,8 @@ describe("Swift golden product fidelity", () => {
     expect(lifecycle).toContain("client.preflightProject(payload())");
     expect(library).toContain('aria-label="主导航"');
     expect(library).toContain('aria-label="当前项目制作导航"');
+    expect(library).toContain('onClick={() => openPage("watch")}');
+    expect(library).toContain(">团队审阅</button>");
     expect(library).toContain("workspace.projects.slice(0, 3)");
     expect(library).toContain("最近项目");
     expect(library).toContain("复制局域网协作链接");
