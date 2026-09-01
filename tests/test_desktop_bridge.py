@@ -30,7 +30,7 @@ def test_production_host_is_loopback_and_readiness_gated() -> None:
     assert "wait_until_ready" in host
     assert 'const HOST_SERVICE: &str = "mirrororder-host"' in host
     assert "probe_service" in host
-    assert "status=ok" not in host  # parsed by the shared HTTP health probe
+    assert "status=ok" not in host
     assert "Python Host 在健康检查通过前退出" in host
 
 
@@ -61,27 +61,34 @@ def test_team_web_is_not_embedded_in_project_workbench() -> None:
 
 def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
     ui = read("desktop/src/features/projects/ProjectLifecyclePanel.tsx")
+    app = read("desktop/src/app/App.tsx")
     client = read("desktop/src/api/desktop.ts")
     runtime = read("src/script_organizer/desktop_runtime.py")
 
     assert "client.preflightProject(payload())" in ui
     assert "client.createProject(payload())" in ui
     assert "client.prepareProject(created.project_id)" in ui
-    assert "client.deleteProject(selectedProject.project_id)" in ui
-    assert "移除前必须完整输入当前项目 ID" in ui
+    assert "new DesktopClient(snapshot.baseUrl).deleteProject(project.project_id)" in app
+    assert "永久删除项目" in app
+    assert "原始媒体、剧本与 FCPXML 不会删除" in app
     assert "/api/v1/projects/preflight" in client
     assert "current.registry.preflight_create" in runtime
 
 
-def test_desktop_project_tabs_are_explicit_product_surfaces() -> None:
+def test_desktop_project_navigation_matches_frozen_demo_surfaces() -> None:
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
-    for label in ("素材", "剧本", "剪辑", "审阅"):
+    assert 'useState<ProductionPage>("slate")' in workbench
+    assert "GoldenSlateWorkbench" in workbench
+    assert 'const materialScript = page === "takes" || page === "script"' in workbench
+    assert "GoldenMaterialScriptWorkbench" in workbench
+    for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
-    assert "project-workbench-primary" in workbench
+    assert 'aria-label="项目工具"' in workbench
     assert ">小镜</button>" in workbench
     assert "onOpenTake={openTakeFromEvidence}" in workbench
     assert "initialGroupId={materialFocusGroupId}" in workbench
+    assert "TimelineWorkbench" not in workbench
 
 
 def test_team_web_remains_a_separate_review_client() -> None:
