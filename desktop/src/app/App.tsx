@@ -16,6 +16,7 @@ import { TeamGatewayClient, teamWorkbenchUrl } from "../api/team";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectHome } from "../features/projects/ProjectHome";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
+import { WorkspaceHome } from "../features/projects/WorkspaceHome";
 import { useProjectActivities } from "../features/projects/projectActivity";
 import { SettingsStatusWorkbench } from "../features/settings/SettingsStatusWorkbench";
 import { StatusCenterWorkbench } from "../features/status/StatusCenterWorkbench";
@@ -52,18 +53,38 @@ function projectById(snapshot: HostSnapshot, projectId: string | null | undefine
   return id ? snapshot.projects.find((item) => item.project_id === id) ?? null : null;
 }
 
-type AppSurface = "production" | "status" | "team" | "settings";
+type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings";
 interface ProjectPageRequest { projectId: string; page: ProductionPage; nonce: number }
+
+function pageTitle(page: ProductionPage): string {
+  return {
+    slate: "场记",
+    takes: "Take",
+    script: "剧本",
+    "media-library": "素材",
+    "media-binding": "本机素材",
+    identity: "人物",
+    watch: "审阅",
+    attention: "待处理",
+    overview: "概览",
+    coverage: "覆盖",
+    "rough-cut": "粗剪",
+    assembly: "组装",
+    timeline: "时间线",
+    delivery: "交付",
+  }[page] ?? "制作";
+}
 
 export function App() {
   const [launchResume] = useState(() => loadAppResume());
-  const [surface, setSurface] = useState<AppSurface>("production");
+  const [surface, setSurface] = useState<AppSurface>("home");
   const [baseUrl, setBaseUrl] = useState(defaultHostBaseUrl);
   const [workspacePath, setWorkspacePath] = useState(launchResume.workspacePath);
   const [activeWorkspacePath, setActiveWorkspacePath] = useState("");
   const [state, setState] = useState<HostConnectionState>("idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
+  const [activeProjectPage, setActiveProjectPage] = useState<ProductionPage>("slate");
   const [pageRequest, setPageRequest] = useState<ProjectPageRequest | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "打开一个工作区开始制作。");
@@ -122,14 +143,15 @@ export function App() {
       setWorkspacePath(launchResume.workspacePath);
       setActiveWorkspacePath(launchResume.workspacePath);
       setSnapshot(next);
-      setSelectedProject(null);
+      setSelectedProject(rememberedProject);
+      setActiveProjectPage("slate");
       setPageRequest(null);
-      setSurface("production");
+      setSurface("home");
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(launchResume.workspacePath);
       setMessage(rememberedProject
-        ? `工作区已恢复 · 上次项目 ${rememberedProject.name || rememberedProject.project_id} 可从项目主页继续`
+        ? `工作区已恢复 · ${rememberedProject.name || rememberedProject.project_id} 已设为当前项目`
         : `工作区已恢复 · ${next.projects.length} 个项目`);
     }).catch((error: unknown) => {
       if (!active) return;
@@ -154,21 +176,20 @@ export function App() {
     const previousSnapshot = snapshot;
     const previousProject = selectedProject;
     const previousPath = workspacePath;
+    const previousSurface = surface;
     setWorkspacePath(normalizedPath);
     setState("starting");
     setMessage("正在打开工作区…");
     try {
-      // Starting the managed local Host does not depend on the editable
-      // advanced service-address field. startAndConnect() uses the base URL
-      // returned by Rust after it has launched/verified the managed Host.
       const next = await new HostConnection(defaultHostBaseUrl).startAndConnect(normalizedPath);
       setBaseUrl(next.baseUrl);
       setWorkspacePath(normalizedPath);
       setActiveWorkspacePath(normalizedPath);
       setSnapshot(next);
       setSelectedProject(null);
+      setActiveProjectPage("slate");
       setPageRequest(null);
-      setSurface("production");
+      setSurface("home");
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(normalizedPath);
@@ -178,6 +199,7 @@ export function App() {
         setWorkspacePath(previousPath);
         setSnapshot(previousSnapshot);
         setSelectedProject(previousProject);
+        setSurface(previousSurface);
         setState("connected");
         setMessage(`未能切换工作区：${errorMessage(error)} · 当前工作现场保持打开`);
       } else {
@@ -245,14 +267,14 @@ export function App() {
       setSnapshot(next);
       setSelectedProject(project);
       setPageRequest(null);
-      setSurface("production");
+      setSurface(sameWorkspace ? previousSurface : "home");
       setResumeEnabledForSession(false);
       setState("connected");
       setMessage(project
         ? `已重新连接 · ${project.name || project.project_id}`
         : connectedWorkspacePath
           ? `工作区已就绪 · ${next.projects.length} 个项目`
-          : `工作区已就绪 · ${next.projects.length} 个项目 · 本机路径未知，可在团队审阅中按需添加工作区路径`);
+          : `工作区已就绪 · ${next.projects.length} 个项目 · 本机路径未知`);
     } catch (error) {
       if (previousSnapshot) {
         setSnapshot(previousSnapshot);
@@ -289,10 +311,11 @@ export function App() {
     setSelectedProject(project);
     if (project && resumeEnabledForSession) rememberProject(project.project_id);
     setState("connected");
-    setMessage(project ? `项目已刷新 · ${project.name || project.project_id}` : `项目主页已刷新 · ${next.projects.length} 个项目`);
+    setMessage(project ? `项目已刷新 · ${project.name || project.project_id}` : `工作区已刷新 · ${next.projects.length} 个项目`);
   }
 
   function selectProject(project: ProjectSummary): void {
+    if (selectedProject?.project_id !== project.project_id) setActiveProjectPage("slate");
     setSelectedProject(project);
     setPageRequest(null);
     setSurface("production");
@@ -302,6 +325,7 @@ export function App() {
   function openProjectPage(project: ProjectSummary, page: ProductionPage): void {
     pageRequestNonce.current += 1;
     setSelectedProject(project);
+    setActiveProjectPage(page);
     setPageRequest({ projectId: project.project_id, page, nonce: pageRequestNonce.current });
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
@@ -356,7 +380,7 @@ export function App() {
     try {
       const task = await new DesktopClient(snapshot.baseUrl).prepareProject(project.project_id);
       await refreshActivities();
-      setMessage(`已提交 ${project.name || project.project_id} 的重整任务${task.task_id ? ` · ${task.task_id}` : ""}；运行中状态会显示在项目卡与 Sidebar，失败恢复统一在状态中心。`);
+      setMessage(`已提交 ${project.name || project.project_id} 的重整任务${task.task_id ? ` · ${task.task_id}` : ""}；运行状态统一在状态中心。`);
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -372,7 +396,7 @@ export function App() {
       if (selectedProject?.project_id === project.project_id) {
         setSelectedProject(null);
         setPageRequest(null);
-        setSurface("production");
+        setSurface("projects");
       }
       await refreshWorkspace();
       await refreshActivities();
@@ -383,9 +407,13 @@ export function App() {
   }
 
   function openHome(): void {
-    setSelectedProject(null);
     setPageRequest(null);
-    setSurface("production");
+    setSurface("home");
+  }
+
+  function openProjects(): void {
+    setPageRequest(null);
+    setSurface("projects");
   }
 
   function openProjectFromStatus(projectId: string): void {
@@ -408,7 +436,7 @@ export function App() {
 
   const recovering = state === "starting" && Boolean(launchResume.workspacePath) && !snapshot;
   const recoveryFailed = state === "error" && Boolean(workspacePath.trim()) && !snapshot;
-  const utilityActive = surface === "production" ? null : surface;
+  const primaryActive = surface === "production" ? null : surface;
   const revealLabel = platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器";
 
   if (!snapshot) {
@@ -417,19 +445,16 @@ export function App() {
         <section className={`startup-home ${recoveryFailed ? "is-recovery" : ""}`}>
           <div className="startup-brand">
             <div className="startup-logo" aria-hidden="true" />
-            <div>
-              <strong>镜序</strong>
-              <span>MirrorOrder</span>
-            </div>
+            <div><strong>镜序</strong><span>MirrorOrder</span></div>
           </div>
           <div className="startup-primary">
             <p className="eyebrow">{recovering ? "恢复工作区" : recoveryFailed ? "工作区恢复" : "Production"}</p>
             <h1>{recovering ? "正在恢复上次工作区" : recoveryFailed ? "重新定位工作区" : "继续制作"}</h1>
             <p>{recovering
-              ? "正在启动本机制作服务。恢复完成后先进入项目主页，不会自动钻入上次项目。"
+              ? "正在启动本机制作服务。恢复完成后进入制作首页。"
               : recoveryFailed
                 ? "上次工作区没有成功打开。重新定位它，或选择其他工作区；项目数据不会被改写。"
-                : "打开镜序工作区后先进入项目主页。Host、端口与运行诊断只在高级区域出现。"}</p>
+                : "打开工作区后，从首页进入项目、场记、素材、人物和状态中心。"}</p>
             {workspacePath.trim() ? <code className="startup-path">{workspacePath}</code> : null}
             <div className="startup-actions">
               <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>{recoveryFailed ? "重新定位" : "打开工作区"}</button>
@@ -452,8 +477,22 @@ export function App() {
     );
   }
 
+  const runningProjects = Object.values(projectActivities).filter((activity) => activity.state === "active").length;
+  const currentTitle = surface === "home"
+    ? "首页"
+    : surface === "projects"
+      ? "项目"
+      : surface === "status"
+        ? "状态中心"
+        : surface === "settings"
+          ? "设置"
+          : surface === "team"
+            ? "团队审阅"
+            : pageTitle(activeProjectPage);
+  const breadcrumb = [snapshot.workspace.workspace, selectedProject?.name || selectedProject?.project_id, currentTitle].filter(Boolean).join(" / ");
+
   return (
-    <main className="app-shell production-app-shell">
+    <main className="app-shell production-app-shell mirrororder-redesign-shell">
       <section className="workspace-shell application-frame">
         <aside className="global-sidebar">
           <ProjectLibrary
@@ -461,13 +500,15 @@ export function App() {
             workspace={snapshot.workspace}
             activities={projectActivities}
             selectedProjectId={selectedProject?.project_id ?? null}
-            utilityActive={utilityActive}
+            primaryActive={primaryActive === "production" ? null : primaryActive}
+            activeProjectPage={activeProjectPage}
             revealLabel={revealLabel}
             onSelectProject={selectProject}
             onOpenHome={openHome}
+            onOpenProjects={openProjects}
             onOpenStatusCenter={() => setSurface("status")}
-            onOpenTeam={() => setSurface("team")}
             onOpenSettings={() => setSurface("settings")}
+            onOpenProjectPage={openProjectPage}
             onOpenTeamProject={openTeamProject}
             onCopyShareLink={(project) => copyProjectShareLink(project)}
             onRevealProject={(project) => revealProject(project)}
@@ -499,43 +540,79 @@ export function App() {
           </details>
         </aside>
 
-        <section className="workbench-shell main-stage">
-          {surface === "status" ? (
-            <StatusCenterWorkbench
-              baseUrl={snapshot.baseUrl}
-              projects={snapshot.projects}
-              onOpenProject={openProjectFromStatus}
-              onOpenProjectPage={openProjectPageFromStatus}
-              onOpenSettings={() => setSurface("settings")}
-            />
-          ) : surface === "team" ? (
-            <TeamWebWorkbench workspacePath={activeWorkspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
-          ) : surface === "settings" ? (
-            <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} />
-          ) : selectedProject ? (
-            <ProjectWorkbench
-              key={selectedProject.project_id}
-              baseUrl={snapshot.baseUrl}
-              project={selectedProject}
-              pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
-              onOpenTeamReview={() => openTeamProject(selectedProject)}
-            />
-          ) : (
-            <ProjectHome
-              baseUrl={snapshot.baseUrl}
-              workspace={snapshot.workspace}
-              activities={projectActivities}
-              revealLabel={revealLabel}
-              onOpenProject={selectProject}
-              onOpenTeamProject={openTeamProject}
-              onCopyShareLink={(project) => copyProjectShareLink(project)}
-              onRevealProject={(project) => revealProject(project)}
-              onPrepareProject={(project) => prepareProject(project)}
-              onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
-              onDeleteProject={(project) => deleteProject(project)}
-              onWorkspaceChanged={refreshWorkspace}
-            />
-          )}
+        <section className="app-main-column">
+          <header className="app-global-topbar">
+            <div className="app-global-context">
+              <span>{breadcrumb}</span>
+              <strong>{currentTitle}</strong>
+            </div>
+            <div className="app-global-actions">
+              <button type="button" className="app-topbar-status" onClick={() => setSurface("status")}>
+                <span className={`app-topbar-status-dot ${runningProjects ? "is-active" : ""}`} />
+                {runningProjects ? `${runningProjects} 个项目处理中` : "后台正常"}
+              </button>
+              <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id)}>刷新</button>
+              <button type="button" className="app-workspace-chip" onClick={openHome}>{snapshot.workspace.workspace}</button>
+            </div>
+          </header>
+
+          <section className={`workbench-shell main-stage surface-${surface}`}>
+            {surface === "home" ? (
+              <WorkspaceHome
+                workspace={snapshot.workspace}
+                activities={projectActivities}
+                onOpenProject={selectProject}
+                onOpenProjects={openProjects}
+                onOpenStatus={() => setSurface("status")}
+                onOpenSettings={() => setSurface("settings")}
+              />
+            ) : surface === "projects" ? (
+              <ProjectHome
+                baseUrl={snapshot.baseUrl}
+                workspace={snapshot.workspace}
+                activities={projectActivities}
+                revealLabel={revealLabel}
+                onOpenProject={selectProject}
+                onOpenTeamProject={openTeamProject}
+                onCopyShareLink={(project) => copyProjectShareLink(project)}
+                onRevealProject={(project) => revealProject(project)}
+                onPrepareProject={(project) => prepareProject(project)}
+                onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
+                onDeleteProject={(project) => deleteProject(project)}
+                onWorkspaceChanged={refreshWorkspace}
+              />
+            ) : surface === "status" ? (
+              <StatusCenterWorkbench
+                baseUrl={snapshot.baseUrl}
+                projects={snapshot.projects}
+                onOpenProject={openProjectFromStatus}
+                onOpenProjectPage={openProjectPageFromStatus}
+                onOpenSettings={() => setSurface("settings")}
+              />
+            ) : surface === "team" ? (
+              <TeamWebWorkbench workspacePath={activeWorkspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
+            ) : surface === "settings" ? (
+              <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} />
+            ) : selectedProject ? (
+              <ProjectWorkbench
+                key={`${snapshot.workspace.workspace_id}:${selectedProject.project_id}`}
+                baseUrl={snapshot.baseUrl}
+                project={selectedProject}
+                pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
+                onOpenTeamReview={() => openTeamProject(selectedProject)}
+                onPageChange={setActiveProjectPage}
+              />
+            ) : (
+              <WorkspaceHome
+                workspace={snapshot.workspace}
+                activities={projectActivities}
+                onOpenProject={selectProject}
+                onOpenProjects={openProjects}
+                onOpenStatus={() => setSurface("status")}
+                onOpenSettings={() => setSurface("settings")}
+              />
+            )}
+          </section>
         </section>
       </section>
       {noticeVisible ? (
