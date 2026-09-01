@@ -1,28 +1,41 @@
 /*
  * Recovery-first ordering for Status Center.
- * Active tasks already expose the Task API cancel action; keep them above long
- * failure lists so cancellation is reachable without scrolling past history.
+ * Active tasks expose the real Task API cancel action. Keep that control surface
+ * pinned above the backlog while only the status-content region scrolls.
  */
-.status-center-section.is-active { order: -20; }
+.status-center-section.is-active {
+  order: -20;
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  border-color: #33495d;
+  box-shadow: 0 8px 18px rgba(4, 9, 13, .14);
+}
 .status-center-section.is-attention { order: -10; }
 .status-center-section.is-recent { order: 0; }
 
-.status-center-section.is-active { border-color: #33495d; }
-.status-center-section.is-active > header { background: rgba(76, 133, 189, .06); }
+.status-center-section.is-active > header { background: #111a22; }
+.status-center-section.is-active .status-center-task-list {
+  max-height: min(250px, 30vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled) { border-color: #5a4a4a; color: #d59a93; background: transparent; }
 .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled):hover { border-color: #765858; color: #e2ada6; background: #1a1313; }
 
-/* A large current backlog must not push control surfaces off-screen. */
-.status-center-section.is-attention .status-center-task-list { max-height: min(520px, 52vh); overflow-y: auto; overscroll-behavior: contain; }
-.status-center-section.is-attention .status-center-task-list::-webkit-scrollbar { width: 10px; }
-.status-center-section.is-attention .status-center-task-list::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background-clip: padding-box; background-color: rgba(120, 134, 146, .42); }
+/* The backlog belongs to the scrollable content region. Do not create an
+ * unbounded page or a second nested failure-list scrollbar. */
+.status-center-section.is-attention .status-center-task-list {
+  max-height: none;
+  overflow: visible;
+}
 
 /* Superseded failures are history, not current alarms. */
 .status-center-section.is-recent .status-center-task.is-history { background: #0d1216; }
 .status-center-section.is-recent .status-center-task.is-history .status-center-task-indicator { background: #6f7880; }
 .status-center-section.is-recent .status-center-task.is-history .status-center-task-body > p { color: #74818c; }
 
-html[data-mirrororder-theme="light"] .status-center-section.is-active { border-color: #bdd0e1; }
+html[data-mirrororder-theme="light"] .status-center-section.is-active { border-color: #bdd0e1; box-shadow: 0 8px 18px rgba(35, 52, 67, .10); }
 html[data-mirrororder-theme="light"] .status-center-section.is-active > header { background: #f3f8fc; }
 html[data-mirrororder-theme="light"] .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled) { border-color: #dfc0bc; color: #a4574f; background: #fff; }
 html[data-mirrororder-theme="light"] .status-center-section.is-active .status-center-actions > button:first-child:not(:disabled):hover { border-color: #d4a9a3; color: #93473f; background: #fff5f3; }
@@ -30,5 +43,5 @@ html[data-mirrororder-theme="light"] .status-center-section.is-recent .status-ce
 html[data-mirrororder-theme="light"] .status-center-section.is-recent .status-center-task.is-history .status-center-task-body > p { color: #6c7883; }
 
 html[data-mirrororder-theme="dark"] .status-center-section.is-active { border-color: #33495d; }
-html[data-mirrororder-theme="dark"] .status-center-section.is-active > header { background: rgba(76, 133, 189, .06); }
+html[data-mirrororder-theme="dark"] .status-center-section.is-active > header { background: #111a22; }
 html[data-mirrororder-theme="dark"] .status-center-section.is-recent .status-center-task.is-history { background: #0d1216; }
