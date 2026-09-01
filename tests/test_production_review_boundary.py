@@ -10,7 +10,7 @@ def test_app_production_is_native_and_does_not_embed_team_web_or_timeline() -> N
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
-    assert 'type AppSurface = "production" | "status" | "team" | "settings"' in app
+    assert 'type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings"' in app
     assert "TeamWebWorkbench" in app
     assert "ProjectWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
@@ -20,15 +20,19 @@ def test_app_production_is_native_and_does_not_embed_team_web_or_timeline() -> N
     assert "AssemblyWorkbench" not in workbench
 
 
-def test_native_production_navigation_starts_at_project_home_then_multicam_slate() -> None:
+def test_native_navigation_starts_at_workspace_home_then_opens_multicam_slate() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
+    library = (ROOT / "desktop/src/features/projects/ProjectLibrary.tsx").read_text(encoding="utf-8")
 
-    assert 'useState<AppSurface>("production")' in app
+    assert 'useState<AppSurface>("home")' in app
+    assert "WorkspaceHome" in app
     assert 'useState<ProductionPage>("slate")' in workbench
     for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
-    assert 'onOpenTeam={() => setSurface("team")}' in app
+    assert "openTeamProject(project: ProjectSummary)" in app
+    assert 'setSurface("team")' in app
+    assert 'aria-label="当前项目制作导航"' in library
     assert '>小镜</button>' in workbench
 
 
