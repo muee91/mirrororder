@@ -16,7 +16,6 @@ Start with the repository documentation authority index:
 - `../docs/app-information-architecture.md`
 - `../docs/ux-principles.md`
 - `development-baseline.json`
-- `../docs/desktop-development-baseline.md`
 - `../docs/architecture/repository-layout.md`
 - `../docs/architecture/desktop-bridge.md`
 
@@ -61,8 +60,6 @@ Passive GETs, opening/switching pages or selecting objects must not start full m
 
 ## Local validation
 
-GitHub Actions are not required for normal development validation.
-
 ```bash
 npm install
 npm run verify:rc
@@ -92,7 +89,7 @@ With an existing local Production Host:
 npm run smoke:host
 ```
 
-A gate is only PASS if it actually ran successfully on the tested commit.
+A gate is only PASS if it actually ran successfully on the tested commit. GitHub Actions are an independent execution signal, not a substitute for local/native smoke.
 
 ## Authority boundary
 
@@ -126,8 +123,8 @@ Audit, retrieval scores and Individual Opinion remain evidence/advice, not final
 
 Production Host and Team Gateway have independent lifecycle managers. `spawn()` and a merely open TCP port are insufficient health evidence; readiness should verify `/api/v1/ping` returns the expected MirrorOrder service identity and `status=ok`.
 
-## Feature isolation
+## Feature isolation on main
 
-Production project tabs are product surfaces, not generic plugin slots.
+Production project tabs are product surfaces, not generic plugin slots. Runtime packaging, heavy media processing, automatic music, new NLE adapters, model-runtime infrastructure and experimental automation must have explicit typed contracts, authority boundaries, failure isolation and native smoke gates before they become normal Production behavior.
 
-Runtime packaging, heavy media processing, automatic music, new NLE adapters, model-runtime infrastructure and experimental automation should start in isolated branches/worktrees when they have their own runtime/process/security boundary. Promote them only after typed contracts, authority boundaries, failure isolation and native smoke gates are explicit.
+The repository currently uses a `main`-only workflow. Do not treat long-lived feature branches or worktrees as an architectural requirement; isolation should come from package/process boundaries, scoped commits, feature gating where appropriate, and explicit validation.

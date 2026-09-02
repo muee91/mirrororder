@@ -94,7 +94,7 @@ desktop/src-tauri/resources/     构建生成/占位的 packaged resources
 
 ## 5. Python Core
 
-当前 `src/script_organizer/` 仍有历史 flat namespace。为降低主线 rebase/import 风险，本轮不做一次性全包搬家；它是**兼容区，不是鼓励继续无限扩张的模板**。
+当前 `src/script_organizer/` 仍有历史 flat namespace。为降低主线 import 和 packaging 风险，不做一次性全包搬家；它是**兼容区，不是鼓励继续无限扩张的模板**。
 
 新代码遵循：
 
@@ -102,7 +102,7 @@ desktop/src-tauri/resources/     构建生成/占位的 packaged resources
 - HTTP/runtime adapter 保持 `*_runtime.py` 的薄层，不复制 store/engine 逻辑；
 - device-local state 不能因为方便而写进 project/shared store；
 - 一个领域开始出现多组 engine/store/runtime/support 文件时，优先规划独立子 package，再以兼容 import 逐步迁移，而不是继续堆几十个顶层模块；
-- 大规模 package 迁移必须单独 worktree/commit，并有 import、packaging、stage-runtime 与 pytest contract，不能和产品功能修改混在一个提交中。
+- 大规模 package 迁移必须作为独立、可审阅的原子工作包，并有 import、packaging、stage-runtime 与 pytest contract，不能和产品功能修改混在一个提交中。
 
 ## 6. 测试与 fixture
 
@@ -128,6 +128,6 @@ desktop/src-tauri/resources/     构建生成/占位的 packaged resources
 1. 它是**源码**、**长期文档**、**测试 fixture**还是**运行时状态**？
 2. 如果是文档，哪个现有 authority 应该更新，是否真的需要新文件？
 3. 如果包含路径/媒体/项目内容，它是否会把某台机器或真实制作数据带进 Git？
-4. 如果是重 runtime/实验能力，是否应该先在独立 worktree 而不是直接扩张 main？
+4. 如果是重 runtime/实验能力，是否已经形成独立 package/process boundary、可审阅 scope 和对应验证，而不是把实验面直接扩张进 Production？
 
 无法明确归类的文件默认不要放到仓库根目录。

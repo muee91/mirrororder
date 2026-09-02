@@ -74,12 +74,14 @@ def test_native_workspace_reads_host_projection_and_opens_team_review_externally
     assert "if (!root) return null" in client
 
 
-def test_boundary_document_defines_native_production_and_web_review() -> None:
-    doc = (ROOT / "docs" / "production-review-boundary.md").read_text(encoding="utf-8")
+def test_current_authority_documents_define_production_and_team_review_boundary() -> None:
+    ia = (ROOT / "docs" / "app-information-architecture.md").read_text(encoding="utf-8")
+    bridge = (ROOT / "docs" / "architecture" / "desktop-bridge.md").read_text(encoding="utf-8")
+    review = (ROOT / "docs" / "review-read-model.md").read_text(encoding="utf-8")
 
-    assert "App — Native Production" in doc
-    assert "Web — Team Review" in doc
-    assert "App 主制作画布不得嵌入 WebView" in doc
-    assert "review.v1" in doc
-    assert "不得自动 Reject" in doc
-    assert "media-bindings.json" in doc
+    assert "团队审阅是独立协作 surface" in ia
+    assert "Team Web" in ia and "Final Editorial Decision" in ia
+    assert "React / TypeScript UI" in bridge
+    assert "Team Web 是浏览器 Review / Projection surface" in bridge
+    assert "review.v1" in review
+    assert "Read Model 不返回原始媒体绝对路径" in review

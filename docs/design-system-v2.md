@@ -1,6 +1,6 @@
 # MirrorOrder Design System v2
 
-> Implementation branch: `work/design-system-v2`
+> 当前实现位于 `desktop/src/design-system-v2.css` 与 `web/design-system-v2.css`。
 >
 > Product authority remains `docs/ux-principles.md` and `docs/app-information-architecture.md`. This document translates those principles into reusable UI rules and migration constraints.
 

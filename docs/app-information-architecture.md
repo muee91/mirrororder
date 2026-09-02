@@ -1,8 +1,8 @@
 # App Product Experience Architecture
 
-> 当前产品体验 authority：2026-08-28。
+> 当前产品体验 authority：2026-09-02。
 >
-> 本文同时约束信息架构与产品壳层。`app-design-system-v1.md` 继续作为 V1 视觉/交互纪律参考，但其中“SwiftUI 是唯一 App UI”“项目主页 Grid”“项目默认页”不再是实现 authority；当前 Desktop 技术边界以 `desktop-development-baseline.md` 为准。
+> 本文约束信息架构与产品壳层。当前 Desktop 开发入口见 [`../desktop/README.md`](../desktop/README.md)，跨层技术边界见 [`architecture/desktop-bridge.md`](./architecture/desktop-bridge.md)，视觉与交互规则见 [`ux-principles.md`](./ux-principles.md) 与 [`design-system-v2.md`](./design-system-v2.md)。
 
 镜序 App 是专业影视后期 Production 工具，不是 Host/Workspace launcher、AI 控制台或模块 Dashboard。
 
@@ -13,7 +13,7 @@
 - 每个项目有一个明确 Primary Canvas，而不是功能目录首页；
 - 复杂能力按制作对象和阶段组织，不按工程模块组织；
 - Host、端口、workspace.toml、模型实现等技术细节只在恢复/设置/高级区域出现；
-- 视觉保持 V1 的高密度、低噪声、Table / Split View / Inspector / Toolbar 纪律。
+- 视觉保持高密度、低噪声、Table / Split View / Inspector / Toolbar 的专业工具纪律。
 
 ## 1. 启动与恢复
 
@@ -227,7 +227,7 @@ Team Web 权限保持：
 
 ## 8. 视觉与交互纪律
 
-继承 V1 的有效原则：
+当前产品遵循：
 
 - 系统字体 / PingFang SC；
 - 中性色为主；
@@ -238,7 +238,7 @@ Team Web 权限保持：
 - 主工作区不使用 KPI Dashboard、大卡片瀑布流、大面积渐变或 AI 发光视觉；
 - 右侧区域解释当前选择，不成为第二套导航。
 
-技术实现允许 React/Tauri，但最终产品应保持 macOS 专业工具的空间纪律，并为 Windows 提供同构 Production experience。
+技术实现使用 React/Tauri，但最终产品应保持 macOS 专业工具的空间纪律，并为 Windows 提供同构 Production experience。
 
 ## 9. 明确禁止回归
 

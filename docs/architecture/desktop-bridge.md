@@ -10,7 +10,7 @@ React / TypeScript UI
 Tauri 2 / Rust
   ├─ Production Host lifecycle :8765
   ├─ Team Gateway lifecycle    :8766
-  ├─ native dialogs / reveal / URL / FCP adapter
+  ├─ native dialogs / reveal / URL / NLE adapter
   └─ Timeline bridge
         ↓
 Python MirrorOrder Core + Rust Timeline Core
@@ -34,7 +34,7 @@ Production Host 与 Team Gateway 使用独立 Tauri manager；停止一个不得
 clip_id / media_id
 → device-local media resolver
 → 当前设备真实媒体路径
-→ HTTP Range / proxy transport 或后续窄 native adapter
+→ HTTP Range / proxy transport 或窄 native adapter
 ```
 
 - 绝对路径不得写回共享 workspace。
@@ -72,18 +72,20 @@ evidence / rough-cut proposal
 - 不修改用户原始 FCPXML。
 - 当前 delivery 继续复用 Python exporter。
 - macOS Final Cut adapter 只做窄平台动作，不重写 FCPXML 业务逻辑。
-- Resolve/Premiere 或其它 NLE adapter 默认先独立 worktree，只有 contract、authority、failure isolation 和 native smoke 明确后再并入主线。
+- Resolve/Premiere 或其它新 NLE adapter 必须先形成独立、可验证的 adapter boundary；contract、authority、failure isolation 和 native smoke 明确后，才进入常规 Production 路径。
 
 ## 7. 重功能隔离
 
-当前主线只承载稳定产品面。以下能力默认独立开发：
+仓库当前使用 `main`-only 工作流。重 runtime、自动配乐、heavy media processing、新 NLE adapter、model runtime infrastructure 和实验自动化引擎的隔离依赖：
 
-- `work/runtime-packaging`
-- `work/auto-score`
-- heavy media processing
-- new NLE adapters
-- model runtime infrastructure
-- experimental automation engines
+- 独立 package/process/runtime boundary；
+- typed contract；
+- scoped atomic commit；
+- 明确 failure isolation；
+- 需要时使用 feature gate；
+- 对应 source/native smoke。
+
+长期 branch/worktree 不是当前架构前提。
 
 ## 8. 验证
 
