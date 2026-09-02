@@ -10,20 +10,23 @@ _INSTALLED = False
 
 
 def _parse_http_byte_range(header: str, size: int) -> tuple[int, int] | None:
-    """Parse the first HTTP bytes range used by WebKit media playback.
+    """Parse a single HTTP bytes range used by WebKit media playback.
 
     MirrorOrder serves one local file per request and does not emit multipart
-    byte ranges. Browsers use single ranges for media probing/seeking, so keep
-    the existing first-range behavior while implementing open-ended and suffix
-    ranges according to HTTP semantics.
+    byte ranges. Browsers normally use single ranges for media probing/seeking.
+    If a client asks for multiple ranges, ignore the Range header and let the
+    handler return the full representation instead of pretending the first
+    range satisfies a multipart request.
     """
 
     if not header.startswith("bytes="):
         return None
+    value = header.removeprefix("bytes=").strip()
+    if "," in value:
+        return None
     if size <= 0:
         raise ValueError("range invalid")
 
-    value = header.removeprefix("bytes=").split(",", 1)[0].strip()
     left, separator, right = value.partition("-")
     left = left.strip()
     right = right.strip()
