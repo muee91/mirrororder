@@ -1,0 +1,75 @@
+.golden-take-picker-list > button {
+  align-items: flex-start;
+}
+
+.golden-take-picker-angles {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.golden-take-angle {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px 3px 4px;
+  border: 1px solid var(--camera-border, var(--mo-border, #dbe3ea));
+  border-radius: 7px;
+  background: var(--camera-fill, var(--mo-surface-muted, #eef3f7));
+}
+
+.golden-take-angle > strong {
+  min-width: 27px;
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--camera-ink, #526272) 12%, transparent);
+  color: var(--camera-ink, var(--mo-text-2, #526272));
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .02em;
+}
+
+.golden-take-angle > em {
+  min-width: 0;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mo-text-2, #526272);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.golden-player-error {
+  height: 100%;
+  min-height: 118px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
+  text-align: center;
+}
+
+.golden-player-error > strong {
+  color: var(--mo-text-1, #1f2a35);
+  font-size: 13px;
+}
+
+.golden-player-error > span {
+  max-width: 280px;
+  color: var(--mo-text-3, #8392a0);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.golden-player-error > button {
+  min-height: 28px;
+}
