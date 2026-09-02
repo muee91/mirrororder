@@ -83,6 +83,10 @@ export function ProjectLibrary({
     () => workspace.projects.find((project) => project.project_id === selectedProjectId) ?? null,
     [selectedProjectId, workspace.projects],
   );
+  const switchProjects = useMemo(
+    () => workspace.projects.filter((project) => project.project_id !== selectedProjectId).slice(0, 3),
+    [selectedProjectId, workspace.projects],
+  );
   const selectedPresentation = selectedProject ? projectPresentation(selectedProject, activities[selectedProject.project_id]) : null;
   const runningCount = Object.values(activities).filter((activity) => activity.state === "active").length;
 
@@ -163,27 +167,28 @@ export function ProjectLibrary({
 
       <div className="project-sidebar-spacer" />
 
-      <section className="project-recent-switcher">
-        <div className="project-nav-section-label"><span>最近项目</span><small>快速切换</small></div>
-        <div className="project-recent-list">
-          {workspace.projects.slice(0, 3).map((project) => {
-            const presentation = projectPresentation(project, activities[project.project_id]);
-            const taskActive = activities[project.project_id]?.state === "active";
-            return (
-              <button
-                type="button"
-                key={project.project_id}
-                className={selectedProjectId === project.project_id ? "is-selected" : ""}
-                onClick={() => onSelectProject(project)}
-                onContextMenu={(event) => { event.preventDefault(); openMenu(project, event.clientX, event.clientY); }}
-              >
-                <span><strong>{project.name || project.project_id}</strong><small>{presentation.sidebarSubtitle}</small></span>
-                {taskActive ? <span className="project-activity-spinner" /> : null}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      {switchProjects.length ? (
+        <section className="project-recent-switcher">
+          <div className="project-nav-section-label"><span>切换项目</span><small>最近使用</small></div>
+          <div className="project-recent-list">
+            {switchProjects.map((project) => {
+              const presentation = projectPresentation(project, activities[project.project_id]);
+              const taskActive = activities[project.project_id]?.state === "active";
+              return (
+                <button
+                  type="button"
+                  key={project.project_id}
+                  onClick={() => onSelectProject(project)}
+                  onContextMenu={(event) => { event.preventDefault(); openMenu(project, event.clientX, event.clientY); }}
+                >
+                  <span><strong>{project.name || project.project_id}</strong><small>{presentation.sidebarSubtitle}</small></span>
+                  {taskActive ? <span className="project-activity-spinner" /> : null}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <nav className="project-system-nav" aria-label="系统导航">
         <button type="button" className={primaryActive === "status" ? "is-active" : ""} onClick={onOpenStatusCenter}><NavIcon name="status" /><span>状态中心</span>{runningCount ? <small className="project-system-badge">{runningCount}</small> : null}</button>
