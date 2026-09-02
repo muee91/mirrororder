@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReviewAngle } from "../../api/host";
 import type { SlateAttachment } from "../../api/production";
+import { cameraPresentation } from "./cameraPresentation";
 import "./mirrororder-media-card.css";
+import "./camera-presentation.css";
 
 export interface MirrorOrderMediaCardModel {
   id: string;
@@ -76,12 +78,10 @@ export function MirrorOrderMediaCard({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [compactPreviewActive, setCompactPreviewActive] = useState(!compact);
   const [previewReady, setPreviewReady] = useState(false);
+  const camera = useMemo(() => cameraPresentation(model.camera), [model.camera]);
 
-  // The frozen Swift card used a static AVAssetImageGenerator thumbnail. The
-  // current Host exposes an authorized playback descriptor but no thumbnail
-  // endpoint, so compact cards only instantiate a video when they are close to
-  // the visible table. Keeping the margin tight avoids a large off-screen grid
-  // of metadata requests / decoder surfaces on long slate boards.
+  // Compact cards only instantiate a decoder surface close to the viewport.
+  // The card still keeps the camera identity visible while preview is dormant.
   useEffect(() => {
     if (!compact) {
       setCompactPreviewActive(true);
@@ -101,7 +101,7 @@ export function MirrorOrderMediaCard({
   }, [compact]);
 
   const previewEnabled = Boolean((showPreview || (compact && compactPreviewActive)) && model.playbackUrl && model.available !== false);
-  const label = useMemo(() => [model.camera, model.name, shotLabel(model.shotType)].filter(Boolean).join(" · "), [model]);
+  const label = useMemo(() => [camera.label, model.name, shotLabel(model.shotType)].filter(Boolean).join(" · "), [camera.label, model.name, model.shotType]);
 
   useEffect(() => {
     setPreviewReady(false);
@@ -141,13 +141,13 @@ export function MirrorOrderMediaCard({
       <div className="mo-media-thumb" aria-hidden="true">
         {previewEnabled ? (
           <>
-            <span className="mo-media-preview-fallback">{model.camera || "▶"}</span>
+            <span className="mo-media-preview-fallback">{camera.label}</span>
             <video ref={videoRef} className={previewReady ? "is-ready" : ""} src={model.playbackUrl} preload="metadata" muted playsInline tabIndex={-1} />
           </>
         ) : (
-          <span className={model.available === false ? "is-missing" : ""}>{model.available === false ? "▧" : model.camera || "▶"}</span>
+          <span className={model.available === false ? "is-missing" : ""}>{model.available === false ? "▧" : camera.label}</span>
         )}
-        <span className="mo-media-camera-badge">{model.camera || "—"}</span>
+        <span className="mo-media-camera-badge" data-camera-tone={camera.tone}>{camera.label}</span>
       </div>
       <div className="mo-media-copy">
         <div className="mo-media-topline">
