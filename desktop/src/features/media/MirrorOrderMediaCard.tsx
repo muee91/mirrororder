@@ -81,7 +81,7 @@ export function MirrorOrderMediaCard({
   const camera = useMemo(() => cameraPresentation(model.camera), [model.camera]);
 
   // Compact cards only instantiate a decoder surface close to the viewport.
-  // The card still keeps the camera identity visible while preview is dormant.
+  // The card keeps a stable camera identity and geometry while preview is dormant.
   useEffect(() => {
     if (!compact) {
       setCompactPreviewActive(true);
@@ -136,6 +136,8 @@ export function MirrorOrderMediaCard({
     };
   }, [model.sourceStart, previewEnabled]);
 
+  const supportText = model.available === false ? "设备缺失" : (!compact && model.sourceRole ? model.sourceRole : "");
+
   const content = (
     <>
       <div className="mo-media-thumb" aria-hidden="true">
@@ -152,27 +154,31 @@ export function MirrorOrderMediaCard({
       <div className="mo-media-copy">
         <div className="mo-media-topline">
           <span className="mo-media-name" title={model.name}>{model.name}</span>
-          {model.duplicateCount && model.duplicateCount > 1 ? <span className="mo-media-count">×{model.duplicateCount}</span> : null}
+          <span className="mo-media-count-slot">{model.duplicateCount && model.duplicateCount > 1 ? `×${model.duplicateCount}` : ""}</span>
         </div>
         <span className={`mo-media-shot ${!model.shotType || model.shotType === "unknown" ? "is-unknown" : ""}`}>{shotLabel(model.shotType)}</span>
         <div className="mo-media-meta">
           <span>{seconds(model.duration) || "时长—"}</span>
-          <span className={preferred ? "is-preferred" : ""}>{preferred ? "首选" : "非首选"}</span>
+          <span className={`mo-media-preference-label ${preferred ? "is-preferred" : ""}`}>{preferred ? "首选" : ""}</span>
         </div>
-        {!compact && model.sourceRole ? <span className="mo-media-role">{model.sourceRole}</span> : null}
-        {model.available === false ? <span className="mo-media-missing">当前设备缺失</span> : null}
+        <span className={`mo-media-support ${model.available === false ? "is-missing" : ""}`} title={supportText}>{supportText}</span>
       </div>
-      {selected ? <span className="mo-media-selected" aria-label="已选择">✓</span> : null}
+      <span className={`mo-media-selected-slot ${selected ? "is-visible" : ""}`} aria-hidden={!selected} aria-label={selected ? "已选择" : undefined}>✓</span>
     </>
   );
 
   return (
-    <div ref={cardRef} className={`mo-media-card ${compact ? "is-compact" : "is-inspector"} ${selected ? "is-selected" : ""} ${model.available === false ? "is-missing" : ""}`} aria-label={label}>
+    <div
+      ref={cardRef}
+      className={`mo-media-card ${compact ? "is-compact" : "is-inspector"} ${selected ? "is-selected" : ""} ${model.available === false ? "is-missing" : ""}`}
+      data-camera-tone={camera.tone}
+      aria-label={label}
+    >
       {onSelect ? (
-        <button type="button" className="mo-media-select" onClick={() => onSelect(model.id)} aria-pressed={selected}>{content}</button>
+        <button type="button" className="mo-media-select" onClick={() => onSelect(model.id)} aria-label={`选择 ${label}`} aria-pressed={selected}>{content}</button>
       ) : <div className="mo-media-select">{content}</div>}
       {onPrefer ? (
-        <button type="button" className={`mo-media-prefer ${preferred ? "is-active" : ""}`} onClick={(event) => { event.stopPropagation(); onPrefer(model.id); }} title={preferred ? "取消场记首选机位" : "设为场记首选机位"} aria-pressed={preferred}>★</button>
+        <button type="button" className={`mo-media-prefer ${preferred ? "is-active" : ""}`} onClick={(event) => { event.stopPropagation(); onPrefer(model.id); }} title={preferred ? "取消场记首选机位" : "设为场记首选机位"} aria-label={preferred ? `取消 ${camera.label} 场记首选` : `设 ${camera.label} 为场记首选`} aria-pressed={preferred}>★</button>
       ) : null}
     </div>
   );
