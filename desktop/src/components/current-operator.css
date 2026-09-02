@@ -1,0 +1,53 @@
+.current-operator-control { position: relative; flex: 0 0 auto; }
+.current-operator-chip {
+  min-width: 142px;
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 12px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--mo-border-default, #29333d);
+  border-radius: var(--mo-radius-control, 5px);
+  padding: 3px 7px;
+  background: var(--mo-surface-control, #11171c);
+  color: var(--mo-text-primary, #e2e8ed);
+  text-align: left;
+}
+.current-operator-chip.needs-operator { border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 52%, var(--mo-border-default, #29333d)); }
+.current-operator-avatar {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--mo-surface-raised, #151b20);
+  color: var(--mo-text-secondary, #a6b1ba);
+  font-size: 11px;
+  font-weight: 760;
+}
+.current-operator-copy { min-width: 0; display: grid; gap: 0; }
+.current-operator-copy small { color: var(--mo-text-muted, #778590); font-size: 10px; font-weight: 560; line-height: 1.05; }
+.current-operator-copy strong { min-width: 0; overflow: hidden; font-size: 11px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.current-operator-chevron { color: var(--mo-text-muted, #778590); font-size: 10px; text-align: right; }
+.current-operator-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 290px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--mo-border-strong, #3a4651);
+  border-radius: var(--mo-radius-overlay, 8px);
+  padding: 12px;
+  background: var(--mo-surface-pane, #10151a);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .28);
+}
+.current-operator-popover header { display: grid; gap: 3px; }
+.current-operator-popover header strong { font-size: 13px; }
+.current-operator-popover header span { color: var(--mo-text-muted, #778590); font-size: 10px; line-height: 1.45; }
+.current-operator-popover label { display: grid; gap: 5px; }
+.current-operator-popover label > span { color: var(--mo-text-secondary, #a6b1ba); font-size: 10px; }
+.current-operator-popover input { width: 100%; min-height: 32px; padding-inline: 8px; font-size: 12px; }
+.current-operator-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.current-operator-actions button { min-height: 30px; font-size: 11px; }
