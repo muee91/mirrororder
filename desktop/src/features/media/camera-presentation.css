@@ -1,53 +1,78 @@
 .mirrororder-redesign-shell [data-camera-tone="a"],
-.mo-media-card [data-camera-tone="a"] {
-  --camera-ink: #1d4ed8;
-  --camera-fill: color-mix(in srgb, #3b82f6 14%, var(--mo-surface, #fff));
-  --camera-border: color-mix(in srgb, #3b82f6 42%, var(--mo-border, #dbe3ea));
+.mo-media-card [data-camera-tone="a"],
+.mo-media-card[data-camera-tone="a"] {
+  --camera-ink: #2563eb;
+  --camera-fill: color-mix(in srgb, #3b82f6 14%, var(--mo-surface-pane, #fff));
+  --camera-border: color-mix(in srgb, #3b82f6 46%, var(--mo-border-default, #dbe3ea));
+  --camera-rail: #3b82f6;
 }
 
 .mirrororder-redesign-shell [data-camera-tone="b"],
-.mo-media-card [data-camera-tone="b"] {
+.mo-media-card [data-camera-tone="b"],
+.mo-media-card[data-camera-tone="b"] {
   --camera-ink: #7c3aed;
-  --camera-fill: color-mix(in srgb, #8b5cf6 14%, var(--mo-surface, #fff));
-  --camera-border: color-mix(in srgb, #8b5cf6 42%, var(--mo-border, #dbe3ea));
+  --camera-fill: color-mix(in srgb, #8b5cf6 14%, var(--mo-surface-pane, #fff));
+  --camera-border: color-mix(in srgb, #8b5cf6 46%, var(--mo-border-default, #dbe3ea));
+  --camera-rail: #8b5cf6;
 }
 
 .mirrororder-redesign-shell [data-camera-tone="c"],
-.mo-media-card [data-camera-tone="c"] {
+.mo-media-card [data-camera-tone="c"],
+.mo-media-card[data-camera-tone="c"] {
   --camera-ink: #0f766e;
-  --camera-fill: color-mix(in srgb, #14b8a6 14%, var(--mo-surface, #fff));
-  --camera-border: color-mix(in srgb, #14b8a6 42%, var(--mo-border, #dbe3ea));
+  --camera-fill: color-mix(in srgb, #14b8a6 14%, var(--mo-surface-pane, #fff));
+  --camera-border: color-mix(in srgb, #14b8a6 46%, var(--mo-border-default, #dbe3ea));
+  --camera-rail: #14b8a6;
+}
+
+.mirrororder-redesign-shell [data-camera-tone="aux"],
+.mo-media-card [data-camera-tone="aux"],
+.mo-media-card[data-camera-tone="aux"] {
+  --camera-ink: #526273;
+  --camera-fill: color-mix(in srgb, #64748b 14%, var(--mo-surface-pane, #fff));
+  --camera-border: color-mix(in srgb, #64748b 46%, var(--mo-border-default, #dbe3ea));
+  --camera-rail: #64748b;
 }
 
 .mirrororder-redesign-shell [data-camera-tone="custom"],
-.mo-media-card [data-camera-tone="custom"] {
-  --camera-ink: var(--mo-text-2, #526272);
-  --camera-fill: var(--mo-surface-muted, #eef3f7);
+.mo-media-card [data-camera-tone="custom"],
+.mo-media-card[data-camera-tone="custom"] {
+  --camera-ink: var(--mo-text-secondary, #526272);
+  --camera-fill: var(--mo-surface-raised, #eef3f7);
   --camera-border: var(--mo-border-strong, #c8d3dc);
+  --camera-rail: var(--mo-border-strong, #94a3b8);
 }
 
 .mirrororder-redesign-shell [data-camera-tone="unknown"],
-.mo-media-card [data-camera-tone="unknown"] {
-  --camera-ink: var(--mo-text-3, #8392a0);
-  --camera-fill: var(--mo-surface-soft, #f8fafc);
-  --camera-border: var(--mo-border, #dbe3ea);
+.mo-media-card [data-camera-tone="unknown"],
+.mo-media-card[data-camera-tone="unknown"] {
+  --camera-ink: var(--mo-text-muted, #8392a0);
+  --camera-fill: var(--mo-surface-raised, #f8fafc);
+  --camera-border: var(--mo-border-default, #dbe3ea);
+  --camera-rail: var(--mo-border-strong, #94a3b8);
 }
 
 .mo-media-camera-badge[data-camera-tone] {
-  min-width: 28px;
-  min-height: 20px;
-  padding: 0 6px;
+  min-width: 32px;
+  min-height: 22px;
+  padding: 0 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--camera-border);
-  border-radius: 6px;
+  border-radius: 5px;
   background: var(--camera-fill);
   color: var(--camera-ink);
+  font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
   font-weight: 800;
+  line-height: 1;
   letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 html[data-mirrororder-theme="dark"] [data-camera-tone="a"] { --camera-ink: #9fc0ff; }
 html[data-mirrororder-theme="dark"] [data-camera-tone="b"] { --camera-ink: #c4a8ff; }
 html[data-mirrororder-theme="dark"] [data-camera-tone="c"] { --camera-ink: #7eddd2; }
+html[data-mirrororder-theme="dark"] [data-camera-tone="aux"] { --camera-ink: #c2cedb; }
