@@ -1,0 +1,135 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+function read(relative: string): string {
+  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
+}
+
+describe("MirrorOrder professional UI contracts", () => {
+  it("treats A/B/C/AUX as stable first-class camera identities", () => {
+    const camera = read("../features/media/cameraPresentation.ts");
+    expect(camera).toContain('CameraTone = "a" | "b" | "c" | "aux" | "custom" | "unknown"');
+    expect(camera).toContain('tone: "a", sortOrder: 10');
+    expect(camera).toContain('tone: "b", sortOrder: 20');
+    expect(camera).toContain('tone: "c", sortOrder: 30');
+    expect(camera).toContain('tone: "aux", sortOrder: 40');
+  });
+
+  it("keeps slate camera columns in A/B/C/AUX semantic order", () => {
+    const slate = read("../features/slate/GoldenSlateWorkbench.tsx");
+    const a = slate.indexOf('mediaCell(draft, "A")');
+    const b = slate.indexOf('mediaCell(draft, "B")');
+    const c = slate.indexOf('mediaCell(draft, "C")');
+    const aux = slate.indexOf('mediaCell(draft, "AUX")');
+    expect(a).toBeGreaterThan(-1);
+    expect(b).toBeGreaterThan(a);
+    expect(c).toBeGreaterThan(b);
+    expect(aux).toBeGreaterThan(c);
+  });
+
+  it("keeps Take cards on stable A/B/C/AUX slots before custom cameras", () => {
+    const takes = read("../features/material-script/VirtualTakeList.tsx");
+    const a = takes.indexOf('{ tone: "a", label: "A机" }');
+    const b = takes.indexOf('{ tone: "b", label: "B机" }');
+    const c = takes.indexOf('{ tone: "c", label: "C机" }');
+    const aux = takes.indexOf('{ tone: "aux", label: "AUX" }');
+    expect(a).toBeGreaterThan(-1);
+    expect(b).toBeGreaterThan(a);
+    expect(c).toBeGreaterThan(b);
+    expect(aux).toBeGreaterThan(c);
+    expect(takes).toContain('tone === "custom" || tone === "unknown"');
+  });
+
+  it("reserves media card state columns so selection does not move metadata", () => {
+    const css = read("../features/media/mirrororder-media-card.css");
+    expect(css).toContain("grid-template-columns: 70px minmax(0, 1fr) 20px");
+    expect(css).toContain("grid-template-columns: 136px minmax(0, 1fr) 20px");
+    expect(css).toContain(".mo-media-selected-slot");
+    expect(css).not.toContain("border: 2px solid");
+  });
+
+  it("keeps the compact MediaCard inside the fixed Slate camera column", () => {
+    const media = read("../features/media/mirrororder-media-card.css");
+    const slate = read("../features/slate/golden-slate.css");
+    expect(media).toContain(".mo-media-card.is-compact { width: 180px; height: 88px; }");
+    expect(media).toContain(".mo-media-card.is-inspector { width: min(300px, 100%); height: 124px; }");
+    expect(slate).toContain(".golden-slate-table .col-media { width: 188px; }");
+  });
+
+  it("locks Take card identity, state, action and camera regions to explicit grids", () => {
+    const css = read("../features/material-script/material-script.css");
+    expect(css).toContain(".take-card-heading");
+    expect(css).toContain("grid-template-columns: minmax(130px, 1fr) minmax(118px, auto) auto");
+    expect(css).toContain(".take-card-state");
+    expect(css).toContain(".take-camera-strip");
+    expect(css).toContain("grid-auto-columns: 196px");
+    expect(css).toContain(".take-issue-slot");
+  });
+
+  it("does not regress core production surfaces below the 10px typography floor", () => {
+    for (const relative of [
+      "../features/media/mirrororder-media-card.css",
+      "../features/media/media-library.css",
+      "../features/material-script/material-script.css",
+      "../features/material-script/golden-material-script.css",
+      "../features/production/production.css",
+      "../features/planning/planning.css",
+      "../features/editor/timeline.css",
+      "../features/status/status-center.css",
+    ]) {
+      expect(read(relative), relative).not.toMatch(/font-size:\s*(?:7|8|9)px/);
+    }
+  });
+
+  it("keeps flagship surfaces on the resolved Desktop theme instead of raw OS media queries", () => {
+    for (const relative of [
+      "../features/media/mirrororder-media-card.css",
+      "../features/media/media-library.css",
+      "../features/production/production.css",
+      "../features/planning/planning.css",
+      "../features/editor/timeline.css",
+      "../features/status/status-center.css",
+    ]) {
+      expect(read(relative), relative).not.toContain("prefers-color-scheme");
+    }
+  });
+
+  it("keeps keyboard focus explicit on production controls", () => {
+    for (const relative of [
+      "../features/media/mirrororder-media-card.css",
+      "../features/media/media-library.css",
+      "../features/production/production.css",
+      "../features/planning/planning.css",
+      "../features/editor/timeline.css",
+      "../features/status/status-center.css",
+    ]) {
+      const css = read(relative);
+      expect(css, relative).toContain(":focus-visible");
+      expect(css, relative).not.toContain("outline: none");
+    }
+  });
+
+  it("keeps camera identity categorical and separate from semantic status colors", () => {
+    const css = read("../features/media/camera-presentation.css");
+    expect(css).toContain('[data-camera-tone="aux"]');
+    expect(css).toContain("--camera-rail:");
+    expect(css).not.toContain("--mo-success");
+    expect(css).not.toContain("--mo-danger");
+  });
+
+  it("uses independent status families instead of one universal badge", () => {
+    const component = read("../components/StatusIndicators.tsx");
+    const css = read("../components/status-indicators.css");
+    expect(component).toContain("ConnectionIndicator");
+    expect(component).toContain("TaskStatusIndicator");
+    expect(component).toContain("SlateStatusIndicator");
+    expect(component).toContain("MediaHealthIndicator");
+    expect(component).toContain("ReviewDecisionIndicator");
+    expect(css).toContain(".mo-connection-indicator");
+    expect(css).toContain(".mo-task-status-indicator");
+    expect(css).toContain(".mo-slate-status-indicator");
+    expect(css).toContain(".mo-media-health-indicator");
+    expect(css).toContain(".mo-review-decision-indicator");
+  });
+});

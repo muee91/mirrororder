@@ -1,0 +1,154 @@
+.mo-connection-indicator,
+.mo-slate-status-indicator,
+.mo-media-health-indicator,
+.mo-review-decision-indicator {
+  font-size: var(--mo-font-sm, 11px);
+  line-height: 1.2;
+}
+
+/* Connection: lightweight dot + label. Never a large toolbar pill. */
+.mo-connection-indicator {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--mo-text-secondary, #a6b1ba);
+  white-space: nowrap;
+}
+.mo-connection-indicator-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--mo-text-muted, #778590);
+}
+.mo-connection-indicator[data-state="ready"] .mo-connection-indicator-dot { background: var(--mo-success, #65bb87); }
+.mo-connection-indicator[data-state="connecting"] .mo-connection-indicator-dot { background: var(--mo-accent, #6fa7e8); }
+.mo-connection-indicator[data-state="error"] .mo-connection-indicator-dot { background: var(--mo-danger, #d66f6f); }
+.mo-connection-indicator[data-state="offline"] { color: var(--mo-text-muted, #778590); }
+
+/* Task: operational state with a fixed icon column and optional progress rail. */
+.mo-task-status-indicator {
+  width: min(220px, 100%);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-rows: auto 3px;
+  column-gap: 7px;
+  row-gap: 5px;
+  align-items: center;
+  color: var(--mo-text-secondary, #a6b1ba);
+  font-size: var(--mo-font-sm, 11px);
+}
+.mo-task-status-icon {
+  grid-row: 1 / 3;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--mo-border-default, #29333d);
+  border-radius: 4px;
+  background: var(--mo-surface-raised, #151b20);
+  color: var(--mo-text-muted, #778590);
+  font-size: 10px;
+  font-weight: 760;
+}
+.mo-task-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mo-task-status-progress {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--mo-border-subtle, #202830);
+}
+.mo-task-status-progress > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--mo-task-progress, 0%);
+  background: var(--mo-accent, #6fa7e8);
+}
+.mo-task-status-indicator[data-state="complete"] .mo-task-status-icon { color: var(--mo-success, #65bb87); border-color: color-mix(in srgb, var(--mo-success, #65bb87) 42%, var(--mo-border-default, #29333d)); }
+.mo-task-status-indicator[data-state="warning"] .mo-task-status-icon { color: var(--mo-warning, #d0aa54); }
+.mo-task-status-indicator[data-state="failed"] .mo-task-status-icon { color: var(--mo-danger, #d66f6f); border-color: color-mix(in srgb, var(--mo-danger, #d66f6f) 42%, var(--mo-border-default, #29333d)); }
+.mo-task-status-indicator[data-state="cancelled"] { color: var(--mo-text-muted, #778590); }
+.mo-task-status-indicator[data-progress="none"] .mo-task-status-progress { visibility: hidden; }
+
+/* Slate: shooting fact. Compact rectangular control, intentionally not Review Decision. */
+.mo-slate-status-indicator {
+  min-width: 74px;
+  min-height: 26px;
+  display: inline-grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
+  border: 1px solid var(--mo-border-default, #29333d);
+  border-radius: 4px;
+  background: var(--mo-surface-control, #11171c);
+  color: var(--mo-text-secondary, #a6b1ba);
+  white-space: nowrap;
+}
+.mo-slate-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mo-text-muted, #778590);
+}
+.mo-slate-status-indicator[data-state="usable"] .mo-slate-status-dot { background: var(--mo-success, #65bb87); }
+.mo-slate-status-indicator[data-state="partial"] .mo-slate-status-dot { background: var(--mo-warning, #d0aa54); }
+.mo-slate-status-indicator[data-state="ng"] .mo-slate-status-dot { background: var(--mo-danger, #d66f6f); }
+
+/* Media health: technical availability, icon + label rather than shooting status. */
+.mo-media-health-indicator {
+  min-width: 0;
+  display: inline-grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--mo-text-muted, #778590);
+}
+.mo-media-health-icon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--mo-surface-raised, #151b20);
+  color: inherit;
+  font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+}
+.mo-media-health-indicator[data-state="ready"] { color: var(--mo-success, #65bb87); }
+.mo-media-health-indicator[data-state="index_pending"] { color: var(--mo-accent, #6fa7e8); }
+.mo-media-health-indicator[data-state="offline"],
+.mo-media-health-indicator[data-state="unsupported"],
+.mo-media-health-indicator[data-state="identity_missing"] { color: var(--mo-warning, #d0aa54); }
+
+/* Review decision: human judgement. Uses authority rail, not Slate dot semantics. */
+.mo-review-decision-indicator {
+  min-width: 82px;
+  min-height: 28px;
+  display: inline-grid;
+  grid-template-columns: 3px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--mo-border-default, #29333d);
+  border-radius: 5px;
+  background: var(--mo-surface-raised, #151b20);
+  color: var(--mo-text-secondary, #a6b1ba);
+  white-space: nowrap;
+}
+.mo-review-decision-rail { align-self: stretch; background: var(--mo-border-strong, #3a4651); }
+.mo-review-decision-indicator[data-decision="best"] .mo-review-decision-rail { background: var(--mo-accent, #6fa7e8); }
+.mo-review-decision-indicator[data-decision="keep"] .mo-review-decision-rail { background: var(--mo-success, #65bb87); }
+.mo-review-decision-indicator[data-decision="reject"] .mo-review-decision-rail { background: var(--mo-danger, #d66f6f); }
+.mo-review-decision-indicator[data-authority="editorial"] {
+  border-color: var(--mo-border-strong, #3a4651);
+  color: var(--mo-text-primary, #e2e8ed);
+  font-weight: 680;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mo-task-status-progress > span { transition: none; }
+}

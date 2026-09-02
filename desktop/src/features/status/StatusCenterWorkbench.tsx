@@ -8,6 +8,7 @@ import {
   latestTaskAttempts,
 } from "../../api/taskSemantics";
 import type { ProductionPage } from "../../app/resumeState";
+import { TaskStatusIndicator, type TaskIndicatorState } from "../../components/StatusIndicators";
 import {
   DeviceTaskClient,
   ProjectTaskClient,
@@ -16,6 +17,7 @@ import {
   type ProjectTaskRecord,
 } from "../../api/tasks";
 import "./status-center.css";
+import "./status-center-task-status.css";
 
 export { latestTaskAttempts };
 
@@ -192,6 +194,17 @@ function statusLabel(task: ProjectTaskRecord): string {
     cancelled: "已取消",
     interrupted: "已中断",
   }[task.status] ?? task.status;
+}
+
+export function taskIndicatorState(task: ProjectTaskRecord, historical = false): TaskIndicatorState {
+  if (historical && (isTaskSuperseded(task) || taskNeedsAttention(task))) return "warning";
+  if (task.status === "queued") return "queued";
+  if (task.status === "running") return "running";
+  if (task.status === "completed") return "complete";
+  if (task.status === "cancelled") return "cancelled";
+  if (task.status === "interrupted") return "warning";
+  if (task.status === "failed") return "failed";
+  return taskNeedsAttention(task) ? "failed" : "warning";
 }
 
 function sortTasks(tasks: ProjectTaskRecord[]): ProjectTaskRecord[] {
@@ -512,19 +525,20 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         ? (task.status === "interrupted" ? "历史中断" : "历史失败")
         : statusLabel(task);
     const operating = actionBusy(task.task_id);
+    const indicatorProgress = taskProgress && active(task) ? (taskProgress.done / taskProgress.total) * 100 : null;
     return (
       <article className={`status-center-task status-${task.status}${historical ? " is-history" : ""}`} key={`${project?.project_id || "device"}:${task.task_id}`}>
         <div className="status-center-task-main">
-          <span className="status-center-task-indicator" aria-hidden="true" />
           <div className="status-center-task-name">
             <strong>{taskLabel(task)}</strong>
-            <span>{source} · {displayedStatus}{stage && stage !== displayedStatus ? ` · ${stage}` : ""}</span>
+            <span>{source}{stage && stage !== displayedStatus ? ` · ${stage}` : ""}</span>
           </div>
+          <TaskStatusIndicator state={taskIndicatorState(task, historical)} label={displayedStatus} progress={indicatorProgress} />
         </div>
         <div className="status-center-task-body">
           <p>{taskPrimaryMessage(task, historical)}</p>
           <div className="status-center-task-meta"><span>{relativeTime(task)}</span>{elapsed ? <span>{elapsed}</span> : null}</div>
-          {taskProgress ? <div className="status-center-progress"><progress value={taskProgress.done} max={taskProgress.total} /><span>{taskProgress.done} / {taskProgress.total}</span></div> : null}
+          {taskProgress && active(task) ? <div className="status-center-progress status-center-progress-count-only"><span>{taskProgress.done} / {taskProgress.total}</span></div> : null}
           {task.error ? <details className="status-center-technical"><summary>技术详情</summary><code>{task.error}</code></details> : null}
         </div>
         <div className="status-center-actions">

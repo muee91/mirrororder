@@ -1,4 +1,4 @@
-export type CameraTone = "a" | "b" | "c" | "custom" | "unknown";
+export type CameraTone = "a" | "b" | "c" | "aux" | "custom" | "unknown";
 
 export interface CameraPresentation {
   key: string;
@@ -8,7 +8,16 @@ export interface CameraPresentation {
 }
 
 function normalized(value: string): string {
-  return value.trim().replace(/机位/g, "").replace(/机/g, "").trim().toUpperCase();
+  return value.trim().replace(/机位/g, "").replace(/机/g, "").replace(/\s+/g, "").toUpperCase();
+}
+
+function auxiliaryCamera(key: string): boolean {
+  return /^AUX(?:\d+)?$/.test(key)
+    || key === "AUXILIARY"
+    || key === "辅助"
+    || key === "辅助/特殊"
+    || key === "辅助特殊"
+    || key === "特殊";
 }
 
 export function cameraPresentation(value: string): CameraPresentation {
@@ -25,6 +34,9 @@ export function cameraPresentation(value: string): CameraPresentation {
   }
   if (/^C(?:\d+)?$/.test(key)) {
     return { key, label: key === "C" ? "C机" : key, tone: "c", sortOrder: 30 };
+  }
+  if (auxiliaryCamera(key)) {
+    return { key: /^AUX(?:\d+)?$/.test(key) ? key : "AUX", label: /^AUX\d+$/.test(key) ? key : "AUX", tone: "aux", sortOrder: 40 };
   }
   return { key: raw, label: raw, tone: "custom", sortOrder: 60 };
 }

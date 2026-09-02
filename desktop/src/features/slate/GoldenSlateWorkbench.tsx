@@ -5,6 +5,7 @@ import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModel
 import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord, type SlateStatus } from "../../api/production";
 import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
 import { SlateRecordClient } from "../../api/slateRecords";
+import { SlateStatusIndicator } from "../../components/StatusIndicators";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
 import { SlateWorkbench } from "./SlateWorkbench";
@@ -288,10 +289,6 @@ function findReviewAngle(review: ReviewModelPayload | null, clipId: string, medi
     if (angle) return angle;
   }
   return null;
-}
-
-function statusLabel(status: SlateStatus): string {
-  return STATUS_OPTIONS.find((item) => item.value === status)?.label ?? status;
 }
 
 export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false, onToggleAssistant, onOpenMaterialScript, onOpenIdentity, onOpenReview }: Props) {
@@ -764,10 +761,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
           <td className="col-media">{mediaCell(draft, "C")}</td>
           <td className="col-media">{mediaCell(draft, "AUX")}</td>
           <td className="col-status">
-            <label className={`golden-status-control status-${draft.status}`} onClick={(event) => event.stopPropagation()}>
-              <span className="status-dot" />
+            <label className="golden-status-control" onClick={(event) => event.stopPropagation()}>
+              <SlateStatusIndicator state={draft.status} />
               <select value={draft.status} aria-label={`第 ${rowNumber} 条状态`} onChange={(event) => patchRecord(draft.record_id, { status: event.target.value as SlateStatus })}>{STATUS_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select>
-              <span className="status-label">{statusLabel(draft.status)}</span>
             </label>
           </td>
         </tr>

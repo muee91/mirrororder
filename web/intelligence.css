@@ -11,40 +11,41 @@
   align-items:center;
   min-height:19px;
   padding:1px 5px;
-  border:1px solid #d7dde5;
+  border:1px solid var(--line,#d7dde5);
   border-radius:4px;
-  background:#f7f8fa;
-  color:#596579;
-  font-size:9px;
-  font-weight:700;
+  background:var(--panel-soft,#f7f8fa);
+  color:var(--muted,#596579);
+  font-size:10px;
+  font-weight:650;
   line-height:1.2;
   white-space:nowrap;
 }
 .member-card.active .shot-chip{
-  border-color:#b8c8ed;
-  background:#eef3ff;
-  color:#36578f;
+  border-color:color-mix(in srgb,var(--blue,#315fad) 42%,var(--line,#d7dde5));
+  background:var(--blue-soft,#eef3ff);
+  color:var(--blue,#36578f);
 }
 .role-chip.confirmed{
-  border-color:#b8d8c7;
-  background:#f1f8f4;
-  color:#35654b;
+  border-color:color-mix(in srgb,var(--green,#35654b) 42%,var(--line,#d7dde5));
+  background:var(--green-soft,#f1f8f4);
+  color:var(--green,#35654b);
 }
 .role-chip.suggested{
   border-style:dashed;
-  color:#6b617f;
+  color:var(--muted,#6b617f);
+  font-weight:600;
 }
 .audit-issue-chip{
-  border-color:#e4d1b9;
-  background:#fbf7f1;
-  color:#735b3e;
+  border-color:color-mix(in srgb,var(--amber,#735b3e) 38%,var(--line,#d7dde5));
+  background:var(--amber-soft,#fbf7f1);
+  color:var(--amber,#735b3e);
   font-weight:600;
 }
 .audit-detail-list{
   margin:6px 0 0;
   padding-left:17px;
-  color:#667085;
-  font-size:9px;
+  color:var(--muted,#667085);
+  font-size:10px;
   line-height:1.45;
 }
 .audit-detail-list li+li{margin-top:2px}
@@ -58,5 +59,5 @@
   font-size:10px;
   cursor:pointer;
 }
-.native-audit-button:hover{border-color:#7e9ce4;color:#315fad}
+.native-audit-button:hover{border-color:var(--blue,#7e9ce4);color:var(--blue,#315fad)}
 .native-audit-button[disabled]{opacity:.5;cursor:default}

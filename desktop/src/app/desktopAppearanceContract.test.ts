@@ -53,7 +53,8 @@ describe("Desktop appearance product contract", () => {
     expect(css).toContain('html[data-mirrororder-theme="light"]');
     expect(css).toContain('html[data-mirrororder-theme="dark"]');
     expect(tools).toContain('.settings-status-workbench');
-    expect(material).toContain('.golden-material-script .angle-card');
+    expect(material).toContain("shared --mo-* semantic tokens");
+    expect(material).toContain("Do not add light/dark palettes here");
     expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-take-picker');
     expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-take-picker');
     expect(slate).toContain('.golden-inspector-field textarea');

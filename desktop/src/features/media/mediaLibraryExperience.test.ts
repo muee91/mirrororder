@@ -28,16 +28,18 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("playbackForItem(host, projectId, item, playbackByMedia[item.media_id])");
   });
 
-  it("keeps playback an explicit user action and reports failures inside the App", () => {
+  it("keeps inspector playback explicit while thumbnail hover preview remains best-effort", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("controls");
     expect(workbench).toContain('preload="metadata"');
     expect(workbench).toContain("playsInline");
     expect(workbench).not.toContain("autoPlay");
+    expect(workbench).toContain("onMouseEnter");
+    expect(workbench).toContain("onMouseLeave");
+    expect(workbench).toContain("event.currentTarget.pause()");
     expect(workbench).toContain("这条原片当前无法在 App 内播放");
     expect(workbench).toContain("这条素材尚未进入项目索引");
     expect(workbench).toContain("已入索引，但缺少可播放的 clip identity");
-    expect(workbench).toContain("重新加载");
   });
 
   it("presents camera as a separate axis from source role", () => {
@@ -50,9 +52,27 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("inferred_camera");
   });
 
-  it("keeps the inspector visible in narrow layouts instead of removing playback", () => {
-    const styles = source("./media-library-experience.css");
+  it("supports list and thumbnail density without replacing the selection Inspector", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    const styles = source("./media-library.css");
+    expect(workbench).toContain('type ViewMode = "list" | "grid"');
+    expect(workbench).toContain('aria-label="素材显示密度"');
+    expect(workbench).toContain(">列表</button>");
+    expect(workbench).toContain(">缩略图</button>");
+    expect(workbench).toContain("media-library-thumb");
+    expect(workbench).toContain('aria-label="当前素材 Inspector"');
+    expect(styles).toContain(".media-library-list.is-list");
+    expect(styles).toContain(".media-library-list.is-grid");
     expect(styles).toContain("grid-template-rows: minmax(250px, .75fr) minmax(420px, 1.25fr)");
     expect(styles).toContain("display: flex !important");
+  });
+
+  it("keeps the media browser on the shared typography and theme authority", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    const styles = source("./media-library.css");
+    expect(workbench).not.toContain("media-library-experience.css");
+    expect(styles).toContain("var(--mo-");
+    expect(styles).not.toContain("prefers-color-scheme");
+    expect(styles).not.toMatch(/font-size:\s*(?:7|8|9)px/);
   });
 });

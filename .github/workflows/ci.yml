@@ -37,6 +37,9 @@ jobs:
       - name: Install Desktop dependencies
         working-directory: desktop
         run: npm install --no-audit --no-fund
+      - name: Prepare Tauri icons
+        working-directory: desktop
+        run: npm run prepare:icons
       - name: Check development baseline
         working-directory: desktop
         run: npm run check:baseline

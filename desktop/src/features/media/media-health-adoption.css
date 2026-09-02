@@ -1,0 +1,29 @@
+/* Media Library consumes the shared MediaHealthIndicator while preserving
+ * inventory-index state as a separate production fact. */
+.media-library-row-state .mo-media-health-indicator {
+  justify-self: end;
+  grid-template-columns: 14px minmax(0, auto);
+  gap: 4px;
+  font-size: 10px;
+}
+
+.media-library-row-state .mo-media-health-icon {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  font-size: 10px;
+}
+
+.media-library-list.is-grid .media-library-row-state .mo-media-health-indicator {
+  grid-template-columns: 14px;
+}
+
+.media-library-list.is-grid .media-library-row-state .mo-media-health-indicator > span:last-child {
+  display: none;
+}
+
+.media-library-monitor > header .mo-media-health-indicator {
+  justify-self: end;
+  min-width: 0;
+  font-size: 10px;
+}

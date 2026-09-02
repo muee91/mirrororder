@@ -88,19 +88,18 @@ describe("startup and production resume product contract", () => {
     expect(connectBlock).toContain("当前工作现场保持打开");
   });
 
-  it("restores the remembered project context on Workspace Home while opening project production on Slate", () => {
+  it("defaults new projects to Slate but restores the last valid Production page for existing projects", () => {
     const app = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     const workbench = readFileSync(fileURLToPath(new URL("../features/production/ProjectWorkbench.tsx", import.meta.url)), "utf8");
     const resume = readFileSync(fileURLToPath(new URL("./resumeState.ts", import.meta.url)), "utf8");
 
     expect(app).toContain("const rememberedProject = projectById(next, launchResume.projectId)");
     expect(app).toContain("setSelectedProject(rememberedProject)");
-    expect(app).toContain('setActiveProjectPage("slate")');
     expect(app).toContain('setSurface("home")');
-    expect(workbench).toContain('useState<ProductionPage>("slate")');
+    expect(workbench).toContain("safeProductionPage(readProjectPage(project.project_id))");
     expect(workbench).toContain("rememberProjectPage(project.project_id, page)");
-    expect(workbench).not.toContain("readProjectPage(project.project_id)");
-    expect(workbench).not.toContain('useState<ProductionPage>("takes")');
     expect(resume).toContain('const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"');
+    expect(resume).toContain("VALID_PROJECT_PAGES.has(value)");
+    expect(resume).toContain("return value && VALID_PROJECT_PAGES.has(value) ? value as ProductionPage : DEFAULT_PROJECT_PAGE");
   });
 });

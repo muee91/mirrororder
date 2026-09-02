@@ -37,25 +37,16 @@ interface ProjectMenuState {
   y: number;
 }
 
-type IconName = "home" | "projects" | "slate" | "media" | "people" | "review" | "overview" | "status" | "settings";
+type IconName = "home" | "projects" | "status" | "settings";
 
 function NavIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, string> = {
     home: "M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z",
     projects: "M3 6.5h7l2 2H21v10.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z",
-    slate: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h5",
-    media: "M4 5h16v14H4zM8 15l3-3 2 2 3-4 2 5M8 9h.01",
-    people: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm6-1a2.5 2.5 0 1 0 0-5M3.5 20c.5-4 2.5-6 5.5-6s5 2 5.5 6M15 14c3 0 5 2 5.5 5",
-    review: "M4 5h16v12H9l-5 4Zm4 4h8M8 13h5",
-    overview: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
     status: "M12 3a9 9 0 1 0 9 9M12 7v5l3 2",
     settings: "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0-5 1.2 2.3 2.6.4.5 2.6 2 1.7-1.2 2.3 1.2 2.3-2 1.7-.5 2.6-2.6.4L12 20.5l-1.2-2.3-2.6-.4-.5-2.6-2-1.7 1.2-2.3-1.2-2.3 2-1.7.5-2.6 2.6-.4Z",
   };
   return <svg className="project-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} /></svg>;
-}
-
-function projectPageActive(activePage: ProductionPage | null | undefined, pages: ProductionPage[]): boolean {
-  return Boolean(activePage && pages.includes(activePage));
 }
 
 export function ProjectLibrary({
@@ -63,14 +54,12 @@ export function ProjectLibrary({
   activities = {},
   selectedProjectId,
   primaryActive = null,
-  activeProjectPage = null,
   revealLabel = "Finder / Explorer",
   onSelectProject,
   onOpenHome,
   onOpenProjects,
   onOpenStatusCenter,
   onOpenSettings,
-  onOpenProjectPage,
   onOpenTeamProject,
   onCopyShareLink,
   onRevealProject,
@@ -121,12 +110,8 @@ export function ProjectLibrary({
     void Promise.resolve(action()).catch(() => undefined);
   }
 
-  function openPage(page: ProductionPage): void {
-    if (selectedProject && onOpenProjectPage) onOpenProjectPage(selectedProject, page);
-  }
-
   return (
-    <div className="project-library project-library-redesign">
+    <div className="project-library project-library-redesign professional-global-sidebar">
       <button type="button" className="project-library-brand project-library-brand-button" onClick={onOpenHome} aria-label="返回首页">
         <img className="mirror-mark" src={mirrororderLogo} alt="" aria-hidden="true" />
         <span className="project-library-brand-copy"><strong>镜序</strong><span>MirrorOrder</span></span>
@@ -138,11 +123,11 @@ export function ProjectLibrary({
       </nav>
 
       {selectedProject ? (
-        <section className="project-current-context">
+        <section className="project-current-context professional-project-context">
           <p className="project-nav-section-label">当前项目</p>
           <button
             type="button"
-            className="project-current-card"
+            className={`project-current-card ${primaryActive === null ? "is-active-context" : ""}`}
             onClick={() => onSelectProject(selectedProject)}
             onContextMenu={(event) => { event.preventDefault(); openMenu(selectedProject, event.clientX, event.clientY); }}
             onKeyDown={(event) => {
@@ -156,14 +141,7 @@ export function ProjectLibrary({
             <span className={`project-current-status status-${selectedPresentation?.statusTone ?? "idle"}`} aria-hidden="true" />
             <span><strong>{selectedProject.name || selectedProject.project_id}</strong><small>{selectedPresentation?.sidebarSubtitle ?? "项目"}</small></span>
           </button>
-
-          <nav className="project-production-nav" aria-label="当前项目制作导航">
-            <button type="button" className={primaryActive === null && projectPageActive(activeProjectPage, ["slate", "takes", "script"]) ? "is-active" : ""} onClick={() => openPage("slate")}><NavIcon name="slate" /><span>场记</span></button>
-            <button type="button" className={primaryActive === null && projectPageActive(activeProjectPage, ["media-library", "media-binding"]) ? "is-active" : ""} onClick={() => openPage("media-library")}><NavIcon name="media" /><span>素材</span></button>
-            <button type="button" className={primaryActive === null && activeProjectPage === "identity" ? "is-active" : ""} onClick={() => openPage("identity")}><NavIcon name="people" /><span>人物</span></button>
-            <button type="button" className={primaryActive === null && projectPageActive(activeProjectPage, ["watch", "attention"]) ? "is-active" : ""} onClick={() => openPage("watch")}><NavIcon name="review" /><span>审阅</span></button>
-            <button type="button" className={primaryActive === null && activeProjectPage === "overview" ? "is-active" : ""} onClick={() => openPage("overview")}><NavIcon name="overview" /><span>概览</span></button>
-          </nav>
+          <p className="professional-project-context-note">制作区在项目画布顶部切换。</p>
         </section>
       ) : (
         <section className="project-current-context is-empty">

@@ -19,7 +19,7 @@ TEAM = ROOT / "desktop" / "src" / "features" / "team" / "TeamWebWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
-def test_desktop_uses_workspace_home_project_management_and_frozen_production_surfaces() -> None:
+def test_desktop_uses_workspace_home_and_authoritative_production_ia() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
@@ -39,27 +39,45 @@ def test_desktop_uses_workspace_home_project_management_and_frozen_production_su
     assert "app-workspace-switch" not in app
     assert "grid-template-columns: 208px minmax(0, 1fr)" in redesign
 
-    assert 'useState<ProductionPage>("slate")' in workbench
-    assert "GoldenSlateWorkbench" in workbench
-    assert "GoldenMaterialScriptWorkbench" in workbench
-    for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
+    assert "const AREAS: Record<ProductionArea, AreaDefinition>" in workbench
+    assert 'className="professional-project-toolbar"' in workbench
+    assert 'aria-label="制作区域"' in workbench
+    assert 'className="professional-secondary-nav"' in workbench
+    for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
-    assert 'aria-label="项目工具"' not in workbench
-    assert 'className="production-secondary-tabs"' not in workbench
-    assert 'className="production-secondary-back"' in workbench
-    assert "TimelineWorkbench" not in workbench
-    assert "RoughCutWorkbench" not in workbench
-    assert "AssemblyWorkbench" not in workbench
-    assert 'label: "交付"' not in workbench
+    for page, label in (
+        ("slate", "场记"),
+        ("media-library", "素材库"),
+        ("takes", "Take"),
+        ("identity", "人物"),
+        ("script", "剧本"),
+        ("coverage", "覆盖"),
+        ("rough-cut", "粗剪"),
+        ("assembly", "组接"),
+        ("timeline", "时间线"),
+        ("delivery", "交付"),
+        ("watch", "看片"),
+        ("attention", "待处理"),
+        ("overview", "概览"),
+    ):
+        assert f'{{ page: "{page}", label: "{label}" }}' in workbench
+    assert "TimelineWorkbench" in workbench
+    assert "RoughCutWorkbench" in workbench
+    assert "AssemblyWorkbench" in workbench
+    edit_area = workbench.split("edit: {", 1)[1].split("review: {", 1)[0]
+    assert '{ page: "timeline", label: "时间线" }' in edit_area
+    assert '{ page: "delivery", label: "交付" }' in edit_area
 
+    assert "professional-global-sidebar" in library
     assert 'aria-label="主导航"' in library
-    assert 'aria-label="当前项目制作导航"' in library
-    assert 'onClick={() => openPage("watch")}' in library
+    assert 'aria-label="系统导航"' in library
     assert "状态中心" in library
     assert ">设置<" in library
+    assert 'aria-label="当前项目制作导航"' not in library
+    assert 'onClick={() => openPage("watch")}' not in library
 
 
-def test_project_resume_defaults_to_home_context_and_slate_when_opened() -> None:
+def test_project_resume_defaults_new_state_to_slate_and_restores_valid_project_page() -> None:
     app = APP.read_text(encoding="utf-8")
     resume = RESUME.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
@@ -68,12 +86,12 @@ def test_project_resume_defaults_to_home_context_and_slate_when_opened() -> None
     assert 'useState<AppSurface>("home")' in app
     assert 'setSelectedProject(rememberedProject)' in app
     assert 'setSurface("home")' in app
-    assert 'useState<ProductionPage>("slate")' in workbench
+    assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert "rememberProjectPage(project.project_id, page)" in workbench
-    assert "readProjectPage(project.project_id)" not in workbench
+    assert "VALID_PROJECT_PAGES.has(value)" in resume
 
 
-def test_frozen_demo_surfaces_are_reachable_from_project_ia() -> None:
+def test_production_surfaces_are_reachable_from_project_toolbar_not_sidebar() -> None:
     workbench = WORKBENCH.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
 
@@ -83,11 +101,17 @@ def test_frozen_demo_surfaces_are_reachable_from_project_ia() -> None:
     assert "MediaLibraryWorkbench" in workbench
     assert "MediaBindingWorkbench" in workbench
     assert "IdentityWorkbench" in workbench
+    assert "CoverageWorkbench" in workbench
+    assert "RoughCutWorkbench" in workbench
+    assert "AssemblyWorkbench" in workbench
+    assert "TimelineWorkbench" in workbench
+    assert "DeliveryWorkbench" in workbench
     assert "ReviewAttentionWorkbench" in workbench
     assert "ProjectOverviewWorkbench" in workbench
     assert "showEditorial={false}" in workbench
-    for label in ("场记", "素材", "人物", "审阅", "概览"):
-        assert f">{label}<" in library
+    assert "制作区在项目画布顶部切换。" in library
+    for label in ("场记", "素材库", "Take", "人物", "剧本", "覆盖", "粗剪", "组接", "时间线", "交付", "看片", "待处理", "概览"):
+        assert f'label: "{label}"' in workbench
 
 
 def test_assistant_is_a_contextual_tool_not_a_project_tab() -> None:
@@ -123,14 +147,16 @@ def test_project_creation_is_low_frequency_modal_not_sidebar_form() -> None:
     assert "Python WorkspaceRegistry" not in lifecycle
 
 
-def test_media_card_has_one_shared_compact_and_inspector_geometry() -> None:
+def test_media_card_has_stable_shared_compact_and_inspector_geometry() -> None:
     component = MEDIA_CARD.read_text(encoding="utf-8")
     css = MEDIA_CARD_CSS.read_text(encoding="utf-8")
 
     assert "MirrorOrderMediaCard" in component
     assert ".mo-media-card.is-compact { width: 180px; height: 88px; }" in css
-    assert ".mo-media-card.is-inspector { width: min(286px, 100%); height: 112px; }" in css
-    assert "mo-media-card" in css
+    assert ".mo-media-card.is-inspector { width: min(300px, 100%); height: 124px; }" in css
+    assert "grid-template-columns: 70px minmax(0, 1fr) 20px" in css
+    assert "grid-template-columns: 136px minmax(0, 1fr) 20px" in css
+    assert "border: 2px solid" not in css
     assert "mo-media-select" in component
 
 

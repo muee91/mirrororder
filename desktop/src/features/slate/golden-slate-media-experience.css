@@ -73,3 +73,61 @@
 .golden-player-error > button {
   min-height: 28px;
 }
+
+/* Professional UI contract: readable production evidence stays at or above
+ * the shared 10px floor even where the legacy Slate fidelity layer still declares 9px. */
+.golden-take-picker-list small,
+.golden-slate-section > header small,
+.golden-slate-table td.col-index small,
+.golden-inspector-head span,
+.golden-inspector-head em,
+.golden-episode-candidates > header,
+.golden-episode-candidates > button span,
+.golden-episode-candidates > button small,
+.golden-inspector-media > header,
+.golden-angle-fields label,
+.golden-io-row label,
+.golden-inspector-field,
+.golden-inspector-link > span,
+.golden-inspector-link small {
+  font-size: var(--mo-font-xs, 10px);
+}
+
+/* Editable Slate status keeps the direct-select interaction while delegating
+ * its visible shooting-state grammar to the shared SlateStatusIndicator. */
+.golden-status-control {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+}
+
+.golden-status-control .mo-slate-status-indicator {
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  height: 28px;
+  border-radius: 5px;
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.golden-status-control select {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.golden-status-control:hover .mo-slate-status-indicator {
+  border-color: var(--mo-border-strong, #3a4651);
+}
+
+.golden-status-control:focus-within .mo-slate-status-indicator {
+  outline: 2px solid var(--mo-accent, #6fa7e8);
+  outline-offset: 1px;
+}
