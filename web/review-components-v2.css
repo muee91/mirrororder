@@ -49,7 +49,9 @@
 .review-member-tile .camera-chip[data-camera-tone="aux"] { --camera-chip-color: var(--mo-camera-aux); }
 .review-member-tile .camera-chip[data-camera-tone="custom"] { --camera-chip-color: var(--mo-camera-custom); }
 
-/* Media health is a technical fact, not a review judgement. */
+/* Media health is a technical fact, not a review judgement. The explicit
+ * indicator is the single authority, so suppress the legacy disabled pseudo. */
+.review-member-tile:disabled::after { content: none; }
 .media-health-indicator {
   display: inline-flex;
   min-width: 36px;

@@ -44,6 +44,12 @@ describe("status center desktop operations contract", () => {
     expect(adoption).not.toMatch(/font-size:\s*(?:7|8|9)px/);
   });
 
+  it("removes the obsolete local-dot action gutter at narrow widths", () => {
+    const adoption = readFileSync(fileURLToPath(new URL("./status-center-task-status.css", import.meta.url)), "utf8");
+    expect(adoption).toContain("@media (max-width: 980px)");
+    expect(adoption).toContain(".status-center-actions { padding-left: 0; }");
+  });
+
   it("consumes the shared MirrorOrder semantic system instead of maintaining a second theme", () => {
     const css = readFileSync(fileURLToPath(new URL("./status-center.css", import.meta.url)), "utf8");
     const main = readFileSync(fileURLToPath(new URL("../../main.tsx", import.meta.url)), "utf8");

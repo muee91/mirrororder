@@ -46,6 +46,19 @@ def test_review_member_tile_reserves_evidence_and_media_health_without_geometry_
     assert ".review-member-tile.active { border-width: 1px; }" in css
 
 
+def test_review_media_health_has_one_authority_and_stable_mobile_camera_slots() -> None:
+    css = COMPONENTS.read_text(encoding="utf-8")
+    design = DESIGN_SYSTEM.read_text(encoding="utf-8")
+    assert ".review-member-tile:disabled::after { content: none; }" in css
+    assert "grid-template-columns: repeat(4, 164px)" in design
+    assert "overflow-x: auto" in design
+    assert "@media (max-width: 680px)" in design
+    assert "grid-template-columns: repeat(4, 148px)" in design
+    assert "text-overflow: ellipsis" in design
+    assert '.member-strip > .review-camera-run[data-camera-tone="aux"] { grid-column: 4; grid-row: 1; }' in css
+    assert '.member-strip > .review-camera-run[data-camera-tone="custom"] { grid-row: 2; }' in css
+
+
 def test_review_opinion_editorial_decision_and_placement_have_distinct_semantics() -> None:
     runtime = RUNTIME.read_text(encoding="utf-8")
     css = COMPONENTS.read_text(encoding="utf-8")
