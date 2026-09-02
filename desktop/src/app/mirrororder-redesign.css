@@ -357,7 +357,7 @@ textarea {
   border-top: 1px solid var(--mo-border);
 }
 
-/* Workspace control */
+/* Workspace control legacy styles are retained for startup compatibility. */
 .mirrororder-redesign-shell .workspace-control {
   flex: 0 0 auto;
   margin: 0;
@@ -398,13 +398,13 @@ textarea {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr);
+  grid-template-rows: 54px minmax(0, 1fr);
   overflow: hidden;
 }
 
 .app-global-topbar {
   min-width: 0;
-  padding: 0 18px 0 22px;
+  padding: 0 16px 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -422,7 +422,7 @@ textarea {
 .app-global-context > span {
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 10px;
+  font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -430,7 +430,7 @@ textarea {
 .app-global-context > strong {
   color: var(--mo-text);
   font-size: 15px;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .app-global-actions {
@@ -474,13 +474,155 @@ textarea {
   box-shadow: 0 0 0 4px var(--mo-accent-soft);
 }
 
+.app-workspace-menu {
+  position: relative;
+}
+
+.app-workspace-menu > summary {
+  list-style: none;
+}
+
+.app-workspace-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
 .app-workspace-chip {
-  max-width: 180px;
-  overflow: hidden;
-  color: var(--mo-text) !important;
+  min-height: 30px;
+  max-width: 190px;
+  padding: 0 9px;
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--mo-border);
+  border-radius: 8px;
+  background: var(--mo-surface);
+  color: var(--mo-text);
+  font-size: 10px;
   font-weight: 650;
+  cursor: default;
+}
+
+.app-workspace-chip > span:nth-child(2) {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-workspace-chip small {
+  color: var(--mo-text-3);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.app-workspace-menu[open] .app-workspace-chip,
+.app-workspace-chip:hover {
+  border-color: var(--mo-border-strong);
+  background: var(--mo-surface-soft);
+}
+
+.app-workspace-menu-popover {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 318px;
+  padding: 10px;
+  border: 1px solid var(--mo-border-strong);
+  border-radius: 11px;
+  background: var(--mo-surface);
+  box-shadow: var(--mo-shadow);
+}
+
+.app-workspace-menu-heading {
+  min-width: 0;
+  padding: 2px 2px 9px;
+  display: grid;
+  gap: 6px;
+  border-bottom: 1px solid var(--mo-border);
+}
+
+.app-workspace-menu-heading > span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-workspace-menu-heading strong {
+  overflow: hidden;
+  color: var(--mo-text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-menu-heading small {
+  flex: 0 0 auto;
+  color: var(--mo-success);
+  font-size: 8px;
+}
+
+.app-workspace-menu-heading code {
+  overflow: hidden;
+  color: var(--mo-text-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-menu-actions {
+  padding: 9px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.app-workspace-menu-actions button {
+  width: 100%;
+  min-height: 31px;
+}
+
+.app-workspace-advanced {
+  padding-top: 8px;
+  border-top: 1px solid var(--mo-border);
+}
+
+.app-workspace-advanced > summary {
+  padding: 2px 0 6px;
+  color: var(--mo-text-3);
+  font-size: 9px;
+  list-style-position: inside;
+}
+
+.app-workspace-advanced label {
+  margin-top: 7px;
+  display: grid;
+  gap: 4px;
+}
+
+.app-workspace-advanced label > span {
+  color: var(--mo-text-3);
+  font-size: 8px;
+}
+
+.app-workspace-advanced input {
+  width: 100%;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid var(--mo-border);
+  border-radius: 7px;
+  background: var(--mo-surface-soft);
+  color: var(--mo-text);
+  font-size: 9px;
+}
+
+.app-workspace-advanced button {
+  width: 100%;
+  margin-top: 6px;
 }
 
 .mirrororder-redesign-shell .main-stage {
@@ -938,7 +1080,6 @@ textarea {
   .project-primary-nav button > span,
   .project-production-nav button > span,
   .project-system-nav button > span,
-  .project-current-context,
   .project-recent-switcher,
   .project-primary-nav button > small,
   .project-system-badge { display: none; }
@@ -946,10 +1087,16 @@ textarea {
   .project-production-nav button,
   .project-system-nav button { grid-template-columns: 1fr; justify-items: center; padding: 0; }
   .project-nav-icon { width: 19px; height: 19px; }
-  .mirrororder-redesign-shell .workspace-control { display: none; }
+  .project-current-context {
+    display: block;
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+  .project-current-context .project-nav-section-label,
+  .project-current-card,
+  .project-current-empty { display: none; }
   .workspace-home-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-home-grid { grid-template-columns: 1fr; }
   .mirrororder-redesign-shell .project-home-list { grid-template-columns: 1fr; }
-  .production-secondary-tabs button:nth-of-type(4),
-  .production-secondary-tabs button:nth-of-type(5) { display: none; }
+  .app-workspace-menu-popover { width: min(318px, calc(100vw - 84px)); }
 }
