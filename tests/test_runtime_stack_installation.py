@@ -55,7 +55,9 @@ def test_runtime_stack_rejects_reentrant_install(monkeypatch: pytest.MonkeyPatch
 
 def test_runtime_install_order_preserves_projection_dependencies() -> None:
     order = runtime_stack.RUNTIME_INSTALL_ORDER
-    assert order[:4] == ("device_media", "automation", "review_read_model", "editorial")
+    assert order[:5] == ("device_media", "media_playback", "automation", "review_read_model", "editorial")
+    assert order.index("device_media") < order.index("media_playback")
+    assert order.index("media_playback") < order.index("automation")
     assert order.index("media_role") < order.index("coverage")
     assert order.index("media_role") < order.index("rough_cut")
     assert order.index("desktop") < order.index("device_model")
