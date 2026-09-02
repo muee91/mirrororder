@@ -20,7 +20,7 @@ interface Props {
 }
 
 type Filter = "all" | "auxiliary" | "unindexed" | "labeled";
-type PlaybackEntry = { clipId: string; url: string; angle: ReviewAngle };
+type PlaybackEntry = { clipId: string; url: string; sourceStart: number };
 type CameraFilterItem = { key: string; label: string; tone: CameraTone; sortOrder: number; count: number };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -85,10 +85,31 @@ function playbackIndex(host: HostConnection, projectId: string, takes: Array<{ a
       const mediaId = angle.media_id?.trim();
       const clipId = angle.clip_id?.trim();
       if (!mediaId || !clipId || angle.playback.available === false || result[mediaId]) continue;
-      result[mediaId] = { clipId, url: host.mediaUrl(projectId, clipId), angle };
+      result[mediaId] = {
+        clipId,
+        url: host.mediaUrl(projectId, clipId),
+        sourceStart: angle.playback.source_start ?? angle.source_start ?? 0,
+      };
     }
   }
   return result;
+}
+
+function playbackForItem(
+  host: HostConnection,
+  projectId: string,
+  item: MediaInventoryItem,
+  reviewFallback?: PlaybackEntry,
+): PlaybackEntry | undefined {
+  const indexedClipId = item.clip_id?.trim();
+  if (indexedClipId) {
+    return {
+      clipId: indexedClipId,
+      url: host.mediaUrl(projectId, indexedClipId),
+      sourceStart: reviewFallback?.clipId === indexedClipId ? reviewFallback.sourceStart : 0,
+    };
+  }
+  return reviewFallback;
 }
 
 export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }: Props) {
@@ -112,6 +133,8 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   async function reload(preferredId = selectedId): Promise<void> {
     setBusy(true);
     try {
+      // Inventory is the playback authority. Review is only a compatibility
+      // fallback for older Host snapshots and supplies a known source start.
       const reviewPromise = host.reviewModel(projectId).catch(() => null);
       const [nextInventory, nextRoles, review] = await Promise.all([client.inventory(projectId), client.roles(projectId), reviewPromise]);
       setInventory(nextInventory);
@@ -173,7 +196,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
   const visible = filtered.slice(0, 500);
   const selectedItem = inventory?.items.find((item) => item.media_id === selectedId) ?? null;
-  const selectedPlayback = selectedItem ? playbackByMedia[selectedItem.media_id] : undefined;
+  const selectedPlayback = selectedItem
+    ? playbackForItem(host, projectId, selectedItem, playbackByMedia[selectedItem.media_id])
+    : undefined;
   const selectedCamera = selectedItem ? effectiveCamera(draft.camera_override, selectedItem.inferred_camera) : null;
   const selectedHasOverride = Boolean(draft.camera_override?.trim());
   const selectedPlaybackFailed = Boolean(selectedItem && playbackFailedMediaId === selectedItem.media_id);
@@ -272,13 +297,13 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
             const auxiliary = isAuxiliary(role);
             const camera = effectiveCamera(role.camera_override, item.inferred_camera);
             const manualCamera = Boolean(role.camera_override?.trim());
-            const canPlay = Boolean(playbackByMedia[item.media_id]);
+            const canPlay = Boolean(playbackForItem(host, projectId, item, playbackByMedia[item.media_id]));
             return (
               <button type="button" className={`media-library-row ${selectedId === item.media_id ? "is-selected" : ""}`} key={item.media_id} onClick={() => select(item)}>
                 <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
                 <span className="media-library-name"><strong>{item.display_name}</strong><small>{item.folder_label || "素材"}</small></span>
                 <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{role.scene_id ? `场 ${role.scene_id}` : auxiliary ? "不参与主机位同步" : ""}</small></span>
-                <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><small>{canPlay ? "可播放" : item.indexed ? "无播放映射" : "不可播放"}</small></span>
+                <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><small>{canPlay ? "可播放" : item.indexed ? "索引缺少播放身份" : "不可播放"}</small></span>
               </button>
             );
           })}
@@ -293,7 +318,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                 <header>
                   <span className="media-library-monitor-camera" data-camera-tone={selectedCamera.tone}>{selectedCamera.label}</span>
                   <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"}</small></span>
-                  <span className={`media-library-play-state ${selectedPlayback ? "is-ready" : ""}`}>{selectedPlayback ? "可播放" : selectedItem.indexed ? "等待播放映射" : "待恢复"}</span>
+                  <span className={`media-library-play-state ${selectedPlayback ? "is-ready" : ""}`}>{selectedPlayback ? "可播放" : selectedItem.indexed ? "播放身份缺失" : "待恢复"}</span>
                 </header>
                 <div className="media-library-player">
                   {selectedPlayback && !selectedPlaybackFailed ? (
@@ -304,13 +329,19 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                       preload="metadata"
                       playsInline
                       onError={() => setPlaybackFailedMediaId(selectedItem.media_id)}
+                      onLoadedMetadata={(event) => {
+                        const start = selectedPlayback.sourceStart;
+                        if (start > 0) {
+                          try { event.currentTarget.currentTime = start; } catch { /* media metadata may still be settling */ }
+                        }
+                      }}
                     />
                   ) : selectedPlaybackFailed ? (
-                    <div className="media-library-player-state is-error"><strong>这条原片当前无法在 App 内播放</strong><span>镜序已经找到素材，但当前 WebView 无法读取或解码它。请先确认素材盘在线；仍失败时可能是编码格式不受当前播放器支持。</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
+                    <div className="media-library-player-state is-error"><strong>这条原片当前无法在 App 内播放</strong><span>镜序已经通过索引定位素材，但当前 WebView 无法读取或解码它。请先确认素材盘在线；仍失败时可能是编码格式不受当前播放器支持。</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
                   ) : !selectedItem.indexed ? (
                     <div className="media-library-player-state"><strong>这条素材尚未进入项目索引</strong><span>未入索引素材不会绕过本机素材身份校验直接按路径播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : (
-                    <div className="media-library-player-state"><strong>已入索引，但当前没有播放映射</strong><span>{playbackProjectionLoaded ? "这条素材还没有进入当前 Take / Review 投影。刷新项目或重新整理后再试。" : "当前 Review 投影暂时不可用；素材清单仍可继续整理。"}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload(selectedItem.media_id)}>重新读取</button></div>
+                    <div className="media-library-player-state"><strong>已入索引，但缺少可播放的 clip identity</strong><span>{playbackProjectionLoaded ? "当前数据来自较旧的索引结构；Review fallback 也没有这条素材。刷新或重新整理项目后再试。" : "当前 Host 没有返回 opaque clip_id。刷新或重新整理项目后再试；素材清单和人工机位仍可继续编辑。"}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload(selectedItem.media_id)}>重新读取</button></div>
                   )}
                 </div>
               </section>
