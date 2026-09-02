@@ -43,10 +43,17 @@ describe("MirrorOrder professional UI contracts", () => {
 
   it("reserves media card state columns so selection does not move metadata", () => {
     const css = read("../features/media/mirrororder-media-card.css");
-    expect(css).toContain("grid-template-columns: 76px minmax(0, 1fr) 20px");
+    expect(css).toContain("grid-template-columns: 70px minmax(0, 1fr) 20px");
     expect(css).toContain("grid-template-columns: 136px minmax(0, 1fr) 20px");
     expect(css).toContain(".mo-media-selected-slot");
     expect(css).not.toContain("border: 2px solid");
+  });
+
+  it("keeps the compact MediaCard inside the fixed Slate camera column", () => {
+    const media = read("../features/media/mirrororder-media-card.css");
+    const slate = read("../features/slate/golden-slate.css");
+    expect(media).toContain(".mo-media-card.is-compact { width: 180px; height: 88px; }");
+    expect(slate).toContain(".golden-slate-table .col-media { width: 188px; }");
   });
 
   it("locks Take card identity, state, action and camera regions to explicit grids", () => {
