@@ -17,7 +17,7 @@ from script_organizer.media_playback_runtime import _parse_http_byte_range
         ("bytes=-10", 100, (90, 99)),
         ("bytes=-1000", 100, (0, 99)),
         ("bytes=99-200", 100, (99, 99)),
-        ("bytes=0-9,20-29", 100, (0, 9)),
+        ("bytes=0-9,20-29", 100, None),
     ],
 )
 def test_http_byte_ranges_match_media_seek_semantics(
