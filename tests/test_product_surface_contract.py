@@ -189,8 +189,10 @@ def test_team_web_and_settings_are_global_utilities_not_project_tabs() -> None:
 def test_product_shell_keeps_runtime_connection_chrome_secondary_to_global_navigation() -> None:
     app = APP.read_text(encoding="utf-8")
 
-    assert 'className="workspace-control"' in app
-    assert 'className="workspace-advanced"' in app
+    assert 'className="app-workspace-menu"' in app
+    assert 'className="app-workspace-chip"' in app
+    assert 'className="workspace-advanced app-workspace-advanced"' in app
+    assert ">高级连接<" in app
     assert "connection-panel" not in app
     assert 'className="app-global-topbar"' in app
     assert 'className="app-global-context"' in app
