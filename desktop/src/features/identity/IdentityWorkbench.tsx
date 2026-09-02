@@ -13,8 +13,24 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function identityTitle(row: IdentityRow): string {
-  return row.role_name || row.label || `${row.kind} · ${row.identity_id.slice(0, 10)}`;
+function identityKindLabel(row: IdentityRow): string {
+  return row.kind === "speaker" ? "声纹" : "人物";
+}
+
+function identityTitle(row: IdentityRow, index: number): string {
+  return row.role_name || row.label || `未命名${identityKindLabel(row)} ${String(index + 1).padStart(2, "0")}`;
+}
+
+function confidenceLabel(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function sourceTimeLabel(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "时间未知";
+  const whole = Math.floor(seconds);
+  const minutes = Math.floor(whole / 60);
+  const rest = whole % 60;
+  return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
 export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
@@ -24,46 +40,63 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
   const [selectedId, setSelectedId] = useState("");
   const [label, setLabel] = useState("");
   const [roleName, setRoleName] = useState("");
-  const [message, setMessage] = useState("正在读取本机人物库…");
+  const [message, setMessage] = useState("正在更新人物识别…");
   const [busy, setBusy] = useState(false);
 
-  async function reload(nextKind = kind): Promise<void> {
-    setMessage("正在读取本机人物库…");
+  async function reload(): Promise<void> {
+    setMessage("正在更新人物识别…");
     try {
-      const payload = await client.identities(projectId, nextKind);
+      const payload = await client.identities(projectId, "");
       setRows(payload.identities);
-      setSelectedId((current) => payload.identities.some((row) => row.identity_id === current) ? current : payload.identities[0]?.identity_id ?? "");
-      setMessage(`${payload.identities.length} 个本机 identity · embedding 不出设备`);
+      setSelectedId((current) => payload.identities.some((row) => row.identity_id === current)
+        ? current
+        : payload.identities[0]?.identity_id ?? "");
+      setMessage(`已找到 ${payload.identities.length} 组人物线索`);
     } catch (error) {
       setMessage(errorMessage(error));
     }
   }
 
   useEffect(() => {
-    void reload(kind);
+    void reload();
     // client is memoized by baseUrl and projectId is explicit input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, projectId, kind]);
+  }, [client, projectId]);
+
+  const visibleRows = useMemo(
+    () => kind ? rows.filter((row) => row.kind === kind) : rows,
+    [kind, rows],
+  );
+  const faceCount = useMemo(() => rows.filter((row) => row.kind === "face").length, [rows]);
+  const speakerCount = useMemo(() => rows.filter((row) => row.kind === "speaker").length, [rows]);
+
+  useEffect(() => {
+    if (visibleRows.some((row) => row.identity_id === selectedId)) return;
+    setSelectedId(visibleRows[0]?.identity_id ?? "");
+  }, [selectedId, visibleRows]);
 
   const selected = rows.find((row) => row.identity_id === selectedId) ?? null;
+  const selectedIndex = selected ? Math.max(0, rows.findIndex((row) => row.identity_id === selected.identity_id)) : 0;
 
   useEffect(() => {
     setLabel(selected?.label ?? "");
     setRoleName(selected?.role_name ?? "");
   }, [selected?.identity_id, selected?.label, selected?.role_name]);
 
-  async function confirm(): Promise<void> {
+  async function confirm(nextRoleName = roleName): Promise<void> {
     if (!selected) return;
     setBusy(true);
-    setMessage("正在写入人工身份确认…");
+    setMessage(selected.confirmed ? "正在保存身份修改…" : "正在确认身份…");
     try {
       const saved = await client.confirmIdentity(projectId, {
         identityId: selected.identity_id,
         label,
-        roleName,
+        roleName: nextRoleName,
       });
       setRows((current) => current.map((row) => row.identity_id === saved.identity_id ? saved : row));
-      setMessage(`已人工确认 ${identityTitle(saved)}；自动聚类不会覆盖该标签。`);
+      setRoleName(saved.role_name);
+      setLabel(saved.label);
+      setMessage(`已确认 ${saved.role_name || saved.label || "这个身份"}`);
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -72,70 +105,143 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
   }
 
   const suggestion = selected?.role_candidates?.[0] ?? null;
+  const canConfirm = Boolean(label.trim() || roleName.trim());
 
   return (
-    <section className="phase3-workbench">
-      <header className="production-heading">
-        <div>
-          <p className="eyebrow">Identity</p>
-          <h2>人物 / 声音身份</h2>
-        </div>
-        <span className="production-state">{message}</span>
-      </header>
-
-      <div className="identity-filter">
-        {(["", "face", "speaker"] as const).map((value) => (
-          <button type="button" key={value || "all"} className={kind === value ? "is-active" : ""} onClick={() => setKind(value)}>
-            {value === "" ? "全部" : value === "face" ? "人脸" : "说话人"}
+    <section className="phase3-workbench identity-workbench">
+      <div className="identity-toolbar">
+        <div className="identity-filter" aria-label="人物类型筛选">
+          <button type="button" className={kind === "" ? "is-active" : ""} onClick={() => setKind("")}>
+            全部 <small>{rows.length}</small>
           </button>
-        ))}
+          <button type="button" className={kind === "face" ? "is-active" : ""} onClick={() => setKind("face")}>
+            人脸 <small>{faceCount}</small>
+          </button>
+          <button type="button" className={kind === "speaker" ? "is-active" : ""} onClick={() => setKind("speaker")}>
+            声纹 <small>{speakerCount}</small>
+          </button>
+        </div>
+        <span className="identity-toolbar-status" role="status">{message}</span>
       </div>
 
       <div className="production-grid identity-grid">
-        <div className="identity-list production-panel">
-          {rows.length ? rows.map((row) => (
-            <button type="button" className={`identity-row ${row.identity_id === selectedId ? "is-selected" : ""}`} key={row.identity_id} onClick={() => setSelectedId(row.identity_id)}>
-              <span className="identity-kind">{row.kind}</span>
-              <strong>{identityTitle(row)}</strong>
-              <span>{row.take_count} Take · {(row.average_confidence * 100).toFixed(0)}%</span>
-              {row.confirmed ? <em>人工确认</em> : row.suggested_role_name ? <em>建议 {row.suggested_role_name}</em> : null}
-            </button>
-          )) : <p className="empty-copy">还没有可浏览的 identity。先完成本机 identity index。</p>}
+        <div className="identity-list production-panel" aria-label="人物线索">
+          {visibleRows.length ? visibleRows.map((row) => {
+            const rowIndex = Math.max(0, rows.findIndex((item) => item.identity_id === row.identity_id));
+            return (
+              <button
+                type="button"
+                className={`identity-row ${row.identity_id === selectedId ? "is-selected" : ""}`}
+                key={row.identity_id}
+                onClick={() => setSelectedId(row.identity_id)}
+                aria-pressed={row.identity_id === selectedId}
+              >
+                <span className={`identity-avatar is-${row.kind}`} aria-hidden="true">{row.kind === "speaker" ? "声" : "人"}</span>
+                <span className="identity-row-copy">
+                  <strong>{identityTitle(row, rowIndex)}</strong>
+                  <small>{row.confirmed ? "已人工确认" : row.suggested_role_name ? `可能是 ${row.suggested_role_name}` : "待确认"}</small>
+                </span>
+                <span className="identity-row-meta">
+                  <strong>{row.take_count} 个 Take</strong>
+                  <small>平均匹配 {confidenceLabel(row.average_confidence)}</small>
+                </span>
+              </button>
+            );
+          }) : <p className="empty-copy">当前筛选下还没有人物线索。</p>}
         </div>
 
-        <aside className="production-panel identity-inspector">
+        <aside className="production-panel identity-inspector" aria-label="人物确认">
           {selected ? (
             <>
-              <div className="parse-heading">
-                <div><p className="eyebrow">{selected.kind}</p><strong>{selected.identity_id}</strong></div>
-                <span>{selected.confirmed ? "human confirmed" : "derived cluster"}</span>
+              <div className="identity-inspector-body">
+                <header className="identity-person-header">
+                  <span className={`identity-person-avatar is-${selected.kind}`} aria-hidden="true">{selected.kind === "speaker" ? "声" : "人"}</span>
+                  <span className="identity-person-copy">
+                    <span className="identity-person-state">{selected.confirmed ? "已确认" : "待确认"}</span>
+                    <strong>{identityTitle(selected, selectedIndex)}</strong>
+                    <small>{selected.take_count} 个 Take · 平均匹配 {confidenceLabel(selected.average_confidence)}</small>
+                  </span>
+                </header>
+
+                {suggestion && !selected.confirmed ? (
+                  <section className="identity-suggestion" aria-label="系统角色建议">
+                    <div>
+                      <span>系统建议</span>
+                      <strong>{suggestion.role_name}</strong>
+                      <small>基于 {suggestion.supporting_takes} 个 Take · 匹配 {confidenceLabel(suggestion.confidence)}</small>
+                    </div>
+                    <button type="button" disabled={busy} onClick={() => { setRoleName(suggestion.role_name); void confirm(suggestion.role_name); }}>
+                      确认是“{suggestion.role_name}”
+                    </button>
+                  </section>
+                ) : null}
+
+                <section className="identity-edit-section">
+                  <div className="identity-section-heading">
+                    <strong>身份信息</strong>
+                    <span>用于场记、素材和审阅中的人物显示</span>
+                  </div>
+                  <div className="identity-edit-grid">
+                    <label className="production-field">
+                      <span>姓名或备注</span>
+                      <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="例如：演员姓名" />
+                    </label>
+                    <label className="production-field">
+                      <span>角色</span>
+                      <input value={roleName} onChange={(event) => setRoleName(event.target.value)} placeholder="例如：林夏" />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="identity-evidence-section">
+                  <div className="identity-section-heading">
+                    <strong>识别依据</strong>
+                    <span>{selected.occurrences.length} 处匹配 · 点击可回到对应 Take</span>
+                  </div>
+                  <div className="identity-occurrences">
+                    {selected.occurrences.slice(0, 12).map((occurrence, index) => (
+                      <button
+                        type="button"
+                        className="occurrence-row"
+                        key={`${occurrence.group_id}-${occurrence.clip_id}`}
+                        onClick={() => onOpenTake?.(occurrence.group_id)}
+                        title={`打开 ${occurrence.group_id}`}
+                      >
+                        <span className="occurrence-order">{String(index + 1).padStart(2, "0")}</span>
+                        <span className="occurrence-copy">
+                          <strong>{occurrence.camera ? `机位 ${occurrence.camera}` : "机位未标记"}</strong>
+                          <span>{sourceTimeLabel(occurrence.source_time)} · 匹配 {confidenceLabel(occurrence.confidence)}</span>
+                          {occurrence.transcript_text ? <small>{occurrence.transcript_text}</small> : null}
+                        </span>
+                        <span className="occurrence-open" aria-hidden="true">›</span>
+                      </button>
+                    ))}
+                    {!selected.occurrences.length ? <p className="empty-copy">暂时没有可回看的匹配位置。</p> : null}
+                  </div>
+                </section>
+
+                <details className="identity-technical">
+                  <summary>技术信息</summary>
+                  <dl>
+                    <div><dt>身份 ID</dt><dd>{selected.identity_id}</dd></div>
+                    <div><dt>识别类型</dt><dd>{selected.kind === "speaker" ? "speaker / 声纹" : "face / 人脸"}</dd></div>
+                    <div><dt>观察数</dt><dd>{selected.observation_count}</dd></div>
+                    <div><dt>示例 Take</dt><dd>{selected.example_group_id || "—"}</dd></div>
+                  </dl>
+                </details>
               </div>
-              <label className="production-field"><span>显示标签</span><input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="例如：演员姓名 / 声音备注" /></label>
-              <label className="production-field"><span>角色名</span><input value={roleName} onChange={(event) => setRoleName(event.target.value)} placeholder="例如：林夏" /></label>
 
-              {suggestion ? (
-                <div className="identity-suggestion">
-                  <p className="eyebrow">角色建议 · 不是权威</p>
-                  <strong>{suggestion.role_name}</strong>
-                  <span>置信 {(suggestion.confidence * 100).toFixed(0)}% · {suggestion.supporting_takes} Take 支撑</span>
-                  <button type="button" className="secondary" onClick={() => setRoleName(suggestion.role_name)}>采用到编辑框</button>
-                </div>
-              ) : null}
-
-              <button type="button" disabled={busy} onClick={() => void confirm()}>人工确认身份</button>
-
-              <div className="identity-occurrences">
-                <p className="eyebrow">出现位置</p>
-                {selected.occurrences.slice(0, 8).map((occurrence) => (
-                  <button type="button" className="occurrence-row" key={`${occurrence.group_id}-${occurrence.clip_id}`} onClick={() => onOpenTake?.(occurrence.group_id)}>
-                    <strong>{occurrence.group_id}</strong>
-                    <span>{occurrence.camera || "—"} · {(occurrence.confidence * 100).toFixed(0)}%</span>
-                    {occurrence.transcript_text ? <small>{occurrence.transcript_text}</small> : null}
-                  </button>
-                ))}
-              </div>
+              <footer className="identity-confirm-bar">
+                <span>
+                  <strong>{selected.confirmed ? "这个身份已经人工确认" : "确认后自动聚类不会覆盖你的判断"}</strong>
+                  <small>{canConfirm ? "保存姓名或角色，并把它作为人工事实。" : "填写姓名或角色后即可确认。"}</small>
+                </span>
+                <button type="button" disabled={busy || !canConfirm} onClick={() => void confirm()}>
+                  {busy ? "保存中…" : selected.confirmed ? "保存修改" : "确认身份"}
+                </button>
+              </footer>
             </>
-          ) : <p className="empty-copy">选择一个 identity 查看证据。</p>}
+          ) : <p className="empty-copy identity-empty-inspector">从左侧选择一组人物线索，查看依据并确认身份。</p>}
         </aside>
       </div>
     </section>
