@@ -73,7 +73,8 @@ def test_document_authority_has_one_front_door() -> None:
     agents = AGENTS.read_text(encoding="utf-8")
     desktop = DESKTOP_README.read_text(encoding="utf-8")
 
-    assert "当前产品与工程 Authority" in docs
+    assert "# 镜序文档索引" in docs
+    assert "当前 authority" in docs
     assert "app-information-architecture.md" in docs
     assert "ux-principles.md" in docs
     assert "一次性 Codex prompt" in docs
