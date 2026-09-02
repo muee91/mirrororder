@@ -73,3 +73,22 @@
 .golden-player-error > button {
   min-height: 28px;
 }
+
+/* Professional UI contract: readable production evidence stays at or above
+ * the shared 10px floor even where the legacy Slate fidelity layer still declares 9px. */
+.golden-take-picker-list small,
+.golden-slate-section > header small,
+.golden-slate-table td.col-index small,
+.golden-inspector-head span,
+.golden-inspector-head em,
+.golden-episode-candidates > header,
+.golden-episode-candidates > button span,
+.golden-episode-candidates > button small,
+.golden-inspector-media > header,
+.golden-angle-fields label,
+.golden-io-row label,
+.golden-inspector-field,
+.golden-inspector-link > span,
+.golden-inspector-link small {
+  font-size: var(--mo-font-xs, 10px);
+}
