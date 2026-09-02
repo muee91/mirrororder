@@ -1,484 +1,258 @@
-/*
- * Status Center v2 — desktop triage workspace.
- *
- * The status center is not a log viewer. Current problems own the main canvas,
- * live jobs stay in a narrow always-visible rail, and history remains secondary.
- * This layer intentionally loads after the legacy/recovery CSS so the resolved
- * Desktop theme, not the OS media query, is the final visual authority.
+/* Status Center — professional operations surface.
+ * It owns Task Row anatomy but consumes the shared --mo-* semantic system.
  */
 .status-center-workbench {
-  --sc-canvas: #0b1014;
-  --sc-panel: #10161b;
-  --sc-panel-raised: #151c22;
-  --sc-panel-soft: #0d1318;
-  --sc-border: #27313a;
-  --sc-border-strong: #34414d;
-  --sc-text: #d2dae1;
-  --sc-text-secondary: #8b98a4;
-  --sc-text-muted: #65727e;
-  --sc-blue: #77aee8;
-  --sc-blue-soft: #142231;
-  --sc-orange: #d89b6d;
-  --sc-orange-soft: #1b1512;
-  --sc-red: #d58f86;
-  --sc-green: #789c83;
-  --sc-control: #151c22;
-  --sc-control-hover: #1c252d;
   grid-template-rows: auto auto minmax(0, 1fr);
-  background: var(--sc-canvas);
+  background: var(--mo-surface-app);
+  color: var(--mo-text-primary);
 }
 
-html[data-mirrororder-theme="light"] .status-center-workbench {
-  --sc-canvas: #f5f7f9;
-  --sc-panel: #ffffff;
-  --sc-panel-raised: #ffffff;
-  --sc-panel-soft: #f8fafb;
-  --sc-border: #dbe2e8;
-  --sc-border-strong: #c7d1da;
-  --sc-text: #26313a;
-  --sc-text-secondary: #667480;
-  --sc-text-muted: #87939d;
-  --sc-blue: #3977b5;
-  --sc-blue-soft: #eef6fd;
-  --sc-orange: #a66532;
-  --sc-orange-soft: #fff7f1;
-  --sc-red: #a85048;
-  --sc-green: #47775a;
-  --sc-control: #f7f9fb;
-  --sc-control-hover: #edf2f5;
-}
-
-html[data-mirrororder-theme="dark"] .status-center-workbench {
-  --sc-canvas: #0b1014;
-  --sc-panel: #10161b;
-  --sc-panel-raised: #151c22;
-  --sc-panel-soft: #0d1318;
-  --sc-border: #27313a;
-  --sc-border-strong: #34414d;
-  --sc-text: #d2dae1;
-  --sc-text-secondary: #8b98a4;
-  --sc-text-muted: #65727e;
-  --sc-blue: #77aee8;
-  --sc-blue-soft: #142231;
-  --sc-orange: #d89b6d;
-  --sc-orange-soft: #1b1512;
-  --sc-red: #d58f86;
-  --sc-green: #789c83;
-  --sc-control: #151c22;
-  --sc-control-hover: #1c252d;
-}
-
-/* Compact application heading: status is context, not a second toolbar. */
 .status-center-heading {
-  min-height: 62px;
-  border-bottom: 1px solid var(--sc-border);
-  padding: 0 22px;
-  background: var(--sc-panel);
+  min-height: 58px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  padding: 0 18px;
+  background: var(--mo-surface-pane);
 }
 .status-center-heading .eyebrow { display: none; }
-.status-center-heading h2 {
-  margin: 0;
-  color: var(--sc-text);
-  font-size: 19px;
-  letter-spacing: -.015em;
-}
-.status-center-heading .assistant-heading-actions {
-  gap: 7px;
-}
+.status-center-heading h2 { margin: 0; color: var(--mo-text-primary); font-size: 17px; letter-spacing: -.01em; }
+.status-center-heading .assistant-heading-actions { gap: 6px; }
 .status-center-heading .production-state {
   max-width: 360px;
   overflow: hidden;
-  color: var(--sc-text-secondary);
+  color: var(--mo-text-secondary);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.status-center-heading button {
-  min-height: 30px;
-  border-color: var(--sc-border);
-  padding: 5px 9px;
-  color: var(--sc-text-secondary);
-  background: var(--sc-control);
-  font-size: 10px;
-}
-.status-center-heading button:hover:not(:disabled) {
-  border-color: var(--sc-border-strong);
-  color: var(--sc-text);
-  background: var(--sc-control-hover);
-}
+.status-center-heading button { min-height: 30px; padding-inline: 9px; font-size: 11px; }
 
-/* Three large dashboard cards become one low-noise status strip. */
+/* Summary is a small status strip, never KPI cards. */
 .status-center-summary {
   display: flex;
   width: max-content;
-  max-width: calc(100% - 44px);
+  max-width: calc(100% - 36px);
   gap: 5px;
-  margin: 11px 22px 10px;
+  margin: 10px 18px;
   border: 0;
   border-radius: 0;
-  overflow: visible;
   background: transparent;
 }
 .status-center-summary span,
 .status-center-summary button {
-  display: flex;
-  min-height: 29px;
+  min-height: 30px;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--sc-border);
-  border-radius: 7px;
-  padding: 4px 9px;
-  color: var(--sc-text-secondary);
-  background: var(--sc-panel);
-  font-size: 9px;
-  line-height: 1;
+  border: 1px solid var(--mo-border-default);
+  border-radius: 5px;
+  padding: 0 9px;
+  background: var(--mo-surface-pane);
+  color: var(--mo-text-secondary);
+  font-size: 10px;
 }
-.status-center-summary strong {
-  color: var(--sc-text);
-  font-size: 11px;
-}
-.status-center-summary .needs-attention {
-  border-color: color-mix(in srgb, var(--sc-orange) 36%, var(--sc-border));
-  color: var(--sc-orange);
-  background: var(--sc-orange-soft);
-}
-.status-center-summary .needs-attention strong { color: var(--sc-orange); }
-.status-center-summary button {
-  cursor: pointer;
-}
-.status-center-summary button:hover,
-.status-center-summary button.is-active {
-  border-color: var(--sc-border-strong);
-  color: var(--sc-text);
-  background: var(--sc-control-hover);
-}
-
-/* Detailed semantics are documented in the code/tests; the first viewport stays operational. */
+.status-center-summary strong { color: var(--mo-text-primary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.status-center-summary .needs-attention { border-color: color-mix(in srgb, var(--mo-warning) 46%, var(--mo-border-default)); color: var(--mo-warning); }
+.status-center-summary .needs-attention strong { color: var(--mo-warning); }
+.status-center-summary button.is-active { border-color: var(--mo-border-strong); background: var(--mo-surface-selected); color: var(--mo-text-primary); }
 .status-center-note { display: none; }
 
-/* Main triage canvas: recovery queue on the left, live jobs in a narrow rail. */
+/* Triage canvas: current issues own width; live work stays in a stable operations rail. */
 .status-center-sections {
   display: flex;
   min-height: 0;
-  max-width: none;
   flex-wrap: wrap;
   align-content: flex-start;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
   overflow-y: auto;
-  padding: 0 22px 24px;
-  background: var(--sc-canvas);
+  padding: 0 18px 22px;
+  background: var(--mo-surface-app);
   scrollbar-gutter: stable;
 }
 .status-center-section {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--sc-border);
-  border-radius: 10px;
-  background: var(--sc-panel);
+  border: 1px solid var(--mo-border-default);
+  border-radius: 4px;
+  background: var(--mo-surface-pane);
   box-shadow: none;
 }
-.status-center-section.is-attention {
-  order: 0;
-  flex: 1 1 610px;
-}
+.status-center-section.is-attention { order: 0; flex: 1 1 610px; }
 .status-center-section.is-active {
   order: 1;
   position: sticky;
-  z-index: 4;
   top: 0;
-  flex: 0 1 310px;
-  border-color: color-mix(in srgb, var(--sc-blue) 32%, var(--sc-border));
-  background: var(--sc-panel);
-  box-shadow: none;
+  z-index: 4;
+  flex: 0 1 320px;
+  border-color: color-mix(in srgb, var(--mo-accent) 35%, var(--mo-border-default));
 }
-.status-center-section.is-recent {
-  order: 2;
-  flex: 1 0 100%;
-}
-.status-center-empty {
-  flex: 1 0 100%;
-}
+.status-center-section.is-recent { order: 2; flex: 1 0 100%; }
+.status-center-empty { flex: 1 0 100%; }
 
 .status-center-section > header {
   min-height: 38px;
-  border-bottom: 1px solid var(--sc-border);
-  padding: 0 11px;
-  background: var(--sc-panel-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  padding: 0 10px;
+  background: var(--mo-surface-raised);
 }
-.status-center-section.is-active > header {
-  background: var(--sc-blue-soft);
-}
-.status-center-section > header strong {
-  color: var(--sc-text);
-  font-size: 10px;
-}
-.status-center-section > header small {
-  color: var(--sc-text-muted);
-  font-size: 9px;
-}
-.status-center-section-dot {
-  width: 6px;
-  height: 6px;
-  box-shadow: none;
-  background: var(--sc-text-muted);
-}
-.status-center-section.is-attention .status-center-section-dot {
-  background: var(--sc-orange);
-  box-shadow: none;
-}
-.status-center-section.is-active .status-center-section-dot {
-  background: var(--sc-blue);
-  box-shadow: none;
-}
-.status-center-section.is-recent .status-center-section-dot {
-  background: var(--sc-green);
-}
+.status-center-section > header > div { display: flex; align-items: center; gap: 7px; }
+.status-center-section > header strong { color: var(--mo-text-primary); font-size: 11px; }
+.status-center-section > header small { color: var(--mo-text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.status-center-section-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mo-text-muted); box-shadow: none; }
+.status-center-section.is-active .status-center-section-dot { background: var(--mo-accent); }
+.status-center-section.is-attention .status-center-section-dot { background: var(--mo-warning); }
+.status-center-section.is-recent .status-center-section-dot { background: var(--mo-success); }
 
-/* Current problems are a compact recovery queue, not an error card wall. */
-.status-center-section.is-attention .status-center-task-list {
-  max-height: min(430px, 52vh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-.status-center-section.is-attention .status-center-task {
-  grid-template-columns: minmax(150px, .58fr) minmax(240px, 1.42fr) auto;
-  gap: 11px;
-  border-color: var(--sc-border);
-  padding: 9px 11px;
-  background: var(--sc-panel);
-}
-.status-center-section.is-attention .status-center-task.status-failed,
-.status-center-section.is-attention .status-center-task.status-interrupted {
-  background: color-mix(in srgb, var(--sc-orange-soft) 58%, var(--sc-panel));
-}
-.status-center-section.is-attention .status-center-task-body {
-  gap: 4px;
-}
-.status-center-section.is-attention .status-center-task-body > p {
-  -webkit-line-clamp: 2;
-  color: var(--sc-text-secondary);
-  font-size: 9px;
-  line-height: 1.45;
-}
-.status-center-section.is-attention .status-center-task.status-failed .status-center-task-body > p,
-.status-center-section.is-attention .status-center-task.status-interrupted .status-center-task-body > p {
-  color: var(--sc-red);
-}
-.status-center-section.is-attention .status-center-progress { display: none; }
+.status-center-task-list { display: grid; gap: 0; }
+.status-center-section.is-attention .status-center-task-list { max-height: min(430px, 52vh); overflow-y: auto; scrollbar-gutter: stable; }
+.status-center-section.is-active .status-center-task-list { max-height: min(520px, 62vh); overflow-y: auto; scrollbar-gutter: stable; }
+.status-center-section.is-recent .status-center-task-list { max-height: min(360px, 42vh); overflow-y: auto; scrollbar-gutter: stable; }
 
-/* Live work is a dedicated control rail. Every active instance remains cancellable. */
-.status-center-section.is-active .status-center-task-list {
-  max-height: min(520px, 62vh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+/* Task Row anatomy: identity/status | message/progress | actions. */
+.status-center-task {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(170px, .62fr) minmax(250px, 1.38fr) auto;
+  gap: 12px;
+  align-items: start;
+  border: 0;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  border-radius: 0;
+  padding: 10px;
+  background: var(--mo-surface-pane);
+  color: var(--mo-text-primary);
 }
-.status-center-section.is-active .status-center-task {
-  grid-template-columns: 1fr;
-  gap: 7px;
-  border-color: var(--sc-border);
-  padding: 10px 11px;
-  background: var(--sc-panel);
+.status-center-task:last-child { border-bottom: 0; }
+.status-center-task::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--mo-text-muted);
 }
-.status-center-section.is-active .status-center-task-body {
-  gap: 5px;
+.status-center-task.status-running::before,
+.status-center-task.status-queued::before { background: var(--mo-accent); }
+.status-center-task.status-failed::before,
+.status-center-task.status-interrupted::before { background: var(--mo-danger); }
+.status-center-task.status-completed::before { background: var(--mo-success); }
+.status-center-task.status-cancelled::before { background: var(--mo-text-muted); }
+.status-center-task.is-history { opacity: .72; }
+
+.status-center-task-main { min-width: 0; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 7px; align-items: start; }
+.status-center-task-indicator {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--mo-border-default);
+  border-radius: 4px;
+  background: var(--mo-surface-raised);
 }
-.status-center-section.is-active .status-center-task-body > p {
+.status-center-task-indicator::before { content: "•"; color: var(--mo-text-muted); font-size: 12px; line-height: 1; }
+.status-center-task.status-running .status-center-task-indicator::before,
+.status-center-task.status-queued .status-center-task-indicator::before { content: "↻"; color: var(--mo-accent); }
+.status-center-task.status-failed .status-center-task-indicator::before,
+.status-center-task.status-interrupted .status-center-task-indicator::before { content: "!"; color: var(--mo-danger); }
+.status-center-task.status-completed .status-center-task-indicator::before { content: "✓"; color: var(--mo-success); }
+.status-center-task.status-cancelled .status-center-task-indicator::before { content: "–"; color: var(--mo-text-muted); }
+.status-center-task-name { min-width: 0; display: grid; gap: 2px; }
+.status-center-task-name strong { min-width: 0; overflow: hidden; color: var(--mo-text-primary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.status-center-task-name span { min-width: 0; overflow: hidden; color: var(--mo-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+.status-center-task-body { min-width: 0; display: grid; gap: 5px; }
+.status-center-task-body > p {
   display: -webkit-box;
+  margin: 0;
   overflow: hidden;
+  color: var(--mo-text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  color: var(--sc-text-secondary);
-  font-size: 9px;
 }
-.status-center-section.is-active .status-center-actions {
-  max-width: none;
-  justify-content: flex-start;
-}
-.status-center-section.is-active .status-center-actions > button:first-child:not(:disabled) {
-  border-color: color-mix(in srgb, var(--sc-red) 42%, var(--sc-border));
-  color: var(--sc-red);
-  background: transparent;
-}
-.status-center-section.is-active .status-center-actions > button:first-child:not(:disabled):hover {
-  border-color: var(--sc-red);
-  color: var(--sc-red);
-  background: color-mix(in srgb, var(--sc-red) 8%, transparent);
-}
+.status-center-task.status-failed .status-center-task-body > p,
+.status-center-task.status-interrupted .status-center-task-body > p { color: var(--mo-danger); }
+.status-center-task-meta { display: flex; gap: 8px; color: var(--mo-text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.status-center-progress { display: grid; grid-template-columns: minmax(80px, 1fr) auto; align-items: center; gap: 8px; }
+.status-center-progress progress { width: 100%; height: 4px; accent-color: var(--mo-accent); }
+.status-center-progress span { color: var(--mo-text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.status-center-section.is-attention .status-center-progress { display: none; }
+.status-center-technical { color: var(--mo-text-muted); font-size: 10px; }
+.status-center-technical summary { color: var(--mo-text-muted); cursor: pointer; }
+.status-center-technical code { display: block; max-height: 140px; margin-top: 5px; overflow: auto; border: 1px solid var(--mo-border-default); border-radius: 4px; padding: 7px; background: var(--mo-surface-raised); color: var(--mo-text-secondary); font-size: 10px; line-height: 1.4; white-space: pre-wrap; }
 
-/* Shared task typography: source and state lead, implementation detail recedes. */
-.status-center-task-name { gap: 2px; }
-.status-center-task-name strong {
-  color: var(--sc-text);
-  font-size: 10px;
-}
-.status-center-task-name span {
-  color: var(--sc-text-muted);
-  font-size: 8px;
-}
-.status-center-task-meta {
-  gap: 7px;
-  color: var(--sc-text-muted);
-  font-size: 8px;
-}
-.status-center-progress {
-  grid-template-columns: minmax(80px, 1fr) auto;
-  gap: 7px;
-}
-.status-center-progress progress { height: 4px; }
-.status-center-progress span {
-  color: var(--sc-text-muted);
-  font-size: 8px;
-}
-.status-center-technical {
-  color: var(--sc-text-muted);
-  font-size: 8px;
-}
-.status-center-technical summary {
-  color: var(--sc-text-muted);
-}
-.status-center-technical code {
-  border-color: var(--sc-border);
-  color: var(--sc-text-secondary);
-  background: var(--sc-panel-soft);
-}
-.status-center-task-indicator {
-  width: 7px;
-  height: 7px;
-}
-.status-center-task.status-running .status-center-task-indicator,
-.status-center-task.status-queued .status-center-task-indicator { background: var(--sc-blue); }
-.status-center-task.status-failed .status-center-task-indicator,
-.status-center-task.status-interrupted .status-center-task-indicator { background: var(--sc-orange); }
-.status-center-task.status-completed .status-center-task-indicator { background: var(--sc-green); }
-.status-center-task.status-cancelled .status-center-task-indicator { background: var(--sc-text-muted); }
-
-/* Actions: recovery first, navigation second, record cleanup tertiary. */
 .status-center-actions {
-  max-width: 250px;
+  display: grid;
+  grid-auto-flow: row;
   gap: 4px;
+  min-width: 92px;
+  max-width: 126px;
 }
-.status-center-actions button {
-  min-height: 27px;
-  border-color: var(--sc-border);
-  padding: 4px 7px;
-  color: var(--sc-text-secondary);
-  background: var(--sc-control);
-  font-size: 9px;
-}
-.status-center-actions button:hover:not(:disabled) {
-  border-color: var(--sc-border-strong);
-  color: var(--sc-text);
-  background: var(--sc-control-hover);
-}
-.status-center-actions button:not(.secondary) {
-  border-color: color-mix(in srgb, var(--sc-blue) 42%, var(--sc-border));
-  color: var(--sc-blue);
-  background: var(--sc-blue-soft);
-}
-.status-center-task:not(.status-running):not(.status-queued) .status-center-actions button:last-child {
-  border-color: transparent;
-  color: var(--sc-text-muted);
-  background: transparent;
-}
-.status-center-task:not(.status-running):not(.status-queued) .status-center-actions button:last-child:hover:not(:disabled) {
-  color: var(--sc-text-secondary);
-  background: var(--sc-control-hover);
-}
+.status-center-actions button { min-height: 28px; padding-inline: 8px; font-size: 10px; white-space: nowrap; }
+.status-center-actions button:not(.secondary) { border-color: color-mix(in srgb, var(--mo-accent) 44%, var(--mo-border-default)); color: var(--mo-accent); background: var(--mo-accent-soft); }
+.status-center-task.status-running .status-center-actions > button:first-child:not(:disabled),
+.status-center-task.status-queued .status-center-actions > button:first-child:not(:disabled) { border-color: color-mix(in srgb, var(--mo-danger) 42%, var(--mo-border-default)); color: var(--mo-danger); background: transparent; }
+
+/* Live task rail stacks one Task Row per operation without changing task anatomy. */
+.status-center-section.is-active .status-center-task { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+.status-center-section.is-active .status-center-actions { grid-auto-flow: column; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; }
+.status-center-section.is-active .status-center-task-body > p { -webkit-line-clamp: 2; }
 
 .status-center-read-error {
-  border-color: var(--sc-border);
-  padding: 9px 11px;
-  background: var(--sc-orange-soft);
-}
-.status-center-read-error strong { color: var(--sc-red); }
-.status-center-read-error span { color: var(--sc-text-secondary); }
-
-/* History is inspectable, but deliberately visually quieter than current work. */
-.status-center-section-note {
-  border-color: var(--sc-border);
-  padding: 7px 11px;
-  color: var(--sc-text-muted);
-  background: var(--sc-panel-soft);
-}
-.status-center-section.is-recent .status-center-task-list {
-  max-height: min(360px, 42vh);
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-}
-.status-center-section.is-recent .status-center-task {
-  grid-template-columns: minmax(150px, .55fr) minmax(220px, 1.45fr) auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  border-color: var(--sc-border);
-  padding: 8px 11px;
-  background: var(--sc-panel);
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  padding: 10px;
+  background: color-mix(in srgb, var(--mo-danger) 7%, var(--mo-surface-pane));
 }
-.status-center-section.is-recent .status-center-task.is-history,
-html[data-mirrororder-theme="light"] .status-center-section.is-recent .status-center-task.is-history,
-html[data-mirrororder-theme="dark"] .status-center-section.is-recent .status-center-task.is-history {
-  background: var(--sc-panel);
-}
-.status-center-section.is-recent .status-center-task.is-history .status-center-task-body > p {
-  color: var(--sc-text-muted);
-}
+.status-center-read-error > div { min-width: 0; display: grid; gap: 2px; }
+.status-center-read-error strong { color: var(--mo-danger); font-size: 11px; }
+.status-center-read-error span { color: var(--mo-text-secondary); font-size: 10px; line-height: 1.4; }
+.status-center-read-error button { min-height: 28px; font-size: 10px; }
 
+.status-center-section-note {
+  margin: 0;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  padding: 8px 10px;
+  background: var(--mo-surface-raised);
+  color: var(--mo-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.status-center-section-empty,
 .status-center-empty {
-  min-height: 210px;
+  display: grid;
+  min-height: 180px;
   align-content: center;
-  border-color: var(--sc-border-strong);
-  color: var(--sc-text-muted);
-  background: var(--sc-panel);
+  justify-items: center;
+  gap: 4px;
+  padding: 22px;
+  color: var(--mo-text-muted);
+  text-align: center;
+  font-size: 11px;
 }
-.status-center-empty strong { color: var(--sc-text); }
-.status-center-empty span { color: var(--sc-text-secondary); }
+.status-center-empty strong { color: var(--mo-text-primary); font-size: 13px; }
+.status-center-empty span { max-width: 520px; line-height: 1.5; }
 
-.status-center-section.is-attention .status-center-task-list::-webkit-scrollbar,
-.status-center-section.is-active .status-center-task-list::-webkit-scrollbar,
-.status-center-section.is-recent .status-center-task-list::-webkit-scrollbar,
-.status-center-sections::-webkit-scrollbar { width: 9px; }
-.status-center-section.is-attention .status-center-task-list::-webkit-scrollbar-thumb,
-.status-center-section.is-active .status-center-task-list::-webkit-scrollbar-thumb,
-.status-center-section.is-recent .status-center-task-list::-webkit-scrollbar-thumb,
-.status-center-sections::-webkit-scrollbar-thumb {
-  border: 3px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
-  background-color: color-mix(in srgb, var(--sc-text-muted) 48%, transparent);
-}
-
-@media (max-width: 1080px) {
-  .status-center-sections { gap: 10px; padding-inline: 16px; }
-  .status-center-summary { margin-inline: 16px; }
+@media (max-width: 1180px) {
   .status-center-section.is-attention { flex-basis: 100%; }
-  .status-center-section.is-active {
-    order: -1;
-    position: static;
-    flex: 1 0 100%;
-  }
-  .status-center-section.is-active .status-center-task-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-height: min(300px, 38vh);
-  }
-  .status-center-section.is-active .status-center-task:nth-child(2) { border-top: 0; }
+  .status-center-section.is-active { position: static; flex: 1 1 100%; }
+  .status-center-section.is-active .status-center-task { grid-template-columns: minmax(170px, .62fr) minmax(250px, 1.38fr) auto; }
+  .status-center-section.is-active .status-center-actions { grid-auto-flow: row; grid-template-columns: none; max-width: 126px; }
 }
 
-@media (max-width: 760px) {
-  .status-center-heading .production-state { display: none; }
-  .status-center-summary { width: auto; }
-  .status-center-summary span,
-  .status-center-summary button { flex: 1 1 0; justify-content: center; }
-  .status-center-section.is-active .status-center-task-list { grid-template-columns: 1fr; }
-  .status-center-section.is-attention .status-center-task,
-  .status-center-section.is-recent .status-center-task {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-  .status-center-actions {
-    grid-column: auto;
-    max-width: none;
-    justify-content: flex-start;
-    padding-left: 16px;
-  }
+@media (max-width: 900px) {
+  .status-center-task,
+  .status-center-section.is-active .status-center-task { grid-template-columns: minmax(0, 1fr); }
+  .status-center-actions,
+  .status-center-section.is-active .status-center-actions { grid-auto-flow: column; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; }
+  .status-center-heading { padding-inline: 12px; }
+  .status-center-summary { margin-inline: 12px; max-width: calc(100% - 24px); overflow-x: auto; }
+  .status-center-sections { padding-inline: 12px; }
 }
