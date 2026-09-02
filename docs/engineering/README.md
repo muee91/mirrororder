@@ -1,118 +1,48 @@
 # 工程控制层
 
-`docs/engineering/` 保存**当前工程管理事实**，用于让本地开发、Agent、worktree 和远端协作共享同一套轻量控制面。这里不取代产品/领域 authority，也不保存一次性验收报告。
+`docs/engineering/` 只保存**当前工程管理事实**。一次性 Codex prompt、旧分支收尾脚本、历史 integration plan 和某次 PASS 证据不属于这里；这些信息由 Git 历史或 `docs/verification/` 保存。
 
-## 核心文件各自负责什么
+## 当前文件
 
-- [`STATUS.md`](./STATUS.md)：当前正在做什么、哪些风险未关闭、哪些 gate 实际执行过。
-- [`BACKLOG.md`](./BACKLOG.md)：尚未进入当前工作包的工程事项，按优先级排队。
-- [`DECISIONS.md`](./DECISIONS.md)：已经接受、会长期影响实现方式的工程决策。
-- [`INVARIANTS.md`](./INVARIANTS.md)：任何分支、Agent 或实现都不能突破的高影响约束。
-- [`PYTHON_PACKAGE_PLAN.md`](./PYTHON_PACKAGE_PLAN.md)：Python flat namespace 的目标边界、迁移顺序与 compatibility/staging contract；它是迁移计划，不代表文件已经搬动。
-- [`INTEGRATION_PLAN.md`](./INTEGRATION_PLAN.md)：当前综合工作分支在真实 local gates 通过后如何 squash、复验并进入稳定 `main`；它不是远端 force-push 指令。
+- [`STATUS.md`](./STATUS.md)：当前 `main` 状态、未关闭风险和最近真实验证。
+- [`BACKLOG.md`](./BACKLOG.md)：尚未进入当前工作包的工程事项。
+- [`DECISIONS.md`](./DECISIONS.md)：仍然生效的长期工程决策。
+- [`INVARIANTS.md`](./INVARIANTS.md)：任何实现都不能突破的高影响约束。
 
-产品入口、UX、领域 authority 和跨层架构仍以 [`../README.md`](../README.md) 中列出的当前文档为准；一次性验证证据仍进入 [`../verification/`](../verification/)。
+长期跨层架构进入 [`../architecture/`](../architecture/)；产品/领域 authority 从 [`../README.md`](../README.md) 开始阅读。
 
-## 工程事实的 authority 顺序
+## Authority 顺序
 
-遇到冲突时按以下顺序判断：
+发生冲突时按以下顺序判断：
 
 1. 当前产品/领域 authority 与 Core 实现；
-2. `AGENTS.md` 与 `INVARIANTS.md` 的仓库级约束；
-3. `DECISIONS.md` 已接受的工程决策；
-4. `STATUS.md` 当前执行状态；
-5. `BACKLOG.md` 与专项 migration/integration plan 的未来工作；
-6. `docs/verification/` 历史证据；
-7. 聊天记录、临时 prompt、旧分支说明。
+2. `AGENTS.md` 与 `INVARIANTS.md`；
+3. `DECISIONS.md`；
+4. `STATUS.md`；
+5. `BACKLOG.md`；
+6. `docs/verification/` 与 Git 历史。
 
-聊天可以帮助推进工作，但**不能成为唯一工程事实源**。
+历史报告、聊天记录和旧执行计划不能覆盖当前 authority。
 
-## 默认工作流
+## 当前工作流：main-only
 
-```text
-main
-  ↓
-独立 branch + git worktree
-  ↓
-实现 / 测试 / diff review
-  ↓
-本地 source gate / fast gate
-  ↓
-必要时 full gate / native smoke
-  ↓
-更新 STATUS / DECISIONS / BACKLOG
-  ↓
-并回 main
-  ↓
-GitHub push / PR / release / optional CI
-```
+仓库当前只维护 `main` 作为开发与集成线。默认流程是：读取最新 `main` → 收敛 scope → 原子修改 → diff review → 运行适用 gate → 直接提交 `main`。不把长期 feature branch、worktree 或 PR 流程当作当前工程前提；如果以后恢复多分支协作，应先更新本文件和 `DECISIONS.md`。
 
-### 本地验证入口
-
-在完整 checkout 中按可用工具链选择最低可执行层，但**低层通过不能替代高层**：
+本地验证入口：
 
 ```bash
-# Python-only：不依赖 Node/Cargo/网络
 python scripts/check_python.py
-
-# 日常跨栈 fast gate
 python scripts/check_fast.py
-
-# 合并高风险工作前的完整 source gate
 python scripts/check_full.py
 ```
 
-`check_python.py` 会执行 Python compileall 和当前 production contract smoke；缺少测试文件或 pytest 时 fail closed。它适合 Node/Rust 工具链暂不可用时尽早发现 Python/contract 回归，但不代表 TypeScript、Vitest、Rust/Tauri、packaged runtime 或 native media/FCP 已验证。
+低层 PASS 不能替代高层验证；没有实际执行的 gate 必须写 `NOT RUN`。GitHub Actions 是独立验证信号：CI 失败必须记录和修复，但不能用旧 CI、旧 commit 或源码审阅伪造当前 PASS。
 
-### 可以直接改 `main` 的范围
+## 文档维护
 
-仅限低风险、可快速审阅且不会改变 contract 的修改，例如：
-
-- 文档拼写或链接；
-- 明显 typo；
-- 极小测试修复；
-- 已有行为的单文件低风险 bugfix；
-- 不改变 schema、authority、runtime、API contract 或跨层依赖的配置修正。
-
-### 默认必须 worktree 的范围
-
-满足任意一条即使用独立 branch/worktree：
-
-- 修改超过 3 个文件；
-- 跨 Python / React / Tauri / Rust；
-- API、DTO、schema、workspace 或 artifact contract 变化；
-- durable task、runtime、媒体处理、模型运行时；
-- 算法实验、自动剪辑、自动配乐、NLE adapter；
-- 审计、迁移、重构或可能扩大 scope 的工作。
-
-推荐命名：
-
-```text
-feature/<topic>
-fix/<topic>
-audit/<topic>
-chore/<topic>
-experiment/<topic>
-refactor/<topic>
-```
-
-本地示例：
-
-```bash
-git worktree add ../mirrororder-waveform -b fix/waveform-runtime main
-```
-
-分支不需要为了日常开发而立即 push 到 GitHub；远端是协作/备份层，不是本地开发控制面。
-
-## 工作包关闭条件
-
-一个工作包只有在以下事实明确后才可以从 `STATUS.md` 移到完成：
-
-1. scope 已收敛，未解决项进入 `BACKLOG.md`；
-2. authority / contract 变化已同步到对应长期文档；
-3. 实际执行过的 gate 有明确结果；
-4. 没有执行的 gate 明确写 `NOT RUN`，不能继承旧 PASS；
-5. 如果新形成长期约束，更新 `DECISIONS.md` 或 `INVARIANTS.md`；
-6. 并回 `main` 前完成 diff review。
-
-GitHub Actions 是额外验证信号，不是上述流程成立的前提。
+- 当前状态只写 `STATUS.md`，不堆阶段日志。
+- 长期约束写 `DECISIONS.md` / `INVARIANTS.md`。
+- 未来事项写 `BACKLOG.md`。
+- 一次性验收写 `docs/verification/`。
+- 长期跨层设计写 `docs/architecture/`。
+- 已完成的一次性执行说明直接删除；Git 历史已保存它们。

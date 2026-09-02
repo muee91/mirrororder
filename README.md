@@ -2,30 +2,29 @@
 
 镜序是面向短剧、多机位拍摄与后期协作的本地优先 Production 工具。它把素材、剧本、场记、人物身份、人工审阅、粗剪提案、时间线编辑和交付串成一套可追踪工作流。
 
-当前产品与文档 authority 从 [`docs/README.md`](docs/README.md) 开始阅读；中文产品总览见 [`项目介绍.md`](项目介绍.md)。仓库文件位置与源码/工作区边界见 [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)。当前工程状态、worktree 和本地 gate 规则见 [`docs/engineering/README.md`](docs/engineering/README.md)。
+文档 authority 从 [`docs/README.md`](docs/README.md) 开始；中文产品总览见 [`项目介绍.md`](项目介绍.md)。
 
-## 当前开发基线
+## 当前技术基线
 
-`main` 是稳定集成基线，Desktop 客户端位于 `desktop/`：
+仓库当前只维护 `main` 作为开发与集成线。Desktop 位于 `desktop/`：
 
 - React / TypeScript：Production UI；
-- Tauri 2 / Rust：桌面生命周期和窄平台适配；
-- Rust Timeline Core：本机 authoritative timeline edit state；
-- Python MirrorOrder Core：项目、Review、Slate、Identity、Assistant、媒体身份和 FCPXML 等业务权威；
+- Tauri 2 / Rust：桌面生命周期与窄平台适配；
+- Rust Timeline Core：authoritative local timeline edit state；
+- Python MirrorOrder Core：Workspace/Project、Review、Slate、Identity、Assistant、media identity/binding、Delivery/FCPXML 等业务 authority；
 - Team Web：独立轻量 Review / Collaboration surface。
 
-跨层、runtime、schema/API、审计、迁移、重构和实验默认在独立 branch + `git worktree` 中完成，再通过本地 gate 并回 `main`。GitHub 是远端协作/备份/Release 层，不是日常开发的单点控制面。
+AI 权限链始终是：
 
-机器可读基线：
+```text
+evidence → proposal → human confirmation → authority
+```
 
-- `desktop/development-baseline.json`
-- `docs/desktop-development-baseline.md`
-
-产品入口与默认页以 `docs/app-information-architecture.md` 为准。
+React/AI/Team Web 都不能成为第二套 Review/Editorial/Timeline truth。
 
 ## 产品入口
 
-打开项目后，Production 只保留四个一级制作区：
+项目 Production 保持四个一级制作区：
 
 ```text
 素材：场记 / 素材库 / Take / 人物
@@ -34,42 +33,9 @@
 审阅：看片 / 待处理 / 概览
 ```
 
-新项目第一次进入默认打开 **素材 → 场记**；已有项目恢复上次 Production 页面。
+新项目第一次进入默认打开 **素材 → 场记**；已有项目按当前 IA 恢复 Production 页面。状态中心、团队审阅和设置属于全局工具；`⌘K / Ctrl+K` 是项目语义搜索，小镜是 contextual drawer。
 
-全局工具位于项目导航之外：
-
-- 状态中心：统一后台任务与失败/重试/近期完成；
-- 团队审阅：Team Web 协作入口；
-- 设置：团队审阅偏好、本地模型、外部/自定义模型连接、成员权限与高级诊断。
-
-项目语义搜索使用 `⌘K / Ctrl+K`；小镜是右侧 contextual drawer，不是独立页面。模型 Provider / Base URL / API Key 属于全局设置，不属于小镜。
-
-## 权威边界
-
-```text
-Python Core
-  ├─ workspace / project lifecycle
-  ├─ Review placement
-  ├─ Script Supervisor / Slate
-  ├─ Identity / role confirmation
-  ├─ Assistant / AI proposals
-  ├─ media identity / device binding semantics
-  └─ FCPXML delivery semantics
-
-Rust Timeline Core
-  └─ authoritative local timeline state + deterministic edit commands
-
-React / TypeScript
-  └─ production UI; not a second source of truth
-```
-
-人工映射、场记事实和最终剪辑判断必须分开。统一 AI 权限链是：
-
-```text
-evidence → proposal → human confirmation → authority
-```
-
-AI、Audit、语义检索或 Team Web Individual Opinion 都不能绕过人工确认成为 Final Editorial Decision、Review placement 或 Timeline authority。
+产品入口以 [`docs/app-information-architecture.md`](docs/app-information-architecture.md) 为准，UX 以 [`docs/ux-principles.md`](docs/ux-principles.md) 为准。
 
 ## 快速开发
 
@@ -79,91 +45,50 @@ npm install
 npm run dev
 ```
 
-日常本地 fast gate：
-
-```bash
-python scripts/check_fast.py
-```
-
-高风险工作并回前的完整源码 gate：
-
-```bash
-python scripts/check_full.py
-```
-
-`check_full.py` 复用当前 `desktop` 的 `verify:rc`，串联 TypeScript、Vitest、Vite、Cargo 与 Python 检查。缺少必要工具时必须明确失败；没有实际执行过的 gate 不得写成“已通过”。GitHub Actions 是附加验证信号，不是本地开发基线的必要条件。
-
-## Production Host / Team Gateway
-
-Production Host 默认使用本机 `8765`：
+Production Host 默认本机 `8765`：
 
 ```bash
 python -m script_organizer.cli serve <workspace> --local-only --port 8765
 ```
 
-Team Web 使用独立 Gateway，默认 `8766`：
+Team Gateway 默认 `8766`：
 
 ```bash
 python -m script_organizer.cli gateway workspace.toml --port 8766
 ```
 
-Production Host 与 Team Gateway 是两套独立生命周期。健康状态必须验证 MirrorOrder service identity，不能只因为某端口可连接就认为服务正确。
+两者是独立生命周期；ready 必须验证 MirrorOrder service identity，不能只检查端口可连接。
 
-## 源码仓库与工作区数据
+## 验证
 
-根 `workspace.toml` 是仓库开发入口；它的 registry 指向 `./projects/registry.json`。`projects/` 是本地/生产 workspace 容器；源码仓库只跟踪空的 `projects/.gitkeep`，其余 `projects/*` 全部由 Git 忽略。
-
-因此源码仓库不再保存真实：
-
-- 项目 registry / `project.toml`；
-- 剧本、FCPXML/XML 或媒体输入副本；
-- cache / output / review / tasks / locks；
-- `/Volumes/...`、`/Users/...`、盘符路径等设备绝对路径。
-
-生产团队仍可以按 [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md) 在设备之间同步项目事实和人工状态；“可同步的生产 workspace”与“MirrorOrder 源码 Git 仓库”是两个不同边界。测试所需项目数据应使用 `tests/fixtures/` 中的最小合成/脱敏 fixture。
-
-## 本机素材身份
-
-```text
-clip_id  = 媒体在项目 / FCPXML 中的一次 occurrence
-media_id = 物理媒体文件身份，与磁盘路径无关
+```bash
+python scripts/check_python.py
+python scripts/check_fast.py
+python scripts/check_full.py
 ```
 
-每台设备只保存自己的媒体根目录和 media binding。本机绝对路径不写回共享 workspace，也不进入 Review authority。
+只有实际成功的目标 commit/run 可以写 PASS。GitHub Actions 是独立验证信号；CI red 需要修复，但旧 CI、旧 verification 或源码审阅不能替代当前执行结果。
 
-设备状态目录：
+当前状态见 [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)。
 
-- macOS：`~/Library/Application Support/MirrorOrder`
-- Windows：`%APPDATA%/MirrorOrder`
-- Linux：`$XDG_CONFIG_HOME/mirrororder`，缺省为 `~/.config/mirrororder`
+## 源码仓库与生产数据
 
-## Timeline Core
+源码仓库只跟踪空 `projects/.gitkeep`；真实 `projects/*`、媒体输入、cache/output、review/tasks/locks、设备绝对路径和 secrets 不进入源码 Git。
 
-`desktop/src-tauri/crates/timeline-core` 提供整数帧时间线模型、deterministic commands、Undo/Redo、checkpoint、journal 和 crash recovery。
+```text
+clip_id  = 项目/FCPXML 中的一次 occurrence
+media_id = 与设备路径无关的物理媒体身份
+```
 
-Timeline authoritative state 由 Rust 持有；React 只发 commands 和读取 snapshots。Python proposal 只有在人工确认后才可转换成 Timeline commands。
+生产团队的跨设备同步语义见 [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md)，仓库/工作区文件位置见 [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)。测试数据只使用 `tests/fixtures/` 中最小、合成、脱敏、可重建 fixture。
 
-## 工程管理
+## 关键文档
 
-当前工程控制层：
-
-- [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)：当前工作包与真实验证状态；
-- [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md)：未来工程事项；
-- [`docs/engineering/DECISIONS.md`](docs/engineering/DECISIONS.md)：长期工程决策；
-- [`docs/engineering/INVARIANTS.md`](docs/engineering/INVARIANTS.md)：跨分支高影响不变量。
-
-Runtime packaging、自动配乐、重媒体处理、新 NLE adapter、模型 runtime infrastructure、实验自动化、审计和迁移默认先在独立 branch/worktree 验证，再按 typed contract、authority、failure isolation 和本地/native gate 决定是否并回主线。
-
-## 文档入口
-
-- [`docs/README.md`](docs/README.md)：文档索引与 authority 层级；
-- [`docs/engineering/README.md`](docs/engineering/README.md)：工程控制层与 worktree / gate 规则；
-- [`docs/app-information-architecture.md`](docs/app-information-architecture.md)：当前产品 IA；
-- [`docs/ux-principles.md`](docs/ux-principles.md)：当前 UX 原则；
-- [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)：仓库与工作区文件位置；
-- [`docs/architecture/desktop-bridge.md`](docs/architecture/desktop-bridge.md)：Desktop / Python Core / Team Web / Timeline 边界；
-- [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md)：跨设备同步与本机素材边界；
-- [`docs/architecture/automation-pipeline.md`](docs/architecture/automation-pipeline.md)：自动整理与 AI 权限边界；
-- [`docs/architecture/local-intelligence.md`](docs/architecture/local-intelligence.md)：本机可重建智能索引；
-- [`AGENTS.md`](AGENTS.md)：工程接手与自动化修改约束；
-- [`desktop/README.md`](desktop/README.md)：Desktop 工程基线。
+- [`docs/README.md`](docs/README.md) — 文档索引与 authority。
+- [`docs/engineering/README.md`](docs/engineering/README.md) — main-only 工程控制层与 gate 规则。
+- [`docs/app-information-architecture.md`](docs/app-information-architecture.md) — 当前产品 IA。
+- [`docs/ux-principles.md`](docs/ux-principles.md) — 当前 UX 原则。
+- [`docs/design-system-v2.md`](docs/design-system-v2.md) — 当前设计系统。
+- [`docs/architecture/README.md`](docs/architecture/README.md) — 跨层架构索引。
+- [`AGENTS.md`](AGENTS.md) — Agent 修改仓库时的硬约束。
+- [`desktop/README.md`](desktop/README.md) — Desktop 工程入口。

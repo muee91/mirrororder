@@ -17,6 +17,7 @@ ARCHITECTURE_DOCS = (
     "docs/architecture/sync-model.md",
     "docs/architecture/automation-pipeline.md",
     "docs/architecture/local-intelligence.md",
+    "docs/architecture/python-package-boundaries.md",
 )
 
 ENGINEERING_DOCS = (
@@ -25,8 +26,6 @@ ENGINEERING_DOCS = (
     "docs/engineering/BACKLOG.md",
     "docs/engineering/DECISIONS.md",
     "docs/engineering/INVARIANTS.md",
-    "docs/engineering/PYTHON_PACKAGE_PLAN.md",
-    "docs/engineering/INTEGRATION_PLAN.md",
 )
 
 LOCAL_GATES = (

@@ -7,8 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_python_package_migration_plan_is_explicit_and_deferred() -> None:
-    plan = (ROOT / "docs" / "engineering" / "PYTHON_PACKAGE_PLAN.md").read_text(encoding="utf-8")
-    assert "no moves on current branch" in plan.lower()
+    plan = (ROOT / "docs" / "architecture" / "python-package-boundaries.md").read_text(encoding="utf-8")
+    assert "no package moves on main" in plan.lower()
     assert "Slice A — FCPXML adapter" in plan
     assert "Identity family" in plan
     assert "python scripts/check_full.py" in plan
