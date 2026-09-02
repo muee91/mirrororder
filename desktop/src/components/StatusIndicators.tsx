@@ -43,7 +43,7 @@ const SLATE_LABELS: Record<SlateIndicatorState, string> = {
 const MEDIA_HEALTH: Record<MediaHealthState, { label: string; icon: string }> = {
   ready: { label: "可播放", icon: "▶" },
   offline: { label: "素材离线", icon: "×" },
-  unsupported: { label: "编码不支持", icon: "!" },
+  unsupported: { label: "无法播放", icon: "!" },
   identity_missing: { label: "播放身份缺失", icon: "?" },
   index_pending: { label: "等待索引", icon: "…" },
 };

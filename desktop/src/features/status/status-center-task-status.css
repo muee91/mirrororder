@@ -32,6 +32,14 @@
   color: inherit;
 }
 
+/* Project/device read failures can contain paths, URLs or runtime identifiers.
+ * They must wrap inside the operations card instead of widening the pane. */
+.status-center-read-error > div { min-width: 0; }
+.status-center-read-error span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* The old local dot used to reserve 15px before task actions at narrow widths.
  * Shared TaskStatusIndicator needs no phantom alignment gutter. */
 @media (max-width: 980px) {

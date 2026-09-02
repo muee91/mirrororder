@@ -44,6 +44,13 @@ describe("status center desktop operations contract", () => {
     expect(adoption).not.toMatch(/font-size:\s*(?:7|8|9)px/);
   });
 
+  it("keeps long read errors inside the status pane at narrow widths", () => {
+    const adoption = readFileSync(fileURLToPath(new URL("./status-center-task-status.css", import.meta.url)), "utf8");
+    expect(adoption).toContain(".status-center-read-error > div { min-width: 0; }");
+    expect(adoption).toContain(".status-center-read-error span {");
+    expect(adoption).toContain("overflow-wrap: anywhere");
+  });
+
   it("removes the obsolete local-dot action gutter at narrow widths", () => {
     const adoption = readFileSync(fileURLToPath(new URL("./status-center-task-status.css", import.meta.url)), "utf8");
     expect(adoption).toContain("@media (max-width: 980px)");

@@ -170,22 +170,20 @@ No KPI-card wall.
 - Product Shell with global-only Sidebar, project toolbar, Current Operator and four Production Areas
 - persisted Production page resume with Slate default for new projects
 - `MediaCard` stable anatomy and A/B/C/AUX categorical camera identity
-- Media Browser List/Grid, camera filter axis and selection Inspector grammar
-- dense Slate production ledger with fixed A/B/C/AUX columns and no-shift media cells
+- Media Browser List/Grid, camera filter axis, selection Inspector and shared `MediaHealthIndicator` technical-state presentation
+- dense Slate production ledger with fixed A/B/C/AUX columns, no-shift media cells, shared 10px evidence floor and editable `SlateStatusIndicator`
 - `TakeCard` stable anatomy, fixed A/B/C/AUX slots and Material / Script 10px typography floor
 - Identity candidate/evidence/confirmed-human authority split with Take jump evidence
-- Status Center current/attention/history operations layout, stale-attempt semantics and shared `TaskStatusIndicator` consumption
+- Status Center current/attention/history operations layout, stale-attempt semantics, shared `TaskStatusIndicator` consumption and narrow-width operations hardening
 - Rough Cut editorial-decision workspace, Assembly sequence grammar, Timeline track/lane grammar and Delivery output/validation grammar
-- Review Web canonical A/B/C/AUX member ordering, stable `ReviewMemberTile`, explicit Media Health, Review Opinion and Editorial Decision families
+- Review Web canonical A/B/C/AUX member ordering, stable `ReviewMemberTile`, explicit Media Health, Review Opinion and Editorial Decision families, plus offline camera-rail protection
 - independent status indicator component families and professional UI contract tests
 
-### Remaining convergence targets
+### Remaining visual acceptance targets
 
-1. Slate: converge the editable Slate status control on `SlateStatusIndicator` without reducing direct-edit speed
-2. Media surfaces: adopt shared `MediaHealthIndicator` where a technical health fact is shown outside the compact card anatomy
-3. Review Web: final cross-breakpoint visual QA for long filenames, repeated cameras, missing media and mixed custom cameras
-4. Status Center: visual QA for long errors, cancel/retry transitions and progress at narrow widths
-5. Full macOS visual acceptance pass for Sidebar / Slate / Media / Script / Identity / Edit / Review / Status Center before leaving Draft
+1. Review Web: device/browser visual QA with real long filenames, repeated cameras, missing media and mixed custom cameras across breakpoints
+2. Status Center: device visual QA for long runtime errors, cancel/retry transitions and live progress at narrow widths
+3. Full macOS visual acceptance pass for Sidebar / Slate / Media / Script / Identity / Edit / Review / Status Center before leaving Draft
 
 ## 8. Review checklist for every PR
 
