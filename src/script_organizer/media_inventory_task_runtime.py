@@ -122,14 +122,24 @@ def _indexed_rows(project: Any) -> dict[str, dict[str, str]]:
         if not isinstance(row, dict):
             return
         media_id = str(row.get("media_id", "") or "")
-        if not media_id or media_id in result:
+        if not media_id:
+            return
+        clip_id = str(row.get("clip_id", "") or "")[:200]
+        existing = result.get(media_id)
+        if existing is not None:
+            if clip_id and not existing.get("clip_id"):
+                existing["clip_id"] = clip_id
             return
         source = str(row.get("source_media_path", "") or row.get("media_path", "") or "")
         result[media_id] = {
+            "clip_id": clip_id,
             "display_name": (Path(source).name or str(row.get("name", "") or media_id))[:300],
             "inferred_camera": str(row.get("camera", "") or "")[:40],
         }
 
+    # ProjectService resolves /media/{clip_id} from material_index.clips, so
+    # prefer the canonical top-level clip row before group members. clip_id is
+    # an opaque project identity: it authorizes no path access by itself.
     for clip in project.index.get("clips", []):
         add(clip)
     for group in project.index.get("groups", []):
@@ -185,6 +195,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
         indexed_row = indexed.get(media_id, {})
         rows_by_id[media_id] = {
             "media_id": media_id,
+            "clip_id": indexed_row.get("clip_id", ""),
             "display_name": (path.name or indexed_row.get("display_name") or media_id)[:300],
             "folder_label": path.parent.name[:120] if path_text else "",
             "inferred_camera": (
@@ -202,6 +213,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
             media_id,
             {
                 "media_id": media_id,
+                "clip_id": indexed_row.get("clip_id", ""),
                 "display_name": indexed_row.get("display_name", media_id),
                 "folder_label": "",
                 "inferred_camera": indexed_row.get("inferred_camera", ""),
@@ -217,6 +229,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
         role = _safe_role(raw_role)
         rows_by_id[key] = {
             "media_id": key,
+            "clip_id": indexed.get(key, {}).get("clip_id", ""),
             "display_name": str(role.get("display_name", "") or key)[:300],
             "folder_label": "",
             "inferred_camera": "",
@@ -261,6 +274,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
             "read_path_scans_media": False,
             "snapshot_rebuildable": True,
             "media_id_shared_identity": True,
+            "clip_id_is_opaque_playback_identity": True,
             "unindexed_media_may_be_labeled": True,
             "camera_override_is_shared_human_fact": True,
             "auxiliary_without_timecode_or_audio_is_valid": True,
