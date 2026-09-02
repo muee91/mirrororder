@@ -28,6 +28,8 @@ export interface MediaRoleStore {
 
 export interface MediaInventoryItem {
   media_id: string;
+  /** Opaque material_index clip identity. Never a device path. */
+  clip_id?: string;
   display_name: string;
   folder_label: string;
   inferred_camera: string;
