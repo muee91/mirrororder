@@ -62,36 +62,38 @@ DJI_0038.MP4 · 航拍
 
 ### 1. Take 一键带入
 
-镜序把尚未录入场记的逻辑 Take 放在左侧待录入区。
+镜序把尚未录入场记的逻辑 Take 放在待录入/归集辅助区。
 
-点击后：
+加入后：
 
-- 新建一条场记 record；
+- 新建一条场记草稿；
 - A/B/C 素材成为附件；
 - 如果已有明确人工归集集数，可以带入单一 episode；
-- 算法 Take 只是录入捷径，不是场记身份。
+- 算法 Take 只是录入捷径，不是场记身份；
+- 保存前只修改 Desktop 草稿，显式保存后才写入项目。
 
-### 2. 文件名搜索
+### 2. 文件名 / Take 搜索
 
-照纸质场记单抄录时，可直接搜索文件名或 Take。
+照纸质场记单抄录时，可按文件名或 Take 搜索当前项目和 device-local media inventory 中可解析的素材。
 
-文件搜索来自当前 Mac 的安全 `media-inventory`，可以包含没有进入同步索引的素材。
+本机 inventory 可以包含尚未进入同步索引的媒体，但查询本身只能读已有 snapshot，不得因为打开搜索而触发全盘重扫。
 
-### 3. Finder 拖入
+### 3. Finder / Explorer 原生拖入
 
-App 的电子场记工作区接受 Finder 文件拖入作为录入捷径。
+Desktop 电子场记使用 Tauri `onDragDropEvent` 接收 Finder / Explorer 文件路径，并通过 Host 的 drop resolver 映射到当前设备可识别的 `clip_id` / `media_id`。
 
-当前实现只使用浏览器拖入对象的**文件名**与 App-only 本机 inventory 匹配：
+路径只用于当前设备解析：
 
 - 不上传文件；
-- 不复制文件；
-- 不把 Finder 路径写进共享项目；
-- 同名多条时要求人工从搜索结果选择；
-- 不在当前绑定素材目录中的文件要求先绑定/扫描。
+- 不复制原始文件；
+- 不把绝对路径写进共享项目或场记附件；
+- 成功解析后只把安全的媒体身份与展示字段加入当前场记草稿；
+- 未能解析的文件明确报错/跳过；
+- 保存前只修改草稿，显式保存后才写入 `script_supervisor.v2`。
 
-这与“从 App 向 Final Cut/Finder 拖出真实文件”的 AppKit bridge 是两条不同链。对外拖出仍必须使用原生 `NSDraggingSession`。
+这条链路与 Team Web 浏览器拖拽不同；Team Web 不获得宿主设备路径，也不提供电子场记编辑。
 
-### 4. 文本 / 语音快速录入
+### 4. 文本快速录入
 
 可以输入：
 
@@ -113,13 +115,7 @@ App 的电子场记工作区接受 Finder 文件拖入作为录入捷径。
 
 如果设备配置了 Assistant Language Model，可用它增强自然语言解析；结果仍必须经过 Host schema 清洗。
 
-### 语音
-
-电子场记提供 `Option + Space` 语音入口。
-
-如果 WKWebView 提供 SpeechRecognition，则识别成中文文本后进入同一 parser；如果系统没有暴露该能力，则退化为聚焦输入框并提示使用 macOS 系统听写。
-
-语音只是录入方式，不产生更高的数据权威。
+当前 React/Tauri Desktop 没有把 `WKWebView SpeechRecognition` 或 `Option + Space` 语音快捷键作为 `script_supervisor.v2` 的现行功能 contract。用户仍可使用操作系统听写把文本输入同一快速录入框；未来若增加 native speech adapter，转写文本也必须进入同一 parser，并且不会获得更高数据权威。
 
 ## AI 红线
 
@@ -182,27 +178,25 @@ Team Web 不提供电子场记编辑。
 - status；
 - note。
 
-完整场记 records、快速录入、Finder drag、本机 inventory 和语音入口属于 App Production。
+完整场记 records、快速录入、device-local inventory 和 native file drop 属于 Desktop Production。
 
 ## 快捷键
 
-电子场记工作区：
+当前 `GoldenSlateWorkbench` 的显式生产快捷键 contract：
 
-- `Tab / Shift+Tab`：字段移动；
-- `Enter`：普通单元格保存并进入下一字段；
-- `Cmd/Ctrl + Enter`：备注保存并进入下一字段；
-- `Option + Space`：语音录入；
-- `Space / K`：预览播放暂停；
-- `J / L`：前后移动；
-- `I / O`：设置精确可用入点 / 出点；
-- `Esc`：关闭素材预览。
+- `Cmd/Ctrl + S`：保存所有待保存场记草稿；
+- `Cmd/Ctrl + N`：新建空白场记草稿；
+- `I / O`：非文本编辑状态下，按当前播放器时间设置精确可用入点 / 出点；
+- `Esc`：Take Picker 打开时关闭 Picker。
+
+普通输入框的 Tab/Enter 行为遵循浏览器控件与当前组件实现，不再在文档中承诺不存在的全局播放、J/K/L 或语音快捷键。
 
 ## 数据安全
 
 - revision-safe 原子写；
 - 每次写入要求 actor；
 - `display_name` 只保留 basename；
-- 不保存 `/Volumes/...`；
+- 不保存 `/Volumes/...`、Windows 盘符或其它设备绝对路径；
 - 不修改原始素材；
 - 不修改源 FCPXML；
 - 不写 `review.json` / `editorial.json` / `auto_decisions.json`。

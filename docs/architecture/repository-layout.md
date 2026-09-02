@@ -6,9 +6,8 @@
 
 ```text
 mirrororder/
-├── README.md                     仓库入口
+├── README.md                     仓库与产品入口
 ├── AGENTS.md                     自动化/Agent 修改约束
-├── 项目介绍.md                   中文产品总览
 ├── pyproject.toml                Python 包与测试配置
 ├── requirements-*.txt            明确的开发/运行依赖入口
 ├── workspace.toml                仓库开发工作区描述；不包含真实项目
@@ -65,11 +64,11 @@ mirrororder/
 
 文档按 authority 类型落位：
 
+- `README.md`：唯一根级产品/仓库总览；
 - `docs/README.md`：唯一文档索引；
 - `docs/*.md`：当前产品 IA、UX、领域 contract；
 - `docs/architecture/*.md`：跨 Python/Desktop/Runtime/Sync 等多个层的长期工程架构；
-- `docs/verification/*.md`：带日期、commit、执行环境的一次性验证/审计证据；
-- 根目录只保留 `README.md`、`AGENTS.md`、`项目介绍.md` 这类仓库入口文档。
+- `docs/verification/*.md`：带日期、commit、执行环境的一次性验证/审计证据。
 
 临时 prompt、迁移清单、已经结束的操作脚本不作为长期文档提交；Git 历史已经承担过程留档。
 
@@ -103,6 +102,8 @@ desktop/src-tauri/resources/     构建生成/占位的 packaged resources
 - device-local state 不能因为方便而写进 project/shared store；
 - 一个领域开始出现多组 engine/store/runtime/support 文件时，优先规划独立子 package，再以兼容 import 逐步迁移，而不是继续堆几十个顶层模块；
 - 大规模 package 迁移必须作为独立、可审阅的原子工作包，并有 import、packaging、stage-runtime 与 pytest contract，不能和产品功能修改混在一个提交中。
+
+详细目标 ownership、dependency direction、compatibility facade 与迁移 slice 见 [`python-package-boundaries.md`](./python-package-boundaries.md)。
 
 ## 6. 测试与 fixture
 

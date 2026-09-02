@@ -55,7 +55,9 @@ GET /api/v1/workspaces/{workspace_id}/projects/{project_id}/review-model
 GET /api/v1/projects/{project_id}/review-model
 ```
 
-普通 Web 使用 `review.v1`，不接收 Host 绝对文件路径。旧 `/script`、`/groups`、`/matches`、`/review` 路由暂时保留。原生 App 继续使用较完整的 Production 数据链，因为 AppKit 原生文件拖拽必须解析当前 Mac 的真实媒体文件路径。
+普通 Team Web 使用 `review.v1`，不接收 Host 绝对文件路径。旧 `/script`、`/groups`、`/matches`、`/review` 路由暂时保留。
+
+Desktop Production 使用更完整的本机 Production contract 和 device-local media resolver。Tauri 原生拖入可以把 Finder / Explorer 路径交给 Host 解析为 `clip_id` / `media_id`；路径只用于当前设备解析，不进入 `review.v1` 或共享项目事实。
 
 ## 3. 顶层结构
 
@@ -114,7 +116,7 @@ media_path
 source_media_path
 resolved_media_path
 本机素材 root
-Finder path
+Finder / Explorer path
 ```
 
 `playback.url` 指向 Gateway HTTP Range media endpoint。浏览器消费媒体流，而不是把 Gateway 文件系统路径冒充自己的本机路径。
@@ -202,7 +204,7 @@ POST /api/v1/workspaces/{workspace_id}/projects/{project_id}/opinions
 POST /api/v1/workspaces/{workspace_id}/projects/{project_id}/editorial-decision
 ```
 
-当前只允许 Host 本机 / 原生 App 使用。团队 LAN Web 只能查看最终决定，因为角色、权限与负责人模型尚未建立。
+当前只允许 Host 本机 / Desktop Production 使用。团队 LAN Web 只能查看最终决定，因为角色、权限与负责人模型尚未建立。
 
 最终决定必须提交：
 
@@ -259,11 +261,11 @@ Web 不需要知道 `editorial.json` 的文件结构，只消费 Host 投影。
 
 普通 Web 不获得 Production timeline、本机路径、runtime、项目输入修改或最终决定写权限。
 
-## 10. Production App UI
+## 10. Desktop Production UI
 
-原生 App 绕过 Web read-model adapter，继续保留 current-device 路径和 AppKit native drag。
+Desktop 不通过 Team Web read-model 充当 Production 画布；它使用 typed Production API、current-device media resolver 与 Tauri 平台适配器。
 
-Viewer Inspector 增加“最终编辑决定”：
+Viewer Inspector 的最终编辑决定能力遵循同一协作 authority：
 
 - 展示当前 target 的团队意见汇总；
 - 显示现有最终决定；
@@ -271,7 +273,7 @@ Viewer Inspector 增加“最终编辑决定”：
 - 使用 `expected_revision` 防止 stale overwrite；
 - revision 冲突后必须基于最新团队状态重新确认。
 
-最终决定会进入 `delivery.v1` selection manifest，但当前 App 仍不会因此直接修改原始 FCPXML 或 multicam 结构。
+最终决定会进入 `delivery.v1` selection manifest，但 Desktop 不会因此直接修改原始 FCPXML 或 multicam 结构。
 
 ## 11. 协作刷新
 
@@ -286,7 +288,7 @@ editorial_updated_at
 
 普通 Web 在 production analysis、legacy review 或 editorial revision 任一变化时重新读取 `review.v1`。其它审核人的新意见因此能在轮询周期内进入页面，而浏览器不直接读取共享文件。
 
-原生 App 对 `editorial` 状态单独轮询，用于 Inspector 的团队意见与最终决定刷新；Production 媒体路径仍走原本的本机链路。
+Desktop Production 对 `editorial` 状态单独刷新/轮询，用于 Inspector 的团队意见与最终决定；Production 媒体路径继续走 device-local resolver。
 
 ## 12. 多设备与同步
 
@@ -309,7 +311,8 @@ editorial.json
 ```text
 media-bindings.json
 /Volumes/... 路径
-Finder path
+Windows 本机路径
+Finder / Explorer path
 embedding
 本机 runtime / model 状态
 ```
@@ -323,7 +326,7 @@ embedding
 - Editorial Decision 不得根据多数票自动生成。
 - Editorial Decision stale revision 不得静默覆盖。
 - `editorial.json` 不得写入 `review.json` 或 `auto_decisions.json`。
-- App current-device media resolver 与 AppKit native drag bridge 不改。
+- Desktop current-device media resolver 与 Tauri native drag/drop path isolation 不得破坏。
 - Delivery resolver 可以读取 Editorial Decision，但不得改变 `review.json` / `auto_decisions.json` 或原始 FCPXML。
 
 ## 14. 下一阶段：NLE Delivery Adapter
@@ -333,5 +336,5 @@ Delivery Semantics 已进入 `selection_manifest.json v3 / delivery.v1`。下一
 1. 定义 Final Cut Pro Rating / Keyword 的安全映射；
 2. 在独立 fixture 上实现结构化 FCPXML 写入与 round-trip 验证；
 3. 输出新的 `mirrororder-delivery.fcpxml`，绝不覆盖用户 source；
-4. 验证 multicam、asset-clip、ref-clip 与 range 语义后，再在 App 暴露“导出到 Final Cut Pro”；
+4. 验证 multicam、asset-clip、ref-clip 与 range 语义后，再在 Desktop 暴露“导出到 Final Cut Pro”；
 5. Premiere / Resolve 后续消费同一 `delivery.v1`，不得各自重新解释审核权威。
