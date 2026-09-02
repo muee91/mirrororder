@@ -30,6 +30,20 @@ describe("status center desktop operations contract", () => {
     expect(css).toContain("-webkit-line-clamp: 2");
   });
 
+  it("renders durable task state through the shared TaskStatusIndicator family", () => {
+    const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
+    const adoption = readFileSync(fileURLToPath(new URL("./status-center-task-status.css", import.meta.url)), "utf8");
+    expect(source).toContain('TaskStatusIndicator, type TaskIndicatorState');
+    expect(source).toContain("export function taskIndicatorState(");
+    expect(source).toContain("<TaskStatusIndicator");
+    expect(source).toContain("progress={indicatorProgress}");
+    expect(source).toContain("taskProgress && active(task)");
+    expect(source).not.toContain('<span className="status-center-task-indicator"');
+    expect(adoption).toContain(".status-center-task-main .mo-task-status-indicator");
+    expect(adoption).toContain("status-center-progress-count-only");
+    expect(adoption).not.toMatch(/font-size:\s*(?:7|8|9)px/);
+  });
+
   it("consumes the shared MirrorOrder semantic system instead of maintaining a second theme", () => {
     const css = readFileSync(fileURLToPath(new URL("./status-center.css", import.meta.url)), "utf8");
     const main = readFileSync(fileURLToPath(new URL("../../main.tsx", import.meta.url)), "utf8");

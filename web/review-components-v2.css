@@ -95,5 +95,38 @@
 }
 .editorial-decision-indicator strong { color: inherit; font-weight: 800; }
 
+/* Native final editorial controls mirror the shared ReviewDecision family.
+ * Higher specificity intentionally beats editorial_ui.js runtime-injected CSS. */
+.inspector .native-editorial-section {
+  border-top-color: var(--line);
+}
+.inspector .native-editorial-head strong,
+.inspector .native-editorial-summary b { color: var(--ink); }
+.inspector .native-editorial-actions button[data-final-state] {
+  min-height: 28px;
+  border-color: var(--line-strong);
+  border-radius: var(--mo-radius-control);
+  background: var(--control);
+  color: var(--control-ink);
+  font-size: 10px;
+  font-weight: 650;
+}
+.inspector .native-editorial-actions button[data-final-state="best"].selected {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.inspector .native-editorial-actions button[data-final-state="keep"].selected {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+}
+.inspector .native-editorial-actions button[data-final-state="reject"].selected {
+  border-color: var(--red);
+  background: var(--red-soft);
+  color: var(--red);
+}
+.inspector .native-editorial-note { color: var(--muted); }
+
 /* Placement remains a separate structural state/action. */
 .placement-indicator { border-style: dashed; }

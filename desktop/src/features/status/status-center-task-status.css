@@ -1,0 +1,37 @@
+/* Status Center consumes the shared task-status family without letting the
+ * generic indicator dictate the operations layout. */
+.status-center-task-main {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 6px;
+}
+
+.status-center-task-main .mo-task-status-indicator {
+  width: 100%;
+  max-width: 180px;
+  font-size: 10px;
+}
+
+.status-center-task-main .mo-task-status-label {
+  font-weight: 650;
+}
+
+/* The shared indicator owns the visual progress rail. Keep only exact counts
+ * in task detail so the same progress is not represented twice. */
+.status-center-progress.status-center-progress-count-only {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 0;
+  color: var(--mo-text-muted, #75828e);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-center-progress.status-center-progress-count-only span {
+  color: inherit;
+}
+
+@media (max-width: 700px) {
+  .status-center-task-main .mo-task-status-indicator { max-width: 220px; }
+}

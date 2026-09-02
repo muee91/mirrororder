@@ -164,26 +164,28 @@ No KPI-card wall.
 
 ## 7. Migration status
 
-### Implemented / started on `work/professional-ui-ux-system`
+### Implemented on `work/professional-ui-ux-system`
 
-- Professional UI / UX authority
-- `MediaCard` stable anatomy
-- Camera A/B/C/AUX first-class identity
-- `TakeCard` stable anatomy
-- A/B/C/AUX Take slots
-- independent status indicator component families
-- professional UI static contracts
-- Material / Script token migration and 10px typography floor
+- Professional UI / UX authority and component matrix
+- Product Shell with global-only Sidebar, project toolbar, Current Operator and four Production Areas
+- persisted Production page resume with Slate default for new projects
+- `MediaCard` stable anatomy and A/B/C/AUX categorical camera identity
+- Media Browser List/Grid, camera filter axis and selection Inspector grammar
+- dense Slate production ledger with fixed A/B/C/AUX columns and no-shift media cells
+- `TakeCard` stable anatomy, fixed A/B/C/AUX slots and Material / Script 10px typography floor
+- Identity candidate/evidence/confirmed-human authority split with Take jump evidence
+- Status Center current/attention/history operations layout, stale-attempt semantics and shared `TaskStatusIndicator` consumption
+- Rough Cut editorial-decision workspace, Assembly sequence grammar, Timeline track/lane grammar and Delivery output/validation grammar
+- Review Web canonical A/B/C/AUX member ordering, stable `ReviewMemberTile`, explicit Media Health, Review Opinion and Editorial Decision families
+- independent status indicator component families and professional UI contract tests
 
-### Next migration targets
+### Remaining convergence targets
 
-1. Slate secondary/Inspector typography and status component adoption
-2. Media Library List/Grid unification around `MediaCard`
-3. Review Web Camera/Decision/Media Health families
-4. Identity candidate/confirmed person split
-5. Status Center TaskRow/TaskStatus adoption
-6. Project shell + Current Operator + four Production Areas
-7. remaining Rough Cut / Assembly / Timeline / Delivery object grammar
+1. Slate: converge the editable Slate status control on `SlateStatusIndicator` without reducing direct-edit speed
+2. Media surfaces: adopt shared `MediaHealthIndicator` where a technical health fact is shown outside the compact card anatomy
+3. Review Web: final cross-breakpoint visual QA for long filenames, repeated cameras, missing media and mixed custom cameras
+4. Status Center: visual QA for long errors, cancel/retry transitions and progress at narrow widths
+5. Full macOS visual acceptance pass for Sidebar / Slate / Media / Script / Identity / Edit / Review / Status Center before leaving Draft
 
 ## 8. Review checklist for every PR
 

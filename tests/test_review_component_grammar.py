@@ -60,6 +60,19 @@ def test_review_opinion_editorial_decision_and_placement_have_distinct_semantics
     assert "border-left: 3px solid var(--ink)" in css
 
 
+def test_native_editorial_decision_uses_shared_best_keep_reject_semantics() -> None:
+    css = COMPONENTS.read_text(encoding="utf-8")
+    assert '.native-editorial-actions button[data-final-state="best"].selected' in css
+    assert 'border-color: var(--blue)' in css
+    assert 'background: var(--blue-soft)' in css
+    assert '.native-editorial-actions button[data-final-state="keep"].selected' in css
+    assert 'border-color: var(--green)' in css
+    assert 'background: var(--green-soft)' in css
+    assert '.native-editorial-actions button[data-final-state="reject"].selected' in css
+    assert 'border-color: var(--red)' in css
+    assert 'background: var(--red-soft)' in css
+
+
 def test_review_component_layer_uses_camera_authority_and_10px_evidence_floor() -> None:
     css = COMPONENTS.read_text(encoding="utf-8")
     design = DESIGN_SYSTEM.read_text(encoding="utf-8")
