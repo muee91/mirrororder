@@ -27,20 +27,17 @@ describe("Swift Demo fidelity guards", () => {
     expect(slate).not.toContain("linkedScene(");
   });
 
-  it("keeps a direct Slate assistant entry without shrinking Slate and does not advertise deferred dictation", () => {
+  it("keeps the assistant in the professional project toolbar without advertising deferred dictation", () => {
     const workbench = source("../production/ProjectWorkbench.tsx");
     const slate = source("./GoldenSlateWorkbench.tsx");
     const slateCss = source("./golden-slate.css");
     const experience = source("../production/product-experience.css");
-    expect(workbench).toContain('const slateAssistantVisible = assistantOpen && page === "slate"');
-    expect(workbench).toContain("assistantOpen={slateAssistantVisible}");
-    expect(workbench).toContain("onToggleAssistant={() => setAssistantOpen((value) => !value)}");
-    expect(workbench).toContain('slateAssistantVisible ? "slate-assistant-drawer" : ""');
-    expect(slate).toContain("onToggleAssistant?: () => void");
-    expect(slate).toContain('aria-label={assistantOpen ? "关闭小镜" : "打开小镜"}');
-    expect(slate).toContain(">✦</button>");
-    expect(experience).toContain(".has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }");
-    expect(experience).toContain(".slate-assistant-drawer { position: absolute");
+    expect(workbench).toContain("const assistantVisible = assistantOpen;");
+    expect(workbench).toContain("professional-assistant-toggle");
+    expect(workbench).toContain("aria-pressed={assistantOpen}");
+    expect(workbench).toContain('className="assistant-context-drawer"');
+    expect(experience).toContain(".has-assistant-drawer .project-workbench-canvas");
+    expect(experience).toContain(".assistant-context-drawer");
     expect(slate).not.toContain("quick-mic");
     expect(slateCss).not.toContain(".quick-mic");
     expect(slateCss).toContain("grid-template-columns: minmax(220px,1fr) auto 1px auto auto auto");
@@ -51,10 +48,10 @@ describe("Swift Demo fidelity guards", () => {
     expect(css).not.toContain("font-size: 7px");
     expect(css).not.toContain("font-size: 8px");
     expect(css).toContain(".golden-ms-title > span");
-    expect(css).toContain("font-size: 10px");
+    expect(css).toContain("font-size: var(--mo-font-xs, 10px)");
     expect(css).toContain(".golden-ms-target-pane > header strong");
-    expect(css).toContain("font-size: 11px");
-    expect(css).toContain("grid-template-columns: 280px minmax(360px,1fr) 300px");
+    expect(css).toContain("font-size: var(--mo-font-sm, 11px)");
+    expect(css).toContain("grid-template-columns: minmax(280px, 360px) minmax(390px, 1fr) minmax(300px, 350px)");
   });
 
   it("keeps Material Script on one chrome layer with explicit desktop appearance", () => {
@@ -64,15 +61,15 @@ describe("Swift Demo fidelity guards", () => {
     const theme = source("../material-script/golden-material-script-theme.css");
     const main = source("../../main.tsx");
     const experience = source("../production/product-experience.css");
-    expect(workbench).toContain('onBack={() => navigate("slate")}');
+    expect(workbench).toContain('page === "script"');
     expect(workbench).not.toContain("golden-secondary-workspace");
     expect(material).toContain("golden-ms-back");
     expect(material).toContain("‹ 场记");
     expect(experience).not.toContain("golden-secondary-return");
-    expect(css).toContain('html[data-mirrororder-theme="light"] .golden-material-script');
-    expect(css).toContain('html[data-mirrororder-theme="dark"] .golden-material-script');
-    expect(theme).toContain('html[data-mirrororder-theme="light"] .golden-material-script .angle-card');
-    expect(theme).toContain('html[data-mirrororder-theme="dark"] .golden-material-script .inspector-angle-tabs button');
+    expect(css).toContain("var(--mo-surface-app");
+    expect(css).toContain("var(--mo-text-primary");
+    expect(theme).toContain("shared --mo-* semantic tokens");
+    expect(theme).toContain("Do not add light/dark palettes here");
     expect(main).toContain('import "./features/material-script/golden-material-script-theme.css"');
   });
 

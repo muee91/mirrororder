@@ -6,29 +6,25 @@ function source(relative: string): string {
 }
 
 describe("Swift golden product fidelity", () => {
-  it("keeps editing out of the Production workspace while using the new project navigation authority", () => {
+  it("keeps the four production areas in the project workspace while using the new navigation authority", () => {
     const workbench = source("../production/ProjectWorkbench.tsx");
     const material = source("../material-script/GoldenMaterialScriptWorkbench.tsx");
     const experience = source("../production/product-experience.css");
-    expect(workbench).not.toContain("TimelineWorkbench");
-    expect(workbench).not.toContain("DeliveryWorkbench");
-    expect(workbench).not.toContain("RoughCutWorkbench");
-    expect(workbench).not.toContain("AssemblyWorkbench");
-    expect(workbench).not.toContain('label: "剪辑"');
-    expect(workbench).not.toContain("project-workbench-primary");
-    expect(workbench).not.toContain("readProjectPage");
-    expect(workbench).toContain('useState<ProductionPage>("slate")');
+    expect(workbench).toContain("TimelineWorkbench");
+    expect(workbench).toContain("DeliveryWorkbench");
+    expect(workbench).toContain("RoughCutWorkbench");
+    expect(workbench).toContain("AssemblyWorkbench");
+    expect(workbench).toContain('label: "剪辑"');
+    expect(workbench).toContain("professional-project-toolbar");
+    expect(workbench).toContain("readProjectPage");
+    expect(workbench).toContain('useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)))');
     expect(workbench).toContain("owns-chrome");
-    expect(workbench).toContain('onBack={() => navigate("slate")}');
+    expect(workbench).toContain("const assistantVisible = assistantOpen;");
+    expect(workbench).toContain('className="professional-secondary-nav"');
     expect(workbench).not.toContain("golden-secondary-workspace");
     expect(material).toContain("‹ 场记");
-    expect(workbench).toContain('const slateAssistantVisible = assistantOpen && page === "slate"');
-    expect(workbench).toContain('const assistantVisible = assistantOpen && (secondarySurface || page === "slate")');
-    expect(workbench).toContain("assistantOpen={slateAssistantVisible}");
-    expect(workbench).toContain("onToggleAssistant={() => setAssistantOpen((value) => !value)}");
-    expect(workbench).toContain('onOpenReview={onOpenTeamReview ?? (() => navigate("watch"))}');
-    expect(workbench).toContain('className="production-secondary-back"');
-    expect(workbench).not.toContain('className="production-secondary-tabs"');
+    expect(workbench).toContain("professional-assistant-toggle");
+    expect(workbench).toContain('className="assistant-context-drawer"');
     expect(workbench).not.toContain('aria-label="项目工具"');
     expect(experience).toContain(".has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }");
     expect(experience).toContain(".slate-assistant-drawer { position: absolute");
@@ -123,17 +119,17 @@ describe("Swift golden product fidelity", () => {
     const css = source("../media/mirrororder-media-card.css");
     const reviewAdapter = source("../material-script/AngleEvidenceCard.tsx");
     expect(css).toContain("width: 180px; height: 88px");
-    expect(css).toContain("width: min(286px, 100%); height: 112px");
+    expect(css).toContain("width: min(300px, 100%); height: 124px");
     expect(css).toContain("grid-template-columns: 70px");
-    expect(css).toContain("grid-template-columns: 132px");
-    expect(css).toContain("border: 2px solid");
+    expect(css).toContain("grid-template-columns: 136px");
+    expect(css).toContain("border: 1px solid");
     expect(card).toContain("IntersectionObserver");
     expect(card).toContain('rootMargin: "48px 96px"');
     expect(card).toContain("compact && compactPreviewActive");
     expect(card).toContain("previewReady");
     expect(card).toContain('video.addEventListener("seeked", markReady)');
     expect(card).toContain("sourceStart");
-    expect(card).toContain("当前设备缺失");
+    expect(card).toContain("设备缺失");
     expect(css).toContain(".mo-media-thumb video.is-ready");
     expect(css).toContain(".mo-media-preview-fallback");
     expect(reviewAdapter).toContain("MirrorOrderMediaCard");
@@ -176,8 +172,8 @@ describe("Swift golden product fidelity", () => {
     expect(lifecycle).toContain("创建并整理");
     expect(lifecycle).toContain("client.preflightProject(payload())");
     expect(library).toContain('aria-label="主导航"');
-    expect(library).toContain('aria-label="当前项目制作导航"');
-    expect(library).toContain('onClick={() => openPage("watch")}');
+    expect(library).toContain('aria-label="系统导航"');
+    expect(library).toContain("制作区在项目画布顶部切换。");
     expect(library).toContain(">团队审阅</button>");
     expect(library).toContain("workspace.projects.filter((project) => project.project_id !== selectedProjectId).slice(0, 3)");
     expect(library).toContain("最近使用");

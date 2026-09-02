@@ -147,17 +147,16 @@ describe("status center recovery semantics", () => {
 
   it("keeps live task cancellation above a compact recovery backlog", () => {
     const source = readFileSync(fileURLToPath(new URL("./StatusCenterWorkbench.tsx", import.meta.url)), "utf8");
-    const recovery = readFileSync(fileURLToPath(new URL("./status-center-recovery.css", import.meta.url)), "utf8");
+    const recovery = readFileSync(fileURLToPath(new URL("./status-center.css", import.meta.url)), "utf8");
     const main = readFileSync(fileURLToPath(new URL("../../main.tsx", import.meta.url)), "utf8");
 
     expect(source).toContain('task.cancel_requested ? "正在取消"');
     expect(source.indexOf('className="status-center-section is-active"')).toBeLessThan(source.indexOf('className="status-center-section is-attention"'));
     expect(recovery).toContain("position: sticky");
-    expect(recovery).toContain("order: -20");
-    expect(recovery).toContain(".status-center-section.is-attention { order: -10; }");
-    expect(recovery).toContain("max-height: min(320px, 38vh)");
+    expect(recovery).toContain(".status-center-section.is-attention { order: 0; flex: 1 1 610px; }");
+    expect(recovery).toContain(".status-center-section.is-active {");
+    expect(recovery).toContain("max-height: min(430px, 52vh)");
     expect(recovery).toContain("scrollbar-gutter: stable");
-    expect(main).toContain('import "./features/status/status-center-recovery.css"');
-    expect(main.indexOf('import "./features/status/status-center-recovery.css"')).toBeGreaterThan(main.indexOf('import "./desktop-theme-frozen-surfaces.css"'));
+    expect(main).not.toContain('import "./features/status/status-center-recovery.css"');
   });
 });
