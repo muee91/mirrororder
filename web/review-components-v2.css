@@ -1,0 +1,99 @@
+/* Review component grammar v2.
+ * Loaded after design-system-v2.css. This layer binds runtime semantics to the
+ * shared ReviewTakeRow / ReviewMemberTile / ReviewOpinion / MediaHealth model.
+ */
+
+.review-take-row { min-width: 0; }
+
+/* Camera identity is categorical. Runtime normalization maps aliases such as
+ * A机 / 辅助 / 特殊 to the same stable A/B/C/AUX slots before custom cameras. */
+.review-camera-run[data-camera-tone="a"],
+.review-member-tile[data-camera-tone="a"] { --member-camera: var(--mo-camera-a); --member-camera-soft: var(--mo-camera-a-soft); }
+.review-camera-run[data-camera-tone="b"],
+.review-member-tile[data-camera-tone="b"] { --member-camera: var(--mo-camera-b); --member-camera-soft: var(--mo-camera-b-soft); }
+.review-camera-run[data-camera-tone="c"],
+.review-member-tile[data-camera-tone="c"] { --member-camera: var(--mo-camera-c); --member-camera-soft: var(--mo-camera-c-soft); }
+.review-camera-run[data-camera-tone="aux"],
+.review-member-tile[data-camera-tone="aux"] { --member-camera: var(--mo-camera-aux); --member-camera-soft: var(--mo-camera-aux-soft); }
+.review-camera-run[data-camera-tone="custom"],
+.review-member-tile[data-camera-tone="custom"] { --member-camera: var(--mo-camera-custom); --member-camera-soft: var(--mo-camera-custom-soft); }
+
+.member-strip > .review-camera-run[data-camera-tone="a"] { grid-column: 1; grid-row: 1; }
+.member-strip > .review-camera-run[data-camera-tone="b"] { grid-column: 2; grid-row: 1; }
+.member-strip > .review-camera-run[data-camera-tone="c"] { grid-column: 3; grid-row: 1; }
+.member-strip > .review-camera-run[data-camera-tone="aux"] { grid-column: 4; grid-row: 1; }
+.member-strip > .review-camera-run[data-camera-tone="custom"] { grid-row: 2; }
+
+/* ReviewMemberTile reserves separate filename, evidence and media-health rows.
+ * Intelligence may insert a shot chip into member-bottom without moving health. */
+.review-member-tile {
+  height: 84px;
+  min-height: 84px;
+  max-height: 84px;
+  grid-template-rows: minmax(30px, 1fr) 18px 16px;
+  border-width: 1px;
+}
+.review-member-tile.active { border-width: 1px; }
+.review-member-tile .member-bottom {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+.review-member-tile .camera-chip,
+.review-member-tile .shot-chip { flex: 0 0 auto; }
+.review-member-tile .member-time { flex: 1 1 auto; min-width: 0; }
+.review-member-tile .camera-chip[data-camera-tone="a"] { --camera-chip-color: var(--mo-camera-a); }
+.review-member-tile .camera-chip[data-camera-tone="b"] { --camera-chip-color: var(--mo-camera-b); }
+.review-member-tile .camera-chip[data-camera-tone="c"] { --camera-chip-color: var(--mo-camera-c); }
+.review-member-tile .camera-chip[data-camera-tone="aux"] { --camera-chip-color: var(--mo-camera-aux); }
+.review-member-tile .camera-chip[data-camera-tone="custom"] { --camera-chip-color: var(--mo-camera-custom); }
+
+/* Media health is a technical fact, not a review judgement. */
+.media-health-indicator {
+  display: inline-flex;
+  min-width: 36px;
+  align-items: center;
+  justify-self: end;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.media-health-indicator::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.media-health-indicator.is-ready { color: var(--green); }
+.media-health-indicator.is-offline { color: var(--red); }
+
+/* Individual review opinion is human judgement. It stays lighter than the
+ * stronger editorial decision authority shown alongside team consensus. */
+.review-opinion-indicator { font-weight: 650; }
+.review-opinion-control { font-weight: 600; }
+.review-opinion-summary {
+  min-height: 24px;
+  padding-left: 8px;
+  border-left: 2px solid var(--line-strong);
+}
+.review-opinion-summary strong { font-weight: 650; }
+.editorial-decision-indicator {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-left: 3px solid var(--ink);
+  padding: 2px 7px 2px 8px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  font-weight: 700;
+}
+.editorial-decision-indicator strong { color: inherit; font-weight: 800; }
+
+/* Placement remains a separate structural state/action. */
+.placement-indicator { border-style: dashed; }
