@@ -50,6 +50,59 @@ def test_inventory_projection_never_enumerates_or_hashes_media_on_read(tmp_path:
     assert payload["semantics"]["paths_exposed"] is False
 
 
+def test_inventory_exposes_canonical_clip_identity_without_exposing_media_path(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    project = _project(tmp_path)
+    source_path = "/Volumes/PRIVATE_CAMERA_CARD/A001.mov"
+    project.index = {
+        "clips": [
+            {
+                "media_id": "M_same",
+                "clip_id": "clip-canonical",
+                "media_path": source_path,
+                "camera": "A",
+            }
+        ],
+        "groups": [
+            {
+                "group_id": "take-1",
+                "members": [
+                    {
+                        "media_id": "M_same",
+                        "clip_id": "clip-group-copy",
+                        "media_path": "/Volumes/OTHER/A001.mov",
+                        "camera": "B",
+                    }
+                ],
+            }
+        ],
+    }
+
+    payload = media_inventory_task_runtime.inventory_payload(
+        project,
+        DeviceMediaStore(),
+        MediaRoleStore(project.config.output_dir),
+    )
+
+    assert payload["summary"]["indexed"] == 1
+    assert payload["items"] == [
+        {
+            "media_id": "M_same",
+            "clip_id": "clip-canonical",
+            "display_name": "A001.mov",
+            "folder_label": "",
+            "inferred_camera": "A",
+            "indexed": True,
+            "label": {},
+        }
+    ]
+    assert payload["semantics"]["clip_id_is_opaque_playback_identity"] is True
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert source_path not in serialized
+    assert "/Volumes/OTHER" not in serialized
+    assert "media_path" not in serialized
+
+
 def test_scan_fingerprint_capture_builds_snapshot_without_second_media_hash(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
     media_root = tmp_path / "media"
@@ -146,4 +199,6 @@ def test_media_inventory_runtime_installs_after_desktop_and_uses_durable_contrac
     assert 'media_files=captured_files' in runtime
     assert 'replace=replace' in runtime
     assert 'cancelled=cancelled' in runtime
+    assert '"clip_id": indexed_row.get("clip_id", "")' in runtime
+    assert '"clip_id_is_opaque_playback_identity": True' in runtime
     assert "原有本机素材绑定保持不变" in runtime
