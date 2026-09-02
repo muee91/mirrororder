@@ -8,6 +8,7 @@ RUNTIME = ROOT / "web" / "review_components_v2.js"
 COMPONENTS = ROOT / "web" / "review-components-v2.css"
 DESIGN_SYSTEM = ROOT / "web" / "design-system-v2.css"
 INTELLIGENCE = ROOT / "web" / "intelligence.css"
+REVIEW = ROOT / "web" / "review.css"
 
 
 def test_review_component_layer_loads_after_design_and_editorial_runtime() -> None:
@@ -49,7 +50,12 @@ def test_review_member_tile_reserves_evidence_and_media_health_without_geometry_
 def test_review_media_health_has_one_authority_and_stable_mobile_camera_slots() -> None:
     css = COMPONENTS.read_text(encoding="utf-8")
     design = DESIGN_SYSTEM.read_text(encoding="utf-8")
-    assert ".review-member-tile:disabled::after { content: none; }" in css
+    legacy = REVIEW.read_text(encoding="utf-8")
+    assert '.member-card:disabled::before{content:"缺失"' in legacy
+    assert ".review-member-tile:disabled::before" in css
+    assert 'content: "";' in css
+    assert "background: var(--member-camera)" in css
+    assert ".review-member-tile:disabled::after" not in css
     assert "grid-template-columns: repeat(4, 164px)" in design
     assert "overflow-x: auto" in design
     assert "@media (max-width: 680px)" in design

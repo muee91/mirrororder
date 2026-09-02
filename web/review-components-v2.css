@@ -50,8 +50,17 @@
 .review-member-tile .camera-chip[data-camera-tone="custom"] { --camera-chip-color: var(--mo-camera-custom); }
 
 /* Media health is a technical fact, not a review judgement. The explicit
- * indicator is the single authority, so suppress the legacy disabled pseudo. */
-.review-member-tile:disabled::after { content: none; }
+ * indicator owns the offline label; ::before remains exclusively camera identity. */
+.review-member-tile:disabled::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  height: auto;
+  background: var(--member-camera);
+  color: transparent;
+  font-size: 0;
+}
 .media-health-indicator {
   display: inline-flex;
   min-width: 36px;

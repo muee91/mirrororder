@@ -8,8 +8,11 @@ import {
   type MediaRoleStore,
   type MediaSourceRole,
 } from "../../api/mediaRoles";
+import { MediaHealthIndicator } from "../../components/StatusIndicators";
 import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
+import { mediaHealthState } from "./mediaHealthState";
 import "./media-library.css";
+import "./media-health-adoption.css";
 import "./camera-presentation.css";
 
 interface Props {
@@ -305,6 +308,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
             const manualCamera = Boolean(role.camera_override?.trim());
             const preview = playbackForItem(host, projectId, item, playbackByMedia[item.media_id]);
             const canPlay = Boolean(preview);
+            const healthState = mediaHealthState({ indexed: item.indexed, playable: canPlay });
             return (
               <button type="button" className={`media-library-row ${selectedId === item.media_id ? "is-selected" : ""}`} key={item.media_id} onClick={() => select(item)} aria-pressed={selectedId === item.media_id}>
                 <span className="media-library-thumb" data-camera-tone={camera.tone} aria-hidden="true">
@@ -332,7 +336,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                 <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
                 <span className="media-library-name"><strong>{item.display_name}</strong><small>{item.folder_label || "素材"}</small></span>
                 <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{role.scene_id ? `场 ${role.scene_id}` : auxiliary ? "不参与主机位同步" : ""}</small></span>
-                <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><small>{canPlay ? "可播放" : item.indexed ? "索引缺少播放身份" : "不可播放"}</small></span>
+                <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><MediaHealthIndicator state={healthState} /></span>
               </button>
             );
           })}
@@ -347,7 +351,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                 <header>
                   <span className="media-library-monitor-camera" data-camera-tone={selectedCamera.tone}>{selectedCamera.label}</span>
                   <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"}</small></span>
-                  <span className={`media-library-play-state ${selectedPlayback ? "is-ready" : ""}`}>{selectedPlayback ? "可播放" : selectedItem.indexed ? "播放身份缺失" : "待恢复"}</span>
+                  <MediaHealthIndicator state={mediaHealthState({ indexed: selectedItem.indexed, playable: Boolean(selectedPlayback), playbackFailed: selectedPlaybackFailed })} />
                 </header>
                 <div className="media-library-player">
                   {selectedPlayback && !selectedPlaybackFailed ? (
