@@ -216,7 +216,7 @@ export function App() {
 
   async function chooseWorkspace(directory: boolean): Promise<void> {
     if (!isTauri()) {
-      setMessage("浏览器预览不能打开系统目录选择器；可在“工作区与连接”中手动填写路径。");
+      setMessage("浏览器预览不能打开系统目录选择器；可在工作区菜单的高级连接中手动填写路径。");
       return;
     }
     try {
@@ -489,7 +489,9 @@ export function App() {
           : surface === "team"
             ? "团队审阅"
             : pageTitle(activeProjectPage);
-  const breadcrumb = [snapshot.workspace.workspace, selectedProject?.name || selectedProject?.project_id, currentTitle].filter(Boolean).join(" / ");
+  const contextLabel = (surface === "production" || surface === "team") && selectedProject
+    ? selectedProject.name || selectedProject.project_id
+    : snapshot.workspace.workspace;
 
   return (
     <main className="app-shell production-app-shell mirrororder-redesign-shell">
@@ -517,33 +519,12 @@ export function App() {
             onDeleteProject={(project) => deleteProject(project)}
             onWorkspaceChanged={refreshWorkspace}
           />
-
-          <details className="workspace-control">
-            <summary>
-              <span className={`status-dot status-${state}`} />
-              <span>{snapshot.workspace.workspace}</span>
-              <small>{connectionLabel(state)}</small>
-            </summary>
-            <div className="workspace-control-body">
-              <label><span>工作区</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
-              <div className="workspace-control-actions">
-                <button type="button" className="secondary" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>切换</button>
-                <button type="button" className="secondary" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>{revealLabel}</button>
-              </div>
-              <details className="workspace-advanced">
-                <summary>高级连接</summary>
-                <label><span>服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
-                <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>连接服务</button>
-                {resumeEnabledForSession ? <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动恢复</button> : null}
-              </details>
-            </div>
-          </details>
         </aside>
 
         <section className="app-main-column">
           <header className="app-global-topbar">
             <div className="app-global-context">
-              <span>{breadcrumb}</span>
+              <span>{contextLabel}</span>
               <strong>{currentTitle}</strong>
             </div>
             <div className="app-global-actions">
@@ -552,7 +533,31 @@ export function App() {
                 {runningProjects ? `${runningProjects} 个项目处理中` : "后台正常"}
               </button>
               <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id)}>刷新</button>
-              <button type="button" className="app-workspace-chip" onClick={openHome}>{snapshot.workspace.workspace}</button>
+              <details className="app-workspace-menu">
+                <summary className="app-workspace-chip">
+                  <span className={`status-dot status-${state}`} aria-hidden="true" />
+                  <span>{snapshot.workspace.workspace}</span>
+                  <small aria-hidden="true">⌄</small>
+                </summary>
+                <div className="app-workspace-menu-popover">
+                  <div className="app-workspace-menu-heading">
+                    <span><strong>{snapshot.workspace.workspace}</strong><small>{connectionLabel(state)}</small></span>
+                    {activeWorkspacePath.trim() ? <code title={activeWorkspacePath}>{activeWorkspacePath}</code> : null}
+                  </div>
+                  <div className="app-workspace-menu-actions">
+                    <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>切换工作区…</button>
+                    <button type="button" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>在 {revealLabel} 中显示</button>
+                  </div>
+                  <details className="workspace-advanced app-workspace-advanced">
+                    <summary>高级连接</summary>
+                    <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
+                    <button type="button" className="secondary" onClick={() => void openWorkspacePath(workspacePath)} disabled={state === "starting" || !workspacePath.trim()}>打开此路径</button>
+                    <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
+                    <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>连接已运行服务</button>
+                    {resumeEnabledForSession ? <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动恢复</button> : null}
+                  </details>
+                </div>
+              </details>
             </div>
           </header>
 
