@@ -9,7 +9,7 @@ export interface VirtualRange {
   paddingBottom: number;
 }
 
-export const TAKE_ROW_HEIGHT = 264;
+export const TAKE_ROW_HEIGHT = 314;
 export const TAKE_VIRTUAL_OVERSCAN = 3;
 
 export function takeStatus(take: ReviewTakeGroup): Exclude<TakeStatusFilter, "all"> {
