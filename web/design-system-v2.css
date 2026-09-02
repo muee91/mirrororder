@@ -1,0 +1,234 @@
+/* MirrorOrder Review design system v2
+ * Review intentionally has larger touch/click targets than Desktop Production,
+ * while sharing semantic color, focus and pane grammar.
+ */
+
+:root {
+  --mo-radius-control: 5px;
+  --mo-radius-pane: 4px;
+  --mo-radius-overlay: 8px;
+  --mo-focus: #4d83cc;
+  --mo-pane-shadow: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  min-width: 0;
+  background: var(--bg);
+}
+
+button,
+input,
+select,
+textarea,
+summary,
+[tabindex] { outline: none; }
+
+:where(button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--blue) 62%, transparent);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 13%, transparent);
+}
+
+button,
+input,
+select,
+textarea { border-radius: var(--mo-radius-control); }
+
+.topbar {
+  min-height: 54px;
+  height: auto;
+  padding: 8px 18px;
+  border-bottom-color: var(--line);
+  background: var(--chrome);
+  box-shadow: none;
+}
+.brand-logo { border-radius: 6px; }
+.brand h1 { font-size: 17px; }
+.brand #project-name { font-size: 11px; }
+.status-pill { height: 24px; border-radius: 999px; font-size: 11px; }
+.project-switch { font-size: 11px; }
+.project-switch select { min-height: 30px; border-radius: var(--mo-radius-control); background: var(--control); color: var(--ink); }
+
+.app-shell {
+  width: 100%;
+  height: calc(100vh - 54px);
+  gap: 1px;
+  padding: 0;
+  background: var(--line);
+}
+
+.toolbar {
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+.episode-picks { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 1px; scrollbar-width: thin; }
+.episode-pick { flex: 0 0 auto; min-width: 56px; height: 28px; border-radius: var(--mo-radius-control); }
+.utility-row { margin-top: 7px; gap: 10px; }
+.search-wrap { width: min(680px, 48vw); }
+#search { height: 34px; border-radius: var(--mo-radius-control); background: var(--control); }
+#search:focus { border-color: var(--blue); box-shadow: none; }
+.toolbar-summary { gap: 7px; font-size: 11px; }
+.text-button,
+.icon-button { min-height: 30px; border-radius: var(--mo-radius-control); background: var(--control); color: var(--control-ink); }
+
+.update-banner { margin: 0; border-width: 0 0 1px; border-radius: 0; }
+
+.workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(270px, .72fr) minmax(560px, 1.9fr) minmax(320px, .8fr);
+  grid-template-areas: "script takes inspector";
+  gap: 1px;
+  background: var(--line);
+}
+.script-column { grid-area: script; }
+.take-column { grid-area: takes; }
+.inspector { grid-area: inspector; }
+
+.panel,
+.inspector {
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: var(--mo-pane-shadow);
+}
+.panel-head,
+.inspector-head {
+  min-height: 46px;
+  border-bottom: 1px solid var(--panel-head-line);
+  background: var(--panel-head);
+}
+.panel-head { padding: 8px 10px; }
+.panel-head strong { font-size: 13px; }
+.subtle { font-size: 11px; }
+
+.script-list { padding: 6px; }
+.script-scene { margin: 6px 0 4px; padding: 5px 6px; font-size: 11px; }
+.script-scene-card,
+.script-line {
+  border-radius: var(--mo-radius-pane);
+  box-shadow: none;
+}
+.script-scene-card { margin: 7px 0 5px; padding: 8px 9px; }
+.script-line { margin-bottom: 4px; padding: 7px; }
+.script-line.active { box-shadow: inset 2px 0 0 var(--purple); }
+
+.candidate-list { gap: 6px; padding: 7px; background: var(--candidate-bg); }
+.take-row {
+  grid-template-columns: 54px minmax(150px, .72fr) minmax(420px, 2.28fr);
+  gap: 8px;
+  min-height: 104px;
+  padding: 8px;
+  border-radius: var(--mo-radius-pane);
+  box-shadow: none;
+}
+.take-row.selected { box-shadow: inset 2px 0 0 var(--blue); }
+.confidence-rail { min-height: 86px; border-radius: var(--mo-radius-pane); }
+.take-meta,
+.decision-button,
+.placement-button { font-size: 10px; }
+.decision-button,
+.placement-button { min-height: 27px; border-radius: var(--mo-radius-control); }
+
+.badge { min-height: 20px; padding: 1px 6px; font-size: 10px; }
+
+.inspector { overflow: auto; }
+.inspector-head { position: sticky; z-index: 3; top: 0; }
+.inspector video { background: #05080b; }
+.inspector-section { border-top-color: var(--line); }
+
+.toast {
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.modal { border-radius: var(--mo-radius-overlay); }
+
+/* 2-column review: script + takes; player becomes a full-width lower pane. */
+@media (max-width: 1260px) {
+  .topbar { padding-inline: 14px; }
+  .workspace {
+    grid-template-columns: minmax(250px, .72fr) minmax(0, 1.8fr);
+    grid-template-rows: minmax(420px, 1fr) minmax(260px, .62fr);
+    grid-template-areas:
+      "script takes"
+      "inspector inspector";
+    overflow: hidden;
+  }
+  .inspector {
+    display: grid;
+    grid-template-columns: minmax(360px, 46%) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-content: start;
+  }
+  .inspector-head { grid-column: 1 / -1; }
+  .inspector video { grid-column: 1; }
+  .player-range,
+  .player-members,
+  .inspector-section { grid-column: 2; }
+  .search-wrap { width: min(560px, 46vw); }
+}
+
+/* Single-column review flow: player and decisions stay usable before script browsing. */
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  .topbar { align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+  .top-actions { width: 100%; overflow-x: auto; padding-bottom: 1px; }
+  .app-shell { height: auto; min-height: calc(100vh - 54px); }
+  .utility-row { align-items: stretch; flex-direction: column; }
+  .search-wrap { width: 100%; }
+  .toolbar-summary { justify-content: flex-start; overflow-x: auto; }
+  .workspace {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      "inspector"
+      "takes"
+      "script";
+    overflow: visible;
+  }
+  .inspector { display: block; min-height: 320px; }
+  .panel { min-height: 420px; }
+  .script-column { min-height: 340px; }
+  .inspector-head { position: static; }
+}
+
+@media (max-width: 680px) {
+  .topbar { padding: 8px 10px; }
+  .brand { gap: 8px; }
+  .brand h1 { font-size: 16px; }
+  .status-pill { display: none; }
+  .toolbar { padding: 7px 8px; }
+  .episode-picks { margin-inline: -1px; }
+  .toolbar-summary { gap: 5px; }
+  .take-row {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+  .confidence-rail {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: auto auto auto;
+    justify-content: start;
+    text-align: left;
+  }
+  .take-actions { gap: 5px; }
+  .decision-button,
+  .placement-button { min-height: 30px; padding-inline: 8px; }
+  .project-switch span { display: none; }
+  .project-switch select { max-width: 150px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .001ms !important; animation-duration: .001ms !important; }
+}
