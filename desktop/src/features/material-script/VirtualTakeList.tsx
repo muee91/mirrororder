@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
-import type { ReviewTakeGroup } from "../../api/host";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import type { ReviewAngle, ReviewTakeGroup } from "../../api/host";
+import { cameraPresentation, type CameraTone } from "../media/cameraPresentation";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { TAKE_ROW_HEIGHT, takeStatus, virtualRange } from "./model";
 
@@ -39,6 +40,54 @@ function bucketLabel(take: ReviewTakeGroup): string {
   return labels[takeStatus(take)];
 }
 
+interface CameraSlotModel {
+  key: string;
+  tone: CameraTone;
+  label: string;
+  angles: ReviewAngle[];
+}
+
+const STABLE_CAMERA_SLOTS: Array<{ tone: CameraTone; label: string }> = [
+  { tone: "a", label: "A机" },
+  { tone: "b", label: "B机" },
+  { tone: "c", label: "C机" },
+  { tone: "aux", label: "AUX" },
+];
+
+function cameraSlots(angles: ReviewAngle[]): CameraSlotModel[] {
+  const grouped = new Map<CameraTone, ReviewAngle[]>();
+  for (const angle of angles) {
+    const tone = cameraPresentation(angle.camera || "").tone;
+    const rows = grouped.get(tone) ?? [];
+    rows.push(angle);
+    grouped.set(tone, rows);
+  }
+
+  const stable = STABLE_CAMERA_SLOTS.map((slot) => ({
+    key: slot.tone,
+    tone: slot.tone,
+    label: slot.label,
+    angles: grouped.get(slot.tone) ?? [],
+  }));
+
+  const trailing = angles
+    .filter((angle) => {
+      const tone = cameraPresentation(angle.camera || "").tone;
+      return tone === "custom" || tone === "unknown";
+    })
+    .map((angle) => {
+      const presentation = cameraPresentation(angle.camera || "");
+      return {
+        key: `${presentation.tone}-${angle.clip_id}`,
+        tone: presentation.tone,
+        label: presentation.label,
+        angles: [angle],
+      } satisfies CameraSlotModel;
+    });
+
+  return [...stable, ...trailing];
+}
+
 function TakeCard({
   take,
   selected,
@@ -52,10 +101,14 @@ function TakeCard({
   onDragBegin: (groupId: string) => void;
   onDragFinish: () => void;
 }) {
+  const slots = useMemo(() => cameraSlots(take.angles), [take.angles]);
+  const status = takeStatus(take);
+
   return (
     <article
-      className={`take-card take-status-${takeStatus(take)} ${selected ? "is-selected" : ""}`}
+      className={`take-card take-status-${status} ${selected ? "is-selected" : ""}`}
       draggable
+      aria-label={`${take.group_id} · ${bucketLabel(take)} · ${mappingLabel(take)}`}
       onDragStart={(event: DragEvent<HTMLElement>) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData(DRAG_TAKE_MIME, take.group_id);
@@ -65,40 +118,48 @@ function TakeCard({
       onDragEnd={onDragFinish}
     >
       <header className="take-card-heading">
-        <div>
-          <div className="take-title-row">
-            <strong>{take.group_id}</strong>
-            {take.take_index > 1 ? <span className="tiny-pill">#{take.take_index}</span> : null}
-            <span className={`mapping-source source-${take.effective_mapping.source}`}>
-              {mappingSourceLabel(take.effective_mapping.source)}
-            </span>
-            <span className={`tiny-pill bucket-${takeStatus(take)}`}>{bucketLabel(take)}</span>
-          </div>
-          <p>{mappingLabel(take)}</p>
+        <div className="take-card-identity">
+          <span className="take-card-kicker">TAKE</span>
+          <strong className="take-card-id" title={take.group_id}>{take.group_id}</strong>
+          <span className="take-card-index">#{take.take_index}</span>
+        </div>
+        <div className="take-card-state">
+          <span className={`mapping-source source-${take.effective_mapping.source}`}>{mappingSourceLabel(take.effective_mapping.source)}</span>
+          <span className={`take-bucket bucket-${status}`}>{bucketLabel(take)}</span>
         </div>
         <div className="take-heading-actions">
           <span className="duration-label">{take.duration.toFixed(1)}s</span>
-          <button type="button" className="take-select" onClick={onSelect}>{selected ? "当前" : "查看"}</button>
+          <button type="button" className="take-select" onClick={onSelect} aria-pressed={selected}>{selected ? "当前" : "查看"}</button>
         </div>
       </header>
+
+      <div className="take-card-mapping" title={mappingLabel(take)}>{mappingLabel(take)}</div>
 
       <p className={`take-transcript ${take.transcript.text ? "" : "is-empty"}`}>
         {take.transcript.text || "无可靠对白"}
       </p>
 
-      <div className="angle-strip" aria-label={`${take.group_id} 机位`}>
-        {take.angles.map((angle) => <AngleEvidenceCard angle={angle} compact key={angle.clip_id} />)}
+      <div className="take-camera-strip" aria-label={`${take.group_id} 机位槽位`}>
+        {slots.map((slot) => {
+          const primary = slot.angles[0] ?? null;
+          return (
+            <section className={`take-camera-slot ${primary ? "has-media" : "is-empty"}`} data-camera-tone={slot.tone} key={slot.key} aria-label={`${slot.label} 槽位`}>
+              <header>
+                <strong>{slot.label}</strong>
+                <span>{slot.angles.length > 1 ? `+${slot.angles.length - 1}` : primary ? "已绑定" : "空"}</span>
+              </header>
+              {primary ? <AngleEvidenceCard angle={primary} compact /> : <div className="take-camera-empty"><span>{slot.label}</span><small>无素材</small></div>}
+            </section>
+          );
+        })}
       </div>
 
-      {take.issues.length > 0 ? (
-        <div className="issue-row take-issues">
-          {take.issues.slice(0, 3).map((issue) => (
-            <span className={`issue-chip issue-${issue.severity}`} key={`${take.group_id}-${issue.code}`}>
-              {issue.label}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <div className="take-issue-slot" aria-label="Take 问题">
+        {take.issues.slice(0, 3).map((issue) => (
+          <span className={`issue-chip issue-${issue.severity}`} key={`${take.group_id}-${issue.code}`}>{issue.label}</span>
+        ))}
+        {take.issues.length > 3 ? <span className="issue-overflow">+{take.issues.length - 3}</span> : null}
+      </div>
     </article>
   );
 }
