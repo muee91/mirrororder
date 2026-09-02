@@ -5,9 +5,12 @@ import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModel
 import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord, type SlateStatus } from "../../api/production";
 import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
 import { SlateRecordClient } from "../../api/slateRecords";
+import { cameraPresentation } from "../media/cameraPresentation";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
 import { SlateWorkbench } from "./SlateWorkbench";
+import "../media/camera-presentation.css";
 import "./golden-slate.css";
+import "./golden-slate-media-experience.css";
 
 interface Props {
   baseUrl: string;
@@ -310,6 +313,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
   const [takePickerOpen, setTakePickerOpen] = useState(false);
   const [takeSearch, setTakeSearch] = useState("");
   const [playbackFailedClipId, setPlaybackFailedClipId] = useState("");
+  const [playbackRetry, setPlaybackRetry] = useState(0);
   const playerRef = useRef<HTMLVideoElement | null>(null);
 
   async function reload(preferredRecordId?: string): Promise<void> {
@@ -328,6 +332,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     const selected = nextDrafts.find((row) => row.record_id === nextSelected) ?? null;
     setSelectedClipId(selected?.preferred_clip_id || (selected?.attachments[0] ? attachmentKey(selected.attachments[0]) : ""));
     setPlaybackFailedClipId("");
+    setPlaybackRetry(0);
     setMessage(`Slate r${nextBoard.revision} · ${nextDrafts.length} 条`);
   }
 
@@ -414,6 +419,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     setSelectedRecordId(recordId);
     setSelectedClipId(row?.preferred_clip_id || (row?.attachments[0] ? attachmentKey(row.attachments[0]) : ""));
     setPlaybackFailedClipId("");
+    setPlaybackRetry(0);
+  }
+
+  function selectClip(clipId: string): void {
+    setSelectedClipId(clipId);
+    setPlaybackFailedClipId("");
+    setPlaybackRetry(0);
   }
 
   function addBlank(seed?: Partial<Draft>): Draft {
@@ -707,6 +719,12 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && takePickerOpen) {
+        event.preventDefault();
+        setTakePickerOpen(false);
+        setTakeSearch("");
+        return;
+      }
       const target = event.target as HTMLElement | null;
       const editing = Boolean(target?.closest("input, textarea, select, [contenteditable=true]"));
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void shortcutActionsRef.current.saveAll(); return; }
@@ -716,7 +734,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     };
     globalThis.addEventListener("keydown", keydown);
     return () => globalThis.removeEventListener("keydown", keydown);
-  }, []);
+  }, [takePickerOpen]);
 
   function mediaCell(draft: Draft, camera: "A" | "B" | "C" | "AUX") {
     const row = primaryAttachment(draft, camera);
@@ -726,7 +744,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     const angle = findReviewAngle(review, row.item.clip_id, row.item.media_id);
     const model = angle ? mediaCardFromAngle(angle, row.item) : mediaCardFromAttachment(row.item);
     model.duplicateCount = row.count;
-    return <MirrorOrderMediaCard model={model} compact selected={draft.record_id === selectedRecordId && model.id === selectedClipId} preferred={draft.preferred_clip_id === model.id} onSelect={() => { selectRecord(draft.record_id); setSelectedClipId(model.id); }} />;
+    return <MirrorOrderMediaCard model={model} compact selected={draft.record_id === selectedRecordId && model.id === selectedClipId} preferred={draft.preferred_clip_id === model.id} onSelect={() => { selectRecord(draft.record_id); selectClip(model.id); }} />;
   }
 
   function renderRows(rows: Draft[]) {
@@ -806,9 +824,20 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
 
       {takePickerOpen ? (
         <section className="golden-take-picker" aria-label="加入 Take / 镜头">
-          <header><strong>加入 Take / 镜头</strong><input autoFocus value={takeSearch} onChange={(event) => setTakeSearch(event.target.value)} placeholder="搜索 Take / 机位 / 文件名 / 对白" /><button type="button" className="secondary" onClick={() => setTakePickerOpen(false)}>关闭</button></header>
+          <header><strong>加入 Take / 镜头</strong><input autoFocus value={takeSearch} onChange={(event) => setTakeSearch(event.target.value)} placeholder="搜索 Take / 机位 / 文件名 / 对白" /><button type="button" className="secondary" onClick={() => { setTakePickerOpen(false); setTakeSearch(""); }}>关闭</button></header>
           <div className="golden-take-picker-list">
-            {takeCandidates.map((take) => <button type="button" key={take.group_id} className={usedTakeIds.has(take.group_id) ? "is-used" : ""} onClick={() => addTake(take)}><strong>T{take.take_index}</strong><span>{take.angles.map((angle) => `${angle.camera || "?"} ${angle.name}`).join(" · ")}</span><small>{take.transcript.text || `${take.duration.toFixed(1)}s · ${take.angles.length} 机位`}</small></button>)}
+            {takeCandidates.map((take) => (
+              <button type="button" key={take.group_id} className={usedTakeIds.has(take.group_id) ? "is-used" : ""} onClick={() => addTake(take)}>
+                <strong>T{take.take_index}</strong>
+                <span className="golden-take-picker-angles">
+                  {take.angles.map((angle) => {
+                    const camera = cameraPresentation(angle.camera || "?");
+                    return <span className="golden-take-angle" data-camera-tone={camera.tone} key={angle.clip_id}><strong>{camera.label}</strong><em title={angle.name}>{angle.name}</em></span>;
+                  })}
+                </span>
+                <small>{take.transcript.text || `${take.duration.toFixed(1)}s · ${take.angles.length} 机位`}</small>
+              </button>
+            ))}
             {!takeCandidates.length ? <span className="golden-take-picker-empty">没有匹配 Take。</span> : null}
           </div>
         </section>
@@ -831,11 +860,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
                 <div className="golden-inspector-head"><div><strong>选中素材</strong><span>EP {selected.episode ?? "—"} / 场 {selected.scene || selected.script_scene_id || "—"} / 镜 {selected.shot || "—"} / 次 {selected.take_number ?? "—"}</span></div>{selected.dirty ? <em>未保存</em> : null}</div>
                 <div className="golden-slate-player">
                   {selectedAngle?.playback.url && selectedAngle.playback.available !== false && !selectedPlaybackFailed ? (
-                    <video ref={playerRef} key={selectedAngle.clip_id} src={selectedAngle.playback.url} controls preload="metadata" onError={() => setPlaybackFailedClipId(selectedPlaybackKey)} onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
-                  ) : <div className="golden-player-empty">{selectedPlaybackFailed ? "当前设备无法读取或解码这个素材" : selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
+                    <video ref={playerRef} key={`${selectedAngle.clip_id}-${playbackRetry}`} src={selectedAngle.playback.url} controls preload="metadata" playsInline onError={() => setPlaybackFailedClipId(selectedPlaybackKey)} onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
+                  ) : selectedPlaybackFailed ? (
+                    <div className="golden-player-error"><strong>当前设备无法读取或解码这个素材</strong><span>素材已经定位成功。请先确认素材盘在线；若仍失败，可能是当前 WebView 不支持这个原片编码。</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedClipId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
+                  ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                 </div>
 
-                {episodeCandidates.length ? <section className="golden-episode-candidates"><header><strong>第 {selected.episode} 集候选</strong><span>{episodeCandidates.length} Take</span></header>{episodeCandidates.map((take) => <button type="button" key={take.group_id} onClick={() => addTake(take)}><strong>T{take.take_index}</strong><span>{take.angles.map((angle) => angle.camera || "?").join(" / ")}</span><small>{take.transcript.text || `${take.duration.toFixed(1)}s`}</small></button>)}</section> : null}
+                {episodeCandidates.length ? <section className="golden-episode-candidates"><header><strong>第 {selected.episode} 集候选</strong><span>{episodeCandidates.length} Take</span></header>{episodeCandidates.map((take) => <button type="button" key={take.group_id} onClick={() => addTake(take)}><strong>T{take.take_index}</strong><span>{take.angles.map((angle) => cameraPresentation(angle.camera || "?").label).join(" / ")}</span><small>{take.transcript.text || `${take.duration.toFixed(1)}s`}</small></button>)}</section> : null}
 
                 <section className="golden-inspector-media"><header><strong>机位素材</strong><span>{inspectorAttachments.length}</span></header>
                   {inspectorAttachments.map((attachment) => {
@@ -844,7 +875,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
                     const model = angle ? mediaCardFromAngle(angle, attachment) : mediaCardFromAttachment(attachment);
                     return (
                       <div className="golden-angle-editor" key={`${attachment.clip_id}-${attachment.media_id}`}>
-                        <MirrorOrderMediaCard model={model} selected={key === selectedClipId} preferred={selected.preferred_clip_id === key} showPreview onSelect={setSelectedClipId} onPrefer={(clipId) => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === clipId ? "" : clipId })} />
+                        <MirrorOrderMediaCard model={model} selected={key === selectedClipId} preferred={selected.preferred_clip_id === key} showPreview onSelect={selectClip} onPrefer={(clipId) => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === clipId ? "" : clipId })} />
                         <div className="golden-angle-fields">
                           <label><span>机位</span><input value={attachment.camera} onChange={(event) => patchAttachment(selected.record_id, key, { camera: event.target.value })} /></label>
                           <label><span>景别</span><select value={attachment.shot_type || "unknown"} onChange={(event) => patchAttachment(selected.record_id, key, { shot_type: event.target.value })}>{SHOT_OPTIONS.map((shot) => <option value={shot} key={shot}>{shot}</option>)}</select></label>
