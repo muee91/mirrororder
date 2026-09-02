@@ -53,6 +53,7 @@ describe("MirrorOrder professional UI contracts", () => {
     const media = read("../features/media/mirrororder-media-card.css");
     const slate = read("../features/slate/golden-slate.css");
     expect(media).toContain(".mo-media-card.is-compact { width: 180px; height: 88px; }");
+    expect(media).toContain(".mo-media-card.is-inspector { width: min(300px, 100%); height: 124px; }");
     expect(slate).toContain(".golden-slate-table .col-media { width: 188px; }");
   });
 
@@ -66,13 +67,46 @@ describe("MirrorOrder professional UI contracts", () => {
     expect(css).toContain(".take-issue-slot");
   });
 
-  it("does not regress flagship production surfaces below the 10px typography floor", () => {
+  it("does not regress core production surfaces below the 10px typography floor", () => {
     for (const relative of [
       "../features/media/mirrororder-media-card.css",
+      "../features/media/media-library.css",
       "../features/material-script/material-script.css",
       "../features/material-script/golden-material-script.css",
+      "../features/production/production.css",
+      "../features/planning/planning.css",
+      "../features/editor/timeline.css",
+      "../features/status/status-center.css",
     ]) {
       expect(read(relative), relative).not.toMatch(/font-size:\s*(?:7|8|9)px/);
+    }
+  });
+
+  it("keeps flagship surfaces on the resolved Desktop theme instead of raw OS media queries", () => {
+    for (const relative of [
+      "../features/media/mirrororder-media-card.css",
+      "../features/media/media-library.css",
+      "../features/production/production.css",
+      "../features/planning/planning.css",
+      "../features/editor/timeline.css",
+      "../features/status/status-center.css",
+    ]) {
+      expect(read(relative), relative).not.toContain("prefers-color-scheme");
+    }
+  });
+
+  it("keeps keyboard focus explicit on production controls", () => {
+    for (const relative of [
+      "../features/media/mirrororder-media-card.css",
+      "../features/media/media-library.css",
+      "../features/production/production.css",
+      "../features/planning/planning.css",
+      "../features/editor/timeline.css",
+      "../features/status/status-center.css",
+    ]) {
+      const css = read(relative);
+      expect(css, relative).toContain(":focus-visible");
+      expect(css, relative).not.toContain("outline: none");
     }
   });
 

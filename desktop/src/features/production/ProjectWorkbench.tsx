@@ -162,7 +162,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
 
       <nav className="professional-secondary-nav" aria-label={`${AREAS[area].label}工作区`}>
         <div className="professional-secondary-pages">
-          {areaDefinition.pages.map((item) => (
+          {areaDefinition.pages.filter((item) => item.page !== "media-binding").map((item) => (
             <button type="button" className={page === item.page ? "is-active" : ""} aria-current={page === item.page ? "page" : undefined} key={item.page} onClick={() => navigate(item.page)}>{item.label}</button>
           ))}
         </div>

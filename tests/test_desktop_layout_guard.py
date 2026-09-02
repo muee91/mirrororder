@@ -11,8 +11,8 @@ def read(path: str) -> str:
 def test_desktop_shell_fills_available_canvas() -> None:
     app = read("desktop/src/app/App.tsx")
     redesign = read("desktop/src/app/mirrororder-redesign.css")
-    production = read("desktop/src/features/production/production.css")
     experience = read("desktop/src/features/production/product-experience.css")
+    workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
     assert 'className="app-shell production-app-shell mirrororder-redesign-shell"' in app
     assert 'className="startup-shell"' in app
@@ -24,10 +24,10 @@ def test_desktop_shell_fills_available_canvas() -> None:
     assert "grid-template-columns: 208px minmax(0, 1fr)" in redesign
     assert ".app-main-column" in redesign
     assert ".project-workbench-canvas { flex: 1;" in experience
-    assert ".production-secondary-workspace" in production or ".production-secondary-workspace" in experience
+    assert 'className="project-workbench-main owns-chrome"' in workbench
 
 
-def test_top_level_workspace_and_team_switching_stays_outside_project_tools() -> None:
+def test_global_navigation_and_project_navigation_have_separate_authority() -> None:
     app = read("desktop/src/app/App.tsx")
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
     library = read("desktop/src/features/projects/ProjectLibrary.tsx")
@@ -37,13 +37,19 @@ def test_top_level_workspace_and_team_switching_stays_outside_project_tools() ->
     assert 'surface === "team"' in app
     assert "TeamWebWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
-    assert 'aria-label="项目工具"' not in workbench
-    assert 'className="production-secondary-tabs"' not in workbench
-    assert 'className="production-secondary-back"' in workbench
+
+    assert 'className="professional-project-toolbar"' in workbench
+    assert 'aria-label="制作区域"' in workbench
+    assert 'className="professional-secondary-nav"' in workbench
+    for label in ("素材", "剧本", "剪辑", "审阅"):
+        assert f'label: "{label}"' in workbench
+
+    assert "professional-global-sidebar" in library
     assert 'aria-label="主导航"' in library
-    assert 'aria-label="当前项目制作导航"' in library
-    assert 'onClick={() => openPage("watch")}' in library
-    assert ">团队审阅</button>" in library
+    assert 'aria-label="系统导航"' in library
+    assert "制作区在项目画布顶部切换。" in library
+    assert 'aria-label="当前项目制作导航"' not in library
+    assert 'onClick={() => openPage("watch")}' not in library
 
 
 def test_removed_swiftui_layout_is_not_a_regression_dependency() -> None:

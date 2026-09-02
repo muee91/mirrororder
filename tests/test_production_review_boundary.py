@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_app_production_is_native_and_does_not_embed_team_web_or_timeline() -> None:
+def test_app_production_is_native_and_team_web_remains_a_separate_surface() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
 
@@ -15,24 +15,30 @@ def test_app_production_is_native_and_does_not_embed_team_web_or_timeline() -> N
     assert "ProjectWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
     assert "GoldenSlateWorkbench" in workbench
-    assert "TimelineWorkbench" not in workbench
-    assert "RoughCutWorkbench" not in workbench
-    assert "AssemblyWorkbench" not in workbench
+    assert "RoughCutWorkbench" in workbench
+    assert "AssemblyWorkbench" in workbench
+    assert "TimelineWorkbench" in workbench
+    assert "DeliveryWorkbench" in workbench
 
 
-def test_native_navigation_starts_at_workspace_home_then_opens_multicam_slate() -> None:
+def test_native_navigation_starts_at_workspace_home_and_uses_production_toolbar_resume() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
     library = (ROOT / "desktop/src/features/projects/ProjectLibrary.tsx").read_text(encoding="utf-8")
 
     assert 'useState<AppSurface>("home")' in app
     assert "WorkspaceHome" in app
-    assert 'useState<ProductionPage>("slate")' in workbench
-    for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
+    assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
+    assert 'className="professional-project-toolbar"' in workbench
+    assert 'aria-label="制作区域"' in workbench
+    for label in ("素材", "剧本", "剪辑", "审阅"):
+        assert f'label: "{label}"' in workbench
+    for label in ("场记", "素材库", "Take", "人物", "剧本", "覆盖", "粗剪", "组接", "时间线", "交付", "看片", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
     assert "openTeamProject(project: ProjectSummary)" in app
     assert 'setSurface("team")' in app
-    assert 'aria-label="当前项目制作导航"' in library
+    assert 'aria-label="当前项目制作导航"' not in library
+    assert "制作区在项目画布顶部切换。" in library
     assert '>小镜</button>' in workbench
 
 

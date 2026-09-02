@@ -11,7 +11,6 @@ import {
 import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
 import "./media-library.css";
 import "./camera-presentation.css";
-import "./media-library-experience.css";
 
 interface Props {
   baseUrl: string;
@@ -20,6 +19,7 @@ interface Props {
 }
 
 type Filter = "all" | "auxiliary" | "unindexed" | "labeled";
+type ViewMode = "list" | "grid";
 type PlaybackEntry = { clipId: string; url: string; sourceStart: number };
 type CameraFilterItem = { key: string; label: string; tone: CameraTone; sortOrder: number; count: number };
 
@@ -123,6 +123,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [draft, setDraft] = useState<MediaRole>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [cameraFilter, setCameraFilter] = useState("all");
   const [actor, setActor] = useState(storedActor);
   const [message, setMessage] = useState("正在读取本机素材清单与共享素材角色…");
@@ -194,7 +195,8 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     });
   }, [cameraFilter, filter, inventory, query, roles]);
 
-  const visible = filtered.slice(0, 500);
+  const visibleLimit = viewMode === "grid" ? 160 : 500;
+  const visible = filtered.slice(0, visibleLimit);
   const selectedItem = inventory?.items.find((item) => item.media_id === selectedId) ?? null;
   const selectedPlayback = selectedItem
     ? playbackForItem(host, projectId, selectedItem, playbackByMedia[selectedItem.media_id])
@@ -275,7 +277,11 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       <div className="media-library-toolbar">
         <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件、机位、场景或备注" />
         <div className="media-library-filters" aria-label="素材状态筛选">
-          {([["all", "全部"], ["auxiliary", "辅助素材"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, label]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{label}</button>)}
+          {([["all", "全部"], ["auxiliary", "辅助素材"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{filterLabel}</button>)}
+        </div>
+        <div className="media-library-view-toggle" aria-label="素材显示密度">
+          <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>列表</button>
+          <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>缩略图</button>
         </div>
         <label className="media-library-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="保存时必填" /></label>
       </div>
@@ -291,15 +297,38 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       </div>
 
       <div className="media-library-layout">
-        <div className="media-library-list" role="list">
+        <div className={`media-library-list is-${viewMode}`} role="list" aria-label={viewMode === "grid" ? "素材缩略图" : "素材列表"}>
           {visible.map((item) => {
             const role = roleFor(item, roles);
             const auxiliary = isAuxiliary(role);
             const camera = effectiveCamera(role.camera_override, item.inferred_camera);
             const manualCamera = Boolean(role.camera_override?.trim());
-            const canPlay = Boolean(playbackForItem(host, projectId, item, playbackByMedia[item.media_id]));
+            const preview = playbackForItem(host, projectId, item, playbackByMedia[item.media_id]);
+            const canPlay = Boolean(preview);
             return (
-              <button type="button" className={`media-library-row ${selectedId === item.media_id ? "is-selected" : ""}`} key={item.media_id} onClick={() => select(item)}>
+              <button type="button" className={`media-library-row ${selectedId === item.media_id ? "is-selected" : ""}`} key={item.media_id} onClick={() => select(item)} aria-pressed={selectedId === item.media_id}>
+                <span className="media-library-thumb" data-camera-tone={camera.tone} aria-hidden="true">
+                  {preview ? (
+                    <video
+                      src={preview.url}
+                      muted
+                      preload="metadata"
+                      playsInline
+                      onLoadedMetadata={(event) => {
+                        if (preview.sourceStart > 0) {
+                          try { event.currentTarget.currentTime = preview.sourceStart; } catch { /* metadata may still be settling */ }
+                        }
+                      }}
+                      onMouseEnter={(event) => { void event.currentTarget.play().catch(() => undefined); }}
+                      onMouseLeave={(event) => {
+                        event.currentTarget.pause();
+                        if (preview.sourceStart > 0) {
+                          try { event.currentTarget.currentTime = preview.sourceStart; } catch { /* keep hover scrub best-effort */ }
+                        }
+                      }}
+                    />
+                  ) : <span className="media-library-thumb-fallback">{camera.label}</span>}
+                </span>
                 <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
                 <span className="media-library-name"><strong>{item.display_name}</strong><small>{item.folder_label || "素材"}</small></span>
                 <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{role.scene_id ? `场 ${role.scene_id}` : auxiliary ? "不参与主机位同步" : ""}</small></span>
@@ -311,7 +340,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           {!visible.length ? <p className="empty-copy">当前筛选下没有素材。</p> : null}
         </div>
 
-        <aside className="media-role-inspector">
+        <aside className="media-role-inspector" aria-label="当前素材 Inspector">
           {selectedItem && selectedCamera ? (
             <>
               <section className="media-library-monitor">

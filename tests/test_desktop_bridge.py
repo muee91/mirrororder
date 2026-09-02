@@ -76,25 +76,31 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
     assert "current.registry.preflight_create" in runtime
 
 
-def test_desktop_project_navigation_matches_frozen_demo_surfaces() -> None:
+def test_desktop_project_navigation_matches_production_authority() -> None:
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
     library = read("desktop/src/features/projects/ProjectLibrary.tsx")
 
-    assert 'useState<ProductionPage>("slate")' in workbench
+    assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert "GoldenSlateWorkbench" in workbench
     assert 'const materialScript = page === "takes" || page === "script"' in workbench
     assert "GoldenMaterialScriptWorkbench" in workbench
-    for label in ("素材库", "本机素材", "人物", "审阅", "待处理", "概览"):
+    assert 'className="professional-project-toolbar"' in workbench
+    assert 'aria-label="制作区域"' in workbench
+    assert 'className="professional-secondary-nav"' in workbench
+    for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
-    assert 'aria-label="项目工具"' not in workbench
-    assert 'className="production-secondary-tabs"' not in workbench
-    assert 'className="production-secondary-back"' in workbench
+    for label in ("场记", "素材库", "Take", "人物", "剧本", "覆盖", "粗剪", "组接", "时间线", "交付", "看片", "待处理", "概览"):
+        assert f'label: "{label}"' in workbench
+    assert 'areaDefinition.pages.filter((item) => item.page !== "media-binding")' in workbench
     assert ">小镜</button>" in workbench
     assert "onOpenTake={openTakeFromEvidence}" in workbench
     assert "initialGroupId={materialFocusGroupId}" in workbench
-    assert 'aria-label="当前项目制作导航"' in library
-    assert 'onClick={() => openPage("watch")}' in library
-    assert "TimelineWorkbench" not in workbench
+    assert "TimelineWorkbench" in workbench
+    assert "RoughCutWorkbench" in workbench
+    assert "AssemblyWorkbench" in workbench
+    assert 'aria-label="当前项目制作导航"' not in library
+    assert 'onClick={() => openPage("watch")}' not in library
+    assert "制作区在项目画布顶部切换。" in library
 
 
 def test_team_web_remains_a_separate_review_client() -> None:
