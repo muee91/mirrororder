@@ -420,6 +420,18 @@ export class HostConnection {
         `review-model project_id 不匹配：请求 ${project}，返回 ${payload.project.project_id}`,
       );
     }
+    // Review deliberately exposes opaque clip routes rather than device paths.
+    // The desktop WebView must bind those routes to the Host that produced this
+    // model; relative /api URLs otherwise resolve against the packaged App
+    // origin and fail to play. Canonicalizing here fixes every Review consumer
+    // while preserving advanced Host addresses and the media identity boundary.
+    for (const take of payload.take_groups ?? []) {
+      for (const angle of take.angles ?? []) {
+        if (angle.clip_id?.trim() && angle.playback) {
+          angle.playback.url = this.mediaUrl(project, angle.clip_id);
+        }
+      }
+    }
     return payload;
   }
 
