@@ -1,0 +1,313 @@
+/* MirrorOrder Design System v2
+ * Loaded last. This layer defines semantic production UI primitives without
+ * forcing every workspace into the same visual template.
+ */
+
+:root {
+  --mo-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mo-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --mo-surface-app: #0b0f13;
+  --mo-surface-sidebar: #0e1216;
+  --mo-surface-pane: #10151a;
+  --mo-surface-raised: #151b20;
+  --mo-surface-control: #11171c;
+  --mo-surface-hover: #171f26;
+  --mo-surface-selected: #182535;
+
+  --mo-border-subtle: #202830;
+  --mo-border-default: #29333d;
+  --mo-border-strong: #3a4651;
+
+  --mo-text-primary: #e2e8ed;
+  --mo-text-secondary: #a6b1ba;
+  --mo-text-muted: #778590;
+  --mo-text-disabled: #56626c;
+
+  --mo-accent: #6fa7e8;
+  --mo-accent-strong: #8bb9ee;
+  --mo-accent-soft: rgba(95, 151, 215, .14);
+  --mo-success: #65bb87;
+  --mo-warning: #d0aa54;
+  --mo-danger: #d66f6f;
+
+  --mo-radius-control: 5px;
+  --mo-radius-pane: 4px;
+  --mo-radius-overlay: 8px;
+
+  --mo-control-sm: 28px;
+  --mo-control-md: 32px;
+  --mo-pane-gap: 1px;
+
+  --mo-font-xs: 10px;
+  --mo-font-sm: 11px;
+  --mo-font-md: 12px;
+  --mo-font-lg: 14px;
+  --mo-font-xl: 17px;
+
+  --mo-focus-ring: 0 0 0 2px rgba(111, 167, 232, .34);
+}
+
+html[data-mirrororder-theme="light"] {
+  --mo-surface-app: #f7f8fa;
+  --mo-surface-sidebar: #f1f4f6;
+  --mo-surface-pane: #ffffff;
+  --mo-surface-raised: #f5f7f9;
+  --mo-surface-control: #ffffff;
+  --mo-surface-hover: #edf2f5;
+  --mo-surface-selected: #e7f0fb;
+
+  --mo-border-subtle: #e3e8ec;
+  --mo-border-default: #d4dce3;
+  --mo-border-strong: #b9c5cf;
+
+  --mo-text-primary: #26313a;
+  --mo-text-secondary: #52606b;
+  --mo-text-muted: #74818c;
+  --mo-text-disabled: #a3adb5;
+
+  --mo-accent: #3f79b9;
+  --mo-accent-strong: #2f659f;
+  --mo-accent-soft: rgba(63, 121, 185, .10);
+  --mo-success: #3d8e5d;
+  --mo-warning: #a57922;
+  --mo-danger: #b95151;
+  --mo-focus-ring: 0 0 0 2px rgba(63, 121, 185, .24);
+}
+
+@media (prefers-color-scheme: light) {
+  html:not([data-mirrororder-theme]),
+  html[data-mirrororder-theme="system"] {
+    --mo-surface-app: #f7f8fa;
+    --mo-surface-sidebar: #f1f4f6;
+    --mo-surface-pane: #ffffff;
+    --mo-surface-raised: #f5f7f9;
+    --mo-surface-control: #ffffff;
+    --mo-surface-hover: #edf2f5;
+    --mo-surface-selected: #e7f0fb;
+    --mo-border-subtle: #e3e8ec;
+    --mo-border-default: #d4dce3;
+    --mo-border-strong: #b9c5cf;
+    --mo-text-primary: #26313a;
+    --mo-text-secondary: #52606b;
+    --mo-text-muted: #74818c;
+    --mo-text-disabled: #a3adb5;
+    --mo-accent: #3f79b9;
+    --mo-accent-strong: #2f659f;
+    --mo-accent-soft: rgba(63, 121, 185, .10);
+    --mo-success: #3d8e5d;
+    --mo-warning: #a57922;
+    --mo-danger: #b95151;
+    --mo-focus-ring: 0 0 0 2px rgba(63, 121, 185, .24);
+  }
+}
+
+html, body, button, input, textarea, select { font-family: var(--mo-font-sans); }
+body { color: var(--mo-text-primary); background: var(--mo-surface-app); }
+
+/* Keyboard grammar: never remove focus without replacing it. */
+:where(button, input, textarea, select, summary, [tabindex]):focus { outline: none; }
+:where(button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 1px solid var(--mo-accent);
+  outline-offset: 1px;
+  box-shadow: var(--mo-focus-ring);
+}
+
+button {
+  min-height: var(--mo-control-sm);
+  border-color: var(--mo-border-default);
+  border-radius: var(--mo-radius-control);
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-control);
+  font-size: var(--mo-font-sm);
+  font-weight: 620;
+}
+button:hover:not(:disabled) { border-color: var(--mo-border-strong); background: var(--mo-surface-hover); }
+button.secondary { border-color: var(--mo-border-default); color: var(--mo-text-secondary); background: var(--mo-surface-raised); }
+button:disabled { color: var(--mo-text-disabled); }
+
+input, textarea, select {
+  border-color: var(--mo-border-default);
+  border-radius: var(--mo-radius-control);
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-control);
+  font-size: var(--mo-font-sm);
+}
+
+.eyebrow {
+  color: var(--mo-text-muted);
+  font-size: var(--mo-font-xs);
+  letter-spacing: .065em;
+}
+
+/* App chrome and pane grammar. */
+.app-shell,
+.production-app-shell,
+.main-stage,
+.project-production-workbench { background: var(--mo-surface-app); }
+.global-sidebar { border-color: var(--mo-border-subtle); background: var(--mo-surface-sidebar); }
+.project-toolbar,
+.assistant-context-drawer,
+.assistant-drawer-heading { border-color: var(--mo-border-subtle); background: var(--mo-surface-pane); }
+
+.project-toolbar-main { min-height: 50px; }
+.project-identity h1 { color: var(--mo-text-primary); font-size: var(--mo-font-lg); }
+.project-workbench-primary {
+  border-color: var(--mo-border-default);
+  border-radius: 6px;
+  background: var(--mo-surface-raised);
+}
+.project-workbench-primary button,
+.project-workbench-secondary button,
+.project-workbench-utility button { font-size: var(--mo-font-sm); }
+.project-workbench-primary button { min-height: 28px; border-radius: 4px; color: var(--mo-text-muted); }
+.project-workbench-primary button:hover,
+.project-workbench-secondary button:hover { color: var(--mo-text-primary); background: var(--mo-surface-hover); }
+.project-workbench-primary button.is-active,
+.project-workbench-secondary button.is-active {
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-selected);
+  box-shadow: inset 0 0 0 1px var(--mo-border-strong);
+}
+.project-workbench-secondary { min-height: 34px; border-color: var(--mo-border-subtle); background: var(--mo-surface-app); }
+.project-workbench-secondary button { min-height: 26px; color: var(--mo-text-muted); }
+.project-workbench-utility button { color: var(--mo-text-secondary); background: transparent; }
+.project-workbench-utility button.is-active { color: var(--mo-text-primary); background: var(--mo-surface-selected); }
+
+.project-workbench-main { padding: 8px 10px 12px; }
+.has-assistant-drawer .project-workbench-main { border-color: var(--mo-border-subtle); }
+.assistant-context-drawer { background: var(--mo-surface-pane); }
+
+/* Pane, table and list primitives. Feature workspaces can remain visually distinct. */
+.production-panel,
+.panel,
+.inspector,
+.phase-placeholder,
+.offline-state {
+  border-color: var(--mo-border-default);
+  border-radius: var(--mo-radius-pane);
+  box-shadow: none;
+}
+
+:where(table) { font-variant-numeric: tabular-nums; }
+:where(code, .timecode, [data-timecode], .media-id, .technical-value) { font-family: var(--mo-font-mono); font-variant-numeric: tabular-nums; }
+
+/* Keep low-frequency workspace controls legible instead of shrinking them to 7–9 px. */
+.workspace-control > summary,
+.workspace-control > summary small,
+.workspace-control-body label,
+.workspace-advanced label,
+.workspace-advanced > summary,
+.workspace-control-actions button,
+.workspace-advanced button,
+.workspace-control-body input,
+.workspace-advanced input { font-size: var(--mo-font-xs); }
+.workspace-control > summary { min-height: 40px; }
+.workspace-control-body input,
+.workspace-advanced input { min-height: var(--mo-control-sm); }
+
+.count-pill { font-size: var(--mo-font-xs); }
+
+/* Three-level feedback grammar: toast = transient; inline/state center remain durable. */
+.app-notice {
+  max-width: min(560px, calc(100vw - 260px));
+  border-color: var(--mo-border-default);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--mo-text-secondary);
+  background: color-mix(in srgb, var(--mo-surface-pane) 94%, transparent);
+  font-size: var(--mo-font-sm);
+  line-height: 1.35;
+  white-space: normal;
+}
+.app-notice.is-error { border-color: color-mix(in srgb, var(--mo-danger) 58%, var(--mo-border-default)); color: var(--mo-danger); }
+
+.status-dot.status-connected,
+.status-connected .status-dot { background: var(--mo-success); }
+.status-dot.status-error,
+.status-error .status-dot { background: var(--mo-danger); }
+.status-dot.status-connecting,
+.status-dot.status-starting,
+.status-connecting .status-dot,
+.status-starting .status-dot { background: var(--mo-warning); }
+
+/* Slate remains a production ledger, not a card dashboard. */
+.golden-slate-workbench { color: var(--mo-text-primary); background: var(--mo-surface-app); }
+.golden-slate-toolbar,
+.golden-slate-quick,
+.golden-slate-section > header,
+.golden-slate-inspector,
+.golden-inspector-head,
+.golden-slate-footer,
+.golden-slate-review-tools {
+  border-color: var(--mo-border-subtle);
+  background: var(--mo-surface-pane);
+}
+.golden-slate-toolbar { height: 50px; }
+.golden-slate-title > strong { color: var(--mo-text-primary); font-size: 13px; }
+.golden-slate-title > span,
+.golden-slate-section > header small,
+.golden-inspector-head span,
+.golden-inspector-head em { font-size: var(--mo-font-xs); }
+.golden-slate-actions input,
+.golden-slate-actions button,
+.golden-slate-quick input,
+.golden-slate-quick button { font-size: var(--mo-font-sm); }
+
+.golden-slate-table { font-size: var(--mo-font-sm); }
+.golden-slate-table th {
+  height: 32px;
+  border-color: var(--mo-border-default);
+  color: var(--mo-text-muted);
+  background: var(--mo-surface-raised);
+  font-size: var(--mo-font-sm);
+}
+.golden-slate-table td {
+  border-color: var(--mo-border-subtle);
+  background: var(--mo-surface-app);
+}
+.golden-slate-table tr:hover td { background: var(--mo-surface-hover); }
+.golden-slate-table tr.is-selected td { background: var(--mo-surface-selected); }
+.golden-slate-table tr.is-selected td:first-child { box-shadow: inset 2px 0 0 var(--mo-accent); }
+.golden-slate-table input { color: var(--mo-text-primary); font-size: var(--mo-font-sm); }
+.golden-slate-table input:hover,
+.golden-slate-table input:focus { border-color: var(--mo-border-strong); background: var(--mo-surface-control); }
+.golden-slate-empty-media { border-color: var(--mo-border-default); border-radius: 5px; color: var(--mo-text-muted); background: var(--mo-surface-raised); font-size: var(--mo-font-sm); }
+
+.golden-status-control { border-radius: 4px; }
+.golden-status-control .status-label { font-size: var(--mo-font-sm); }
+.golden-status-control.status-usable .status-dot { background: var(--mo-success); }
+.golden-status-control.status-partial .status-dot { background: var(--mo-warning); }
+.golden-status-control.status-ng .status-dot { background: var(--mo-danger); }
+
+.golden-take-picker {
+  border-color: var(--mo-border-strong);
+  border-radius: var(--mo-radius-overlay);
+  background: var(--mo-surface-pane);
+}
+.golden-take-picker > header input,
+.golden-take-picker-list span,
+.golden-take-picker-list small,
+.golden-take-picker-empty { font-size: var(--mo-font-sm); }
+.golden-take-picker-list > button { border-radius: 4px; }
+
+/* Inspector should read as a contextual pane, never as a second navigation system. */
+.golden-slate-inspector,
+.assistant-context-drawer { border-radius: 0; box-shadow: none; }
+.golden-inspector-head strong,
+.golden-inspector-media > header strong { font-size: var(--mo-font-sm); }
+.golden-slate-player { border-radius: 4px; }
+
+/* Controls and overlays share a compact desktop radius scale. */
+:where(.production-panel, .parse-preview, .identity-row, .assistant-item, .occurrence-row, .take-card, .take-inspector, .script-scene) {
+  border-radius: var(--mo-radius-pane);
+}
+
+@media (max-width: 1180px) {
+  .project-workbench-primary button { padding-inline: 8px; }
+  .project-workbench-main { padding-inline: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .001ms !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
+}
