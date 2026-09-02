@@ -64,7 +64,7 @@ describe("Swift Demo fidelity guards", () => {
     const theme = source("../material-script/golden-material-script-theme.css");
     const main = source("../../main.tsx");
     const experience = source("../production/product-experience.css");
-    expect(workbench).toContain('onBack={() => setPage("slate")}');
+    expect(workbench).toContain('onBack={() => navigate("slate")}');
     expect(workbench).not.toContain("golden-secondary-workspace");
     expect(material).toContain("golden-ms-back");
     expect(material).toContain("‹ 场记");

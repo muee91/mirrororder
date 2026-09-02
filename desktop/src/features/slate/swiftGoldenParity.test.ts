@@ -72,7 +72,8 @@ describe("Swift golden product fidelity", () => {
     expect(css).toContain("grid-template-columns: minmax(220px,1fr) auto 1px auto auto auto");
     expect(slate).toContain("shortcutActionsRef");
     expect(slate).toContain('globalThis.addEventListener("keydown", keydown)');
-    expect(slate).toContain("}, []);");
+    expect(slate).toContain('if (event.key === "Escape" && takePickerOpen)');
+    expect(slate).toContain("}, [takePickerOpen]);");
     expect(slate).not.toContain("track.clips =");
     expect(css).toContain("height: 52px");
     expect(css).toContain("height: 38px");
@@ -178,7 +179,7 @@ describe("Swift golden product fidelity", () => {
     expect(library).toContain('aria-label="当前项目制作导航"');
     expect(library).toContain('onClick={() => openPage("watch")}');
     expect(library).toContain(">团队审阅</button>");
-    expect(library).toContain("workspace.projects.slice(0, 3)");
+    expect(library).toContain("workspace.projects.filter((project) => project.project_id !== selectedProjectId).slice(0, 3)");
     expect(library).toContain("最近项目");
     expect(library).toContain("复制局域网协作链接");
     expect(library).toContain("永久删除项目…");

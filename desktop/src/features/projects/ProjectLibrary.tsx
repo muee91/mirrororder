@@ -145,6 +145,13 @@ export function ProjectLibrary({
             className="project-current-card"
             onClick={() => onSelectProject(selectedProject)}
             onContextMenu={(event) => { event.preventDefault(); openMenu(selectedProject, event.clientX, event.clientY); }}
+            onKeyDown={(event) => {
+              if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
+                event.preventDefault();
+                const box = event.currentTarget.getBoundingClientRect();
+                openMenu(selectedProject, box.right - 204, box.bottom + 4);
+              }
+            }}
           >
             <span className={`project-current-status status-${selectedPresentation?.statusTone ?? "idle"}`} aria-hidden="true" />
             <span><strong>{selectedProject.name || selectedProject.project_id}</strong><small>{selectedPresentation?.sidebarSubtitle ?? "项目"}</small></span>
@@ -172,14 +179,22 @@ export function ProjectLibrary({
           <div className="project-nav-section-label"><span>切换项目</span><small>最近使用</small></div>
           <div className="project-recent-list">
             {switchProjects.map((project) => {
-              const presentation = projectPresentation(project, activities[project.project_id]);
-              const taskActive = activities[project.project_id]?.state === "active";
+              const activity = activities[project.project_id];
+              const presentation = projectPresentation(project, activity);
+              const taskActive = activity?.state === "active";
               return (
                 <button
                   type="button"
                   key={project.project_id}
                   onClick={() => onSelectProject(project)}
                   onContextMenu={(event) => { event.preventDefault(); openMenu(project, event.clientX, event.clientY); }}
+                  onKeyDown={(event) => {
+                    if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
+                      event.preventDefault();
+                      const box = event.currentTarget.getBoundingClientRect();
+                      openMenu(project, box.right - 204, box.bottom + 4);
+                    }
+                  }}
                 >
                   <span><strong>{project.name || project.project_id}</strong><small>{presentation.sidebarSubtitle}</small></span>
                   {taskActive ? <span className="project-activity-spinner" /> : null}
