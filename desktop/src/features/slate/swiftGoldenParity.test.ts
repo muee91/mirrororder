@@ -180,7 +180,7 @@ describe("Swift golden product fidelity", () => {
     expect(library).toContain('onClick={() => openPage("watch")}');
     expect(library).toContain(">团队审阅</button>");
     expect(library).toContain("workspace.projects.filter((project) => project.project_id !== selectedProjectId).slice(0, 3)");
-    expect(library).toContain("最近项目");
+    expect(library).toContain("最近使用");
     expect(library).toContain("复制局域网协作链接");
     expect(library).toContain("永久删除项目…");
     expect(redesign).toContain("grid-template-columns: 208px minmax(0, 1fr)");
