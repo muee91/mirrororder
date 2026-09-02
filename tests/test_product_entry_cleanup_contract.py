@@ -77,7 +77,7 @@ def test_document_authority_has_one_front_door() -> None:
     assert "当前 authority" in docs
     assert "app-information-architecture.md" in docs
     assert "ux-principles.md" in docs
-    assert "一次性 Codex prompt" in docs
+    assert "一次性执行 prompt / closeout / integration script" in docs
     assert "docs/README.md" in readme
     assert "docs/README.md" in agents
     assert "docs/app-information-architecture.md" in agents
