@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import "./status-indicators.css";
 
 export type ConnectionIndicatorState = "ready" | "connecting" | "offline" | "error";
@@ -82,7 +83,7 @@ export function TaskStatusIndicator({
       data-progress={bounded === null ? "none" : "value"}
       role="status"
       aria-label={bounded === null ? text : `${text} ${Math.round(bounded)}%`}
-      style={{ "--mo-task-progress": bounded === null ? "0%" : `${bounded}%` } as React.CSSProperties}
+      style={{ "--mo-task-progress": bounded === null ? "0%" : `${bounded}%` } as CSSProperties}
     >
       <span className="mo-task-status-icon" aria-hidden="true">{TASK_ICONS[state]}</span>
       <span className="mo-task-status-label">{text}</span>
