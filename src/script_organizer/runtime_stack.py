@@ -6,6 +6,7 @@ from typing import Any
 
 RUNTIME_INSTALL_ORDER = (
     "device_media",
+    "media_playback",
     "automation",
     "review_read_model",
     "editorial",
@@ -37,19 +38,23 @@ _LAST_ERROR = ""
 def _install_stack_once() -> None:
     """Install the Host runtime in dependency order using lazy imports.
 
-    Imports are intentionally staged. Media-role projections must be installed
-    before Coverage/Rough Cut modules bind their module-level projection
-    functions. Desktop installs before device-model restoration so the durable
-    device task manager and local runtime management surface exist first. The
-    durable media-inventory adapter then owns scan submission while Desktop
-    retains only lightweight binding/status surfaces. Explicit Slate file-drop
-    resolution installs after device-media identity. Project-location installs
-    last because it only adds a local, lightweight path resolver for explicit
-    Desktop reveal actions.
+    Device-media identity installs first, then the media-playback adapter binds
+    standards-compliant byte-range responses before later handlers wrap the
+    Host. Media-role projections must be installed before Coverage/Rough Cut
+    modules bind their module-level projection functions. Desktop installs
+    before device-model restoration so the durable device task manager and
+    local runtime management surface exist first. The durable media-inventory
+    adapter then owns scan submission while Desktop retains only lightweight
+    binding/status surfaces. Explicit Slate file-drop resolution installs after
+    device-media identity. Project-location installs last because it only adds
+    a local, lightweight path resolver for explicit Desktop reveal actions.
     """
 
     from .device_media_runtime import install_device_media_runtime
     install_device_media_runtime()
+
+    from .media_playback_runtime import install_media_playback_runtime
+    install_media_playback_runtime()
 
     from .automation_runtime import install_automation_runtime
     install_automation_runtime()
