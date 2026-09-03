@@ -7,6 +7,7 @@ import {
   programMediaAtPlayhead,
   selectedSourceState,
   sequenceFps,
+  videoClipAtPlayhead,
 } from "./editorPlayback";
 import "./editor-monitors.css";
 
@@ -86,6 +87,13 @@ export function EditorMonitors({
     const current = selectedSourceState(project, sequence, selectedClip);
     return current ? { ...current, sourceFrame: selectedClip?.source_in ?? 0 } : null;
   }, [fps, project, selectedClip, sequence, sourcePreview]);
+  const programLocated = useMemo(
+    () => videoClipAtPlayhead(sequence, playhead),
+    [playhead, sequence],
+  );
+  const programAnglePending = Boolean(
+    programLocated?.clip.multicam_group_id && !programLocated.clip.selected_angle_source_id,
+  );
   const programState = useMemo(
     () => programMediaAtPlayhead(project, sequence, playhead),
     [playhead, project, sequence],
@@ -251,8 +259,16 @@ export function EditorMonitors({
           <header><strong>Program Monitor</strong><span>{monitorLabel(playhead, fps)}</span></header>
           {programUrl && programState ? (
             <video ref={programVideoRef} src={programUrl} muted playsInline preload="metadata" key={`program-${programState.source.source_id}`} />
-          ) : <div className="monitor-empty">当前 playhead 没有启用的视频 clip。</div>}
-          <footer>{programState ? `${programState.clip.metadata.segment_id || programState.clip.clip_id} · ${programState.source.name || programState.source.clip_id}` : "—"}</footer>
+          ) : (
+            <div className="monitor-empty">
+              {programAnglePending ? "当前多机位片段机位待选；在 Timeline Inspector 明确选择 A/B/C 后预览。" : "当前 playhead 没有启用的视频 clip。"}
+            </div>
+          )}
+          <footer>
+            {programAnglePending && programLocated
+              ? `${programLocated.clip.metadata.segment_id || programLocated.clip.clip_id} · 机位待选`
+              : programState ? `${programState.clip.metadata.segment_id || programState.clip.clip_id} · ${programState.source.name || programState.source.clip_id}` : "—"}
+          </footer>
         </article>
       </div>
 

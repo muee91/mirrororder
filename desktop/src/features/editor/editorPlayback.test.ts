@@ -80,9 +80,18 @@ describe("editor playback mapping", () => {
     expect(clampPlayhead(sequence(), 999)).toBe(60);
   });
 
-  it("uses the base source directly when no multicam selection is active", () => {
+  it("does not present the base source as an editorial multicam choice", () => {
     const nextSequence = sequence();
     const clip = nextSequence.tracks[0].clips[0];
+    clip.selected_angle_source_id = null;
+    expect(activeSourceId(clip)).toBeNull();
+    expect(programMediaAtPlayhead(project(), nextSequence, 20)).toBeNull();
+  });
+
+  it("still uses the base source for an ordinary single-source clip", () => {
+    const nextSequence = sequence();
+    const clip = nextSequence.tracks[0].clips[0];
+    clip.multicam_group_id = null;
     clip.selected_angle_source_id = null;
     expect(activeSourceId(clip)).toBe("source:a");
     expect(programMediaAtPlayhead(project(), nextSequence, 20)?.sourceFrame).toBe(110);

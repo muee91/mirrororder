@@ -170,6 +170,17 @@ describe("buildRoughCutTimelineProposal", () => {
     expect(result.baseProject.multicam_groups).toEqual([]);
   });
 
+  it("keeps multicam angle unresolved even when Script Supervisor has a preferred base angle", () => {
+    const result = buildRoughCutTimelineProposal(review(), plan(), ntsc23976);
+    const command = result.commands[0];
+    expect(command.type).toBe("insert");
+    if (command.type !== "insert") throw new Error("expected insert");
+    expect(command.clip.source_id).toBe("source:b");
+    expect(command.clip.multicam_group_id).toBe("g1");
+    expect(command.clip.selected_angle_source_id).toBeNull();
+    expect(result.warnings.some((warning) => warning.includes("多机位 Best") && warning.includes("机位保持待选"))).toBe(true);
+  });
+
   it("preserves 24000/1001 timebase while quantizing seconds to frames", () => {
     const result = buildRoughCutTimelineProposal(review(), plan(), ntsc23976);
     const command = result.commands[0];
@@ -178,7 +189,7 @@ describe("buildRoughCutTimelineProposal", () => {
     expect(command.clip.source_id).toBe("source:b");
     expect(command.clip.source_in).toBe(Math.round(22 * 24000 / 1001));
     expect(command.clip.duration).toBe(Math.round(4 * 24000 / 1001));
-    expect(command.clip.selected_angle_source_id).toBe("source:b");
+    expect(command.clip.selected_angle_source_id).toBeNull();
     expect(command.clip.metadata.trim_basis).toBe("script_supervisor_usable_range");
     expect(command.clip.metadata.frame_rate).toBe("24000/1001");
     expect(result.baseProject.sequences[0].frame_rate).toEqual(ntsc23976);

@@ -45,12 +45,14 @@ export function videoClipAtPlayhead(sequence: TimelineSequence, playhead: number
   return null;
 }
 
-export function activeSourceId(clip: TimelineClip): string {
+export function activeSourceId(clip: TimelineClip): string | null {
+  if (clip.multicam_group_id && !clip.selected_angle_source_id) return null;
   return clip.selected_angle_source_id || clip.source_id;
 }
 
 export function sourceForClip(project: TimelineProject, clip: TimelineClip): TimelineSource | null {
   const sourceId = activeSourceId(clip);
+  if (!sourceId) return null;
   return project.sources.find((source) => source.source_id === sourceId) ?? null;
 }
 

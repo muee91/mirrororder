@@ -245,6 +245,13 @@ def test_rejects_selected_multicam_angle_outside_declared_group(tmp_path: Path) 
         export_timeline_snapshot(_config(tmp_path), request, expected_project_id="p1")
 
 
+def test_rejects_unresolved_multicam_angle_instead_of_flattening_the_base_source(tmp_path: Path) -> None:
+    request = _request()
+    request["timeline"]["sequences"][0]["tracks"][0]["clips"][1]["selected_angle_source_id"] = None
+    with pytest.raises(UnsafeTimelineDelivery, match="multicam clip has no selected angle"):
+        export_timeline_snapshot(_config(tmp_path), request, expected_project_id="p1")
+
+
 def test_rejects_multicam_rebase_without_selected_angle_source_start_evidence(tmp_path: Path) -> None:
     config = _config(tmp_path)
     payload = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))

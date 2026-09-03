@@ -40,7 +40,7 @@ function takeFor(review: ReviewModelPayload, groupId: string): ReviewTakeGroup |
   return review.take_groups.find((take) => take.group_id === groupId) ?? null;
 }
 
-function preferredAngle(take: ReviewTakeGroup, candidate: RoughCutCandidate | null): ReviewAngle | null {
+function baseAngleForTake(take: ReviewTakeGroup, candidate: RoughCutCandidate | null): ReviewAngle | null {
   const supervisor = candidate?.script_supervisor ?? {};
   const preferredClipId = typeof supervisor.preferred_clip_id === "string" ? supervisor.preferred_clip_id : "";
   if (preferredClipId) {
@@ -144,8 +144,12 @@ export function buildRoughCutTimelineProposal(
         continue;
       }
       const candidate = candidateFor(segment);
-      const angle = preferredAngle(take, candidate);
-      if (!angle) {
+      // A multicam clip still needs a base source/time coordinate, but choosing
+      // that coordinate is not an editorial camera decision. Script Supervisor
+      // preference may supply a useful base; the Timeline selected angle remains
+      // null until the editor explicitly switches it in Timeline Core.
+      const baseAngle = baseAngleForTake(take, candidate);
+      if (!baseAngle) {
         skipped.push({ segmentId, status: segment.selection_status, reason: "显式 Best 没有可用 angle" });
         continue;
       }
@@ -154,9 +158,9 @@ export function buildRoughCutTimelineProposal(
       const sourceOffset = range?.start ?? 0;
       const durationSeconds = range
         ? range.end - range.start
-        : Math.max(0, angle.source_end !== null ? angle.source_end - angle.source_start : take.duration || angle.duration);
+        : Math.max(0, baseAngle.source_end !== null ? baseAngle.source_end - baseAngle.source_start : take.duration || baseAngle.duration);
       const durationFrames = Math.max(1, secondsToFrames(durationSeconds, rate));
-      const sourceInFrames = secondsToFrames(angle.source_start + sourceOffset, rate);
+      const sourceInFrames = secondsToFrames(baseAngle.source_start + sourceOffset, rate);
       const clipId = `rough:${segmentId}:${take.group_id}`;
       const trimBasis = range ? "script_supervisor_usable_range" : "full_take_range";
       const availableAngleCount = take.angles.filter((item) => item.playback.available !== false).length;
@@ -166,7 +170,7 @@ export function buildRoughCutTimelineProposal(
         proposal_revision: plan.revision,
         segment_id: segmentId,
         group_id: take.group_id,
-        source_clip_id: angle.clip_id,
+        source_clip_id: baseAngle.clip_id,
         decision_source: candidate?.decision_source ?? "explicit_best",
         trim_basis: trimBasis,
         frame_rate: `${rate.numerator}/${rate.denominator}`,
@@ -179,13 +183,13 @@ export function buildRoughCutTimelineProposal(
         track_id: "V1",
         clip: {
           clip_id: clipId,
-          source_id: sourceId(angle.clip_id),
+          source_id: sourceId(baseAngle.clip_id),
           timeline_start: cursor,
           source_in: sourceInFrames,
           duration: durationFrames,
           enabled: true,
           multicam_group_id: availableAngleCount > 1 ? take.group_id : null,
-          selected_angle_source_id: availableAngleCount > 1 ? sourceId(angle.clip_id) : null,
+          selected_angle_source_id: null,
           metadata,
         },
       });
@@ -200,8 +204,14 @@ export function buildRoughCutTimelineProposal(
   if (skipped.length) {
     warnings.push(`${skipped.length} 个剧本段因缺少单一显式 Best / 存在冲突而未进入时间线提议。`);
   }
+  const pendingMulticamAngles = commands.filter(
+    (command) => command.type === "insert" && Boolean(command.clip.multicam_group_id) && !command.clip.selected_angle_source_id,
+  ).length;
+  if (pendingMulticamAngles) {
+    warnings.push(`${pendingMulticamAngles} 个多机位 Best 已进入 Timeline，但机位保持待选；请在 Timeline Inspector 明确选择机位后再交付。`);
+  }
   if (commands.some((command) => command.type === "insert" && command.clip.multicam_group_id && !command.clip.metadata[MULTICAM_SYNC_METADATA_KEY])) {
-    warnings.push("部分多机位 Take 缺少完整同步范围；可以保留当前 base angle，但后续切换机位会 fail closed。 ");
+    warnings.push("部分多机位 Take 缺少完整同步范围；片段仍可进入 Timeline，但同步证据不足时机位预览/切换会 fail closed。 ");
   }
   warnings.push(`Source pool 已注册 ${sources.size} 个可播放 angle；非 Best 素材只有人工 Insert/Overwrite 后才进入 Timeline。`);
   warnings.push(`时间基 ${rate.numerator}/${rate.denominator} fps；所有秒级范围会在提交前量化到整数帧。`);
