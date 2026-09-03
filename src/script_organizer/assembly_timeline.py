@@ -8,7 +8,7 @@ from typing import Any
 from .rough_cut_plan import build_rough_cut_plan
 
 
-ASSEMBLY_CONTRACT = "assembly_timeline.v1"
+ASSEMBLY_CONTRACT = "assembly_timeline.v2"
 
 
 def _as_dict(value: object) -> dict[str, Any]:
@@ -28,8 +28,21 @@ def _float(value: object, default: float = 0.0) -> float:
 
 def _revision(plan_revision: str) -> str:
     return hashlib.sha1(
-        json.dumps({"rough_cut_plan": plan_revision}, sort_keys=True).encode("utf-8")
+        json.dumps({"rough_cut_plan": plan_revision, "contract": ASSEMBLY_CONTRACT}, sort_keys=True).encode("utf-8")
     ).hexdigest()[:20]
+
+
+def _block_id(scene_id: str, block: dict[str, Any]) -> str:
+    raw = {
+        "scene_id": scene_id,
+        "kind": str(block.get("kind", "") or ""),
+        "group_id": str(block.get("group_id", "") or ""),
+        "script_segment_ids": [str(value) for value in _as_list(block.get("script_segment_ids"))],
+    }
+    digest = hashlib.sha1(
+        json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:16]
+    return f"assembly:{digest}"
 
 
 def _primary_candidate(segment: dict[str, Any]) -> dict[str, Any] | None:
@@ -45,29 +58,32 @@ def _primary_candidate(segment: dict[str, Any]) -> dict[str, Any] | None:
     )
 
 
+def _angle_summary(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "clip_id": str(item.get("clip_id", "") or ""),
+        "camera": str(item.get("camera", "") or ""),
+        "shot_type": str(item.get("shot_type", "unknown") or "unknown"),
+        "coverage_role": str(item.get("coverage_role", "unknown") or "unknown"),
+    }
+
+
 def _angle_choice(candidate: dict[str, Any]) -> dict[str, Any]:
     angles = [item for item in _as_list(candidate.get("angles")) if isinstance(item, dict)]
+    summaries = [_angle_summary(item) for item in angles]
     preferred = str(_as_dict(candidate.get("script_supervisor")).get("preferred_clip_id", "") or "")
     if preferred:
         match = next((item for item in angles if str(item.get("clip_id", "") or "") == preferred), None)
         if match:
             return {
                 "status": "manual_preferred",
-                "clip_id": preferred,
-                "camera": str(match.get("camera", "") or ""),
-                "shot_type": str(match.get("shot_type", "unknown") or "unknown"),
-                "coverage_role": str(match.get("coverage_role", "unknown") or "unknown"),
-                "candidates": [],
+                **_angle_summary(match),
+                "candidates": summaries,
             }
     if len(angles) == 1:
-        angle = angles[0]
         return {
             "status": "single_angle",
-            "clip_id": str(angle.get("clip_id", "") or ""),
-            "camera": str(angle.get("camera", "") or ""),
-            "shot_type": str(angle.get("shot_type", "unknown") or "unknown"),
-            "coverage_role": str(angle.get("coverage_role", "unknown") or "unknown"),
-            "candidates": [],
+            **_angle_summary(angles[0]),
+            "candidates": summaries,
         }
     return {
         "status": "pending" if angles else "missing",
@@ -75,15 +91,7 @@ def _angle_choice(candidate: dict[str, Any]) -> dict[str, Any]:
         "camera": "",
         "shot_type": "unknown",
         "coverage_role": "unknown",
-        "candidates": [
-            {
-                "clip_id": str(item.get("clip_id", "") or ""),
-                "camera": str(item.get("camera", "") or ""),
-                "shot_type": str(item.get("shot_type", "unknown") or "unknown"),
-                "coverage_role": str(item.get("coverage_role", "unknown") or "unknown"),
-            }
-            for item in angles
-        ],
+        "candidates": summaries,
     }
 
 
@@ -147,6 +155,7 @@ def _segment_entry(segment: dict[str, Any]) -> dict[str, Any]:
             "speaker": str(script.get("speaker", "") or ""),
             "text": str(script.get("text", "") or ""),
             "selection_status": status,
+            "decision_source": "",
             "group_id": "",
             "angle": {},
             "usable_range": {},
@@ -160,6 +169,7 @@ def _segment_entry(segment: dict[str, Any]) -> dict[str, Any]:
         "speaker": str(script.get("speaker", "") or ""),
         "text": str(script.get("text", "") or ""),
         "selection_status": status,
+        "decision_source": str(candidate.get("decision_source", "") or ""),
         "group_id": str(candidate.get("group_id", "") or ""),
         "angle": angle,
         "usable_range": usable_range,
@@ -170,12 +180,7 @@ def _segment_entry(segment: dict[str, Any]) -> dict[str, Any]:
 
 
 def _merge_scene_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merge consecutive script segments using the same primary Take.
-
-    A logical Take may cover several dialogue segments. Repeating its full source
-    range once per script line would duplicate media, so assembly preview groups
-    consecutive segments with the same primary group into one source block.
-    """
+    """Merge consecutive script segments using the same authoritative primary Take."""
 
     blocks: list[dict[str, Any]] = []
     for entry in entries:
@@ -186,6 +191,7 @@ def _merge_scene_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "kind": "unresolved",
                     "script_segment_ids": [str(entry.get("script_segment_id", "") or "")],
                     "selection_status": str(entry.get("selection_status", "") or ""),
+                    "decision_source": "",
                     "group_id": "",
                     "angle": {},
                     "usable_range": {},
@@ -198,6 +204,7 @@ def _merge_scene_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             previous
             and previous.get("kind") == "source"
             and str(previous.get("group_id", "") or "") == group_id
+            and str(previous.get("decision_source", "") or "") == str(entry.get("decision_source", "") or "")
             and _as_dict(previous.get("usable_range")) == _as_dict(entry.get("usable_range"))
             and _as_dict(previous.get("angle")) == _as_dict(entry.get("angle"))
         ):
@@ -209,6 +216,7 @@ def _merge_scene_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "kind": "source",
                 "script_segment_ids": [str(entry.get("script_segment_id", "") or "")],
                 "selection_status": str(entry.get("selection_status", "") or ""),
+                "decision_source": str(entry.get("decision_source", "") or ""),
                 "group_id": group_id,
                 "angle": dict(_as_dict(entry.get("angle"))),
                 "usable_range": dict(_as_dict(entry.get("usable_range"))),
@@ -226,12 +234,11 @@ def build_assembly_timeline(
     scene_id: str | None = None,
     episode: int | None = None,
 ) -> dict[str, Any]:
-    """Build a read-only assembly preview from explicit Best decisions.
+    """Build the authoritative read-only editorial sequence proposal.
 
-    The preview never writes FCPXML or Selection Manifest. It refuses to invent a
-    creative Take selection and refuses to choose between multiple camera angles
-    unless the script-supervisor board explicitly marks a preferred clip or the
-    Take only has one angle.
+    Python owns Take/range selection semantics. Desktop may resolve local source
+    inventory for playback and quantize seconds into frames, but it must not
+    re-evaluate Best/Keep/Reject, primary Take, or Script Supervisor ranges.
     """
 
     plan = build_rough_cut_plan(project, scene_id=scene_id, episode=episode)
@@ -242,6 +249,7 @@ def build_assembly_timeline(
     for scene in _as_list(plan.get("scenes")):
         if not isinstance(scene, dict):
             continue
+        scene_id_value = str(scene.get("scene_id", "") or "")
         entries = [_segment_entry(item) for item in _as_list(scene.get("segments")) if isinstance(item, dict)]
         blocks = _merge_scene_entries(entries)
         scene_duration = 0.0
@@ -249,6 +257,7 @@ def build_assembly_timeline(
         attention = 0
         cursor = 0.0
         for block in blocks:
+            block["block_id"] = _block_id(scene_id_value, block)
             if block.get("kind") != "source":
                 block["assembly_status"] = "selection_pending"
                 block["timeline_start"] = cursor
@@ -286,7 +295,7 @@ def build_assembly_timeline(
         total_duration += scene_duration
         scenes.append(
             {
-                "scene_id": str(scene.get("scene_id", "") or ""),
+                "scene_id": scene_id_value,
                 "episode": scene.get("episode"),
                 "heading": str(scene.get("heading", "") or ""),
                 "readiness": readiness,
@@ -316,6 +325,7 @@ def build_assembly_timeline(
         "coverage_revision": str(plan.get("coverage_revision", "") or ""),
         "project_id": str(plan.get("project_id", "") or ""),
         "filters": dict(_as_dict(plan.get("filters"))),
+        "timebase": dict(_as_dict(plan.get("timebase"))),
         "readiness": readiness,
         "duration": round(total_duration, 4),
         "summary": {
@@ -332,6 +342,9 @@ def build_assembly_timeline(
             "angle_auto_choice": False,
             "script_supervisor_preferred_angle_allowed": True,
             "script_supervisor_usable_range_allowed": True,
+            "desktop_reselects_take": False,
+            "desktop_reinterprets_usable_range": False,
+            "review_source_inventory_is_editorial_authority": False,
             "writes_selection_manifest": False,
             "writes_fcpxml": False,
             "modifies_source_media": False,

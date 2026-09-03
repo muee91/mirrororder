@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
-import type { RoughCutPlan } from "../../api/production";
-import { buildRoughCutTimelineProposal } from "./timelineSeed";
+import type { AssemblyTimeline } from "../../api/production";
+import { buildAssemblyTimelineProposal } from "./timelineSeed";
 
 function review(): ReviewModelPayload {
   return {
@@ -32,7 +32,7 @@ function review(): ReviewModelPayload {
         context: { episode_ids: [], script_segment_ids: [] },
         automatic_state: {},
         editorial_state: {},
-        effective_mapping: { source: "human", mapping_status: "confirmed", script_segment_ids: ["s1"], episode_ids: [1] },
+        effective_mapping: { source: "human", mapping_status: "confirmed", script_segment_ids: ["s1", "s2"], episode_ids: [1] },
         issues: [],
       },
     ],
@@ -66,16 +66,22 @@ function alternateTake(): ReviewTakeGroup {
   };
 }
 
-function plan(): RoughCutPlan {
+function assembly(): AssemblyTimeline {
   return {
-    contract: "rough_cut_plan.v1",
-    revision: "r1",
+    contract: "assembly_timeline.v2",
+    revision: "ar1",
+    rough_cut_plan_revision: "r1",
     project_id: "p1",
     coverage_revision: "c1",
     filters: {},
     readiness: "needs_review",
+    duration: 4,
     summary: {},
-    semantics: {},
+    semantics: {
+      desktop_reselects_take: false,
+      desktop_reinterprets_usable_range: false,
+      review_source_inventory_is_editorial_authority: false,
+    },
     timebase: { status: "confirmed", source: "fcpxml_sequence", numerator: 24000, denominator: 1001 },
     scenes: [
       {
@@ -83,41 +89,49 @@ function plan(): RoughCutPlan {
         episode: 1,
         heading: "",
         readiness: "needs_review",
+        duration: 4,
         summary: {},
-        segments: [
+        blocks: [
           {
-            script: { segment_id: "s1", order: 1, type: "dialogue", speaker: "A", text: "hello" },
+            block_id: "assembly:block1",
+            kind: "source",
+            script_segment_ids: ["s1", "s2"],
             selection_status: "explicit_best",
-            primary_group_id: "g1",
-            candidates: [
-              {
-                group_id: "g1",
-                group_start: 0,
-                group_end: 10,
-                duration: 10,
-                delivery_state: "best",
-                decision_source: "editorial_decision",
-                creative_authority: true,
-                angles: [],
-                continuity_risk: "low",
-                audit_mapping_current: true,
-                script_supervisor: { preferred_clip_id: "b", usable_range: { start: 2, end: 6 } },
-                supervisor_blocked: false,
-                supervisor_partial: true,
-              },
-            ],
-            role_pools: {},
-            summary: {},
+            decision_source: "editorial_decision",
+            group_id: "g1",
+            angle: {
+              status: "manual_preferred",
+              clip_id: "b",
+              camera: "B",
+              shot_type: "closeup",
+              coverage_role: "dialogue",
+              candidates: [
+                { clip_id: "a", camera: "A", shot_type: "wide", coverage_role: "master" },
+                { clip_id: "b", camera: "B", shot_type: "closeup", coverage_role: "dialogue" },
+              ],
+            },
+            usable_range: { status: "manual", start: 2, end: 6, duration: 4, issues: [] },
+            script_supervisor: { preferred_clip_id: "b", usable_range: { start: 2, end: 6 } },
+            continuity_risk: "low",
             issues: [],
+            assembly_status: "ready",
+            timeline_start: 0,
+            timeline_end: 4,
+            duration: 4,
           },
           {
-            script: { segment_id: "s2", order: 2, type: "dialogue", speaker: "B", text: "world" },
+            block_id: "assembly:block2",
+            kind: "unresolved",
+            script_segment_ids: ["s3"],
             selection_status: "needs_editorial_choice",
-            primary_group_id: "",
-            candidates: [],
-            role_pools: {},
-            summary: {},
+            decision_source: "",
+            group_id: "",
+            angle: { status: "missing", clip_id: "", camera: "", shot_type: "unknown", coverage_role: "unknown", candidates: [] },
+            usable_range: { status: "invalid", start: 0, end: 0, duration: 0, issues: [] },
             issues: [],
+            assembly_status: "selection_pending",
+            timeline_start: 4,
+            timeline_end: 4,
           },
         ],
       },
@@ -127,84 +141,63 @@ function plan(): RoughCutPlan {
 
 const ntsc23976 = { numerator: 24000, denominator: 1001 };
 
-describe("buildRoughCutTimelineProposal", () => {
-  it("only converts explicit human Best rows and preserves skipped conflicts for review", () => {
-    const result = buildRoughCutTimelineProposal(review(), plan(), ntsc23976);
+describe("buildAssemblyTimelineProposal", () => {
+  it("projects Assembly blocks instead of re-evaluating per-script Best decisions", () => {
+    const result = buildAssemblyTimelineProposal(review(), assembly(), ntsc23976);
     expect(result.commands).toHaveLength(1);
     expect(result.included).toHaveLength(1);
+    expect(result.included[0].segmentIds).toEqual(["s1", "s2"]);
     expect(result.skipped).toEqual([
-      { segmentId: "s2", status: "needs_editorial_choice", reason: "没有单一、显式的人工作品 Best，不自动进入 Timeline" },
+      { blockId: "assembly:block2", segmentId: "s3", status: "needs_editorial_choice", reason: "Assembly 未解析为单一显式 Best，保持人工待决" },
     ]);
   });
 
-  it("registers playable non-Best review media in the source pool without auto inserting it", () => {
+  it("keeps non-Best Review media in the source inventory without making it editorial authority", () => {
     const nextReview = review();
     nextReview.take_groups.push(alternateTake());
     nextReview.summary.take_groups = 2;
-    const result = buildRoughCutTimelineProposal(nextReview, plan(), ntsc23976);
+    const result = buildAssemblyTimelineProposal(nextReview, assembly(), ntsc23976);
 
-    expect(result.baseProject.sources.map((source) => source.source_id)).toEqual([
-      "source:a",
-      "source:b",
-      "source:c",
-    ]);
+    expect(result.baseProject.sources.map((source) => source.source_id)).toEqual(["source:a", "source:b", "source:c"]);
     expect(result.commands).toHaveLength(1);
-    const command = result.commands[0];
-    expect(command.type).toBe("insert");
-    if (command.type !== "insert") throw new Error("expected insert");
-    expect(command.clip.source_id).toBe("source:b");
-    expect(result.warnings.some((warning) => warning.includes("非 Best 素材只有人工 Insert/Overwrite"))).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("只提供媒体证据") && warning.includes("不参与 Best/范围决策"))).toBe(true);
   });
 
-  it("never registers or auto-selects an unavailable playback angle", () => {
-    const nextReview = review();
-    nextReview.take_groups[0].angles[1].playback.available = false;
-    const result = buildRoughCutTimelineProposal(nextReview, plan(), ntsc23976);
-    const command = result.commands[0];
-    expect(command.type).toBe("insert");
-    if (command.type !== "insert") throw new Error("expected insert");
-    expect(command.clip.source_id).toBe("source:a");
-    expect(command.clip.multicam_group_id).toBeNull();
-    expect(command.clip.selected_angle_source_id).toBeNull();
-    expect(result.baseProject.sources.map((source) => source.source_id)).toEqual(["source:a"]);
-    expect(result.baseProject.multicam_groups).toEqual([]);
-  });
-
-  it("keeps multicam angle unresolved even when Script Supervisor has a preferred base angle", () => {
-    const result = buildRoughCutTimelineProposal(review(), plan(), ntsc23976);
+  it("uses the Assembly authoritative base angle but keeps the multicam edit angle unresolved", () => {
+    const result = buildAssemblyTimelineProposal(review(), assembly(), ntsc23976);
     const command = result.commands[0];
     expect(command.type).toBe("insert");
     if (command.type !== "insert") throw new Error("expected insert");
     expect(command.clip.source_id).toBe("source:b");
     expect(command.clip.multicam_group_id).toBe("g1");
     expect(command.clip.selected_angle_source_id).toBeNull();
-    expect(result.warnings.some((warning) => warning.includes("多机位 Best") && warning.includes("机位保持待选"))).toBe(true);
+    expect(command.clip.metadata.proposal_source).toBe("assembly_timeline.v2");
+    expect(command.clip.metadata.assembly_block_id).toBe("assembly:block1");
+    expect(command.clip.metadata.decision_source).toBe("editorial_decision");
   });
 
-  it("preserves 24000/1001 timebase while quantizing seconds to frames", () => {
-    const result = buildRoughCutTimelineProposal(review(), plan(), ntsc23976);
+  it("uses the Assembly usable range and preserves 24000/1001 quantization", () => {
+    const result = buildAssemblyTimelineProposal(review(), assembly(), ntsc23976);
     const command = result.commands[0];
     expect(command.type).toBe("insert");
     if (command.type !== "insert") throw new Error("expected insert");
-    expect(command.clip.source_id).toBe("source:b");
     expect(command.clip.source_in).toBe(Math.round(22 * 24000 / 1001));
     expect(command.clip.duration).toBe(Math.round(4 * 24000 / 1001));
-    expect(command.clip.selected_angle_source_id).toBeNull();
     expect(command.clip.metadata.trim_basis).toBe("script_supervisor_usable_range");
     expect(command.clip.metadata.frame_rate).toBe("24000/1001");
     expect(result.baseProject.sequences[0].frame_rate).toEqual(ntsc23976);
-    expect(result.baseProject.multicam_groups[0].angle_source_ids).toEqual(["source:a", "source:b"]);
   });
 
-  it("does not auto-promote a non-explicit plan even when candidates exist", () => {
-    const next = plan();
-    next.scenes[0].segments[0].selection_status = "needs_editorial_choice";
-    next.scenes[0].segments[0].primary_group_id = "";
-    expect(buildRoughCutTimelineProposal(review(), next, { numerator: 25, denominator: 1 }).commands).toHaveLength(0);
+  it("fails closed if an Assembly-selected base angle is unavailable in local Review inventory", () => {
+    const nextReview = review();
+    nextReview.take_groups[0].angles[1].playback.available = false;
+    const result = buildAssemblyTimelineProposal(nextReview, assembly(), ntsc23976);
+    expect(result.commands).toHaveLength(0);
+    expect(result.skipped[0].reason).toContain("当前不可播放");
   });
 
   it("fails closed when no valid timebase is supplied", () => {
-    expect(() => buildRoughCutTimelineProposal(review(), plan(), { numerator: 0, denominator: 1 })).toThrow(
+    expect(() => buildAssemblyTimelineProposal(review(), assembly(), { numerator: 0, denominator: 1 })).toThrow(
       "需要明确、有效的有理数时间基",
     );
   });

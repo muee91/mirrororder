@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload } from "../../api/host";
-import { ProductionClient, type RoughCutPlan } from "../../api/production";
+import { ProductionClient, type AssemblyTimeline } from "../../api/production";
 import {
   isTimelineAuthorityConflict,
   TimelineBridgeError,
@@ -15,7 +15,7 @@ import {
 } from "../../api/timeline";
 import { EditorMonitors } from "./EditorMonitors";
 import { clampPlayhead, isEditableKeyboardTarget } from "./editorPlayback";
-import { buildRoughCutTimelineProposal } from "./timelineSeed";
+import { buildAssemblyTimelineProposal } from "./timelineSeed";
 import {
   buildManualSourceCommand,
   buildTimelineSourceOptions,
@@ -82,7 +82,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
   const timeline = useMemo(() => new TimelineClient(), []);
   const [review, setReview] = useState<ReviewModelPayload | null>(null);
-  const [plan, setPlan] = useState<RoughCutPlan | null>(null);
+  const [plan, setPlan] = useState<AssemblyTimeline | null>(null);
   const [snapshot, setSnapshot] = useState<TimelineSnapshot | null>(null);
   const [persistence, setPersistence] = useState<TimelineRuntimeStatus | null>(null);
   const [selectedClipId, setSelectedClipId] = useState("");
@@ -96,7 +96,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
   const [rateDenominator, setRateDenominator] = useState("");
   const [replaceProposalArmed, setReplaceProposalArmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("正在读取粗剪计划…");
+  const [message, setMessage] = useState("正在读取组接提议…");
 
   const refreshPersistence = useCallback(async (): Promise<void> => {
     if (!isTauri()) return;
@@ -121,8 +121,8 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     setRateNumerator("");
     setRateDenominator("");
     setReplaceProposalArmed(false);
-    setMessage("正在读取粗剪计划…");
-    Promise.all([host.reviewModel(projectId), production.roughCutPlan(projectId)])
+    setMessage("正在读取组接提议…");
+    Promise.all([host.reviewModel(projectId), production.assemblyTimeline(projectId)])
       .then(([nextReview, nextPlan]) => {
         if (cancelled) return;
         setReview(nextReview);
@@ -137,9 +137,9 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
         ) {
           setRateNumerator(String(timebase.numerator));
           setRateDenominator(String(timebase.denominator));
-          setMessage(`粗剪计划已读取 · ${nextPlan.readiness} · 时间基 ${timebase.numerator}/${timebase.denominator}`);
+          setMessage(`组接提议已读取 · ${nextPlan.readiness} · 时间基 ${timebase.numerator}/${timebase.denominator}`);
         } else {
-          setMessage("粗剪计划已读取 · 当前来源没有可证明的时间基，请确认项目帧率后再建立时间线。");
+          setMessage("组接提议已读取 · 当前来源没有可证明的时间基，请确认项目帧率后再建立时间线。");
         }
       })
       .catch((error) => {
@@ -174,7 +174,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     return numerator && denominator ? { numerator, denominator } : null;
   }, [rateDenominator, rateNumerator]);
   const proposal = useMemo(
-    () => review && plan && frameRate ? buildRoughCutTimelineProposal(review, plan, frameRate) : null,
+    () => review && plan && frameRate ? buildAssemblyTimelineProposal(review, plan, frameRate) : null,
     [frameRate, plan, review],
   );
   const timebaseDetected = plan?.timebase?.status === "confirmed";
@@ -330,16 +330,16 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       return;
     }
     if (!isTauri()) {
-      setMessage("浏览器预览可以检查粗剪提议；建立本机时间线需要在桌面 App 中执行。");
+      setMessage("浏览器预览可以检查组接提议；建立本机时间线需要在桌面 App 中执行。");
       return;
     }
     if (snapshot && !replaceProposalArmed) {
       setReplaceProposalArmed(true);
-      setMessage("当前已有 authoritative Timeline。重新从粗剪建立会替换当前时间线并清空现有 Undo/Redo 历史；再次点击确认才会执行。");
+      setMessage("当前已有 authoritative Timeline。重新从组接建立会替换当前时间线并清空现有 Undo/Redo 历史；再次点击确认才会执行。");
       return;
     }
     setBusy(true);
-    setMessage(snapshot ? "正在用粗剪提议重建本机时间线…" : "正在建立本机时间线…");
+    setMessage(snapshot ? "正在用组接提议重建本机时间线…" : "正在建立本机时间线…");
     try {
       const next = await timeline.loadWithCommands(proposal.baseProject, proposal.commands);
       setSnapshot(next);
@@ -347,7 +347,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       setSelectedClipId(firstClip?.clip_id ?? "");
       setPlayhead(firstClip?.timeline_start ?? 0);
       await refreshPersistence();
-      setMessage(`${snapshot ? "时间线已从粗剪重新建立" : "时间线已建立并保存"} · ${proposal.commands.length} 段人工确认素材已加入`);
+      setMessage(`${snapshot ? "时间线已从组接重新建立" : "时间线已建立并保存"} · ${proposal.commands.length} 段人工确认素材已加入`);
     } catch (error) {
       if (!(await recoverAuthorityConflict(error, "重建时间线"))) {
         setMessage(errorMessage(error));
@@ -498,7 +498,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
     <section className="timeline-workbench">
       <header className="production-heading timeline-heading">
         <div>
-          <p className="eyebrow">粗剪提议与本机编辑</p>
+          <p className="eyebrow">组接提议与本机编辑</p>
           <h2>剪辑时间线</h2>
         </div>
         <span className="production-state">{message}</span>
@@ -521,7 +521,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
             disabled={busy || !proposal || proposal.commands.length === 0}
             onClick={() => void confirmProposal()}
           >
-            {snapshot ? (replaceProposalArmed ? "再次确认重建" : "从粗剪重建时间线") : "确认建立时间线"}
+            {snapshot ? (replaceProposalArmed ? "再次确认重建" : "从组接重建时间线") : "确认建立时间线"}
           </button>
         </div>
         {!frameRate ? <div className="proposal-warnings"><span>未确认时间基，不会生成或提交时间线提议。</span></div> : null}
@@ -531,9 +531,9 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
         </div>
         {proposal?.skipped.length ? (
           <details>
-            <summary>查看未自动进入时间线的 {proposal.skipped.length} 个剧本段</summary>
+            <summary>查看未自动进入时间线的 {proposal.skipped.length} 个组接块</summary>
             <div className="proposal-skipped">
-              {proposal.skipped.slice(0, 30).map((row) => <span key={row.segmentId}><code>{row.segmentId}</code> · {row.status} · {row.reason}</span>)}
+              {proposal.skipped.slice(0, 30).map((row) => <span key={row.blockId}><code>{row.segmentId || row.blockId}</code> · {row.status} · {row.reason}</span>)}
             </div>
           </details>
         ) : null}
@@ -609,7 +609,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
                   <button type="button" className="secondary" disabled={busy || Boolean(sourceRangeError) || !audioTargetTrackId} onClick={() => editAudioFromSource("overwrite")}>Overwrite Audio @ {frameLabel(playhead)}</button>
                 </div>
               </>
-            ) : <p className="empty-copy">当前 Timeline 没有已注册的可播放 Source。先从 Review / Rough Cut 建立 source pool。</p>}
+            ) : <p className="empty-copy">当前 Timeline 没有已注册的可播放 Source。先从 Review / Assembly 建立 source pool。</p>}
           </div>
 
           <EditorMonitors
@@ -698,7 +698,7 @@ export function TimelineWorkbench({ baseUrl, projectId }: Props) {
       ) : (
         <div className="production-panel timeline-empty">
           <strong>尚未建立本机时间线</strong>
-          <p>桌面 App 会优先恢复上次保存的编辑；没有已有编辑时，上方粗剪提议仍需明确点击“确认建立时间线”。</p>
+          <p>桌面 App 会优先恢复上次保存的编辑；没有已有编辑时，上方组接提议仍需明确点击“确认建立时间线”。</p>
         </div>
       )}
     </section>

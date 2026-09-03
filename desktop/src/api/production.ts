@@ -240,6 +240,69 @@ export interface RoughCutPlan {
   timebase?: RoughCutTimebase;
 }
 
+export interface AssemblyAngleCandidate {
+  clip_id: string;
+  camera: string;
+  shot_type: string;
+  coverage_role: string;
+}
+
+export interface AssemblyAngleChoice extends AssemblyAngleCandidate {
+  status: "manual_preferred" | "single_angle" | "pending" | "missing" | string;
+  candidates: AssemblyAngleCandidate[];
+}
+
+export interface AssemblyUsableRange {
+  status: "manual" | "full_take" | "pending" | "invalid" | string;
+  start: number;
+  end: number;
+  duration: number;
+  issues: Array<Record<string, unknown>>;
+}
+
+export interface AssemblyBlock {
+  block_id: string;
+  kind: "source" | "unresolved" | string;
+  script_segment_ids: string[];
+  selection_status: string;
+  decision_source: string;
+  group_id: string;
+  angle: Partial<AssemblyAngleChoice>;
+  usable_range: Partial<AssemblyUsableRange>;
+  script_supervisor?: Record<string, unknown>;
+  continuity_risk?: string;
+  issues: Array<Record<string, unknown>>;
+  assembly_status: string;
+  timeline_start: number;
+  timeline_end: number;
+  duration?: number;
+}
+
+export interface AssemblyScene {
+  scene_id: string;
+  episode: number;
+  heading: string;
+  readiness: string;
+  duration: number;
+  summary: Record<string, number>;
+  blocks: AssemblyBlock[];
+}
+
+export interface AssemblyTimeline {
+  contract: "assembly_timeline.v2" | string;
+  revision: string;
+  rough_cut_plan_revision: string;
+  coverage_revision: string;
+  project_id: string;
+  filters: Record<string, unknown>;
+  timebase?: RoughCutTimebase;
+  readiness: string;
+  duration: number;
+  summary: Record<string, unknown>;
+  scenes: AssemblyScene[];
+  semantics: Record<string, boolean>;
+}
+
 export interface WaveformPayload {
   contract: "waveform.v1" | string;
   clip_id: string;
@@ -322,6 +385,15 @@ function actorValue(actor: string): string {
 
 function waveformSamples(samples: number): number {
   return Math.max(64, Math.min(4096, Math.round(samples || 512)));
+}
+
+function productionFilter(filter?: { episode?: number; sceneId?: string }): string {
+  const query = new URLSearchParams();
+  if (filter?.episode && Number.isInteger(filter.episode) && filter.episode > 0) {
+    query.set("episode", String(filter.episode));
+  }
+  if (filter?.sceneId?.trim()) query.set("scene_id", filter.sceneId.trim());
+  return query.size ? `?${query.toString()}` : "";
 }
 
 export class ProductionClient {
@@ -423,13 +495,17 @@ export class ProductionClient {
   }
 
   roughCutPlan(projectId: string, filter?: { episode?: number; sceneId?: string }): Promise<RoughCutPlan> {
-    const query = new URLSearchParams();
-    if (filter?.episode && Number.isInteger(filter.episode) && filter.episode > 0) {
-      query.set("episode", String(filter.episode));
-    }
-    if (filter?.sceneId?.trim()) query.set("scene_id", filter.sceneId.trim());
-    const suffix = query.size ? `?${query.toString()}` : "";
-    return requestJson<RoughCutPlan>(this.baseUrl, `${projectPath(projectId)}/rough-cut-plan${suffix}`);
+    return requestJson<RoughCutPlan>(
+      this.baseUrl,
+      `${projectPath(projectId)}/rough-cut-plan${productionFilter(filter)}`,
+    );
+  }
+
+  assemblyTimeline(projectId: string, filter?: { episode?: number; sceneId?: string }): Promise<AssemblyTimeline> {
+    return requestJson<AssemblyTimeline>(
+      this.baseUrl,
+      `${projectPath(projectId)}/assembly-timeline${productionFilter(filter)}`,
+    );
   }
 
   waveform(projectId: string, clipId: string, samples = 512): Promise<WaveformPayload> {
