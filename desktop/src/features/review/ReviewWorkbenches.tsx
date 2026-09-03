@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
+import { collaborationAttention, type CollaborationEditorialState } from "./reviewAttention";
 import "./review.css";
 
 interface Props {
@@ -17,12 +18,7 @@ type EnrichedTake = ReviewTakeGroup & {
     priority?: number;
     judge?: { verdict?: string; confidence?: number; reason?: string };
   };
-  editorial_state: ReviewTakeGroup["editorial_state"] & {
-    editorial_decision?: {
-      group?: { state?: string; actor?: string; updated_at?: string } | null;
-      assignments?: Array<Record<string, unknown>>;
-    };
-  };
+  editorial_state: ReviewTakeGroup["editorial_state"] & CollaborationEditorialState;
 };
 
 type EnrichedModel = ReviewModelPayload & {
@@ -39,22 +35,30 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function teamAttention(take: ReviewTakeGroup) {
+  return collaborationAttention((take as EnrichedTake).editorial_state);
+}
+
 function issueLabel(take: ReviewTakeGroup): string[] {
   const audit = (take as EnrichedTake).audit_state;
+  const collaboration = teamAttention(take);
   const labels = take.issues.map((issue) => issue.label).filter(Boolean);
   if (audit?.analysis_stale) labels.unshift("Audit 分析已过期");
   else if (audit?.mapping_stale) labels.unshift("归集变化，旧 Audit 判断已隐藏");
+  labels.push(...collaboration.labels);
   if (take.effective_mapping.source === "none") labels.push("尚未形成有效归集");
   return [...new Set(labels)];
 }
 
 function priority(take: ReviewTakeGroup): number {
   const audit = (take as EnrichedTake).audit_state;
-  if (take.issues.some((issue) => issue.severity === "error")) return 1000;
-  if (audit?.mapping_stale || audit?.analysis_stale) return 800 + Number(audit.priority ?? 0);
-  if (take.issues.some((issue) => issue.severity === "warning")) return 600 + Number(audit?.priority ?? 0);
-  if (take.effective_mapping.source === "none") return 500;
-  return Number(audit?.priority ?? 0);
+  const collaboration = teamAttention(take);
+  let score = Number(audit?.priority ?? 0);
+  if (take.issues.some((issue) => issue.severity === "error")) score = Math.max(score, 1000);
+  else if (audit?.mapping_stale || audit?.analysis_stale) score = Math.max(score, 800 + Number(audit.priority ?? 0));
+  else if (take.issues.some((issue) => issue.severity === "warning")) score = Math.max(score, 600 + Number(audit?.priority ?? 0));
+  else if (take.effective_mapping.source === "none") score = Math.max(score, 500);
+  return Math.max(score, collaboration.priority);
 }
 
 function finalState(take: ReviewTakeGroup): string {
@@ -103,21 +107,27 @@ export function ReviewAttentionWorkbench({ baseUrl, projectId, onOpenTake }: Pro
         <div><p className="eyebrow">审阅 / Attention</p><h2>待处理</h2></div>
         <div className="assistant-heading-actions"><span className="production-state">{message}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>刷新</button></div>
       </header>
-      <div className="review-attention-summary"><strong>{rows.length}</strong><span>需要人工注意的 Take</span><p>这里只聚合问题与 stale evidence，不自动修改归集、个人意见或最终剪辑决定。</p></div>
+      <div className="review-attention-summary"><strong>{rows.length}</strong><span>需要人工注意的 Take</span><p>这里只聚合问题、stale evidence 与尚未裁决的团队意见，不自动修改归集、个人意见或最终剪辑决定。</p></div>
       <div className="review-attention-list">
         {rows.map((take) => {
           const audit = (take as EnrichedTake).audit_state;
+          const collaboration = teamAttention(take);
           const labels = issueLabel(take);
+          const contextNote = audit?.judge?.reason && !audit.stale
+            ? audit.judge.reason
+            : collaboration.hasAttention
+              ? collaboration.summary
+              : "";
           return (
             <article className="review-attention-row" key={take.group_id}>
               <div className="review-attention-name"><strong>{take.group_id}</strong><span>{mappingLabel(take)} · {take.cameras.join("/") || "无机位"} · 最终 {finalState(take)}</span></div>
               <div className="review-attention-issues">{labels.slice(0, 4).map((label) => <span key={label}>⚠ {label}</span>)}</div>
-              {audit?.judge?.reason && !audit.stale ? <p>{audit.judge.reason}</p> : null}
+              {contextNote ? <p>{contextNote}</p> : null}
               {onOpenTake ? <button type="button" onClick={() => onOpenTake(take.group_id)}>打开看片</button> : null}
             </article>
           );
         })}
-        {!rows.length ? <p className="empty-copy">当前没有由 review.v1 / Audit 投影出来的待处理项。</p> : null}
+        {!rows.length ? <p className="empty-copy">当前没有由 review.v1 / Audit / 团队反馈投影出来的待处理项。</p> : null}
       </div>
     </section>
   );
@@ -140,7 +150,12 @@ export function ProjectOverviewWorkbench({ baseUrl, projectId, onOpenTake }: Pro
     for (const take of model?.take_groups ?? []) result[finalState(take)] = (result[finalState(take)] ?? 0) + 1;
     return result;
   }, [model]);
+  const collaborationAttentionCount = useMemo(
+    () => (model?.take_groups ?? []).filter((take) => teamAttention(take).hasAttention).length,
+    [model],
+  );
   const attention = useMemo(() => (model?.take_groups ?? []).filter((take) => issueLabel(take).length).sort((left, right) => priority(right) - priority(left)).slice(0, 8), [model]);
+  const attentionTotal = useMemo(() => (model?.take_groups ?? []).filter((take) => issueLabel(take).length).length, [model]);
   const auditSummary = model?.summary.audit ?? {};
   const collaboration = model?.summary.collaboration ?? {};
 
@@ -167,11 +182,11 @@ export function ProjectOverviewWorkbench({ baseUrl, projectId, onOpenTake }: Pro
             </section>
             <section className="review-overview-pane">
               <p className="eyebrow">协作 / Audit</p>
-              <dl className="review-fact-list"><div><dt>个人意见</dt><dd>{String(collaboration.opinions ?? 0)}</dd></div><div><dt>审核人</dt><dd>{String(collaboration.reviewers ?? 0)}</dd></div><div><dt>最终决定</dt><dd>{String(collaboration.decisions ?? 0)}</dd></div><div><dt>Audit current</dt><dd>{String(auditSummary.current_groups ?? 0)}</dd></div><div><dt>mapping stale</dt><dd>{String(auditSummary.mapping_stale_groups ?? 0)}</dd></div></dl>
+              <dl className="review-fact-list"><div><dt>个人意见</dt><dd>{String(collaboration.opinions ?? 0)}</dd></div><div><dt>审核人</dt><dd>{String(collaboration.reviewers ?? 0)}</dd></div><div><dt>团队反馈待处理</dt><dd>{String(collaborationAttentionCount)}</dd></div><div><dt>最终决定</dt><dd>{String(collaboration.decisions ?? 0)}</dd></div><div><dt>Audit current</dt><dd>{String(auditSummary.current_groups ?? 0)}</dd></div><div><dt>mapping stale</dt><dd>{String(auditSummary.mapping_stale_groups ?? 0)}</dd></div></dl>
             </section>
           </div>
           <section className="review-overview-pane review-overview-attention">
-            <div className="review-pane-heading"><div><p className="eyebrow">下一步</p><h3>优先看片</h3></div><span>{attention.length} / {model.take_groups.filter((take) => issueLabel(take).length).length}</span></div>
+            <div className="review-pane-heading"><div><p className="eyebrow">下一步</p><h3>优先看片</h3></div><span>{attention.length} / {attentionTotal}</span></div>
             <div className="review-overview-takes">{attention.map((take) => <button type="button" key={take.group_id} onClick={() => onOpenTake?.(take.group_id)}><strong>{take.group_id}</strong><span>{issueLabel(take)[0] || mappingLabel(take)}</span></button>)}</div>
           </section>
         </>
