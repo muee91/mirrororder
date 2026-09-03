@@ -1,0 +1,342 @@
+/* Current application chrome for MirrorOrder Production.
+ * This layer intentionally owns only the Global Sidebar + Global Topbar.
+ * Domain workbenches keep their own pane geometry; Design System v2 loaded after
+ * this file remains authoritative for semantic tokens, focus and component grammar.
+ */
+
+.mirrororder-redesign-shell .application-frame {
+  grid-template-columns: 224px minmax(0, 1fr);
+  background: var(--mo-surface-app, #0b0f13);
+}
+
+.mirrororder-redesign-shell .global-sidebar {
+  border-right: 1px solid var(--mo-border-subtle, #202830);
+  background: var(--mo-surface-sidebar, #0e1216);
+}
+
+.project-library-redesign {
+  padding: 10px 8px 8px;
+}
+
+.project-library-redesign .project-library-brand {
+  min-height: 38px;
+  margin-bottom: 8px;
+  padding: 4px 7px;
+  border-radius: var(--mo-radius-control, 5px);
+}
+
+.project-library-redesign .project-library-brand:hover {
+  background: var(--mo-surface-hover, #171f26);
+}
+
+.project-library-redesign .mirror-mark {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+}
+
+.project-library-redesign .project-library-brand-copy strong {
+  color: var(--mo-text-primary, #e2e8ed);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.project-library-redesign .project-library-brand-copy span {
+  color: var(--mo-text-muted, #778590);
+  font-size: 10px;
+}
+
+.project-primary-nav,
+.project-system-nav {
+  gap: 2px;
+}
+
+.project-primary-nav button,
+.project-system-nav button {
+  min-height: 30px;
+  padding: 0 8px;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 7px;
+  border-radius: var(--mo-radius-control, 5px);
+  color: var(--mo-text-secondary, #a6b1ba);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.project-primary-nav button:hover,
+.project-system-nav button:hover {
+  background: var(--mo-surface-hover, #171f26);
+  color: var(--mo-text-primary, #e2e8ed);
+}
+
+.project-primary-nav button.is-active,
+.project-system-nav button.is-active,
+.project-primary-nav button.is-active:hover,
+.project-system-nav button.is-active:hover {
+  color: var(--mo-text-primary, #e2e8ed);
+  background: var(--mo-surface-selected, #182535);
+  box-shadow: inset 2px 0 0 var(--mo-accent, #6fa7e8);
+  font-weight: 650;
+}
+
+.project-primary-nav button > small,
+.project-system-badge,
+.project-primary-nav button.is-active > small,
+.project-system-nav button.is-active .project-system-badge {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mo-text-muted, #778590);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.project-nav-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.65;
+}
+
+.project-current-context {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top-color: var(--mo-border-subtle, #202830);
+}
+
+.project-nav-section-label {
+  margin: 0 8px 5px;
+  color: var(--mo-text-muted, #778590);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .025em;
+  text-transform: none;
+}
+
+.project-nav-section-label small {
+  color: var(--mo-text-muted, #778590);
+  font-size: 10px;
+}
+
+.project-current-card {
+  min-height: 40px;
+  margin-bottom: 0;
+  padding: 5px 8px;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 8px;
+  border: 0;
+  border-radius: var(--mo-radius-control, 5px);
+  background: transparent;
+}
+
+.project-current-card:hover {
+  background: var(--mo-surface-hover, #171f26);
+}
+
+.project-current-card.is-active-context,
+.project-current-card.is-active-context:hover {
+  background: var(--mo-surface-selected, #182535);
+  box-shadow: inset 2px 0 0 var(--mo-accent, #6fa7e8);
+}
+
+.project-current-card strong,
+.project-recent-list strong {
+  color: var(--mo-text-primary, #e2e8ed);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.project-current-card small,
+.project-recent-list small {
+  color: var(--mo-text-muted, #778590);
+  font-size: 10px;
+}
+
+.project-current-status {
+  width: 6px;
+  height: 6px;
+}
+
+.professional-project-context-note {
+  display: none;
+}
+
+.project-current-empty {
+  margin: 0;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: var(--mo-radius-control, 5px);
+  background: var(--mo-surface-raised, #151b20);
+}
+
+.project-current-empty strong,
+.project-current-empty span {
+  font-size: 10px;
+}
+
+.project-sidebar-spacer {
+  min-height: 10px;
+}
+
+.project-recent-switcher {
+  padding-top: 9px;
+  border-top-color: var(--mo-border-subtle, #202830);
+}
+
+.project-recent-list {
+  gap: 1px;
+}
+
+.project-recent-list button {
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: var(--mo-radius-control, 5px);
+}
+
+.project-recent-list button:hover,
+.project-recent-list button.is-selected {
+  background: var(--mo-surface-hover, #171f26);
+}
+
+.project-system-nav {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top-color: var(--mo-border-subtle, #202830);
+}
+
+/* Global topbar: context first, controls visually quiet. */
+.app-main-column {
+  grid-template-rows: 46px minmax(0, 1fr);
+}
+
+.app-global-topbar {
+  padding: 0 10px 0 14px;
+  gap: 12px;
+  border-bottom-color: var(--mo-border-subtle, #202830);
+  background: var(--mo-surface-pane, #10151a);
+}
+
+.app-global-context {
+  gap: 0;
+}
+
+.app-global-context > span {
+  color: var(--mo-text-muted, #778590);
+  font-size: 10px;
+}
+
+.app-global-context > strong {
+  color: var(--mo-text-primary, #e2e8ed);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.app-global-actions {
+  gap: 3px;
+}
+
+.app-global-actions button {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--mo-radius-control, 5px);
+  background: transparent;
+  color: var(--mo-text-secondary, #a6b1ba);
+  font-size: 10px;
+  font-weight: 560;
+}
+
+.app-global-actions button:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--mo-surface-hover, #171f26);
+  color: var(--mo-text-primary, #e2e8ed);
+}
+
+.app-topbar-status-dot.is-active {
+  box-shadow: none;
+}
+
+.app-workspace-chip {
+  min-height: 28px;
+  max-width: 184px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--mo-radius-control, 5px);
+  background: transparent;
+  color: var(--mo-text-secondary, #a6b1ba);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.app-workspace-chip small {
+  color: var(--mo-text-muted, #778590);
+  font-size: 10px;
+}
+
+.app-workspace-menu[open] .app-workspace-chip,
+.app-workspace-chip:hover {
+  border-color: transparent;
+  background: var(--mo-surface-hover, #171f26);
+  color: var(--mo-text-primary, #e2e8ed);
+}
+
+.app-workspace-menu-popover {
+  top: calc(100% + 6px);
+  width: 306px;
+  padding: 9px;
+  border-color: var(--mo-border-default, #29333d);
+  border-radius: var(--mo-radius-overlay, 8px);
+  background: var(--mo-surface-raised, #151b20);
+}
+
+.app-workspace-menu-heading {
+  padding-bottom: 8px;
+  border-bottom-color: var(--mo-border-subtle, #202830);
+}
+
+.app-workspace-menu-heading strong {
+  color: var(--mo-text-primary, #e2e8ed);
+  font-size: 11px;
+}
+
+.app-workspace-menu-heading small,
+.app-workspace-menu-heading code,
+.app-workspace-advanced > summary,
+.app-workspace-advanced label > span,
+.app-workspace-advanced input {
+  font-size: 10px;
+}
+
+.app-workspace-menu-heading code,
+.app-workspace-advanced > summary,
+.app-workspace-advanced label > span {
+  color: var(--mo-text-muted, #778590);
+}
+
+.app-workspace-advanced input {
+  border-color: var(--mo-border-default, #29333d);
+  border-radius: var(--mo-radius-control, 5px);
+  background: var(--mo-surface-control, #11171c);
+  color: var(--mo-text-primary, #e2e8ed);
+}
+
+@media (max-width: 1180px) {
+  .mirrororder-redesign-shell .application-frame {
+    grid-template-columns: 208px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1040px) {
+  .mirrororder-redesign-shell .application-frame {
+    grid-template-columns: 196px minmax(0, 1fr);
+  }
+
+  .project-library-redesign {
+    padding-inline: 6px;
+  }
+
+  .app-global-context > span {
+    display: none;
+  }
+}

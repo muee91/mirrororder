@@ -10,9 +10,11 @@ describe("MirrorOrder Design System v2 contract", () => {
   it("loads the v2 layer after legacy theme and workspace overrides", () => {
     const main = read("../main.tsx");
     const redesignIndex = main.indexOf('import "./app/project-context-redesign.css";');
+    const chromeIndex = main.indexOf('import "./app/app-chrome.css";');
     const v2Index = main.indexOf('import "./design-system-v2.css";');
 
-    expect(v2Index).toBeGreaterThan(redesignIndex);
+    expect(chromeIndex).toBeGreaterThan(redesignIndex);
+    expect(v2Index).toBeGreaterThan(chromeIndex);
   });
 
   it("defines semantic production tokens instead of another page-specific palette", () => {
@@ -58,5 +60,18 @@ describe("MirrorOrder Design System v2 contract", () => {
     expect(secondary).toContain("Project Area navigation remains authoritative in ProjectWorkbench's project toolbar");
     expect(secondary).toContain("background: var(--mo-surface-pane)");
     expect(secondary).not.toMatch(/font-size:\s*9px/);
+  });
+
+  it("keeps global chrome quiet, compact and row-oriented", () => {
+    const chrome = read("./app-chrome.css");
+
+    expect(chrome).toContain("grid-template-columns: 224px minmax(0, 1fr)");
+    expect(chrome).toContain("grid-template-rows: 46px minmax(0, 1fr)");
+    expect(chrome).toContain(".project-current-card.is-active-context:hover");
+    expect(chrome).toContain("box-shadow: inset 2px 0 0 var(--mo-accent");
+    expect(chrome).toContain(".app-global-actions button");
+    expect(chrome).toContain("border: 0");
+    expect(chrome).toContain(".professional-project-context-note");
+    expect(chrome).not.toMatch(/font-size:\s*(?:7|8|9)px/);
   });
 });

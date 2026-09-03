@@ -13,6 +13,7 @@ import "./features/media/media-binding-recovery.css";
 import "./app/mirrororder-redesign.css";
 import "./app/mirrororder-workspaces-redesign.css";
 import "./app/project-context-redesign.css";
+import "./app/app-chrome.css";
 import "./design-system-v2.css";
 
 initializeDesktopAppearance();
