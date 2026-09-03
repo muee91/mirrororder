@@ -1,38 +1,41 @@
-/* Context-only header for project secondary workspaces.
-   Project-level navigation is authoritative in the global sidebar. */
+/* Context-only header for secondary production surfaces.
+   Project Area navigation remains authoritative in ProjectWorkbench's project toolbar. */
 
 .mirrororder-redesign-shell .production-secondary-workspace {
-  grid-template-rows: 42px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
 }
 
 .mirrororder-redesign-shell .production-secondary-bar-redesign {
-  height: 42px;
-  min-height: 42px;
-  padding: 0 12px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 10px;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
+  border-color: var(--mo-border-subtle);
+  background: var(--mo-surface-pane);
 }
 
 .mirrororder-redesign-shell .production-secondary-back,
 .mirrororder-redesign-shell .production-secondary-assistant {
   min-height: 28px;
-  padding: 0 9px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--mo-radius-control);
   background: transparent;
-  color: var(--mo-text-2);
-  font-size: 9px;
+  color: var(--mo-text-secondary);
+  font-size: var(--mo-font-xs);
 }
 
 .mirrororder-redesign-shell .production-secondary-back:hover,
 .mirrororder-redesign-shell .production-secondary-assistant:hover {
-  background: var(--mo-surface-soft);
-  color: var(--mo-text);
+  background: var(--mo-surface-hover);
+  color: var(--mo-text-primary);
 }
 
-.mirrororder-redesign-shell .production-secondary-assistant.is-active {
-  background: var(--mo-accent-soft);
-  color: var(--mo-accent);
+.mirrororder-redesign-shell .production-secondary-assistant.is-active,
+.mirrororder-redesign-shell .production-secondary-assistant.is-active:hover {
+  background: var(--mo-surface-selected);
+  color: var(--mo-text-primary);
   font-weight: 650;
 }
 
@@ -48,8 +51,8 @@
   max-width: 38%;
   margin: 0;
   overflow: hidden;
-  color: var(--mo-text-3);
-  font-size: 9px;
+  color: var(--mo-text-muted);
+  font-size: var(--mo-font-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -57,8 +60,8 @@
 .mirrororder-redesign-shell .production-secondary-title strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--mo-text);
-  font-size: 11px;
+  color: var(--mo-text-primary);
+  font-size: var(--mo-font-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
