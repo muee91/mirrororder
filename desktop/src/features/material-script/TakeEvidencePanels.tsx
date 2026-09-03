@@ -178,6 +178,10 @@ function groupKey(groupId: string): string {
   return `group|${groupId}`;
 }
 
+function assignmentKey(groupId: string, segmentId: string): string {
+  return `assignment|${segmentId}|${groupId}`;
+}
+
 function opinionRows(payload: EditorialStorePayload | null, groupId: string): EditorialOpinion[] {
   if (!payload) return [];
   const row = payload.opinions[groupKey(groupId)];
@@ -186,6 +190,40 @@ function opinionRows(payload: EditorialStorePayload | null, groupId: string): Ed
 
 function groupDecision(payload: EditorialStorePayload | null, groupId: string): EditorialDecision | null {
   return payload?.decisions[groupKey(groupId)] ?? null;
+}
+
+interface AssignmentEditorialRow {
+  segmentId: string;
+  opinions: EditorialOpinion[];
+  decision: EditorialDecision | null;
+}
+
+function assignmentRows(payload: EditorialStorePayload | null, groupId: string): AssignmentEditorialRow[] {
+  if (!payload) return [];
+  const rows = new Map<string, AssignmentEditorialRow>();
+  for (const bucket of Object.values(payload.opinions)) {
+    const target = bucket.target;
+    if (target?.kind !== "assignment" || target.group_id !== groupId || !target.segment_id) continue;
+    rows.set(target.segment_id, {
+      segmentId: target.segment_id,
+      opinions: Object.values(bucket.reviewers ?? {}),
+      decision: payload.decisions[assignmentKey(groupId, target.segment_id)] ?? null,
+    });
+  }
+  for (const decision of Object.values(payload.decisions)) {
+    const target = decision.target;
+    if (target?.kind !== "assignment" || target.group_id !== groupId || !target.segment_id || rows.has(target.segment_id)) continue;
+    rows.set(target.segment_id, { segmentId: target.segment_id, opinions: [], decision });
+  }
+  return [...rows.values()].sort((left, right) => left.segmentId.localeCompare(right.segmentId));
+}
+
+function opinionCounts(opinions: EditorialOpinion[]): Record<string, number> {
+  return opinions.reduce<Record<string, number>>((result, opinion) => {
+    const state = opinion.state || "unreviewed";
+    result[state] = (result[state] ?? 0) + 1;
+    return result;
+  }, {});
 }
 
 export function EditorialDecisionPanel({ baseUrl, projectId, groupId }: { baseUrl: string; projectId: string; groupId: string }) {
@@ -210,31 +248,32 @@ export function EditorialDecisionPanel({ baseUrl, projectId, groupId }: { baseUr
 
   const opinions = opinionRows(payload, groupId);
   const decision = groupDecision(payload, groupId);
-  const counts = opinions.reduce<Record<string, number>>((result, opinion) => {
-    const state = opinion.state || "unreviewed";
-    result[state] = (result[state] ?? 0) + 1;
-    return result;
-  }, {});
+  const counts = opinionCounts(opinions);
+  const assignments = assignmentRows(payload, groupId);
 
-  async function decide(state: EditorialState): Promise<void> {
+  async function decide(targetKind: "group" | "assignment", state: EditorialState, segmentId = ""): Promise<void> {
     if (!payload || busy) return;
     if (!actor.trim()) {
       setMessage("最终决定需要操作者昵称。");
       return;
     }
+    const scope = targetKind === "assignment" ? `剧本段 ${segmentId}` : "当前 Take";
     setBusy(true);
     saveActor(actor);
-    setMessage(state === "unreviewed" ? "正在清除最终决定…" : `正在写入最终${STATE_LABELS[state]}…`);
+    setMessage(state === "unreviewed" ? `正在清除${scope}最终决定…` : `正在写入${scope}最终${STATE_LABELS[state]}…`);
     try {
       const response = await client.decision(projectId, {
-        targetKind: "group",
+        targetKind,
         groupId,
+        ...(segmentId ? { segmentId } : {}),
         state,
         actor,
         expectedRevision: payload.revision,
       });
       setPayload(response.editorial);
-      setMessage(state === "unreviewed" ? `最终决定已清除 · r${response.editorial.revision}` : `最终决定：${STATE_LABELS[state]} · r${response.editorial.revision}`);
+      setMessage(state === "unreviewed"
+        ? `${scope}最终决定已清除 · r${response.editorial.revision}`
+        : `${scope}最终：${STATE_LABELS[state]} · r${response.editorial.revision}`);
     } catch (error) {
       if (error instanceof HostConnectionError && error.status === 409) {
         await reload(true).catch(() => undefined);
@@ -255,12 +294,12 @@ export function EditorialDecisionPanel({ baseUrl, projectId, groupId }: { baseUr
       </div>
 
       <div className="team-opinion-summary">
-        <span className="evidence-label">团队个人意见</span>
+        <span className="evidence-label">当前 Take · 团队个人意见</span>
         {opinions.length ? (
           <div className="opinion-counts">
             {Object.entries(counts).filter(([, count]) => count > 0).map(([state, count]) => <span key={state}>{STATE_LABELS[state] || state} {count}</span>)}
           </div>
-        ) : <p className="evidence-muted">当前 Take 还没有团队个人意见。</p>}
+        ) : <p className="evidence-muted">当前 Take 还没有组级团队个人意见。</p>}
         {opinions.length ? (
           <details className="opinion-details"><summary>查看 {opinions.length} 条个人意见</summary><div>{opinions.map((opinion, index) => <p key={`${opinion.reviewer_id || opinion.actor}-${index}`}><strong>{opinion.actor || "审核人"}</strong><span>{STATE_LABELS[opinion.state] || opinion.state}</span></p>)}</div></details>
         ) : null}
@@ -273,13 +312,48 @@ export function EditorialDecisionPanel({ baseUrl, projectId, groupId }: { baseUr
 
       <div className="editorial-decision-actions">
         {(["best", "keep", "reject"] as EditorialState[]).map((state) => (
-          <button type="button" className={decision?.state === state ? `is-selected state-${state}` : ""} disabled={busy || !payload} onClick={() => void decide(state)} key={state}>{STATE_LABELS[state]}</button>
+          <button type="button" className={decision?.state === state ? `is-selected state-${state}` : ""} disabled={busy || !payload} onClick={() => void decide("group", state)} key={state}>{STATE_LABELS[state]}</button>
         ))}
-        {decision ? <button type="button" className="secondary" disabled={busy || !payload} onClick={() => void decide("unreviewed")}>清除</button> : null}
+        {decision ? <button type="button" className="secondary" disabled={busy || !payload} onClick={() => void decide("group", "unreviewed")}>清除</button> : null}
       </div>
 
-      {decision ? <p className="editorial-current-decision">当前最终 <strong>{STATE_LABELS[decision.state] || decision.state}</strong> · {decision.actor || "未知决定人"}{decision.updated_at ? ` · ${decision.updated_at}` : ""}</p> : <p className="evidence-muted">尚未形成最终剪辑决定。</p>}
-      <p className="evidence-authority-note">这里写的是 Host-local 最终 Editorial Decision，与 Team Web 的个人意见、场记 NG/可用状态和自动 Audit 分开保存。</p>
+      {decision ? <p className="editorial-current-decision">当前最终 <strong>{STATE_LABELS[decision.state] || decision.state}</strong> · {decision.actor || "未知决定人"}{decision.updated_at ? ` · ${decision.updated_at}` : ""}</p> : <p className="evidence-muted">当前 Take 尚未形成组级最终剪辑决定。</p>}
+
+      {assignments.length ? (
+        <div className="assignment-editorial-section">
+          <div className="assignment-editorial-heading">
+            <span className="evidence-label">具体剧本段反馈</span>
+            <small>{assignments.length} 个剧本段有团队意见或最终决定</small>
+          </div>
+          <div className="assignment-editorial-list">
+            {assignments.map((row) => {
+              const rowCounts = opinionCounts(row.opinions);
+              return (
+                <article className="assignment-editorial-row" key={row.segmentId}>
+                  <div className="assignment-editorial-target"><strong>剧本段</strong><code title={row.segmentId}>{row.segmentId}</code></div>
+                  {row.opinions.length ? (
+                    <>
+                      <div className="opinion-counts">
+                        {Object.entries(rowCounts).filter(([, count]) => count > 0).map(([state, count]) => <span key={state}>{STATE_LABELS[state] || state} {count}</span>)}
+                      </div>
+                      <details className="opinion-details"><summary>查看 {row.opinions.length} 条段落意见</summary><div>{row.opinions.map((opinion, index) => <p key={`${opinion.reviewer_id || opinion.actor}-${index}`}><strong>{opinion.actor || "审核人"}</strong><span>{STATE_LABELS[opinion.state] || opinion.state}</span></p>)}</div></details>
+                    </>
+                  ) : <p className="evidence-muted">该剧本段没有未合并的团队个人意见。</p>}
+                  <div className="editorial-decision-actions compact-decision-actions">
+                    {(["best", "keep", "reject"] as EditorialState[]).map((state) => (
+                      <button type="button" className={row.decision?.state === state ? `is-selected state-${state}` : ""} disabled={busy || !payload} onClick={() => void decide("assignment", state, row.segmentId)} key={state}>{STATE_LABELS[state]}</button>
+                    ))}
+                    {row.decision ? <button type="button" className="secondary" disabled={busy || !payload} onClick={() => void decide("assignment", "unreviewed", row.segmentId)}>清除</button> : null}
+                  </div>
+                  {row.decision ? <p className="editorial-current-decision">该段最终 <strong>{STATE_LABELS[row.decision.state] || row.decision.state}</strong> · {row.decision.actor || "未知决定人"}{row.decision.updated_at ? ` · ${row.decision.updated_at}` : ""}</p> : <p className="evidence-muted">该剧本段尚未形成最终决定。</p>}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <p className="evidence-authority-note">这里写的是 Host-local 最终 Editorial Decision；Take 级与剧本段级决定都与 Team Web 的个人意见、场记 NG/可用状态和自动 Audit 分开保存。</p>
     </section>
   );
 }
