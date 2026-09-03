@@ -33,7 +33,7 @@ export interface DeliveryExportPayload {
 
 export interface TimelineDeliveryReport {
   version?: number;
-  contract?: "timeline_delivery_report.v1" | string;
+  contract?: "timeline_delivery_report.v1" | "timeline_delivery_report.v2" | string;
   organized_fcpxml?: string;
   organized_fcpxml_ref?: string;
   organized_fcpxml_exists?: boolean;
@@ -44,8 +44,12 @@ export interface TimelineDeliveryReport {
   video_clip_count?: number;
   audio_track_count?: number;
   audio_clip_count?: number;
+  multicam_resource_count?: number;
+  multicam_clip_count?: number;
   multicam_flattened_count?: number;
+  marker_count?: number;
   markers_not_exported?: number;
+  disabled_clip_count?: number;
   semantics?: Record<string, boolean>;
   persisted_report_path_safe?: boolean;
   device_paths_exposed?: boolean;
@@ -56,6 +60,36 @@ export interface TimelineDeliveryReport {
 export interface TimelineDeliveryPayload {
   contract: "timeline_delivery_export.v1" | string;
   report: TimelineDeliveryReport;
+}
+
+export interface PremiereDeliveryReport {
+  version?: number;
+  contract?: "premiere_timeline_delivery_report.v1" | string;
+  premiere_xmeml?: string;
+  premiere_xmeml_ref?: string;
+  premiere_xmeml_exists?: boolean;
+  timeline_authority?: TimelineAuthority;
+  timeline_project_id?: string;
+  sequence_id?: string;
+  frame_rate?: { numerator: number; denominator: number };
+  video_clip_count?: number;
+  audio_track_count?: number;
+  multicam_source_clip_count?: number;
+  multicam_source_sequence_written?: boolean;
+  markers_not_exported?: number;
+  transitions_supported?: boolean;
+  persisted_report_path_safe?: boolean;
+  device_paths_exposed?: boolean;
+  device_paths_scope?: "localhost_response_only" | string;
+  interchange_contains_device_media_paths?: boolean;
+  shared_project_paths_written?: boolean;
+  semantics?: Record<string, boolean>;
+  [key: string]: unknown;
+}
+
+export interface PremiereDeliveryPayload {
+  contract: "premiere_timeline_delivery_export.v1" | string;
+  report: PremiereDeliveryReport;
 }
 
 async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -74,6 +108,10 @@ function legacyRoute(projectId: string): string {
 
 function timelineRoute(projectId: string): string {
   return `${baseProjectRoute(projectId)}/timeline-delivery-export`;
+}
+
+function premiereRoute(projectId: string): string {
+  return `${baseProjectRoute(projectId)}/timeline-premiere-export`;
 }
 
 async function request<T>(
@@ -102,6 +140,14 @@ async function request<T>(
   return await response.json() as T;
 }
 
+function timelineRequest(snapshot: TimelineSnapshot): object {
+  return {
+    contract: "timeline_delivery_request.v1",
+    timeline: snapshot.project,
+    authority: snapshot.authority,
+  };
+}
+
 export class DeliveryClient {
   readonly baseUrl: string;
 
@@ -122,6 +168,10 @@ export class DeliveryClient {
     return request<TimelineDeliveryPayload>(this.baseUrl, timelineRoute(projectId), "GET");
   }
 
+  premiereStatus(projectId: string): Promise<PremiereDeliveryPayload> {
+    return request<PremiereDeliveryPayload>(this.baseUrl, premiereRoute(projectId), "GET");
+  }
+
   async exportTimeline(projectId: string, snapshot: TimelineSnapshot): Promise<TimelineDeliveryPayload> {
     if (snapshot.project.project_id !== projectId.trim()) {
       throw new HostConnectionError("snapshot project_id 与当前项目不一致");
@@ -130,11 +180,19 @@ export class DeliveryClient {
       this.baseUrl,
       timelineRoute(projectId),
       "POST",
-      {
-        contract: "timeline_delivery_request.v1",
-        timeline: snapshot.project,
-        authority: snapshot.authority,
-      },
+      timelineRequest(snapshot),
+    );
+  }
+
+  async exportPremiere(projectId: string, snapshot: TimelineSnapshot): Promise<PremiereDeliveryPayload> {
+    if (snapshot.project.project_id !== projectId.trim()) {
+      throw new HostConnectionError("snapshot project_id 与当前项目不一致");
+    }
+    return request<PremiereDeliveryPayload>(
+      this.baseUrl,
+      premiereRoute(projectId),
+      "POST",
+      timelineRequest(snapshot),
     );
   }
 }

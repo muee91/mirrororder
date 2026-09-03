@@ -5,7 +5,12 @@ from pathlib import Path
 from typing import Any
 
 from .fcpxml_exporter import UnsafeFCPXMLExport, export
-from .nle_delivery import export_timeline_delivery
+from .nle_delivery import (
+    PREMIERE_REPORT_NAME,
+    PREMIERE_XMEML_NAME,
+    export_timeline_delivery,
+    export_timeline_premiere_delivery,
+)
 from .timeline_delivery import (
     TIMELINE_FCPXML_NAME,
     TIMELINE_REPORT_NAME,
@@ -19,6 +24,9 @@ _ALLOWED_ARTIFACTS = {
 }
 _TIMELINE_ALLOWED_ARTIFACTS = {
     "organized_fcpxml": TIMELINE_FCPXML_NAME,
+}
+_PREMIERE_ALLOWED_ARTIFACTS = {
+    "premiere_xmeml": PREMIERE_XMEML_NAME,
 }
 
 
@@ -34,6 +42,15 @@ def _artifact_path(project: Any, key: str, value: object) -> Path | None:
 def _timeline_artifact_path(project: Any, key: str, value: object) -> Path | None:
     """Resolve a first-party logical Timeline delivery ref at the Host-local boundary."""
     expected = _TIMELINE_ALLOWED_ARTIFACTS[key]
+    ref = str(value or "").strip().replace("\\", "/")
+    if ref != expected:
+        return None
+    return Path(project.config.output_dir) / expected
+
+
+def _premiere_artifact_path(project: Any, key: str, value: object) -> Path | None:
+    """Resolve a first-party logical Premiere interchange ref at the Host-local boundary."""
+    expected = _PREMIERE_ALLOWED_ARTIFACTS[key]
     ref = str(value or "").strip().replace("\\", "/")
     if ref != expected:
         return None
@@ -74,6 +91,20 @@ def _decorate_timeline_report(project: Any, report: object) -> dict[str, Any]:
     return payload
 
 
+def _decorate_premiere_report(project: Any, report: object) -> dict[str, Any]:
+    """Decorate only the logical Premiere XMEML artifact for localhost Desktop."""
+    payload = dict(report) if isinstance(report, dict) else {}
+    persisted_path_safe = not bool(payload.get("persisted_report_contains_device_paths", False))
+    artifact = _premiere_artifact_path(project, "premiere_xmeml", payload.get("premiere_xmeml"))
+    payload["premiere_xmeml_exists"] = bool(artifact and artifact.is_file())
+    payload["premiere_xmeml_ref"] = str(payload.get("premiere_xmeml", "") or "")
+    payload["premiere_xmeml"] = str(artifact) if artifact is not None else ""
+    payload["persisted_report_path_safe"] = persisted_path_safe
+    payload["device_paths_exposed"] = True
+    payload["device_paths_scope"] = "localhost_response_only"
+    return payload
+
+
 def _existing_report(project: Any) -> dict[str, Any]:
     path = Path(project.config.output_dir) / "export_report.json"
     try:
@@ -92,15 +123,24 @@ def _existing_timeline_report(project: Any) -> dict[str, Any]:
         return {}
 
 
+def _existing_premiere_report(project: Any) -> dict[str, Any]:
+    path = Path(project.config.output_dir) / PREMIERE_REPORT_NAME
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return _decorate_premiere_report(project, payload)
+    except (OSError, ValueError):
+        return {}
+
+
 def install_delivery_runtime() -> None:
     """Expose first-party delivery exporters to the local Desktop app.
 
     The historical ``delivery-export`` endpoint remains the Review/Editorial
-    keyword export. ``timeline-delivery-export`` is deliberately separate: it
-    accepts an immutable Rust Timeline snapshot captured by Desktop, projects it
-    into NLE-neutral IR, and exports that exact edit authority through the Final
-    Cut adapter. Persisted reports stay path-free; concrete output paths are
-    reconstructed only in this localhost adapter.
+    keyword export. Timeline Final Cut and Premiere endpoints both accept the
+    same immutable Rust Timeline snapshot and consume the shared NLE-neutral IR;
+    neither adapter may reinterpret Editorial decisions. Persisted reports stay
+    path-free; concrete output paths are reconstructed only in this localhost
+    adapter.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -137,6 +177,18 @@ def install_delivery_runtime() -> None:
                     self._send_json({
                         "contract": "timeline_delivery_export.v1",
                         "report": _existing_timeline_report(project),
+                    })
+                    return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "timeline-premiere-export"
+                ):
+                    self._local_only()
+                    project = service.project(parts[3])
+                    self._send_json({
+                        "contract": "premiere_timeline_delivery_export.v1",
+                        "report": _existing_premiere_report(project),
                     })
                     return
                 return super()._app_get(parsed)
@@ -179,6 +231,28 @@ def install_delivery_runtime() -> None:
                     self._send_json({
                         "contract": "timeline_delivery_export.v1",
                         "report": _decorate_timeline_report(project, report),
+                    })
+                    return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "timeline-premiere-export"
+                ):
+                    self._local_only()
+                    project_id = parts[3]
+                    project = service.project(project_id)
+                    payload = web_server._body(self)
+                    try:
+                        report = export_timeline_premiere_delivery(
+                            project.config,
+                            payload,
+                            expected_project_id=project_id,
+                        )
+                    except UnsafeTimelineDelivery as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                    self._send_json({
+                        "contract": "premiere_timeline_delivery_export.v1",
+                        "report": _decorate_premiere_report(project, report),
                     })
                     return
                 return super()._app_post(parsed)

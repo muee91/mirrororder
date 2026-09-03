@@ -5,8 +5,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from script_organizer.config import ProjectConfig
-from script_organizer.delivery_runtime import _decorate_report, _decorate_timeline_report
+from script_organizer.delivery_runtime import _decorate_premiere_report, _decorate_report, _decorate_timeline_report
 from script_organizer.fcpxml_exporter import export
+from script_organizer.nle_delivery import PREMIERE_XMEML_NAME
 from script_organizer.timeline_delivery import TIMELINE_FCPXML_NAME
 
 
@@ -87,7 +88,7 @@ def test_timeline_delivery_response_resolves_only_the_allowlisted_timeline_artif
     timeline_file = config.output_dir / TIMELINE_FCPXML_NAME
     timeline_file.write_text("<fcpxml/>", encoding="utf-8")
     report = {
-        "contract": "timeline_delivery_report.v1",
+        "contract": "timeline_delivery_report.v2",
         "artifact_scope": "project_output",
         "organized_fcpxml": TIMELINE_FCPXML_NAME,
         "timeline_authority": {"generation": "g1", "revision": 3},
@@ -105,3 +106,30 @@ def test_timeline_delivery_response_resolves_only_the_allowlisted_timeline_artif
     malicious = _decorate_timeline_report(project, {**report, "organized_fcpxml": "../../outside.fcpxml"})
     assert malicious["organized_fcpxml"] == ""
     assert malicious["organized_fcpxml_exists"] is False
+
+
+def test_premiere_delivery_response_resolves_only_the_allowlisted_export_artifact(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    project = SimpleNamespace(config=config)
+    premiere_file = config.output_dir / PREMIERE_XMEML_NAME
+    premiere_file.write_text("<xmeml version=\"4\"/>", encoding="utf-8")
+    report = {
+        "contract": "premiere_timeline_delivery_report.v1",
+        "artifact_scope": "project_output",
+        "premiere_xmeml": PREMIERE_XMEML_NAME,
+        "timeline_authority": {"generation": "g1", "revision": 3},
+        "persisted_report_contains_device_paths": False,
+        "interchange_contains_device_media_paths": True,
+    }
+
+    decorated = _decorate_premiere_report(project, report)
+    assert decorated["premiere_xmeml_ref"] == PREMIERE_XMEML_NAME
+    assert decorated["premiere_xmeml"] == str(premiere_file)
+    assert decorated["premiere_xmeml_exists"] is True
+    assert decorated["persisted_report_path_safe"] is True
+    assert decorated["device_paths_exposed"] is True
+    assert decorated["device_paths_scope"] == "localhost_response_only"
+
+    malicious = _decorate_premiere_report(project, {**report, "premiere_xmeml": "../../outside.xml"})
+    assert malicious["premiere_xmeml"] == ""
+    assert malicious["premiere_xmeml_exists"] is False

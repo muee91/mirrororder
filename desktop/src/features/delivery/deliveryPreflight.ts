@@ -1,5 +1,6 @@
 import type {
   TimelineAuthority,
+  TimelineMulticamGroup,
   TimelineSequence,
   TimelineSnapshot,
   TimelineTrack,
@@ -42,16 +43,35 @@ function isPositiveInteger(value: number): boolean {
 }
 
 function overlapIssue(track: TimelineTrack): DeliveryPreflightIssue | null {
-  const enabled = track.clips
-    .filter((clip) => clip.enabled)
+  const clips = track.clips
     .slice()
     .sort((a, b) => a.timeline_start - b.timeline_start || a.clip_id.localeCompare(b.clip_id));
   let previousEnd = 0;
-  for (const clip of enabled) {
+  for (const clip of clips) {
     if (clip.timeline_start < previousEnd) {
-      return issue("video_overlap", `视频片段 ${clip.clip_id} 与前一片段重叠；timeline_delivery.v1 不会自动改写重叠关系。`);
+      return issue("track_overlap", `${track.kind === "video" ? "视频" : "音频"}轨 ${track.track_id} 在 ${clip.clip_id} 附近存在重叠；当前 NLE IR 不会自动修复重叠关系。`);
     }
     previousEnd = clip.timeline_start + clip.duration;
+  }
+  return null;
+}
+
+function multicamSourceIds(group: TimelineMulticamGroup): string[] {
+  const typed = group.angles ?? [];
+  return typed.length ? typed.map((angle) => angle.source_id) : group.angle_source_ids;
+}
+
+function typedSyncIssue(group: TimelineMulticamGroup): DeliveryPreflightIssue | null {
+  const typed = group.angles ?? [];
+  if (!typed.length) {
+    return issue("multicam_typed_sync_missing", `多机位组 ${group.group_id || "<empty>"} 仍只有 legacy angle_source_ids；交付需要 Timeline v2 typed sync。`);
+  }
+  for (const angle of typed) {
+    const start = angle.sync_start_frame;
+    const end = angle.sync_end_frame;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || Number(start) < 0 || Number(end) <= Number(start)) {
+      return issue("multicam_typed_sync_incomplete", `多机位组 ${group.group_id || "<empty>"} 的 ${angle.camera || angle.source_id} 缺少完整 typed sync range。`);
+    }
   }
   return null;
 }
@@ -75,6 +95,10 @@ export function buildTimelineDeliveryPreflight(snapshot: TimelineSnapshot): Time
   ));
   const warnings: DeliveryPreflightIssue[] = [];
   const sequence = activeSequence(snapshot);
+
+  if (snapshot.project.version !== 2) {
+    blockers.push(issue("timeline_version", `当前 Timeline project version=${snapshot.project.version}；NLE 交付要求先由 Timeline Core normalize 到 v2。`));
+  }
 
   if (!sequence) {
     blockers.push(issue(
@@ -102,25 +126,20 @@ export function buildTimelineDeliveryPreflight(snapshot: TimelineSnapshot): Time
 
   const videoTracks = nonEmptyTracks(sequence, "video");
   const audioTracks = nonEmptyTracks(sequence, "audio");
-  const enabledVideoClips = videoTracks.flatMap((track) => track.clips.filter((clip) => clip.enabled));
+  const allVideoClips = videoTracks.flatMap((track) => track.clips);
+  const enabledVideoClips = allVideoClips.filter((clip) => clip.enabled);
   const independentAudioClipCount = audioTracks.reduce((sum, track) => sum + track.clips.length, 0);
 
   if (videoTracks.length !== 1) {
     blockers.push(issue(
       "video_track_count",
-      `timeline_delivery.v1 需要且只支持 1 条非空视频轨；当前为 ${videoTracks.length} 条。`,
-    ));
-  }
-  if (independentAudioClipCount > 0) {
-    blockers.push(issue(
-      "independent_audio_unsupported",
-      `当前有 ${independentAudioClipCount} 个独立 A-track 片段；timeline_delivery.v1 目前只安全保留视频 asset 自带音频。`,
+      `当前 NLE adapters 需要且只支持 1 条非空视频轨；当前为 ${videoTracks.length} 条。`,
     ));
   }
   if (sequence.transitions.length > 0) {
     blockers.push(issue(
       "transitions_unsupported",
-      `当前有 ${sequence.transitions.length} 个 transition；timeline_delivery.v1 目前不会静默丢弃 transition。`,
+      `当前有 ${sequence.transitions.length} 个 transition；本轮 FCPXML / Premiere adapters 都明确 fail closed，不会静默丢弃。`,
     ));
   }
   if (enabledVideoClips.length === 0) {
@@ -144,10 +163,14 @@ export function buildTimelineDeliveryPreflight(snapshot: TimelineSnapshot): Time
   const duplicateGroups = new Set<string>();
   for (const group of snapshot.project.multicam_groups) {
     if (!group.group_id || groups.has(group.group_id)) duplicateGroups.add(group.group_id || "<empty>");
-    else groups.set(group.group_id, group.angle_source_ids);
-    if (!group.angle_source_ids.length) {
+    const sourceIds = multicamSourceIds(group);
+    if (group.group_id && !groups.has(group.group_id)) groups.set(group.group_id, sourceIds);
+    if (!sourceIds.length) {
       blockers.push(issue("multicam_group_empty", `多机位组 ${group.group_id || "<empty>"} 没有 angle source。`));
+      continue;
     }
+    const typedProblem = typedSyncIssue(group);
+    if (typedProblem) blockers.push(typedProblem);
   }
   for (const groupId of duplicateGroups) {
     blockers.push(issue("multicam_group_duplicate", `多机位 group_id ${groupId} 无法唯一解析。`));
@@ -155,7 +178,7 @@ export function buildTimelineDeliveryPreflight(snapshot: TimelineSnapshot): Time
 
   let pendingMulticamCount = 0;
   let selectedMulticamCount = 0;
-  for (const clip of enabledVideoClips) {
+  for (const clip of allVideoClips) {
     if (!sources.has(clip.source_id)) {
       blockers.push(issue("base_source_missing", `视频片段 ${clip.clip_id} 引用了不存在的 base source ${clip.source_id}。`));
     }
@@ -182,21 +205,38 @@ export function buildTimelineDeliveryPreflight(snapshot: TimelineSnapshot): Time
     }
   }
 
-  if (videoTracks.length === 1) {
-    const overlap = overlapIssue(videoTracks[0]);
+  for (const track of audioTracks) {
+    for (const clip of track.clips) {
+      if (clip.multicam_group_id || clip.selected_angle_source_id) {
+        blockers.push(issue(
+          "audio_multicam_unsupported",
+          `独立音频片段 ${clip.clip_id} 必须引用单一 source；当前 FCPXML / Premiere adapters 不支持在 A-track 上做 multicam switching。`,
+        ));
+      }
+    }
+  }
+
+  for (const track of [...videoTracks, ...audioTracks]) {
+    const overlap = overlapIssue(track);
     if (overlap) blockers.push(overlap);
   }
 
+  if (independentAudioClipCount > 0) {
+    warnings.push(issue(
+      "independent_audio_preserved",
+      `${independentAudioClipCount} 个独立 A-track 片段将由 NLE IR 保留；FCPXML 输出为 connected audio-only assets，Premiere 输出为独立 audio tracks。`,
+    ));
+  }
   if (selectedMulticamCount > 0) {
     warnings.push(issue(
-      "multicam_flattened",
-      `${selectedMulticamCount} 个已选机位的多机位片段会按当前角度 flatten 为普通 asset-clip；不会保留 multicam container。`,
+      "multicam_preserved",
+      `${selectedMulticamCount} 个多机位片段将保留 typed sync：Final Cut 输出 multicam container，Premiere 同时输出 edit sequence 与 multicam source sequence。`,
     ));
   }
   if (sequence.markers.length > 0) {
     warnings.push(issue(
-      "markers_omitted",
-      `${sequence.markers.length} 个 Timeline marker 当前不属于 timeline_delivery.v1 authority，将不会写入最终 FCPXML。`,
+      "premiere_markers_omitted",
+      `${sequence.markers.length} 个 Timeline marker 会写入 Final Cut FCPXML；Premiere XMEML adapter 本轮仍不导出 marker。`,
     ));
   }
 

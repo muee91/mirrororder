@@ -5,7 +5,7 @@ import { buildTimelineDeliveryPreflight, sameTimelineAuthority } from "./deliver
 function snapshot(): TimelineSnapshot {
   return {
     project: {
-      version: 1,
+      version: 2,
       project_id: "p1",
       sources: [
         { source_id: "source:a", clip_id: "a", media_id: "ma", name: "A.mov", duration_frames: 1000 },
@@ -50,30 +50,43 @@ function snapshot(): TimelineSnapshot {
   };
 }
 
+function typedGroup() {
+  return {
+    group_id: "g1",
+    angle_source_ids: ["source:a", "source:b"],
+    angles: [
+      { source_id: "source:a", camera: "A", name: "A.mov", sync_start_frame: 0, sync_end_frame: 1000 },
+      { source_id: "source:b", camera: "B", name: "B.mov", sync_start_frame: 20, sync_end_frame: 1000 },
+    ],
+    reference_source_id: "source:a",
+    audio_source_id: null,
+  };
+}
+
 function blockerCodes(value: TimelineSnapshot): string[] {
   return buildTimelineDeliveryPreflight(value).blockers.map((item) => item.code);
 }
 
 describe("timeline delivery preflight", () => {
-  it("allows a single enabled video track with linked asset audio only", () => {
+  it("allows a normalized v2 timeline with one video track", () => {
     const result = buildTimelineDeliveryPreflight(snapshot());
     expect(result.blockers).toEqual([]);
     expect(result.enabledVideoClipCount).toBe(1);
     expect(result.independentAudioClipCount).toBe(0);
   });
 
-  it("blocks unresolved multicam angles before export", () => {
+  it("blocks unresolved multicam angles before either NLE export", () => {
     const next = snapshot();
     const clip = next.project.sequences[0].tracks[0].clips[0];
     clip.multicam_group_id = "g1";
-    next.project.multicam_groups = [{ group_id: "g1", angle_source_ids: ["source:a", "source:b"] }];
+    next.project.multicam_groups = [typedGroup()];
 
     const result = buildTimelineDeliveryPreflight(next);
     expect(result.pendingMulticamCount).toBe(1);
     expect(result.blockers.some((item) => item.code === "multicam_angle_pending")).toBe(true);
   });
 
-  it("surfaces independent audio and transitions as current v1 blockers", () => {
+  it("allows independent audio while transitions remain an explicit blocker", () => {
     const next = snapshot();
     next.project.sequences[0].tracks[1].clips.push({
       ...next.project.sequences[0].tracks[0].clips[0],
@@ -87,10 +100,17 @@ describe("timeline delivery preflight", () => {
       duration: 8,
     });
 
-    expect(blockerCodes(next)).toEqual(expect.arrayContaining([
-      "independent_audio_unsupported",
-      "transitions_unsupported",
-    ]));
+    const result = buildTimelineDeliveryPreflight(next);
+    expect(result.independentAudioClipCount).toBe(1);
+    expect(result.blockers.map((item) => item.code)).not.toContain("independent_audio_unsupported");
+    expect(result.blockers.map((item) => item.code)).toContain("transitions_unsupported");
+    expect(result.warnings.map((item) => item.code)).toContain("independent_audio_preserved");
+  });
+
+  it("blocks legacy multicam groups that were not normalized to typed sync", () => {
+    const next = snapshot();
+    next.project.multicam_groups = [{ group_id: "g1", angle_source_ids: ["source:a", "source:b"] }];
+    expect(blockerCodes(next)).toContain("multicam_typed_sync_missing");
   });
 
   it("blocks multiple non-empty video tracks and an empty final cut", () => {
@@ -105,7 +125,7 @@ describe("timeline delivery preflight", () => {
     expect(blockerCodes(next)).toEqual(expect.arrayContaining(["video_track_count", "no_enabled_video"]));
   });
 
-  it("blocks overlapping enabled clips instead of assuming exporter will repair them", () => {
+  it("blocks overlapping clips on video or audio tracks instead of repairing them", () => {
     const next = snapshot();
     next.project.sequences[0].tracks[0].clips.push({
       ...next.project.sequences[0].tracks[0].clips[0],
@@ -114,20 +134,24 @@ describe("timeline delivery preflight", () => {
       timeline_start: 50,
     });
 
-    expect(blockerCodes(next)).toContain("video_overlap");
+    expect(blockerCodes(next)).toContain("track_overlap");
   });
 
-  it("warns when selected multicam clips will flatten and markers will be omitted", () => {
+  it("reports preserved multicam and format-specific marker behavior", () => {
     const next = snapshot();
     const clip = next.project.sequences[0].tracks[0].clips[0];
     clip.multicam_group_id = "g1";
     clip.selected_angle_source_id = "source:b";
-    next.project.multicam_groups = [{ group_id: "g1", angle_source_ids: ["source:a", "source:b"] }];
+    next.project.multicam_groups = [typedGroup()];
     next.project.sequences[0].markers.push({ marker_id: "m1", position: 12, label: "note" });
 
     const result = buildTimelineDeliveryPreflight(next);
     expect(result.blockers).toEqual([]);
     expect(result.warnings.map((item) => item.code)).toEqual(expect.arrayContaining([
+      "multicam_preserved",
+      "premiere_markers_omitted",
+    ]));
+    expect(result.warnings.map((item) => item.code)).not.toEqual(expect.arrayContaining([
       "multicam_flattened",
       "markers_omitted",
     ]));
