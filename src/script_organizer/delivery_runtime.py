@@ -5,13 +5,12 @@ from pathlib import Path
 from typing import Any
 
 from .fcpxml_exporter import UnsafeFCPXMLExport, export
-from .timeline_audio_delivery import export_timeline_snapshot_with_audio
+from .nle_delivery import export_timeline_delivery
 from .timeline_delivery import (
     TIMELINE_FCPXML_NAME,
     TIMELINE_REPORT_NAME,
     UnsafeTimelineDelivery,
 )
-from .timeline_delivery_sync import normalize_timeline_delivery_request
 
 _INSTALLED = False
 _ALLOWED_ARTIFACTS = {
@@ -98,9 +97,10 @@ def install_delivery_runtime() -> None:
 
     The historical ``delivery-export`` endpoint remains the Review/Editorial
     keyword export. ``timeline-delivery-export`` is deliberately separate: it
-    accepts an immutable Rust Timeline snapshot captured by Desktop and exports
-    that exact edit authority. Persisted reports stay path-free; concrete output
-    paths are reconstructed only in this localhost adapter.
+    accepts an immutable Rust Timeline snapshot captured by Desktop, projects it
+    into NLE-neutral IR, and exports that exact edit authority through the Final
+    Cut adapter. Persisted reports stay path-free; concrete output paths are
+    reconstructed only in this localhost adapter.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -167,10 +167,9 @@ def install_delivery_runtime() -> None:
                     self._local_only()
                     project_id = parts[3]
                     project = service.project(project_id)
-                    raw_payload = web_server._body(self)
+                    payload = web_server._body(self)
                     try:
-                        payload = normalize_timeline_delivery_request(raw_payload)
-                        report = export_timeline_snapshot_with_audio(
+                        report = export_timeline_delivery(
                             project.config,
                             payload,
                             expected_project_id=project_id,
