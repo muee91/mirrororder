@@ -24,6 +24,7 @@ import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
 import {
   forgetWorkspaceResume,
   loadAppResume,
+  readProjectPage,
   rememberProject,
   rememberWorkspace,
   type ProductionPage,
@@ -139,20 +140,21 @@ export function App() {
     void task.then((next) => {
       if (!active) return;
       const rememberedProject = projectById(next, launchResume.projectId);
+      const rememberedPage = rememberedProject ? readProjectPage(rememberedProject.project_id) : "slate";
       setBaseUrl(next.baseUrl);
       setWorkspacePath(launchResume.workspacePath);
       setActiveWorkspacePath(launchResume.workspacePath);
       setSnapshot(next);
       setSelectedProject(rememberedProject);
-      setActiveProjectPage("slate");
+      setActiveProjectPage(rememberedPage);
       setPageRequest(null);
-      setSurface("home");
+      setSurface(rememberedProject ? "production" : "projects");
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(launchResume.workspacePath);
       setMessage(rememberedProject
-        ? `工作区已恢复 · ${rememberedProject.name || rememberedProject.project_id} 已设为当前项目`
-        : `工作区已恢复 · ${next.projects.length} 个项目`);
+        ? `已恢复 · ${rememberedProject.name || rememberedProject.project_id} · ${pageTitle(rememberedPage)}`
+        : `工作区已恢复 · 选择项目继续制作`);
     }).catch((error: unknown) => {
       if (!active) return;
       setActiveWorkspacePath("");
@@ -189,7 +191,7 @@ export function App() {
       setSelectedProject(null);
       setActiveProjectPage("slate");
       setPageRequest(null);
-      setSurface("home");
+      setSurface("projects");
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(normalizedPath);
@@ -267,7 +269,7 @@ export function App() {
       setSnapshot(next);
       setSelectedProject(project);
       setPageRequest(null);
-      setSurface(sameWorkspace ? previousSurface : "home");
+      setSurface(sameWorkspace ? previousSurface : "projects");
       setResumeEnabledForSession(false);
       setState("connected");
       setMessage(project
@@ -315,7 +317,7 @@ export function App() {
   }
 
   function selectProject(project: ProjectSummary): void {
-    if (selectedProject?.project_id !== project.project_id) setActiveProjectPage("slate");
+    if (selectedProject?.project_id !== project.project_id) setActiveProjectPage(readProjectPage(project.project_id));
     setSelectedProject(project);
     setPageRequest(null);
     setSurface("production");
@@ -451,10 +453,10 @@ export function App() {
             <p className="eyebrow">{recovering ? "恢复工作区" : recoveryFailed ? "工作区恢复" : "Production"}</p>
             <h1>{recovering ? "正在恢复上次工作区" : recoveryFailed ? "重新定位工作区" : "继续制作"}</h1>
             <p>{recovering
-              ? "正在启动本机制作服务。恢复完成后进入制作首页。"
+              ? "正在启动本机制作服务。恢复完成后回到上次工作现场。"
               : recoveryFailed
                 ? "上次工作区没有成功打开。重新定位它，或选择其他工作区；项目数据不会被改写。"
-                : "打开工作区后，从首页进入项目、场记、素材、人物和状态中心。"}</p>
+                : "打开工作区后选择项目继续制作。"}</p>
             {workspacePath.trim() ? <code className="startup-path">{workspacePath}</code> : null}
             <div className="startup-actions">
               <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>{recoveryFailed ? "重新定位" : "打开工作区"}</button>
