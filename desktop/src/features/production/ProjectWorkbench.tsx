@@ -38,6 +38,11 @@ interface AreaDefinition {
   pages: Array<{ page: ProductionPage; label: string }>;
 }
 
+interface ReviewReturnContext {
+  page: ProductionPage;
+  label: string;
+}
+
 const AREAS: Record<ProductionArea, AreaDefinition> = {
   material: {
     label: "素材",
@@ -104,12 +109,14 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const [page, setPage] = useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)));
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
+  const [reviewReturn, setReviewReturn] = useState<ReviewReturnContext | null>(null);
   const [operatorRevision, setOperatorRevision] = useState(0);
   const area = areaForPage(page);
   const areaDefinition = AREAS[area];
 
-  function navigate(next: ProductionPage): void {
+  function navigate(next: ProductionPage, options?: { preserveReviewReturn?: boolean }): void {
     const safe = safeProductionPage(next);
+    if (!options?.preserveReviewReturn) setReviewReturn(null);
     setPage(safe);
     onPageChange?.(safe);
   }
@@ -131,8 +138,15 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   function openTakeFromEvidence(groupId: string): void {
     const value = groupId.trim();
     if (!value) return;
+    const sourcePage = page;
     setMaterialFocusGroupId(value);
-    navigate("watch");
+    setReviewReturn(sourcePage === "watch" ? null : { page: sourcePage, label: pageLabel(sourcePage) });
+    navigate("watch", { preserveReviewReturn: true });
+  }
+
+  function returnFromReview(): void {
+    if (!reviewReturn) return;
+    navigate(reviewReturn.page);
   }
 
   const materialScript = page === "takes" || page === "script";
@@ -162,6 +176,9 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
 
       <nav className="professional-secondary-nav" aria-label={`${AREAS[area].label}工作区`}>
         <div className="professional-secondary-pages">
+          {page === "watch" && reviewReturn ? (
+            <button type="button" className="professional-review-return" onClick={returnFromReview} title={`返回刚才的${reviewReturn.label}工作位置`}>← {reviewReturn.label}</button>
+          ) : null}
           {areaDefinition.pages.filter((item) => item.page !== "media-binding").map((item) => (
             <button type="button" className={page === item.page ? "is-active" : ""} aria-current={page === item.page ? "page" : undefined} key={item.page} onClick={() => navigate(item.page)}>{item.label}</button>
           ))}
