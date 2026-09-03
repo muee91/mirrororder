@@ -29,6 +29,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Pin npm for Arborist stability
+        run: npm install --global npm@11.6.0 --no-audit --no-fund
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Tauri Linux dependencies
         run: |
