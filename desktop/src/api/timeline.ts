@@ -13,9 +13,21 @@ export interface TimelineSource {
   duration_frames: number | null;
 }
 
+export interface TimelineMulticamAngle {
+  source_id: string;
+  camera: string;
+  name: string;
+  sync_start_frame: number | null;
+  sync_end_frame: number | null;
+}
+
 export interface TimelineMulticamGroup {
   group_id: string;
+  /** v1 compatibility projection; v2 sync authority lives in angles. */
   angle_source_ids: string[];
+  angles?: TimelineMulticamAngle[];
+  reference_source_id?: string | null;
+  audio_source_id?: string | null;
 }
 
 export interface TimelineClip {
@@ -39,7 +51,10 @@ export interface TimelineTrack {
 export interface TimelineMarker {
   marker_id: string;
   position: number;
+  duration?: number;
+  kind?: string;
   label: string;
+  metadata?: Record<string, string>;
 }
 
 export interface TimelineTransition {
@@ -115,6 +130,7 @@ export type TimelineCommand =
   | { type: "trim"; sequence_id: string; clip_id: string; timeline_start: number; source_in: number; duration: number }
   | { type: "ripple_delete"; sequence_id: string; clip_id: string }
   | { type: "disable"; sequence_id: string; clip_id: string; disabled: boolean }
+  | { type: "replace_take"; sequence_id: string; clip_id: string; group_id: string; source_id: string; source_in: number }
   | { type: "multicam_switch"; sequence_id: string; clip_id: string; source_id: string }
   | { type: "set_marker"; sequence_id: string; marker: TimelineMarker };
 

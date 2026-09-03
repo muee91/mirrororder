@@ -56,8 +56,8 @@ export function sourceForClip(project: TimelineProject, clip: TimelineClip): Tim
   return project.sources.find((source) => source.source_id === sourceId) ?? null;
 }
 
-export function synchronizedSourceFrame(clip: TimelineClip, baseSourceFrame: number): number | null {
-  return rebaseMulticamSourceFrame(clip, baseSourceFrame);
+export function synchronizedSourceFrame(project: TimelineProject, clip: TimelineClip, baseSourceFrame: number): number | null {
+  return rebaseMulticamSourceFrame(project, clip, baseSourceFrame);
 }
 
 export function programMediaAtPlayhead(
@@ -70,7 +70,7 @@ export function programMediaAtPlayhead(
   const source = sourceForClip(project, located.clip);
   if (!source) return null;
   const baseSourceFrame = located.clip.source_in + Math.max(0, playhead - located.clip.timeline_start);
-  const sourceFrame = synchronizedSourceFrame(located.clip, baseSourceFrame);
+  const sourceFrame = synchronizedSourceFrame(project, located.clip, baseSourceFrame);
   if (sourceFrame === null) return null;
   return {
     ...located,
@@ -88,7 +88,7 @@ export function selectedSourceState(
   if (!clip) return null;
   const source = sourceForClip(project, clip);
   if (!source) return null;
-  const sourceFrame = synchronizedSourceFrame(clip, clip.source_in);
+  const sourceFrame = synchronizedSourceFrame(project, clip, clip.source_in);
   if (sourceFrame === null) return null;
   return { source, sourceSeconds: sourceFrame / sequenceFps(sequence) };
 }

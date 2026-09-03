@@ -1,7 +1,13 @@
 import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import type { AssemblyBlock, AssemblyTimeline } from "../../api/production";
-import type { FrameRate, TimelineCommand, TimelineMulticamGroup, TimelineProject, TimelineSource } from "../../api/timeline";
-import { encodeMulticamSyncRanges, MULTICAM_SYNC_METADATA_KEY, type TimelineSyncRange } from "./timelineSync";
+import type {
+  FrameRate,
+  TimelineCommand,
+  TimelineMulticamAngle,
+  TimelineMulticamGroup,
+  TimelineProject,
+  TimelineSource,
+} from "../../api/timeline";
 
 export interface TimelineSeedProposal {
   baseProject: TimelineProject;
@@ -57,17 +63,21 @@ function baseAngleForBlock(take: ReviewTakeGroup, block: AssemblyBlock) {
   return playable[0] ?? null;
 }
 
-function syncMetadataForTake(take: ReviewTakeGroup, rate: FrameRate): string | null {
-  const ranges: TimelineSyncRange[] = [];
-  for (const angle of availableAngles(take)) {
-    const start = Number(angle.source_start);
-    const inferredEnd = angle.source_end !== null ? Number(angle.source_end) : start + Math.max(0, Number(angle.duration) || 0);
-    if (!Number.isFinite(start) || !Number.isFinite(inferredEnd) || start < 0 || inferredEnd <= start) return null;
-    const startFrame = secondsToFrames(start, rate);
-    const endFrame = Math.max(startFrame + 1, secondsToFrames(inferredEnd, rate));
-    ranges.push({ source_id: sourceId(angle.clip_id), start_frame: startFrame, end_frame: endFrame });
-  }
-  return encodeMulticamSyncRanges(ranges);
+function typedAngleForTake(angle: ReturnType<typeof availableAngles>[number], rate: FrameRate): TimelineMulticamAngle | null {
+  const start = Number(angle.source_start);
+  const inferredEnd = angle.source_end !== null
+    ? Number(angle.source_end)
+    : start + Math.max(0, Number(angle.duration) || 0);
+  if (!Number.isFinite(start) || !Number.isFinite(inferredEnd) || start < 0 || inferredEnd <= start) return null;
+  const startFrame = secondsToFrames(start, rate);
+  const endFrame = Math.max(startFrame + 1, secondsToFrames(inferredEnd, rate));
+  return {
+    source_id: sourceId(angle.clip_id),
+    camera: angle.camera,
+    name: angle.name,
+    sync_start_frame: startFrame,
+    sync_end_frame: endFrame,
+  };
 }
 
 function ensureSources(
@@ -78,9 +88,14 @@ function ensureSources(
 ): void {
   const playable = availableAngles(take);
   const angleSourceIds: string[] = [];
+  const typedAngles: TimelineMulticamAngle[] = [];
+  let completeTypedSync = true;
   for (const angle of playable) {
     const id = sourceId(angle.clip_id);
     angleSourceIds.push(id);
+    const typedAngle = typedAngleForTake(angle, rate);
+    if (typedAngle) typedAngles.push(typedAngle);
+    else completeTypedSync = false;
     if (!sources.has(id)) {
       sources.set(id, {
         source_id: id,
@@ -94,7 +109,14 @@ function ensureSources(
     }
   }
   if (angleSourceIds.length > 1) {
-    multicam.set(take.group_id, { group_id: take.group_id, angle_source_ids: angleSourceIds });
+    multicam.set(take.group_id, {
+      group_id: take.group_id,
+      // Keep the v1 projection until Timeline Delivery v2 consumes typed angles.
+      angle_source_ids: angleSourceIds,
+      angles: completeTypedSync && typedAngles.length === angleSourceIds.length ? typedAngles : [],
+      reference_source_id: angleSourceIds[0] ?? null,
+      audio_source_id: null,
+    });
   }
 }
 
@@ -114,6 +136,14 @@ function blockRange(block: AssemblyBlock): { start: number; end: number; trimBas
 
 function firstSegmentId(block: AssemblyBlock): string {
   return block.script_segment_ids[0] ?? "";
+}
+
+function hasCompleteTypedSync(group: TimelineMulticamGroup): boolean {
+  if (!group.angles || group.angles.length < 2) return false;
+  return group.angles.every((angle) => Number.isSafeInteger(angle.sync_start_frame)
+    && Number.isSafeInteger(angle.sync_end_frame)
+    && Number(angle.sync_start_frame) >= 0
+    && Number(angle.sync_end_frame) > Number(angle.sync_start_frame));
 }
 
 export function buildAssemblyTimelineProposal(
@@ -189,7 +219,6 @@ export function buildAssemblyTimelineProposal(
       const sourceInFrames = secondsToFrames(Number(baseAngle.source_start) + range.start, rate);
       const clipId = `timeline:${block.block_id}`;
       const playableAngleCount = availableAngles(take).length;
-      const syncMetadata = playableAngleCount > 1 ? syncMetadataForTake(take, rate) : null;
       const metadata: Record<string, string> = {
         proposal_source: assembly.contract,
         proposal_revision: assembly.revision,
@@ -202,7 +231,6 @@ export function buildAssemblyTimelineProposal(
         trim_basis: range.trimBasis,
         frame_rate: `${rate.numerator}/${rate.denominator}`,
       };
-      if (syncMetadata) metadata[MULTICAM_SYNC_METADATA_KEY] = syncMetadata;
 
       commands.push({
         type: "insert",
@@ -248,14 +276,14 @@ export function buildAssemblyTimelineProposal(
   if (pendingMulticamAngles) {
     warnings.push(`${pendingMulticamAngles} 个多机位 Best 已进入 Timeline，但机位保持待选；请在 Timeline Inspector 明确选择机位后再交付。`);
   }
-  if (commands.some((command) => command.type === "insert" && command.clip.multicam_group_id && !command.clip.metadata[MULTICAM_SYNC_METADATA_KEY])) {
-    warnings.push("部分多机位 Take 缺少完整同步范围；片段仍可进入 Timeline，但同步证据不足时机位预览/切换会 fail closed。 ");
+  if ([...multicam.values()].some((group) => !hasCompleteTypedSync(group))) {
+    warnings.push("部分多机位 Take 缺少完整 typed sync range；片段仍可进入 Timeline，但机位预览/切换会 fail closed。 ");
   }
   warnings.push(`Source pool 已从 Review inventory 注册 ${sources.size} 个可播放 angle；它只提供媒体证据，不参与 Best/范围决策。`);
   warnings.push(`时间基 ${rate.numerator}/${rate.denominator} fps；Assembly 秒级范围会在提交前量化到整数帧。`);
 
   const baseProject: TimelineProject = {
-    version: 1,
+    version: 2,
     project_id: review.project.project_id,
     sources: [...sources.values()],
     multicam_groups: [...multicam.values()],
