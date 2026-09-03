@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import type { ReviewAngle, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation, type CameraTone } from "../media/cameraPresentation";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
@@ -108,7 +108,13 @@ function TakeCard({
     <article
       className={`take-card take-status-${status} ${selected ? "is-selected" : ""}`}
       draggable
+      tabIndex={selected ? 0 : -1}
+      aria-current={selected ? "true" : undefined}
       aria-label={`${take.group_id} · ${bucketLabel(take)} · ${mappingLabel(take)}`}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) return;
+        onSelect();
+      }}
       onDragStart={(event: DragEvent<HTMLElement>) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData(DRAG_TAKE_MIME, take.group_id);
@@ -204,6 +210,20 @@ export function VirtualTakeList({
     }
   }, [selectedGroupId, takes]);
 
+  function handleNavigation(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.metaKey || event.ctrlKey || event.altKey || takes.length === 0) return;
+    const currentIndex = Math.max(0, takes.findIndex((take) => take.group_id === selectedGroupId));
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowUp") nextIndex = Math.max(0, currentIndex - 1);
+    else if (event.key === "ArrowDown") nextIndex = Math.min(takes.length - 1, currentIndex + 1);
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = takes.length - 1;
+    else return;
+    event.preventDefault();
+    const next = takes[nextIndex];
+    if (next) onSelect(next);
+  }
+
   const range = virtualRange(takes.length, scrollTop, viewportHeight);
   const visible = takes.slice(range.start, range.end);
 
@@ -211,6 +231,10 @@ export function VirtualTakeList({
     <div
       className="take-virtual-scroll"
       ref={viewportRef}
+      tabIndex={0}
+      aria-keyshortcuts="ArrowUp ArrowDown Home End"
+      title="↑/↓ 切换 Take · Home/End 跳到首尾"
+      onKeyDown={handleNavigation}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       aria-label={`素材 Take，共 ${takes.length} 条`}
     >

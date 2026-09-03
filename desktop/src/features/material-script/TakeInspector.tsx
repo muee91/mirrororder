@@ -1,9 +1,20 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
+import { cameraPresentation } from "../media/cameraPresentation";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { CandidateEvidence } from "./CandidateEvidence";
 import { AuditEvidencePanel, EditorialDecisionPanel } from "./TakeEvidencePanels";
 import { mappingLabel, mappingSourceLabel } from "./VirtualTakeList";
+import "./take-review.css";
+
+function cameraContinuityKey(value: string | undefined): string {
+  const raw = value?.trim().toLowerCase() ?? "";
+  if (!raw) return "";
+  const presentation = cameraPresentation(value || "");
+  return presentation.tone === "custom" || presentation.tone === "unknown"
+    ? raw
+    : presentation.tone;
+}
 
 export function TakeInspector({
   connection,
@@ -31,6 +42,28 @@ export function TakeInspector({
     () => angle ? connection.mediaUrl(projectId, angle.clip_id) : "",
     [angle, connection, projectId],
   );
+  const previousGroupId = useRef(take?.group_id ?? "");
+  const preferredCamera = useRef(cameraContinuityKey(angle?.camera));
+
+  useEffect(() => {
+    if (!take) return;
+    const groupChanged = Boolean(previousGroupId.current) && previousGroupId.current !== take.group_id;
+    if (groupChanged) {
+      previousGroupId.current = take.group_id;
+      const key = preferredCamera.current;
+      const matching = key
+        ? take.angles.find((item) => cameraContinuityKey(item.camera) === key) ?? null
+        : null;
+      if (matching && matching.clip_id !== selectedClipId) {
+        onSelectClip(matching.clip_id);
+        return;
+      }
+    }
+    previousGroupId.current = take.group_id;
+    const current = take.angles.find((item) => item.clip_id === selectedClipId) ?? take.angles[0] ?? null;
+    const key = cameraContinuityKey(current?.camera);
+    if (key) preferredCamera.current = key;
+  }, [onSelectClip, selectedClipId, take]);
 
   if (!take) return <aside className="take-inspector"><div className="player-empty">当前项目没有 Take。</div></aside>;
 
@@ -46,6 +79,16 @@ export function TakeInspector({
         </span>
       </div>
       <p className="inspector-mapping">{mappingLabel(take)}</p>
+
+      {take.issues.length ? (
+        <div className="take-inspector-statusline" aria-label={`${take.group_id} 当前问题`}>
+          {take.issues.slice(0, 2).map((issue) => (
+            <span className={`take-inspector-issue issue-${issue.severity}`} key={`${take.group_id}-${issue.code}`}>{issue.label}</span>
+          ))}
+          {take.issues.length > 2 ? <span className="take-inspector-issue-overflow">+{take.issues.length - 2}</span> : null}
+        </div>
+      ) : null}
+
       <div className="inspector-actions">
         <button type="button" className="secondary" onClick={onShowScript}>定位剧本</button>
         {take.effective_mapping.source === "human" ? (
@@ -61,6 +104,7 @@ export function TakeInspector({
             angle={item}
             selected={item.clip_id === angle?.clip_id}
             onSelect={onSelectClip}
+            compact
             key={item.clip_id}
           />
         ))}
@@ -95,27 +139,33 @@ export function TakeInspector({
       ) : null}
 
       <div className="dialogue-panel">
-        <p className="eyebrow">对白 / 证据</p>
+        <p className="eyebrow">对白</p>
         <p>{take.transcript.text || "当前没有可靠对白投影。"}</p>
       </div>
 
-      <AuditEvidencePanel take={take} selectedAngle={angle} />
-
-      {take.candidates.length > 0 ? (
-        <div className="candidate-panel">
-          <p className="eyebrow">候选关系 · 需人工审阅后确认</p>
-          {take.candidates.slice(0, 3).map((candidate) => (
-            <CandidateEvidence candidate={candidate} key={candidate.candidate_id} />
-          ))}
-          <div className="inspector-actions">
-            <button type="button" className="secondary" onClick={onShowScript}>
-              到剧本审阅首选候选
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       {showEditorial ? <EditorialDecisionPanel baseUrl={connection.baseUrl} projectId={projectId} groupId={take.group_id} /> : null}
+
+      <details className="take-inspector-evidence">
+        <summary>
+          <span>制作证据与候选</span>
+          <small>{take.candidates.length ? `${take.candidates.length} 个候选` : "按需展开"}</small>
+        </summary>
+        <AuditEvidencePanel take={take} selectedAngle={angle} />
+
+        {take.candidates.length > 0 ? (
+          <div className="candidate-panel">
+            <p className="eyebrow">候选关系 · 需人工审阅后确认</p>
+            {take.candidates.slice(0, 3).map((candidate) => (
+              <CandidateEvidence candidate={candidate} key={candidate.candidate_id} />
+            ))}
+            <div className="inspector-actions">
+              <button type="button" className="secondary" onClick={onShowScript}>
+                到剧本审阅首选候选
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </details>
     </aside>
   );
 }

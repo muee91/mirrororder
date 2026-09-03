@@ -1,0 +1,114 @@
+/* Reviewing ergonomics for Take selection + Inspector.
+ * Keep the viewer and current production facts primary; deeper analysis remains available on demand.
+ */
+
+.take-virtual-scroll:focus-visible {
+  outline: 1px solid var(--mo-accent, #6fa7e8);
+  outline-offset: -1px;
+}
+
+.take-card {
+  cursor: pointer;
+}
+
+.take-card[draggable="true"] {
+  cursor: grab;
+}
+
+.take-card:focus-visible {
+  outline: 1px solid var(--mo-accent, #6fa7e8);
+  outline-offset: -2px;
+  box-shadow: inset 2px 0 0 var(--mo-accent, #6fa7e8);
+}
+
+.take-inspector-statusline {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.take-inspector-issue,
+.take-inspector-issue-overflow {
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border-left: 2px solid var(--mo-border-strong, #3a4651);
+  padding: 0 6px;
+  color: var(--mo-text-secondary, #aeb8c2);
+  background: var(--mo-surface-raised, #171d23);
+  font-size: var(--mo-font-xs, 10px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.take-inspector-issue.issue-warning {
+  border-left-color: var(--mo-warning, #d0aa54);
+  color: var(--mo-warning, #dfc783);
+}
+
+.take-inspector-issue.issue-error {
+  border-left-color: var(--mo-danger, #d66f6f);
+  color: var(--mo-danger, #eeaaaa);
+}
+
+.take-inspector-issue-overflow {
+  border-left-color: transparent;
+  color: var(--mo-text-muted, #74808d);
+  background: transparent;
+}
+
+.take-inspector .inspector-angle-cards {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  margin: 10px 0 8px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.take-inspector .inspector-angle-cards .mo-media-card.is-compact {
+  flex: 0 0 180px;
+}
+
+.take-inspector .take-player {
+  max-height: 340px;
+}
+
+.take-inspector-evidence {
+  margin-top: 12px;
+  border-top: 1px solid var(--mo-border-subtle, #242c34);
+  padding-top: 8px;
+}
+
+.take-inspector-evidence > summary {
+  min-height: 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+  color: var(--mo-text-secondary, #9da9b4);
+  cursor: default;
+  font-size: var(--mo-font-sm, 11px);
+  list-style-position: inside;
+}
+
+.take-inspector-evidence > summary small {
+  color: var(--mo-text-muted, #6f7c87);
+  font-size: var(--mo-font-xs, 10px);
+  font-weight: 500;
+}
+
+.take-inspector-evidence[open] > summary {
+  color: var(--mo-text-primary, #d7dfe5);
+}
+
+.take-inspector-evidence .take-evidence-section,
+.take-inspector-evidence .candidate-panel {
+  margin-top: 8px;
+}
