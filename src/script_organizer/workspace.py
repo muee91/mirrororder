@@ -14,6 +14,11 @@ from uuid import uuid4
 
 from .config import ProjectConfig
 from .fcpxml_reader import read_fcpxml
+from .project_package import (
+    PROJECT_PACKAGE_FORMAT,
+    PROJECT_PACKAGE_SCHEMA_VERSION,
+    load_project_package_manifest,
+)
 from .runtime_diagnostics import environment_payload
 from .script_parser import parse_script
 
@@ -185,6 +190,9 @@ class WorkspaceRegistry:
         config_path = Path(str(entry["config_path"]))
         if not config_path.is_absolute():
             config_path = self.config.config_path.parent / config_path
+        manifest = load_project_package_manifest(config_path)
+        if not manifest.legacy and manifest.project_id != project_id:
+            raise ValueError("项目 manifest id 与 workspace registry 不一致")
         config = ProjectConfig.from_file(config_path)
         if config.is_media_directory:
             from .media_identity import DeviceMediaStore
@@ -202,6 +210,9 @@ class WorkspaceRegistry:
         return config
 
     def register_existing(self, project_id: str, config_path: str | Path) -> dict[str, Any]:
+        manifest = load_project_package_manifest(config_path)
+        if not manifest.legacy and manifest.project_id != project_id:
+            raise ValueError("项目 manifest id 与注册 project_id 不一致")
         config = ProjectConfig.from_file(config_path)
         payload = self.load()
         projects = [item for item in payload["projects"] if item.get("project_id") != project_id]
@@ -284,11 +295,13 @@ class WorkspaceRegistry:
         config_path = project_dir / "project.toml"
         lines = [
             "[project]",
-            f'id = "{project_id}"',
-            f'name = "{name}"',
+            f"format = {json.dumps(PROJECT_PACKAGE_FORMAT)}",
+            f"schema_version = {PROJECT_PACKAGE_SCHEMA_VERSION}",
+            f"id = {json.dumps(project_id)}",
+            f"name = {json.dumps(name, ensure_ascii=False)}",
             "",
             "[input]",
-            f'kind = "{input_kind}"',
+            f"kind = {json.dumps(input_kind)}",
             'script = "./inputs/' + script_copy.name + '"',
         ]
         if fcpxml_copy:
@@ -311,10 +324,14 @@ class WorkspaceRegistry:
             "max_escalated_groups = 24",
             "",
             "[media]",
-            f'timeline_mode = "{str(payload.get("timeline_mode", "sequential"))}"',
+            "timeline_mode = " + json.dumps(str(payload.get("timeline_mode", "sequential")), ensure_ascii=False),
         ])
         for camera, pattern in sorted(patterns.items()):
-            lines.append(f'camera_patterns.{str(camera).upper()} = "{str(pattern)}"')
+            camera_key = json.dumps(str(camera).upper(), ensure_ascii=False)
+            lines.append(
+                f"camera_patterns.{camera_key} = "
+                + json.dumps(str(pattern), ensure_ascii=False)
+            )
         config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         entry = self.register_existing(project_id, config_path)
         if media_roots:

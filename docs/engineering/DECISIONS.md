@@ -32,3 +32,7 @@
 ## D007 — Python package 迁移按 domain slice 进行
 
 `src/script_organizer/` 的 flat namespace 是历史兼容区，不继续无限扩张。迁移按 coherent domain slice 完成，不把搬包、schema/API/authority 变化混在一起；root compatibility facade 只能纯 re-export、无 import-time side effect，并在 caller 迁完后删除。目标边界见 `docs/architecture/python-package-boundaries.md`。
+
+## D008 — `project.toml` 是 MirrorOrder Project Package 的版本化 manifest
+
+新建项目从 schema v1 起显式写入 `project.format = "mirrororder-project"` 与 `project.schema_version = 1`。历史未标记 manifest 作为 legacy schema 0 只读兼容，不在普通读取中静默迁移；未知格式和未来 schema fail fast。项目持久化路径必须可移植，device-local media root/binding 永不进入 v1 manifest。当前 workspace 内部仍保持 `projects/<project_id>/project.toml`，`.mirrorproj` 是可移动目录包的产品命名约定，不作为破坏性目录迁移理由。详细 contract 见 `docs/architecture/project-package.md`。

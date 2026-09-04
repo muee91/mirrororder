@@ -12,6 +12,7 @@
 6. [`engineering/STATUS.md`](./engineering/STATUS.md) — 当前 `main` 与未关闭风险。
 7. [`architecture/desktop-bridge.md`](./architecture/desktop-bridge.md) — Desktop / Python / Rust / Team Web 跨层边界。
 8. [`architecture/repository-layout.md`](./architecture/repository-layout.md) — 源码仓库与运行时工作区边界。
+9. [`architecture/project-package.md`](./architecture/project-package.md) — Project Package v1、`project.toml` schema 与项目可迁移边界。
 
 冲突时：产品/领域文档和 Core 实现优先；工程长期规则看 `engineering/DECISIONS.md` / `INVARIANTS.md`；当前执行状态看 `engineering/STATUS.md`；历史 verification 不能覆盖当前状态。
 
@@ -29,7 +30,7 @@
 
 ## 3. 跨层架构
 
-[`architecture/`](./architecture/) 保存长期跨层说明：Desktop bridge、同步模型、自动化 pipeline、本地智能、仓库布局与 Python package boundaries。详细索引见 [`architecture/README.md`](./architecture/README.md)。
+[`architecture/`](./architecture/) 保存长期跨层说明：Desktop bridge、Project Package、同步模型、自动化 pipeline、本地智能、仓库布局与 Python package boundaries。详细索引见 [`architecture/README.md`](./architecture/README.md)。
 
 ## 4. 工程控制层
 
