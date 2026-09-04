@@ -188,6 +188,10 @@ assert(goldenSlate.includes('from "../material-script/TakeCard"'), "GoldenSlateW
 assert((goldenSlate.match(/<TakeListRow\b/g) ?? []).length >= 2, "Slate Take picker and episode candidates must both use TakeListRow");
 assert(!goldenSlate.includes("golden-take-angle"), "GoldenSlateWorkbench must not hand-render camera chips for Take candidates");
 assert(!goldenSlate.includes("cameraPresentation("), "GoldenSlateWorkbench must not rebuild compact Take camera presentation locally");
+const goldenSlateCss = read("src/features/slate/golden-slate.css");
+assert(!goldenSlateCss.includes(".golden-take-picker-list > button"), "Golden Slate CSS must not reclaim compact Take row anatomy in the picker");
+assert(!goldenSlateCss.includes(".golden-take-picker-list strong"), "Golden Slate CSS must not style canonical Take descendants through broad picker selectors");
+assert(!goldenSlateCss.includes(".golden-episode-candidates > button"), "Golden Slate CSS must not reclaim compact Take row anatomy in episode candidates");
 
 const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
 assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
