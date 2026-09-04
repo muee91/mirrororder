@@ -40,3 +40,13 @@
 ## D009 — Project transfer 使用 path-free durable task + device-local request indirection
 
 外部 `.mirrorproj` 导入、项目另存和 `.mirrorpkg` 收集都属于显式用户动作；可能持续的复制/归档工作必须进入现有 Status Center。绝对源/目标路径只保存到 Application Support 下的 device-local transfer request，durable task target 只保存 `request_id`。外部项目不能通过 Registry 长期引用任意绝对路径，而是原子导入到受管 `projects/<project_id>/`；`.mirrorpkg` 可选媒体只通过 `DeviceMediaStore` 的 `media_id` 权威解析收集，`M_...` 必须通过内容指纹验证、`MP_...` 必须已有本机确认，归档清单不保存原 binding 路径。`output/tasks.json` 属于原 Host / runner 的 operational history，在 Import / Save As / Collect 中统一排除，不随项目身份移动。
+
+## D010 — Production UI 对象使用单一实现权威
+
+Design System v2 定义对象 anatomy、状态语义、机位语义和布局不变量；页面 Workbench 只负责组合制作对象，不再拥有重新发明这些对象的权力。
+
+- 同一 Product Surface 内，同一制作对象只保留一个 canonical renderer。Desktop 与 Team Web 可以因职责不同拥有各自明确的组件族，但同一 surface 内不得并行存在多套 `MediaCard`、`TakeCard`、`SlateRow`、`ScriptBlock`、人物行等实现。
+- canonical renderer 必须是可独立 import 的组件，不能长期隐藏为某个大 Workbench 内的私有函数。页面 adapter 可以完成 DTO → view model 映射，但不能复制机位、状态、selection、availability 或对象 anatomy。
+- A/B/C/AUX 固定槽位、Take/机位排序、预留状态位和 no-shift 行为属于组件 contract，不是页面自由布局。共享语义必须由共享定义消费，禁止在每个页面重新声明一份常量或排序规则。
+- 迁移遵循“确定 canonical → 替换 consumer → 删除重复实现/样式”。`Golden*`、`redesign`、`frozen`、`recovery` 等迁移层只能收缩，不能作为继续叠加新视觉层的命名模板。
+- feature-local CSS 可以定义工作区布局，但不得通过新的全局覆盖层重新定义 canonical 对象的核心几何和状态位置。

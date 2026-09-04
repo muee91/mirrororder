@@ -1,4 +1,5 @@
 export type CameraTone = "a" | "b" | "c" | "aux" | "custom" | "unknown";
+export type StableCameraTone = "a" | "b" | "c" | "aux";
 
 export interface CameraPresentation {
   key: string;
@@ -6,6 +7,19 @@ export interface CameraPresentation {
   tone: CameraTone;
   sortOrder: number;
 }
+
+export interface StableCameraSlotDefinition {
+  tone: StableCameraTone;
+  label: string;
+  sortOrder: number;
+}
+
+export const STABLE_CAMERA_SLOTS: readonly StableCameraSlotDefinition[] = [
+  { tone: "a", label: "A机", sortOrder: 10 },
+  { tone: "b", label: "B机", sortOrder: 20 },
+  { tone: "c", label: "C机", sortOrder: 30 },
+  { tone: "aux", label: "AUX", sortOrder: 40 },
+];
 
 function normalized(value: string): string {
   return value.trim().replace(/机位/g, "").replace(/机/g, "").replace(/\s+/g, "").toUpperCase();

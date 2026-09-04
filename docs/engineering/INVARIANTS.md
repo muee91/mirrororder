@@ -54,6 +54,22 @@ evidence → proposal → human confirmation → authority
 - 把 `/Volumes/...`、`/Users/...`、Windows 盘符等设备绝对路径写入共享 artifact、源码 Git 或 durable task target。
 - 把模型 API key/secret 写进 workspace/project/review/audit/editorial 或同步产物。
 
+## Production UI implementation authority
+
+### MUST
+
+- 同一 Product Surface 内，同一制作对象只消费一个 canonical renderer；页面只组合对象或适配数据。
+- A/B/C/AUX 固定槽位和排序从共享 camera presentation 定义读取；缺少 B 时仍保留 B 空槽，C 不得左移。
+- `MediaCard`、`TakeCard`、`SlateRow`、`ScriptBlock`、人物候选/已确认人物等 canonical renderer 必须可独立 import，并有对应 contract test 或 authority gate。
+- CSS ownership 迁移必须收缩旧层：替换 consumer 后删除失去 owner 的覆盖或兼容样式。
+
+### MUST NOT
+
+- 在 Workbench 内再声明第二个同语义 `MediaCard` / `TakeCard` / `SlateRow` / `ScriptBlock` / 人物行实现。
+- 在 feature 内复制 A/B/C/AUX slot 常量、相同对象的排序规则或状态位置规则来制造局部变体。
+- 为修一个页面继续向 `desktop/src/main.tsx` 叠加新的全局 theme/redesign/frozen/recovery CSS 层；需要新视觉时应修改现有 owner 或完成替换后移除旧 owner。
+- 用 page-specific CSS 覆盖 canonical 对象的核心 anatomy、固定尺寸、slot 顺序和 selection geometry。
+
 ## Python package
 
 - `src/script_organizer/` flat namespace 只作为迁移期兼容区。
