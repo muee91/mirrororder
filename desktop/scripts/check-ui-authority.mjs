@@ -157,6 +157,14 @@ const takeCard = read("src/features/material-script/TakeCard.tsx");
 assert(takeCard.includes("export function TakeCard"), "TakeCard must remain an independently importable canonical renderer");
 assert(takeCard.includes("export function TakeListRow"), "TakeListRow must remain owned beside the canonical TakeCard");
 assert(takeCard.includes("STABLE_CAMERA_SLOTS"), "TakeCard must consume the shared camera slot definition");
+assert(takeCard.includes('import "./take-card.css"'), "canonical Take renderers must own their compact stylesheet import");
+assert(takeCard.includes('data-ui-authority="take-compact"'), "TakeListRow must expose the canonical compact Take authority marker");
+assert(!takeCard.includes("className?: string;"), "TakeListRow must not expose arbitrary className styling escape hatches");
+const compactTakeStyleOwners = sourceCssFiles.filter((relativePath) => read(relativePath).includes(".mo-take-list-"));
+assert(
+  compactTakeStyleOwners.length === 1 && compactTakeStyleOwners[0] === "src/features/material-script/take-card.css",
+  `compact Take styling must have one owner; found ${compactTakeStyleOwners.length ? compactTakeStyleOwners.join(", ") : "none"}`,
+);
 
 const virtualTakeList = read("src/features/material-script/VirtualTakeList.tsx");
 assert(!/\bfunction\s+TakeCard\b/.test(virtualTakeList), "VirtualTakeList must not hide a second TakeCard implementation");
@@ -166,6 +174,7 @@ assert(virtualTakeList.includes('from "./TakeCard"'), "VirtualTakeList must cons
 const slatePlacementPools = read("src/features/slate/SlatePlacementPools.tsx");
 assert(slatePlacementPools.includes("TakeListRow"), "SlatePlacementPools must consume the canonical compact Take renderer");
 assert(!/\bfunction\s+TakeCard\b/.test(slatePlacementPools), "SlatePlacementPools must not reintroduce a second TakeCard implementation");
+assert(!slatePlacementPools.includes("golden-placement-take"), "SlatePlacementPools must not style Take rows through a local card class");
 
 const slateRow = read("src/features/slate/SlateRow.tsx");
 assert(slateRow.includes("export const SLATE_CAMERA_COLUMNS"), "SlateRow must own the fixed A/B/C/AUX camera column contract");
