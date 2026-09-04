@@ -99,6 +99,8 @@ const canonicalRenderers = [
   ["ScriptBlock", "src/features/material-script/ScriptBlock.tsx"],
   ["IdentityCandidateRow", "src/features/identity/IdentityRows.tsx"],
   ["PersonRow", "src/features/identity/IdentityRows.tsx"],
+  ["SlateRow", "src/features/slate/SlateRow.tsx"],
+  ["SlateTableHead", "src/features/slate/SlateRow.tsx"],
 ];
 for (const [symbol, ownerPath] of canonicalRenderers) {
   assertCanonicalDefinition(symbol, ownerPath, sourceTsxFiles);
@@ -164,6 +166,15 @@ assert(virtualTakeList.includes('from "./TakeCard"'), "VirtualTakeList must cons
 const slatePlacementPools = read("src/features/slate/SlatePlacementPools.tsx");
 assert(slatePlacementPools.includes("TakeListRow"), "SlatePlacementPools must consume the canonical compact Take renderer");
 assert(!/\bfunction\s+TakeCard\b/.test(slatePlacementPools), "SlatePlacementPools must not reintroduce a second TakeCard implementation");
+
+const slateRow = read("src/features/slate/SlateRow.tsx");
+assert(slateRow.includes("export const SLATE_CAMERA_COLUMNS"), "SlateRow must own the fixed A/B/C/AUX camera column contract");
+assert(slateRow.includes("export const SLATE_COLUMN_KEYS"), "SlateRow must own the fixed ledger column order");
+const goldenSlate = read("src/features/slate/GoldenSlateWorkbench.tsx");
+assert(goldenSlate.includes('from "./SlateRow"'), "GoldenSlateWorkbench must consume the canonical SlateRow renderer");
+assert(!goldenSlate.includes("<td className=\"col-"), "GoldenSlateWorkbench must not own SlateRow table cells");
+assert(!goldenSlate.includes("<th className=\"col-"), "GoldenSlateWorkbench must not own Slate column headers");
+assert(!goldenSlate.includes("SlateStatusIndicator"), "Slate status placement must remain inside the canonical SlateRow");
 
 const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
 assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
