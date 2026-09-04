@@ -23,11 +23,12 @@ describe("Take reviewing ergonomics", () => {
 
   it("supports continuous Take browsing without a tiny select target", () => {
     const list = read("./VirtualTakeList.tsx");
+    const card = read("./TakeCard.tsx");
 
-    expect(list).toContain("tabIndex={selected ? 0 : -1}");
+    expect(card).toContain("tabIndex={selected ? 0 : -1}");
     expect(list).toContain('aria-keyshortcuts="ArrowUp ArrowDown Home End"');
     expect(list).toContain('event.key === "ArrowUp"');
     expect(list).toContain('event.key === "ArrowDown"');
-    expect(list).toContain('if ((event.target as HTMLElement).closest("button")) return;');
+    expect(card).toContain('if ((event.target as HTMLElement).closest("button")) return;');
   });
 });

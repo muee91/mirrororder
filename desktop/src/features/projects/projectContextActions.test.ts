@@ -6,6 +6,7 @@ const library = readFileSync(fileURLToPath(new URL("./ProjectLibrary.tsx", impor
 const home = readFileSync(fileURLToPath(new URL("./ProjectHome.tsx", import.meta.url)), "utf8");
 const activity = readFileSync(fileURLToPath(new URL("./projectActivity.ts", import.meta.url)), "utf8");
 const app = readFileSync(fileURLToPath(new URL("../../app/App.tsx", import.meta.url)), "utf8");
+const transfers = readFileSync(fileURLToPath(new URL("../../app/projectTransferActions.ts", import.meta.url)), "utf8");
 const workbench = readFileSync(fileURLToPath(new URL("../production/ProjectWorkbench.tsx", import.meta.url)), "utf8");
 
 describe("project actions", () => {
@@ -21,7 +22,7 @@ describe("project actions", () => {
     expect(library).not.toContain('>团队审阅</span><small>');
   });
 
-  it("keeps Project Home management actions explicit and on existing app authority", () => {
+  it("keeps Project Home management actions explicit and outside page-owned clients", () => {
     expect(home).toContain("project-home-more");
     expect(home).toContain('aria-haspopup="menu"');
     expect(home).toContain("onContextMenu");
@@ -36,9 +37,12 @@ describe("project actions", () => {
     expect(home).toContain("onPrepareProject");
     expect(home).toContain("onOpenMediaBinding");
     expect(home).toContain("onDeleteProject");
+    expect(home).toContain('from "../../app/projectTransferActions"');
     expect(home).not.toContain("new ProjectActionClient");
     expect(home).not.toContain("new PlatformClient");
     expect(home).not.toContain("new DesktopClient");
+    expect(transfers).toContain("new ProjectActionClient(baseUrl).saveProjectAs");
+    expect(transfers).toContain("new ProjectActionClient(baseUrl).collectProject");
   });
 
   it("routes Project Home and sidebar actions through existing Desktop authorities", () => {

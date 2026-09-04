@@ -10,10 +10,10 @@ describe("MirrorOrder professional UI contracts", () => {
   it("treats A/B/C/AUX as stable first-class camera identities", () => {
     const camera = read("../features/media/cameraPresentation.ts");
     expect(camera).toContain('CameraTone = "a" | "b" | "c" | "aux" | "custom" | "unknown"');
-    expect(camera).toContain('tone: "a", sortOrder: 10');
-    expect(camera).toContain('tone: "b", sortOrder: 20');
-    expect(camera).toContain('tone: "c", sortOrder: 30');
-    expect(camera).toContain('tone: "aux", sortOrder: 40');
+    expect(camera).toContain('tone: "a", label: "A机", sortOrder: 10');
+    expect(camera).toContain('tone: "b", label: "B机", sortOrder: 20');
+    expect(camera).toContain('tone: "c", label: "C机", sortOrder: 30');
+    expect(camera).toContain('tone: "aux", label: "AUX", sortOrder: 40');
   });
 
   it("keeps slate camera columns in A/B/C/AUX semantic order", () => {
@@ -28,17 +28,19 @@ describe("MirrorOrder professional UI contracts", () => {
     expect(aux).toBeGreaterThan(c);
   });
 
-  it("keeps Take cards on stable A/B/C/AUX slots before custom cameras", () => {
-    const takes = read("../features/material-script/VirtualTakeList.tsx");
-    const a = takes.indexOf('{ tone: "a", label: "A机" }');
-    const b = takes.indexOf('{ tone: "b", label: "B机" }');
-    const c = takes.indexOf('{ tone: "c", label: "C机" }');
-    const aux = takes.indexOf('{ tone: "aux", label: "AUX" }');
+  it("keeps Take cards on the shared A/B/C/AUX contract before custom cameras", () => {
+    const camera = read("../features/media/cameraPresentation.ts");
+    const takeCard = read("../features/material-script/TakeCard.tsx");
+    const a = camera.indexOf('{ tone: "a", label: "A机", sortOrder: 10 }');
+    const b = camera.indexOf('{ tone: "b", label: "B机", sortOrder: 20 }');
+    const c = camera.indexOf('{ tone: "c", label: "C机", sortOrder: 30 }');
+    const aux = camera.indexOf('{ tone: "aux", label: "AUX", sortOrder: 40 }');
     expect(a).toBeGreaterThan(-1);
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
     expect(aux).toBeGreaterThan(c);
-    expect(takes).toContain('tone === "custom" || tone === "unknown"');
+    expect(takeCard).toContain("STABLE_CAMERA_SLOTS.map");
+    expect(takeCard).toContain('tone === "custom" || tone === "unknown"');
   });
 
   it("reserves media card state columns so selection does not move metadata", () => {
