@@ -1,12 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { HostConnectionError } from "../../api/host";
-import { ProductionClient, type IdentityRow } from "../../api/production";
+import { HostConnection, HostConnectionError } from "../../api/host";
+import { ProductionClient, type IdentityOccurrence, type IdentityRow } from "../../api/production";
+import { MirrorOrderMediaCard, type MirrorOrderMediaCardModel } from "../media/MirrorOrderMediaCard";
+import "./identity-workbench.css";
 
 interface Props {
   baseUrl: string;
   projectId: string;
   onOpenTake?: (groupId: string) => void;
 }
+
+type VisualIdentityOccurrence = IdentityOccurrence & {
+  media_id?: string;
+  name?: string;
+  duration?: number;
+  shot_type?: string;
+};
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
@@ -33,8 +42,70 @@ function sourceTimeLabel(seconds: number): string {
   return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
+function hasFaceCrop(row: IdentityRow): boolean {
+  return row.kind === "face" && row.example?.portrait_available === true;
+}
+
+function portraitUrl(baseUrl: string, projectId: string, identityId: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/api/v1/projects/${encodeURIComponent(projectId)}/identities/${encodeURIComponent(identityId)}/portrait`;
+}
+
+function IdentityPortrait({
+  baseUrl,
+  projectId,
+  row,
+  large = false,
+  eager = false,
+  title,
+}: {
+  baseUrl: string;
+  projectId: string;
+  row: IdentityRow;
+  large?: boolean;
+  eager?: boolean;
+  title: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const available = hasFaceCrop(row) && !failed;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [row.identity_id, row.updated_at]);
+
+  return (
+    <span className={`identity-portrait ${large ? "is-large" : ""} is-${row.kind}`}>
+      {available ? (
+        <img
+          src={portraitUrl(baseUrl, projectId, row.identity_id)}
+          alt={`${title} 人脸样本`}
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span aria-hidden="true">{row.kind === "speaker" ? "声" : "人"}</span>
+      )}
+    </span>
+  );
+}
+
+function evidenceCard(host: HostConnection, projectId: string, occurrence: VisualIdentityOccurrence): MirrorOrderMediaCardModel {
+  const observedDuration = Math.max(0, Number(occurrence.end || 0) - Number(occurrence.start || 0));
+  return {
+    id: `${occurrence.group_id}:${occurrence.clip_id}`,
+    mediaId: occurrence.media_id || occurrence.clip_id,
+    camera: occurrence.camera || "—",
+    name: occurrence.name || occurrence.clip_id || occurrence.group_id,
+    duration: typeof occurrence.duration === "number" && occurrence.duration > 0 ? occurrence.duration : observedDuration,
+    shotType: occurrence.shot_type || "unknown",
+    playbackUrl: occurrence.clip_id ? host.mediaUrl(projectId, occurrence.clip_id) : undefined,
+    sourceStart: occurrence.source_time,
+  };
+}
+
 export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
   const client = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
+  const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const [kind, setKind] = useState<"" | "face" | "speaker">("");
   const [rows, setRows] = useState<IdentityRow[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -128,6 +199,7 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
         <div className="identity-list production-panel" aria-label="人物线索">
           {visibleRows.length ? visibleRows.map((row) => {
             const rowIndex = Math.max(0, rows.findIndex((item) => item.identity_id === row.identity_id));
+            const title = identityTitle(row, rowIndex);
             return (
               <button
                 type="button"
@@ -136,9 +208,9 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
                 onClick={() => setSelectedId(row.identity_id)}
                 aria-pressed={row.identity_id === selectedId}
               >
-                <span className={`identity-avatar is-${row.kind}`} aria-hidden="true">{row.kind === "speaker" ? "声" : "人"}</span>
+                <IdentityPortrait baseUrl={baseUrl} projectId={projectId} row={row} title={title} />
                 <span className="identity-row-copy">
-                  <strong>{identityTitle(row, rowIndex)}</strong>
+                  <strong>{title}</strong>
                   <small>{row.confirmed ? "已人工确认" : row.suggested_role_name ? `可能是 ${row.suggested_role_name}` : "待确认"}</small>
                 </span>
                 <span className="identity-row-meta">
@@ -155,7 +227,14 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
             <>
               <div className="identity-inspector-body">
                 <header className="identity-person-header">
-                  <span className={`identity-person-avatar is-${selected.kind}`} aria-hidden="true">{selected.kind === "speaker" ? "声" : "人"}</span>
+                  <IdentityPortrait
+                    baseUrl={baseUrl}
+                    projectId={projectId}
+                    row={selected}
+                    title={identityTitle(selected, selectedIndex)}
+                    large
+                    eager
+                  />
                   <span className="identity-person-copy">
                     <span className="identity-person-state">{selected.confirmed ? "已确认" : "待确认"}</span>
                     <strong>{identityTitle(selected, selectedIndex)}</strong>
@@ -196,26 +275,27 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
                 <section className="identity-evidence-section">
                   <div className="identity-section-heading">
                     <strong>识别依据</strong>
-                    <span>{selected.occurrences.length} 处匹配 · 点击可回到对应 Take</span>
+                    <span>{selected.occurrences.length} 处匹配 · 直接看机位画面，点击回到对应 Take</span>
                   </div>
-                  <div className="identity-occurrences">
-                    {selected.occurrences.slice(0, 12).map((occurrence, index) => (
-                      <button
-                        type="button"
-                        className="occurrence-row"
-                        key={`${occurrence.group_id}-${occurrence.clip_id}`}
-                        onClick={() => onOpenTake?.(occurrence.group_id)}
-                        title={`打开 ${occurrence.group_id}`}
-                      >
-                        <span className="occurrence-order">{String(index + 1).padStart(2, "0")}</span>
-                        <span className="occurrence-copy">
-                          <strong>{occurrence.camera ? `机位 ${occurrence.camera}` : "机位未标记"}</strong>
-                          <span>{sourceTimeLabel(occurrence.source_time)} · 匹配 {confidenceLabel(occurrence.confidence)}</span>
-                          {occurrence.transcript_text ? <small>{occurrence.transcript_text}</small> : null}
-                        </span>
-                        <span className="occurrence-open" aria-hidden="true">›</span>
-                      </button>
-                    ))}
+                  <div className="identity-evidence-cards">
+                    {selected.occurrences.slice(0, 12).map((rawOccurrence) => {
+                      const occurrence = rawOccurrence as VisualIdentityOccurrence;
+                      const model = evidenceCard(host, projectId, occurrence);
+                      return (
+                        <div className="identity-evidence-card" key={`${occurrence.group_id}-${occurrence.clip_id}`}>
+                          <MirrorOrderMediaCard
+                            model={model}
+                            compact
+                            onSelect={onOpenTake && occurrence.group_id ? () => onOpenTake(occurrence.group_id) : undefined}
+                          />
+                          <div className="identity-evidence-meta">
+                            <strong>匹配 {confidenceLabel(occurrence.confidence)}</strong>
+                            <span>{sourceTimeLabel(occurrence.source_time)}</span>
+                          </div>
+                          {occurrence.transcript_text ? <p>{occurrence.transcript_text}</p> : null}
+                        </div>
+                      );
+                    })}
                     {!selected.occurrences.length ? <p className="empty-copy">暂时没有可回看的匹配位置。</p> : null}
                   </div>
                 </section>
