@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_app_production_is_native_and_team_web_remains_a_separate_surface() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
+    resume = (ROOT / "desktop/src/app/resumeState.ts").read_text(encoding="utf-8")
 
     assert 'type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings"' in app
     assert "TeamWebWorkbench" in app
@@ -19,10 +20,15 @@ def test_app_production_is_native_and_team_web_remains_a_separate_surface() -> N
     assert "AssemblyWorkbench" not in workbench
     assert "TimelineWorkbench" in workbench
     assert "DeliveryWorkbench" in workbench
-    assert 'page === "rough-cut" || page === "assembly" ? "timeline" : page' in workbench
+    assert 'page === "rough-cut" || page === "assembly"' in workbench
+    assert 'return "timeline"' in workbench
+    assert 'page === "attention" || page === "overview"' in workbench
+    assert 'return "watch"' in workbench
+    assert 'page === "rough-cut" || page === "assembly"' in resume
+    assert 'page === "attention" || page === "overview"' in resume
 
 
-def test_native_navigation_starts_at_workspace_home_and_uses_production_toolbar_resume() -> None:
+def test_native_navigation_starts_at_workspace_home_and_uses_reduced_toolbar_resume() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
     library = (ROOT / "desktop/src/features/projects/ProjectLibrary.tsx").read_text(encoding="utf-8")
@@ -34,8 +40,21 @@ def test_native_navigation_starts_at_workspace_home_and_uses_production_toolbar_
     assert 'aria-label="制作区域"' in workbench
     for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
-    for label in ("场记", "素材库", "镜次", "人物", "剧本", "覆盖", "剪辑工作台", "交付", "看片", "待处理", "概览"):
-        assert f'label: "{label}"' in workbench
+    for page, label in (
+        ("slate", "场记"),
+        ("media-library", "素材库"),
+        ("takes", "镜次"),
+        ("identity", "人物"),
+        ("script", "剧本"),
+        ("timeline", "剪辑工作台"),
+        ("delivery", "交付"),
+        ("watch", "看片"),
+    ):
+        assert f'{{ page: "{page}", label: "{label}" }}' in workbench
+    assert '{ page: "coverage", label: "覆盖", hidden: true }' in workbench
+    assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
+    assert '{ page: "attention",' not in workbench
+    assert '{ page: "overview",' not in workbench
     assert '{ page: "rough-cut",' not in workbench
     assert '{ page: "assembly",' not in workbench
     assert "openTeamProject(project: ProjectSummary)" in app
