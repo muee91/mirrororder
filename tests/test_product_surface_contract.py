@@ -20,7 +20,7 @@ TEAM = ROOT / "desktop" / "src" / "features" / "team" / "TeamWebWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
-def test_desktop_uses_workspace_home_and_authoritative_production_ia() -> None:
+def test_desktop_uses_workspace_home_and_reduced_production_ia() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
@@ -52,23 +52,31 @@ def test_desktop_uses_workspace_home_and_authoritative_production_ia() -> None:
         ("takes", "镜次"),
         ("identity", "人物"),
         ("script", "剧本"),
-        ("coverage", "覆盖"),
         ("timeline", "剪辑工作台"),
         ("delivery", "交付"),
         ("watch", "看片"),
-        ("attention", "待处理"),
-        ("overview", "概览"),
     ):
         assert f'{{ page: "{page}", label: "{label}" }}' in workbench
+    assert '{ page: "coverage", label: "覆盖", hidden: true }' in workbench
+    assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
+    assert '{ page: "attention",' not in workbench
+    assert '{ page: "overview",' not in workbench
     assert '{ page: "rough-cut",' not in workbench
     assert '{ page: "assembly",' not in workbench
-    assert 'page === "rough-cut" || page === "assembly" ? "timeline" : page' in workbench
+    assert 'const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden)' in workbench
+    assert "showSecondaryNavigation" in workbench
     assert "TimelineWorkbench" in workbench
+    assert "ReviewAttentionWorkbench" not in workbench
+    assert "ProjectOverviewWorkbench" not in workbench
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
     edit_area = workbench.split("edit: {", 1)[1].split("review: {", 1)[0]
     assert '{ page: "timeline", label: "剪辑工作台" }' in edit_area
     assert '{ page: "delivery", label: "交付" }' in edit_area
+    review_area = workbench.split("review: {", 1)[1].split("};", 1)[0]
+    assert '{ page: "watch", label: "看片" }' in review_area
+    assert "待处理" not in review_area
+    assert "概览" not in review_area
 
     assert "professional-global-sidebar" in library
     assert 'aria-label="主导航"' in library
@@ -79,7 +87,7 @@ def test_desktop_uses_workspace_home_and_authoritative_production_ia() -> None:
     assert 'onClick={() => openPage("watch")}' not in library
 
 
-def test_project_resume_defaults_new_state_to_slate_and_restores_valid_project_page() -> None:
+def test_project_resume_defaults_new_state_and_canonicalizes_retired_pages() -> None:
     app = APP.read_text(encoding="utf-8")
     resume = RESUME.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
@@ -91,11 +99,14 @@ def test_project_resume_defaults_new_state_to_slate_and_restores_valid_project_p
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert "rememberProjectPage(project.project_id, page)" in workbench
     assert "VALID_PROJECT_PAGES.has(value)" in resume
-    assert 'return page === "rough-cut" || page === "assembly" ? "timeline" : page' in resume
+    assert 'page === "rough-cut" || page === "assembly"' in resume
+    assert 'return "timeline"' in resume
+    assert 'page === "attention" || page === "overview"' in resume
+    assert 'return "watch"' in resume
     assert "return canonicalProductionPage(value as ProductionPage)" in resume
 
 
-def test_production_surfaces_are_reachable_from_project_toolbar_not_sidebar() -> None:
+def test_production_tools_are_contextual_instead_of_becoming_more_tabs() -> None:
     workbench = WORKBENCH.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
 
@@ -103,6 +114,7 @@ def test_production_surfaces_are_reachable_from_project_toolbar_not_sidebar() ->
     assert "GoldenMaterialScriptWorkbench" in workbench
     assert 'phase={page === "takes" ? "rough" : "precise"}' in workbench
     assert "onOpenPrecise={openTakeInPreciseScript}" in workbench
+    assert "onOpenCoverage" in workbench
     assert "MediaLibraryWorkbench" in workbench
     assert "MediaBindingWorkbench" in workbench
     assert "IdentityWorkbench" in workbench
@@ -111,12 +123,12 @@ def test_production_surfaces_are_reachable_from_project_toolbar_not_sidebar() ->
     assert "AssemblyWorkbench" not in workbench
     assert "TimelineWorkbench" in workbench
     assert "DeliveryWorkbench" in workbench
-    assert "ReviewAttentionWorkbench" in workbench
-    assert "ProjectOverviewWorkbench" in workbench
+    assert "ReviewAttentionWorkbench" not in workbench
+    assert "ProjectOverviewWorkbench" not in workbench
     assert "showEditorial={false}" in workbench
+    assert '{ page: "coverage", label: "覆盖", hidden: true }' in workbench
+    assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
     assert "制作区在项目画布顶部切换。" in library
-    for label in ("场记", "素材库", "镜次", "人物", "剧本", "覆盖", "剪辑工作台", "交付", "看片", "待处理", "概览"):
-        assert f'label: "{label}"' in workbench
 
 
 def test_assistant_is_a_contextual_tool_not_a_project_tab() -> None:
