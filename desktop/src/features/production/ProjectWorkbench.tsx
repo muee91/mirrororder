@@ -145,6 +145,13 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
     navigate("watch", { preserveReviewReturn: true });
   }
 
+  function openTakeInPreciseScript(groupId: string): void {
+    const value = groupId.trim();
+    if (!value) return;
+    setMaterialFocusGroupId(value);
+    navigate("script");
+  }
+
   function returnFromReview(): void {
     if (!reviewReturn) return;
     navigate(reviewReturn.page);
@@ -200,7 +207,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               baseUrl={baseUrl}
               project={project}
               initialGroupId={materialFocusGroupId}
-              initialMode={page === "takes" ? "rough" : "precise"}
+              phase={page === "takes" ? "rough" : "precise"}
+              onOpenPrecise={openTakeInPreciseScript}
               showEditorial={false}
             />
           ) : null}
