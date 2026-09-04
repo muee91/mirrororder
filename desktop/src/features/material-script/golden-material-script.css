@@ -2,15 +2,16 @@
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   color: var(--mo-text-primary, #dbe2e7);
   background: var(--mo-surface-app, #0b0f13);
 }
+.golden-material-script.is-rough { grid-template-rows: auto auto auto minmax(0, 1fr); }
 .golden-material-script.is-loading { grid-template-rows: auto minmax(0, 1fr); }
 
 .golden-ms-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: center;
   min-height: 52px;
@@ -24,10 +25,6 @@
 .golden-ms-title > span { display: block; overflow: hidden; color: var(--mo-text-muted, #6f7c87); font-size: var(--mo-font-xs, 10px); text-overflow: ellipsis; white-space: nowrap; }
 .golden-ms-back { min-height: 30px; border-color: transparent; padding: 5px 8px; color: var(--mo-text-secondary, #8b99a4); background: transparent; font-size: var(--mo-font-xs, 10px); }
 .golden-ms-back:hover { color: var(--mo-text-primary, #d6dde3); background: var(--mo-surface-hover, #1b232a); }
-
-.golden-ms-mode { display: flex; border: 1px solid var(--mo-border-default, #303943); border-radius: var(--mo-radius-control, 5px); padding: 2px; background: var(--mo-surface-app, #0b1014); }
-.golden-ms-mode button { min-width: 84px; border: 0; border-radius: 3px; padding: 5px 8px; color: var(--mo-text-muted, #73808b); background: transparent; font-size: var(--mo-font-sm, 11px); }
-.golden-ms-mode button.is-active { color: var(--mo-text-primary, #e0e7ec); background: var(--mo-surface-selected, #202a33); }
 
 .golden-ms-actor { display: grid; gap: 3px; color: var(--mo-text-muted, #74818c); font-size: var(--mo-font-xs, 10px); }
 .golden-ms-actor input { width: 112px; min-height: 28px; border: 1px solid var(--mo-border-default, #303943); border-radius: var(--mo-radius-control, 5px); padding: 5px 7px; color: var(--mo-text-primary, #d9e1e7); background: var(--mo-surface-control, #0a0f13); font-size: var(--mo-font-sm, 11px); }
@@ -89,7 +86,7 @@
 
 @media (max-width: 1220px) {
   .golden-ms-columns { grid-template-columns: 280px minmax(360px, 1fr) 300px; }
-  .golden-ms-toolbar { grid-template-columns: minmax(180px, 1fr) auto auto; gap: 9px; }
+  .golden-ms-toolbar { grid-template-columns: minmax(180px, 1fr) auto; gap: 9px; }
 }
 
 @media (max-width: 1040px) {
