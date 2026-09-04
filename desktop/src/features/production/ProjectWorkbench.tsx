@@ -65,7 +65,7 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
     defaultPage: "script",
     pages: [
       { page: "script", label: "剧本" },
-      { page: "coverage", label: "覆盖" },
+      { page: "coverage", label: "覆盖", hidden: true },
     ],
   },
   edit: {
@@ -119,7 +119,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const area = areaForPage(page);
   const areaDefinition = AREAS[area];
   const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);
-  const showSecondaryNavigation = visibleAreaPages.length > 1 || Boolean(page === "watch" && reviewReturn);
+  const currentPageDefinition = areaDefinition.pages.find((item) => item.page === page) ?? null;
+  const showSecondaryNavigation = visibleAreaPages.length > 1 || Boolean(currentPageDefinition?.hidden) || Boolean(page === "watch" && reviewReturn);
 
   function navigate(next: ProductionPage, options?: { preserveReviewReturn?: boolean }): void {
     const safe = safeProductionPage(next);
@@ -217,6 +218,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               initialGroupId={materialFocusGroupId}
               phase={page === "takes" ? "rough" : "precise"}
               onOpenPrecise={openTakeInPreciseScript}
+              onOpenCoverage={page === "script" ? () => navigate("coverage") : undefined}
               showEditorial={false}
             />
           ) : null}
