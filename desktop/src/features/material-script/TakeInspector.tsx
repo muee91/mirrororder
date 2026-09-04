@@ -3,8 +3,8 @@ import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { CandidateEvidence } from "./CandidateEvidence";
+import { mappingLabel, mappingSourceLabel, takeDisplayLabel } from "./TakeCard";
 import { AuditEvidencePanel, EditorialDecisionPanel } from "./TakeEvidencePanels";
-import { mappingLabel, mappingSourceLabel } from "./VirtualTakeList";
 import "./take-review.css";
 
 function cameraContinuityKey(value: string | undefined): string {
@@ -67,12 +67,14 @@ export function TakeInspector({
 
   if (!take) return <aside className="take-inspector"><div className="player-empty">当前项目没有 Take。</div></aside>;
 
+  const displayLabel = takeDisplayLabel(take);
+
   return (
     <aside className="take-inspector">
       <div className="inspector-heading">
         <div>
           <p className="eyebrow">当前 Take</p>
-          <h3>{take.group_id}</h3>
+          <h3>{displayLabel}</h3>
         </div>
         <span className={`mapping-source source-${take.effective_mapping.source}`}>
           {mappingSourceLabel(take.effective_mapping.source)}
@@ -81,7 +83,7 @@ export function TakeInspector({
       <p className="inspector-mapping">{mappingLabel(take)}</p>
 
       {take.issues.length ? (
-        <div className="take-inspector-statusline" aria-label={`${take.group_id} 当前问题`}>
+        <div className="take-inspector-statusline" aria-label={`${displayLabel} 当前问题`}>
           {take.issues.slice(0, 2).map((issue) => (
             <span className={`take-inspector-issue issue-${issue.severity}`} key={`${take.group_id}-${issue.code}`}>{issue.label}</span>
           ))}
@@ -98,7 +100,7 @@ export function TakeInspector({
         ) : null}
       </div>
 
-      <div className="inspector-angle-cards" aria-label={`${take.group_id} 机位选择`}>
+      <div className="inspector-angle-cards" aria-label={`${displayLabel} 机位选择`}>
         {take.angles.map((item) => (
           <AngleEvidenceCard
             angle={item}
