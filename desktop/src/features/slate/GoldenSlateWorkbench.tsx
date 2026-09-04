@@ -5,7 +5,7 @@ import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModel
 import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord } from "../../api/production";
 import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
 import { SlateRecordClient } from "../../api/slateRecords";
-import { cameraPresentation } from "../media/cameraPresentation";
+import { TakeListRow } from "../material-script/TakeCard";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
 import { SlateRow, SlateTableHead, type SlateCameraColumn } from "./SlateRow";
 import { SlateWorkbench } from "./SlateWorkbench";
@@ -819,16 +819,12 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
           <header><strong>加入 Take / 镜头</strong><input autoFocus value={takeSearch} onChange={(event) => setTakeSearch(event.target.value)} placeholder="搜索 Take / 机位 / 文件名 / 对白" /><button type="button" className="secondary" onClick={() => { setTakePickerOpen(false); setTakeSearch(""); }}>关闭</button></header>
           <div className="golden-take-picker-list">
             {takeCandidates.map((take) => (
-              <button type="button" key={take.group_id} className={usedTakeIds.has(take.group_id) ? "is-used" : ""} onClick={() => addTake(take)}>
-                <strong>T{take.take_index}</strong>
-                <span className="golden-take-picker-angles">
-                  {take.angles.map((angle) => {
-                    const camera = cameraPresentation(angle.camera || "?");
-                    return <span className="golden-take-angle" data-camera-tone={camera.tone} key={angle.clip_id}><strong>{camera.label}</strong><em title={angle.name}>{angle.name}</em></span>;
-                  })}
-                </span>
-                <small>{take.transcript.text || `${take.duration.toFixed(1)}s · ${take.angles.length} 机位`}</small>
-              </button>
+              <TakeListRow
+                key={take.group_id}
+                take={take}
+                state={usedTakeIds.has(take.group_id) ? "used" : "default"}
+                onSelect={() => addTake(take)}
+              />
             ))}
             {!takeCandidates.length ? <span className="golden-take-picker-empty">没有匹配 Take。</span> : null}
           </div>
@@ -858,7 +854,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
                   ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                 </div>
 
-                {episodeCandidates.length ? <section className="golden-episode-candidates"><header><strong>第 {selected.episode} 集候选</strong><span>{episodeCandidates.length} Take</span></header>{episodeCandidates.map((take) => <button type="button" key={take.group_id} onClick={() => addTake(take)}><strong>T{take.take_index}</strong><span>{take.angles.map((angle) => cameraPresentation(angle.camera || "?").label).join(" / ")}</span><small>{take.transcript.text || `${take.duration.toFixed(1)}s`}</small></button>)}</section> : null}
+                {episodeCandidates.length ? <section className="golden-episode-candidates"><header><strong>第 {selected.episode} 集候选</strong><span>{episodeCandidates.length} Take</span></header>{episodeCandidates.map((take) => <TakeListRow key={take.group_id} take={take} onSelect={() => addTake(take)} />)}</section> : null}
 
                 <section className="golden-inspector-media"><header><strong>机位素材</strong><span>{inspectorAttachments.length}</span></header>
                   {inspectorAttachments.map((attachment) => {
