@@ -13,6 +13,7 @@ STATUS_CENTER = ROOT / "desktop" / "src" / "features" / "status" / "StatusCenter
 SETTINGS = ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx"
 LEGACY_TASK_PANEL = ROOT / "desktop" / "src" / "features" / "settings" / "TaskStatusPanel.tsx"
 SLATE = ROOT / "desktop" / "src" / "features" / "slate" / "GoldenSlateWorkbench.tsx"
+SLATE_ROW = ROOT / "desktop" / "src" / "features" / "slate" / "SlateRow.tsx"
 MEDIA_CARD = ROOT / "desktop" / "src" / "features" / "media" / "MirrorOrderMediaCard.tsx"
 MEDIA_CARD_CSS = ROOT / "desktop" / "src" / "features" / "media" / "mirrororder-media-card.css"
 TEAM = ROOT / "desktop" / "src" / "features" / "team" / "TeamWebWorkbench.tsx"
@@ -100,7 +101,8 @@ def test_production_surfaces_are_reachable_from_project_toolbar_not_sidebar() ->
 
     assert 'const materialScript = page === "takes" || page === "script"' in workbench
     assert "GoldenMaterialScriptWorkbench" in workbench
-    assert 'initialMode={page === "takes" ? "rough" : "precise"}' in workbench
+    assert 'phase={page === "takes" ? "rough" : "precise"}' in workbench
+    assert "onOpenPrecise={openTakeInPreciseScript}" in workbench
     assert "MediaLibraryWorkbench" in workbench
     assert "MediaBindingWorkbench" in workbench
     assert "IdentityWorkbench" in workbench
@@ -129,14 +131,21 @@ def test_assistant_is_a_contextual_tool_not_a_project_tab() -> None:
 
 def test_slate_is_dense_table_and_preserves_keyboard_flow() -> None:
     slate = SLATE.read_text(encoding="utf-8")
+    slate_row = SLATE_ROW.read_text(encoding="utf-8")
 
     assert '<table className="golden-slate-table">' in slate
+    assert 'from "./SlateRow"' in slate
+    assert "<SlateRow" in slate
+    assert "<SlateTableHead" in slate
     for column in ("集", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
-        assert f">{column}<" in slate
+        assert f">{column}<" in slate_row
+    assert 'SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"]' in slate_row
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s"' in slate
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n"' in slate
     assert "expectedRevision: revision" in slate
     assert "displayedDrafts.findIndex" in slate
+    assert '<td className="col-' not in slate
+    assert '<th className="col-' not in slate
 
 
 def test_project_creation_is_low_frequency_modal_not_sidebar_form() -> None:
