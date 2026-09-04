@@ -17,15 +17,17 @@ describe("MirrorOrder professional UI contracts", () => {
   });
 
   it("keeps slate camera columns in A/B/C/AUX semantic order", () => {
-    const slate = read("../features/slate/GoldenSlateWorkbench.tsx");
-    const a = slate.indexOf('mediaCell(draft, "A")');
-    const b = slate.indexOf('mediaCell(draft, "B")');
-    const c = slate.indexOf('mediaCell(draft, "C")');
-    const aux = slate.indexOf('mediaCell(draft, "AUX")');
+    const slateRow = read("../features/slate/SlateRow.tsx");
+    expect(slateRow).toContain('export const SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"] as const');
+    const a = slateRow.indexOf('"camera-A"');
+    const b = slateRow.indexOf('"camera-B"');
+    const c = slateRow.indexOf('"camera-C"');
+    const aux = slateRow.indexOf('"camera-AUX"');
     expect(a).toBeGreaterThan(-1);
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
     expect(aux).toBeGreaterThan(c);
+    expect(slateRow).toContain('SLATE_CAMERA_COLUMNS.map((camera) => <td className="col-media" key={camera}>{renderMedia(camera)}</td>)');
   });
 
   it("keeps Take cards on the shared A/B/C/AUX contract before custom cameras", () => {
