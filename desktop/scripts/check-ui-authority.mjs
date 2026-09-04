@@ -57,9 +57,15 @@ assert(!/\bfunction\s+TakeCard\b/.test(virtualTakeList), "VirtualTakeList must n
 assert(!virtualTakeList.includes("const STABLE_CAMERA_SLOTS"), "VirtualTakeList must not redefine stable camera slots");
 assert(virtualTakeList.includes('from "./TakeCard"'), "VirtualTakeList must consume the canonical TakeCard");
 
+const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
+assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
+const scriptEpisode = read("src/features/material-script/ScriptEpisodeView.tsx");
+assert(scriptEpisode.includes('from "./ScriptBlock"'), "ScriptEpisodeView must consume the canonical ScriptBlock");
+assert(!scriptEpisode.includes('className={`script-block'), "ScriptEpisodeView must not hide a second ScriptBlock anatomy");
+
 const angleEvidence = read("src/features/material-script/AngleEvidenceCard.tsx");
 assert(angleEvidence.includes("MirrorOrderMediaCard"), "AngleEvidenceCard must remain a data adapter over the canonical MediaCard renderer");
 
 if (!process.exitCode) {
-  console.log(`UI authority OK: ${cssImports.length} allowlisted global stylesheet layers; canonical MediaCard/TakeCard contracts intact.`);
+  console.log(`UI authority OK: ${cssImports.length} allowlisted global stylesheet layers; canonical MediaCard/TakeCard/ScriptBlock contracts intact.`);
 }
