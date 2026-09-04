@@ -10,6 +10,10 @@ export function episodeLabel(episode: number): string {
   return episode > 0 ? `EP${episode}` : "未分集";
 }
 
+export function takeDisplayLabel(take: ReviewTakeGroup): string {
+  return take.take_index > 0 ? `Take #${take.take_index}` : "Take";
+}
+
 export function mappingLabel(take: ReviewTakeGroup): string {
   const mapping = take.effective_mapping;
   if (mapping.mapping_status === "episode_only") {
@@ -92,6 +96,7 @@ export interface TakeCardProps {
 export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }: TakeCardProps) {
   const slots = useMemo(() => takeCameraSlots(take.angles), [take.angles]);
   const status = takeStatus(take);
+  const displayLabel = takeDisplayLabel(take);
 
   return (
     <article
@@ -99,7 +104,7 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
       draggable
       tabIndex={selected ? 0 : -1}
       aria-current={selected ? "true" : undefined}
-      aria-label={`${take.group_id} · ${bucketLabel(take)} · ${mappingLabel(take)}`}
+      aria-label={`${displayLabel} · ${bucketLabel(take)} · ${mappingLabel(take)}`}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button")) return;
         onSelect();
@@ -115,8 +120,7 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
       <header className="take-card-heading">
         <div className="take-card-identity">
           <span className="take-card-kicker">TAKE</span>
-          <strong className="take-card-id" title={take.group_id}>{take.group_id}</strong>
-          <span className="take-card-index">#{take.take_index}</span>
+          <strong className="take-card-id">{take.take_index > 0 ? `#${take.take_index}` : "—"}</strong>
         </div>
         <div className="take-card-state">
           <span className={`mapping-source source-${take.effective_mapping.source}`}>{mappingSourceLabel(take.effective_mapping.source)}</span>
@@ -134,7 +138,7 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
         {take.transcript.text || "无可靠对白"}
       </p>
 
-      <div className="take-camera-strip" aria-label={`${take.group_id} 机位槽位`}>
+      <div className="take-camera-strip" aria-label={`${displayLabel} 机位槽位`}>
         {slots.map((slot) => {
           const primary = slot.angles[0] ?? null;
           return (
@@ -170,11 +174,12 @@ export interface TakeListRowProps {
 }
 
 export function TakeListRow({ take, detail, className = "take-list-row", action, actionLabel, onSelect, onDragStart }: TakeListRowProps) {
+  const displayLabel = takeDisplayLabel(take);
   return (
     <article
       className={className}
       draggable={Boolean(onDragStart)}
-      aria-label={`${take.group_id} · ${detail || mappingLabel(take)}`}
+      aria-label={`${displayLabel} · ${detail || mappingLabel(take)}`}
       onDragStart={onDragStart ? (event) => onDragStart(event, take) : undefined}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button")) return;
@@ -182,7 +187,7 @@ export function TakeListRow({ take, detail, className = "take-list-row", action,
       }}
     >
       <div>
-        <strong>{take.group_id}</strong>
+        <strong>{displayLabel}</strong>
         <span>{detail || take.angles.map((angle) => angle.camera).filter(Boolean).join("/") || "无机位"}</span>
       </div>
       {action && actionLabel ? (
