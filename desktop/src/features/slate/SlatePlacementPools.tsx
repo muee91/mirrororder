@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
 import { MediaRoleClient, type MediaInventoryItem } from "../../api/mediaRoles";
+import { TakeListRow } from "../material-script/TakeCard";
 import {
   buildSlatePools,
   buildSlateSceneTargets,
@@ -60,15 +61,6 @@ function Pool({ title, count, children, drop, onDrop }: { title: string; count: 
       <header><strong>{title}</strong><span>{count}</span></header>
       <div>{children}</div>
     </section>
-  );
-}
-
-function TakeCard({ take, detail, action, actionLabel, onSelect, onDragStart }: { take: ReviewTakeGroup; detail?: string; action?: () => void; actionLabel?: string; onSelect?: () => void; onDragStart: (event: DragEvent<HTMLElement>, take: ReviewTakeGroup) => void }) {
-  return (
-    <div className="golden-placement-take" draggable onDragStart={(event) => onDragStart(event, take)} onClick={onSelect}>
-      <div><strong>{take.group_id}</strong><span>{detail || take.angles.map((angle) => angle.camera).filter(Boolean).join("/") || "无机位"}</span></div>
-      {action && actionLabel ? <button type="button" onClick={(event) => { event.stopPropagation(); action(); }}>{actionLabel}</button> : null}
-    </div>
   );
 }
 
@@ -170,15 +162,15 @@ export function SlatePlacementPools({ baseUrl, projectId, review, actor = "", on
       <div className="golden-placement-layout">
         <div className="golden-placement-pools">
           <Pool title="待归集" count={pools.pending.length} drop onDrop={restoreOrClear}>
-            {pools.pending.map((take) => <TakeCard key={take.group_id} take={take} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} action={() => setExcluded(take, true)} actionLabel="排除" />)}
+            {pools.pending.map((take) => <TakeListRow className="golden-placement-take" key={take.group_id} take={take} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} action={() => setExcluded(take, true)} actionLabel="排除" />)}
             {!pools.pending.length ? <span className="golden-placement-empty">没有待归集 Take</span> : null}
           </Pool>
           <Pool title="已归集" count={pools.placed.length}>
-            {pools.placed.map((take) => <TakeCard key={take.group_id} take={take} detail={placementLabel(take, targets)} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} />)}
+            {pools.placed.map((take) => <TakeListRow className="golden-placement-take" key={take.group_id} take={take} detail={placementLabel(take, targets)} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} />)}
             {!pools.placed.length ? <span className="golden-placement-empty">没有人工归集 Take</span> : null}
           </Pool>
           <Pool title="已排除" count={pools.excluded.length}>
-            {pools.excluded.map((take) => <TakeCard key={take.group_id} take={take} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} action={() => setExcluded(take, false)} actionLabel="恢复" />)}
+            {pools.excluded.map((take) => <TakeListRow className="golden-placement-take" key={take.group_id} take={take} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} action={() => setExcluded(take, false)} actionLabel="恢复" />)}
             {!pools.excluded.length ? <span className="golden-placement-empty">没有 Review 排除项</span> : null}
           </Pool>
           <Pool title="孤立素材" count={pools.orphan.length}>
