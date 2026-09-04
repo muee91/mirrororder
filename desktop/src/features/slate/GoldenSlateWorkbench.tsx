@@ -2,12 +2,12 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
-import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord, type SlateStatus } from "../../api/production";
+import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord } from "../../api/production";
 import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
 import { SlateRecordClient } from "../../api/slateRecords";
-import { SlateStatusIndicator } from "../../components/StatusIndicators";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
+import { SlateRow, SlateTableHead, type SlateCameraColumn } from "./SlateRow";
 import { SlateWorkbench } from "./SlateWorkbench";
 import "../media/camera-presentation.css";
 import "./golden-slate.css";
@@ -27,12 +27,6 @@ type Draft = SlateRecord & { dirty: boolean; derived: boolean; derivedSource: st
 type SceneLink = { episode: number; sceneId: string };
 
 const ACTOR_KEY = "mirrororder.productionActor";
-const STATUS_OPTIONS: Array<{ value: SlateStatus; label: string }> = [
-  { value: "unmarked", label: "待定" },
-  { value: "usable", label: "可用" },
-  { value: "partial", label: "部分可用" },
-  { value: "ng", label: "NG" },
-];
 const SHOT_OPTIONS = ["unknown", "wide", "full", "medium", "medium_closeup", "closeup", "extreme_closeup", "big_closeup", "insert"];
 
 function storedActor(): string {
@@ -273,7 +267,7 @@ function cameraKey(value: string): string {
   return value.trim().toUpperCase().replace(/机/g, "");
 }
 
-function primaryAttachment(draft: Draft, camera: "A" | "B" | "C" | "AUX"): { item: SlateAttachment; count: number } | null {
+function primaryAttachment(draft: Draft, camera: SlateCameraColumn): { item: SlateAttachment; count: number } | null {
   const rows = draft.attachments.filter((attachment) => {
     const key = cameraKey(attachment.camera);
     if (camera === "AUX") return !["A", "B", "C"].includes(key) || attachment.source_role !== "sync_camera";
@@ -733,7 +727,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     return () => globalThis.removeEventListener("keydown", keydown);
   }, [takePickerOpen]);
 
-  function mediaCell(draft: Draft, camera: "A" | "B" | "C" | "AUX") {
+  function mediaCell(draft: Draft, camera: SlateCameraColumn) {
     const row = primaryAttachment(draft, camera);
     if (!row) {
       return <button type="button" className="golden-slate-empty-media" onClick={(event) => { event.stopPropagation(); selectRecord(draft.record_id); setTakePickerOpen(true); }}>{camera === "AUX" ? "—" : `＋ ${camera}`}</button>;
@@ -750,23 +744,25 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
       const rowNumber = displayIndex >= 0 ? displayIndex + 1 : 0;
       const mappedScenePlaceholder = !draft.scene && draft.script_scene_id ? draft.script_scene_id : "";
       return (
-        <tr key={draft.record_id} className={`${draft.record_id === selectedRecordId ? "is-selected" : ""} ${draft.dirty ? "is-dirty" : ""}`} onClick={() => selectRecord(draft.record_id)}>
-          <td className="col-index"><strong>{String(rowNumber).padStart(3, "0")}</strong>{draft.derivedSource ? <small className="derived-source">{draft.derivedSource}</small> : draft.dirty ? <small>未保存</small> : null}</td>
-          <td className="col-number"><input type="number" min={1} value={draft.episode ?? ""} onClick={(event) => event.stopPropagation()} onChange={(event) => patchRecord(draft.record_id, { episode: event.target.value ? Number(event.target.value) : null })} /></td>
-          <td className="col-text"><input value={draft.scene} placeholder={mappedScenePlaceholder} title={mappedScenePlaceholder ? `剧本场景 ${mappedScenePlaceholder}` : undefined} onClick={(event) => event.stopPropagation()} onChange={(event) => patchRecord(draft.record_id, { scene: event.target.value })} /></td>
-          <td className="col-text"><input value={draft.shot} onClick={(event) => event.stopPropagation()} onChange={(event) => patchRecord(draft.record_id, { shot: event.target.value })} /></td>
-          <td className="col-number"><input type="number" min={1} value={draft.take_number ?? ""} onClick={(event) => event.stopPropagation()} onChange={(event) => patchRecord(draft.record_id, { take_number: event.target.value ? Number(event.target.value) : null })} /></td>
-          <td className="col-media">{mediaCell(draft, "A")}</td>
-          <td className="col-media">{mediaCell(draft, "B")}</td>
-          <td className="col-media">{mediaCell(draft, "C")}</td>
-          <td className="col-media">{mediaCell(draft, "AUX")}</td>
-          <td className="col-status">
-            <label className="golden-status-control" onClick={(event) => event.stopPropagation()}>
-              <SlateStatusIndicator state={draft.status} />
-              <select value={draft.status} aria-label={`第 ${rowNumber} 条状态`} onChange={(event) => patchRecord(draft.record_id, { status: event.target.value as SlateStatus })}>{STATUS_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select>
-            </label>
-          </td>
-        </tr>
+        <SlateRow
+          key={draft.record_id}
+          row={{
+            recordId: draft.record_id,
+            rowNumber,
+            selected: draft.record_id === selectedRecordId,
+            dirty: draft.dirty,
+            derivedSource: draft.derivedSource,
+            episode: draft.episode,
+            scene: draft.scene,
+            mappedScenePlaceholder,
+            shot: draft.shot,
+            takeNumber: draft.take_number,
+            status: draft.status,
+          }}
+          onSelect={() => selectRecord(draft.record_id)}
+          onPatch={(patch) => patchRecord(draft.record_id, patch)}
+          renderMedia={(camera) => mediaCell(draft, camera)}
+        />
       );
     });
   }
@@ -778,7 +774,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
         <header><span className="section-dot" /><strong>{title}</strong><small>{rows.length} 条</small></header>
         <div className="golden-slate-section-scroll">
           <table className="golden-slate-table">
-            <thead><tr><th className="col-index">序号</th><th className="col-number">集</th><th className="col-text">场号</th><th className="col-text">镜号</th><th className="col-number">次号</th><th className="col-media">A 机</th><th className="col-media">B 机</th><th className="col-media">C 机</th><th className="col-media">辅助 / 特殊</th><th className="col-status">状态</th></tr></thead>
+            <thead><SlateTableHead /></thead>
             <tbody>{renderRows(rows)}</tbody>
           </table>
         </div>
@@ -801,7 +797,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
           {onOpenMaterialScript ? <button type="button" className="secondary" onClick={onOpenMaterialScript}>素材 / 剧本</button> : null}
           {onOpenReview ? <button type="button" className="secondary" onClick={onOpenReview}>团队审阅</button> : null}
           {onOpenIdentity ? <button type="button" className="secondary compact-action" onClick={onOpenIdentity}>人物</button> : null}
-          {onToggleAssistant ? <button type="button" className={`icon-action ${assistantOpen ? "is-active" : ""}`} onClick={onToggleAssistant} aria-label={assistantOpen ? "关闭小镜" : "打开小镜"} aria-pressed={assistantOpen} title={assistantOpen ? "关闭小镜" : "打开小镜"}>✦</button> : null}
+          {onToggleAssistant ? <button type="button" className={`icon-action ${assistantOpen ? "is-active" : ""}`} onClick={() => onToggleAssistant()} aria-label={assistantOpen ? "关闭小镜" : "打开小镜"} aria-pressed={assistantOpen} title={assistantOpen ? "关闭小镜" : "打开小镜"}>✦</button> : null}
           <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>加入 Take / 镜头</button>
           <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>检视</button>
           <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新项目" title="刷新项目">刷新</button>
@@ -886,7 +882,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
 
                 <div className="golden-io-row"><button type="button" className="secondary" onClick={() => setIO("in")}>I 设入点</button><label><span>入点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.start ?? ""} onChange={(event) => { const start = event.target.value ? Number(event.target.value) : 0; const end = selected.usable_range?.end ?? start + 0.04; patchRecord(selected.record_id, { usable_range: { start, end: Math.max(end, start + 0.04) } }); }} /></label><label><span>出点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.end ?? ""} onChange={(event) => { const end = event.target.value ? Number(event.target.value) : 0; const start = selected.usable_range?.start ?? 0; if (end > start) patchRecord(selected.record_id, { usable_range: { start, end } }); }} /></label><button type="button" className="secondary" onClick={() => setIO("out")}>O 设出点</button></div>
                 <label className="golden-inspector-field"><span>备注</span><textarea rows={4} value={selected.note} onChange={(event) => patchRecord(selected.record_id, { note: event.target.value })} placeholder="场记原话、可用范围描述、连续性提醒…" /></label>
-                <div className="golden-inspector-link"><span>关联</span><strong>{selected.source_group_id ? `Take · ${selected.source_group_id}` : "独立场记"}</strong>{selected.script_scene_id ? <small>剧本场景 · {selected.script_scene_id}</small> : null}<small>{selectedTake?.transcript.text || "没有 Take 转写证据"}</small></div>
+                <div className="golden-inspector-link"><span>关联</span><strong>{selectedTake ? `Take ${selectedTake.take_index}` : selected.source_group_id ? "关联 Take" : "独立场记"}</strong>{selected.script_scene_id ? <small>剧本场景 · {selected.script_scene_id}</small> : null}<small>{selectedTake?.transcript.text || "没有 Take 转写证据"}</small></div>
                 <div className="golden-inspector-actions"><button type="button" disabled={busy || !selected.dirty || !actor.trim()} onClick={() => void saveSelected()}>保存当前行</button>{selectedCanDelete ? <button type="button" className="danger-subtle" disabled={busy} onClick={() => void requestDeleteSelected()}>{selectedPersisted ? "删除人工场记…" : "移除草稿…"}</button> : null}</div>
               </>
             ) : <div className="golden-inspector-empty">选择一行或一张机位卡。</div>}
