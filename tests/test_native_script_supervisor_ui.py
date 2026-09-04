@@ -40,8 +40,10 @@ def test_slate_quick_entry_is_sparse_revision_safe_and_continuous() -> None:
 
 def test_camera_specific_shot_facts_stay_clip_level() -> None:
     ui = source("desktop/src/features/slate/GoldenSlateWorkbench.tsx")
+    slate_row = source("desktop/src/features/slate/SlateRow.tsx")
 
-    assert 'camera: "A" | "B" | "C" | "AUX"' in ui
+    assert 'SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"]' in slate_row
+    assert "camera: SlateCameraColumn" in ui
     assert 'if (camera === "AUX")' in ui
     assert 'source_role === "sync_camera"' in ui
     assert "const shot = parsed.angle_shots[cameraKey(attachment.camera)]" in ui
