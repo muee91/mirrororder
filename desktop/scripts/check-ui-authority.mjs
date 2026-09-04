@@ -91,6 +91,16 @@ assert(cssImports.includes("./design-system-v2.css"), "Design System v2 must rem
 
 const sourceTsxFiles = listFiles("src", new Set([".tsx"]));
 const sourceCssFiles = listFiles("src", new Set([".css"]));
+
+const projectWorkbench = read("src/features/production/ProjectWorkbench.tsx");
+const resumeState = read("src/app/resumeState.ts");
+assert(projectWorkbench.includes('review: {\n    label: "审阅",\n    defaultPage: "watch",\n    pages: [\n      { page: "watch", label: "看片" },\n    ],'), "Review must remain one production surface; attention/overview are not standalone pages");
+assert(!projectWorkbench.includes("ReviewAttentionWorkbench"), "Attention must not return as a standalone production workbench");
+assert(!projectWorkbench.includes("ProjectOverviewWorkbench"), "Project overview must not return as a standalone review workbench");
+assert(projectWorkbench.includes('{ page: "media-binding", label: "本机素材", hidden: true }'), "Media binding must stay a hidden repair tool, not a primary production page");
+assert(projectWorkbench.includes("visibleAreaPages.length > 1"), "Single-page production areas must not render redundant secondary navigation");
+assert(resumeState.includes('if (page === "attention" || page === "overview") return "watch";'), "Legacy attention/overview resume routes must collapse into Review");
+
 const forbiddenContextTakeSelectors = [
   ".golden-take-picker-list > button",
   ".golden-take-picker-list strong",
