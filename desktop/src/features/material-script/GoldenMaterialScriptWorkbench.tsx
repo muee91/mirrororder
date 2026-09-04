@@ -28,6 +28,7 @@ interface Props {
   showEditorial?: boolean;
   onBack?: () => void;
   onOpenPrecise?: (groupId: string) => void;
+  onOpenCoverage?: () => void;
 }
 
 type WriteState = "idle" | "saving" | "error";
@@ -71,6 +72,7 @@ export function GoldenMaterialScriptWorkbench({
   showEditorial = false,
   onBack,
   onOpenPrecise,
+  onOpenCoverage,
 }: Props) {
   const connection = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const rough = useMemo(() => new RoughPlacementClient(baseUrl), [baseUrl]);
@@ -259,6 +261,7 @@ export function GoldenMaterialScriptWorkbench({
           {onBack ? <button type="button" className="golden-ms-back secondary" onClick={onBack}>‹ 场记</button> : null}
           <div className="golden-ms-title"><p className="eyebrow">Production</p><h2>{phase === "rough" ? "镜次归集" : "剧本匹配"}</h2><span>{message}</span></div>
         </div>
+        {phase === "precise" && onOpenCoverage ? <button type="button" className="secondary" onClick={onOpenCoverage}>覆盖视图</button> : null}
         <label className="golden-ms-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="写入时必填" /></label>
       </header>
     );
