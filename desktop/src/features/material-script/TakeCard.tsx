@@ -158,3 +158,44 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
     </article>
   );
 }
+
+export interface TakeListRowProps {
+  take: ReviewTakeGroup;
+  detail?: string;
+  className?: string;
+  action?: () => void;
+  actionLabel?: string;
+  onSelect?: () => void;
+  onDragStart?: (event: DragEvent<HTMLElement>, take: ReviewTakeGroup) => void;
+}
+
+export function TakeListRow({ take, detail, className = "take-list-row", action, actionLabel, onSelect, onDragStart }: TakeListRowProps) {
+  return (
+    <article
+      className={className}
+      draggable={Boolean(onDragStart)}
+      aria-label={`${take.group_id} · ${detail || mappingLabel(take)}`}
+      onDragStart={onDragStart ? (event) => onDragStart(event, take) : undefined}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) return;
+        onSelect?.();
+      }}
+    >
+      <div>
+        <strong>{take.group_id}</strong>
+        <span>{detail || take.angles.map((angle) => angle.camera).filter(Boolean).join("/") || "无机位"}</span>
+      </div>
+      {action && actionLabel ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            action();
+          }}
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+    </article>
+  );
+}
