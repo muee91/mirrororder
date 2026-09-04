@@ -95,6 +95,7 @@ const sourceCssFiles = listFiles("src", new Set([".css"]));
 const canonicalRenderers = [
   ["MirrorOrderMediaCard", "src/features/media/MirrorOrderMediaCard.tsx"],
   ["TakeCard", "src/features/material-script/TakeCard.tsx"],
+  ["TakeListRow", "src/features/material-script/TakeCard.tsx"],
   ["ScriptBlock", "src/features/material-script/ScriptBlock.tsx"],
   ["IdentityCandidateRow", "src/features/identity/IdentityRows.tsx"],
   ["PersonRow", "src/features/identity/IdentityRows.tsx"],
@@ -152,12 +153,17 @@ assert(cameraPresentation.includes("export const STABLE_CAMERA_SLOTS"), "cameraP
 
 const takeCard = read("src/features/material-script/TakeCard.tsx");
 assert(takeCard.includes("export function TakeCard"), "TakeCard must remain an independently importable canonical renderer");
+assert(takeCard.includes("export function TakeListRow"), "TakeListRow must remain owned beside the canonical TakeCard");
 assert(takeCard.includes("STABLE_CAMERA_SLOTS"), "TakeCard must consume the shared camera slot definition");
 
 const virtualTakeList = read("src/features/material-script/VirtualTakeList.tsx");
 assert(!/\bfunction\s+TakeCard\b/.test(virtualTakeList), "VirtualTakeList must not hide a second TakeCard implementation");
 assert(!virtualTakeList.includes("const STABLE_CAMERA_SLOTS"), "VirtualTakeList must not redefine stable camera slots");
 assert(virtualTakeList.includes('from "./TakeCard"'), "VirtualTakeList must consume the canonical TakeCard");
+
+const slatePlacementPools = read("src/features/slate/SlatePlacementPools.tsx");
+assert(slatePlacementPools.includes("TakeListRow"), "SlatePlacementPools must consume the canonical compact Take renderer");
+assert(!/\bfunction\s+TakeCard\b/.test(slatePlacementPools), "SlatePlacementPools must not reintroduce a second TakeCard implementation");
 
 const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
 assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
