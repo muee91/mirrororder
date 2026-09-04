@@ -10,6 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_PATH = ROOT / "src/script_organizer/identity_api_runtime.py"
 UI_PATH = ROOT / "desktop/src/features/identity/IdentityWorkbench.tsx"
+IDENTITY_ROWS_PATH = ROOT / "desktop/src/features/identity/IdentityRows.tsx"
 CSS_PATH = ROOT / "desktop/src/features/identity/identity-workbench.css"
 
 
@@ -171,14 +172,18 @@ def test_decorated_identity_rows_keep_paths_server_side():
 
 def test_identity_ui_uses_face_portraits_and_existing_camera_cards():
     ui = UI_PATH.read_text(encoding="utf-8")
+    rows_ui = IDENTITY_ROWS_PATH.read_text(encoding="utf-8")
     css = CSS_PATH.read_text(encoding="utf-8")
     runtime = RUNTIME_PATH.read_text(encoding="utf-8")
 
     assert "MirrorOrderMediaCard" in ui
     assert "identity-evidence-cards" in ui
     assert 'className="occurrence-row"' not in ui
-    assert "portrait_available" in ui
-    assert "/portrait" in ui
+    assert 'from "./IdentityRows"' in ui
+    assert "IdentityCandidateRow" in rows_ui
+    assert "PersonRow" in rows_ui
+    assert "portrait_available" in rows_ui
+    assert "/portrait" in rows_ui
     assert "identity-portrait" in css
     assert "@container" in css
     assert '"full_frame_portrait_fallback": False' in runtime
