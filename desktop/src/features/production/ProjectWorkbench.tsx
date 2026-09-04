@@ -12,7 +12,7 @@ import "../material-script/material-script.css";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
 import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
 import "../media/media.css";
-import { AssemblyWorkbench, CoverageWorkbench, RoughCutWorkbench } from "../planning/PlanningWorkbenches";
+import { CoverageWorkbench } from "../planning/PlanningWorkbenches";
 import { ProjectOverviewWorkbench, ReviewAttentionWorkbench } from "../review/ReviewWorkbenches";
 import { GoldenSlateWorkbench } from "../slate/GoldenSlateWorkbench";
 import { SlatePlaybackShortcuts } from "../slate/SlatePlaybackShortcuts";
@@ -50,7 +50,7 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
     pages: [
       { page: "slate", label: "场记" },
       { page: "media-library", label: "素材库" },
-      { page: "takes", label: "Take" },
+      { page: "takes", label: "镜次" },
       { page: "identity", label: "人物" },
       { page: "media-binding", label: "本机素材" },
     ],
@@ -65,11 +65,9 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
   },
   edit: {
     label: "剪辑",
-    defaultPage: "rough-cut",
+    defaultPage: "timeline",
     pages: [
-      { page: "rough-cut", label: "粗剪" },
-      { page: "assembly", label: "组接" },
-      { page: "timeline", label: "时间线" },
+      { page: "timeline", label: "剪辑工作台" },
       { page: "delivery", label: "交付" },
     ],
   },
@@ -87,19 +85,22 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
 const ALL_PAGES = new Set<ProductionPage>(Object.values(AREAS).flatMap((area) => area.pages.map((item) => item.page)));
 
 function safeProductionPage(page: ProductionPage): ProductionPage {
-  return ALL_PAGES.has(page) ? page : "slate";
+  const canonical: ProductionPage = page === "rough-cut" || page === "assembly" ? "timeline" : page;
+  return ALL_PAGES.has(canonical) ? canonical : "slate";
 }
 
 function areaForPage(page: ProductionPage): ProductionArea {
+  const canonical = safeProductionPage(page);
   for (const [key, area] of Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>) {
-    if (area.pages.some((item) => item.page === page)) return key;
+    if (area.pages.some((item) => item.page === canonical)) return key;
   }
   return "material";
 }
 
 function pageLabel(page: ProductionPage): string {
+  const canonical = safeProductionPage(page);
   for (const area of Object.values(AREAS)) {
-    const item = area.pages.find((candidate) => candidate.page === page);
+    const item = area.pages.find((candidate) => candidate.page === canonical);
     if (item) return item.label;
   }
   return "场记";
@@ -152,8 +153,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const materialScript = page === "takes" || page === "script";
   const assistantVisible = assistantOpen;
   const canvasKey = `${project.project_id}:${page}:operator-${operatorRevision}`;
-
-  const primaryNavigation = useMemo(() => (Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>), []);
+  const primaryNavigation = useMemo(() => Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>, []);
 
   return (
     <section className={`project-production-workbench professional-project-workbench ${assistantVisible ? "has-assistant-drawer" : ""}`}>
@@ -209,8 +209,6 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
           {page === "media-binding" ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-          {page === "rough-cut" ? <RoughCutWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-          {page === "assembly" ? <AssemblyWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "watch" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial /> : null}

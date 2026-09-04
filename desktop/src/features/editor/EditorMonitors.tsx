@@ -49,7 +49,7 @@ function monitorLabel(frame: number, fps: number): string {
 }
 
 function waveformError(error: unknown): string {
-  if (error instanceof HostConnectionError && error.status === 404) return "当前 clip 尚未生成 waveform";
+  if (error instanceof HostConnectionError && error.status === 404) return "当前素材尚未生成波形缓存";
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -75,7 +75,7 @@ export function EditorMonitors({
   const programVideoRef = useRef<HTMLVideoElement>(null);
   const [direction, setDirection] = useState<TransportDirection>(0);
   const [waveform, setWaveform] = useState<WaveformPayload | null>(null);
-  const [waveformMessage, setWaveformMessage] = useState("选择 Timeline clip 或 Source 后读取 waveform");
+  const [waveformMessage, setWaveformMessage] = useState("选择时间线片段或素材后读取波形");
   const [waveformBusy, setWaveformBusy] = useState(false);
 
   const fps = sequenceFps(sequence);
@@ -87,17 +87,9 @@ export function EditorMonitors({
     const current = selectedSourceState(project, sequence, selectedClip);
     return current ? { ...current, sourceFrame: selectedClip?.source_in ?? 0 } : null;
   }, [fps, project, selectedClip, sequence, sourcePreview]);
-  const programLocated = useMemo(
-    () => videoClipAtPlayhead(sequence, playhead),
-    [playhead, sequence],
-  );
-  const programAnglePending = Boolean(
-    programLocated?.clip.multicam_group_id && !programLocated.clip.selected_angle_source_id,
-  );
-  const programState = useMemo(
-    () => programMediaAtPlayhead(project, sequence, playhead),
-    [playhead, project, sequence],
-  );
+  const programLocated = useMemo(() => videoClipAtPlayhead(sequence, playhead), [playhead, sequence]);
+  const programAnglePending = Boolean(programLocated?.clip.multicam_group_id && !programLocated.clip.selected_angle_source_id);
+  const programState = useMemo(() => programMediaAtPlayhead(project, sequence, playhead), [playhead, project, sequence]);
   const sourceUrl = sourceState?.source.clip_id ? host.mediaUrl(projectId, sourceState.source.clip_id) : "";
   const programUrl = programState?.source.clip_id ? host.mediaUrl(projectId, programState.source.clip_id) : "";
   const waveformClipId = sourceState?.source.clip_id ?? "";
@@ -106,19 +98,18 @@ export function EditorMonitors({
     let cancelled = false;
     setWaveform(null);
     if (!waveformClipId) {
-      setWaveformMessage("选择 Timeline clip 或 Source 后读取 waveform");
+      setWaveformMessage("选择时间线片段或素材后读取波形");
       return () => { cancelled = true; };
     }
-    setWaveformMessage("正在读取缓存 waveform…");
+    setWaveformMessage("正在读取波形缓存…");
     void production.waveform(projectId, waveformClipId, 640)
       .then((payload) => {
         if (cancelled) return;
         setWaveform(payload);
-        setWaveformMessage(payload.peaks.length ? `waveform.v1 · ${payload.peaks.length} peaks` : "当前媒体没有可读取音频");
+        setWaveformMessage(payload.peaks.length ? `波形缓存 · ${payload.peaks.length} 个采样峰值` : "当前媒体没有可读取音频");
       })
       .catch((error: unknown) => {
-        if (cancelled) return;
-        setWaveformMessage(waveformError(error));
+        if (!cancelled) setWaveformMessage(waveformError(error));
       });
     return () => { cancelled = true; };
   }, [production, projectId, waveformClipId]);
@@ -126,11 +117,11 @@ export function EditorMonitors({
   async function refreshWaveform(): Promise<void> {
     if (!waveformClipId || waveformBusy) return;
     setWaveformBusy(true);
-    setWaveformMessage("正在刷新缓存 waveform…");
+    setWaveformMessage("正在刷新波形缓存…");
     try {
       const payload = await production.waveform(projectId, waveformClipId, 640);
       setWaveform(payload);
-      setWaveformMessage(payload.peaks.length ? `waveform.v1 · ${payload.peaks.length} peaks` : "当前媒体没有可读取音频");
+      setWaveformMessage(payload.peaks.length ? `波形缓存 · ${payload.peaks.length} 个采样峰值` : "当前媒体没有可读取音频");
     } catch (error) {
       setWaveform(null);
       setWaveformMessage(waveformError(error));
@@ -142,14 +133,14 @@ export function EditorMonitors({
   async function buildWaveform(): Promise<void> {
     if (!waveformClipId || waveformBusy) return;
     setWaveformBusy(true);
-    setWaveformMessage("正在提交 waveform 生成任务…");
+    setWaveformMessage("正在提交波形生成任务…");
     try {
       const payload = await production.buildWaveform(projectId, waveformClipId, 640);
       if (payload.task.type && payload.task.type !== "waveform_build") {
-        setWaveformMessage(`waveform 提交返回了未知任务类型：${payload.task.type}`);
+        setWaveformMessage(`波形生成返回未知任务类型：${payload.task.type}`);
         return;
       }
-      setWaveformMessage("waveform 已提交到状态中心；可以继续剪辑，完成后点“刷新”读取缓存。");
+      setWaveformMessage("波形生成已提交到状态中心；可以继续剪辑，完成后点“刷新”读取缓存。");
     } catch (error) {
       setWaveformMessage(waveformError(error));
     } finally {
@@ -161,9 +152,7 @@ export function EditorMonitors({
     const video = sourceVideoRef.current;
     if (!video || !sourceState) return;
     const seek = () => {
-      if (Math.abs(video.currentTime - sourceState.sourceSeconds) > 0.04) {
-        video.currentTime = Math.max(0, sourceState.sourceSeconds);
-      }
+      if (Math.abs(video.currentTime - sourceState.sourceSeconds) > 0.04) video.currentTime = Math.max(0, sourceState.sourceSeconds);
     };
     if (video.readyState >= 1) seek();
     else video.addEventListener("loadedmetadata", seek, { once: true });
@@ -174,9 +163,7 @@ export function EditorMonitors({
     const video = programVideoRef.current;
     if (!video || !programState) return;
     const seek = () => {
-      if (Math.abs(video.currentTime - programState.sourceSeconds) > Math.max(0.02, 0.75 / fps)) {
-        video.currentTime = Math.max(0, programState.sourceSeconds);
-      }
+      if (Math.abs(video.currentTime - programState.sourceSeconds) > Math.max(0.02, 0.75 / fps)) video.currentTime = Math.max(0, programState.sourceSeconds);
     };
     if (video.readyState >= 1) seek();
     else video.addEventListener("loadedmetadata", seek, { once: true });
@@ -194,25 +181,17 @@ export function EditorMonitors({
     const handleKey = (event: KeyboardEvent) => {
       if (isEditableKeyboardTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "j" || event.key === "J") {
-        event.preventDefault();
-        setDirection(-1);
+        event.preventDefault(); setDirection(-1);
       } else if (event.key === "k" || event.key === "K") {
-        event.preventDefault();
-        setDirection(0);
+        event.preventDefault(); setDirection(0);
       } else if (event.key === "l" || event.key === "L") {
-        event.preventDefault();
-        setDirection(1);
+        event.preventDefault(); setDirection(1);
       } else if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        setDirection(0);
-        onStepFrames(-1);
+        event.preventDefault(); setDirection(0); onStepFrames(-1);
       } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        setDirection(0);
-        onStepFrames(1);
+        event.preventDefault(); setDirection(0); onStepFrames(1);
       } else if (event.key === " ") {
-        event.preventDefault();
-        setDirection((current) => current === 0 ? 1 : 0);
+        event.preventDefault(); setDirection((current) => current === 0 ? 1 : 0);
       }
     };
     globalThis.addEventListener("keydown", handleKey);
@@ -240,67 +219,38 @@ export function EditorMonitors({
     <section className="editor-monitors production-panel">
       <div className="monitor-grid">
         <article className="editor-monitor">
-          <header><strong>Source Monitor</strong><span>{sourceState ? monitorLabel(sourceState.sourceFrame, fps) : "未选择 source"}</span></header>
+          <header><strong>素材监看</strong><span>{sourceState ? monitorLabel(sourceState.sourceFrame, fps) : "未选择素材"}</span></header>
           {sourceUrl && sourceState ? (
-            <video
-              ref={sourceVideoRef}
-              src={sourceUrl}
-              controls
-              preload="metadata"
-              key={`source-${sourceState.source.source_id}`}
-              onTimeUpdate={(event) => reportSourceFrame(event.currentTarget)}
-              onSeeked={(event) => reportSourceFrame(event.currentTarget)}
-            />
-          ) : <div className="monitor-empty">选择 Source pool 或 Timeline clip 查看原始 source。</div>}
+            <video ref={sourceVideoRef} src={sourceUrl} controls preload="metadata" key={`source-${sourceState.source.source_id}`} onTimeUpdate={(event) => reportSourceFrame(event.currentTarget)} onSeeked={(event) => reportSourceFrame(event.currentTarget)} />
+          ) : <div className="monitor-empty">选择素材池或时间线片段查看原始素材。</div>}
           <footer>{sourceState?.source.name || sourceState?.source.clip_id || "—"}</footer>
         </article>
 
         <article className="editor-monitor program-monitor">
-          <header><strong>Program Monitor</strong><span>{monitorLabel(playhead, fps)}</span></header>
+          <header><strong>节目监看</strong><span>{monitorLabel(playhead, fps)}</span></header>
           {programUrl && programState ? (
             <video ref={programVideoRef} src={programUrl} muted playsInline preload="metadata" key={`program-${programState.source.source_id}`} />
           ) : (
-            <div className="monitor-empty">
-              {programAnglePending ? "当前多机位片段机位待选；在 Timeline Inspector 明确选择 A/B/C 后预览。" : "当前 playhead 没有启用的视频 clip。"}
-            </div>
+            <div className="monitor-empty">{programAnglePending ? "当前多机位片段机位待选；在右侧片段检查器明确选择 A/B/C 后预览。" : "当前播放头没有启用的视频片段。"}</div>
           )}
-          <footer>
-            {programAnglePending && programLocated
-              ? `${programLocated.clip.metadata.segment_id || programLocated.clip.clip_id} · 机位待选`
-              : programState ? `${programState.clip.metadata.segment_id || programState.clip.clip_id} · ${programState.source.name || programState.source.clip_id}` : "—"}
-          </footer>
+          <footer>{programAnglePending && programLocated ? `${programLocated.clip.metadata.segment_id || programLocated.clip.clip_id} · 机位待选` : programState ? `${programState.clip.metadata.segment_id || programState.clip.clip_id} · ${programState.source.name || programState.source.clip_id}` : "—"}</footer>
         </article>
       </div>
 
-      <div className="proxy-transport" aria-label="Proxy transport controls">
+      <div className="proxy-transport" aria-label="代理播放控制">
         <button type="button" className={direction === -1 ? "is-active" : ""} onClick={() => setDirection(-1)} title="J">J ◀</button>
         <button type="button" onClick={() => { setDirection(0); onStepFrames(-1); }} title="←">−1f</button>
         <button type="button" className={direction === 0 ? "is-active" : ""} onClick={() => setDirection(0)} title="K">K ■</button>
         <button type="button" onClick={() => { setDirection(0); onStepFrames(1); }} title="→">+1f</button>
         <button type="button" className={direction === 1 ? "is-active" : ""} onClick={() => setDirection(1)} title="L">L ▶</button>
-        <label>
-          Playhead
-          <input type="number" min={0} value={playhead} onChange={(event) => onPlayheadChange(Math.max(0, Math.round(Number(event.target.value) || 0)))} />
-        </label>
-        <span>WebView proxy transport · native A/V clock gate 尚未启用</span>
+        <label>播放头 <input type="number" min={0} value={playhead} onChange={(event) => onPlayheadChange(Math.max(0, Math.round(Number(event.target.value) || 0)))} /></label>
+        <span>WebView 代理播放 · 原生音视频时钟门控尚未启用</span>
       </div>
 
       <div className="waveform-strip">
-        <div className="waveform-heading">
-          <strong>Waveform</strong>
-          <div className="waveform-heading-actions">
-            <span>{waveformMessage}</span>
-            <button type="button" disabled={!waveformClipId || waveformBusy} onClick={() => void refreshWaveform()}>刷新</button>
-            <button type="button" disabled={!waveformClipId || waveformBusy} onClick={() => void buildWaveform()}>生成 waveform</button>
-          </div>
-        </div>
+        <div className="waveform-heading"><strong>音频波形</strong><div className="waveform-heading-actions"><span>{waveformMessage}</span><button type="button" disabled={!waveformClipId || waveformBusy} onClick={() => void refreshWaveform()}>刷新</button><button type="button" disabled={!waveformClipId || waveformBusy} onClick={() => void buildWaveform()}>生成波形</button></div></div>
         {waveform?.peaks.length ? (
-          <div className="waveform-canvas">
-            <svg viewBox="0 0 1000 100" preserveAspectRatio="none" role="img" aria-label={`${waveform.peaks.length} waveform peaks`}>
-              <path d={waveformPath(waveform.peaks)} />
-            </svg>
-            {waveformProgress !== null ? <i className="waveform-playhead" style={{ left: `${waveformProgress}%` }} /> : null}
-          </div>
+          <div className="waveform-canvas"><svg viewBox="0 0 1000 100" preserveAspectRatio="none" role="img" aria-label={`${waveform.peaks.length} 个波形峰值`}><path d={waveformPath(waveform.peaks)} /></svg>{waveformProgress !== null ? <i className="waveform-playhead" style={{ left: `${waveformProgress}%` }} /> : null}</div>
         ) : <div className="waveform-empty">{waveformMessage}</div>}
       </div>
     </section>

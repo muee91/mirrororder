@@ -29,10 +29,10 @@ describe("project production workspace product contract", () => {
     expect(workbench).toContain('areaDefinition.pages.filter((item) => item.page !== "media-binding")');
 
     const editArea = workbench.slice(workbench.indexOf("edit: {"), workbench.indexOf("review: {"));
-    expect(editArea).toContain('{ page: "rough-cut", label: "粗剪" }');
-    expect(editArea).toContain('{ page: "assembly", label: "组接" }');
-    expect(editArea).toContain('{ page: "timeline", label: "时间线" }');
+    expect(editArea).toContain('{ page: "timeline", label: "剪辑工作台" }');
     expect(editArea).toContain('{ page: "delivery", label: "交付" }');
+    expect(editArea).not.toContain('{ page: "rough-cut"');
+    expect(editArea).not.toContain('{ page: "assembly"');
   });
 
   it("uses shared semantic tokens and resolved Desktop theme authority", () => {

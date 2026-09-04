@@ -15,11 +15,11 @@ describe("editor-first delivery presentation", () => {
     expect(workbench).toContain("exportPremiere(projectId, snapshot)");
   });
 
-  it("describes the v2 delivery semantics instead of obsolete flatten/audio limitations", () => {
+  it("describes v2 delivery semantics in Chinese product language", () => {
     const workbench = read("./DeliveryWorkbench.tsx");
-    expect(workbench).toContain("独立 A-track");
-    expect(workbench).toContain("保留 multicam container");
-    expect(workbench).toContain("Timeline marker");
+    expect(workbench).toContain("独立音频片段");
+    expect(workbench).toContain("保留多机位容器");
+    expect(workbench).toContain("时间线标记");
     expect(workbench).not.toContain("linked asset audio only · v1");
     expect(workbench).not.toContain("flatten 为普通 asset-clip");
   });

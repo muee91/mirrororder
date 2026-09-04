@@ -45,6 +45,10 @@ function normalized(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+export function canonicalProductionPage(page: ProductionPage): ProductionPage {
+  return page === "rough-cut" || page === "assembly" ? "timeline" : page;
+}
+
 export function loadAppResume(storage: StorageLike | null = browserStorage()): AppResumeState {
   if (!storage) return { workspacePath: "", projectId: "" };
   try {
@@ -110,7 +114,8 @@ export function readProjectPage(projectId: string, storage: StorageLike | null =
   if (!id || !storage) return DEFAULT_PROJECT_PAGE;
   try {
     const value = storage.getItem(projectPageKey(id));
-    return value && VALID_PROJECT_PAGES.has(value) ? value as ProductionPage : DEFAULT_PROJECT_PAGE;
+    if (!value || !VALID_PROJECT_PAGES.has(value)) return DEFAULT_PROJECT_PAGE;
+    return canonicalProductionPage(value as ProductionPage);
   } catch {
     return DEFAULT_PROJECT_PAGE;
   }
@@ -120,7 +125,7 @@ export function rememberProjectPage(projectId: string, page: ProductionPage, sto
   const id = projectId.trim();
   if (!id || !VALID_PROJECT_PAGES.has(page) || !storage) return;
   try {
-    storage.setItem(projectPageKey(id), page);
+    storage.setItem(projectPageKey(id), canonicalProductionPage(page));
   } catch {
     // Device-local convenience only.
   }

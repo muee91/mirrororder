@@ -10,7 +10,6 @@ import {
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
-
   getItem(key: string): string | null { return this.values.get(key) ?? null; }
   setItem(key: string, value: string): void { this.values.set(key, value); }
   removeItem(key: string): void { this.values.delete(key); }
@@ -20,16 +19,11 @@ describe("production resume state", () => {
   it("remembers only a successfully opened workspace and its project", () => {
     const storage = new MemoryStorage();
     expect(loadAppResume(storage)).toEqual({ workspacePath: "", projectId: "" });
-
     rememberProject("project-before-workspace", storage);
     expect(loadAppResume(storage)).toEqual({ workspacePath: "", projectId: "" });
-
     rememberWorkspace(" /Volumes/Drama/MirrorOrder ", storage);
     rememberProject(" drama-01 ", storage);
-    expect(loadAppResume(storage)).toEqual({
-      workspacePath: "/Volumes/Drama/MirrorOrder",
-      projectId: "drama-01",
-    });
+    expect(loadAppResume(storage)).toEqual({ workspacePath: "/Volumes/Drama/MirrorOrder", projectId: "drama-01" });
   });
 
   it("clears the remembered project when the workspace changes", () => {
@@ -40,11 +34,13 @@ describe("production resume state", () => {
     expect(loadAppResume(storage)).toEqual({ workspacePath: "/workspace/b", projectId: "" });
   });
 
-  it("defaults a project without navigation history to the script-supervisor canvas", () => {
+  it("defaults to the script-supervisor canvas and migrates legacy editor pages", () => {
     const storage = new MemoryStorage();
     expect(readProjectPage("project-a", storage)).toBe("slate");
     rememberProjectPage("project-a", "rough-cut", storage);
-    expect(readProjectPage("project-a", storage)).toBe("rough-cut");
+    expect(readProjectPage("project-a", storage)).toBe("timeline");
+    rememberProjectPage("project-a", "assembly", storage);
+    expect(readProjectPage("project-a", storage)).toBe("timeline");
   });
 
   it("remembers the device-local media binding canvas as a production page", () => {
