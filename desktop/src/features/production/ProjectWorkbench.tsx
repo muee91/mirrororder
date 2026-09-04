@@ -13,7 +13,6 @@ import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
 import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
 import "../media/media.css";
 import { CoverageWorkbench } from "../planning/PlanningWorkbenches";
-import { ProjectOverviewWorkbench, ReviewAttentionWorkbench } from "../review/ReviewWorkbenches";
 import { GoldenSlateWorkbench } from "../slate/GoldenSlateWorkbench";
 import { SlatePlaybackShortcuts } from "../slate/SlatePlaybackShortcuts";
 import "./production.css";
@@ -32,10 +31,16 @@ interface Props {
 
 type ProductionArea = "material" | "script" | "edit" | "review";
 
+interface AreaPageDefinition {
+  page: ProductionPage;
+  label: string;
+  hidden?: boolean;
+}
+
 interface AreaDefinition {
   label: string;
   defaultPage: ProductionPage;
-  pages: Array<{ page: ProductionPage; label: string }>;
+  pages: AreaPageDefinition[];
 }
 
 interface ReviewReturnContext {
@@ -52,7 +57,7 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
       { page: "media-library", label: "素材库" },
       { page: "takes", label: "镜次" },
       { page: "identity", label: "人物" },
-      { page: "media-binding", label: "本机素材" },
+      { page: "media-binding", label: "本机素材", hidden: true },
     ],
   },
   script: {
@@ -76,8 +81,6 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
     defaultPage: "watch",
     pages: [
       { page: "watch", label: "看片" },
-      { page: "attention", label: "待处理" },
-      { page: "overview", label: "概览" },
     ],
   },
 };
@@ -85,8 +88,9 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
 const ALL_PAGES = new Set<ProductionPage>(Object.values(AREAS).flatMap((area) => area.pages.map((item) => item.page)));
 
 function safeProductionPage(page: ProductionPage): ProductionPage {
-  const canonical: ProductionPage = page === "rough-cut" || page === "assembly" ? "timeline" : page;
-  return ALL_PAGES.has(canonical) ? canonical : "slate";
+  if (page === "rough-cut" || page === "assembly") return "timeline";
+  if (page === "attention" || page === "overview") return "watch";
+  return ALL_PAGES.has(page) ? page : "slate";
 }
 
 function areaForPage(page: ProductionPage): ProductionArea {
@@ -114,6 +118,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const [operatorRevision, setOperatorRevision] = useState(0);
   const area = areaForPage(page);
   const areaDefinition = AREAS[area];
+  const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);
+  const showSecondaryNavigation = visibleAreaPages.length > 1 || Boolean(page === "watch" && reviewReturn);
 
   function navigate(next: ProductionPage, options?: { preserveReviewReturn?: boolean }): void {
     const safe = safeProductionPage(next);
@@ -181,17 +187,19 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
         </div>
       </header>
 
-      <nav className="professional-secondary-nav" aria-label={`${AREAS[area].label}工作区`}>
-        <div className="professional-secondary-pages">
-          {page === "watch" && reviewReturn ? (
-            <button type="button" className="professional-review-return" onClick={returnFromReview} title={`返回刚才的${reviewReturn.label}工作位置`}>← {reviewReturn.label}</button>
-          ) : null}
-          {areaDefinition.pages.filter((item) => item.page !== "media-binding").map((item) => (
-            <button type="button" className={page === item.page ? "is-active" : ""} aria-current={page === item.page ? "page" : undefined} key={item.page} onClick={() => navigate(item.page)}>{item.label}</button>
-          ))}
-        </div>
-        <span className="professional-page-context">{AREAS[area].label} / {pageLabel(page)}</span>
-      </nav>
+      {showSecondaryNavigation ? (
+        <nav className="professional-secondary-nav" aria-label={`${AREAS[area].label}工作区`}>
+          <div className="professional-secondary-pages">
+            {page === "watch" && reviewReturn ? (
+              <button type="button" className="professional-review-return" onClick={returnFromReview} title={`返回刚才的${reviewReturn.label}工作位置`}>← {reviewReturn.label}</button>
+            ) : null}
+            {visibleAreaPages.map((item) => (
+              <button type="button" className={page === item.page ? "is-active" : ""} aria-current={page === item.page ? "page" : undefined} key={item.page} onClick={() => navigate(item.page)}>{item.label}</button>
+            ))}
+          </div>
+          <span className="professional-page-context">{AREAS[area].label} / {pageLabel(page)}</span>
+        </nav>
+      ) : null}
 
       <div className="project-workbench-canvas">
         <div className="project-workbench-main owns-chrome" key={canvasKey}>
@@ -220,8 +228,6 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
           {page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "watch" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial /> : null}
-          {page === "attention" ? <ReviewAttentionWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-          {page === "overview" ? <ProjectOverviewWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
         </div>
 
         {assistantVisible ? (
