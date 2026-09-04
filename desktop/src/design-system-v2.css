@@ -286,10 +286,7 @@ input, textarea, select {
   background: var(--mo-surface-pane);
 }
 .golden-take-picker > header input,
-.golden-take-picker-list span,
-.golden-take-picker-list small,
 .golden-take-picker-empty { font-size: var(--mo-font-sm); }
-.golden-take-picker-list > button { border-radius: 4px; }
 
 /* Inspector should read as a contextual pane, never as a second navigation system. */
 .golden-slate-inspector,
