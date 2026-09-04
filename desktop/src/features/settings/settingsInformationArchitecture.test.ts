@@ -37,6 +37,13 @@ describe("Desktop settings information architecture", () => {
     expect(runtime).not.toContain(">停止</button>");
   });
 
+  it("dismisses transient success messages instead of leaving stale settings status forever", () => {
+    const settings = read("./SettingsStatusWorkbench.tsx");
+    expect(settings).toContain("TRANSIENT_SETTINGS_MESSAGES");
+    expect(settings).toContain('globalThis.setTimeout(() => setMessage(""), 2400)');
+    expect(settings).toContain('message ? <span className="production-state"');
+  });
+
   it("does not leak frozen Timeline or release-gate concepts into normal Settings", () => {
     const settings = read("./SettingsStatusWorkbench.tsx");
     expect(settings).not.toContain("TimelineClient");

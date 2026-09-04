@@ -11,6 +11,11 @@ import "./settings-preferences.css";
 
 interface Props { baseUrl: string }
 
+const TRANSIENT_SETTINGS_MESSAGES = new Set([
+  "设置已更新。",
+  "团队审阅偏好已保存。",
+]);
+
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
   return error instanceof Error ? error.message : String(error);
@@ -61,6 +66,12 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
 
   useEffect(() => { void reload(); }, [desktop, host, platform]);
 
+  useEffect(() => {
+    if (!TRANSIENT_SETTINGS_MESSAGES.has(message)) return;
+    const timer = globalThis.setTimeout(() => setMessage(""), 2400);
+    return () => globalThis.clearTimeout(timer);
+  }, [message]);
+
   async function saveSettings(): Promise<void> {
     if (!settings) return;
     setBusy(true);
@@ -81,7 +92,7 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
     <section className="phase3-workbench settings-status-workbench">
       <header className="production-heading settings-heading">
         <div><p className="eyebrow">MirrorOrder Desktop</p><h2>设置</h2></div>
-        <div className="assistant-heading-actions"><span className="production-state">{message}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>刷新</button></div>
+        <div className="assistant-heading-actions">{message ? <span className="production-state" role="status" aria-live="polite">{message}</span> : null}<button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>刷新</button></div>
       </header>
 
       <p className="production-note settings-intro">这里管理当前设备的外观、智能能力、小镜模型和团队审阅偏好。后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
