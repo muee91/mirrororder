@@ -109,34 +109,6 @@
   font-size: var(--mo-font-xs, 10px);
 }
 
-/* Canonical compact Take anatomy must survive legacy feature-context selectors
- * until those selectors are deleted during the Golden Slate CSS contraction. */
-[data-ui-authority="take-compact"] .mo-take-list-heading strong,
-[data-ui-authority="take-compact"] .mo-take-list-camera strong {
-  grid-row: auto;
-}
-[data-ui-authority="take-compact"] .mo-take-list-heading strong {
-  color: var(--mo-text-primary, #e2e8ed);
-  font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: var(--mo-font-sm, 11px);
-}
-[data-ui-authority="take-compact"] .mo-take-list-heading > span {
-  color: var(--mo-text-muted, #778590);
-  font-size: var(--mo-font-xs, 10px);
-}
-[data-ui-authority="take-compact"] .mo-take-list-camera strong {
-  color: inherit;
-  font-size: 9px;
-}
-[data-ui-authority="take-compact"] .mo-take-list-detail > span {
-  color: var(--mo-text-secondary, #a6b1ba);
-  font-size: var(--mo-font-xs, 10px);
-}
-[data-ui-authority="take-compact"] .mo-take-list-detail > small {
-  color: var(--mo-text-muted, #778590);
-  font-size: 9px;
-}
-
 @media (max-width: 1180px) {
   .mo-take-list-row { padding-inline: 7px; }
   .mo-take-list-detail > small { display: none; }
