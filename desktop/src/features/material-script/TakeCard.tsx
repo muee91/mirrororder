@@ -3,6 +3,7 @@ import type { ReviewAngle, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation, STABLE_CAMERA_SLOTS, type CameraTone } from "../media/cameraPresentation";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { takeStatus } from "./model";
+import "./take-card.css";
 
 export const DRAG_TAKE_MIME = "application/x-mirrororder-take";
 
@@ -101,6 +102,7 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
   return (
     <article
       className={`take-card take-status-${status} ${selected ? "is-selected" : ""}`}
+      data-ui-authority="take-card"
       draggable
       tabIndex={selected ? 0 : -1}
       aria-current={selected ? "true" : undefined}
@@ -163,36 +165,73 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
   );
 }
 
+export type TakeListRowState = "default" | "used";
+
 export interface TakeListRowProps {
   take: ReviewTakeGroup;
   detail?: string;
-  className?: string;
+  state?: TakeListRowState;
   action?: () => void;
   actionLabel?: string;
   onSelect?: () => void;
   onDragStart?: (event: DragEvent<HTMLElement>, take: ReviewTakeGroup) => void;
 }
 
-export function TakeListRow({ take, detail, className = "take-list-row", action, actionLabel, onSelect, onDragStart }: TakeListRowProps) {
+export function TakeListRow({ take, detail, state = "default", action, actionLabel, onSelect, onDragStart }: TakeListRowProps) {
   const displayLabel = takeDisplayLabel(take);
+  const status = takeStatus(take);
+  const slots = useMemo(() => takeCameraSlots(take.angles), [take.angles]);
+  const stableSlots = slots.slice(0, STABLE_CAMERA_SLOTS.length);
+  const trailingCount = slots.slice(STABLE_CAMERA_SLOTS.length).reduce((total, slot) => total + slot.angles.length, 0);
+  const secondary = detail || take.transcript.text || mappingLabel(take);
+
   return (
     <article
-      className={className}
+      className={`mo-take-list-row state-${state} take-status-${status}`}
+      data-ui-authority="take-compact"
+      data-take-state={state}
       draggable={Boolean(onDragStart)}
-      aria-label={`${displayLabel} · ${detail || mappingLabel(take)}`}
+      tabIndex={onSelect ? 0 : undefined}
+      aria-label={`${displayLabel} · ${secondary}`}
       onDragStart={onDragStart ? (event) => onDragStart(event, take) : undefined}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button")) return;
         onSelect?.();
       }}
+      onKeyDown={onSelect ? (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onSelect();
+      } : undefined}
     >
-      <div>
-        <strong>{displayLabel}</strong>
-        <span>{detail || take.angles.map((angle) => angle.camera).filter(Boolean).join("/") || "无机位"}</span>
+      <div className="mo-take-list-core">
+        <header className="mo-take-list-heading">
+          <strong>{displayLabel}</strong>
+          <span>{take.duration.toFixed(1)}s</span>
+        </header>
+        <div className="mo-take-list-cameras" aria-label={`${displayLabel} 机位槽位`}>
+          {stableSlots.map((slot) => (
+            <span
+              className={`mo-take-list-camera ${slot.angles.length ? "has-media" : "is-empty"}`}
+              data-camera-tone={slot.tone}
+              key={slot.key}
+              title={slot.angles.map((angle) => angle.name).filter(Boolean).join(" / ") || `${slot.label} 无素材`}
+            >
+              <strong>{slot.label.replace("机", "")}</strong>
+              <em>{slot.angles.length > 1 ? `×${slot.angles.length}` : slot.angles.length ? "•" : "—"}</em>
+            </span>
+          ))}
+          {trailingCount ? <span className="mo-take-list-camera-overflow" title="自定义或未知机位">+{trailingCount}</span> : null}
+        </div>
+        <div className="mo-take-list-detail">
+          <span title={secondary}>{secondary}</span>
+          <small>{bucketLabel(take)}</small>
+        </div>
       </div>
       {action && actionLabel ? (
         <button
           type="button"
+          className="mo-take-list-action"
           onClick={(event) => {
             event.stopPropagation();
             action();
