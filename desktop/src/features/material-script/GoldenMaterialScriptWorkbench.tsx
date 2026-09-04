@@ -265,11 +265,11 @@ export function GoldenMaterialScriptWorkbench({
   }
 
   if (!model) {
-    return <section className="golden-material-script is-loading">{toolbar()}<div className="golden-ms-loading">{message}</div></section>;
+    return <section className={`golden-material-script is-loading is-${phase}`}>{toolbar()}<div className="golden-ms-loading">{message}</div></section>;
   }
 
   return (
-    <section className="golden-material-script">
+    <section className={`golden-material-script is-${phase}`}>
       {toolbar()}
 
       {phase === "rough" ? (
