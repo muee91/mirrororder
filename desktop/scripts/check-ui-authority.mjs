@@ -91,6 +91,19 @@ assert(cssImports.includes("./design-system-v2.css"), "Design System v2 must rem
 
 const sourceTsxFiles = listFiles("src", new Set([".tsx"]));
 const sourceCssFiles = listFiles("src", new Set([".css"]));
+const forbiddenContextTakeSelectors = [
+  ".golden-take-picker-list > button",
+  ".golden-take-picker-list strong",
+  ".golden-take-picker-list span",
+  ".golden-take-picker-list small",
+  ".golden-episode-candidates > button",
+];
+for (const relativePath of sourceCssFiles) {
+  const source = read(relativePath);
+  for (const selector of forbiddenContextTakeSelectors) {
+    assert(!source.includes(selector), `${relativePath} must not style canonical compact Take anatomy through ${selector}`);
+  }
+}
 
 const canonicalRenderers = [
   ["MirrorOrderMediaCard", "src/features/media/MirrorOrderMediaCard.tsx"],
