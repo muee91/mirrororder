@@ -184,6 +184,10 @@ assert(goldenSlate.includes('from "./SlateRow"'), "GoldenSlateWorkbench must con
 assert(!goldenSlate.includes("<td className=\"col-"), "GoldenSlateWorkbench must not own SlateRow table cells");
 assert(!goldenSlate.includes("<th className=\"col-"), "GoldenSlateWorkbench must not own Slate column headers");
 assert(!goldenSlate.includes("SlateStatusIndicator"), "Slate status placement must remain inside the canonical SlateRow");
+assert(goldenSlate.includes('from "../material-script/TakeCard"'), "GoldenSlateWorkbench must consume the canonical compact Take renderer");
+assert((goldenSlate.match(/<TakeListRow\b/g) ?? []).length >= 2, "Slate Take picker and episode candidates must both use TakeListRow");
+assert(!goldenSlate.includes("golden-take-angle"), "GoldenSlateWorkbench must not hand-render camera chips for Take candidates");
+assert(!goldenSlate.includes("cameraPresentation("), "GoldenSlateWorkbench must not rebuild compact Take camera presentation locally");
 
 const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
 assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
