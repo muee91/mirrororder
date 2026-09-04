@@ -12,8 +12,10 @@ describe("Swift golden product fidelity", () => {
     const experience = source("../production/product-experience.css");
     expect(workbench).toContain("TimelineWorkbench");
     expect(workbench).toContain("DeliveryWorkbench");
-    expect(workbench).toContain("RoughCutWorkbench");
-    expect(workbench).toContain("AssemblyWorkbench");
+    expect(workbench).not.toContain("RoughCutWorkbench");
+    expect(workbench).not.toContain("AssemblyWorkbench");
+    expect(workbench).toContain('{ page: "timeline", label: "剪辑工作台" }');
+    expect(workbench).toContain('page === "rough-cut" || page === "assembly" ? "timeline" : page');
     expect(workbench).toContain('label: "剪辑"');
     expect(workbench).toContain("professional-project-toolbar");
     expect(workbench).toContain("readProjectPage");

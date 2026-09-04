@@ -6,9 +6,19 @@ function read(relative: string): string {
   return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 }
 
+function editorSurfaceText(): string {
+  return [
+    read("./TimelineWorkbenchView.tsx"),
+    read("./TimelineInitialAssembly.tsx"),
+    read("./TimelineInspectorPanel.tsx"),
+    read("./TimelineSuggestionsPanel.tsx"),
+    read("./TimelineSourcePanel.tsx"),
+  ].join("\n");
+}
+
 describe("editor Chinese product language", () => {
   it("uses Chinese names for the primary editing surfaces", () => {
-    const timeline = read("./TimelineWorkbench.tsx");
+    const timeline = editorSurfaceText();
     const monitors = read("./EditorMonitors.tsx");
     expect(timeline).toContain("剪辑工作台");
     expect(timeline).toContain("初始顺片");
@@ -22,7 +32,7 @@ describe("editor Chinese product language", () => {
   });
 
   it("does not expose old English monitor or source-operation labels", () => {
-    const timeline = read("./TimelineWorkbench.tsx");
+    const timeline = editorSurfaceText();
     const monitors = read("./EditorMonitors.tsx");
     expect(monitors).not.toContain(">Source Monitor<");
     expect(monitors).not.toContain(">Program Monitor<");

@@ -15,10 +15,11 @@ def test_app_production_is_native_and_team_web_remains_a_separate_surface() -> N
     assert "ProjectWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
     assert "GoldenSlateWorkbench" in workbench
-    assert "RoughCutWorkbench" in workbench
-    assert "AssemblyWorkbench" in workbench
+    assert "RoughCutWorkbench" not in workbench
+    assert "AssemblyWorkbench" not in workbench
     assert "TimelineWorkbench" in workbench
     assert "DeliveryWorkbench" in workbench
+    assert 'page === "rough-cut" || page === "assembly" ? "timeline" : page' in workbench
 
 
 def test_native_navigation_starts_at_workspace_home_and_uses_production_toolbar_resume() -> None:
@@ -33,8 +34,10 @@ def test_native_navigation_starts_at_workspace_home_and_uses_production_toolbar_
     assert 'aria-label="制作区域"' in workbench
     for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
-    for label in ("场记", "素材库", "Take", "人物", "剧本", "覆盖", "粗剪", "组接", "时间线", "交付", "看片", "待处理", "概览"):
+    for label in ("场记", "素材库", "镜次", "人物", "剧本", "覆盖", "剪辑工作台", "交付", "看片", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
+    assert '{ page: "rough-cut",' not in workbench
+    assert '{ page: "assembly",' not in workbench
     assert "openTeamProject(project: ProjectSummary)" in app
     assert 'setSurface("team")' in app
     assert 'aria-label="当前项目制作导航"' not in library

@@ -89,15 +89,18 @@ def test_desktop_project_navigation_matches_production_authority() -> None:
     assert 'className="professional-secondary-nav"' in workbench
     for label in ("素材", "剧本", "剪辑", "审阅"):
         assert f'label: "{label}"' in workbench
-    for label in ("场记", "素材库", "Take", "人物", "剧本", "覆盖", "粗剪", "组接", "时间线", "交付", "看片", "待处理", "概览"):
+    for label in ("场记", "素材库", "镜次", "人物", "剧本", "覆盖", "剪辑工作台", "交付", "看片", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
+    assert '{ page: "rough-cut",' not in workbench
+    assert '{ page: "assembly",' not in workbench
+    assert 'page === "rough-cut" || page === "assembly" ? "timeline" : page' in workbench
     assert 'areaDefinition.pages.filter((item) => item.page !== "media-binding")' in workbench
     assert ">小镜</button>" in workbench
     assert "onOpenTake={openTakeFromEvidence}" in workbench
     assert "initialGroupId={materialFocusGroupId}" in workbench
     assert "TimelineWorkbench" in workbench
-    assert "RoughCutWorkbench" in workbench
-    assert "AssemblyWorkbench" in workbench
+    assert "RoughCutWorkbench" not in workbench
+    assert "AssemblyWorkbench" not in workbench
     assert 'aria-label="当前项目制作导航"' not in library
     assert 'onClick={() => openPage("watch")}' not in library
     assert "制作区在项目画布顶部切换。" in library

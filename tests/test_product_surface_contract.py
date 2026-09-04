@@ -48,24 +48,25 @@ def test_desktop_uses_workspace_home_and_authoritative_production_ia() -> None:
     for page, label in (
         ("slate", "场记"),
         ("media-library", "素材库"),
-        ("takes", "Take"),
+        ("takes", "镜次"),
         ("identity", "人物"),
         ("script", "剧本"),
         ("coverage", "覆盖"),
-        ("rough-cut", "粗剪"),
-        ("assembly", "组接"),
-        ("timeline", "时间线"),
+        ("timeline", "剪辑工作台"),
         ("delivery", "交付"),
         ("watch", "看片"),
         ("attention", "待处理"),
         ("overview", "概览"),
     ):
         assert f'{{ page: "{page}", label: "{label}" }}' in workbench
+    assert '{ page: "rough-cut",' not in workbench
+    assert '{ page: "assembly",' not in workbench
+    assert 'page === "rough-cut" || page === "assembly" ? "timeline" : page' in workbench
     assert "TimelineWorkbench" in workbench
-    assert "RoughCutWorkbench" in workbench
-    assert "AssemblyWorkbench" in workbench
+    assert "RoughCutWorkbench" not in workbench
+    assert "AssemblyWorkbench" not in workbench
     edit_area = workbench.split("edit: {", 1)[1].split("review: {", 1)[0]
-    assert '{ page: "timeline", label: "时间线" }' in edit_area
+    assert '{ page: "timeline", label: "剪辑工作台" }' in edit_area
     assert '{ page: "delivery", label: "交付" }' in edit_area
 
     assert "professional-global-sidebar" in library
@@ -89,6 +90,8 @@ def test_project_resume_defaults_new_state_to_slate_and_restores_valid_project_p
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert "rememberProjectPage(project.project_id, page)" in workbench
     assert "VALID_PROJECT_PAGES.has(value)" in resume
+    assert 'return page === "rough-cut" || page === "assembly" ? "timeline" : page' in resume
+    assert "return canonicalProductionPage(value as ProductionPage)" in resume
 
 
 def test_production_surfaces_are_reachable_from_project_toolbar_not_sidebar() -> None:
@@ -102,15 +105,15 @@ def test_production_surfaces_are_reachable_from_project_toolbar_not_sidebar() ->
     assert "MediaBindingWorkbench" in workbench
     assert "IdentityWorkbench" in workbench
     assert "CoverageWorkbench" in workbench
-    assert "RoughCutWorkbench" in workbench
-    assert "AssemblyWorkbench" in workbench
+    assert "RoughCutWorkbench" not in workbench
+    assert "AssemblyWorkbench" not in workbench
     assert "TimelineWorkbench" in workbench
     assert "DeliveryWorkbench" in workbench
     assert "ReviewAttentionWorkbench" in workbench
     assert "ProjectOverviewWorkbench" in workbench
     assert "showEditorial={false}" in workbench
     assert "制作区在项目画布顶部切换。" in library
-    for label in ("场记", "素材库", "Take", "人物", "剧本", "覆盖", "粗剪", "组接", "时间线", "交付", "看片", "待处理", "概览"):
+    for label in ("场记", "素材库", "镜次", "人物", "剧本", "覆盖", "剪辑工作台", "交付", "看片", "待处理", "概览"):
         assert f'label: "{label}"' in workbench
 
 

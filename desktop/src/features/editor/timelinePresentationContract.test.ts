@@ -17,20 +17,21 @@ describe("editor-first Timeline presentation", () => {
   });
 
   it("keeps destructive rebuild as an explicit two-step action", () => {
-    const workbench = read("./TimelineWorkbench.tsx");
+    const authority = read("./useTimelineAuthorityActions.ts");
+    const initialAssembly = read("./TimelineInitialAssembly.tsx");
 
-    expect(workbench).toContain("if (snapshot && !replaceProposalArmed)");
-    expect(workbench).toContain("再次点击确认才会执行");
-    expect(workbench).toContain("再次确认重建");
+    expect(authority).toContain("if (snapshot && !replaceProposalArmed)");
+    expect(authority).toContain("再次点击确认才会执行");
+    expect(initialAssembly).toContain("再次确认重建");
   });
 
   it("keeps unresolved multicam angle visibly pending instead of previewing the base source", () => {
-    const workbench = read("./TimelineWorkbench.tsx");
+    const inspector = read("./TimelineInspectorPanel.tsx");
     const monitors = read("./EditorMonitors.tsx");
 
-    expect(workbench).toContain('value={selection.clip.selected_angle_source_id ?? ""}');
-    expect(workbench).toContain('type: "multicam_switch"');
+    expect(inspector).toContain('value={selection.clip.selected_angle_source_id ?? ""}');
+    expect(inspector).toContain('type: "multicam_switch"');
     expect(monitors).toContain("programAnglePending");
-    expect(monitors).toContain("当前多机位片段机位待选；在 Timeline Inspector 明确选择 A/B/C 后预览。");
+    expect(monitors).toContain("当前多机位片段机位待选；在右侧片段检查器明确选择 A/B/C 后预览。");
   });
 });
