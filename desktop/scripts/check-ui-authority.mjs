@@ -63,9 +63,18 @@ const scriptEpisode = read("src/features/material-script/ScriptEpisodeView.tsx")
 assert(scriptEpisode.includes('from "./ScriptBlock"'), "ScriptEpisodeView must consume the canonical ScriptBlock");
 assert(!scriptEpisode.includes('className={`script-block'), "ScriptEpisodeView must not hide a second ScriptBlock anatomy");
 
+const identityRows = read("src/features/identity/IdentityRows.tsx");
+assert(identityRows.includes("export function IdentityCandidateRow"), "IdentityCandidateRow must remain independently importable");
+assert(identityRows.includes("export function PersonRow"), "PersonRow must remain independently importable");
+assert(identityRows.includes('data-authority="candidate"'), "identity candidates must expose evidence/candidate authority");
+assert(identityRows.includes('data-authority="human"'), "confirmed people must expose human authority");
+const identityWorkbench = read("src/features/identity/IdentityWorkbench.tsx");
+assert(identityWorkbench.includes('from "./IdentityRows"'), "IdentityWorkbench must consume canonical identity rows");
+assert(!identityWorkbench.includes('className={`identity-row'), "IdentityWorkbench must not hide another identity row renderer");
+
 const angleEvidence = read("src/features/material-script/AngleEvidenceCard.tsx");
 assert(angleEvidence.includes("MirrorOrderMediaCard"), "AngleEvidenceCard must remain a data adapter over the canonical MediaCard renderer");
 
 if (!process.exitCode) {
-  console.log(`UI authority OK: ${cssImports.length} allowlisted global stylesheet layers; canonical MediaCard/TakeCard/ScriptBlock contracts intact.`);
+  console.log(`UI authority OK: ${cssImports.length} allowlisted global stylesheet layers; canonical MediaCard/TakeCard/ScriptBlock/Identity rows intact.`);
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { HostConnection, HostConnectionError } from "../../api/host";
 import { ProductionClient, type IdentityOccurrence, type IdentityRow } from "../../api/production";
 import { MirrorOrderMediaCard, type MirrorOrderMediaCardModel } from "../media/MirrorOrderMediaCard";
+import { confidenceLabel, IdentityCandidateRow, IdentityPortrait, identityTitle, PersonRow } from "./IdentityRows";
 import "./identity-workbench.css";
 
 interface Props {
@@ -22,71 +23,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function identityKindLabel(row: IdentityRow): string {
-  return row.kind === "speaker" ? "声纹" : "人物";
-}
-
-function identityTitle(row: IdentityRow, index: number): string {
-  return row.role_name || row.label || `未命名${identityKindLabel(row)} ${String(index + 1).padStart(2, "0")}`;
-}
-
-function confidenceLabel(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
-
 function sourceTimeLabel(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "时间未知";
   const whole = Math.floor(seconds);
   const minutes = Math.floor(whole / 60);
   const rest = whole % 60;
   return `${minutes}:${String(rest).padStart(2, "0")}`;
-}
-
-function hasFaceCrop(row: IdentityRow): boolean {
-  return row.kind === "face" && row.example?.portrait_available === true;
-}
-
-function portraitUrl(baseUrl: string, projectId: string, identityId: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}/api/v1/projects/${encodeURIComponent(projectId)}/identities/${encodeURIComponent(identityId)}/portrait`;
-}
-
-function IdentityPortrait({
-  baseUrl,
-  projectId,
-  row,
-  large = false,
-  eager = false,
-  title,
-}: {
-  baseUrl: string;
-  projectId: string;
-  row: IdentityRow;
-  large?: boolean;
-  eager?: boolean;
-  title: string;
-}) {
-  const [failed, setFailed] = useState(false);
-  const available = hasFaceCrop(row) && !failed;
-
-  useEffect(() => {
-    setFailed(false);
-  }, [row.identity_id, row.updated_at]);
-
-  return (
-    <span className={`identity-portrait ${large ? "is-large" : ""} is-${row.kind}`}>
-      {available ? (
-        <img
-          src={portraitUrl(baseUrl, projectId, row.identity_id)}
-          alt={`${title} 人脸样本`}
-          loading={eager ? "eager" : "lazy"}
-          decoding="async"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <span aria-hidden="true">{row.kind === "speaker" ? "声" : "人"}</span>
-      )}
-    </span>
-  );
 }
 
 function evidenceCard(host: HostConnection, projectId: string, occurrence: VisualIdentityOccurrence): MirrorOrderMediaCardModel {
@@ -199,26 +141,17 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
         <div className="identity-list production-panel" aria-label="人物线索">
           {visibleRows.length ? visibleRows.map((row) => {
             const rowIndex = Math.max(0, rows.findIndex((item) => item.identity_id === row.identity_id));
-            const title = identityTitle(row, rowIndex);
-            return (
-              <button
-                type="button"
-                className={`identity-row ${row.identity_id === selectedId ? "is-selected" : ""}`}
-                key={row.identity_id}
-                onClick={() => setSelectedId(row.identity_id)}
-                aria-pressed={row.identity_id === selectedId}
-              >
-                <IdentityPortrait baseUrl={baseUrl} projectId={projectId} row={row} title={title} />
-                <span className="identity-row-copy">
-                  <strong>{title}</strong>
-                  <small>{row.confirmed ? "已人工确认" : row.suggested_role_name ? `可能是 ${row.suggested_role_name}` : "待确认"}</small>
-                </span>
-                <span className="identity-row-meta">
-                  <strong>{row.take_count} 个 Take</strong>
-                  <small>平均匹配 {confidenceLabel(row.average_confidence)}</small>
-                </span>
-              </button>
-            );
+            const rowProps = {
+              baseUrl,
+              projectId,
+              row,
+              index: rowIndex,
+              selected: row.identity_id === selectedId,
+              onSelect: () => setSelectedId(row.identity_id),
+            };
+            return row.confirmed
+              ? <PersonRow key={row.identity_id} {...rowProps} />
+              : <IdentityCandidateRow key={row.identity_id} {...rowProps} />;
           }) : <p className="empty-copy">当前筛选下还没有人物线索。</p>}
         </div>
 
