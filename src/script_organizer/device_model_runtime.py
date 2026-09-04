@@ -16,9 +16,11 @@ _LAST_RESTORE_ERROR = ""
 
 
 def device_models_payload() -> dict[str, Any]:
+    registry = ModelRegistry()
     return {
         "contract": "device_models.v1",
-        "models": ModelRegistry().public(),
+        "models": registry.public(),
+        "routing": registry.routing(),
         "connections": load_model_connections(include_secrets=False),
         "restore_error": _LAST_RESTORE_ERROR,
     }

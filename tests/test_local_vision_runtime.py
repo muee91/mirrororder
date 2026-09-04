@@ -76,7 +76,7 @@ def test_app_build_bundles_runtime_ui_but_never_model_weights() -> None:
     assert "runtime manifest" in verifier
     assert "PACKAGED_RUNTIME_CONTRACT" in runtime
     assert "resolve_python_runtime" in runtime
-    assert "本地模型与身份识别" in panel
+    assert "本地 AI 与身份识别" in panel
     assert "启用一次后" in panel
     assert 'setCapability("vision"' in panel
     assert 'action: "prepare_identity"' in panel

@@ -157,7 +157,7 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
         </div>
       </header>
 
-      <p className="production-note settings-intro">这里管理当前设备的外观、智能能力、小镜模型和团队审阅偏好。后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
+      <p className="production-note settings-intro">这里管理当前设备的外观、本地 AI、小镜实际运行方式和团队审阅偏好。后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
 
       <div className="settings-preference-stack">
         <section className="settings-preference-section" aria-labelledby="settings-general-title">
@@ -172,7 +172,7 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
 
         <section className="settings-preference-section" aria-labelledby="settings-local-title">
           <header className="settings-section-heading">
-            <div><p className="eyebrow">本机智能</p><h3 id="settings-local-title">视觉与身份识别</h3></div>
+            <div><p className="eyebrow">本机智能</p><h3 id="settings-local-title">本地 AI 与身份识别</h3></div>
             <span>启用一次 · 当前设备自动恢复</span>
           </header>
           <LocalRuntimePanel baseUrl={baseUrl} />
@@ -180,8 +180,8 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
 
         <section className="settings-preference-section" aria-labelledby="settings-assistant-title">
           <header className="settings-section-heading">
-            <div><p className="eyebrow">小镜</p><h3 id="settings-assistant-title">模型连接</h3></div>
-            <span>当前设备 · 与项目无关</span>
+            <div><p className="eyebrow">小镜</p><h3 id="settings-assistant-title">AI 能力</h3></div>
+            <span>当前设备 · 与项目无关 · 显示实际路由 · 高级设置可覆盖</span>
           </header>
           <AssistantModelsPanel baseUrl={baseUrl} />
         </section>

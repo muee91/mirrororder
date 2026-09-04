@@ -96,6 +96,24 @@ describe("Desktop settings information architecture", () => {
     expect(css).toContain(".settings-advanced-diagnostics > summary::after");
   });
 
+  it("shows authoritative Xiaojing routing before advanced model overrides", () => {
+    const settings = read("./SettingsStatusWorkbench.tsx");
+    const models = read("../../api/models.ts");
+    const panel = read("../assistant/AssistantModelsPanel.tsx");
+    const runtime = read("./LocalRuntimePanel.tsx");
+
+    expect(settings).toContain("AI 能力");
+    expect(settings).toContain("显示实际路由 · 高级设置可覆盖");
+    expect(models).toContain("EffectiveModelRouting");
+    expect(panel).toContain("小镜当前运行方式");
+    expect(panel).toContain("payload.routing");
+    expect(panel).toContain("关键词检索");
+    expect(panel).toContain("高级模型设置");
+    expect(panel).toContain("自动沿用已启用的本地多模态模型");
+    expect(panel).toContain("外部画面理解只发送抽样帧到所选服务，不上传原始视频文件。");
+    expect(runtime).toContain("当小镜没有更高优先级的语言模型连接时");
+  });
+
   it("lets users explicitly clear a saved model API key", () => {
     const panel = read("../assistant/AssistantModelsPanel.tsx");
     expect(panel).toContain("clear_api_key: boolean");

@@ -3,6 +3,10 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
 
 export type ModelRole = "text" | "vision" | "embedding";
+export type ModelRoutingMode = "local" | "external" | "hybrid" | "fallback";
+export type ModelRoutingPrivacy = "local-only" | "external-models" | "mixed";
+
+export const MODEL_ROUTING_CHANGED_EVENT = "mirrororder:model-routing-changed";
 
 export interface ModelConnection {
   enabled: boolean;
@@ -19,17 +23,37 @@ export interface ModelConnections {
   embedding: ModelConnection;
 }
 
+export interface EffectiveModelRoute {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  local: boolean;
+  source?: string;
+  fallback?: string;
+}
+
+export interface EffectiveModelRouting {
+  contract: string;
+  mode: ModelRoutingMode;
+  privacy: ModelRoutingPrivacy;
+  text: EffectiveModelRoute;
+  vision: EffectiveModelRoute;
+  embedding: EffectiveModelRoute;
+}
+
 export interface ModelInventory {
   contract: string;
   production_rescue: Record<string, unknown>;
   vision: Record<string, unknown>;
   multimodal_audit: Record<string, unknown>;
   assistant_language: Record<string, unknown>;
+  semantic_embedding: Record<string, unknown>;
 }
 
 export interface AssistantModelsPayload {
   contract?: string;
   models: ModelInventory;
+  routing: EffectiveModelRouting;
   connections: ModelConnections;
   restore_error?: string;
   agent_api?: Record<string, unknown>;

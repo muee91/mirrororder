@@ -10,6 +10,7 @@ from typing import Any
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .model_connections import load_model_connections
 from .model_provider import ModelProviderConfig
+from .semantic_encoder import SemanticEmbeddingConfig
 from .vision_provider import VisionProviderConfig
 
 
@@ -94,13 +95,84 @@ class ModelRegistry:
     """One public inventory for every optional model role used by MirrorOrder.
 
     Secrets remain process/device local. The registry exposes capability facts,
-    never API keys or synchronized project configuration.
+    never API keys or synchronized project configuration. Routing is derived
+    from the same effective configs the runtimes use, so UI never has to guess
+    which saved connection actually won precedence.
     """
 
     def __init__(self) -> None:
         self.rescue = ModelProviderConfig.from_env()
         self.vision = VisionProviderConfig.from_env()
         self.assistant = AssistantModelConfig.from_env()
+        self.embedding = SemanticEmbeddingConfig.from_env()
+
+    @staticmethod
+    def _route(
+        *,
+        enabled: bool,
+        provider: str,
+        model: str,
+        local: bool,
+        source: str = "",
+        fallback: str = "",
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "enabled": bool(enabled),
+            "provider": provider or "none",
+            "model": model,
+            "local": bool(local),
+        }
+        if source:
+            payload["source"] = source
+        if fallback:
+            payload["fallback"] = fallback
+        return payload
+
+    def routing(self) -> dict[str, Any]:
+        text = self._route(
+            enabled=self.assistant.enabled,
+            provider=self.assistant.provider,
+            model=self.assistant.model,
+            local=self.assistant.is_local,
+            source=self.assistant.source,
+        )
+        vision = self._route(
+            enabled=self.vision.enabled,
+            provider=self.vision.provider,
+            model=self.vision.model,
+            local=self.vision.is_local,
+        )
+        embedding = self._route(
+            enabled=self.embedding.enabled,
+            provider=self.embedding.provider,
+            model=self.embedding.model,
+            local=self.embedding.local,
+            source=self.embedding.source,
+            fallback="" if self.embedding.enabled else "keyword",
+        )
+        enabled_routes = [row for row in (text, vision, embedding) if row["enabled"]]
+        has_local = any(bool(row["local"]) for row in enabled_routes)
+        has_external = any(not bool(row["local"]) for row in enabled_routes)
+        if has_local and has_external:
+            mode = "hybrid"
+            privacy = "mixed"
+        elif has_external:
+            mode = "external"
+            privacy = "external-models"
+        elif has_local:
+            mode = "local"
+            privacy = "local-only"
+        else:
+            mode = "fallback"
+            privacy = "local-only"
+        return {
+            "contract": "model_routing.v1",
+            "mode": mode,
+            "privacy": privacy,
+            "text": text,
+            "vision": vision,
+            "embedding": embedding,
+        }
 
     def public(self) -> dict[str, Any]:
         vision = self.vision.public()
@@ -116,6 +188,7 @@ class ModelRegistry:
                 "frame_count": int(self.vision.frame_count),
             },
             "assistant_language": self.assistant.public(),
+            "semantic_embedding": self.embedding.public(),
         }
 
 

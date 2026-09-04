@@ -5,6 +5,7 @@ import {
   type LocalRuntimePayload,
 } from "../../api/desktop";
 import { HostConnectionError } from "../../api/host";
+import { MODEL_ROUTING_CHANGED_EVENT } from "../../api/models";
 
 interface Props { baseUrl: string }
 type Capability = "vision" | "face" | "speaker";
@@ -39,11 +40,15 @@ function runtimeStatusLabel(value: string): string {
 }
 
 function statusSummary(next: LocalRuntimePayload): string {
-  return `视觉 ${runtimeStatusLabel(next.vision.status)} · 人脸 ${runtimeStatusLabel(next.identity.face.status)} · 声纹 ${runtimeStatusLabel(next.identity.speaker.status)}`;
+  return `本地 AI ${runtimeStatusLabel(next.vision.status)} · 人脸 ${runtimeStatusLabel(next.identity.face.status)} · 声纹 ${runtimeStatusLabel(next.identity.speaker.status)}`;
 }
 
 function shouldOfferRecovery(status: string, lastError?: string): boolean {
   return Boolean(lastError) || ["error", "failed", "unavailable", "missing", "missing_runtime", "not_prepared", "stopped"].includes(status);
+}
+
+function notifyRoutingChange(): void {
+  globalThis.dispatchEvent(new Event(MODEL_ROUTING_CHANGED_EVENT));
 }
 
 export function LocalRuntimePanel({ baseUrl }: Props) {
@@ -53,7 +58,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [message, setMessage] = useState("正在读取本地模型状态…");
+  const [message, setMessage] = useState("正在读取本地 AI 状态…");
 
   function apply(next: LocalRuntimePayload, submitted = false): void {
     const previousServerModel = serverModelRef.current;
@@ -117,6 +122,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
           : { action: "prepare_identity", kind });
       }
       apply(next, enabled);
+      if (kind === "vision") notifyRoutingChange();
     } catch (error) {
       setMessage(errorMessage(error));
       await reload();
@@ -128,7 +134,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
   async function saveModel(): Promise<void> {
     if (!runtime || !model.trim()) return;
     setBusy(true);
-    setMessage("正在切换本地视觉模型…");
+    setMessage("正在切换本地 AI 模型…");
     try {
       let next = await client.updateLocalRuntime({ action: "set", local_vision_model: model.trim() });
       if (next.local_vision_enabled) {
@@ -136,6 +142,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
       }
       apply(next, next.local_vision_enabled);
       setModel(next.local_vision_model);
+      notifyRoutingChange();
     } catch (error) {
       setMessage(errorMessage(error));
       await reload();
@@ -151,7 +158,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
       <div className="parse-heading">
         <div>
           <p className="eyebrow">本机智能</p>
-          <h3>本地模型与身份识别</h3>
+          <h3>本地 AI 与身份识别</h3>
         </div>
         <button
           type="button"
@@ -164,6 +171,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
           <span>刷新</span>
         </button>
       </div>
+      <p className="production-note">本地多模态模型负责画面理解；当小镜没有更高优先级的语言模型连接时，也会自动沿用它进行本地对话与推理。</p>
       <p className="production-note">启用一次后，镜序会自动准备当前设备的运行时，并在 Host 下次启动时恢复；切换项目不需要重新激活。</p>
       <p className="production-note">{message}</p>
       {runtime ? (
@@ -171,7 +179,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
           <div className="runtime-switch-grid">
             <label className="settings-check">
               <input type="checkbox" checked={runtime.local_vision_enabled} disabled={locked} onChange={(event) => void setCapability("vision", event.target.checked)} />
-              <span>本地视觉</span>
+              <span>本地多模态模型</span>
             </label>
             <label className="settings-check">
               <input type="checkbox" checked={runtime.face_identity_enabled} disabled={locked} onChange={(event) => void setCapability("face", event.target.checked)} />
@@ -184,16 +192,16 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
           </div>
           <div className="runtime-model-row">
             <label className="production-field">
-              <span>视觉模型</span>
+              <span>本地模型</span>
               <input value={model} disabled={locked} onChange={(event) => setModel(event.target.value)} spellCheck={false} />
             </label>
             <button type="button" className="secondary" disabled={locked || !model.trim() || model.trim() === runtime.local_vision_model} onClick={() => void saveModel()}>保存模型</button>
           </div>
           <div className="runtime-status-grid">
             <article>
-              <strong>视觉</strong><span>{runtime.local_vision_enabled ? runtimeStatusLabel(runtime.vision.status) : "未启用"}</span><small>{bytesLabel(runtime.vision.cache_bytes)} · {runtime.vision.available ? "本地运行时可用" : "本地运行时缺失"}</small>
+              <strong>本地 AI</strong><span>{runtime.local_vision_enabled ? runtimeStatusLabel(runtime.vision.status) : "未启用"}</span><small>{bytesLabel(runtime.vision.cache_bytes)} · 文本后备 + 视觉 · {runtime.vision.available ? "运行时可用" : "运行时缺失"}</small>
               {runtime.vision.last_error ? <em>{runtime.vision.last_error}</em> : null}
-              {runtime.local_vision_enabled && !runtime.vision.preparing && !runtime.vision.running && shouldOfferRecovery(runtime.vision.status, runtime.vision.last_error) ? <button type="button" disabled={locked} onClick={() => void action({ action: "prepare" }, "正在重新提交本地视觉准备任务…")}>重新准备</button> : null}
+              {runtime.local_vision_enabled && !runtime.vision.preparing && !runtime.vision.running && shouldOfferRecovery(runtime.vision.status, runtime.vision.last_error) ? <button type="button" disabled={locked} onClick={() => void action({ action: "prepare" }, "正在重新提交本地 AI 准备任务…")}>重新准备</button> : null}
             </article>
             <article>
               <strong>人脸</strong><span>{runtime.face_identity_enabled ? runtimeStatusLabel(runtime.identity.face.status) : "未启用"}</span><small>{bytesLabel(runtime.identity.face.cache_bytes)}</small>

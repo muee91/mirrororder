@@ -26,9 +26,28 @@
 .team-web-advanced > summary { width: fit-content; cursor: pointer; color: #8996a1; font-size: 9px; font-weight: 600; }
 .team-web-advanced[open] > summary { margin-bottom: 8px; }
 .team-web-advanced .production-field { width: min(300px, 100%); margin: 0; }
-.assistant-models > summary { position: relative; padding-right: 20px; }
+.assistant-routing-card { display: grid; gap: 12px; padding: 16px; }
+.assistant-routing-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.assistant-routing-heading > div { display: grid; gap: 2px; }
+.assistant-routing-heading h3 { margin: 0; }
+.assistant-routing-mode { flex: 0 0 auto; border: 1px solid #34414b; border-radius: 999px; padding: 4px 9px; color: #cbd4dc; background: #151d23; font-size: 10px; font-weight: 700; }
+.assistant-routing-mode.mode-local { border-color: #355344; color: #a9d1b9; }
+.assistant-routing-mode.mode-hybrid { border-color: #5a4f34; color: #d8c78e; }
+.assistant-routing-mode.mode-external { border-color: #4a465b; color: #c3bad9; }
+.assistant-routing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.assistant-route { display: grid; min-width: 0; gap: 4px; border: 1px solid #27323a; border-radius: 8px; padding: 10px; background: #0e1418; }
+.assistant-route > span { color: #778590; font-size: 9px; font-weight: 650; }
+.assistant-route > strong { overflow: hidden; color: #d3dbe1; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-route > small { color: #697781; font-size: 9px; line-height: 1.45; }
+.assistant-routing-message,
+.assistant-routing-privacy { margin: 0; }
+.assistant-models { margin-top: 2px; border-top: 1px solid #252d36; padding-top: 4px; }
+.assistant-models > summary { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; padding: 8px 20px 8px 0; }
+.assistant-models > summary span { color: #aab5be; font-size: 10px; font-weight: 650; }
+.assistant-models > summary small { color: #697681; font-size: 9px; font-weight: 500; }
 .assistant-models > summary::after { position: absolute; top: 50%; right: 2px; content: "›"; color: #697681; font-size: 15px; line-height: 1; transform: translateY(-50%); transition: transform .14s ease; }
 .assistant-models[open] > summary::after { transform: translateY(-50%) rotate(90deg); }
+.assistant-models[open] > summary { margin-bottom: 4px; }
 .model-api-key-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 .model-api-key-row .production-field { margin: 0; }
 .settings-advanced-diagnostics { border: 1px solid #252d36; border-radius: 10px; padding: 0; background: #0e1317; }
@@ -47,6 +66,13 @@ html[data-mirrororder-theme="light"] .settings-preference-section > .production-
 html[data-mirrororder-theme="light"] .settings-team-grid > .production-panel { border-color: #d8e0e6; background: #fff; }
 html[data-mirrororder-theme="light"] .team-web-advanced { border-color: #dde3e9; }
 html[data-mirrororder-theme="light"] .team-web-advanced > summary { color: #65727d; }
+html[data-mirrororder-theme="light"] .assistant-routing-mode { border-color: #d7dfe5; color: #43505a; background: #f5f8fa; }
+html[data-mirrororder-theme="light"] .assistant-route { border-color: #dfe5ea; background: #f8fafb; }
+html[data-mirrororder-theme="light"] .assistant-route > strong { color: #26313a; }
+html[data-mirrororder-theme="light"] .assistant-route > span,
+html[data-mirrororder-theme="light"] .assistant-route > small { color: #65727d; }
+html[data-mirrororder-theme="light"] .assistant-models { border-color: #dde3e9; }
+html[data-mirrororder-theme="light"] .assistant-models > summary span { color: #43505a; }
 html[data-mirrororder-theme="light"] .settings-advanced-diagnostics { border-color: #d8e0e6; background: #f8fafb; }
 html[data-mirrororder-theme="light"] .settings-advanced-diagnostics[open] > summary { border-color: #d8e0e6; }
 
@@ -67,6 +93,8 @@ html[data-mirrororder-theme="dark"] .settings-advanced-diagnostics { border-colo
   .settings-preference-stack { width: calc(100% - 32px); }
   .settings-section-heading { align-items: start; }
   .settings-section-heading > span { max-width: 250px; }
+  .assistant-routing-grid { grid-template-columns: minmax(0, 1fr); }
+  .assistant-route > strong { white-space: normal; }
   .model-api-key-row { grid-template-columns: minmax(0, 1fr); }
   .model-api-key-row > button { justify-self: start; }
 }

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from script_organizer import device_model_runtime
+from script_organizer.model_registry import ModelRegistry
 
 
 class _Tasks:
@@ -101,6 +104,22 @@ def test_device_model_payload_never_requires_a_project(monkeypatch) -> None:
         def public(self):
             return {"contract": "models.v1"}
 
+        def routing(self):
+            return {
+                "contract": "model_routing.v1",
+                "mode": "fallback",
+                "privacy": "local-only",
+                "text": {"enabled": False, "provider": "none", "model": "", "local": False},
+                "vision": {"enabled": False, "provider": "none", "model": "", "local": False},
+                "embedding": {
+                    "enabled": False,
+                    "provider": "none",
+                    "model": "",
+                    "local": False,
+                    "fallback": "keyword",
+                },
+            }
+
     monkeypatch.setattr(device_model_runtime, "ModelRegistry", _Registry)
     monkeypatch.setattr(device_model_runtime, "_LAST_RESTORE_ERROR", "")
     monkeypatch.setattr(
@@ -112,6 +131,94 @@ def test_device_model_payload_never_requires_a_project(monkeypatch) -> None:
     payload = device_model_runtime.device_models_payload()
     assert payload["contract"] == "device_models.v1"
     assert payload["models"] == {"contract": "models.v1"}
+    assert payload["routing"]["embedding"]["fallback"] == "keyword"
     assert payload["connections"]["include_secrets"] is False
     assert payload["restore_error"] == ""
     assert "project_id" not in payload
+
+
+def _routing_registry(*, text, vision, embedding) -> ModelRegistry:
+    registry = ModelRegistry.__new__(ModelRegistry)
+    registry.assistant = SimpleNamespace(**text)
+    registry.vision = SimpleNamespace(**vision)
+    registry.embedding = SimpleNamespace(**embedding)
+    return registry
+
+
+def test_effective_routing_reuses_local_vlm_for_text_and_keeps_keyword_fallback() -> None:
+    registry = _routing_registry(
+        text={
+            "enabled": True,
+            "provider": "local-vision",
+            "model": "Qwen3-VL",
+            "is_local": True,
+            "source": "local-vision-text-fallback",
+        },
+        vision={
+            "enabled": True,
+            "provider": "local",
+            "model": "Qwen3-VL",
+            "is_local": True,
+        },
+        embedding={
+            "enabled": False,
+            "provider": "none",
+            "model": "",
+            "local": False,
+            "source": "none",
+        },
+    )
+
+    routing = registry.routing()
+
+    assert routing["mode"] == "local"
+    assert routing["privacy"] == "local-only"
+    assert routing["text"]["source"] == "local-vision-text-fallback"
+    assert routing["text"]["model"] == routing["vision"]["model"] == "Qwen3-VL"
+    assert routing["embedding"]["fallback"] == "keyword"
+
+
+def test_effective_routing_reports_hybrid_when_external_text_and_local_vision_mix() -> None:
+    registry = _routing_registry(
+        text={
+            "enabled": True,
+            "provider": "openai-compatible",
+            "model": "remote-text",
+            "is_local": False,
+            "source": "device-model-connection",
+        },
+        vision={
+            "enabled": True,
+            "provider": "local",
+            "model": "Qwen3-VL",
+            "is_local": True,
+        },
+        embedding={
+            "enabled": False,
+            "provider": "none",
+            "model": "",
+            "local": False,
+            "source": "none",
+        },
+    )
+
+    routing = registry.routing()
+
+    assert routing["mode"] == "hybrid"
+    assert routing["privacy"] == "mixed"
+    assert routing["text"]["local"] is False
+    assert routing["vision"]["local"] is True
+
+
+def test_effective_routing_reports_foundational_fallback_when_no_models_are_enabled() -> None:
+    registry = _routing_registry(
+        text={"enabled": False, "provider": "none", "model": "", "is_local": False, "source": "none"},
+        vision={"enabled": False, "provider": "none", "model": "", "is_local": False},
+        embedding={"enabled": False, "provider": "none", "model": "", "local": False, "source": "none"},
+    )
+
+    routing = registry.routing()
+
+    assert routing["mode"] == "fallback"
+    assert routing["privacy"] == "local-only"
+    assert routing["embedding"]["fallback"] == "keyword"
