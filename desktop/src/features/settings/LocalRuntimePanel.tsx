@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DesktopClient,
   type LocalRuntimeAction,
@@ -48,24 +48,32 @@ function shouldOfferRecovery(status: string, lastError?: string): boolean {
 
 export function LocalRuntimePanel({ baseUrl }: Props) {
   const client = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
+  const serverModelRef = useRef("");
   const [runtime, setRuntime] = useState<LocalRuntimePayload | null>(null);
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("正在读取本地模型状态…");
 
   function apply(next: LocalRuntimePayload, submitted = false): void {
+    const previousServerModel = serverModelRef.current;
+    serverModelRef.current = next.local_vision_model;
     setRuntime(next);
-    setModel(next.local_vision_model);
+    setModel((current) => !previousServerModel || current === previousServerModel ? next.local_vision_model : current);
     setMessage(submitted || next.device_task?.task_id
       ? `${statusSummary(next)} · 设备准备任务已提交，可在状态中心查看。`
       : statusSummary(next));
   }
 
-  async function reload(): Promise<void> {
+  async function reload(interactive = false): Promise<void> {
+    if (interactive && (refreshing || busy)) return;
+    if (interactive) setRefreshing(true);
     try {
       apply(await client.localRuntime());
     } catch (error) {
       setMessage(errorMessage(error));
+    } finally {
+      if (interactive) setRefreshing(false);
     }
   }
 
@@ -127,6 +135,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
         next = await client.updateLocalRuntime({ action: "prepare" });
       }
       apply(next, next.local_vision_enabled);
+      setModel(next.local_vision_model);
     } catch (error) {
       setMessage(errorMessage(error));
       await reload();
@@ -135,6 +144,8 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
     }
   }
 
+  const locked = busy || refreshing;
+
   return (
     <div className="production-panel status-card local-runtime-card">
       <div className="parse-heading">
@@ -142,7 +153,16 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
           <p className="eyebrow">本机智能</p>
           <h3>本地模型与身份识别</h3>
         </div>
-        <button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>刷新</button>
+        <button
+          type="button"
+          className={`secondary settings-refresh-button ${refreshing ? "is-refreshing" : ""}`}
+          disabled={locked}
+          aria-busy={refreshing}
+          onClick={() => void reload(true)}
+        >
+          <span className="settings-refresh-icon" aria-hidden="true">↻</span>
+          <span>刷新</span>
+        </button>
       </div>
       <p className="production-note">启用一次后，镜序会自动准备当前设备的运行时，并在 Host 下次启动时恢复；切换项目不需要重新激活。</p>
       <p className="production-note">{message}</p>
@@ -150,40 +170,40 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
         <>
           <div className="runtime-switch-grid">
             <label className="settings-check">
-              <input type="checkbox" checked={runtime.local_vision_enabled} disabled={busy} onChange={(event) => void setCapability("vision", event.target.checked)} />
+              <input type="checkbox" checked={runtime.local_vision_enabled} disabled={locked} onChange={(event) => void setCapability("vision", event.target.checked)} />
               <span>本地视觉</span>
             </label>
             <label className="settings-check">
-              <input type="checkbox" checked={runtime.face_identity_enabled} disabled={busy} onChange={(event) => void setCapability("face", event.target.checked)} />
+              <input type="checkbox" checked={runtime.face_identity_enabled} disabled={locked} onChange={(event) => void setCapability("face", event.target.checked)} />
               <span>人脸身份</span>
             </label>
             <label className="settings-check">
-              <input type="checkbox" checked={runtime.speaker_identity_enabled} disabled={busy} onChange={(event) => void setCapability("speaker", event.target.checked)} />
+              <input type="checkbox" checked={runtime.speaker_identity_enabled} disabled={locked} onChange={(event) => void setCapability("speaker", event.target.checked)} />
               <span>声纹身份</span>
             </label>
           </div>
           <div className="runtime-model-row">
             <label className="production-field">
               <span>视觉模型</span>
-              <input value={model} onChange={(event) => setModel(event.target.value)} spellCheck={false} />
+              <input value={model} disabled={locked} onChange={(event) => setModel(event.target.value)} spellCheck={false} />
             </label>
-            <button type="button" className="secondary" disabled={busy || !model.trim() || model.trim() === runtime.local_vision_model} onClick={() => void saveModel()}>保存模型</button>
+            <button type="button" className="secondary" disabled={locked || !model.trim() || model.trim() === runtime.local_vision_model} onClick={() => void saveModel()}>保存模型</button>
           </div>
           <div className="runtime-status-grid">
             <article>
               <strong>视觉</strong><span>{runtime.local_vision_enabled ? runtimeStatusLabel(runtime.vision.status) : "未启用"}</span><small>{bytesLabel(runtime.vision.cache_bytes)} · {runtime.vision.available ? "本地运行时可用" : "本地运行时缺失"}</small>
               {runtime.vision.last_error ? <em>{runtime.vision.last_error}</em> : null}
-              {runtime.local_vision_enabled && !runtime.vision.preparing && !runtime.vision.running && shouldOfferRecovery(runtime.vision.status, runtime.vision.last_error) ? <button type="button" disabled={busy} onClick={() => void action({ action: "prepare" }, "正在重新提交本地视觉准备任务…")}>重新准备</button> : null}
+              {runtime.local_vision_enabled && !runtime.vision.preparing && !runtime.vision.running && shouldOfferRecovery(runtime.vision.status, runtime.vision.last_error) ? <button type="button" disabled={locked} onClick={() => void action({ action: "prepare" }, "正在重新提交本地视觉准备任务…")}>重新准备</button> : null}
             </article>
             <article>
               <strong>人脸</strong><span>{runtime.face_identity_enabled ? runtimeStatusLabel(runtime.identity.face.status) : "未启用"}</span><small>{bytesLabel(runtime.identity.face.cache_bytes)}</small>
               {runtime.identity.face.last_error ? <em>{runtime.identity.face.last_error}</em> : null}
-              {runtime.face_identity_enabled && !runtime.identity.face.preparing && shouldOfferRecovery(runtime.identity.face.status, runtime.identity.face.last_error) ? <button type="button" disabled={busy} onClick={() => void action({ action: "prepare_identity", kind: "face" }, "正在重新提交人脸运行时准备任务…")}>重新准备</button> : null}
+              {runtime.face_identity_enabled && !runtime.identity.face.preparing && shouldOfferRecovery(runtime.identity.face.status, runtime.identity.face.last_error) ? <button type="button" disabled={locked} onClick={() => void action({ action: "prepare_identity", kind: "face" }, "正在重新提交人脸运行时准备任务…")}>重新准备</button> : null}
             </article>
             <article>
               <strong>声纹</strong><span>{runtime.speaker_identity_enabled ? runtimeStatusLabel(runtime.identity.speaker.status) : "未启用"}</span><small>{bytesLabel(runtime.identity.speaker.cache_bytes)}</small>
               {runtime.identity.speaker.last_error ? <em>{runtime.identity.speaker.last_error}</em> : null}
-              {runtime.speaker_identity_enabled && !runtime.identity.speaker.preparing && shouldOfferRecovery(runtime.identity.speaker.status, runtime.identity.speaker.last_error) ? <button type="button" disabled={busy} onClick={() => void action({ action: "prepare_identity", kind: "speaker" }, "正在重新提交声纹运行时准备任务…")}>重新准备</button> : null}
+              {runtime.speaker_identity_enabled && !runtime.identity.speaker.preparing && shouldOfferRecovery(runtime.identity.speaker.status, runtime.identity.speaker.last_error) ? <button type="button" disabled={locked} onClick={() => void action({ action: "prepare_identity", kind: "speaker" }, "正在重新提交声纹运行时准备任务…")}>重新准备</button> : null}
             </article>
           </div>
           <p className="production-note">模型和可选运行时只保存在当前设备。下载、安装与模型加载通过可取消的设备任务进入状态中心；关闭开关会停止使用，但保留已下载缓存，方便下次快速恢复。</p>

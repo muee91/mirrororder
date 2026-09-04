@@ -33,15 +33,87 @@ describe("Desktop settings information architecture", () => {
     expect(runtime).toContain("切换项目不需要重新激活");
     expect(runtime).toContain("setCapability");
     expect(runtime).toContain("重新准备");
+    expect(runtime).toContain("const locked = busy || refreshing");
+    expect(runtime).toContain("reload(true)");
+    expect(runtime).toContain("settings-refresh-button");
     expect(runtime).not.toContain("准备 / 启动");
     expect(runtime).not.toContain(">停止</button>");
   });
 
-  it("dismisses transient success messages instead of leaving stale settings status forever", () => {
+  it("preserves an unsaved local vision model draft while runtime status is polling", () => {
+    const runtime = read("./LocalRuntimePanel.tsx");
+    expect(runtime).toContain('const serverModelRef = useRef("")');
+    expect(runtime).toContain("const previousServerModel = serverModelRef.current");
+    expect(runtime).toContain("current === previousServerModel ? next.local_vision_model : current");
+  });
+
+  it("uses refresh motion instead of a persistent success banner", () => {
     const settings = read("./SettingsStatusWorkbench.tsx");
-    expect(settings).toContain("TRANSIENT_SETTINGS_MESSAGES");
-    expect(settings).toContain('globalThis.setTimeout(() => setMessage(""), 2400)');
-    expect(settings).toContain('message ? <span className="production-state"');
+    const css = read("./settings-preferences.css");
+    expect(settings).not.toContain("TRANSIENT_SETTINGS_MESSAGES");
+    expect(settings).not.toContain("设置已更新。");
+    expect(settings).toContain("settings-refresh-button");
+    expect(settings).toContain("settings-refresh-icon");
+    expect(settings).toContain("aria-busy={refreshing}");
+    expect(settings).toContain("刷新状态");
+    expect(css).toContain("settings-refresh-spin");
+  });
+
+  it("does not overwrite unsaved Team Web preferences when the top refresh button is used", () => {
+    const settings = read("./SettingsStatusWorkbench.tsx");
+    expect(settings).toContain("async function refreshStatus()");
+    expect(settings).toContain("await readDeviceStatus();");
+    expect(settings).toContain("const settingsDirty");
+    expect(settings).toContain("disabled={saving || !settings || !settingsDirty}");
+  });
+
+  it("uses guided Chinese controls for the default episode instead of raw storage tokens", () => {
+    const settings = read("./SettingsStatusWorkbench.tsx");
+    expect(settings).toContain('type EpisodeMode = "first" | "all" | "number"');
+    expect(settings).toContain('<option value="first">首集</option>');
+    expect(settings).toContain('<option value="all">全部</option>');
+    expect(settings).toContain('<option value="number">指定集数</option>');
+    expect(settings).toContain('type="number" min={1} max={9999}');
+    expect(settings).not.toContain('placeholder="first / all / 1"');
+  });
+
+  it("locks Team Web preference controls while a save is in flight", () => {
+    const settings = read("./SettingsStatusWorkbench.tsx");
+    expect(settings).toContain("if (saving) return;");
+    expect(settings).toContain("if (!settings || saving || sameSettings(settings, savedSettings)) return;");
+    expect(settings).toContain("disabled={saving} onChange={(event) => patchSettings");
+  });
+
+  it("keeps model saves meaningful and expandable surfaces discoverable", () => {
+    const panel = read("../assistant/AssistantModelsPanel.tsx");
+    const css = read("./settings-preferences.css");
+    expect(panel).toContain("const dirty = Boolean(payload");
+    expect(panel).toContain("disabled={busy || !payload || !dirty}");
+    expect(panel).toContain("if (busy) return;");
+    expect(panel).toContain("disabled={busy} onChange={(event) => patch");
+    expect(panel).not.toContain("设备模型连接已保存。密钥只保存在当前设备，不会在界面中回显。");
+    expect(css).toContain(".assistant-models > summary::after");
+    expect(css).toContain(".settings-advanced-diagnostics > summary::after");
+  });
+
+  it("lets users explicitly clear a saved model API key", () => {
+    const panel = read("../assistant/AssistantModelsPanel.tsx");
+    expect(panel).toContain("clear_api_key: boolean");
+    expect(panel).toContain('else if (row.clear_api_key) value.api_key = ""');
+    expect(panel).toContain("清除已保存 Key");
+    expect(panel).toContain("保留已保存 Key");
+  });
+
+  it("keeps collaboration refresh and permission updates serialized", () => {
+    const collaboration = read("./CollaborationPanel.tsx");
+    expect(collaboration).toContain("teamSummary");
+    expect(collaboration).toContain("const locked = refreshing || Boolean(busyUserId)");
+    expect(collaboration).toContain("if (interactive && locked) return;");
+    expect(collaboration).toContain("if (locked) return;");
+    expect(collaboration).toContain("disabled={locked}");
+    expect(collaboration).toContain("reload(true)");
+    expect(collaboration).toContain("settings-refresh-button");
+    expect(collaboration).not.toContain("团队权限已更新。");
   });
 
   it("does not leak frozen Timeline or release-gate concepts into normal Settings", () => {

@@ -15,31 +15,42 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function teamSummary(next: CollaborationPayload): string {
+  return next.users.length ? `${next.users.length} 位团队成员已登记` : "还没有团队成员访问记录";
+}
+
 export function CollaborationPanel({ baseUrl }: Props) {
   const client = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const [payload, setPayload] = useState<CollaborationPayload | null>(null);
   const [busyUserId, setBusyUserId] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("正在读取团队访问状态…");
+  const locked = refreshing || Boolean(busyUserId);
 
-  async function reload(): Promise<void> {
+  async function reload(interactive = false): Promise<void> {
+    if (interactive && locked) return;
+    if (interactive) setRefreshing(true);
     try {
       const next = await client.collaboration();
       setPayload(next);
-      setMessage(next.users.length ? `${next.users.length} 位团队成员已登记` : "还没有团队成员访问记录");
+      setMessage(teamSummary(next));
     } catch (error) {
       setMessage(errorMessage(error));
+    } finally {
+      if (interactive) setRefreshing(false);
     }
   }
 
   useEffect(() => { void reload(); }, [client]);
 
   async function update(user: CollaborationUser, values: { role?: CollaborationRole; status?: CollaborationStatus }): Promise<void> {
+    if (locked) return;
     setBusyUserId(user.user_id);
     setMessage(`正在更新 ${user.nickname || user.user_id}…`);
     try {
       const next = await client.updateCollaborator(user.user_id, values);
       setPayload(next);
-      setMessage("团队权限已更新。");
+      setMessage(teamSummary(next));
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -54,7 +65,16 @@ export function CollaborationPanel({ baseUrl }: Props) {
           <p className="eyebrow">团队访问</p>
           <h3>成员与权限</h3>
         </div>
-        <button type="button" className="secondary" onClick={() => void reload()}>刷新</button>
+        <button
+          type="button"
+          className={`secondary settings-refresh-button ${refreshing ? "is-refreshing" : ""}`}
+          disabled={locked}
+          aria-busy={refreshing}
+          onClick={() => void reload(true)}
+        >
+          <span className="settings-refresh-icon" aria-hidden="true">↻</span>
+          <span>刷新</span>
+        </button>
       </div>
       <p className="production-note">{message}</p>
       <div className="collaboration-users">
@@ -69,7 +89,7 @@ export function CollaborationPanel({ baseUrl }: Props) {
               <span>角色</span>
               <select
                 value={user.role}
-                disabled={busyUserId === user.user_id}
+                disabled={locked}
                 onChange={(event) => void update(user, { role: event.target.value as CollaborationRole })}
               >
                 <option value="viewer">查看者</option>
@@ -81,7 +101,7 @@ export function CollaborationPanel({ baseUrl }: Props) {
               <span>访问</span>
               <select
                 value={user.status}
-                disabled={busyUserId === user.user_id}
+                disabled={locked}
                 onChange={(event) => void update(user, { status: event.target.value as CollaborationStatus })}
               >
                 <option value="active">允许</option>

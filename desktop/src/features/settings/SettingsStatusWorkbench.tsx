@@ -10,11 +10,7 @@ import { LocalRuntimePanel } from "./LocalRuntimePanel";
 import "./settings-preferences.css";
 
 interface Props { baseUrl: string }
-
-const TRANSIENT_SETTINGS_MESSAGES = new Set([
-  "设置已更新。",
-  "团队审阅偏好已保存。",
-]);
+type EpisodeMode = "first" | "all" | "number";
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
@@ -25,10 +21,15 @@ function pollInterval(value: string): FrontendSettings["poll_interval_ms"] {
   const parsed = Number(value);
   return parsed === 1000 || parsed === 5000 || parsed === 10000 ? parsed : 2500;
 }
-function defaultEpisode(value: string): FrontendSettings["default_episode"] {
-  if (value === "first" || value === "all") return value;
+function sameSettings(left: FrontendSettings | null, right: FrontendSettings | null): boolean {
+  return Boolean(left && right && JSON.stringify(left) === JSON.stringify(right));
+}
+function episodeMode(value: FrontendSettings["default_episode"]): EpisodeMode {
+  return typeof value === "number" ? "number" : value;
+}
+function validEpisodeNumber(value: string): number | null {
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 9999 ? parsed : "first";
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 9999 ? parsed : null;
 }
 
 export function SettingsStatusWorkbench({ baseUrl }: Props) {
@@ -37,54 +38,103 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
   const platform = useMemo(() => new PlatformClient(), []);
   const [status, setStatus] = useState<DesktopStatusPayload | null>(null);
   const [settings, setSettings] = useState<FrontendSettings | null>(null);
+  const [savedSettings, setSavedSettings] = useState<FrontendSettings | null>(null);
+  const [episodeInput, setEpisodeInput] = useState("1");
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [hostProcess, setHostProcess] = useState<HostProcessStatus | null>(null);
-  const [message, setMessage] = useState("正在读取设置…");
-  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   function patchSettings(patch: Partial<FrontendSettings>): void {
+    if (saving) return;
     setSettings((current) => current ? { ...current, ...patch } : current);
   }
 
-  async function reload(): Promise<void> {
-    setBusy(true);
-    setMessage("正在读取设置…");
-    try {
-      const [next, nextSettings] = await Promise.all([desktop.status(), desktop.frontendSettings()]);
-      setStatus(next);
-      setSettings(nextSettings);
-      if (isTauri()) {
-        const [nextPlatform, nextHost] = await Promise.all([platform.info(), host.managedStatus().catch(() => null)]);
-        setPlatformInfo(nextPlatform);
-        setHostProcess(nextHost);
-      }
-      setMessage("设置已更新。");
-    } catch (error) {
-      setMessage(errorMessage(error));
-    } finally { setBusy(false); }
+  function syncEpisodeInput(next: FrontendSettings): void {
+    if (typeof next.default_episode === "number") setEpisodeInput(String(next.default_episode));
   }
 
-  useEffect(() => { void reload(); }, [desktop, host, platform]);
+  function changeEpisodeMode(mode: EpisodeMode): void {
+    if (!settings || saving) return;
+    if (mode === "number") {
+      const nextEpisode = validEpisodeNumber(episodeInput) ?? (typeof settings.default_episode === "number" ? settings.default_episode : 1);
+      setEpisodeInput(String(nextEpisode));
+      patchSettings({ default_episode: nextEpisode });
+      return;
+    }
+    patchSettings({ default_episode: mode });
+  }
 
-  useEffect(() => {
-    if (!TRANSIENT_SETTINGS_MESSAGES.has(message)) return;
-    const timer = globalThis.setTimeout(() => setMessage(""), 2400);
-    return () => globalThis.clearTimeout(timer);
-  }, [message]);
+  function changeEpisodeNumber(value: string): void {
+    setEpisodeInput(value);
+    const nextEpisode = validEpisodeNumber(value);
+    if (nextEpisode !== null) patchSettings({ default_episode: nextEpisode });
+  }
+
+  function restoreEpisodeNumber(): void {
+    if (settings && typeof settings.default_episode === "number" && validEpisodeNumber(episodeInput) === null) {
+      setEpisodeInput(String(settings.default_episode));
+    }
+  }
+
+  async function readDeviceStatus(): Promise<void> {
+    const next = await desktop.status();
+    setStatus(next);
+    if (isTauri()) {
+      const [nextPlatform, nextHost] = await Promise.all([platform.info(), host.managedStatus().catch(() => null)]);
+      setPlatformInfo(nextPlatform);
+      setHostProcess(nextHost);
+    }
+  }
+
+  async function loadInitial(): Promise<void> {
+    setRefreshing(true);
+    setError("");
+    try {
+      const [, nextSettings] = await Promise.all([readDeviceStatus(), desktop.frontendSettings()]);
+      setSettings(nextSettings);
+      setSavedSettings(nextSettings);
+      syncEpisodeInput(nextSettings);
+    } catch (nextError) {
+      setError(errorMessage(nextError));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function refreshStatus(): Promise<void> {
+    if (refreshing || saving) return;
+    setRefreshing(true);
+    setError("");
+    try {
+      await readDeviceStatus();
+    } catch (nextError) {
+      setError(errorMessage(nextError));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => { void loadInitial(); }, [desktop, host, platform]);
 
   async function saveSettings(): Promise<void> {
-    if (!settings) return;
-    setBusy(true);
-    setMessage("正在保存团队审阅偏好…");
+    if (!settings || saving || sameSettings(settings, savedSettings)) return;
+    setSaving(true);
+    setError("");
     try {
       const saved = await desktop.saveFrontendSettings(settings);
       setSettings(saved);
-      setMessage("团队审阅偏好已保存。");
-    } catch (error) {
-      setMessage(errorMessage(error));
-    } finally { setBusy(false); }
+      setSavedSettings(saved);
+      syncEpisodeInput(saved);
+    } catch (nextError) {
+      setError(errorMessage(nextError));
+    } finally {
+      setSaving(false);
+    }
   }
 
+  const settingsDirty = Boolean(settings && savedSettings && !sameSettings(settings, savedSettings));
   const requiredModules = status?.environment.python_modules.filter((item) => item.required) ?? [];
   const optionalModules = status?.environment.python_modules.filter((item) => !item.required) ?? [];
 
@@ -92,7 +142,19 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
     <section className="phase3-workbench settings-status-workbench">
       <header className="production-heading settings-heading">
         <div><p className="eyebrow">MirrorOrder Desktop</p><h2>设置</h2></div>
-        <div className="assistant-heading-actions">{message ? <span className="production-state" role="status" aria-live="polite">{message}</span> : null}<button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>刷新</button></div>
+        <div className="assistant-heading-actions">
+          {error ? <span className="production-state is-error" role="alert">{error}</span> : null}
+          <button
+            type="button"
+            className={`secondary settings-refresh-button ${refreshing ? "is-refreshing" : ""}`}
+            disabled={refreshing || saving}
+            aria-busy={refreshing}
+            onClick={() => void refreshStatus()}
+          >
+            <span className="settings-refresh-icon" aria-hidden="true">↻</span>
+            <span>刷新状态</span>
+          </button>
+        </div>
       </header>
 
       <p className="production-note settings-intro">这里管理当前设备的外观、智能能力、小镜模型和团队审阅偏好。后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
@@ -131,20 +193,21 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
           </header>
           <div className="settings-team-grid">
             <div className="production-panel status-card frontend-settings-card">
-              <div className="parse-heading"><div><h3>审阅界面</h3><p className="production-note">这些选项只控制 Team Web，不改变 Desktop 场记画布。</p></div><button type="button" disabled={busy || !settings} onClick={() => void saveSettings()}>保存</button></div>
+              <div className="parse-heading"><div><h3>审阅界面</h3><p className="production-note">这些选项只控制 Team Web，不改变 Desktop 场记画布。</p></div><button type="button" disabled={saving || !settings || !settingsDirty} onClick={() => void saveSettings()}>{saving ? "保存中…" : "保存"}</button></div>
               {settings ? (
                 <>
                   <div className="settings-form-grid">
-                    <label className="production-field"><span>Web 外观</span><select value={settings.theme} onChange={(event) => patchSettings({ theme: event.target.value as FrontendSettings["theme"] })}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
-                    <label className="production-field"><span>界面密度</span><select value={settings.density} onChange={(event) => patchSettings({ density: event.target.value as FrontendSettings["density"] })}><option value="comfortable">舒适</option><option value="compact">紧凑</option></select></label>
-                    <label className="production-field"><span>默认视图</span><select value={settings.default_mode} onChange={(event) => patchSettings({ default_mode: event.target.value as FrontendSettings["default_mode"] })}><option value="script">剧本</option><option value="unassigned">待归集</option></select></label>
-                    <label className="production-field"><span>默认集数</span><input value={String(settings.default_episode)} onChange={(event) => patchSettings({ default_episode: defaultEpisode(event.target.value) })} placeholder="first / all / 1" /></label>
-                    <label className="settings-check"><input type="checkbox" checked={settings.update_sound} onChange={(event) => patchSettings({ update_sound: event.target.checked })} /><span>更新提示音</span></label>
-                    <label className="settings-check"><input type="checkbox" checked={settings.show_unknown_count} onChange={(event) => patchSettings({ show_unknown_count: event.target.checked })} /><span>显示未归类数量</span></label>
+                    <label className="production-field"><span>Web 外观</span><select value={settings.theme} disabled={saving} onChange={(event) => patchSettings({ theme: event.target.value as FrontendSettings["theme"] })}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+                    <label className="production-field"><span>界面密度</span><select value={settings.density} disabled={saving} onChange={(event) => patchSettings({ density: event.target.value as FrontendSettings["density"] })}><option value="comfortable">舒适</option><option value="compact">紧凑</option></select></label>
+                    <label className="production-field"><span>默认视图</span><select value={settings.default_mode} disabled={saving} onChange={(event) => patchSettings({ default_mode: event.target.value as FrontendSettings["default_mode"] })}><option value="script">剧本</option><option value="unassigned">待归集</option></select></label>
+                    <label className="production-field"><span>默认集数</span><select value={episodeMode(settings.default_episode)} disabled={saving} onChange={(event) => changeEpisodeMode(event.target.value as EpisodeMode)}><option value="first">首集</option><option value="all">全部</option><option value="number">指定集数</option></select></label>
+                    {typeof settings.default_episode === "number" ? <label className="production-field"><span>指定集数</span><input type="number" min={1} max={9999} inputMode="numeric" value={episodeInput} disabled={saving} onChange={(event) => changeEpisodeNumber(event.target.value)} onBlur={restoreEpisodeNumber} /></label> : null}
+                    <label className="settings-check"><input type="checkbox" checked={settings.update_sound} disabled={saving} onChange={(event) => patchSettings({ update_sound: event.target.checked })} /><span>更新提示音</span></label>
+                    <label className="settings-check"><input type="checkbox" checked={settings.show_unknown_count} disabled={saving} onChange={(event) => patchSettings({ show_unknown_count: event.target.checked })} /><span>显示未归类数量</span></label>
                   </div>
                   <details className="team-web-advanced">
                     <summary>高级</summary>
-                    <label className="production-field"><span>自动刷新频率</span><select value={settings.poll_interval_ms} onChange={(event) => patchSettings({ poll_interval_ms: pollInterval(event.target.value) })}><option value={1000}>1 秒</option><option value={2500}>2.5 秒</option><option value={5000}>5 秒</option><option value={10000}>10 秒</option></select></label>
+                    <label className="production-field"><span>自动刷新频率</span><select value={settings.poll_interval_ms} disabled={saving} onChange={(event) => patchSettings({ poll_interval_ms: pollInterval(event.target.value) })}><option value={1000}>1 秒</option><option value={2500}>2.5 秒</option><option value={5000}>5 秒</option><option value={10000}>10 秒</option></select></label>
                   </details>
                 </>
               ) : <p className="empty-copy">尚未读取团队审阅偏好。</p>}
