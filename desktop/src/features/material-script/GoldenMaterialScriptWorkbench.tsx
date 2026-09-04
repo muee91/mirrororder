@@ -24,9 +24,10 @@ interface Props {
   baseUrl: string;
   project: ProjectSummary;
   initialGroupId?: string | null;
-  initialMode?: "rough" | "precise";
+  phase: "rough" | "precise";
   showEditorial?: boolean;
   onBack?: () => void;
+  onOpenPrecise?: (groupId: string) => void;
 }
 
 type WriteState = "idle" | "saving" | "error";
@@ -66,14 +67,14 @@ export function GoldenMaterialScriptWorkbench({
   baseUrl,
   project,
   initialGroupId = null,
-  initialMode = "rough",
+  phase,
   showEditorial = false,
   onBack,
+  onOpenPrecise,
 }: Props) {
   const connection = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const rough = useMemo(() => new RoughPlacementClient(baseUrl), [baseUrl]);
   const [model, setModel] = useState<ReviewModelPayload | null>(null);
-  const [mode, setMode] = useState<"rough" | "precise">(initialMode);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [activeEpisode, setActiveEpisode] = useState<number | null>(null);
@@ -84,7 +85,7 @@ export function GoldenMaterialScriptWorkbench({
   const [actor, setActor] = useState(storedActor);
   const [roughText, setRoughText] = useState("");
   const [roughPreview, setRoughPreview] = useState<RoughPlacementPayload | null>(null);
-  const [message, setMessage] = useState("正在读取素材 / 剧本工作区…");
+  const [message, setMessage] = useState("正在读取工作区…");
   const [writeState, setWriteState] = useState<WriteState>("idle");
   const [writeMessage, setWriteMessage] = useState("");
 
@@ -97,13 +98,13 @@ export function GoldenMaterialScriptWorkbench({
     setSelectedGroupId(take?.group_id ?? null);
     setSelectedClipId((clip) => take?.angles.some((angle) => angle.clip_id === clip) ? clip : take?.angles[0]?.clip_id ?? null);
     setActiveEpisode((value) => value && next.episodes.some((episode) => episode.episode === value) ? value : next.episodes[0]?.episode ?? null);
-    setMessage(`review.v1 · Review r${next.revisions.review} · ${next.take_groups.length} Take`);
+    setMessage(`${next.take_groups.length} Take · 已同步`);
     return next;
   }
 
   useEffect(() => {
     let cancelled = false;
-    setMessage("正在读取素材 / 剧本工作区…");
+    setMessage("正在读取工作区…");
     void connection.reviewModel(project.project_id).then((next) => {
       if (cancelled) return;
       const focused = initialGroupId ? next.take_groups.find((item) => item.group_id === initialGroupId) ?? null : null;
@@ -112,11 +113,10 @@ export function GoldenMaterialScriptWorkbench({
       setSelectedGroupId(take?.group_id ?? null);
       setSelectedClipId(take?.angles[0]?.clip_id ?? null);
       setActiveEpisode(next.episodes[0]?.episode ?? null);
-      setMode(initialMode);
-      setMessage(`review.v1 · Review r${next.revisions.review} · ${next.take_groups.length} Take`);
+      setMessage(`${next.take_groups.length} Take · 已同步`);
     }).catch((error) => { if (!cancelled) setMessage(errorMessage(error)); });
     return () => { cancelled = true; };
-  }, [connection, initialGroupId, initialMode, project.project_id]);
+  }, [connection, initialGroupId, project.project_id]);
 
   const takes = model?.take_groups ?? [];
   const episodes = model?.episodes ?? [];
@@ -149,7 +149,7 @@ export function GoldenMaterialScriptWorkbench({
     const episode = take.effective_mapping.episode_ids[0] ?? takeEpisodeIds(take)[0] ?? null;
     if (episode !== null) setActiveEpisode(episode);
     setSelectedSegmentId(preferredScriptSegmentId(take));
-    setMode("precise");
+    if (phase === "rough") onOpenPrecise?.(take.group_id);
   }
 
   function showScriptTake(groupId: string): void {
@@ -162,9 +162,9 @@ export function GoldenMaterialScriptWorkbench({
 
   async function placeTake(groupId: string, episodeIds: number[], segmentIds: string[], interaction: "drag" | "click", surface: string): Promise<void> {
     if (!model) return;
-    if (!actor.trim()) { setWriteState("error"); setWriteMessage("先填写操作者昵称，再写入人工归集。"); return; }
+    if (!actor.trim()) { setWriteState("error"); setWriteMessage("先填写操作者昵称，再确认归集。"); return; }
     setWriteState("saving");
-    setWriteMessage("正在写入 Review 人工归集…");
+    setWriteMessage("正在保存人工归集…");
     saveActor(actor);
     try {
       await connection.setGroupPlacement(project.project_id, {
@@ -179,12 +179,12 @@ export function GoldenMaterialScriptWorkbench({
       });
       await reload(groupId);
       setWriteState("idle");
-      setWriteMessage(segmentIds.length ? `已精确归集 ${groupId} → ${segmentIds.length} 个剧本段` : `已粗归集 ${groupId} → ${episodeIds.map(episodeLabel).join(" / ")}`);
+      setWriteMessage(segmentIds.length ? `已匹配当前 Take → ${segmentIds.length} 个剧本段` : `已归集当前 Take → ${episodeIds.map(episodeLabel).join(" / ")}`);
     } catch (error) {
       setWriteState("error");
       if (needsRefresh(error)) {
         await reload(groupId).catch(() => undefined);
-        setWriteMessage("Review 已变化，已刷新；请重新拖放。");
+        setWriteMessage("内容已被其他操作更新，已刷新；请重新操作。");
       } else setWriteMessage(errorMessage(error));
     } finally { setDraggingGroupId(null); }
   }
@@ -203,12 +203,12 @@ export function GoldenMaterialScriptWorkbench({
       });
       await reload(selectedTake.group_id);
       setWriteState("idle");
-      setWriteMessage(`已清除 ${selectedTake.group_id} 的人工归集；自动候选未改动。`);
+      setWriteMessage("已清除当前 Take 的人工归集；自动候选未改动。");
     } catch (error) {
       setWriteState("error");
       if (needsRefresh(error)) {
         await reload(selectedTake.group_id).catch(() => undefined);
-        setWriteMessage("Review 已变化，已刷新；请重新操作。");
+        setWriteMessage("内容已被其他操作更新，已刷新；请重新操作。");
       } else setWriteMessage(errorMessage(error));
     }
   }
@@ -221,7 +221,7 @@ export function GoldenMaterialScriptWorkbench({
       const preview = await rough.preview(project.project_id, roughText);
       setRoughPreview(preview);
       setWriteState("idle");
-      setWriteMessage(`已识别 ${preview.plans.length} 段范围；确认前不会写入 Review。`);
+      setWriteMessage(`已识别 ${preview.plans.length} 段范围；确认前不会写入。`);
     } catch (error) { setWriteState("error"); setWriteMessage(errorMessage(error)); }
   }
 
@@ -235,13 +235,13 @@ export function GoldenMaterialScriptWorkbench({
       setRoughPreview(null);
       await reload(selectedGroupId);
       setWriteState("idle");
-      setWriteMessage(`已粗归 ${result.resolved_groups} 个 Take · Review r${result.review_revision ?? "?"}`);
+      setWriteMessage(`已粗归 ${result.resolved_groups} 个 Take`);
     } catch (error) {
       setWriteState("error");
       if (needsRefresh(error)) {
         await reload(selectedGroupId).catch(() => undefined);
         setRoughPreview(null);
-        setWriteMessage("Review 已变化，预览已作废；请重新预览后确认。");
+        setWriteMessage("内容已变化，预览已作废；请重新预览后确认。");
       } else setWriteMessage(errorMessage(error));
     }
   }
@@ -257,11 +257,7 @@ export function GoldenMaterialScriptWorkbench({
       <header className="golden-ms-toolbar">
         <div className="golden-ms-heading">
           {onBack ? <button type="button" className="golden-ms-back secondary" onClick={onBack}>‹ 场记</button> : null}
-          <div className="golden-ms-title"><p className="eyebrow">Production</p><h2>素材 / 剧本</h2><span>{message}</span></div>
-        </div>
-        <div className="golden-ms-mode" aria-label="工作阶段">
-          <button type="button" className={mode === "rough" ? "is-active" : ""} onClick={() => setMode("rough")}>粗归集</button>
-          <button type="button" className={mode === "precise" ? "is-active" : ""} onClick={() => setMode("precise")}>精确剧本</button>
+          <div className="golden-ms-title"><p className="eyebrow">Production</p><h2>{phase === "rough" ? "镜次归集" : "剧本匹配"}</h2><span>{message}</span></div>
         </div>
         <label className="golden-ms-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="写入时必填" /></label>
       </header>
@@ -276,7 +272,7 @@ export function GoldenMaterialScriptWorkbench({
     <section className="golden-material-script">
       {toolbar()}
 
-      {mode === "rough" ? (
+      {phase === "rough" ? (
         <section className="golden-ms-rough-entry">
           <div><strong>粗场记</strong><span>只确定集数，不猜场号或对白。</span></div>
           <input value={roughText} onChange={(event) => { setRoughText(event.target.value); setRoughPreview(null); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void previewRough(); } }} placeholder="1-10 第1集；11-20 第2集" />
@@ -286,22 +282,22 @@ export function GoldenMaterialScriptWorkbench({
         </section>
       ) : null}
 
-      <div className={`golden-ms-write write-${writeState}`}>{writeMessage || (mode === "rough" ? "拖 Take 到左侧集数 = episode-only 粗归集。" : "拖 Take 到左侧剧本段 = 精确人工 placement。")}</div>
+      <div className={`golden-ms-write write-${writeState}`}>{writeMessage || (phase === "rough" ? "拖 Take 到左侧集数，只确认所属集。" : "拖 Take 到左侧剧本内容，确认匹配位置。")}</div>
 
       <div className="golden-ms-columns">
         <aside className="golden-ms-target-pane">
-          {mode === "rough" ? (
+          {phase === "rough" ? (
             <>
-              <header><strong>集数目标</strong><span>先大概放进去，后面看片再精确到剧本。</span></header>
+              <header><strong>集数目标</strong><span>先放到正确集，看片时再精确到剧本。</span></header>
               <div className="golden-ms-episode-grid">
                 <button type="button" className={roughEpisodeFilter === null ? "is-active" : ""} onClick={() => setRoughEpisodeFilter(null)}>全集</button>
                 {episodes.map((episode) => <button type="button" className={`${roughEpisodeFilter === episode.episode ? "is-active" : ""} ${draggingGroupId ? "is-drop-target" : ""}`} key={episode.episode} onClick={() => setRoughEpisodeFilter(episode.episode)} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => roughEpisodeDrop(event, episode.episode)}>EP{episode.episode}<small>{episode.scenes.length} 场</small></button>)}
               </div>
-              <div className="golden-ms-target-note">点击集数筛选中间素材池；拖入则写入人工集级归集。AI 候选只作为筛选线索，不自动确认。</div>
+              <div className="golden-ms-target-note">点击集数筛选中间素材池；拖入即确认归属集。AI 候选只用于筛选，不自动确认。</div>
             </>
           ) : (
             <>
-              <header><strong>剧本目标</strong><span>当前 Take 可拖到具体对白 / 动作。</span></header>
+              <header><strong>剧本目标</strong><span>把当前 Take 放到具体对白或动作。</span></header>
               <div className="golden-ms-episode-strip">{episodes.map((episode) => <button type="button" className={episode.episode === selectedEpisode?.episode ? "is-active" : ""} key={episode.episode} onClick={() => setActiveEpisode(episode.episode)}>EP{episode.episode}</button>)}</div>
               <div className="golden-ms-script-scroll">
                 {selectedEpisode ? <ScriptEpisodeView episode={selectedEpisode} model={model} selectedSegmentId={selectedSegmentId} draggingGroupId={draggingGroupId} placementGroupId={selectedTake?.group_id ?? null} onShowTake={showScriptTake} onDropPlacement={(groupId, block) => { setSelectedSegmentId(block.segment_id); void placeTake(groupId, block.episode > 0 ? [block.episode] : [], [block.segment_id], "drag", "golden-material-script-segment"); }} onClickPlacement={(block: ReviewScriptBlock) => { if (!selectedTake) return; setSelectedSegmentId(block.segment_id); void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "golden-material-script-segment"); }} /> : <span className="golden-ms-empty">当前没有剧本段。</span>}
