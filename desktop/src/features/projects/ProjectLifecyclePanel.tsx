@@ -7,11 +7,17 @@ import {
   type ProjectPreflight,
 } from "../../api/desktop";
 import { HostConnectionError } from "../../api/host";
+import { ProjectActionClient } from "../../api/projectActions";
+import { DeviceTaskClient } from "../../api/tasks";
 
 interface Props {
   baseUrl: string;
   onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
+  onStatusMessage?: (message: string) => void;
 }
+
+const IMPORT_POLL_MS = 750;
+const IMPORT_POLL_LIMIT = 120;
 
 function errorMessage(error: unknown): string {
   if (error instanceof HostConnectionError) return error.message;
@@ -22,8 +28,14 @@ function rootsFromText(value: string): string[] {
   return [...new Set(value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))];
 }
 
-export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged }: Props) {
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
+export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged, onStatusMessage }: Props) {
   const client = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
+  const projectActions = useMemo(() => new ProjectActionClient(baseUrl), [baseUrl]);
+  const deviceTasks = useMemo(() => new DeviceTaskClient(baseUrl), [baseUrl]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [inputKind, setInputKind] = useState<"fcpxml" | "media-directory">("fcpxml");
@@ -34,6 +46,8 @@ export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged }: Props) {
   const [preflight, setPreflight] = useState<ProjectPreflight | null>(null);
   const [message, setMessage] = useState("选择剧本和素材来源；创建时会自动检查配置。");
   const [busy, setBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importState, setImportState] = useState<"idle" | "submitted" | "done" | "attention">("idle");
 
   function payload(): ProjectCreatePayload {
     return {
@@ -94,6 +108,55 @@ export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged }: Props) {
     }
   }
 
+  async function waitForImportedProject(taskId: string, projectId: string): Promise<void> {
+    for (let attempt = 0; attempt < IMPORT_POLL_LIMIT; attempt += 1) {
+      await delay(IMPORT_POLL_MS);
+      const task = (await deviceTasks.list()).find((item) => item.task_id === taskId);
+      if (!task) continue;
+      if (task.status === "completed") {
+        await onWorkspaceChanged(projectId);
+        setImportState("done");
+        onStatusMessage?.(`项目已导入 · ${projectId}`);
+        return;
+      }
+      if (["failed", "cancelled", "interrupted"].includes(task.status)) {
+        throw new HostConnectionError(task.error || task.message || "项目导入没有完成");
+      }
+    }
+    setImportState("submitted");
+    onStatusMessage?.("项目仍在后台导入；可在状态中心查看，完成后刷新项目。");
+  }
+
+  async function importProject(): Promise<void> {
+    if (!isTauri()) {
+      setImportState("attention");
+      onStatusMessage?.("打开外部项目只能从桌面 App 执行。");
+      return;
+    }
+    setImportBusy(true);
+    setImportState("idle");
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: "打开镜序项目 (.mirrorproj)",
+      });
+      if (typeof selected !== "string" || !selected.trim()) return;
+      const submission = await projectActions.importPackage(selected);
+      setImportState("submitted");
+      onStatusMessage?.(`已提交“${submission.package.name || submission.package.project_id}”导入任务；进度在状态中心查看。`);
+      const taskId = String(submission.task.task_id || "").trim();
+      if (taskId) await waitForImportedProject(taskId, submission.package.project_id);
+    } catch (error) {
+      setImportState("attention");
+      const detail = `项目导入需要处理：${errorMessage(error)}`;
+      setMessage(detail);
+      onStatusMessage?.(detail);
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
   async function create(): Promise<void> {
     setBusy(true);
     setMessage("正在检查项目来源…");
@@ -128,10 +191,20 @@ export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged }: Props) {
 
   const sourceReady = inputKind === "fcpxml" ? Boolean(fcpxmlPath.trim()) : rootsFromText(mediaRoots).length > 0;
   const canCreate = Boolean(name.trim() && scriptPath.trim() && sourceReady);
+  const importLabel = importBusy
+    ? "正在导入…"
+    : importState === "done"
+      ? "项目已导入"
+      : importState === "submitted"
+        ? "导入已提交"
+        : importState === "attention"
+          ? "重新打开项目…"
+          : "打开项目…";
 
   return (
     <>
-      <button type="button" className="project-new-button project-home-new-button" onClick={() => setOpen(true)}>新建项目</button>
+      <button type="button" className="secondary project-home-open-package-button" disabled={importBusy || busy || !isTauri()} onClick={() => void importProject()}>{importLabel}</button>
+      <button type="button" className="project-new-button project-home-new-button" disabled={importBusy} onClick={() => setOpen(true)}>新建项目</button>
 
       {open ? (
         <div className="project-lifecycle-overlay" role="presentation" onMouseDown={() => !busy && setOpen(false)}>

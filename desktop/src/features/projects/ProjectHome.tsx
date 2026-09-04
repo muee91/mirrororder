@@ -1,5 +1,9 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
+import { HostConnectionError } from "../../api/host";
+import { ProjectActionClient } from "../../api/projectActions";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
 import { projectPresentation } from "./projectPresentation";
@@ -28,6 +32,15 @@ interface HomeMenuState {
   y: number;
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof HostConnectionError) return error.message;
+  return error instanceof Error ? error.message : String(error);
+}
+
+function safeFileStem(value: string): string {
+  return value.replace(/[\\/:*?"<>|]/g, "-").trim() || "MirrorOrder Project";
+}
+
 export function ProjectHome({
   baseUrl,
   workspace,
@@ -42,8 +55,11 @@ export function ProjectHome({
   onDeleteProject,
   onWorkspaceChanged,
 }: Props) {
+  const projectActions = useMemo(() => new ProjectActionClient(baseUrl), [baseUrl]);
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<HomeMenuState | null>(null);
+  const [actionMessage, setActionMessage] = useState("");
+  const [transferBusy, setTransferBusy] = useState(false);
   const visible = useMemo(() => {
     const value = query.trim().toLowerCase();
     if (!value) return workspace.projects;
@@ -66,7 +82,7 @@ export function ProjectHome({
 
   function openMenu(project: ProjectSummary, x: number, y: number): void {
     const width = 190;
-    const height = 326;
+    const height = 404;
     const viewportWidth = globalThis.innerWidth || 1280;
     const viewportHeight = globalThis.innerHeight || 800;
     setMenu({
@@ -81,16 +97,71 @@ export function ProjectHome({
     void Promise.resolve(action()).catch(() => undefined);
   }
 
+  async function saveProjectAs(project: ProjectSummary): Promise<void> {
+    if (!isTauri() || transferBusy) {
+      setActionMessage("另存项目只能从桌面 App 执行。");
+      return;
+    }
+    const title = project.name || project.project_id;
+    try {
+      const destination = await saveDialog({
+        title: "另存镜序项目",
+        defaultPath: `${safeFileStem(title)} 副本.mirrorproj`,
+        filters: [{ name: "镜序项目", extensions: ["mirrorproj"] }],
+      });
+      if (typeof destination !== "string" || !destination.trim()) return;
+      setTransferBusy(true);
+      const submission = await projectActions.saveProjectAs(project.project_id, destination, {
+        name: `${title} 副本`,
+        includeCache: false,
+      });
+      setActionMessage(`已提交“${title}”另存任务${submission.task.task_id ? ` · ${submission.task.task_id}` : ""}；进度在状态中心查看。`);
+    } catch (error) {
+      setActionMessage(`另存项目失败：${errorMessage(error)}`);
+    } finally {
+      setTransferBusy(false);
+    }
+  }
+
+  async function collectProject(project: ProjectSummary): Promise<void> {
+    if (!isTauri() || transferBusy) {
+      setActionMessage("收集项目只能从桌面 App 执行。");
+      return;
+    }
+    const title = project.name || project.project_id;
+    try {
+      const destination = await saveDialog({
+        title: "收集镜序项目",
+        defaultPath: `${safeFileStem(title)}.mirrorpkg`,
+        filters: [{ name: "镜序项目归档", extensions: ["mirrorpkg"] }],
+      });
+      if (typeof destination !== "string" || !destination.trim()) return;
+      const includeMedia = globalThis.confirm(
+        "是否同时收集这台电脑已经定位的原始媒体？\n\n确定：项目 + 原始媒体\n取消：只收集项目状态和项目内文件",
+      );
+      setTransferBusy(true);
+      const submission = await projectActions.collectProject(project.project_id, destination, {
+        includeCache: false,
+        includeMedia,
+      });
+      setActionMessage(`已提交“${title}”收集任务${includeMedia ? "（含本机已定位媒体）" : ""}${submission.task.task_id ? ` · ${submission.task.task_id}` : ""}；进度在状态中心查看。`);
+    } catch (error) {
+      setActionMessage(`收集项目失败：${errorMessage(error)}`);
+    } finally {
+      setTransferBusy(false);
+    }
+  }
+
   return (
     <section className="project-home-canvas">
       <header className="project-home-heading">
         <div className="project-home-heading-copy">
           <div><h1>项目</h1><span className="project-home-count">{workspace.projects.length}</span></div>
-          <span>管理工作区内的制作项目</span>
+          <span aria-live="polite">{actionMessage || "管理工作区内的制作项目"}</span>
         </div>
         <div className="project-home-actions">
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目…" aria-label="搜索项目" />
-          <ProjectLifecyclePanel baseUrl={baseUrl} onWorkspaceChanged={onWorkspaceChanged} />
+          <ProjectLifecyclePanel baseUrl={baseUrl} onWorkspaceChanged={onWorkspaceChanged} onStatusMessage={setActionMessage} />
         </div>
       </header>
 
@@ -146,7 +217,7 @@ export function ProjectHome({
       ) : (
         <div className="project-home-empty">
           <strong>{workspace.projects.length ? "没有匹配项目" : "还没有项目"}</strong>
-          <span>{workspace.projects.length ? "调整搜索关键词。" : "使用右上角“新建项目”开始第一个制作项目。"}</span>
+          <span>{workspace.projects.length ? "调整搜索关键词。" : "使用右上角“新建项目”或“打开项目”开始制作。"}</span>
         </div>
       )}
 
@@ -159,6 +230,8 @@ export function ProjectHome({
           <button type="button" role="menuitem" onClick={() => run(() => onRevealProject(menu.project))}>在 {revealLabel} 中显示</button>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenMediaBinding(menu.project))}>本机素材 / 换素材盘</button>
           <button type="button" role="menuitem" onClick={() => run(() => onPrepareProject(menu.project))}>重新整理项目</button>
+          <button type="button" role="menuitem" disabled={transferBusy || !isTauri()} onClick={() => run(() => saveProjectAs(menu.project))}>另存项目…</button>
+          <button type="button" role="menuitem" disabled={transferBusy || !isTauri()} onClick={() => run(() => collectProject(menu.project))}>收集项目…</button>
           <button type="button" role="menuitem" className="project-context-danger" onClick={() => run(() => onDeleteProject(menu.project))}>永久删除项目…</button>
         </div>
       ) : null}

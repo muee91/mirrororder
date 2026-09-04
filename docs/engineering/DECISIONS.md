@@ -36,3 +36,7 @@
 ## D008 — `project.toml` 是 MirrorOrder Project Package 的版本化 manifest
 
 新建项目从 schema v1 起显式写入 `project.format = "mirrororder-project"` 与 `project.schema_version = 1`。历史未标记 manifest 作为 legacy schema 0 只读兼容，不在普通读取中静默迁移；未知格式和未来 schema fail fast。项目持久化路径必须可移植，device-local media root/binding 永不进入 v1 manifest。当前 workspace 内部仍保持 `projects/<project_id>/project.toml`，`.mirrorproj` 是可移动目录包的产品命名约定，不作为破坏性目录迁移理由。详细 contract 见 `docs/architecture/project-package.md`。
+
+## D009 — Project transfer 使用 path-free durable task + device-local request indirection
+
+外部 `.mirrorproj` 导入、项目另存和 `.mirrorpkg` 收集都属于显式用户动作；可能持续的复制/归档工作必须进入现有 Status Center。绝对源/目标路径只保存到 Application Support 下的 device-local transfer request，durable task target 只保存 `request_id`。外部项目不能通过 Registry 长期引用任意绝对路径，而是原子导入到受管 `projects/<project_id>/`；`.mirrorpkg` 可选媒体只通过 `DeviceMediaStore` 的 `media_id` 权威解析收集，`M_...` 必须通过内容指纹验证、`MP_...` 必须已有本机确认，归档清单不保存原 binding 路径。`output/tasks.json` 属于原 Host / runner 的 operational history，在 Import / Save As / Collect 中统一排除，不随项目身份移动。
