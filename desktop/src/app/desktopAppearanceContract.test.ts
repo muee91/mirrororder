@@ -45,33 +45,33 @@ describe("Desktop appearance product contract", () => {
     expect(control).not.toContain("FrontendSettings");
   });
 
-  it("provides explicit root-prefixed light and dark overrides across frozen Demo surfaces", () => {
+  it("provides explicit root-prefixed light and dark overrides across current production surfaces", () => {
     const css = read("../desktop-theme.css");
     const tools = read("../desktop-theme-tools.css");
     const material = read("../features/material-script/material-script.css");
-    const materialSurface = read("../features/material-script/material-script-workbench.css");
+    const workspaces = read("../features/production/production-workspaces.css");
     const takeCard = read("../features/material-script/take-card.css");
     const slate = read("../desktop-theme-slate.css");
     const frozen = read("../desktop-theme-frozen-surfaces.css");
     expect(css).toContain('html[data-mirrororder-theme="light"]');
     expect(css).toContain('html[data-mirrororder-theme="dark"]');
-    expect(tools).toContain('.settings-status-workbench');
+    expect(tools).toContain(".settings-status-workbench");
     expect(material).toContain("var(--mo-");
-    expect(materialSurface).toContain("var(--mo-");
+    expect(workspaces).toContain("var(--mo-");
     expect(material).not.toContain("@media (prefers-color-scheme");
-    expect(materialSurface).not.toContain("@media (prefers-color-scheme");
+    expect(workspaces).not.toContain("@media (prefers-color-scheme");
     expect(takeCard).toContain(".mo-take-list-row");
     expect(takeCard).toContain("var(--mo-");
     expect(takeCard).not.toContain("@media (prefers-color-scheme");
     expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-take-picker');
     expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-take-picker');
-    expect(slate).toContain('.golden-inspector-field textarea');
+    expect(slate).toContain(".golden-inspector-field textarea");
     expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-slate-actions .icon-action.is-active');
     expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-slate-table input { border-color: transparent;');
     expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-slate-table input { border-color: transparent;');
     expect(slate).toContain('html[data-mirrororder-theme="light"] button.danger-subtle');
     expect(slate).toContain('html[data-mirrororder-theme="dark"] button.danger-subtle');
-    expect(slate).toContain('.golden-inspector-actions .danger-subtle { flex: 0 0 auto;');
+    expect(slate).toContain(".golden-inspector-actions .danger-subtle { flex: 0 0 auto;");
     expect(frozen).toContain('html[data-mirrororder-theme="light"] .project-home-heading');
     expect(frozen).toContain('html[data-mirrororder-theme="dark"] .project-home-heading');
     expect(frozen).toContain('html[data-mirrororder-theme="light"] .mo-media-prefer');

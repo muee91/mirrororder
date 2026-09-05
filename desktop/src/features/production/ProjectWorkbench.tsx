@@ -6,13 +6,13 @@ import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
-import { MaterialScriptWorkbench } from "../material-script/MaterialScriptWorkbench";
-import "../material-script/material-script.css";
-import "../material-script/material-script-workbench.css";
+import { MaterialWorkspace } from "../material/MaterialWorkspace";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
 import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
 import "../media/media.css";
 import { CoverageWorkbench } from "../planning/PlanningWorkbenches";
+import { ReviewWorkspace } from "../review/ReviewWorkspace";
+import { ScriptWorkspace } from "../script/ScriptWorkspace";
 import { GoldenSlateWorkbench } from "../slate/GoldenSlateWorkbench";
 import { SlatePlaybackShortcuts } from "../slate/SlatePlaybackShortcuts";
 import "./production.css";
@@ -20,6 +20,7 @@ import "./assistant-drawer.css";
 import "./product-experience.css";
 import "./secondary-tools-theme.css";
 import "./professional-project-workbench.css";
+import "./production-workspaces.css";
 
 interface Props {
   baseUrl: string;
@@ -29,7 +30,7 @@ interface Props {
   onPageChange?: (page: ProductionPage) => void;
 }
 
-type ProductionArea = "material" | "script" | "edit" | "review";
+type ProductionArea = "material" | "script" | "timeline" | "review";
 
 interface AreaPageDefinition {
   page: ProductionPage;
@@ -43,11 +44,6 @@ interface AreaDefinition {
   pages: AreaPageDefinition[];
 }
 
-interface ReviewReturnContext {
-  page: ProductionPage;
-  label: string;
-}
-
 const AREAS: Record<ProductionArea, AreaDefinition> = {
   material: {
     label: "素材",
@@ -55,7 +51,7 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
     pages: [
       { page: "slate", label: "场记" },
       { page: "media-library", label: "素材库" },
-      { page: "takes", label: "镜次" },
+      { page: "takes", label: "Take" },
       { page: "identity", label: "人物" },
       { page: "media-binding", label: "本机素材", hidden: true },
     ],
@@ -68,11 +64,11 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
       { page: "coverage", label: "覆盖", hidden: true },
     ],
   },
-  edit: {
-    label: "剪辑",
+  timeline: {
+    label: "时间线",
     defaultPage: "timeline",
     pages: [
-      { page: "timeline", label: "剪辑工作台" },
+      { page: "timeline", label: "时间线" },
       { page: "delivery", label: "交付" },
     ],
   },
@@ -113,25 +109,29 @@ function pageLabel(page: ProductionPage): string {
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)));
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [takeFocusGroupId, setTakeFocusGroupId] = useState<string | null>(null);
-  const [reviewReturn, setReviewReturn] = useState<ReviewReturnContext | null>(null);
+  const [focusedTakeGroupId, setFocusedTakeGroupId] = useState<string | null>(null);
   const [operatorRevision, setOperatorRevision] = useState(0);
+
   const area = areaForPage(page);
   const areaDefinition = AREAS[area];
   const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);
   const currentPageDefinition = areaDefinition.pages.find((item) => item.page === page) ?? null;
-  const showSecondaryNavigation = visibleAreaPages.length > 1 || Boolean(currentPageDefinition?.hidden) || Boolean(page === "watch" && reviewReturn);
+  const showSecondaryNavigation = visibleAreaPages.length > 1 || Boolean(currentPageDefinition?.hidden);
 
-  function navigate(next: ProductionPage, options?: { preserveReviewReturn?: boolean }): void {
-    const safe = safeProductionPage(next);
-    if (!options?.preserveReviewReturn) setReviewReturn(null);
-    setPage(safe);
-    onPageChange?.(safe);
+  function navigate(next: ProductionPage): void {
+    setPage(safeProductionPage(next));
   }
 
   function switchArea(next: ProductionArea): void {
     if (next === area) return;
     navigate(AREAS[next].defaultPage);
+  }
+
+  function focusTake(groupId: string, destination: "takes" | "script" | "watch"): void {
+    const value = groupId.trim();
+    if (!value) return;
+    setFocusedTakeGroupId(value);
+    navigate(destination);
   }
 
   useEffect(() => {
@@ -142,27 +142,6 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   useEffect(() => {
     if (pageRequest) navigate(pageRequest.page);
   }, [pageRequest?.nonce]);
-
-  function openTakeFromEvidence(groupId: string): void {
-    const value = groupId.trim();
-    if (!value) return;
-    const sourcePage = page;
-    setTakeFocusGroupId(value);
-    setReviewReturn(sourcePage === "watch" ? null : { page: sourcePage, label: pageLabel(sourcePage) });
-    navigate("watch", { preserveReviewReturn: true });
-  }
-
-  function openTakeInScript(groupId: string): void {
-    const value = groupId.trim();
-    if (!value) return;
-    setTakeFocusGroupId(value);
-    navigate("script");
-  }
-
-  function returnFromReview(): void {
-    if (!reviewReturn) return;
-    navigate(reviewReturn.page);
-  }
 
   const assistantVisible = assistantOpen;
   const canvasKey = `${project.project_id}:${page}:operator-${operatorRevision}`;
@@ -177,7 +156,15 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
         </div>
         <nav className="professional-area-nav" aria-label="制作区域">
           {primaryNavigation.map(([key, definition]) => (
-            <button type="button" className={area === key ? "is-active" : ""} aria-current={area === key ? "page" : undefined} key={key} onClick={() => switchArea(key)}>{definition.label}</button>
+            <button
+              type="button"
+              className={area === key ? "is-active" : ""}
+              aria-current={area === key ? "page" : undefined}
+              key={key}
+              onClick={() => switchArea(key)}
+            >
+              {definition.label}
+            </button>
           ))}
         </nav>
         <div className="professional-project-tools">
@@ -190,11 +177,16 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
       {showSecondaryNavigation ? (
         <nav className="professional-secondary-nav" aria-label={`${AREAS[area].label}工作区`}>
           <div className="professional-secondary-pages">
-            {page === "watch" && reviewReturn ? (
-              <button type="button" className="professional-review-return" onClick={returnFromReview} title={`返回刚才的${reviewReturn.label}工作位置`}>← {reviewReturn.label}</button>
-            ) : null}
             {visibleAreaPages.map((item) => (
-              <button type="button" className={page === item.page ? "is-active" : ""} aria-current={page === item.page ? "page" : undefined} key={item.page} onClick={() => navigate(item.page)}>{item.label}</button>
+              <button
+                type="button"
+                className={page === item.page ? "is-active" : ""}
+                aria-current={page === item.page ? "page" : undefined}
+                key={item.page}
+                onClick={() => navigate(item.page)}
+              >
+                {item.label}
+              </button>
             ))}
           </div>
           <span className="professional-page-context">{AREAS[area].label} / {pageLabel(page)}</span>
@@ -211,39 +203,36 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
           ) : null}
 
           {page === "takes" ? (
-            <MaterialScriptWorkbench
+            <MaterialWorkspace
               baseUrl={baseUrl}
               project={project}
-              initialGroupId={takeFocusGroupId}
-              surface="takes"
-              onOpenScript={openTakeInScript}
+              initialGroupId={focusedTakeGroupId}
+              onOpenScript={(groupId) => focusTake(groupId, "script")}
             />
           ) : null}
 
           {page === "script" ? (
-            <MaterialScriptWorkbench
+            <ScriptWorkspace
               baseUrl={baseUrl}
               project={project}
-              initialGroupId={takeFocusGroupId}
-              surface="script"
+              initialGroupId={focusedTakeGroupId}
               onOpenCoverage={() => navigate("coverage")}
             />
           ) : null}
 
           {page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenMediaBinding={() => navigate("media-binding")} /> : null}
           {page === "media-binding" ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-          {page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
-          {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
+          {page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "takes")} /> : null}
+          {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} /> : null}
           {page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+
           {page === "watch" ? (
-            <MaterialScriptWorkbench
+            <ReviewWorkspace
               baseUrl={baseUrl}
               project={project}
-              initialGroupId={takeFocusGroupId}
-              surface="review"
-              showEditorial
-              onOpenScript={openTakeInScript}
+              initialGroupId={focusedTakeGroupId}
+              onOpenScript={(groupId) => focusTake(groupId, "script")}
             />
           ) : null}
         </div>

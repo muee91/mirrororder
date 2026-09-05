@@ -76,27 +76,36 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
     assert "current.registry.preflight_create" in runtime
 
 
-def test_desktop_project_navigation_matches_reduced_production_authority() -> None:
+def test_desktop_project_navigation_matches_workspace_authority() -> None:
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
     resume = read("desktop/src/app/resumeState.ts")
     library = read("desktop/src/features/projects/ProjectLibrary.tsx")
+    material = read("desktop/src/features/material/MaterialWorkspace.tsx")
+    script = read("desktop/src/features/script/ScriptWorkspace.tsx")
+    review = read("desktop/src/features/review/ReviewWorkspace.tsx")
 
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert "GoldenSlateWorkbench" in workbench
-    assert 'const materialScript = page === "takes" || page === "script"' in workbench
-    assert "GoldenMaterialScriptWorkbench" in workbench
+    assert "MaterialWorkspace" in workbench
+    assert "ScriptWorkspace" in workbench
+    assert "ReviewWorkspace" in workbench
+    assert "MaterialScriptWorkbench" not in workbench
+    assert 'surface="takes"' not in workbench
+    assert 'surface="script"' not in workbench
+    assert 'surface="review"' not in workbench
+    assert 'type ProductionArea = "material" | "script" | "timeline" | "review"' in workbench
     assert 'className="professional-project-toolbar"' in workbench
     assert 'aria-label="制作区域"' in workbench
     assert 'className="professional-secondary-nav"' in workbench
-    for label in ("素材", "剧本", "剪辑", "审阅"):
+    for label in ("素材", "剧本", "时间线", "审阅"):
         assert f'label: "{label}"' in workbench
     for page, label in (
         ("slate", "场记"),
         ("media-library", "素材库"),
-        ("takes", "镜次"),
+        ("takes", "Take"),
         ("identity", "人物"),
         ("script", "剧本"),
-        ("timeline", "剪辑工作台"),
+        ("timeline", "时间线"),
         ("delivery", "交付"),
         ("watch", "看片"),
     ):
@@ -114,14 +123,19 @@ def test_desktop_project_navigation_matches_reduced_production_authority() -> No
     assert "visibleAreaPages" in workbench
     assert "showSecondaryNavigation" in workbench
     assert ">小镜</button>" in workbench
-    assert "onOpenTake={openTakeFromEvidence}" in workbench
-    assert "initialGroupId={materialFocusGroupId}" in workbench
-    assert "onOpenCoverage" in workbench
+    assert 'onOpenTake={(groupId) => focusTake(groupId, "takes")}' in workbench
+    assert 'onOpenTake={(groupId) => focusTake(groupId, "script")}' in workbench
+    assert 'onOpenScript={(groupId) => focusTake(groupId, "script")}' in workbench
     assert "TimelineWorkbench" in workbench
     assert "ReviewAttentionWorkbench" not in workbench
     assert "ProjectOverviewWorkbench" not in workbench
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
+    assert "setGroupPlacement" not in material
+    assert "connection.setGroupPlacement" in script
+    assert "connection.clearGroupPlacement" in script
+    assert "showEditorial" in review
+    assert "setGroupPlacement" not in review
     assert 'aria-label="当前项目制作导航"' not in library
     assert 'onClick={() => openPage("watch")}' not in library
     assert "制作区在项目画布顶部切换。" in library

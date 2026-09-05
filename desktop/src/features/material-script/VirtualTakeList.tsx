@@ -13,13 +13,15 @@ export function VirtualTakeList({
   onSelect,
   onDragBegin,
   onDragFinish,
+  allowDrag = true,
   variant = "card",
 }: {
   takes: ReviewTakeGroup[];
   selectedGroupId: string | null;
   onSelect: (take: ReviewTakeGroup) => void;
-  onDragBegin: (groupId: string) => void;
-  onDragFinish: () => void;
+  onDragBegin?: (groupId: string) => void;
+  onDragFinish?: () => void;
+  allowDrag?: boolean;
   variant?: "card" | "compact";
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -84,27 +86,27 @@ export function VirtualTakeList({
             className={`virtual-take-row is-${variant}`}
             key={take.group_id}
             style={{ height: rowHeight, transform: `translateY(${(range.start + offset) * rowHeight}px)` }}
-            onDragEnd={onDragFinish}
+            onDragEnd={allowDrag ? onDragFinish : undefined}
           >
             {variant === "compact" ? (
               <TakeListRow
                 take={take}
                 detail={take.group_id === selectedGroupId ? "当前选择" : undefined}
                 onSelect={() => onSelect(take)}
-                onDragStart={(event, rowTake) => {
+                onDragStart={allowDrag ? (event, rowTake) => {
                   event.dataTransfer.effectAllowed = "move";
                   event.dataTransfer.setData(DRAG_TAKE_MIME, rowTake.group_id);
                   event.dataTransfer.setData("text/plain", rowTake.group_id);
-                  onDragBegin(rowTake.group_id);
-                }}
+                  onDragBegin?.(rowTake.group_id);
+                } : undefined}
               />
             ) : (
               <TakeCard
                 take={take}
                 selected={take.group_id === selectedGroupId}
                 onSelect={() => onSelect(take)}
-                onDragBegin={onDragBegin}
-                onDragFinish={onDragFinish}
+                onDragBegin={allowDrag ? (groupId) => onDragBegin?.(groupId) : () => {}}
+                onDragFinish={allowDrag ? () => onDragFinish?.() : () => {}}
               />
             )}
           </div>

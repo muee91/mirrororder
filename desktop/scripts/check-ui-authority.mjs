@@ -93,8 +93,11 @@ const sourceTsxFiles = listFiles("src", new Set([".tsx"]));
 const sourceCssFiles = listFiles("src", new Set([".css"]));
 
 const projectWorkbench = read("src/features/production/ProjectWorkbench.tsx");
-const materialScriptWorkbench = read("src/features/material-script/MaterialScriptWorkbench.tsx");
+const materialWorkspace = read("src/features/material/MaterialWorkspace.tsx");
+const scriptWorkspace = read("src/features/script/ScriptWorkspace.tsx");
+const reviewWorkspace = read("src/features/review/ReviewWorkspace.tsx");
 const resumeState = read("src/app/resumeState.ts");
+
 assert(projectWorkbench.includes('review: {\n    label: "审阅",\n    defaultPage: "watch",\n    pages: [\n      { page: "watch", label: "看片" },\n    ],'), "Review must remain one production surface; attention/overview are not standalone pages");
 assert(!projectWorkbench.includes("ReviewAttentionWorkbench"), "Attention must not return as a standalone production workbench");
 assert(!projectWorkbench.includes("ProjectOverviewWorkbench"), "Project overview must not return as a standalone review workbench");
@@ -102,14 +105,31 @@ assert(projectWorkbench.includes('{ page: "media-binding", label: "本机素材"
 assert(projectWorkbench.includes("visibleAreaPages.length > 1"), "Single-page production areas must not render redundant secondary navigation");
 assert(resumeState.includes('if (page === "attention" || page === "overview") return "watch";'), "Legacy attention/overview resume routes must collapse into Review");
 
-assert(!projectWorkbench.includes("GoldenMaterialScriptWorkbench"), "Material/Script must not regain a parallel Golden workbench");
+assert(projectWorkbench.includes('type ProductionArea = "material" | "script" | "timeline" | "review"'), "Desktop production areas must remain Material / Script / Timeline / Review");
+assert(projectWorkbench.includes("<MaterialWorkspace"), "ProjectWorkbench must route Material to MaterialWorkspace");
+assert(projectWorkbench.includes("<ScriptWorkspace"), "ProjectWorkbench must route Script to ScriptWorkspace");
+assert(projectWorkbench.includes("<ReviewWorkspace"), "ProjectWorkbench must route Review to ReviewWorkspace");
+assert(!projectWorkbench.includes("MaterialScriptWorkbench"), "cross-domain MaterialScriptWorkbench must not return");
 for (const surface of ["takes", "script", "review"]) {
-  assert(projectWorkbench.includes(`surface="${surface}"`), `MaterialScriptWorkbench must own the ${surface} production role`);
+  assert(!projectWorkbench.includes(`surface="${surface}"`), `production routing must not reintroduce surface="${surface}" mode switching`);
 }
-assert(materialScriptWorkbench.includes('export type MaterialScriptSurface = "takes" | "script" | "review";'), "MaterialScriptWorkbench must expose explicit role-based surfaces");
-assert(!materialScriptWorkbench.includes("WorkbenchTab"), "MaterialScriptWorkbench must not restore page-internal Material/Script tabs");
-assert(materialScriptWorkbench.includes("material-script-context-drawer"), "Take detail and Script matching must remain contextual drawers");
+assert(!materialWorkspace.includes("setGroupPlacement"), "Material must not own Review placement writes");
+assert(!materialWorkspace.includes("clearGroupPlacement"), "Material must not clear Review placement");
+assert(!materialWorkspace.includes("showEditorial"), "Material must not own Final Editorial Decision controls");
+assert(scriptWorkspace.includes("connection.setGroupPlacement"), "Script must own Review placement writes");
+assert(scriptWorkspace.includes("connection.clearGroupPlacement"), "Script must own placement correction/clear");
+assert(scriptWorkspace.includes("RoughPlacementClient"), "batch placement must stay inside Script authority");
+assert(reviewWorkspace.includes("showEditorial"), "Review must own Editorial Decision controls");
+assert(reviewWorkspace.includes('{ value: "attention", label: "需关注" }'), "Attention must remain a Review filter");
+assert(!reviewWorkspace.includes("setGroupPlacement"), "Review must not duplicate Script placement editing");
+assert(!reviewWorkspace.includes("clearGroupPlacement"), "Review must not clear Script placement directly");
+assert(projectWorkbench.includes('onOpenTake={(groupId) => focusTake(groupId, "takes")}'), "Identity evidence must open Take in Material");
+assert(projectWorkbench.includes('onOpenTake={(groupId) => focusTake(groupId, "script")}'), "Coverage evidence must return to Script");
+assert(!projectWorkbench.includes("ReviewReturnContext"), "cross-workspace return state must not become a second navigation system");
+
 for (const retiredPath of [
+  "src/features/material-script/MaterialScriptWorkbench.tsx",
+  "src/features/material-script/material-script-workbench.css",
   "src/features/material-script/GoldenMaterialScriptWorkbench.tsx",
   "src/features/material-script/golden-material-script.css",
   "src/features/material-script/golden-material-script-theme.css",
@@ -271,6 +291,6 @@ assert(angleEvidence.includes("MirrorOrderMediaCard"), "AngleEvidenceCard must r
 if (!process.exitCode) {
   console.log(
     `UI authority OK: ${cssImports.length} allowlisted global stylesheet layers; ` +
-    `${canonicalRenderers.length} canonical renderer owners unique; migration/Golden layer budgets did not grow.`,
+    `${canonicalRenderers.length} canonical renderer owners unique; workspace authority and migration/Golden layer budgets did not grow.`,
   );
 }

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -6,50 +6,84 @@ function read(relative: string): string {
   return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 }
 
+function exists(relative: string): boolean {
+  return existsSync(fileURLToPath(new URL(relative, import.meta.url)));
+}
+
 describe("MirrorOrder product surface contraction", () => {
-  it("keeps Review as one production surface with attention as a watch filter", () => {
+  it("keeps four independent production workspaces instead of a cross-domain surface switch", () => {
     const workbench = read("../features/production/ProjectWorkbench.tsx");
-    const watch = read("../features/material-script/MaterialScriptWorkbench.tsx");
+    expect(workbench).toContain('import { MaterialWorkspace } from "../material/MaterialWorkspace"');
+    expect(workbench).toContain('import { ScriptWorkspace } from "../script/ScriptWorkspace"');
+    expect(workbench).toContain('import { ReviewWorkspace } from "../review/ReviewWorkspace"');
+    expect(workbench).toContain("<MaterialWorkspace");
+    expect(workbench).toContain("<ScriptWorkspace");
+    expect(workbench).toContain("<TimelineWorkbench");
+    expect(workbench).toContain("<ReviewWorkspace");
+    expect(workbench).not.toContain("MaterialScriptWorkbench");
+    expect(workbench).not.toContain('surface="takes"');
+    expect(workbench).not.toContain('surface="script"');
+    expect(workbench).not.toContain('surface="review"');
+    expect(exists("../features/material-script/MaterialScriptWorkbench.tsx")).toBe(false);
+  });
+
+  it("keeps Material focused on Take and production facts without owning placement or editorial decisions", () => {
+    const material = read("../features/material/MaterialWorkspace.tsx");
+    expect(material).toContain('<main className="material-primary-canvas">');
+    expect(material).toContain("<VirtualTakeList");
+    expect(material).toContain("<TakeInspector");
+    expect(material).toContain("onOpenScript");
+    expect(material).not.toContain("setGroupPlacement");
+    expect(material).not.toContain("clearGroupPlacement");
+    expect(material).not.toContain("RoughPlacementClient");
+    expect(material).not.toContain("showEditorial");
+    expect(material).not.toContain("review-actor-field");
+  });
+
+  it("makes Script the only production workspace that writes Review placement", () => {
+    const script = read("../features/script/ScriptWorkspace.tsx");
+    expect(script).toContain('<main className="script-primary-canvas">');
+    expect(script).toContain("connection.setGroupPlacement");
+    expect(script).toContain("connection.clearGroupPlacement");
+    expect(script).toContain("RoughPlacementClient");
+    expect(script).toContain("script-candidate-browser");
+    expect(script).toContain("TakeListRow");
+    expect(script).toContain(">批量归集</button>");
+    expect(script).toContain("onOpenCoverage");
+  });
+
+  it("keeps Review viewer-first with attention as a filter and editorial decisions in the viewer", () => {
+    const workbench = read("../features/production/ProjectWorkbench.tsx");
+    const review = read("../features/review/ReviewWorkspace.tsx");
     const attention = read("../features/review/reviewAttention.ts");
     expect(workbench).toContain('review: {\n    label: "审阅",\n    defaultPage: "watch",\n    pages: [\n      { page: "watch", label: "看片" },\n    ],');
-    expect(workbench).not.toContain("ReviewAttentionWorkbench");
-    expect(workbench).not.toContain("ProjectOverviewWorkbench");
-    expect(watch).toContain('{ value: "attention", label: "需关注" }');
-    expect(watch).toContain("reviewTakeAttention(take).hasAttention");
+    expect(review).toContain('{ value: "attention", label: "需关注" }');
+    expect(review).toContain('<main className="review-primary-canvas">');
+    expect(review).toContain('aria-label="看片与人工决定"');
+    expect(review).toContain("showEditorial");
+    expect(review).toContain("reviewTakeAttention(take).hasAttention");
+    expect(review).not.toContain("setGroupPlacement");
+    expect(review).not.toContain("clearGroupPlacement");
+    expect(review).not.toContain("review-actor-field");
     expect(attention).toContain("export function reviewTakeAttention");
   });
 
-  it("uses one role-based MaterialScript surface instead of parallel workbenches", () => {
+  it("routes evidence actions to the workspace that owns the work", () => {
     const workbench = read("../features/production/ProjectWorkbench.tsx");
-    const materialScript = read("../features/material-script/MaterialScriptWorkbench.tsx");
-    expect(workbench).not.toContain("GoldenMaterialScriptWorkbench");
-    expect(workbench).toContain('surface="takes"');
-    expect(workbench).toContain('surface="script"');
-    expect(workbench).toContain('surface="review"');
-    expect(materialScript).toContain('export type MaterialScriptSurface = "takes" | "script" | "review";');
-    expect(materialScript).not.toContain("WorkbenchTab");
-    expect(materialScript).not.toContain('aria-label="素材剧本工作台"');
-    expect(materialScript).toContain("material-script-context-drawer");
-    expect(materialScript).toContain('variant="compact"');
+    expect(workbench).toContain('onOpenTake={(groupId) => focusTake(groupId, "takes")}');
+    expect(workbench).toContain('onOpenTake={(groupId) => focusTake(groupId, "script")}');
+    expect(workbench).toContain('onOpenScript={(groupId) => focusTake(groupId, "script")}');
+    expect(workbench).not.toContain("ReviewReturnContext");
+    expect(workbench).not.toContain("reviewReturn");
   });
 
-  it("keeps batch rough placement as a contextual Take tool instead of a parallel workbench", () => {
-    const materialScript = read("../features/material-script/MaterialScriptWorkbench.tsx");
-    expect(materialScript).toContain("RoughPlacementClient");
-    expect(materialScript).toContain(">批量归集</button>");
-    expect(materialScript).toContain("previewRoughPlacement");
-    expect(materialScript).toContain("applyRoughPlacement");
-  });
-
-  it("keeps Script as the primary canvas and moves Take matching into context", () => {
-    const materialScript = read("../features/material-script/MaterialScriptWorkbench.tsx");
-    const surfaceCss = read("../features/material-script/material-script-workbench.css");
-    expect(materialScript).toContain('surface === "script"');
-    expect(materialScript).toContain('<main className="script-primary-canvas">');
-    expect(materialScript).toContain("script-candidate-browser");
-    expect(materialScript).toContain("TakeListRow");
-    expect(surfaceCss).toContain(".material-script-context-drawer");
-    expect(surfaceCss).toContain(".script-primary-canvas");
+  it("keeps Timeline as the product-area name and legacy edit routes collapsed into it", () => {
+    const workbench = read("../features/production/ProjectWorkbench.tsx");
+    const resume = read("./resumeState.ts");
+    expect(workbench).toContain('type ProductionArea = "material" | "script" | "timeline" | "review"');
+    expect(workbench).toContain('timeline: {\n    label: "时间线"');
+    expect(workbench).toContain('{ page: "timeline", label: "时间线" }');
+    expect(resume).toContain('if (page === "rough-cut" || page === "assembly") return "timeline";');
   });
 
   it("keeps internal mapping ids out of the primary Script UI", () => {
@@ -70,21 +104,13 @@ describe("MirrorOrder product surface contraction", () => {
     expect(presentation).toContain("review?.attentionCount");
   });
 
-  it("keeps repair and diagnostic views out of primary navigation", () => {
+  it("keeps repair and Coverage views contextual instead of primary navigation", () => {
     const workbench = read("../features/production/ProjectWorkbench.tsx");
     expect(workbench).toContain('{ page: "media-binding", label: "本机素材", hidden: true }');
     expect(workbench).toContain('{ page: "coverage", label: "覆盖", hidden: true }');
     expect(workbench).toContain("visibleAreaPages.length > 1");
     expect(workbench).toContain("currentPageDefinition?.hidden");
-  });
-
-  it("keeps Coverage attached to Script instead of restoring a peer tab", () => {
-    const workbench = read("../features/production/ProjectWorkbench.tsx");
-    const materialScript = read("../features/material-script/MaterialScriptWorkbench.tsx");
-    expect(workbench).toContain('surface="script"');
     expect(workbench).toContain('onOpenCoverage={() => navigate("coverage")}');
-    expect(materialScript).toContain("onOpenCoverage?: () => void;");
-    expect(materialScript).toContain(">覆盖</button>");
   });
 
   it("canonicalizes retired pages instead of restoring their navigation", () => {

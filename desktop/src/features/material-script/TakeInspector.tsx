@@ -34,7 +34,7 @@ export function TakeInspector({
   selectedClipId: string | null;
   onSelectClip: (clipId: string) => void;
   onShowScript: () => void;
-  onClearPlacement: () => void;
+  onClearPlacement?: () => void;
   writeSaving: boolean;
   showEditorial?: boolean;
 }) {
@@ -105,7 +105,7 @@ export function TakeInspector({
 
       <div className="inspector-actions">
         <button type="button" className="secondary" onClick={onShowScript}>定位剧本</button>
-        {take.effective_mapping.source === "human" ? (
+        {onClearPlacement && take.effective_mapping.source === "human" ? (
           <button type="button" className="secondary danger-quiet" disabled={writeSaving} onClick={onClearPlacement}>
             清除人工归集
           </button>
