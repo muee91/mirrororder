@@ -74,6 +74,34 @@ export function preferredScriptSegmentId(take: ReviewTakeGroup): string | null {
   return take.context.script_segment_ids[0] ?? null;
 }
 
+function candidateSegmentIds(take: ReviewTakeGroup): string[] {
+  const values = new Set<string>();
+  for (const candidate of take.candidates) {
+    const segmentIds = candidate.script_segment_ids?.length
+      ? candidate.script_segment_ids
+      : [candidate.script_segment_id];
+    for (const segmentId of segmentIds) {
+      if (segmentId) values.add(segmentId);
+    }
+  }
+  return [...values];
+}
+
+export function mappedTakeIds(model: ReviewModelPayload, segmentId: string): string[] {
+  return model.take_groups
+    .filter((take) => take.effective_mapping.script_segment_ids.includes(segmentId))
+    .map((take) => take.group_id);
+}
+
+export function candidateTakeIds(model: ReviewModelPayload, segmentId: string): string[] {
+  return model.take_groups
+    .filter((take) => (
+      !take.effective_mapping.script_segment_ids.includes(segmentId) &&
+      candidateSegmentIds(take).includes(segmentId)
+    ))
+    .map((take) => take.group_id);
+}
+
 export function relatedTakeIds(model: ReviewModelPayload, segmentId: string): string[] {
   const ranked: Array<{ rank: number; index: number; groupId: string }> = [];
   model.take_groups.forEach((take, index) => {
@@ -81,11 +109,7 @@ export function relatedTakeIds(model: ReviewModelPayload, segmentId: string): st
       ranked.push({ rank: 0, index, groupId: take.group_id });
       return;
     }
-    if (
-      take.candidates.some((candidate) =>
-        (candidate.script_segment_ids?.length ? candidate.script_segment_ids : [candidate.script_segment_id]).includes(segmentId),
-      )
-    ) {
+    if (candidateSegmentIds(take).includes(segmentId)) {
       ranked.push({ rank: 1, index, groupId: take.group_id });
       return;
     }

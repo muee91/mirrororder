@@ -7,9 +7,9 @@ import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorkspace";
 import "../media/media.css";
-import { CoverageWorkbench } from "../planning/PlanningWorkbenches";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
 import { ScriptWorkspace } from "../script/ScriptWorkspace";
+import "../script/script-workspace.css";
 import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
@@ -56,7 +56,6 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
     defaultPage: "script",
     pages: [
       { page: "script", label: "剧本" },
-      { page: "coverage", label: "覆盖", hidden: true },
     ],
   },
   timeline: {
@@ -79,6 +78,7 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
 const ALL_PAGES = new Set<ProductionPage>(Object.values(AREAS).flatMap((area) => area.pages.map((item) => item.page)));
 
 function safeProductionPage(page: ProductionPage): ProductionPage {
+  if (page === "coverage") return "script";
   if (page === "rough-cut" || page === "assembly") return "timeline";
   if (page === "attention" || page === "overview") return "watch";
   return ALL_PAGES.has(page) ? page : "slate";
@@ -231,11 +231,9 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               baseUrl={baseUrl}
               project={project}
               initialGroupId={focusedTakeGroupId}
-              onOpenCoverage={() => navigate("coverage")}
             />
           ) : null}
 
-          {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} /> : null}
           {page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
 

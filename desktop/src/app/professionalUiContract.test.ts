@@ -77,6 +77,7 @@ describe("MirrorOrder professional UI contracts", () => {
       "../features/media/media-library.css",
       "../features/material/material-workspace.css",
       "../features/material-script/material-script.css",
+      "../features/script/script-workspace.css",
       "../features/production/production-workspaces.css",
       "../features/material-script/take-card.css",
       "../features/production/production.css",
@@ -93,6 +94,7 @@ describe("MirrorOrder professional UI contracts", () => {
       "../features/media/mirrororder-media-card.css",
       "../features/media/media-library.css",
       "../features/material/material-workspace.css",
+      "../features/script/script-workspace.css",
       "../features/production/production-workspaces.css",
       "../features/production/production.css",
       "../features/planning/planning.css",
@@ -107,6 +109,7 @@ describe("MirrorOrder professional UI contracts", () => {
     for (const relative of [
       "../features/media/mirrororder-media-card.css",
       "../features/media/media-library.css",
+      "../features/script/script-workspace.css",
       "../features/production/production.css",
       "../features/planning/planning.css",
       "../features/editor/timeline.css",

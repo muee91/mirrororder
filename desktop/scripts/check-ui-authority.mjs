@@ -97,6 +97,7 @@ const materialWorkspace = read("src/features/material/MaterialWorkspace.tsx");
 const materialTakeView = read("src/features/material/MaterialTakeView.tsx");
 const materialWorkspaceCss = read("src/features/material/material-workspace.css");
 const scriptWorkspace = read("src/features/script/ScriptWorkspace.tsx");
+const scriptWorkspaceCss = read("src/features/script/script-workspace.css");
 const reviewWorkspace = read("src/features/review/ReviewWorkspace.tsx");
 const resumeState = read("src/app/resumeState.ts");
 
@@ -105,6 +106,7 @@ assert(!projectWorkbench.includes("ReviewAttentionWorkbench"), "Attention must n
 assert(!projectWorkbench.includes("ProjectOverviewWorkbench"), "Project overview must not return as a standalone review workbench");
 assert(projectWorkbench.includes('{ page: "media-binding", label: "本机素材", hidden: true }'), "Media binding must stay a hidden repair tool, not a primary production page");
 assert(projectWorkbench.includes('const showSecondaryNavigation = area !== "material"'), "Material subviews must be owned inside MaterialWorkspace instead of ProjectWorkbench secondary navigation");
+assert(resumeState.includes('if (page === "coverage") return "script";'), "Legacy Coverage resume routes must collapse into Script");
 assert(resumeState.includes('if (page === "attention" || page === "overview") return "watch";'), "Legacy attention/overview resume routes must collapse into Review");
 
 assert(projectWorkbench.includes('type ProductionArea = "material" | "script" | "timeline" | "review"'), "Desktop production areas must remain Material / Script / Timeline / Review");
@@ -112,6 +114,8 @@ assert(projectWorkbench.includes("<MaterialWorkspace"), "ProjectWorkbench must r
 assert(projectWorkbench.includes("<ScriptWorkspace"), "ProjectWorkbench must route Script to ScriptWorkspace");
 assert(projectWorkbench.includes("<ReviewWorkspace"), "ProjectWorkbench must route Review to ReviewWorkspace");
 assert(!projectWorkbench.includes("MaterialScriptWorkbench"), "cross-domain MaterialScriptWorkbench must not return");
+assert(!projectWorkbench.includes('import { CoverageWorkbench }'), "Coverage must not return as a ProjectWorkbench route");
+assert(!projectWorkbench.includes('{ page: "coverage", label: "覆盖"'), "Coverage must be a Script projection, not a page definition");
 for (const surface of ["takes", "script", "review"]) {
   assert(!projectWorkbench.includes(`surface="${surface}"`), `production routing must not reintroduce surface="${surface}" mode switching`);
 }
@@ -145,9 +149,21 @@ for (const selector of [".mo-take-list-row", ".mo-take-list-core", ".mo-take-lis
   assert(!materialWorkspaceCss.includes(selector), `material-workspace.css must not reclaim canonical compact Take anatomy through ${selector}`);
 }
 
+assert(scriptWorkspace.includes("ScriptProjectionMode"), "Script must expose explicit in-workspace projection modes");
+assert(scriptWorkspace.includes('{ value: "script", label: "正文" }'), "Script must keep the normal reading projection");
+assert(scriptWorkspace.includes('{ value: "coverage", label: "覆盖" }'), "Coverage must live inside Script as a projection");
+assert(scriptWorkspace.includes('{ value: "issues", label: "问题" }'), "Script must expose an issue-focused projection");
+assert(scriptWorkspace.includes('placeholder="搜索剧本、角色或场景"'), "Script must support direct script search");
+assert(scriptWorkspace.includes("placeTakeOnSelectedBlock"), "Script segment context must support direct Take placement");
+assert(scriptWorkspace.includes('actionLabel={mappedHere ? "查看" : "归集到此段"}'), "Script candidates must act on the selected ScriptBlock instead of a generic material tray");
 assert(scriptWorkspace.includes("connection.setGroupPlacement"), "Script must own Review placement writes");
 assert(scriptWorkspace.includes("connection.clearGroupPlacement"), "Script must own placement correction/clear");
-assert(scriptWorkspace.includes("RoughPlacementClient"), "batch placement must stay inside Script authority");
+assert(scriptWorkspace.includes("RoughPlacementClient"), "batch episode-only placement must stay inside Script authority");
+assert(!scriptWorkspace.includes("onOpenCoverage"), "Script must not deep-link to a standalone Coverage page");
+for (const selector of [".script-block {", ".script-block-meta {", ".script-block p {", ".script-block-actions button {"]) {
+  assert(!scriptWorkspaceCss.includes(selector), `script-workspace.css must not reclaim canonical ScriptBlock anatomy through ${selector}`);
+}
+
 assert(reviewWorkspace.includes("showEditorial"), "Review must own Editorial Decision controls");
 assert(reviewWorkspace.includes('{ value: "attention", label: "需关注" }'), "Attention must remain a Review filter");
 assert(!reviewWorkspace.includes("setGroupPlacement"), "Review must not duplicate Script placement editing");
@@ -155,7 +171,6 @@ assert(!reviewWorkspace.includes("clearGroupPlacement"), "Review must not clear 
 assert(projectWorkbench.includes('onOpenScript={(groupId) => focusTake(groupId, "script")}'), "Material Take must preserve identity when opening Script");
 assert(projectWorkbench.includes('groupId ? focusTake(groupId, "watch") : navigate("watch")'), "Material Take must preserve identity when opening Review");
 assert(projectWorkbench.includes('onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}'), "Material Take must preserve identity intent when opening Timeline");
-assert(projectWorkbench.includes('onOpenTake={(groupId) => focusTake(groupId, "script")}'), "Coverage evidence must return to Script");
 assert(!projectWorkbench.includes("ReviewReturnContext"), "cross-workspace return state must not become a second navigation system");
 
 for (const retiredPath of [
@@ -284,9 +299,14 @@ assert(!goldenSlateCss.includes(".golden-episode-candidates > button"), "Golden 
 
 const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
 assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
+assert(scriptBlock.includes('data-script-projection={projectionMode}'), "ScriptBlock must expose projection state without duplicating renderers");
+assert(scriptBlock.includes("mappedTakeIds"), "ScriptBlock must present mapped Take state");
+assert(scriptBlock.includes("candidateTakeIds"), "ScriptBlock must present candidate Take state");
 assert(!scriptBlock.includes("<code>{block.segment_id}</code>"), "primary Script UI must not expose raw segment ids");
 const scriptEpisode = read("src/features/material-script/ScriptEpisodeView.tsx");
 assert(scriptEpisode.includes('from "./ScriptBlock"'), "ScriptEpisodeView must consume the canonical ScriptBlock");
+assert(scriptEpisode.includes("mappedTakeIds(model, block.segment_id)"), "ScriptEpisodeView must project mapped Take state into canonical ScriptBlock");
+assert(scriptEpisode.includes("candidateTakeIds(model, block.segment_id)"), "ScriptEpisodeView must project candidate Take state into canonical ScriptBlock");
 assert(!scriptEpisode.includes('className={`script-block'), "ScriptEpisodeView must not hide a second ScriptBlock anatomy");
 assert(!scriptEpisode.includes("{scene.scene_id}</p>"), "primary Script UI must not expose raw scene ids");
 

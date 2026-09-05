@@ -6,9 +6,9 @@
 
 - 仓库只维护 `main`。
 - Desktop 当前处于 **Product Recovery**，产品仍不能视为已恢复可用。
-- 文档 authority 已收缩到产品定义、当前状态、当前 backlog、长期 invariants 与必要领域/跨层 contract。
 - P0.1 / P0.2 已完成源码切分：Material / Script / Review 分别拥有独立 workspace renderer，跨域 `MaterialScriptWorkbench` 已移除。
-- P0.3 已完成当前源码切片：Material 现在拥有场记 / 素材库 / Take / 人物四个内部视图，本机素材恢复降为 contextual tool。
+- P0.3 已完成：Material 收成一个资产与拍摄事实中心。
+- P0.4 已完成当前源码切片：ScriptBlock 是剧本主对象，Coverage / 问题改为 Script 内部 projection，独立 Coverage route 已从 ProjectWorkbench 移除。
 
 ## 当前 Product Recovery 状态
 
@@ -32,23 +32,32 @@ ProjectWorkbench
 │   ├── Take
 │   └── 人物
 ├── ScriptWorkspace
+│   └── 正文 / 覆盖 / 问题 projection
 ├── TimelineWorkbench
 └── ReviewWorkspace
 ```
 
-Material 当前已经收口为同一个资产与拍摄事实中心：
+Material 当前：
 
-- `ProjectWorkbench` 不再分别拥有 Slate / Media Library / Take / Identity / Binding 子页面 renderer；
 - `MaterialWorkspace` 自己管理 `slate / library / takes / people` 四个 view；
-- `repair` 只作为素材库上下文中的本机恢复工具，不成为新的产品面；
-- Take view 会把 Review Take 与 Script Supervisor / Slate fact 关联，展示场 / 镜 / Take、场记状态、媒体可用性和当前剧本归属摘要；
-- Take 支持按 Take、场镜次、机位、对白、备注搜索，并能筛选待归集 / 有候选 / 已归集 / 素材离线；
+- `repair` 只作为素材库上下文中的本机恢复工具；
+- Take view 会关联 Script Supervisor / Slate fact，展示场 / 镜 / Take、场记状态、媒体可用性和当前剧本归属；
 - 当前 Take 明确提供“在剧本中打开 / 在审阅中打开 / 到时间线 / 修复本机素材”；
-- Material 仍不写 Review placement，也不承载 Final Editorial Decision。
+- Material 不写 Review placement，也不承载 Final Editorial Decision。
+
+Script 当前：
+
+- Script / ScriptBlock 是唯一 Primary Canvas；
+- 支持集数切换与“搜索剧本、角色或场景”；
+- `正文 / 覆盖 / 问题` 是同一 Script canvas 的 projection，不再跳转独立 Coverage Workbench；
+- Coverage projection 显示已归集 / 候选状态，明确不把“无 placement 证据”解释成“缺镜头”；
+- 选中 ScriptBlock 后在 contextual drawer 查看相关 Take，并可直接“归集到此段”；
+- 无候选时可以在同一 drawer 搜索全部 Take，仍由 Script workspace 写 Review placement；
+- batch rough placement 保留为 Script 的 episode-only contextual tool；
+- legacy `coverage` resume/page request canonicalize 到 `script`。
 
 其它 workspace authority 保持：
 
-- Script 是 Desktop 人工 Review placement / mapping 修正的主要 owner；
 - Review 以 Viewer + 人工 Editorial Decision 为主，`需关注` 只是 filter；
 - Timeline 是唯一 authoritative local editor；
 - canonical `TakeCard / TakeListRow / ScriptBlock / MediaCard / SlateRow / PersonRow` 继续复用，不复制 renderer。
@@ -70,7 +79,7 @@ Material 当前已经收口为同一个资产与拍摄事实中心：
 - Python stale navigation source-shape assertion；
 - compact Take CSS 出现两个 owner。
 
-P0.1–P0.3 已持续更新这些 source-shape contract 与 CSS ownership guard，但当前新 `main` 尚未执行完整验证，因此不能写 PASS。
+P0.1–P0.4 已持续更新 source-shape contract 与 UI authority guard，但当前新 `main` 尚未执行完整验证，因此不能写 PASS。
 
 执行策略保持：
 
@@ -81,16 +90,15 @@ P0.1–P0.3 已持续更新这些 source-shape contract 与 CSS ownership guard�
 
 ## 下一轮代码入口
 
-接下来直接进入 **P0.4 — Script-first placement**：
+接下来直接进入 **P0.5 — Timeline 唯一剪辑中心**：
 
-- Script / ScriptBlock 保持唯一 Primary Canvas；
-- 把集 / 场 / 搜索、Coverage projection、已归集 Take、候选 Take、人工 placement 修正组织成一条连续任务；
-- 减少“先选 Take 再找剧本”的工具感，优先从“这一段剧本缺什么 / 已经有什么”出发；
-- Coverage 不再表现成独立工作台；
-- 候选和 Take detail 保持 contextual，不重新形成第二素材池工作台；
-- placement revision / actor / ReviewStore authority 保持不变。
+- 核对 source browser → program monitor → tracks → selection → undo/redo → persistence 的真实主链；
+- Material / Script / Review deep-link 到 Timeline 时，明确当前 Take / clip/source intent；
+- Rough Cut / Assembly / AI editing 只作为 proposal / preview，不保留竞争性的 editor state；
+- Delivery/export 降为 Timeline 后续 flow，不作为并列剪辑工作台；
+- 删除失去产品 owner 的旧 planning/editor shell，而不是继续隐藏。
 
-之后顺序仍是：P0.5 Timeline → P0.6 Review → P0.7 typed project context → P0.8 contracts/CSS → P0.9 真机验收。
+之后顺序：P0.6 Review → P0.7 typed project context → P0.8 contracts/CSS → P0.9 真机验收。
 
 ## 其它未关闭风险
 

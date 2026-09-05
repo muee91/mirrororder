@@ -1,0 +1,205 @@
+/* Script workspace orchestration only. ScriptBlock anatomy remains owned by material-script.css. */
+
+.script-command-bar {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mo-border-subtle, #202830);
+}
+
+.script-projection-switch {
+  display: flex;
+  gap: 4px;
+}
+
+.script-projection-switch button {
+  min-height: 30px;
+  border-color: var(--mo-border-default, #303a44);
+  padding: 5px 9px;
+  color: var(--mo-text-muted, #8793a0);
+  background: var(--mo-surface-control, #171d23);
+  font-size: var(--mo-font-sm, 11px);
+}
+
+.script-projection-switch button.is-active {
+  border-color: var(--mo-border-strong, #536170);
+  color: var(--mo-text-primary, #eef2f6);
+  background: var(--mo-surface-selected, #182535);
+}
+
+.script-search,
+.script-candidate-search {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--mo-border-default, #303a44);
+  border-radius: var(--mo-radius-control, 5px);
+  padding: 6px 9px;
+  color: var(--mo-text-primary, #eef2f6);
+  background: var(--mo-surface-control, #0d1014);
+  font: inherit;
+}
+
+.script-search:focus-visible,
+.script-candidate-search:focus-visible,
+.script-projection-switch button:focus-visible {
+  outline: 2px solid var(--mo-focus-ring, #7aa2d6);
+  outline-offset: 1px;
+}
+
+.script-episode-bar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--mo-border-subtle, #202830);
+}
+
+.script-episode-bar .episode-strip {
+  min-width: 0;
+  padding: 7px 0;
+}
+
+.script-coverage-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--mo-border-subtle, #202830);
+}
+
+.script-coverage-summary > span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 4px;
+  border: 1px solid var(--mo-border-default, #303a44);
+  border-radius: 4px;
+  padding: 4px 7px;
+  color: var(--mo-text-muted, #8793a0);
+  background: var(--mo-surface-raised, #151b21);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.script-coverage-summary > span strong {
+  color: var(--mo-text-primary, #eef2f6);
+  font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.script-coverage-summary > span.needs-attention {
+  border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 40%, var(--mo-border-default, #303a44));
+}
+
+.script-coverage-summary > small {
+  min-width: 260px;
+  margin-left: auto;
+  color: var(--mo-text-muted, #778491);
+  font-size: var(--mo-font-xs, 10px);
+  line-height: 1.4;
+  text-align: right;
+}
+
+.script-segment-context {
+  min-width: 0;
+}
+
+.script-segment-summary {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border-bottom: 1px solid var(--mo-border-subtle, #202830);
+}
+
+.script-segment-summary > p {
+  margin: 0;
+  color: var(--mo-text-secondary, #bdc6cf);
+  font-size: var(--mo-font-md, 12px);
+  line-height: 1.55;
+}
+
+.script-segment-summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.script-segment-summary > div > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  border: 1px solid var(--mo-border-default, #303a44);
+  border-radius: 4px;
+  padding: 4px 7px;
+  color: var(--mo-text-muted, #8793a0);
+  background: var(--mo-surface-raised, #151b21);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.script-segment-summary > div > span strong {
+  color: var(--mo-text-primary, #eef2f6);
+}
+
+.script-segment-summary > div > span.needs-attention {
+  border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 40%, var(--mo-border-default, #303a44));
+}
+
+.script-candidate-search {
+  width: calc(100% - 24px);
+  margin: 6px 12px 2px;
+}
+
+.script-detail-placement-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 12px 0;
+  border: 1px solid var(--mo-border-default, #303a44);
+  border-radius: 5px;
+  padding: 8px 10px;
+  color: var(--mo-text-secondary, #aab5c0);
+  background: var(--mo-surface-raised, #151b21);
+  font-size: var(--mo-font-sm, 11px);
+}
+
+.script-detail-placement-action button {
+  flex: 0 0 auto;
+}
+
+.script-scene > header > div {
+  min-width: 0;
+}
+
+.script-scene > header small {
+  display: block;
+  margin-top: 3px;
+  color: var(--mo-text-muted, #778491);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+@media (max-width: 1180px) {
+  .script-command-bar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .script-command-bar .workspace-toolbar-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .script-episode-bar {
+    align-items: stretch;
+    flex-direction: column;
+    padding-bottom: 7px;
+  }
+
+  .script-coverage-summary > small {
+    min-width: 220px;
+  }
+}

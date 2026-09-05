@@ -50,6 +50,7 @@ describe("Desktop appearance product contract", () => {
     const tools = read("../desktop-theme-tools.css");
     const material = read("../features/material-script/material-script.css");
     const materialWorkspace = read("../features/material/material-workspace.css");
+    const scriptWorkspace = read("../features/script/script-workspace.css");
     const workspaces = read("../features/production/production-workspaces.css");
     const takeCard = read("../features/material-script/take-card.css");
     const slate = read("../desktop-theme-slate.css");
@@ -59,9 +60,11 @@ describe("Desktop appearance product contract", () => {
     expect(tools).toContain(".settings-status-workbench");
     expect(material).toContain("var(--mo-");
     expect(materialWorkspace).toContain("var(--mo-");
+    expect(scriptWorkspace).toContain("var(--mo-");
     expect(workspaces).toContain("var(--mo-");
     expect(material).not.toContain("@media (prefers-color-scheme");
     expect(materialWorkspace).not.toContain("@media (prefers-color-scheme");
+    expect(scriptWorkspace).not.toContain("@media (prefers-color-scheme");
     expect(workspaces).not.toContain("@media (prefers-color-scheme");
     expect(takeCard).toContain(".mo-take-list-row");
     expect(takeCard).toContain("var(--mo-");

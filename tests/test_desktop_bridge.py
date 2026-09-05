@@ -83,6 +83,7 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     material = read("desktop/src/features/material/MaterialWorkspace.tsx")
     material_take = read("desktop/src/features/material/MaterialTakeView.tsx")
     script = read("desktop/src/features/script/ScriptWorkspace.tsx")
+    script_block = read("desktop/src/features/material-script/ScriptBlock.tsx")
     review = read("desktop/src/features/review/ReviewWorkspace.tsx")
 
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
@@ -110,16 +111,19 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
         ("watch", "看片"),
     ):
         assert f'{{ page: "{page}", label: "{label}" }}' in workbench
-    assert '{ page: "coverage", label: "覆盖", hidden: true }' in workbench
+    assert '{ page: "coverage", label: "覆盖"' not in workbench
     assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
     assert '{ page: "attention",' not in workbench
     assert '{ page: "overview",' not in workbench
+    assert 'page === "coverage"' in resume
+    assert 'return "script"' in resume
     assert 'page === "attention" || page === "overview"' in resume
     assert 'return "watch"' in resume
     assert 'page === "rough-cut" || page === "assembly"' in resume
     assert 'return "timeline"' in resume
     assert ">小镜</button>" in workbench
     assert "TimelineWorkbench" in workbench
+    assert "CoverageWorkbench" not in workbench
     assert "ReviewAttentionWorkbench" not in workbench
     assert "ProjectOverviewWorkbench" not in workbench
     assert "RoughCutWorkbench" not in workbench
@@ -142,11 +146,22 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     assert ">到时间线</button>" in material_take
     assert ">修复本机素材</button>" in material_take
 
+    assert "ScriptProjectionMode" in script
+    assert '{ value: "script", label: "正文" }' in script
+    assert '{ value: "coverage", label: "覆盖" }' in script
+    assert '{ value: "issues", label: "问题" }' in script
+    assert 'placeholder="搜索剧本、角色或场景"' in script
+    assert "placeTakeOnSelectedBlock" in script
+    assert 'actionLabel={mappedHere ? "查看" : "归集到此段"}' in script
     assert "connection.setGroupPlacement" in script
     assert "connection.clearGroupPlacement" in script
+    assert "onOpenCoverage" not in script
+    assert 'data-script-projection={projectionMode}' in script_block
+    assert "mappedTakeIds" in script_block
+    assert "candidateTakeIds" in script_block
+
     assert "showEditorial" in review
     assert "setGroupPlacement" not in review
-    assert 'onOpenTake={(groupId) => focusTake(groupId, "script")}' in workbench
     assert 'onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}' in workbench
     assert 'aria-label="当前项目制作导航"' not in library
     assert 'onClick={() => openPage("watch")}' not in library
