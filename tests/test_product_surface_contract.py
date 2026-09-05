@@ -6,6 +6,11 @@ APP = ROOT / "desktop" / "src" / "app" / "App.tsx"
 RESUME = ROOT / "desktop" / "src" / "app" / "resumeState.ts"
 REDESIGN = ROOT / "desktop" / "src" / "app" / "mirrororder-redesign.css"
 WORKBENCH = ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
+MATERIAL_WORKSPACE = ROOT / "desktop" / "src" / "features" / "material" / "MaterialWorkspace.tsx"
+MATERIAL_TAKE = ROOT / "desktop" / "src" / "features" / "material" / "MaterialTakeView.tsx"
+SCRIPT_WORKSPACE = ROOT / "desktop" / "src" / "features" / "script" / "ScriptWorkspace.tsx"
+REVIEW_WORKSPACE = ROOT / "desktop" / "src" / "features" / "review" / "ReviewWorkspace.tsx"
+TIMELINE = ROOT / "desktop" / "src" / "features" / "editor" / "TimelineWorkbench.tsx"
 PROJECT_LIBRARY = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx"
 WORKSPACE_HOME = ROOT / "desktop" / "src" / "features" / "projects" / "WorkspaceHome.tsx"
 PROJECT_LIFECYCLE = ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLifecyclePanel.tsx"
@@ -20,9 +25,13 @@ TEAM = ROOT / "desktop" / "src" / "features" / "team" / "TeamWebWorkbench.tsx"
 WEB = ROOT / "web" / "index.html"
 
 
-def test_desktop_uses_workspace_home_and_reduced_production_ia() -> None:
+def test_desktop_uses_workspace_home_and_four_production_workspaces() -> None:
     app = APP.read_text(encoding="utf-8")
     workbench = WORKBENCH.read_text(encoding="utf-8")
+    material = MATERIAL_WORKSPACE.read_text(encoding="utf-8")
+    script = SCRIPT_WORKSPACE.read_text(encoding="utf-8")
+    review = REVIEW_WORKSPACE.read_text(encoding="utf-8")
+    timeline = TIMELINE.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
     workspace_home = WORKSPACE_HOME.read_text(encoding="utf-8")
     redesign = REDESIGN.read_text(encoding="utf-8")
@@ -43,40 +52,45 @@ def test_desktop_uses_workspace_home_and_reduced_production_ia() -> None:
     assert "const AREAS: Record<ProductionArea, AreaDefinition>" in workbench
     assert 'className="professional-project-toolbar"' in workbench
     assert 'aria-label="制作区域"' in workbench
-    assert 'className="professional-secondary-nav"' in workbench
-    for label in ("素材", "剧本", "剪辑", "审阅"):
+    assert 'className="professional-secondary-nav"' not in workbench
+    assert 'type ProductionArea = ProductionWorkspace' in workbench
+    for label in ("素材", "剧本", "时间线", "审阅"):
         assert f'label: "{label}"' in workbench
-    for page, label in (
-        ("slate", "场记"),
-        ("media-library", "素材库"),
-        ("takes", "镜次"),
-        ("identity", "人物"),
-        ("script", "剧本"),
-        ("timeline", "剪辑工作台"),
-        ("delivery", "交付"),
-        ("watch", "看片"),
-    ):
-        assert f'{{ page: "{page}", label: "{label}" }}' in workbench
-    assert '{ page: "coverage", label: "覆盖", hidden: true }' in workbench
-    assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
-    assert '{ page: "attention",' not in workbench
-    assert '{ page: "overview",' not in workbench
-    assert '{ page: "rough-cut",' not in workbench
-    assert '{ page: "assembly",' not in workbench
-    assert 'const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden)' in workbench
-    assert "showSecondaryNavigation" in workbench
+    assert "MaterialWorkspace" in workbench
+    assert "ScriptWorkspace" in workbench
     assert "TimelineWorkbench" in workbench
-    assert "ReviewAttentionWorkbench" not in workbench
-    assert "ProjectOverviewWorkbench" not in workbench
+    assert "ReviewWorkspace" in workbench
+    assert "MaterialScriptWorkbench" not in workbench
+    assert 'surface="takes"' not in workbench
+    assert 'surface="script"' not in workbench
+    assert 'surface="review"' not in workbench
+    assert "CoverageWorkbench" not in workbench
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
-    edit_area = workbench.split("edit: {", 1)[1].split("review: {", 1)[0]
-    assert '{ page: "timeline", label: "剪辑工作台" }' in edit_area
-    assert '{ page: "delivery", label: "交付" }' in edit_area
-    review_area = workbench.split("review: {", 1)[1].split("};", 1)[0]
-    assert '{ page: "watch", label: "看片" }' in review_area
-    assert "待处理" not in review_area
-    assert "概览" not in review_area
+
+    assert 'export type MaterialView = "slate" | "library" | "takes" | "people" | "repair"' in material
+    assert 'aria-label="素材视图"' in material
+    assert "GoldenSlateWorkbench" in material
+    assert "MediaLibraryWorkbench" in material
+    assert "MaterialTakeView" in material
+    assert "IdentityWorkbench" in material
+    assert "MediaBindingWorkbench" in material
+    for label in ("场记", "素材库", "Take", "人物"):
+        assert f'label: "{label}"' in material
+
+    assert "PROJECTION_OPTIONS" in script
+    assert '{ value: "script", label: "正文" }' in script
+    assert '{ value: "coverage", label: "覆盖" }' in script
+    assert '{ value: "issues", label: "问题" }' in script
+    assert "connection.setGroupPlacement" in script
+    assert "connection.clearGroupPlacement" in script
+
+    assert '{ value: "attention", label: "需关注" }' in review
+    assert "ReviewDecisionPanel" in review
+    assert "setGroupPlacement" not in review
+
+    assert "DeliveryWorkbench" in timeline
+    assert 'aria-label="时间线交付"' in timeline
 
     assert "professional-global-sidebar" in library
     assert 'aria-label="主导航"' in library
@@ -99,36 +113,55 @@ def test_project_resume_defaults_new_state_and_canonicalizes_retired_pages() -> 
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert "rememberProjectPage(project.project_id, page)" in workbench
     assert "VALID_PROJECT_PAGES.has(value)" in resume
+    assert 'page === "coverage"' in resume
+    assert 'return "script"' in resume
     assert 'page === "rough-cut" || page === "assembly"' in resume
     assert 'return "timeline"' in resume
     assert 'page === "attention" || page === "overview"' in resume
     assert 'return "watch"' in resume
     assert "return canonicalProductionPage(value as ProductionPage)" in resume
+    assert 'if (page === "coverage") return "script"' in workbench
+    assert 'if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline"' in workbench
 
 
-def test_production_tools_are_contextual_instead_of_becoming_more_tabs() -> None:
+def test_production_tools_are_contextual_and_selection_survives_workspace_navigation() -> None:
     workbench = WORKBENCH.read_text(encoding="utf-8")
+    material_take = MATERIAL_TAKE.read_text(encoding="utf-8")
+    script = SCRIPT_WORKSPACE.read_text(encoding="utf-8")
+    review = REVIEW_WORKSPACE.read_text(encoding="utf-8")
+    timeline = TIMELINE.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
 
-    assert "GoldenMaterialScriptWorkbench" not in workbench
-    assert 'surface="takes"' in workbench
-    assert 'surface="script"' in workbench
-    assert 'surface="review"' in workbench
-    assert "onOpenScript={openTakeInScript}" in workbench
-    assert 'onOpenCoverage={() => navigate("coverage")}' in workbench
-    assert "MediaLibraryWorkbench" in workbench
-    assert "MediaBindingWorkbench" in workbench
-    assert "IdentityWorkbench" in workbench
-    assert "CoverageWorkbench" in workbench
+    assert "ProductionSelectionContext" in workbench
+    assert "ProductionNavigationIntent" in workbench
+    assert "function focusTake(" in workbench
+    assert 'initialGroupId={currentSelection.groupId ?? null}' in workbench
+    assert 'initialClipId={currentSelection.clipId ?? null}' in workbench
+    assert 'initialScriptSegmentId={currentSelection.scriptSegmentId ?? null}' in workbench
+    assert 'focusIntent={currentIntent?.workspace === "timeline" ? currentIntent : null}' in workbench
+    assert 'onOpenTimeline={(groupId, clipId) => focusTake(groupId, "timeline", clipId)}' in workbench
+
+    assert ">在剧本中打开</button>" in material_take
+    assert ">在审阅中打开</button>" in material_take
+    assert ">到时间线</button>" in material_take
+    assert ">修复本机素材</button>" in material_take
+    assert "setGroupPlacement" not in material_take
+
+    assert "connection.setGroupPlacement" in script
+    assert "connection.clearGroupPlacement" in script
+    assert "onOpenReview" in script
+    assert "onOpenTimeline" in script
+
+    assert ">在素材中打开</button>" in review
+    assert ">在剧本中打开</button>" in review
+    assert ">到时间线</button>" in review
+    assert "setGroupPlacement" not in review
+
+    assert "deliveryRequestNonce" in timeline
+    assert "focusIntent" in timeline
+    assert "DeliveryWorkbench" in timeline
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
-    assert "TimelineWorkbench" in workbench
-    assert "DeliveryWorkbench" in workbench
-    assert "ReviewAttentionWorkbench" not in workbench
-    assert "ProjectOverviewWorkbench" not in workbench
-    assert "showEditorial" in workbench
-    assert '{ page: "coverage", label: "覆盖", hidden: true }' in workbench
-    assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
     assert "制作区在项目画布顶部切换。" in library
 
 

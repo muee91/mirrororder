@@ -74,10 +74,11 @@ def test_document_authority_has_one_front_door() -> None:
     desktop = DESKTOP_README.read_text(encoding="utf-8")
 
     assert "# 镜序文档索引" in docs
-    assert "当前 authority" in docs
+    assert "一个问题只有一个当前 authority" in docs
     assert "app-information-architecture.md" in docs
     assert "ux-principles.md" in docs
-    assert "一次性执行 prompt / closeout / integration script" in docs
+    assert "一次性 prompt" in docs
+    assert "不提交为长期文档" in docs
     assert "docs/README.md" in readme
     assert "docs/README.md" in agents
     assert "docs/app-information-architecture.md" in agents

@@ -69,11 +69,13 @@ def test_review_media_cards_share_fixed_low_noise_visual_contract() -> None:
     assert ".camera-run.repeated{min-width:0;width:max-content" in css
 
 
-def test_active_desktop_surface_uses_workspace_home_and_production_ia() -> None:
+def test_active_desktop_surface_uses_four_workspace_product_ia() -> None:
     app = (ROOT / "desktop" / "src" / "app" / "App.tsx").read_text(encoding="utf-8")
     library = (ROOT / "desktop" / "src" / "features" / "projects" / "ProjectLibrary.tsx").read_text(encoding="utf-8")
     workspace_home = (ROOT / "desktop" / "src" / "features" / "projects" / "WorkspaceHome.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx").read_text(encoding="utf-8")
+    material = (ROOT / "desktop" / "src" / "features" / "material" / "MaterialWorkspace.tsx").read_text(encoding="utf-8")
+    timeline = (ROOT / "desktop" / "src" / "features" / "editor" / "TimelineWorkbench.tsx").read_text(encoding="utf-8")
 
     assert "WorkspaceHome" in app
     assert "ProjectLibrary" in app
@@ -83,18 +85,24 @@ def test_active_desktop_surface_uses_workspace_home_and_production_ia() -> None:
     assert 'aria-label="当前项目制作导航"' not in library
     assert "制作区在项目画布顶部切换。" in library
     assert "最近项目" in workspace_home
-    assert "GoldenSlateWorkbench" in workbench
-    assert "MaterialScriptWorkbench" in workbench
-    assert "GoldenMaterialScriptWorkbench" not in workbench
-    assert 'surface="takes"' in workbench
-    assert 'surface="script"' in workbench
-    assert 'surface="review"' in workbench
-    assert 'className="professional-project-toolbar"' in workbench
-    assert 'className="professional-secondary-nav"' in workbench
-    for label in ("素材", "剧本", "剪辑", "审阅"):
-        assert f'label: "{label}"' in workbench
+
+    assert "MaterialWorkspace" in workbench
+    assert "ScriptWorkspace" in workbench
+    assert "ReviewWorkspace" in workbench
     assert "TimelineWorkbench" in workbench
-    assert 'label: "交付"' in workbench
+    assert "MaterialScriptWorkbench" not in workbench
+    assert 'surface="takes"' not in workbench
+    assert 'surface="script"' not in workbench
+    assert 'surface="review"' not in workbench
+    assert 'className="professional-project-toolbar"' in workbench
+    assert 'className="professional-secondary-nav"' not in workbench
+    for label in ("素材", "剧本", "时间线", "审阅"):
+        assert f'label: "{label}"' in workbench
+
+    assert "GoldenSlateWorkbench" in material
+    assert 'aria-label="素材视图"' in material
+    assert "DeliveryWorkbench" in timeline
+    assert 'aria-label="时间线交付"' in timeline
 
 
 def test_active_work_has_one_global_status_center_not_settings_task_panel() -> None:

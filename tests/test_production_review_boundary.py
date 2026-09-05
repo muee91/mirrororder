@@ -9,28 +9,33 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_app_production_is_native_and_team_web_remains_a_separate_surface() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
+    material = (ROOT / "desktop/src/features/material/MaterialWorkspace.tsx").read_text(encoding="utf-8")
+    timeline = (ROOT / "desktop/src/features/editor/TimelineWorkbench.tsx").read_text(encoding="utf-8")
     resume = (ROOT / "desktop/src/app/resumeState.ts").read_text(encoding="utf-8")
 
     assert 'type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings"' in app
     assert "TeamWebWorkbench" in app
     assert "ProjectWorkbench" in app
     assert "TeamWebWorkbench" not in workbench
-    assert "GoldenSlateWorkbench" in workbench
+    assert "MaterialWorkspace" in workbench
+    assert "ScriptWorkspace" in workbench
+    assert "ReviewWorkspace" in workbench
+    assert "TimelineWorkbench" in workbench
+    assert "GoldenSlateWorkbench" in material
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
-    assert "TimelineWorkbench" in workbench
-    assert "DeliveryWorkbench" in workbench
-    assert 'page === "rough-cut" || page === "assembly"' in workbench
-    assert 'return "timeline"' in workbench
-    assert 'page === "attention" || page === "overview"' in workbench
-    assert 'return "watch"' in workbench
+    assert "MaterialScriptWorkbench" not in workbench
+    assert "DeliveryWorkbench" in timeline
+    assert 'if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline"' in workbench
+    assert 'if (page === "attention" || page === "overview") return "watch"' in workbench
     assert 'page === "rough-cut" || page === "assembly"' in resume
     assert 'page === "attention" || page === "overview"' in resume
 
 
-def test_native_navigation_starts_at_workspace_home_and_uses_reduced_toolbar_resume() -> None:
+def test_native_navigation_starts_at_workspace_home_and_uses_four_workspace_toolbar() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
+    material = (ROOT / "desktop/src/features/material/MaterialWorkspace.tsx").read_text(encoding="utf-8")
     library = (ROOT / "desktop/src/features/projects/ProjectLibrary.tsx").read_text(encoding="utf-8")
 
     assert 'useState<AppSurface>("home")' in app
@@ -38,25 +43,18 @@ def test_native_navigation_starts_at_workspace_home_and_uses_reduced_toolbar_res
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert 'className="professional-project-toolbar"' in workbench
     assert 'aria-label="制作区域"' in workbench
-    for label in ("素材", "剧本", "剪辑", "审阅"):
+    assert 'className="professional-secondary-nav"' not in workbench
+    for label in ("素材", "剧本", "时间线", "审阅"):
         assert f'label: "{label}"' in workbench
-    for page, label in (
-        ("slate", "场记"),
-        ("media-library", "素材库"),
-        ("takes", "镜次"),
-        ("identity", "人物"),
-        ("script", "剧本"),
-        ("timeline", "剪辑工作台"),
-        ("delivery", "交付"),
-        ("watch", "看片"),
-    ):
-        assert f'{{ page: "{page}", label: "{label}" }}' in workbench
-    assert '{ page: "coverage", label: "覆盖", hidden: true }' in workbench
-    assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
-    assert '{ page: "attention",' not in workbench
-    assert '{ page: "overview",' not in workbench
+    assert '{ page: "script", label: "剧本" }' in workbench
+    assert '{ page: "timeline", label: "时间线" }' in workbench
+    assert '{ page: "watch", label: "看片" }' in workbench
+    assert '{ page: "coverage",' not in workbench
     assert '{ page: "rough-cut",' not in workbench
     assert '{ page: "assembly",' not in workbench
+    assert 'aria-label="素材视图"' in material
+    for label in ("场记", "素材库", "Take", "人物"):
+        assert f'label: "{label}"' in material
     assert "openTeamProject(project: ProjectSummary)" in app
     assert 'setSurface("team")' in app
     assert 'aria-label="当前项目制作导航"' not in library

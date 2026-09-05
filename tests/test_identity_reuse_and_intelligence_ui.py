@@ -49,8 +49,6 @@ def test_fully_human_confirmed_identity_group_stays_cached(tmp_path: Path) -> No
     indexer.database = database
     indexer.project_id = "project"
     assert indexer._fully_human_labeled("face", "G1") is True
-    # This returns before consulting model/profile state, so a future runtime
-    # version change cannot erase confirmed human identity work.
     assert indexer._already_indexed("face", "G1") is True
 
 
@@ -125,11 +123,12 @@ def test_audit_runtime_is_host_only_and_not_review_authority() -> None:
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "audit_runtime.py").read_text(encoding="utf-8")
     engine = (root / "src" / "script_organizer" / "audit_engine.py").read_text(encoding="utf-8")
-    docs = (root / "docs" / "ai-audit-learning-loop.md").read_text(encoding="utf-8")
+    invariants = (root / "docs" / "engineering" / "INVARIANTS.md").read_text(encoding="utf-8")
 
     assert 'tasks_module.TASK_TYPES.add("audit")' in runtime
     assert "self._local_only()" in runtime
     assert '"audit_is_review_authority": False' in runtime
     assert "review.json" not in engine.split("class AuditEngine", 1)[1].split("def _inputs", 1)[0]
-    assert "生产算法不允许在运行中自行改写自己" in docs
-    assert "Face identity" in docs
+    assert "evidence → proposal → human confirmation → authority" in invariants
+    assert "AI proposal、Audit、semantic score 或 Team Web opinion" in invariants
+    assert "Final Editorial Decision、Review placement 或 Rust Timeline authority" in invariants

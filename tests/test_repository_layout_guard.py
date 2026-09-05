@@ -11,21 +11,25 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 ARCHITECTURE_DOCS = (
-    "docs/architecture/README.md",
     "docs/architecture/repository-layout.md",
     "docs/architecture/desktop-bridge.md",
+    "docs/architecture/project-package.md",
     "docs/architecture/sync-model.md",
-    "docs/architecture/automation-pipeline.md",
-    "docs/architecture/local-intelligence.md",
-    "docs/architecture/python-package-boundaries.md",
 )
 
 ENGINEERING_DOCS = (
-    "docs/engineering/README.md",
     "docs/engineering/STATUS.md",
     "docs/engineering/BACKLOG.md",
-    "docs/engineering/DECISIONS.md",
     "docs/engineering/INVARIANTS.md",
+)
+
+RETIRED_DOCS = (
+    "docs/architecture/README.md",
+    "docs/architecture/automation-pipeline.md",
+    "docs/architecture/local-intelligence.md",
+    "docs/architecture/python-package-boundaries.md",
+    "docs/engineering/README.md",
+    "docs/engineering/DECISIONS.md",
 )
 
 LOCAL_GATES = (
@@ -92,6 +96,8 @@ def test_cross_layer_architecture_docs_have_one_home() -> None:
         assert (ROOT / relative).is_file(), relative
     for relative in LEGACY_ROOT_ARCHITECTURE_DOCS:
         assert not (ROOT / relative).exists(), relative
+    for relative in RETIRED_DOCS:
+        assert not (ROOT / relative).exists(), relative
 
 
 def test_engineering_control_layer_is_present() -> None:
@@ -138,10 +144,16 @@ def test_repository_entry_docs_point_to_normalized_paths() -> None:
     docs_readme = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
 
     assert "docs/architecture/repository-layout.md" in readme
-    assert "docs/architecture/sync-model.md" in agents
-    assert "docs/engineering/README.md" in readme
-    assert "docs/engineering/README.md" in agents
-    assert "engineering/README.md" in docs_readme
+    assert "docs/architecture/sync-model.md" in readme
+    assert "docs/architecture/desktop-bridge.md" in agents
+    assert "docs/architecture/repository-layout.md" in agents
+    assert "architecture/desktop-bridge.md" in docs_readme
+    assert "architecture/project-package.md" in docs_readme
+    assert "architecture/repository-layout.md" in docs_readme
+    assert "architecture/sync-model.md" in docs_readme
+    assert "engineering/STATUS.md" in docs_readme
+    assert "engineering/BACKLOG.md" in docs_readme
+    assert "engineering/INVARIANTS.md" in docs_readme
 
     for legacy in LEGACY_ROOT_ARCHITECTURE_DOCS:
         assert f"]({legacy})" not in readme

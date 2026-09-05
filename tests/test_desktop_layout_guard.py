@@ -30,6 +30,7 @@ def test_desktop_shell_fills_available_canvas() -> None:
 def test_global_navigation_and_project_navigation_have_separate_authority() -> None:
     app = read("desktop/src/app/App.tsx")
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
+    material = read("desktop/src/features/material/MaterialWorkspace.tsx")
     library = read("desktop/src/features/projects/ProjectLibrary.tsx")
 
     assert "openTeamProject(project: ProjectSummary)" in app
@@ -40,9 +41,13 @@ def test_global_navigation_and_project_navigation_have_separate_authority() -> N
 
     assert 'className="professional-project-toolbar"' in workbench
     assert 'aria-label="制作区域"' in workbench
-    assert 'className="professional-secondary-nav"' in workbench
-    for label in ("素材", "剧本", "剪辑", "审阅"):
+    assert 'className="professional-secondary-nav"' not in workbench
+    for label in ("素材", "剧本", "时间线", "审阅"):
         assert f'label: "{label}"' in workbench
+
+    assert 'aria-label="素材视图"' in material
+    for label in ("场记", "素材库", "Take", "人物"):
+        assert f'label: "{label}"' in material
 
     assert "professional-global-sidebar" in library
     assert 'aria-label="主导航"' in library

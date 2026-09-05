@@ -6,12 +6,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_python_package_migration_plan_is_explicit_and_deferred() -> None:
-    plan = (ROOT / "docs" / "architecture" / "python-package-boundaries.md").read_text(encoding="utf-8")
-    assert "no package moves on main" in plan.lower()
-    assert "Slice A — FCPXML adapter" in plan
-    assert "Identity family" in plan
-    assert "python scripts/check_full.py" in plan
+def test_python_package_migration_is_explicitly_deferred_during_product_recovery() -> None:
+    invariants = (ROOT / "docs" / "engineering" / "INVARIANTS.md").read_text(encoding="utf-8")
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+    assert "src/script_organizer/" in invariants
+    assert "flat namespace" in invariants
+    assert "runtime_stack.py" in invariants
+    assert "Product Recovery 期间不进行与五步主链无关的大规模 package migration" in invariants
+    assert "Product Recovery 期间不启动与主链无关的大规模 package migration" in agents
 
 
 def test_python_build_contract_uses_setuptools_src_layout() -> None:
