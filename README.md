@@ -1,8 +1,26 @@
 # 镜序（MirrorOrder）
 
-镜序是面向短剧、多机位拍摄与后期协作的本地优先 Production 工具。它把素材、剧本、场记、人物身份、人工审阅、粗剪提案、时间线编辑和交付串成一套可追踪工作流。
+镜序是面向短剧与多机位后期整理的本地优先 Production 工具。
 
-文档 authority 从 [`docs/README.md`](docs/README.md) 开始。
+它解决的核心问题不是“把所有功能放进一个 App”，而是把真实后期最费时间的一条链做短、做清楚、做可靠：
+
+```text
+混乱的原始素材 + 剧本 + 可选场记
+        ↓
+识别真实拍摄 Take 与多机位关系
+        ↓
+记录 / 修正拍摄事实
+        ↓
+把 Take 对到正确剧本位置
+        ↓
+看片并做人工判断
+        ↓
+形成可剪的 Timeline 结构
+        ↓
+进入 FCP / Premiere / Resolve 或完成交付
+```
+
+项目产品定义与信息架构以 [`docs/app-information-architecture.md`](docs/app-information-architecture.md) 为 authority；文档总索引从 [`docs/README.md`](docs/README.md) 开始。
 
 ## 当前技术基线
 
@@ -20,7 +38,7 @@ AI 权限链始终是：
 evidence → proposal → human confirmation → authority
 ```
 
-React/AI/Team Web 都不能成为第二套 Review/Editorial/Timeline truth。
+React/AI/Team Web 都不能成为第二套 Review / Editorial / Timeline truth。
 
 ## 产品入口
 
@@ -29,31 +47,55 @@ MirrorOrder Desktop = Production
 Team Web            = Review / Collaboration
 ```
 
-项目 Production 保持四个一级制作区：
+Desktop 项目内只保留四个一级工作区：
 
 ```text
-素材：场记 / 素材库 / Take / 人物
-剧本：剧本 / 覆盖
-剪辑：粗剪 / 组接 / 时间线 / 交付
-审阅：看片 / 待处理 / 概览
+素材 / 剧本 / 时间线 / 审阅
 ```
 
-新项目第一次进入默认打开 **素材 → 场记**；已有项目按当前 IA 恢复 Production 页面。状态中心、团队审阅和设置属于全局工具；`⌘K / Ctrl+K` 是项目语义搜索，小镜是 contextual drawer。
+它们分别回答：
 
-Team Web 可以做团队看片、Individual Opinion、协作审阅和受限项目投影，但不能修改本机素材目录、电子场记、Timeline authority 或 Final Editorial Decision。
+- **素材**：我拿到了什么？实际拍了什么？
+- **剧本**：这些 Take 对应故事哪里？哪里缺失或冲突？
+- **时间线**：当前可剪结构和成片结构是什么？
+- **审阅**：哪些内容需要我看片并作人工决定？
 
-产品入口以 [`docs/app-information-architecture.md`](docs/app-information-architecture.md) 为准，UX 以 [`docs/ux-principles.md`](docs/ux-principles.md) 为准。
+素材域中的场记 / 素材库 / Take / 人物是同一素材工作区的 view / task；Coverage 是剧本 view；粗剪 / 组接 / AI editing 是 Timeline proposal；“需关注”是审阅 filter。它们都不应再成长为平级主工作台。
+
+新项目第一次进入默认打开 **素材 → 场记**；已有项目按当前 IA 恢复 Production 上下文。状态中心、团队审阅和设置属于全局工具；`⌘K / Ctrl+K` 是项目语义搜索，小镜是 contextual drawer。
+
+Team Web 可以做团队看片、Individual Opinion、协作审阅和其权限内的人工归集，但不能修改本机素材目录、电子场记、Timeline authority 或 Final Editorial Decision。
 
 ## 核心语义边界
 
 ```text
-Take 对应剧本哪里？ = Review placement / mapping
-Take 最后剪不剪？   = Editorial Decision
+拍摄现场发生了什么？   = Script Supervisor / Slate fact
+Take 对应剧本哪里？    = Review placement / mapping
+Take 最后剪不剪？      = Editorial Decision
+最终剪辑结构是什么？   = Rust Timeline authority
 ```
 
-Script Supervisor / 电子场记记录拍摄现场与素材附件事实；ReviewStore 管人工剧本 placement；Editorial Decision 管最终人工剪辑判断。三者可以互相投影证据，但不能静默互相改写 authority。
+这些 authority 可以互相投影证据，但不能静默互相改写。
 
-自动分析、语义检索、Audit、小镜和 rough-cut 都只能产生 evidence / proposal；只有显式人工确认才能改变相应 authority。
+Desktop UI 的长期实现原则是：
+
+> **共享对象，不共享工作流。**
+
+`TakeRow`、`MediaCard`、`ScriptBlock` 等 canonical renderer 可以跨工作区复用；素材、剧本、时间线、审阅必须分别拥有自己的 orchestration、主动作和写权限。禁止再通过一个大型 `surface/mode` Workbench 同时承担多个一级工作区。
+
+## 当前 Product Recovery 验收
+
+真实项目上以下五件事必须顺畅走通，才算恢复“能用”：
+
+1. 找到一个实际 Take；
+2. 看懂它的拍摄事实、机位和当前归属；
+3. 把它修正到正确剧本位置；
+4. 看片并完成需要的人工决定；
+5. 把需要的素材 / 决定带到时间线继续剪。
+
+历史 Swift V1 不再是实现或视觉 authority，但作为最低可用性回归基线：新版核心任务不能比 Swift V1 更难理解、更绕或更容易丢失当前对象。
+
+当前恢复计划见 [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md)，当前事实与 CI 状态见 [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)。
 
 ## 快速开发
 
@@ -85,9 +127,7 @@ python scripts/check_fast.py
 python scripts/check_full.py
 ```
 
-只有实际成功的目标 commit/run 可以写 PASS。GitHub Actions 是独立验证信号；CI red 需要修复，但旧 CI、旧 verification 或源码审阅不能替代当前执行结果。
-
-当前状态见 [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)。
+只有实际成功的目标 commit/run 可以写 PASS。GitHub Actions 是独立验证信号；CI red 需要修复，但测试绿灯不能替代真实产品可用性验收。
 
 ## 源码仓库与生产数据
 
@@ -105,10 +145,12 @@ media_id = 与设备路径无关的物理媒体身份
 ## 关键文档
 
 - [`docs/README.md`](docs/README.md) — 文档索引与 authority。
-- [`docs/engineering/README.md`](docs/engineering/README.md) — main-only 工程控制层与 gate 规则。
-- [`docs/app-information-architecture.md`](docs/app-information-architecture.md) — 当前产品 IA。
+- [`docs/app-information-architecture.md`](docs/app-information-architecture.md) — **产品定义 + 当前 IA authority**。
 - [`docs/ux-principles.md`](docs/ux-principles.md) — 当前 UX 原则。
 - [`docs/design-system-v2.md`](docs/design-system-v2.md) — 当前设计系统。
+- [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md) — 当前 main / CI / 产品恢复状态。
+- [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md) — 当前 Product Recovery 与后续工程 backlog。
+- [`docs/engineering/INVARIANTS.md`](docs/engineering/INVARIANTS.md) — 长期工程硬约束。
 - [`docs/architecture/README.md`](docs/architecture/README.md) — 跨层架构索引。
-- [`AGENTS.md`](AGENTS.md) — Agent 修改仓库时的硬约束。
+- [`AGENTS.md`](AGENTS.md) — Agent 修改仓库时的接手约束。
 - [`desktop/README.md`](desktop/README.md) — Desktop 工程入口。
