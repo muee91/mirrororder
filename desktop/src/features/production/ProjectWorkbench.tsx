@@ -41,6 +41,13 @@ interface AreaDefinition {
   pages: AreaPageDefinition[];
 }
 
+type ProductionSelectionValues = {
+  groupId?: string | null;
+  clipId?: string | null;
+  scriptSegmentId?: string | null;
+  timelineClipId?: string | null;
+};
+
 const AREAS: Record<ProductionArea, AreaDefinition> = {
   material: {
     label: "素材",
@@ -114,7 +121,7 @@ function pageForMaterialView(view: MaterialView): ProductionPage {
 
 function normalizedContext(
   projectId: string,
-  values: Omit<ProductionSelectionContext, "projectId">,
+  values: ProductionSelectionValues,
 ): ProductionSelectionContext {
   const groupId = values.groupId?.trim();
   const clipId = values.clipId?.trim();
@@ -142,7 +149,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const currentSelection = selection.projectId === project.project_id ? selection : { projectId: project.project_id };
   const currentIntent = navigationIntent?.projectId === project.project_id ? navigationIntent : null;
 
-  const updateSelection = useCallback((values: Omit<ProductionSelectionContext, "projectId">): void => {
+  const updateSelection = useCallback((values: ProductionSelectionValues): void => {
     setSelection(normalizedContext(project.project_id, values));
   }, [project.project_id]);
 
@@ -184,8 +191,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
     if (!value) return;
     const context = normalizedContext(project.project_id, {
       groupId: value,
-      clipId: clipId ?? undefined,
-      scriptSegmentId: scriptSegmentId ?? undefined,
+      clipId,
+      scriptSegmentId,
     });
     setSelection(context);
     setNavigationIntent(nextIntent(destination, context));
