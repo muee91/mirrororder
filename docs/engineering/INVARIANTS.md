@@ -14,7 +14,7 @@
 ### MUST NOT
 
 - 删除/弱化必要测试来制造绿灯。
-- 用源码审阅、旧 CI 或历史 verification 冒充当前执行结果。
+- 用源码审阅、旧 CI 或历史报告冒充当前执行结果。
 - 用“contract 都通过”替代真实用户主链验收。
 
 ## Authority
@@ -105,8 +105,14 @@ Desktop 项目内一级工作区固定为：
 
 ## Python package
 
-- `src/script_organizer/` flat namespace 只作为迁移期兼容区。
+- `src/script_organizer/` flat namespace 只作为历史兼容区，不继续无限扩张。
 - 新 coherent engine/store/runtime/support 组优先进入明确 domain package。
 - compatibility facade 只能 re-export，不得在 import 时注册 route、安装 runtime、写磁盘、加载模型或修改全局 registry。
 - `runtime_stack.py` 保持显式 composition root；domain import 不得触发全栈安装。
-- 目标 ownership 与迁移顺序见 `docs/architecture/python-package-boundaries.md`。
+- Product Recovery 期间不进行与五步主链无关的大规模 package migration；需要迁移时以当时实际 caller / authority 重新确定边界，不继承旧迁移计划。
+
+## Documentation
+
+- 当前产品定义只由 `docs/app-information-architecture.md` 拥有；README 只能摘要和链接。
+- 当前状态、计划、长期硬约束分别由 `STATUS.md`、`BACKLOG.md`、`INVARIANTS.md` 拥有。
+- 一次性阶段报告、verification、closeout、聊天 handoff 不作为当前 authority 文档保留；Git history / Actions 保存历史证据。

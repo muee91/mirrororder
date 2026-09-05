@@ -1,62 +1,91 @@
 # MirrorOrder Desktop
 
-`desktop/` is the current and only Desktop development baseline on `main`.
+`desktop/` is the current Desktop development baseline on `main`.
+
+## Start here
+
+Before changing Production UI, read:
+
+- `../docs/app-information-architecture.md`
+- `../docs/engineering/STATUS.md`
+- `../docs/engineering/BACKLOG.md`
+- `../docs/engineering/INVARIANTS.md`
+- `../docs/ux-principles.md`
+- `../docs/design-system-v2.md`
+- `../docs/architecture/desktop-bridge.md`
+- `../docs/architecture/repository-layout.md`
+
+Current P0 is **Desktop Product Recovery**. Do not add product surfaces before the real five-step workflow is usable.
 
 ## Architecture
 
-- React / TypeScript — Production UI
-- Tauri 2 / Rust — desktop lifecycle and narrow platform adapters
-- Rust Timeline Core — authoritative local timeline edit state
-- Python MirrorOrder Core — project / Review / Slate / Identity / Assistant / media / FCPXML business authority
-- Team Web — separate lightweight Review / Collaboration surface
-
-Start with the repository documentation authority index:
-
-- `../docs/README.md`
-- `../docs/app-information-architecture.md`
-- `../docs/ux-principles.md`
-- `development-baseline.json`
-- `../docs/architecture/repository-layout.md`
-- `../docs/architecture/desktop-bridge.md`
-
-## File placement
+- React / TypeScript — Production UI and interaction orchestration.
+- Tauri 2 / Rust — desktop lifecycle and narrow platform adapters.
+- Rust Timeline Core — authoritative local timeline edit state.
+- Python MirrorOrder Core — project / Review / Slate / Identity / media / Delivery business authority.
+- Team Web — separate lightweight Review / Collaboration surface.
 
 Desktop code is organized by responsibility:
 
 ```text
 src/api/                 typed localhost/native clients and DTOs
 src/app/                 application shell and global navigation
-src/features/<domain>/   domain workbench UI, hooks, styles and colocated Vitest
+src/features/<domain>/   workspace UI, hooks, styles and colocated tests
 src-tauri/src/            narrow platform adapters and lifecycle managers
 src-tauri/crates/         independently testable Rust cores such as timeline-core
 scripts/                  build, staging, smoke and release tooling
-src-tauri/resources/      generated/packaged resource targets and source-level manifests/placeholders
+src-tauri/resources/      generated/packaged resource targets
 ```
 
-Do not put product business authority into Tauri platform adapters, and do not duplicate Host fetch logic inside individual Workbenches. Generated portable Python/media-tool runtime contents are build outputs, not hand-maintained source files.
+Do not move product business authority into Tauri adapters or React state. Generated runtime/media-tool contents are build outputs, not hand-maintained source.
 
-## Product surfaces
+## Product workspaces
 
-Production project navigation is fixed by the current IA:
+Desktop 项目内只有四个一级工作区：
 
 ```text
-素材：场记 / 素材库 / Take / 人物
-剧本：剧本 / 覆盖
-剪辑：粗剪 / 组接 / 时间线 / 交付
-审阅：看片 / 待处理 / 概览
+素材 / 剧本 / 时间线 / 审阅
 ```
 
-New projects start at **素材 → 场记**. Existing projects restore the last Production page.
+- **素材**：Media / Take / Person / Slate。场记、素材库、Take、人物是同一 Material workspace 的 view/task；本机素材 relink 是 contextual tool。
+- **剧本**：Script / ScriptBlock 是 Primary Canvas；Coverage 是同一 Script 上下文的 projection；Review placement / mapping 修正以这里为主家。
+- **时间线**：唯一 authoritative local editor；Rough Cut / Assembly / AI editing 只能提供 proposal/preview，人工确认后转换为 Timeline commands；Delivery/export 是后续 flow。
+- **审阅**：Viewer + 当前 Take + 必要剧本上下文 + 人工 Editorial Decision；“需关注”只是 filter/queue。不要在这里复制场记、relink、人物治理、完整 placement editor 或 Timeline edit。
 
-Global surfaces sit outside project navigation:
+核心实现原则：
 
-- 状态中心 — durable tasks, failures, retry and recent completion history;
-- 团队审阅 — Team Web collaboration workspace;
-- 设置 — Team Web preferences, local runtimes, external/custom model connections, collaboration access and advanced diagnostics.
+> **共享对象，不共享工作流。**
 
-`⌘K / Ctrl+K` is project semantic search. 小镜 is a contextual right-side drawer. Model Provider / Base URL / API Key configuration belongs to Settings, not the Assistant drawer.
+允许复用 canonical `TakeCard / TakeListRow / MediaCard / ScriptBlock / SlateRow / PersonRow / Viewer primitives`。不允许通过一个 `surface/mode` Workbench 把多个一级 workspace 的 loader、toolbar、selection、drawer 和写权限重新合并。
 
-Passive GETs, opening/switching pages or selecting objects must not start full media scans, long FFmpeg jobs, model downloads or full-project indexing. Heavy work is submitted explicitly as a durable task and observed through Status Center.
+跨 workspace 跳转应保留当前 Take / media / ScriptBlock / Timeline source 等 selection intent，但 selection context 不成为业务 truth。
+
+## Global surfaces
+
+以下不属于项目四工作区：
+
+- 状态中心 — durable tasks、失败、重试与完成记录的唯一全局控制面；
+- 团队审阅 — Team Web collaboration surface；
+- 设置 — 本机 runtime、连接、协作访问和高级诊断。
+
+`⌘K / Ctrl+K` 是项目搜索入口，小镜是 contextual drawer。普通 GET、页面切换、对象选择、Inspector 展开不得启动全盘扫描、长 FFmpeg、模型下载或整项目索引；重工作必须显式提交 durable task。
+
+## Authority boundary
+
+- ReviewStore owns human script placement / mapping.
+- Script Supervisor / Slate owns shooting/production facts.
+- Final Editorial Decision is separate from Review placement.
+- Python Core owns workspace/project lifecycle and non-Timeline business authority.
+- Rust Timeline Core owns deterministic edit state, validation, undo/redo, persistence and recovery.
+- React/TypeScript owns interaction, not a second truth.
+- Team Web never receives device paths, local model secrets, Timeline authority or Final Editorial Decision authority.
+- Video/proxy frames are not transported through Tauri JSON/Base64 IPC.
+
+AI authority remains:
+
+```text
+evidence → proposal → human confirmation → authority
+```
 
 ## Local validation
 
@@ -65,10 +94,11 @@ npm install
 npm run verify:rc
 ```
 
-Or run individual gates:
+Targeted gates when locating failures:
 
 ```bash
 npm run check:baseline
+npm run check:ui-authority
 npm run typecheck
 npm test
 npm run build
@@ -83,48 +113,18 @@ Python tests remain at repository root:
 python -m pytest -q
 ```
 
-With an existing local Production Host:
+A gate is only PASS if it actually ran successfully on the tested commit. During Product Recovery, finish a coherent functional slice before running the necessary targeted validation; do not repeatedly dispatch CI for intermediate cosmetic edits.
 
-```bash
-npm run smoke:host
-```
+## Current usability acceptance
 
-A gate is only PASS if it actually ran successfully on the tested commit. GitHub Actions are an independent execution signal, not a substitute for local/native smoke.
-
-## Authority boundary
-
-- **ReviewStore** owns human script placement / mapping.
-- **Script Supervisor / Slate** owns production evidence and slate facts; it must not silently rewrite Review placement or Editorial Reject.
-- **Python Core** owns workspace/project lifecycle, Review, Slate, Identity, Assistant, model connections, AI proposals, media identity/binding semantics, Team Web review/security semantics and FCPXML delivery semantics.
-- **React/TypeScript** owns desktop interaction, workbench layout, typed localhost clients and proposal preview.
-- **Tauri/Rust** owns Python process lifecycle, native dialogs/filesystem/platform adapters and the Rust Timeline bridge.
-- **Rust Timeline Core** owns deterministic edit state, validation, undo/redo, persistence and recovery.
-- **Team Web** remains a lightweight reviewer/collaboration surface and never receives local model secrets, device paths, Timeline authority or Final Editorial Decision authority.
-- Video/proxy frames are not transported through Tauri JSON/Base64 IPC.
-
-AI authority remains:
+P0 is not closed until a real project can smoothly complete:
 
 ```text
-evidence → proposal → human confirmation → authority
+找到 Take
+→ 理解拍摄事实 / 机位 / 当前归属
+→ 修正剧本 placement
+→ 看片并作人工决定
+→ 带入 Timeline 继续剪
 ```
 
-Audit, retrieval scores and Individual Opinion remain evidence/advice, not final editorial truth.
-
-## Status and settings contracts
-
-- `StatusCenterWorkbench` is the single global durable-task surface. Project workbenches may show lightweight progress or failure hints, but must not grow parallel task controllers.
-- `media_inventory_scan` owns explicit device-local media inventory rescans; ordinary media-inventory GETs read snapshots only.
-- `waveform_build` owns expensive waveform generation; waveform GETs read cache only.
-- Settings should show normal user configuration first. Python executable, Host process details, release gates, Timeline journal paths and similar engineering data belong in the advanced diagnostics disclosure.
-- Local runtime status uses user-facing state names; raw provider/runtime state should not dominate the normal settings experience.
-- External/custom model connection secrets remain device-local and are never echoed back into project/shared data.
-
-## Managed services
-
-Production Host and Team Gateway have independent lifecycle managers. `spawn()` and a merely open TCP port are insufficient health evidence; readiness should verify `/api/v1/ping` returns the expected MirrorOrder service identity and `status=ok`.
-
-## Feature isolation on main
-
-Production project tabs are product surfaces, not generic plugin slots. Runtime packaging, heavy media processing, automatic music, new NLE adapters, model-runtime infrastructure and experimental automation must have explicit typed contracts, authority boundaries, failure isolation and native smoke gates before they become normal Production behavior.
-
-The repository currently uses a `main`-only workflow. Do not treat long-lived feature branches or worktrees as an architectural requirement; isolation should come from package/process boundaries, scoped commits, feature gating where appropriate, and explicit validation.
+Swift V1 is only a minimum usability regression baseline, not a visual or technical implementation target.

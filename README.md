@@ -2,7 +2,7 @@
 
 镜序是面向短剧与多机位后期整理的本地优先 Production 工具。
 
-它解决的核心问题不是“把所有功能放进一个 App”，而是把真实后期最费时间的一条链做短、做清楚、做可靠：
+它的核心目标不是把所有能力堆进一个 App，而是把真实后期最费时间的一条链做短、做清楚、做可靠：
 
 ```text
 混乱的原始素材 + 剧本 + 可选场记
@@ -20,7 +20,7 @@
 进入 FCP / Premiere / Resolve 或完成交付
 ```
 
-项目产品定义与信息架构以 [`docs/app-information-architecture.md`](docs/app-information-architecture.md) 为 authority；文档总索引从 [`docs/README.md`](docs/README.md) 开始。
+产品定义与信息架构以 [`docs/app-information-architecture.md`](docs/app-information-architecture.md) 为 authority；文档索引见 [`docs/README.md`](docs/README.md)。
 
 ## 当前技术基线
 
@@ -29,7 +29,7 @@
 - React / TypeScript：Production UI；
 - Tauri 2 / Rust：桌面生命周期与窄平台适配；
 - Rust Timeline Core：authoritative local timeline edit state；
-- Python MirrorOrder Core：Workspace/Project、Review、Slate、Identity、Assistant、media identity/binding、Delivery/FCPXML 等业务 authority；
+- Python MirrorOrder Core：Workspace/Project、Review、Slate、Identity、media identity/binding、Delivery/FCPXML 等业务 authority；
 - Team Web：独立轻量 Review / Collaboration surface。
 
 AI 权限链始终是：
@@ -38,7 +38,7 @@ AI 权限链始终是：
 evidence → proposal → human confirmation → authority
 ```
 
-React/AI/Team Web 都不能成为第二套 Review / Editorial / Timeline truth。
+React、AI、Team Web 都不能成为第二套 Review / Editorial / Timeline truth。
 
 ## 产品入口
 
@@ -60,11 +60,9 @@ Desktop 项目内只保留四个一级工作区：
 - **时间线**：当前可剪结构和成片结构是什么？
 - **审阅**：哪些内容需要我看片并作人工决定？
 
-素材域中的场记 / 素材库 / Take / 人物是同一素材工作区的 view / task；Coverage 是剧本 view；粗剪 / 组接 / AI editing 是 Timeline proposal；“需关注”是审阅 filter。它们都不应再成长为平级主工作台。
+场记 / 素材库 / Take / 人物属于素材域内的 view / task；Coverage 是剧本 projection；Rough Cut / Assembly / AI editing 是 Timeline proposal；“需关注”是审阅 filter。它们不建立新的一级工作台。
 
-新项目第一次进入默认打开 **素材 → 场记**；已有项目按当前 IA 恢复 Production 上下文。状态中心、团队审阅和设置属于全局工具；`⌘K / Ctrl+K` 是项目语义搜索，小镜是 contextual drawer。
-
-Team Web 可以做团队看片、Individual Opinion、协作审阅和其权限内的人工归集，但不能修改本机素材目录、电子场记、Timeline authority 或 Final Editorial Decision。
+新项目第一次进入默认打开 **素材 → 场记**；已有项目恢复 canonical Production 上下文。状态中心、团队审阅和设置属于全局工具；`⌘K / Ctrl+K` 是项目搜索入口，小镜是 contextual drawer。
 
 ## 核心语义边界
 
@@ -81,7 +79,7 @@ Desktop UI 的长期实现原则是：
 
 > **共享对象，不共享工作流。**
 
-`TakeRow`、`MediaCard`、`ScriptBlock` 等 canonical renderer 可以跨工作区复用；素材、剧本、时间线、审阅必须分别拥有自己的 orchestration、主动作和写权限。禁止再通过一个大型 `surface/mode` Workbench 同时承担多个一级工作区。
+`TakeCard / TakeListRow`、`MediaCard`、`ScriptBlock` 等 canonical renderer 可以跨工作区复用；素材、剧本、时间线、审阅必须分别拥有自己的 orchestration、主动作和写权限。禁止再用一个大型 `surface/mode` Workbench 同时承担多个一级工作区。
 
 ## 当前 Product Recovery 验收
 
@@ -93,7 +91,7 @@ Desktop UI 的长期实现原则是：
 4. 看片并完成需要的人工决定；
 5. 把需要的素材 / 决定带到时间线继续剪。
 
-历史 Swift V1 不再是实现或视觉 authority，但作为最低可用性回归基线：新版核心任务不能比 Swift V1 更难理解、更绕或更容易丢失当前对象。
+历史 Swift V1 不是实现或视觉 authority，只作为最低可用性回归基线：新版核心任务不能比它更难理解、更绕或更容易丢失当前对象。
 
 当前恢复计划见 [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md)，当前事实与 CI 状态见 [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)。
 
@@ -117,8 +115,6 @@ Team Gateway 默认 `8766`：
 python -m script_organizer.cli gateway workspace.toml --port 8766
 ```
 
-两者是独立生命周期；ready 必须验证 MirrorOrder service identity，不能只检查端口可连接。
-
 ## 验证
 
 ```bash
@@ -127,7 +123,7 @@ python scripts/check_fast.py
 python scripts/check_full.py
 ```
 
-只有实际成功的目标 commit/run 可以写 PASS。GitHub Actions 是独立验证信号；CI red 需要修复，但测试绿灯不能替代真实产品可用性验收。
+只有实际成功的目标 commit/run 可以写 PASS。CI red 需要修复，但测试绿灯不能替代真实产品可用性验收。
 
 ## 源码仓库与生产数据
 
@@ -138,19 +134,16 @@ clip_id  = 项目/FCPXML 中的一次 occurrence
 media_id = 与设备路径无关的物理媒体身份
 ```
 
-设备绝对路径只属于当前设备 media binding，不应进入跨设备共享项目事实。
-
-生产团队的跨设备同步语义见 [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md)，仓库/工作区文件位置见 [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)。测试数据只使用 `tests/fixtures/` 中最小、合成、脱敏、可重建 fixture。
+设备绝对路径只属于当前设备 media binding，不进入跨设备共享项目事实。同步语义见 [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md)，仓库/工作区边界见 [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)。
 
 ## 关键文档
 
-- [`docs/README.md`](docs/README.md) — 文档索引与 authority。
-- [`docs/app-information-architecture.md`](docs/app-information-architecture.md) — **产品定义 + 当前 IA authority**。
-- [`docs/ux-principles.md`](docs/ux-principles.md) — 当前 UX 原则。
-- [`docs/design-system-v2.md`](docs/design-system-v2.md) — 当前设计系统。
-- [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md) — 当前 main / CI / 产品恢复状态。
-- [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md) — 当前 Product Recovery 与后续工程 backlog。
+- [`docs/app-information-architecture.md`](docs/app-information-architecture.md) — 产品定义 + 当前 IA authority。
+- [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md) — 当前 main / CI / Product Recovery 状态。
+- [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md) — 当前 P0 执行计划。
 - [`docs/engineering/INVARIANTS.md`](docs/engineering/INVARIANTS.md) — 长期工程硬约束。
-- [`docs/architecture/README.md`](docs/architecture/README.md) — 跨层架构索引。
-- [`AGENTS.md`](AGENTS.md) — Agent 修改仓库时的接手约束。
+- [`docs/ux-principles.md`](docs/ux-principles.md) — UX 纪律。
+- [`docs/design-system-v2.md`](docs/design-system-v2.md) — 设计与 canonical object authority。
+- [`docs/README.md`](docs/README.md) — 其余领域/架构文档索引。
+- [`AGENTS.md`](AGENTS.md) — Agent 接手约束。
 - [`desktop/README.md`](desktop/README.md) — Desktop 工程入口。
