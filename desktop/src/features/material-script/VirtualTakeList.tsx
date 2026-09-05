@@ -14,6 +14,7 @@ export function VirtualTakeList({
   onDragBegin,
   onDragFinish,
   allowDrag = true,
+  detailForTake,
   variant = "card",
 }: {
   takes: ReviewTakeGroup[];
@@ -22,6 +23,7 @@ export function VirtualTakeList({
   onDragBegin?: (groupId: string) => void;
   onDragFinish?: () => void;
   allowDrag?: boolean;
+  detailForTake?: (take: ReviewTakeGroup) => string | undefined;
   variant?: "card" | "compact";
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -81,36 +83,42 @@ export function VirtualTakeList({
       aria-label={`素材 Take，共 ${takes.length} 条`}
     >
       <div className="take-virtual-canvas" style={{ height: takes.length * rowHeight }}>
-        {visible.map((take, offset) => (
-          <div
-            className={`virtual-take-row is-${variant}`}
-            key={take.group_id}
-            style={{ height: rowHeight, transform: `translateY(${(range.start + offset) * rowHeight}px)` }}
-            onDragEnd={allowDrag ? onDragFinish : undefined}
-          >
-            {variant === "compact" ? (
-              <TakeListRow
-                take={take}
-                detail={take.group_id === selectedGroupId ? "当前选择" : undefined}
-                onSelect={() => onSelect(take)}
-                onDragStart={allowDrag ? (event, rowTake) => {
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData(DRAG_TAKE_MIME, rowTake.group_id);
-                  event.dataTransfer.setData("text/plain", rowTake.group_id);
-                  onDragBegin?.(rowTake.group_id);
-                } : undefined}
-              />
-            ) : (
-              <TakeCard
-                take={take}
-                selected={take.group_id === selectedGroupId}
-                onSelect={() => onSelect(take)}
-                onDragBegin={allowDrag ? (groupId) => onDragBegin?.(groupId) : () => {}}
-                onDragFinish={allowDrag ? () => onDragFinish?.() : () => {}}
-              />
-            )}
-          </div>
-        ))}
+        {visible.map((take, offset) => {
+          const detail = detailForTake?.(take);
+          const compactDetail = take.group_id === selectedGroupId
+            ? detail ? `当前 · ${detail}` : "当前选择"
+            : detail;
+          return (
+            <div
+              className={`virtual-take-row is-${variant}`}
+              key={take.group_id}
+              style={{ height: rowHeight, transform: `translateY(${(range.start + offset) * rowHeight}px)` }}
+              onDragEnd={allowDrag ? onDragFinish : undefined}
+            >
+              {variant === "compact" ? (
+                <TakeListRow
+                  take={take}
+                  detail={compactDetail}
+                  onSelect={() => onSelect(take)}
+                  onDragStart={allowDrag ? (event, rowTake) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData(DRAG_TAKE_MIME, rowTake.group_id);
+                    event.dataTransfer.setData("text/plain", rowTake.group_id);
+                    onDragBegin?.(rowTake.group_id);
+                  } : undefined}
+                />
+              ) : (
+                <TakeCard
+                  take={take}
+                  selected={take.group_id === selectedGroupId}
+                  onSelect={() => onSelect(take)}
+                  onDragBegin={allowDrag ? (groupId) => onDragBegin?.(groupId) : () => {}}
+                  onDragFinish={allowDrag ? () => onDragFinish?.() : () => {}}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

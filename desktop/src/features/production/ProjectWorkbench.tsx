@@ -5,16 +5,11 @@ import { CurrentOperatorControl } from "../../components/CurrentOperatorControl"
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
-import { IdentityWorkbench } from "../identity/IdentityWorkbench";
-import { MaterialWorkspace } from "../material/MaterialWorkspace";
-import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
-import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
+import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorkspace";
 import "../media/media.css";
 import { CoverageWorkbench } from "../planning/PlanningWorkbenches";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
 import { ScriptWorkspace } from "../script/ScriptWorkspace";
-import { GoldenSlateWorkbench } from "../slate/GoldenSlateWorkbench";
-import { SlatePlaybackShortcuts } from "../slate/SlatePlaybackShortcuts";
 import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
@@ -106,6 +101,22 @@ function pageLabel(page: ProductionPage): string {
   return "场记";
 }
 
+function materialViewForPage(page: ProductionPage): MaterialView {
+  if (page === "media-library") return "library";
+  if (page === "takes") return "takes";
+  if (page === "identity") return "people";
+  if (page === "media-binding") return "repair";
+  return "slate";
+}
+
+function pageForMaterialView(view: MaterialView): ProductionPage {
+  if (view === "library") return "media-library";
+  if (view === "takes") return "takes";
+  if (view === "people") return "identity";
+  if (view === "repair") return "media-binding";
+  return "slate";
+}
+
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)));
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -116,7 +127,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const areaDefinition = AREAS[area];
   const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);
   const currentPageDefinition = areaDefinition.pages.find((item) => item.page === page) ?? null;
-  const showSecondaryNavigation = visibleAreaPages.length > 1 || Boolean(currentPageDefinition?.hidden);
+  const showSecondaryNavigation = area !== "material" && (visibleAreaPages.length > 1 || Boolean(currentPageDefinition?.hidden));
 
   function navigate(next: ProductionPage): void {
     setPage(safeProductionPage(next));
@@ -127,7 +138,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
     navigate(AREAS[next].defaultPage);
   }
 
-  function focusTake(groupId: string, destination: "takes" | "script" | "watch"): void {
+  function focusTake(groupId: string, destination: "takes" | "script" | "watch" | "timeline"): void {
     const value = groupId.trim();
     if (!value) return;
     setFocusedTakeGroupId(value);
@@ -144,7 +155,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }, [pageRequest?.nonce]);
 
   const assistantVisible = assistantOpen;
-  const canvasKey = `${project.project_id}:${page}:operator-${operatorRevision}`;
+  const canvasScope = area === "material" ? "material" : page;
+  const canvasKey = `${project.project_id}:${canvasScope}:operator-${operatorRevision}`;
   const primaryNavigation = useMemo(() => Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>, []);
 
   return (
@@ -195,19 +207,22 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
 
       <div className="project-workbench-canvas">
         <div className="project-workbench-main owns-chrome" key={canvasKey}>
-          {page === "slate" ? (
-            <>
-              <GoldenSlateWorkbench baseUrl={baseUrl} projectId={project.project_id} />
-              <SlatePlaybackShortcuts />
-            </>
-          ) : null}
-
-          {page === "takes" ? (
+          {area === "material" ? (
             <MaterialWorkspace
               baseUrl={baseUrl}
               project={project}
+              view={materialViewForPage(page)}
               initialGroupId={focusedTakeGroupId}
+              onViewChange={(view, groupId) => {
+                if (groupId?.trim()) setFocusedTakeGroupId(groupId.trim());
+                navigate(pageForMaterialView(view));
+              }}
               onOpenScript={(groupId) => focusTake(groupId, "script")}
+              onOpenReview={(groupId) => {
+                if (!groupId?.trim()) setFocusedTakeGroupId(null);
+                groupId ? focusTake(groupId, "watch") : navigate("watch");
+              }}
+              onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}
             />
           ) : null}
 
@@ -220,9 +235,6 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             />
           ) : null}
 
-          {page === "media-library" ? <MediaLibraryWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenMediaBinding={() => navigate("media-binding")} /> : null}
-          {page === "media-binding" ? <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-          {page === "identity" ? <IdentityWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "takes")} /> : null}
           {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} /> : null}
           {page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}

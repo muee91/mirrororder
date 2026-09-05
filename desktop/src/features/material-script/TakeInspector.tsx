@@ -33,7 +33,7 @@ export function TakeInspector({
   take: ReviewTakeGroup | null;
   selectedClipId: string | null;
   onSelectClip: (clipId: string) => void;
-  onShowScript: () => void;
+  onShowScript?: () => void;
   onClearPlacement?: () => void;
   writeSaving: boolean;
   showEditorial?: boolean;
@@ -103,14 +103,16 @@ export function TakeInspector({
         </section>
       ) : null}
 
-      <div className="inspector-actions">
-        <button type="button" className="secondary" onClick={onShowScript}>定位剧本</button>
-        {onClearPlacement && take.effective_mapping.source === "human" ? (
-          <button type="button" className="secondary danger-quiet" disabled={writeSaving} onClick={onClearPlacement}>
-            清除人工归集
-          </button>
-        ) : null}
-      </div>
+      {onShowScript || (onClearPlacement && take.effective_mapping.source === "human") ? (
+        <div className="inspector-actions">
+          {onShowScript ? <button type="button" className="secondary" onClick={onShowScript}>定位剧本</button> : null}
+          {onClearPlacement && take.effective_mapping.source === "human" ? (
+            <button type="button" className="secondary danger-quiet" disabled={writeSaving} onClick={onClearPlacement}>
+              清除人工归集
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="inspector-angle-cards" aria-label={`${displayLabel} 机位选择`}>
         {take.angles.map((item) => (
@@ -172,11 +174,13 @@ export function TakeInspector({
             {take.candidates.slice(0, 3).map((candidate) => (
               <CandidateEvidence candidate={candidate} key={candidate.candidate_id} />
             ))}
-            <div className="inspector-actions">
-              <button type="button" className="secondary" onClick={onShowScript}>
-                到剧本审阅首选候选
-              </button>
-            </div>
+            {onShowScript ? (
+              <div className="inspector-actions">
+                <button type="button" className="secondary" onClick={onShowScript}>
+                  到剧本审阅首选候选
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </details>

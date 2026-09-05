@@ -81,11 +81,11 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     resume = read("desktop/src/app/resumeState.ts")
     library = read("desktop/src/features/projects/ProjectLibrary.tsx")
     material = read("desktop/src/features/material/MaterialWorkspace.tsx")
+    material_take = read("desktop/src/features/material/MaterialTakeView.tsx")
     script = read("desktop/src/features/script/ScriptWorkspace.tsx")
     review = read("desktop/src/features/review/ReviewWorkspace.tsx")
 
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
-    assert "GoldenSlateWorkbench" in workbench
     assert "MaterialWorkspace" in workbench
     assert "ScriptWorkspace" in workbench
     assert "ReviewWorkspace" in workbench
@@ -96,7 +96,7 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     assert 'type ProductionArea = "material" | "script" | "timeline" | "review"' in workbench
     assert 'className="professional-project-toolbar"' in workbench
     assert 'aria-label="制作区域"' in workbench
-    assert 'className="professional-secondary-nav"' in workbench
+    assert 'const showSecondaryNavigation = area !== "material"' in workbench
     for label in ("素材", "剧本", "时间线", "审阅"):
         assert f'label: "{label}"' in workbench
     for page, label in (
@@ -114,28 +114,40 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
     assert '{ page: "attention",' not in workbench
     assert '{ page: "overview",' not in workbench
-    assert 'page === "attention" || page === "overview"' in workbench
-    assert 'return "watch"' in workbench
-    assert 'page === "rough-cut" || page === "assembly"' in workbench
-    assert 'return "timeline"' in workbench
     assert 'page === "attention" || page === "overview"' in resume
     assert 'return "watch"' in resume
-    assert "visibleAreaPages" in workbench
-    assert "showSecondaryNavigation" in workbench
+    assert 'page === "rough-cut" || page === "assembly"' in resume
+    assert 'return "timeline"' in resume
     assert ">小镜</button>" in workbench
-    assert 'onOpenTake={(groupId) => focusTake(groupId, "takes")}' in workbench
-    assert 'onOpenTake={(groupId) => focusTake(groupId, "script")}' in workbench
-    assert 'onOpenScript={(groupId) => focusTake(groupId, "script")}' in workbench
     assert "TimelineWorkbench" in workbench
     assert "ReviewAttentionWorkbench" not in workbench
     assert "ProjectOverviewWorkbench" not in workbench
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
+
+    assert 'export type MaterialView = "slate" | "library" | "takes" | "people" | "repair"' in material
+    assert 'aria-label="素材视图"' in material
+    assert "GoldenSlateWorkbench" in material
+    assert "MediaLibraryWorkbench" in material
+    assert "MaterialTakeView" in material
+    assert "IdentityWorkbench" in material
+    assert "MediaBindingWorkbench" in material
+    assert 'onOpenMediaBinding={() => onViewChange("repair")}' in material
     assert "setGroupPlacement" not in material
+    assert "setGroupPlacement" not in material_take
+    assert "showEditorial" not in material_take
+    assert "production.scriptSupervisor(project.project_id)" in material_take
+    assert ">在剧本中打开</button>" in material_take
+    assert ">在审阅中打开</button>" in material_take
+    assert ">到时间线</button>" in material_take
+    assert ">修复本机素材</button>" in material_take
+
     assert "connection.setGroupPlacement" in script
     assert "connection.clearGroupPlacement" in script
     assert "showEditorial" in review
     assert "setGroupPlacement" not in review
+    assert 'onOpenTake={(groupId) => focusTake(groupId, "script")}' in workbench
+    assert 'onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}' in workbench
     assert 'aria-label="当前项目制作导航"' not in library
     assert 'onClick={() => openPage("watch")}' not in library
     assert "制作区在项目画布顶部切换。" in library

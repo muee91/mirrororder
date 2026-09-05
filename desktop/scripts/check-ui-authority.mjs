@@ -94,6 +94,8 @@ const sourceCssFiles = listFiles("src", new Set([".css"]));
 
 const projectWorkbench = read("src/features/production/ProjectWorkbench.tsx");
 const materialWorkspace = read("src/features/material/MaterialWorkspace.tsx");
+const materialTakeView = read("src/features/material/MaterialTakeView.tsx");
+const materialWorkspaceCss = read("src/features/material/material-workspace.css");
 const scriptWorkspace = read("src/features/script/ScriptWorkspace.tsx");
 const reviewWorkspace = read("src/features/review/ReviewWorkspace.tsx");
 const resumeState = read("src/app/resumeState.ts");
@@ -102,7 +104,7 @@ assert(projectWorkbench.includes('review: {\n    label: "审阅",\n    defaultPa
 assert(!projectWorkbench.includes("ReviewAttentionWorkbench"), "Attention must not return as a standalone production workbench");
 assert(!projectWorkbench.includes("ProjectOverviewWorkbench"), "Project overview must not return as a standalone review workbench");
 assert(projectWorkbench.includes('{ page: "media-binding", label: "本机素材", hidden: true }'), "Media binding must stay a hidden repair tool, not a primary production page");
-assert(projectWorkbench.includes("visibleAreaPages.length > 1"), "Single-page production areas must not render redundant secondary navigation");
+assert(projectWorkbench.includes('const showSecondaryNavigation = area !== "material"'), "Material subviews must be owned inside MaterialWorkspace instead of ProjectWorkbench secondary navigation");
 assert(resumeState.includes('if (page === "attention" || page === "overview") return "watch";'), "Legacy attention/overview resume routes must collapse into Review");
 
 assert(projectWorkbench.includes('type ProductionArea = "material" | "script" | "timeline" | "review"'), "Desktop production areas must remain Material / Script / Timeline / Review");
@@ -113,9 +115,36 @@ assert(!projectWorkbench.includes("MaterialScriptWorkbench"), "cross-domain Mate
 for (const surface of ["takes", "script", "review"]) {
   assert(!projectWorkbench.includes(`surface="${surface}"`), `production routing must not reintroduce surface="${surface}" mode switching`);
 }
+
+assert(materialWorkspace.includes('export type MaterialView = "slate" | "library" | "takes" | "people" | "repair"'), "MaterialWorkspace must own the Material domain views");
+assert(materialWorkspace.includes('aria-label="素材视图"'), "MaterialWorkspace must expose one internal view switcher");
+for (const child of ["GoldenSlateWorkbench", "MediaLibraryWorkbench", "MaterialTakeView", "IdentityWorkbench", "MediaBindingWorkbench"]) {
+  assert(materialWorkspace.includes(child), `MaterialWorkspace must compose ${child}`);
+}
+for (const directImport of ["IdentityWorkbench", "MediaLibraryWorkbench", "MediaBindingWorkbench", "GoldenSlateWorkbench"]) {
+  assert(!projectWorkbench.includes(`import { ${directImport} }`), `ProjectWorkbench must not directly own Material child view ${directImport}`);
+}
+assert(materialWorkspace.includes('onOpenMediaBinding={() => onViewChange("repair")}'), "media repair must remain a contextual Material tool");
+assert(materialWorkspace.includes('onClick={() => onViewChange("library")}'), "Material repair must return to the library context");
 assert(!materialWorkspace.includes("setGroupPlacement"), "Material must not own Review placement writes");
 assert(!materialWorkspace.includes("clearGroupPlacement"), "Material must not clear Review placement");
 assert(!materialWorkspace.includes("showEditorial"), "Material must not own Final Editorial Decision controls");
+
+assert(materialTakeView.includes("production.scriptSupervisor(project.project_id)"), "Material Take view must project Script Supervisor facts");
+assert(materialTakeView.includes("slateFactIndex"), "Material Take view must join Slate facts to Take identity without exposing raw ids");
+assert(materialTakeView.includes("mediaAvailabilityLabel"), "Material Take view must make media availability visible");
+assert(materialTakeView.includes("mappingLabel(take)"), "Material Take view must show current Script mapping as read-only context");
+assert(materialTakeView.includes(">在剧本中打开</button>"), "Material Take must deep-link to Script");
+assert(materialTakeView.includes(">在审阅中打开</button>"), "Material Take must deep-link to Review");
+assert(materialTakeView.includes(">到时间线</button>"), "Material Take must deep-link to Timeline");
+assert(materialTakeView.includes(">修复本机素材</button>"), "offline Material Take must expose contextual media repair");
+assert(!materialTakeView.includes("setGroupPlacement"), "Material Take view must not write Review placement");
+assert(!materialTakeView.includes("clearGroupPlacement"), "Material Take view must not clear Review placement");
+assert(!materialTakeView.includes("showEditorial"), "Material Take view must not render Editorial Decision controls");
+for (const selector of [".mo-take-list-row", ".mo-take-list-core", ".mo-take-list-heading", ".mo-take-list-cameras"]) {
+  assert(!materialWorkspaceCss.includes(selector), `material-workspace.css must not reclaim canonical compact Take anatomy through ${selector}`);
+}
+
 assert(scriptWorkspace.includes("connection.setGroupPlacement"), "Script must own Review placement writes");
 assert(scriptWorkspace.includes("connection.clearGroupPlacement"), "Script must own placement correction/clear");
 assert(scriptWorkspace.includes("RoughPlacementClient"), "batch placement must stay inside Script authority");
@@ -123,7 +152,9 @@ assert(reviewWorkspace.includes("showEditorial"), "Review must own Editorial Dec
 assert(reviewWorkspace.includes('{ value: "attention", label: "需关注" }'), "Attention must remain a Review filter");
 assert(!reviewWorkspace.includes("setGroupPlacement"), "Review must not duplicate Script placement editing");
 assert(!reviewWorkspace.includes("clearGroupPlacement"), "Review must not clear Script placement directly");
-assert(projectWorkbench.includes('onOpenTake={(groupId) => focusTake(groupId, "takes")}'), "Identity evidence must open Take in Material");
+assert(projectWorkbench.includes('onOpenScript={(groupId) => focusTake(groupId, "script")}'), "Material Take must preserve identity when opening Script");
+assert(projectWorkbench.includes('groupId ? focusTake(groupId, "watch") : navigate("watch")'), "Material Take must preserve identity when opening Review");
+assert(projectWorkbench.includes('onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}'), "Material Take must preserve identity intent when opening Timeline");
 assert(projectWorkbench.includes('onOpenTake={(groupId) => focusTake(groupId, "script")}'), "Coverage evidence must return to Script");
 assert(!projectWorkbench.includes("ReviewReturnContext"), "cross-workspace return state must not become a second navigation system");
 
@@ -227,6 +258,7 @@ assert(!/\bfunction\s+TakeCard\b/.test(virtualTakeList), "VirtualTakeList must n
 assert(!virtualTakeList.includes("const STABLE_CAMERA_SLOTS"), "VirtualTakeList must not redefine stable camera slots");
 assert(virtualTakeList.includes('from "./TakeCard"'), "VirtualTakeList must consume the canonical TakeCard");
 assert(virtualTakeList.includes("TakeListRow"), "compact Material/Review lists must consume the canonical TakeListRow");
+assert(virtualTakeList.includes("detailForTake"), "VirtualTakeList may project workspace detail without duplicating Take anatomy");
 
 const slatePlacementPools = read("src/features/slate/SlatePlacementPools.tsx");
 assert(slatePlacementPools.includes("TakeListRow"), "SlatePlacementPools must consume the canonical compact Take renderer");

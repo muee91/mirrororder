@@ -13,7 +13,7 @@ function exists(relative: string): boolean {
 describe("MirrorOrder product surface contraction", () => {
   it("keeps four independent production workspaces instead of a cross-domain surface switch", () => {
     const workbench = read("../features/production/ProjectWorkbench.tsx");
-    expect(workbench).toContain('import { MaterialWorkspace } from "../material/MaterialWorkspace"');
+    expect(workbench).toContain('import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorkspace"');
     expect(workbench).toContain('import { ScriptWorkspace } from "../script/ScriptWorkspace"');
     expect(workbench).toContain('import { ReviewWorkspace } from "../review/ReviewWorkspace"');
     expect(workbench).toContain("<MaterialWorkspace");
@@ -27,17 +27,54 @@ describe("MirrorOrder product surface contraction", () => {
     expect(exists("../features/material-script/MaterialScriptWorkbench.tsx")).toBe(false);
   });
 
-  it("keeps Material focused on Take and production facts without owning placement or editorial decisions", () => {
+  it("makes Material one workspace with internal production views and contextual repair", () => {
+    const workbench = read("../features/production/ProjectWorkbench.tsx");
     const material = read("../features/material/MaterialWorkspace.tsx");
-    expect(material).toContain('<main className="material-primary-canvas">');
-    expect(material).toContain("<VirtualTakeList");
-    expect(material).toContain("<TakeInspector");
-    expect(material).toContain("onOpenScript");
-    expect(material).not.toContain("setGroupPlacement");
-    expect(material).not.toContain("clearGroupPlacement");
-    expect(material).not.toContain("RoughPlacementClient");
-    expect(material).not.toContain("showEditorial");
-    expect(material).not.toContain("review-actor-field");
+    expect(material).toContain('export type MaterialView = "slate" | "library" | "takes" | "people" | "repair"');
+    expect(material).toContain('aria-label="素材视图"');
+    expect(material).toContain("<GoldenSlateWorkbench");
+    expect(material).toContain("<MediaLibraryWorkbench");
+    expect(material).toContain("<MaterialTakeView");
+    expect(material).toContain("<IdentityWorkbench");
+    expect(material).toContain("<MediaBindingWorkbench");
+    expect(material).toContain('onOpenMediaBinding={() => onViewChange("repair")}');
+    expect(material).toContain('view === "repair"');
+    expect(material).toContain('onClick={() => onViewChange("library")}');
+    expect(workbench).toContain('const showSecondaryNavigation = area !== "material"');
+    expect(workbench).toContain('const canvasScope = area === "material" ? "material" : page;');
+    expect(workbench).not.toContain('import { IdentityWorkbench }');
+    expect(workbench).not.toContain('import { MediaLibraryWorkbench }');
+    expect(workbench).not.toContain('import { MediaBindingWorkbench }');
+    expect(workbench).not.toContain('import { GoldenSlateWorkbench }');
+  });
+
+  it("makes Material Take browsing explain shooting facts, media health and current mapping", () => {
+    const materialTake = read("../features/material/MaterialTakeView.tsx");
+    expect(materialTake).toContain("production.scriptSupervisor(project.project_id)");
+    expect(materialTake).toContain("slateFactIndex");
+    expect(materialTake).toContain("mediaAvailabilityLabel");
+    expect(materialTake).toContain("mappingLabel(take)");
+    expect(materialTake).toContain('placeholder="搜索 Take、场镜次、机位、对白或备注"');
+    expect(materialTake).toContain('{ value: "offline", label: "素材离线" }');
+    expect(materialTake).toContain('aria-label="当前 Take 拍摄事实"');
+    expect(materialTake).toContain("detailForTake");
+    expect(materialTake).not.toContain("setGroupPlacement");
+    expect(materialTake).not.toContain("clearGroupPlacement");
+    expect(materialTake).not.toContain("showEditorial");
+    expect(materialTake).not.toContain("EditorialDecisionPanel");
+  });
+
+  it("gives a Material Take explicit exits to Script, Review, Timeline and media repair", () => {
+    const materialTake = read("../features/material/MaterialTakeView.tsx");
+    const workbench = read("../features/production/ProjectWorkbench.tsx");
+    expect(materialTake).toContain(">在剧本中打开</button>");
+    expect(materialTake).toContain(">在审阅中打开</button>");
+    expect(materialTake).toContain(">到时间线</button>");
+    expect(materialTake).toContain(">修复本机素材</button>");
+    expect(workbench).toContain('onOpenScript={(groupId) => focusTake(groupId, "script")}');
+    expect(workbench).toContain('groupId ? focusTake(groupId, "watch") : navigate("watch")');
+    expect(workbench).toContain('onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}');
+    expect(workbench).toContain('onViewChange={(view, groupId) =>');
   });
 
   it("makes Script the only production workspace that writes Review placement", () => {
@@ -64,17 +101,7 @@ describe("MirrorOrder product surface contraction", () => {
     expect(review).toContain("reviewTakeAttention(take).hasAttention");
     expect(review).not.toContain("setGroupPlacement");
     expect(review).not.toContain("clearGroupPlacement");
-    expect(review).not.toContain("review-actor-field");
     expect(attention).toContain("export function reviewTakeAttention");
-  });
-
-  it("routes evidence actions to the workspace that owns the work", () => {
-    const workbench = read("../features/production/ProjectWorkbench.tsx");
-    expect(workbench).toContain('onOpenTake={(groupId) => focusTake(groupId, "takes")}');
-    expect(workbench).toContain('onOpenTake={(groupId) => focusTake(groupId, "script")}');
-    expect(workbench).toContain('onOpenScript={(groupId) => focusTake(groupId, "script")}');
-    expect(workbench).not.toContain("ReviewReturnContext");
-    expect(workbench).not.toContain("reviewReturn");
   });
 
   it("keeps Timeline as the product-area name and legacy edit routes collapsed into it", () => {
@@ -86,6 +113,15 @@ describe("MirrorOrder product surface contraction", () => {
     expect(resume).toContain('if (page === "rough-cut" || page === "assembly") return "timeline";');
   });
 
+  it("keeps repair and Coverage contextual instead of creating new primary areas", () => {
+    const workbench = read("../features/production/ProjectWorkbench.tsx");
+    const material = read("../features/material/MaterialWorkspace.tsx");
+    expect(workbench).toContain('{ page: "media-binding", label: "本机素材", hidden: true }');
+    expect(workbench).toContain('{ page: "coverage", label: "覆盖", hidden: true }');
+    expect(material).toContain('onOpenMediaBinding={() => onViewChange("repair")}');
+    expect(workbench).toContain('onOpenCoverage={() => navigate("coverage")}');
+  });
+
   it("keeps internal mapping ids out of the primary Script UI", () => {
     const scriptBlock = read("../features/material-script/ScriptBlock.tsx");
     const episode = read("../features/material-script/ScriptEpisodeView.tsx");
@@ -93,24 +129,6 @@ describe("MirrorOrder product surface contraction", () => {
     expect(scriptBlock).not.toContain("归集 {placementGroupId}");
     expect(scriptBlock).toContain("归集当前 Take");
     expect(episode).not.toContain("{scene.scene_id}</p>");
-  });
-
-  it("moves useful project overview signals into Project Home", () => {
-    const home = read("../features/projects/ProjectHome.tsx");
-    const presentation = read("../features/projects/projectPresentation.ts");
-    expect(home).toContain("reviewProjectSummary(await host.reviewModel(project.project_id))");
-    expect(home).toContain("review.unmappedCount");
-    expect(home).toContain("review.scriptGapCount");
-    expect(presentation).toContain("review?.attentionCount");
-  });
-
-  it("keeps repair and Coverage views contextual instead of primary navigation", () => {
-    const workbench = read("../features/production/ProjectWorkbench.tsx");
-    expect(workbench).toContain('{ page: "media-binding", label: "本机素材", hidden: true }');
-    expect(workbench).toContain('{ page: "coverage", label: "覆盖", hidden: true }');
-    expect(workbench).toContain("visibleAreaPages.length > 1");
-    expect(workbench).toContain("currentPageDefinition?.hidden");
-    expect(workbench).toContain('onOpenCoverage={() => navigate("coverage")}');
   });
 
   it("canonicalizes retired pages instead of restoring their navigation", () => {
