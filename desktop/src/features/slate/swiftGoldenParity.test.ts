@@ -6,32 +6,33 @@ function source(relative: string): string {
 }
 
 describe("Swift golden product fidelity", () => {
-  it("keeps the four production areas in the project workspace while using the new navigation authority", () => {
+  it("keeps the Swift usability baseline while current navigation has exactly four dedicated workspace authorities", () => {
     const workbench = source("../production/ProjectWorkbench.tsx");
-    const material = source("../material-script/GoldenMaterialScriptWorkbench.tsx");
-    const experience = source("../production/product-experience.css");
-    expect(workbench).toContain("TimelineWorkbench");
-    expect(workbench).toContain("DeliveryWorkbench");
-    expect(workbench).not.toContain("RoughCutWorkbench");
-    expect(workbench).not.toContain("AssemblyWorkbench");
-    expect(workbench).toContain('{ page: "timeline", label: "剪辑工作台" }');
-    expect(workbench).toContain('if (page === "rough-cut" || page === "assembly") return "timeline";');
-    expect(workbench).toContain('label: "剪辑"');
+    const material = source("../material/MaterialWorkspace.tsx");
+    const script = source("../script/ScriptWorkspace.tsx");
+    for (const label of ["素材", "剧本", "时间线", "审阅"]) expect(workbench).toContain(`label: "${label}"`);
+    expect(workbench).toContain("<MaterialWorkspace");
+    expect(workbench).toContain("<ScriptWorkspace");
+    expect(workbench).toContain("<TimelineWorkbench");
+    expect(workbench).toContain("<ReviewWorkspace");
+    expect(workbench).toContain('{ page: "timeline", label: "时间线" }');
+    expect(workbench).toContain('if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline";');
     expect(workbench).toContain("professional-project-toolbar");
     expect(workbench).toContain("readProjectPage");
     expect(workbench).toContain('useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)))');
     expect(workbench).toContain("owns-chrome");
     expect(workbench).toContain("const assistantVisible = assistantOpen;");
-    expect(workbench).toContain('className="professional-secondary-nav"');
-    expect(workbench).not.toContain("golden-secondary-workspace");
-    expect(material).toContain("‹ 场记");
     expect(workbench).toContain("professional-assistant-toggle");
     expect(workbench).toContain('className="assistant-context-drawer"');
-    expect(workbench).not.toContain('aria-label="项目工具"');
-    expect(experience).toContain(".has-slate-assistant .project-workbench-canvas { grid-template-columns: minmax(0, 1fr); }");
-    expect(experience).toContain(".slate-assistant-drawer { position: absolute");
-    expect(experience).not.toContain(".project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body");
-    expect(experience).not.toContain("golden-secondary-return");
+    expect(workbench).not.toContain("MaterialScriptWorkbench");
+    expect(workbench).not.toContain("DeliveryWorkbench");
+    expect(workbench).not.toContain("RoughCutWorkbench");
+    expect(workbench).not.toContain("AssemblyWorkbench");
+    expect(workbench).not.toContain("professional-secondary-nav");
+    expect(material).toContain('const MATERIAL_VIEWS: Array<{ view: Exclude<MaterialView, "repair">');
+    expect(material).toContain('view === "repair"');
+    expect(script).toContain("PROJECTION_OPTIONS");
+    expect(script).toContain('{ value: "coverage", label: "覆盖" }');
   });
 
   it("restores the multicam slate workflow rather than only its column labels", () => {

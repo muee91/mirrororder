@@ -113,9 +113,10 @@ describe("slate intake pools", () => {
     expect(buildSlateSceneTargets(review)[0]?.segmentIds).toEqual([]);
   });
 
-  it("keeps the four pools and Review drag actions on the main Slate workbench", () => {
+  it("keeps Slate intake pools on Slate while Script owns placement into script segments", () => {
     const source = readFileSync(fileURLToPath(new URL("./GoldenSlateWorkbench.tsx", import.meta.url)), "utf8");
     const placement = readFileSync(fileURLToPath(new URL("./SlatePlacementPools.tsx", import.meta.url)), "utf8");
+    const scriptSource = readFileSync(fileURLToPath(new URL("../script/ScriptWorkspace.tsx", import.meta.url)), "utf8");
     for (const label of ["待归集", "已归集", "已排除", "孤立素材"]) expect(placement).toContain(label);
     expect(source).toContain("<SlateWorkbench");
     expect(source).toContain("Review 归集辅助");
@@ -129,9 +130,11 @@ describe("slate intake pools", () => {
     expect(placement).toContain("无可归集剧本段");
     expect(placement.indexOf("if (!drag || !review || !target.segmentIds.length)")).toBeLessThan(placement.indexOf("host.setGroupPlacement"));
     expect(placement).not.toContain("scriptSegmentIds: target.segmentId ? [target.segmentId]");
-    const materialSource = readFileSync(fileURLToPath(new URL("../material-script/MaterialScriptWorkbench.tsx", import.meta.url)), "utf8");
-    expect(materialSource).toContain("[block.segment_id]");
-    expect(materialSource).toContain('"desktop-v2-script-segment"');
+    expect(scriptSource).toContain("scriptSegmentIds: segmentIds");
+    expect(scriptSource).toContain("[selectedBlock.segment_id]");
+    expect(scriptSource).toContain('"desktop-script-segment-context"');
+    expect(scriptSource).toContain("[block.segment_id]");
+    expect(scriptSource).toContain('"desktop-script-segment"');
     expect(source).not.toContain("production.writeSlateEntry(projectId, {\n        groupId: payload.groupId");
   });
 });

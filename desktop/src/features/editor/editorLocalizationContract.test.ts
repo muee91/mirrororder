@@ -20,7 +20,7 @@ describe("editor Chinese product language", () => {
   it("uses Chinese names for the primary editing surfaces", () => {
     const timeline = editorSurfaceText();
     const monitors = read("./EditorMonitors.tsx");
-    expect(timeline).toContain("剪辑工作台");
+    expect(timeline).toContain("时间线");
     expect(timeline).toContain("初始顺片");
     expect(timeline).toContain("换镜次");
     expect(timeline).toContain("智能建议");

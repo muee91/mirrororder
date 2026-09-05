@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 function source(relative: string): string {
@@ -43,34 +43,42 @@ describe("Swift Demo fidelity guards", () => {
     expect(slateCss).toContain("grid-template-columns: minmax(220px,1fr) auto 1px auto auto auto");
   });
 
-  it("keeps the material and script workspace readable at Swift production density", () => {
-    const css = source("../material-script/golden-material-script.css");
-    expect(css).not.toContain("font-size: 7px");
-    expect(css).not.toContain("font-size: 8px");
-    expect(css).toContain(".golden-ms-title > span");
-    expect(css).toContain("font-size: var(--mo-font-xs, 10px)");
-    expect(css).toContain(".golden-ms-target-pane > header strong");
-    expect(css).toContain("font-size: var(--mo-font-sm, 11px)");
-    expect(css).toContain("grid-template-columns: minmax(280px, 360px) minmax(390px, 1fr) minmax(300px, 350px)");
+  it("keeps Material and Script readable at the Swift usability floor without reviving shared-workbench styling", () => {
+    const materialCss = source("../material/material-workspace.css");
+    const scriptCss = source("../script/script-workspace.css");
+    for (const css of [materialCss, scriptCss]) {
+      expect(css).toContain("var(--mo-");
+      expect(css).not.toMatch(/font-size:\s*(?:7|8|9)px/);
+    }
+    expect(materialCss).toContain(".material-domain-bar");
+    expect(materialCss).toContain("min-height: 52px");
+    expect(materialCss).toContain("font-size: var(--mo-font-xs, 10px)");
+    expect(materialCss).toContain("font-size: var(--mo-font-sm, 11px)");
+    expect(scriptCss).toContain(".script-command-bar");
+    expect(scriptCss).toContain("grid-template-columns: auto minmax(220px, 1fr) auto");
+    expect(scriptCss).toContain("font-size: var(--mo-font-xs, 10px)");
+    expect(scriptCss).toContain("font-size: var(--mo-font-sm, 11px)");
   });
 
-  it("keeps Material Script on one chrome layer with explicit desktop appearance", () => {
+  it("keeps dedicated workspace chrome and explicit desktop appearance after retiring MaterialScript", () => {
     const workbench = source("../production/ProjectWorkbench.tsx");
-    const material = source("../material-script/GoldenMaterialScriptWorkbench.tsx");
-    const css = source("../material-script/golden-material-script.css");
-    const theme = source("../material-script/golden-material-script-theme.css");
+    const material = source("../material/MaterialWorkspace.tsx");
+    const script = source("../script/ScriptWorkspace.tsx");
     const main = source("../../main.tsx");
     const experience = source("../production/product-experience.css");
-    expect(workbench).toContain('page === "script"');
-    expect(workbench).not.toContain("golden-secondary-workspace");
-    expect(material).toContain("golden-ms-back");
-    expect(material).toContain("‹ 场记");
+    expect(workbench).toContain("<MaterialWorkspace");
+    expect(workbench).toContain("<ScriptWorkspace");
+    expect(workbench).toContain("<TimelineWorkbench");
+    expect(workbench).toContain("<ReviewWorkspace");
+    expect(workbench).not.toContain("MaterialScriptWorkbench");
+    expect(workbench).not.toContain("professional-secondary-nav");
+    expect(material).toContain('data-material-view={view}');
+    expect(script).toContain('aria-label="剧本集数"');
     expect(experience).not.toContain("golden-secondary-return");
-    expect(css).toContain("var(--mo-surface-app");
-    expect(css).toContain("var(--mo-text-primary");
-    expect(theme).toContain("shared --mo-* semantic tokens");
-    expect(theme).toContain("Do not add light/dark palettes here");
-    expect(main).toContain('import "./features/material-script/golden-material-script-theme.css"');
+    expect(main).not.toContain("golden-material-script-theme.css");
+    expect(existsSync(new URL("../material-script/GoldenMaterialScriptWorkbench.tsx", import.meta.url))).toBe(false);
+    expect(existsSync(new URL("../material-script/golden-material-script.css", import.meta.url))).toBe(false);
+    expect(existsSync(new URL("../material-script/golden-material-script-theme.css", import.meta.url))).toBe(false);
   });
 
   it("does not mount the legacy Review Slate workload while its details is collapsed", () => {

@@ -8,6 +8,7 @@ const activity = readFileSync(fileURLToPath(new URL("./projectActivity.ts", impo
 const app = readFileSync(fileURLToPath(new URL("../../app/App.tsx", import.meta.url)), "utf8");
 const transfers = readFileSync(fileURLToPath(new URL("../../app/projectTransferActions.ts", import.meta.url)), "utf8");
 const workbench = readFileSync(fileURLToPath(new URL("../production/ProjectWorkbench.tsx", import.meta.url)), "utf8");
+const materialWorkspace = readFileSync(fileURLToPath(new URL("../material/MaterialWorkspace.tsx", import.meta.url)), "utf8");
 
 describe("project actions", () => {
   it("keeps the full high-value project context menu in the Swift-style sidebar", () => {
@@ -71,10 +72,14 @@ describe("project actions", () => {
     expect(library).not.toContain("ProjectTaskClient");
   });
 
-  it("keeps device media binding reachable without restoring duplicate Production navigation", () => {
+  it("keeps device media binding reachable as a Material recovery tool without duplicate Production ownership", () => {
     expect(workbench).toContain('"media-binding"');
-    expect(workbench).toContain('page === "media-binding" ? <MediaBindingWorkbench');
+    expect(workbench).toContain('if (page === "media-binding") return "repair";');
     expect(workbench).toContain("pageRequest?.nonce");
+    expect(workbench).not.toContain("MediaBindingWorkbench");
     expect(workbench).not.toContain("project-workbench-primary");
+    expect(materialWorkspace).toContain('view === "repair"');
+    expect(materialWorkspace).toContain("<MediaBindingWorkbench");
+    expect(materialWorkspace).toContain('onClick={() => onViewChange("library")}');
   });
 });

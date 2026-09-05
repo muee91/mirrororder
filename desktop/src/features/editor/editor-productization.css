@@ -51,7 +51,7 @@
 .editorial-suggestion.tone-warning { border-left-color: var(--mo-warning, #d6b765); }
 .editorial-suggestion.tone-info { border-left-color: var(--mo-accent, #5a9ef4); }
 .editorial-suggestion > div { display: grid; gap: 3px; }
-.editorial-suggestion span { color: var(--mo-text-muted, #75828e); font-size: 9px; }
+.editorial-suggestion span { color: var(--mo-text-muted, #75828e); font-size: 10px; }
 .editorial-suggestion strong { color: var(--mo-text-primary, #d4dce4); font-size: 11px; }
 .editorial-suggestion p { margin: 0; color: var(--mo-text-secondary, #8f9ba7); font-size: 10px; line-height: 1.45; }
 .editorial-suggestion button { align-self: center; }
