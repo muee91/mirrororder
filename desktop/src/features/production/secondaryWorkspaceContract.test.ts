@@ -1,13 +1,17 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-function read(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
+function path(relative: string): string {
+  return fileURLToPath(new URL(relative, import.meta.url));
 }
 
-describe("project production workspace product contract", () => {
-  it("keeps global context in the sidebar and project navigation in the Production toolbar", () => {
+function read(relative: string): string {
+  return readFileSync(path(relative), "utf8");
+}
+
+describe("project production workspace contract", () => {
+  it("keeps global context in the sidebar and exactly four project workspaces in ProjectWorkbench", () => {
     const workbench = read("./ProjectWorkbench.tsx");
     const library = read("../projects/ProjectLibrary.tsx");
 
@@ -15,77 +19,43 @@ describe("project production workspace product contract", () => {
     expect(library).toContain('aria-label="主导航"');
     expect(library).toContain('aria-label="系统导航"');
     expect(library).toContain("制作区在项目画布顶部切换。");
-    expect(library).not.toContain('aria-label="当前项目制作导航"');
-    expect(library).not.toContain('openPage("watch")');
-
     expect(workbench).toContain("const AREAS: Record<ProductionArea, AreaDefinition>");
-    expect(workbench).toContain('label: "素材"');
-    expect(workbench).toContain('label: "剧本"');
-    expect(workbench).toContain('label: "剪辑"');
-    expect(workbench).toContain('label: "审阅"');
+    for (const label of ["素材", "剧本", "时间线", "审阅"]) expect(workbench).toContain(`label: "${label}"`);
     expect(workbench).toContain('className="professional-project-toolbar"');
     expect(workbench).toContain('aria-label="制作区域"');
-    expect(workbench).toContain('className="professional-secondary-nav"');
-    expect(workbench).toContain("const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);");
-
-    const editArea = workbench.slice(workbench.indexOf("edit: {"), workbench.indexOf("review: {"));
-    expect(editArea).toContain('{ page: "timeline", label: "剪辑工作台" }');
-    expect(editArea).toContain('{ page: "delivery", label: "交付" }');
-    expect(editArea).not.toContain('{ page: "rough-cut"');
-    expect(editArea).not.toContain('{ page: "assembly"');
+    expect(workbench).not.toContain("professional-secondary-nav");
+    expect(workbench).not.toContain('{ page: "delivery", label: "交付" }');
+    expect(workbench).not.toContain('{ page: "coverage", label: "覆盖" }');
   });
 
-  it("uses shared semantic tokens and resolved Desktop theme authority", () => {
-    const experience = read("./product-experience.css");
-    const production = read("./production.css");
-    const review = read("../material-script/take-review.css");
-    const mediaLibrary = read("../media/media-library.css");
-    const planning = read("../planning/planning.css");
-    const timeline = read("../editor/timeline.css");
-    const secondaryTheme = read("./secondary-tools-theme.css");
+  it("keeps Material recovery contextual and removes retired planning workbenches", () => {
+    const material = read("../material/MaterialWorkspace.tsx");
+    const project = read("./ProjectWorkbench.tsx");
 
-    for (const [name, css] of [["production", production], ["media", mediaLibrary], ["planning", planning], ["timeline", timeline]] as const) {
-      expect(css, name).toContain("var(--mo-");
-      expect(css, name).not.toContain("@media (prefers-color-scheme: light)");
-      expect(css, name).not.toMatch(/font-size:\s*(?:7|8|9)px/);
+    expect(material).toContain('view === "repair"');
+    expect(material).toContain("<MediaBindingWorkbench");
+    expect(material).toContain('onClick={() => onViewChange("library")}');
+    expect(project).not.toContain("CoverageWorkbench");
+    expect(project).not.toContain("RoughCutWorkbench");
+    expect(project).not.toContain("AssemblyWorkbench");
+    expect(existsSync(path("../planning/PlanningWorkbenches.tsx"))).toBe(false);
+    expect(existsSync(path("../planning/planning.css"))).toBe(false);
+  });
+
+  it("uses current workspace-owned theme layers instead of the retired material-script theme patch", () => {
+    for (const relative of [
+      "../material/material-workspace.css",
+      "../script/script-workspace.css",
+      "../review/review-workspace.css",
+      "../review/review-decision.css",
+      "../editor/editor-productization.css",
+    ]) {
+      const css = read(relative);
+      expect(css, relative).toContain("var(--mo-");
+      expect(css, relative).not.toContain("@media (prefers-color-scheme: light)");
+      expect(css, relative).not.toMatch(/font-size:\s*(?:7|8|9)px/);
     }
-    expect(experience).not.toContain("@media (prefers-color-scheme: light)");
-    expect(review).not.toContain("@media (prefers-color-scheme: light)");
-    expect(secondaryTheme).toContain('html[data-mirrororder-theme="light"] .material-script-workbench .take-card');
-    expect(secondaryTheme).toContain('html[data-mirrororder-theme="dark"] .material-script-workbench .take-card');
-  });
-
-  it("presents local media recovery as an ordered reconnect flow rather than a two-card dashboard", () => {
-    const workbench = read("../media/MediaBindingWorkbench.tsx");
-    const css = read("../media/media.css");
-
-    expect(workbench).toContain('className="media-binding-section media-binding-setup"');
-    expect(workbench).toContain('className="media-binding-section media-binding-results"');
-    expect(workbench).toContain("重连规则");
-    expect(workbench).toContain("重新连接已移动素材…");
-    expect(workbench).toContain("添加搜索位置…");
-    expect(workbench).not.toContain("扫描新增目录");
-    expect(workbench).not.toContain("替换目录并重扫");
-    expect(workbench).not.toContain("production-grid media-binding-grid");
-    expect(workbench).not.toContain('className="production-panel"');
-    expect(workbench).not.toContain("media-binding-counts");
-    expect(css).not.toContain(".media-binding-grid");
-    expect(css).not.toContain("@media (prefers-color-scheme: light)");
-    expect(css).toContain('html[data-mirrororder-theme="light"] .media-binding-content');
-    expect(css).toContain('html[data-mirrororder-theme="dark"] .media-binding-content');
-  });
-
-  it("routes media recovery as a hidden utility page instead of a Production navigation tab", () => {
-    const projectWorkbench = read("./ProjectWorkbench.tsx");
-    const mediaLibrary = read("../media/MediaLibraryWorkbench.tsx");
-
-    expect(projectWorkbench).toContain('{ page: "media-binding", label: "本机素材", hidden: true }');
-    expect(projectWorkbench).toContain("const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);");
-    expect(projectWorkbench).toContain('onOpenMediaBinding={() => navigate("media-binding")}');
-    expect(mediaLibrary).toContain("onOpenMediaBinding?: () => void");
-    expect(mediaLibrary).not.toContain('import { MediaBindingWorkbench }');
-    expect(mediaLibrary).not.toContain("<MediaBindingWorkbench");
-    expect(mediaLibrary).not.toContain("showBinding");
+    expect(existsSync(path("./secondary-tools-theme.css"))).toBe(false);
   });
 
   it("keeps the official Vite-bundled logo authoritative in the sidebar", () => {

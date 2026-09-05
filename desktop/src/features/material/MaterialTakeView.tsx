@@ -29,9 +29,11 @@ interface Props {
   baseUrl: string;
   project: ProjectSummary;
   initialGroupId?: string | null;
-  onOpenScript?: (groupId: string) => void;
-  onOpenReview?: (groupId: string) => void;
-  onOpenTimeline?: (groupId: string) => void;
+  initialClipId?: string | null;
+  onSelectionChange?: (groupId: string | null, clipId: string | null) => void;
+  onOpenScript?: (groupId: string, clipId?: string | null) => void;
+  onOpenReview?: (groupId: string, clipId?: string | null) => void;
+  onOpenTimeline?: (groupId: string, clipId?: string | null) => void;
   onOpenRepair?: () => void;
 }
 
@@ -134,6 +136,8 @@ export function MaterialTakeView({
   baseUrl,
   project,
   initialGroupId = null,
+  initialClipId = null,
+  onSelectionChange,
   onOpenScript,
   onOpenReview,
   onOpenTimeline,
@@ -147,7 +151,7 @@ export function MaterialTakeView({
   const [filter, setFilter] = useState<MaterialTakeFilter>("all");
   const [episodeFilter, setEpisodeFilter] = useState<number | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(initialGroupId);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(initialClipId);
   const [drawerOpen, setDrawerOpen] = useState(Boolean(initialGroupId));
 
   useEffect(() => {
@@ -205,10 +209,13 @@ export function MaterialTakeView({
     if (!model) return;
     const focused = initialGroupId ? model.take_groups.find((take) => take.group_id === initialGroupId) ?? null : null;
     const first = focused ?? model.take_groups[0] ?? null;
+    const requestedClip = first && initialClipId && first.angles.some((angle) => angle.clip_id === initialClipId)
+      ? initialClipId
+      : first?.angles[0]?.clip_id ?? null;
     setSelectedGroupId(first?.group_id ?? null);
-    setSelectedClipId(first?.angles[0]?.clip_id ?? null);
+    setSelectedClipId(requestedClip);
     setDrawerOpen(Boolean(focused));
-  }, [initialGroupId, model]);
+  }, [initialClipId, initialGroupId, model]);
 
   useEffect(() => {
     if (!model) return;
@@ -225,6 +232,10 @@ export function MaterialTakeView({
       setDrawerOpen(false);
     }
   }, [filteredTakes, model, selectedGroupId]);
+
+  useEffect(() => {
+    onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId);
+  }, [selectedTake?.group_id, selectedClipId]);
 
   function selectTake(take: ReviewTakeGroup): void {
     setSelectedGroupId(take.group_id);
@@ -298,9 +309,9 @@ export function MaterialTakeView({
             {selectedTake ? (
               <>
                 <div className="material-take-cross-actions" aria-label="继续处理当前 Take">
-                  <button type="button" onClick={() => onOpenScript?.(selectedTake.group_id)}>在剧本中打开</button>
-                  <button type="button" className="secondary" onClick={() => onOpenReview?.(selectedTake.group_id)}>在审阅中打开</button>
-                  <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id)}>到时间线</button>
+                  <button type="button" onClick={() => onOpenScript?.(selectedTake.group_id, selectedClipId)}>在剧本中打开</button>
+                  <button type="button" className="secondary" onClick={() => onOpenReview?.(selectedTake.group_id, selectedClipId)}>在审阅中打开</button>
+                  <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId)}>到时间线</button>
                   {hasOfflineMedia(selectedTake) && onOpenRepair ? <button type="button" className="secondary" onClick={onOpenRepair}>修复本机素材</button> : null}
                 </div>
 

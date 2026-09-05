@@ -1,0 +1,72 @@
+.take-evidence-section {
+  border-top: 1px solid var(--mo-border-subtle, #26303a);
+  padding-top: 12px;
+}
+
+.take-evidence-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.take-evidence-heading strong {
+  color: var(--mo-text-primary, #cbd4dd);
+  font-size: var(--mo-font-sm, 11px);
+}
+
+.take-evidence-heading > span,
+.evidence-label,
+.evidence-muted,
+.evidence-authority-note {
+  color: var(--mo-text-muted, #74818d);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.evidence-alert {
+  margin: 0 0 9px;
+  border-left: 2px solid var(--mo-border-strong, #5f6871);
+  padding: 6px 8px;
+  color: var(--mo-text-secondary, #98a4af);
+  background: var(--mo-surface-raised, #141a20);
+  font-size: var(--mo-font-xs, 10px);
+  line-height: 1.45;
+}
+
+.evidence-alert.is-stale {
+  border-color: var(--mo-warning, #9a8242);
+  color: var(--mo-warning, #d8c17e);
+  background: color-mix(in srgb, var(--mo-warning, #d0aa54) 8%, var(--mo-surface-raised, #141a20));
+}
+
+.evidence-block {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  border: 1px solid var(--mo-border-subtle, #29333d);
+  border-radius: var(--mo-radius-panel, 8px);
+  padding: 8px;
+  background: var(--mo-surface-raised, #11171c);
+}
+
+.compact-evidence-block { padding-block: 7px; }
+.evidence-facts { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.evidence-facts strong { color: var(--mo-text-primary, #c8d1da); font-size: var(--mo-font-xs, 10px); }
+.evidence-facts span {
+  border: 1px solid var(--mo-border-default, #2d3741);
+  border-radius: 999px;
+  padding: 3px 6px;
+  color: var(--mo-text-secondary, #9ba7b2);
+  background: var(--mo-surface-control, #172029);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.evidence-warning-list { display: grid; gap: 3px; margin-top: 6px; }
+.evidence-warning-list span { color: var(--mo-warning, #d7bf78); font-size: var(--mo-font-xs, 10px); line-height: 1.4; }
+.evidence-muted { margin: 4px 0 0; line-height: 1.45; }
+.evidence-judge { display: flex; align-items: baseline; gap: 7px; }
+.evidence-judge strong { color: var(--mo-text-primary, #cbd4dd); font-size: var(--mo-font-sm, 11px); }
+.evidence-judge span { color: var(--mo-success, #89a798); font-size: var(--mo-font-xs, 10px); }
+.evidence-block > p { margin: 0; color: var(--mo-text-secondary, #929eaa); font-size: var(--mo-font-xs, 10px); line-height: 1.5; }
+.evidence-authority-note { margin: 8px 0 0; line-height: 1.5; }

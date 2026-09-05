@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import { readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
@@ -9,11 +9,14 @@ import "../media/media.css";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
 import { ScriptWorkspace } from "../script/ScriptWorkspace";
 import "../script/script-workspace.css";
-import type { ProductionNavigationIntent, ProductionWorkspace } from "./productionNavigation";
+import type {
+  ProductionNavigationIntent,
+  ProductionSelectionContext,
+  ProductionWorkspace,
+} from "./productionNavigation";
 import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
-import "./secondary-tools-theme.css";
 import "./professional-project-workbench.css";
 import "./production-workspaces.css";
 
@@ -109,29 +112,50 @@ function pageForMaterialView(view: MaterialView): ProductionPage {
   return "slate";
 }
 
+function normalizedContext(
+  projectId: string,
+  values: Omit<ProductionSelectionContext, "projectId">,
+): ProductionSelectionContext {
+  const groupId = values.groupId?.trim();
+  const clipId = values.clipId?.trim();
+  const scriptSegmentId = values.scriptSegmentId?.trim();
+  const timelineClipId = values.timelineClipId?.trim();
+  return {
+    projectId,
+    ...(groupId ? { groupId } : {}),
+    ...(clipId ? { clipId } : {}),
+    ...(scriptSegmentId ? { scriptSegmentId } : {}),
+    ...(timelineClipId ? { timelineClipId } : {}),
+  };
+}
+
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)));
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [selection, setSelection] = useState<ProductionSelectionContext>(() => ({ projectId: project.project_id }));
   const [navigationIntent, setNavigationIntent] = useState<ProductionNavigationIntent | null>(null);
   const [deliveryRequestNonce, setDeliveryRequestNonce] = useState(0);
   const [operatorRevision, setOperatorRevision] = useState(0);
   const navigationNonce = useRef(0);
 
   const area = areaForPage(page);
+  const currentSelection = selection.projectId === project.project_id ? selection : { projectId: project.project_id };
   const currentIntent = navigationIntent?.projectId === project.project_id ? navigationIntent : null;
+
+  const updateSelection = useCallback((values: Omit<ProductionSelectionContext, "projectId">): void => {
+    setSelection(normalizedContext(project.project_id, values));
+  }, [project.project_id]);
 
   function nextIntent(
     workspace: ProductionWorkspace,
-    groupId?: string | null,
-    clipId?: string | null,
+    context: ProductionSelectionContext = currentSelection,
   ): ProductionNavigationIntent {
     navigationNonce.current += 1;
     return {
+      ...context,
       projectId: project.project_id,
       workspace,
       nonce: navigationNonce.current,
-      ...(groupId?.trim() ? { groupId: groupId.trim() } : {}),
-      ...(clipId?.trim() ? { clipId: clipId.trim() } : {}),
     };
   }
 
@@ -146,28 +170,41 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
 
   function switchArea(next: ProductionArea): void {
     if (next === area) return;
-    if (currentIntent) {
-      navigationNonce.current += 1;
-      setNavigationIntent({ ...currentIntent, workspace: next, nonce: navigationNonce.current });
-    }
+    setNavigationIntent(nextIntent(next));
     navigate(AREAS[next].defaultPage);
   }
 
   function focusTake(
     groupId: string,
-    destination: "material" | "script" | "review" | "timeline",
+    destination: ProductionWorkspace,
     clipId?: string | null,
+    scriptSegmentId?: string | null,
   ): void {
     const value = groupId.trim();
     if (!value) return;
-    setNavigationIntent(nextIntent(destination, value, clipId));
+    const context = normalizedContext(project.project_id, {
+      groupId: value,
+      clipId: clipId ?? undefined,
+      scriptSegmentId: scriptSegmentId ?? undefined,
+    });
+    setSelection(context);
+    setNavigationIntent(nextIntent(destination, context));
     navigate(destination === "material" ? "takes" : destination === "script" ? "script" : destination === "review" ? "watch" : "timeline");
   }
 
   function openReviewWithoutSelection(): void {
-    setNavigationIntent(null);
+    const context = { projectId: project.project_id };
+    setSelection(context);
+    setNavigationIntent(nextIntent("review", context));
     navigate("watch");
   }
+
+  useEffect(() => {
+    if (selection.projectId !== project.project_id) {
+      setSelection({ projectId: project.project_id });
+      setNavigationIntent(null);
+    }
+  }, [project.project_id, selection.projectId]);
 
   useEffect(() => {
     rememberProjectPage(project.project_id, page);
@@ -216,14 +253,16 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               baseUrl={baseUrl}
               project={project}
               view={materialViewForPage(page)}
-              initialGroupId={currentIntent?.groupId ?? null}
+              initialGroupId={currentSelection.groupId ?? null}
+              initialClipId={currentSelection.clipId ?? null}
+              onSelectionChange={(groupId, clipId) => updateSelection({ groupId, clipId })}
               onViewChange={(view, groupId) => {
-                if (groupId?.trim()) setNavigationIntent(nextIntent("material", groupId));
+                if (groupId?.trim()) updateSelection({ groupId });
                 navigate(pageForMaterialView(view));
               }}
-              onOpenScript={(groupId) => focusTake(groupId, "script")}
-              onOpenReview={(groupId) => groupId ? focusTake(groupId, "review") : openReviewWithoutSelection()}
-              onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}
+              onOpenScript={(groupId, clipId) => focusTake(groupId, "script", clipId)}
+              onOpenReview={(groupId, clipId) => groupId ? focusTake(groupId, "review", clipId) : openReviewWithoutSelection()}
+              onOpenTimeline={(groupId, clipId) => focusTake(groupId, "timeline", clipId)}
             />
           ) : null}
 
@@ -231,7 +270,13 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             <ScriptWorkspace
               baseUrl={baseUrl}
               project={project}
-              initialGroupId={currentIntent?.groupId ?? null}
+              initialGroupId={currentSelection.groupId ?? null}
+              initialClipId={currentSelection.clipId ?? null}
+              initialScriptSegmentId={currentSelection.scriptSegmentId ?? null}
+              onSelectionChange={(groupId, clipId, scriptSegmentId) => updateSelection({ groupId, clipId, scriptSegmentId })}
+              onOpenMaterial={(groupId, clipId) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId)}
+              onOpenReview={(groupId, clipId, scriptSegmentId) => focusTake(groupId, "review", clipId, scriptSegmentId)}
+              onOpenTimeline={(groupId, clipId, scriptSegmentId) => focusTake(groupId, "timeline", clipId, scriptSegmentId)}
             />
           ) : null}
 
@@ -241,6 +286,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               projectId={project.project_id}
               focusIntent={currentIntent?.workspace === "timeline" ? currentIntent : null}
               deliveryRequestNonce={deliveryRequestNonce}
+              onSelectionChange={(groupId, clipId, timelineClipId) => updateSelection({ groupId, clipId, timelineClipId, scriptSegmentId: currentSelection.scriptSegmentId })}
             />
           ) : null}
 
@@ -248,10 +294,12 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             <ReviewWorkspace
               baseUrl={baseUrl}
               project={project}
-              initialGroupId={currentIntent?.groupId ?? null}
-              onOpenMaterial={(groupId) => focusTake(groupId, "material")}
-              onOpenScript={(groupId) => focusTake(groupId, "script")}
-              onOpenTimeline={(groupId, clipId) => focusTake(groupId, "timeline", clipId)}
+              initialGroupId={currentSelection.groupId ?? null}
+              initialClipId={currentSelection.clipId ?? null}
+              onSelectionChange={(groupId, clipId) => updateSelection({ groupId, clipId, scriptSegmentId: currentSelection.scriptSegmentId })}
+              onOpenMaterial={(groupId, clipId) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId)}
+              onOpenScript={(groupId, clipId) => focusTake(groupId, "script", clipId, currentSelection.scriptSegmentId)}
+              onOpenTimeline={(groupId, clipId) => focusTake(groupId, "timeline", clipId, currentSelection.scriptSegmentId)}
             />
           ) : null}
         </div>

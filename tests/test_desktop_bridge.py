@@ -78,6 +78,7 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
 
 def test_desktop_project_navigation_matches_workspace_authority() -> None:
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
+    navigation = read("desktop/src/features/production/productionNavigation.ts")
     resume = read("desktop/src/app/resumeState.ts")
     library = read("desktop/src/features/projects/ProjectLibrary.tsx")
     material = read("desktop/src/features/material/MaterialWorkspace.tsx")
@@ -85,19 +86,22 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     script = read("desktop/src/features/script/ScriptWorkspace.tsx")
     script_block = read("desktop/src/features/material-script/ScriptBlock.tsx")
     review = read("desktop/src/features/review/ReviewWorkspace.tsx")
+    review_decision = read("desktop/src/features/review/ReviewDecisionPanel.tsx")
+    inspector = read("desktop/src/features/material-script/TakeInspector.tsx")
+    timeline = read("desktop/src/features/editor/TimelineWorkbench.tsx")
 
-    assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
+    assert 'export type ProductionWorkspace = "material" | "script" | "timeline" | "review"' in navigation
+    assert "export interface ProductionSelectionContext" in navigation
+    assert "export interface ProductionNavigationIntent extends ProductionSelectionContext" in navigation
+    assert "const [selection, setSelection] = useState<ProductionSelectionContext>" in workbench
     assert "MaterialWorkspace" in workbench
     assert "ScriptWorkspace" in workbench
+    assert "TimelineWorkbench" in workbench
     assert "ReviewWorkspace" in workbench
     assert "MaterialScriptWorkbench" not in workbench
-    assert 'surface="takes"' not in workbench
-    assert 'surface="script"' not in workbench
-    assert 'surface="review"' not in workbench
-    assert 'type ProductionArea = "material" | "script" | "timeline" | "review"' in workbench
     assert 'className="professional-project-toolbar"' in workbench
     assert 'aria-label="制作区域"' in workbench
-    assert 'const showSecondaryNavigation = area !== "material"' in workbench
+    assert "professional-secondary-nav" not in workbench
     for label in ("素材", "剧本", "时间线", "审阅"):
         assert f'label: "{label}"' in workbench
     for page, label in (
@@ -107,27 +111,19 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
         ("identity", "人物"),
         ("script", "剧本"),
         ("timeline", "时间线"),
-        ("delivery", "交付"),
         ("watch", "看片"),
     ):
         assert f'{{ page: "{page}", label: "{label}" }}' in workbench
     assert '{ page: "coverage", label: "覆盖"' not in workbench
-    assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
-    assert '{ page: "attention",' not in workbench
-    assert '{ page: "overview",' not in workbench
-    assert 'page === "coverage"' in resume
-    assert 'return "script"' in resume
-    assert 'page === "attention" || page === "overview"' in resume
-    assert 'return "watch"' in resume
-    assert 'page === "rough-cut" || page === "assembly"' in resume
-    assert 'return "timeline"' in resume
+    assert '{ page: "delivery", label: "交付"' not in workbench
+    assert 'page === "coverage"' in resume and 'return "script"' in resume
+    assert 'page === "attention" || page === "overview"' in resume and 'return "watch"' in resume
+    assert 'page === "rough-cut" || page === "assembly" || page === "delivery"' in resume and 'return "timeline"' in resume
     assert ">小镜</button>" in workbench
-    assert "TimelineWorkbench" in workbench
     assert "CoverageWorkbench" not in workbench
-    assert "ReviewAttentionWorkbench" not in workbench
-    assert "ProjectOverviewWorkbench" not in workbench
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
+    assert "ReviewReturnContext" not in workbench
 
     assert 'export type MaterialView = "slate" | "library" | "takes" | "people" | "repair"' in material
     assert 'aria-label="素材视图"' in material
@@ -139,8 +135,8 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     assert 'onOpenMediaBinding={() => onViewChange("repair")}' in material
     assert "setGroupPlacement" not in material
     assert "setGroupPlacement" not in material_take
-    assert "showEditorial" not in material_take
     assert "production.scriptSupervisor(project.project_id)" in material_take
+    assert "onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId)" in material_take
     assert ">在剧本中打开</button>" in material_take
     assert ">在审阅中打开</button>" in material_take
     assert ">到时间线</button>" in material_take
@@ -155,14 +151,34 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     assert 'actionLabel={mappedHere ? "查看" : "归集到此段"}' in script
     assert "connection.setGroupPlacement" in script
     assert "connection.clearGroupPlacement" in script
-    assert "onOpenCoverage" not in script
+    assert "onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId, selectedScriptSegmentId)" in script
     assert 'data-script-projection={projectionMode}' in script_block
     assert "mappedTakeIds" in script_block
     assert "candidateTakeIds" in script_block
 
-    assert "showEditorial" in review
+    assert "<ReviewDecisionPanel" in review
+    assert '{ value: "unreviewed", label: "未决定" }' in review
+    assert '{ value: "attention", label: "需关注" }' in review
     assert "setGroupPlacement" not in review
-    assert 'onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}' in workbench
+    assert 'targetKind: "group"' in review_decision
+    assert 'decide("assignment"' not in review_decision
+    assert "showEditorial" not in inspector
+    assert "EditorialDecisionPanel" not in inspector
+
+    assert "useTimelineAuthorityActions" in timeline
+    assert "<DeliveryWorkbench" in timeline
+    assert 'aria-label="时间线交付"' in timeline
+    assert "onSelectionChange?.(groupId, clipId, timelineClipId)" in timeline
+
+    for retired in (
+        "desktop/src/features/material-script/TakeEvidencePanels.tsx",
+        "desktop/src/features/material-script/editorial-inspector.css",
+        "desktop/src/features/planning/PlanningWorkbenches.tsx",
+        "desktop/src/features/planning/planning.css",
+        "desktop/src/features/production/secondary-tools-theme.css",
+    ):
+        assert not (ROOT / retired).exists()
+
     assert 'aria-label="当前项目制作导航"' not in library
     assert 'onClick={() => openPage("watch")}' not in library
     assert "制作区在项目画布顶部切换。" in library

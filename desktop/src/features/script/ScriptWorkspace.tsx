@@ -33,6 +33,12 @@ interface Props {
   baseUrl: string;
   project: ProjectSummary;
   initialGroupId?: string | null;
+  initialClipId?: string | null;
+  initialScriptSegmentId?: string | null;
+  onSelectionChange?: (groupId: string | null, clipId: string | null, scriptSegmentId: string | null) => void;
+  onOpenMaterial?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
+  onOpenReview?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
+  onOpenTimeline?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
 }
 
 const ACTOR_STORAGE_KEY = "mirrororder.desktop-v2.review-actor";
@@ -77,6 +83,17 @@ function episodeHasSegment(episode: ReviewEpisode | null, segmentId: string | nu
   return episode.scenes.some((scene) => scene.script_blocks.some((block) => block.segment_id === segmentId));
 }
 
+function findScriptBlock(episodes: ReviewEpisode[], segmentId: string | null | undefined): ReviewScriptBlock | null {
+  if (!segmentId) return null;
+  for (const episode of episodes) {
+    for (const scene of episode.scenes) {
+      const block = scene.script_blocks.find((item) => item.segment_id === segmentId);
+      if (block) return block;
+    }
+  }
+  return null;
+}
+
 function scriptBlockSearchText(sceneHeading: string, block: ReviewScriptBlock): string {
   return [sceneHeading, block.speaker, block.type, block.text, block.raw_text, ...block.issues.map((issue) => issue.label)]
     .filter(Boolean)
@@ -97,15 +114,21 @@ export function ScriptWorkspace({
   baseUrl,
   project,
   initialGroupId = null,
+  initialClipId = null,
+  initialScriptSegmentId = null,
+  onSelectionChange,
+  onOpenMaterial,
+  onOpenReview,
+  onOpenTimeline,
 }: Props) {
   const { connection, loadState, message, model, refresh } = useReviewModelSnapshot(baseUrl, project.project_id);
   const roughPlacement = useMemo(() => new RoughPlacementClient(baseUrl), [baseUrl]);
   const [activeEpisode, setActiveEpisode] = useState<number | null>(null);
   const [projectionMode, setProjectionMode] = useState<ScriptProjectionMode>("script");
   const [query, setQuery] = useState("");
-  const [selectedScriptSegmentId, setSelectedScriptSegmentId] = useState<string | null>(null);
+  const [selectedScriptSegmentId, setSelectedScriptSegmentId] = useState<string | null>(initialScriptSegmentId);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(initialGroupId);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(initialClipId);
   const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
   const [actor, setActor] = useState(storedActor);
   const [drawerOpen, setDrawerOpen] = useState(Boolean(initialGroupId));
@@ -124,33 +147,36 @@ export function ScriptWorkspace({
   const selectedEpisode = model?.episodes.find((episode) => episode.episode === activeEpisode) ?? model?.episodes[0] ?? null;
 
   const selectedBlock = useMemo(() => {
-    if (!model || !selectedScriptSegmentId) return null;
-    for (const episode of model.episodes) {
-      for (const scene of episode.scenes) {
-        const block = scene.script_blocks.find((item) => item.segment_id === selectedScriptSegmentId);
-        if (block) return block;
-      }
-    }
-    return null;
+    if (!model) return null;
+    return findScriptBlock(model.episodes, selectedScriptSegmentId);
   }, [model, selectedScriptSegmentId]);
 
   useEffect(() => {
     if (!model) return;
-    const focusKey = `${project.project_id}:${initialGroupId ?? ""}`;
-    const shouldApplyFocus = Boolean(initialGroupId) && appliedFocusKey.current !== focusKey;
-    const focused = shouldApplyFocus
+    const focusKey = `${project.project_id}:${initialGroupId ?? ""}:${initialClipId ?? ""}:${initialScriptSegmentId ?? ""}`;
+    const shouldApplyFocus = Boolean(initialGroupId || initialScriptSegmentId) && appliedFocusKey.current !== focusKey;
+    const focused = initialGroupId && shouldApplyFocus
       ? model.take_groups.find((take) => take.group_id === initialGroupId) ?? null
       : null;
+    const requestedBlock = shouldApplyFocus ? findScriptBlock(model.episodes, initialScriptSegmentId) : null;
 
-    if (focused) {
-      const segmentId = preferredScriptSegmentId(focused);
-      const episode = focused.effective_mapping.episode_ids[0] ?? takeEpisodeIds(focused)[0] ?? model.episodes[0]?.episode ?? null;
-      setSelectedGroupId(focused.group_id);
-      setSelectedClipId(focused.angles[0]?.clip_id ?? null);
+    if (focused || requestedBlock) {
+      const segmentId = requestedBlock?.segment_id ?? (focused ? preferredScriptSegmentId(focused) : null);
+      const episode = requestedBlock?.episode
+        ?? focused?.effective_mapping.episode_ids[0]
+        ?? (focused ? takeEpisodeIds(focused)[0] : null)
+        ?? model.episodes[0]?.episode
+        ?? null;
+      setSelectedGroupId(focused?.group_id ?? null);
+      setSelectedClipId(
+        focused && initialClipId && focused.angles.some((angle) => angle.clip_id === initialClipId)
+          ? initialClipId
+          : focused?.angles[0]?.clip_id ?? null,
+      );
       setActiveEpisode(episode);
-      setSelectedScriptSegmentId(segmentId);
-      setDrawerView("detail");
-      setDrawerOpen(true);
+      setSelectedScriptSegmentId(segmentId ?? firstPlaceableBlock(model.episodes.find((item) => item.episode === episode) ?? null)?.segment_id ?? null);
+      setDrawerView(focused ? "detail" : "segment");
+      setDrawerOpen(Boolean(focused));
       appliedFocusKey.current = focusKey;
       return;
     }
@@ -158,7 +184,7 @@ export function ScriptWorkspace({
     setActiveEpisode((current) => current ?? model.episodes[0]?.episode ?? null);
     setSelectedScriptSegmentId((current) => current ?? firstPlaceableBlock(model.episodes[0] ?? null)?.segment_id ?? null);
     setSelectedGroupId((current) => current && model.take_groups.some((take) => take.group_id === current) ? current : null);
-  }, [initialGroupId, model, project.project_id]);
+  }, [initialClipId, initialGroupId, initialScriptSegmentId, model, project.project_id]);
 
   useEffect(() => {
     if (!selectedEpisode) return;
@@ -174,6 +200,10 @@ export function ScriptWorkspace({
     });
     return () => globalThis.cancelAnimationFrame(frame);
   }, [activeEpisode, selectedScriptSegmentId]);
+
+  useEffect(() => {
+    onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId, selectedScriptSegmentId);
+  }, [selectedTake?.group_id, selectedClipId, selectedScriptSegmentId]);
 
   const visibleEpisode = useMemo(() => {
     if (!selectedEpisode || !model) return null;
@@ -611,6 +641,11 @@ export function ScriptWorkspace({
                 <div className="workspace-context-tabs">
                   <button type="button" onClick={() => { setDrawerView("segment"); setCandidateScope("context"); }}>返回当前剧本段</button>
                   <button type="button" className="is-active">Take 详情</button>
+                </div>
+                <div className="material-take-cross-actions script-take-cross-actions" aria-label="继续处理当前 Take">
+                  <button type="button" className="secondary" onClick={() => onOpenMaterial?.(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>在素材中打开</button>
+                  <button type="button" className="secondary" onClick={() => onOpenReview?.(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>在审阅中打开</button>
+                  <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>到时间线</button>
                 </div>
                 {selectedBlock && !selectedTakeMappedHere ? (
                   <div className="script-detail-placement-action">

@@ -7,7 +7,7 @@ import {
   type EditorialState,
   type EditorialStorePayload,
 } from "../../api/planning";
-import "../material-script/editorial-inspector.css";
+import "./review-decision.css";
 
 const STATE_LABELS: Record<string, string> = {
   best: "Best",

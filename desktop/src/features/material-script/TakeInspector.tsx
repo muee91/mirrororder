@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
+import { AuditEvidencePanel } from "./AuditEvidencePanel";
 import { CandidateEvidence } from "./CandidateEvidence";
 import { mappingLabel, mappingSourceLabel, takeDisplayLabel } from "./TakeCard";
-import { AuditEvidencePanel, EditorialDecisionPanel } from "./TakeEvidencePanels";
 import "./take-review.css";
 
 function cameraContinuityKey(value: string | undefined): string {
@@ -25,7 +25,6 @@ export function TakeInspector({
   onShowScript,
   onClearPlacement,
   writeSaving,
-  showEditorial = false,
   afterPlayback = null,
 }: {
   connection: HostConnection;
@@ -36,7 +35,6 @@ export function TakeInspector({
   onShowScript?: () => void;
   onClearPlacement?: () => void;
   writeSaving: boolean;
-  showEditorial?: boolean;
   afterPlayback?: ReactNode;
 }) {
   const angle = take?.angles.find((item) => item.clip_id === selectedClipId) ?? take?.angles[0] ?? null;
@@ -136,7 +134,6 @@ export function TakeInspector({
       ) : null}
 
       {afterPlayback}
-      {showEditorial ? <EditorialDecisionPanel baseUrl={connection.baseUrl} projectId={projectId} groupId={take.group_id} /> : null}
 
       {take.issues.length ? (
         <div className="take-inspector-statusline" aria-label={`${displayLabel} 当前问题`}>

@@ -14,10 +14,12 @@ interface Props {
   project: ProjectSummary;
   view: MaterialView;
   initialGroupId?: string | null;
+  initialClipId?: string | null;
+  onSelectionChange?: (groupId: string | null, clipId: string | null) => void;
   onViewChange: (view: MaterialView, groupId?: string) => void;
-  onOpenScript?: (groupId: string) => void;
-  onOpenReview?: (groupId?: string) => void;
-  onOpenTimeline?: (groupId: string) => void;
+  onOpenScript?: (groupId: string, clipId?: string | null) => void;
+  onOpenReview?: (groupId?: string, clipId?: string | null) => void;
+  onOpenTimeline?: (groupId: string, clipId?: string | null) => void;
 }
 
 const MATERIAL_VIEWS: Array<{ view: Exclude<MaterialView, "repair">; label: string; hint: string }> = [
@@ -34,6 +36,8 @@ export function MaterialWorkspace({
   project,
   view,
   initialGroupId = null,
+  initialClipId = null,
+  onSelectionChange,
   onViewChange,
   onOpenScript,
   onOpenReview,
@@ -101,8 +105,10 @@ export function MaterialWorkspace({
             baseUrl={baseUrl}
             project={project}
             initialGroupId={initialGroupId}
+            initialClipId={initialClipId}
+            onSelectionChange={onSelectionChange}
             onOpenScript={onOpenScript}
-            onOpenReview={(groupId) => onOpenReview?.(groupId)}
+            onOpenReview={(groupId, clipId) => onOpenReview?.(groupId, clipId)}
             onOpenTimeline={onOpenTimeline}
             onOpenRepair={() => onViewChange("repair")}
           />

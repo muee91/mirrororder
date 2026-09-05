@@ -13,6 +13,7 @@ interface Props {
   projectId: string;
   focusIntent?: ProductionNavigationIntent | null;
   deliveryRequestNonce?: number;
+  onSelectionChange?: (groupId: string | null, clipId: string | null, timelineClipId: string | null) => void;
 }
 
 export function TimelineWorkbench({
@@ -20,6 +21,7 @@ export function TimelineWorkbench({
   projectId,
   focusIntent = null,
   deliveryRequestNonce = 0,
+  onSelectionChange,
 }: Props) {
   const model = useTimelineWorkbenchModel(baseUrl, projectId);
   const timelineActions = useTimelineAuthorityActions(model);
@@ -69,6 +71,22 @@ export function TimelineWorkbench({
       model.setMessage(`${focusLabel || "当前 Take"} 暂无可用 Timeline Source；先检查本机素材绑定或建立初始顺片。`);
     }
   }, [focusIntent, focusLabel, model.review, model.sequence, model.snapshot, model.sourceOptions, projectId, sourceActions]);
+
+  useEffect(() => {
+    const timelineClip = model.selection?.clip ?? null;
+    const timelineGroupId = timelineClip?.metadata.group_id || null;
+    const sourceOption = model.sourceOption;
+    const sourceGroupId = sourceOption?.groupId || null;
+    const groupId = sourceGroupId ?? timelineGroupId;
+    const source = timelineClip && model.snapshot
+      ? model.snapshot.project.sources.find((item) => item.source_id === (timelineClip.selected_angle_source_id ?? timelineClip.source_id)) ?? null
+      : null;
+    const clipId = sourceOption?.source.clip_id ?? source?.clip_id ?? null;
+    const timelineClipId = timelineClip && (!sourceGroupId || !timelineGroupId || sourceGroupId === timelineGroupId)
+      ? timelineClip.clip_id
+      : null;
+    onSelectionChange?.(groupId, clipId, timelineClipId);
+  }, [model.selection?.clip.clip_id, model.sourceOption?.source.source_id, model.sourceOption?.groupId, model.snapshot?.authority.revision]);
 
   return (
     <div className="timeline-workspace-shell">

@@ -1,11 +1,14 @@
 export type ProductionWorkspace = "material" | "script" | "timeline" | "review";
 
-export interface ProductionNavigationIntent {
+export interface ProductionSelectionContext {
   projectId: string;
-  workspace: ProductionWorkspace;
-  nonce: number;
   groupId?: string;
   clipId?: string;
   scriptSegmentId?: string;
   timelineClipId?: string;
+}
+
+export interface ProductionNavigationIntent extends ProductionSelectionContext {
+  workspace: ProductionWorkspace;
+  nonce: number;
 }

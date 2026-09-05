@@ -16,8 +16,10 @@ interface Props {
   baseUrl: string;
   project: ProjectSummary;
   initialGroupId?: string | null;
-  onOpenMaterial?: (groupId: string) => void;
-  onOpenScript?: (groupId: string) => void;
+  initialClipId?: string | null;
+  onSelectionChange?: (groupId: string | null, clipId: string | null) => void;
+  onOpenMaterial?: (groupId: string, clipId?: string | null) => void;
+  onOpenScript?: (groupId: string, clipId?: string | null) => void;
   onOpenTimeline?: (groupId: string, clipId?: string | null) => void;
 }
 
@@ -63,6 +65,8 @@ export function ReviewWorkspace({
   baseUrl,
   project,
   initialGroupId = null,
+  initialClipId = null,
+  onSelectionChange,
   onOpenMaterial,
   onOpenScript,
   onOpenTimeline,
@@ -70,7 +74,7 @@ export function ReviewWorkspace({
   const { connection, loadState, message, model, refresh } = useReviewModelSnapshot(baseUrl, project.project_id);
   const [filter, setFilter] = useState<ReviewQueueFilter>("all");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(initialGroupId);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(initialClipId);
   const appliedFocusKey = useRef("");
 
   const counts = useMemo(() => {
@@ -104,19 +108,23 @@ export function ReviewWorkspace({
 
   useEffect(() => {
     if (!model) return;
-    const focusKey = `${project.project_id}:${initialGroupId ?? ""}`;
+    const focusKey = `${project.project_id}:${initialGroupId ?? ""}:${initialClipId ?? ""}`;
     const shouldApplyFocus = Boolean(initialGroupId) && appliedFocusKey.current !== focusKey;
     const focused = shouldApplyFocus ? model.take_groups.find((take) => take.group_id === initialGroupId) ?? null : null;
     if (focused) {
       setSelectedGroupId(focused.group_id);
-      setSelectedClipId(focused.angles[0]?.clip_id ?? null);
+      setSelectedClipId(
+        initialClipId && focused.angles.some((angle) => angle.clip_id === initialClipId)
+          ? initialClipId
+          : focused.angles[0]?.clip_id ?? null,
+      );
       appliedFocusKey.current = focusKey;
       return;
     }
     setSelectedGroupId((current) => current && model.take_groups.some((take) => take.group_id === current)
       ? current
       : model.take_groups[0]?.group_id ?? null);
-  }, [initialGroupId, model, project.project_id]);
+  }, [initialClipId, initialGroupId, model, project.project_id]);
 
   useEffect(() => {
     if (!selectedTake) {
@@ -139,6 +147,10 @@ export function ReviewWorkspace({
       setSelectedGroupId(filteredTakes[0].group_id);
     }
   }, [filteredTakes, model, selectedGroupId]);
+
+  useEffect(() => {
+    onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId);
+  }, [selectedTake?.group_id, selectedClipId]);
 
   function selectTake(take: ReviewTakeGroup): void {
     setSelectedGroupId(take.group_id);
@@ -206,8 +218,8 @@ export function ReviewWorkspace({
               </div>
               <div className="review-cross-actions" aria-label="继续处理当前 Take">
                 <span className={`review-final-state state-${finalState(selectedTake)}`}>最终 {FINAL_LABELS[finalState(selectedTake)]}</span>
-                <button type="button" className="secondary" onClick={() => onOpenMaterial?.(selectedTake.group_id)}>在素材中打开</button>
-                <button type="button" className="secondary" onClick={() => onOpenScript?.(selectedTake.group_id)}>在剧本中打开</button>
+                <button type="button" className="secondary" onClick={() => onOpenMaterial?.(selectedTake.group_id, selectedClipId)}>在素材中打开</button>
+                <button type="button" className="secondary" onClick={() => onOpenScript?.(selectedTake.group_id, selectedClipId)}>在剧本中打开</button>
                 <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId)}>到时间线</button>
               </div>
             </div>
