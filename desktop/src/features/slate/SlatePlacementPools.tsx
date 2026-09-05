@@ -162,15 +162,15 @@ export function SlatePlacementPools({ baseUrl, projectId, review, actor = "", on
       <div className="golden-placement-layout">
         <div className="golden-placement-pools">
           <Pool title="待归集" count={pools.pending.length} drop onDrop={restoreOrClear}>
-            {pools.pending.map((take) => <TakeListRow className="golden-placement-take" key={take.group_id} take={take} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} action={() => setExcluded(take, true)} actionLabel="排除" />)}
+            {pools.pending.map((take) => <TakeListRow key={take.group_id} take={take} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} action={() => setExcluded(take, true)} actionLabel="排除" />)}
             {!pools.pending.length ? <span className="golden-placement-empty">没有待归集 Take</span> : null}
           </Pool>
           <Pool title="已归集" count={pools.placed.length}>
-            {pools.placed.map((take) => <TakeListRow className="golden-placement-take" key={take.group_id} take={take} detail={placementLabel(take, targets)} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} />)}
+            {pools.placed.map((take) => <TakeListRow key={take.group_id} take={take} detail={placementLabel(take, targets)} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} />)}
             {!pools.placed.length ? <span className="golden-placement-empty">没有人工归集 Take</span> : null}
           </Pool>
           <Pool title="已排除" count={pools.excluded.length}>
-            {pools.excluded.map((take) => <TakeListRow className="golden-placement-take" key={take.group_id} take={take} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} action={() => setExcluded(take, false)} actionLabel="恢复" />)}
+            {pools.excluded.map((take) => <TakeListRow key={take.group_id} take={take} onSelect={() => onSelectTake?.(take.group_id)} onDragStart={beginDrag} action={() => setExcluded(take, false)} actionLabel="恢复" />)}
             {!pools.excluded.length ? <span className="golden-placement-empty">没有 Review 排除项</span> : null}
           </Pool>
           <Pool title="孤立素材" count={pools.orphan.length}>

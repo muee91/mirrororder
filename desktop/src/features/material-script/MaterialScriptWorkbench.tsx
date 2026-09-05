@@ -7,7 +7,9 @@ import {
   type ReviewScriptBlock,
   type ReviewTakeGroup,
 } from "../../api/host";
+import { reviewTakeAttention } from "../review/reviewAttention";
 import { ScriptEpisodeView, dragGroupId, scriptDomId } from "./ScriptEpisodeView";
+import { takeDisplayLabel } from "./TakeCard";
 import { TakeInspector } from "./TakeInspector";
 import { DRAG_TAKE_MIME, VirtualTakeList, episodeLabel } from "./VirtualTakeList";
 import {
@@ -34,6 +36,7 @@ type WriteState = "idle" | "saving" | "error";
 const ACTOR_STORAGE_KEY = "mirrororder.desktop-v2.review-actor";
 const STATUS_OPTIONS: Array<{ value: TakeStatusFilter; label: string }> = [
   { value: "all", label: "全部" },
+  { value: "attention", label: "需关注" },
   { value: "candidate", label: "AI/算法候选" },
   { value: "pending", label: "待归集" },
   { value: "placed", label: "已归集" },
@@ -95,7 +98,7 @@ export function MaterialScriptWorkbench({
   useEffect(() => {
     let cancelled = false;
     setLoadState("loading");
-    setMessage("正在读取 Python Core 的 review.v1 投影…");
+    setMessage("正在读取审阅状态…");
     setWriteMessage("");
     void connection.reviewModel(project.project_id).then((next) => {
       if (cancelled) return;
@@ -108,7 +111,7 @@ export function MaterialScriptWorkbench({
       setMaterialEpisode(null);
       setStatusFilter("all");
       setLoadState("ready");
-      setMessage(`review.v1 · analysis ${next.revisions.analysis || "—"} · review r${next.revisions.review}`);
+      setMessage(`已载入 ${next.take_groups.length} Take · ${next.episodes.length} 集`);
     }).catch((error: unknown) => {
       if (cancelled) return;
       setLoadState("error");
@@ -130,6 +133,7 @@ export function MaterialScriptWorkbench({
   // truncate this authority-bearing navigation for presentation convenience.
   const episodeButtons = model?.episodes ?? [];
   const selectedEpisode = model?.episodes.find((item) => item.episode === activeEpisode) ?? model?.episodes[0] ?? null;
+  const statusOptions = showEditorial ? STATUS_OPTIONS : STATUS_OPTIONS.filter((option) => option.value !== "attention");
   const filteredTakes = useMemo(
     () => model?.take_groups.filter((take) => takeMatchesFilters(take, statusFilter, materialEpisode)) ?? [],
     [materialEpisode, model, statusFilter],
@@ -138,8 +142,11 @@ export function MaterialScriptWorkbench({
     ? model?.take_groups.find((item) => item.group_id === selectedGroupId) ?? null
     : null;
   const statusCounts = useMemo(() => {
-    const counts = { candidate: 0, pending: 0, placed: 0, rejected: 0 };
-    for (const take of model?.take_groups ?? []) counts[takeStatus(take)] += 1;
+    const counts = { attention: 0, candidate: 0, pending: 0, placed: 0, rejected: 0 };
+    for (const take of model?.take_groups ?? []) {
+      counts[takeStatus(take)] += 1;
+      if (reviewTakeAttention(take).hasAttention) counts.attention += 1;
+    }
     return counts;
   }, [model]);
 
@@ -177,6 +184,11 @@ export function MaterialScriptWorkbench({
     setTab("material");
   }
 
+  function displayGroup(groupId: string): string {
+    const take = model?.take_groups.find((item) => item.group_id === groupId) ?? null;
+    return take ? takeDisplayLabel(take) : "Take";
+  }
+
   function beginDrag(event: DragEvent<HTMLElement>, groupId: string): void {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData(DRAG_TAKE_MIME, groupId);
@@ -190,7 +202,7 @@ export function MaterialScriptWorkbench({
     const refreshed = next.take_groups.find((item) => item.group_id === groupId) ?? null;
     setSelectedGroupId(refreshed?.group_id ?? null);
     setSelectedClipId((current) => refreshed?.angles.some((item) => item.clip_id === current) ? current : refreshed?.angles[0]?.clip_id ?? null);
-    setMessage(`review.v1 · analysis ${next.revisions.analysis || "—"} · review r${next.revisions.review}`);
+    setMessage(`已更新 · ${next.take_groups.length} Take · ${next.episodes.length} 集`);
     setWriteState("idle");
     setWriteMessage(summary);
   }
@@ -203,7 +215,7 @@ export function MaterialScriptWorkbench({
       return;
     }
     setWriteState("saving");
-    setWriteMessage("正在写入 review.json 人工归集…");
+    setWriteMessage("正在写入人工归集…");
     saveActor(actor);
     try {
       await connection.setGroupPlacement(project.project_id, {
@@ -216,9 +228,10 @@ export function MaterialScriptWorkbench({
         sourceSurface: surface,
         sourceClipId: groupId === selectedGroupId ? selectedClipId ?? undefined : undefined,
       });
+      const label = displayGroup(groupId);
       const summary = segmentIds.length
-        ? `已人工归集 ${groupId} → ${segmentIds.join(", ")}`
-        : `已人工粗归集 ${groupId} → ${episodeIds.map(episodeLabel).join(" / ")}`;
+        ? `已人工归集 ${label} → ${segmentIds.join(", ")}`
+        : `已人工粗归集 ${label} → ${episodeIds.map(episodeLabel).join(" / ")}`;
       await refreshAfterWrite(groupId, summary);
     } catch (error) {
       setWriteState("error");
@@ -226,7 +239,7 @@ export function MaterialScriptWorkbench({
         try {
           const latest = await connection.reviewModel(project.project_id);
           setModel(latest);
-          setWriteMessage(`Review 已变化，已刷新到 r${latest.revisions.review}；请重新拖放。`);
+          setWriteMessage("审阅状态已变化并刷新；请重新拖放。");
         } catch {
           setWriteMessage(errorMessage(error));
         }
@@ -254,14 +267,14 @@ export function MaterialScriptWorkbench({
         expectedRevision: model.revisions.review,
         sourceSurface: "desktop-v2-material",
       });
-      await refreshAfterWrite(selectedTake.group_id, `已清除 ${selectedTake.group_id} 的人工 placement；自动状态未改动。`);
+      await refreshAfterWrite(selectedTake.group_id, `已清除 ${takeDisplayLabel(selectedTake)} 的人工归集；自动状态未改动。`);
     } catch (error) {
       setWriteState("error");
       if (reviewWriteNeedsRefresh(error)) {
         try {
           const latest = await connection.reviewModel(project.project_id);
           setModel(latest);
-          setWriteMessage(`Review 已变化，已刷新到 r${latest.revisions.review}；请重新操作。`);
+          setWriteMessage("审阅状态已变化并刷新；请重新操作。");
         } catch {
           setWriteMessage(errorMessage(error));
         }
@@ -284,7 +297,7 @@ export function MaterialScriptWorkbench({
     <section className="material-script-workbench">
       <div className="workbench-heading phase2-heading">
         <div><p className="eyebrow">项目</p><h2>{project.name || project.project_id}</h2></div>
-        <div className="workbench-revision"><code>{project.project_id}</code><span>{model.take_groups.length} Take · {model.episodes.length} 集</span></div>
+        <div className="workbench-revision"><span>{model.take_groups.length} Take · {model.episodes.length} 集</span></div>
       </div>
       <nav className="workbench-tabs" aria-label="素材剧本工作台">
         <button type="button" className={tab === "material" ? "is-active" : ""} onClick={() => setTab("material")}>素材</button>
@@ -296,7 +309,7 @@ export function MaterialScriptWorkbench({
         <div className="take-workbench">
           <div className="material-controls">
             <div className="status-filter">
-              {STATUS_OPTIONS.map((option) => (
+              {statusOptions.map((option) => (
                 <button type="button" className={statusFilter === option.value ? "is-active" : ""} key={option.value} onClick={() => setStatusFilter(option.value)}>
                   {option.label} <span>{option.value === "all" ? model.take_groups.length : statusCounts[option.value]}</span>
                 </button>
@@ -318,7 +331,7 @@ export function MaterialScriptWorkbench({
               >{episodeLabel(episode.episode)}</button>
             ))}
           </div>
-          <div className={`write-status write-${writeState}`}>{writeMessage || "拖到集数=粗归集；剧本页可精确归集。"}</div>
+          <div className={`write-status write-${writeState}`}>{writeMessage || (showEditorial ? "“需关注”汇总问题、过期证据、未归集与尚待裁决的团队意见；筛选本身不会修改任何人工决定。" : "拖到集数=粗归集；剧本页可精确归集。")}</div>
           <div className="material-layout">
             <div className="take-list-column">
               {filteredTakes.length ? (
@@ -358,7 +371,7 @@ export function MaterialScriptWorkbench({
           <div className="script-placement-tray">
             {selectedTake ? (
               <div className="selected-take-drag" draggable onDragStart={(event) => beginDrag(event, selectedTake.group_id)} onDragEnd={() => setDraggingGroupId(null)}>
-                当前 Take · <strong>{selectedTake.group_id}</strong> <span>拖到集数或剧本段</span>
+                当前 Take · <strong>{takeDisplayLabel(selectedTake)}</strong> <span>拖到集数或剧本段</span>
               </div>
             ) : <span>先在素材页选择一个 Take。</span>}
           </div>

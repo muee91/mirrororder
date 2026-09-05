@@ -44,8 +44,8 @@ describe("project presentation model", () => {
   it("surfaces attention consistently", () => {
     const result = projectPresentation(project({ groups: 8, clips: 24, missing_media: 2, script_gap_blocks: 1 }));
     expect(result.statusTone).toBe("attention");
-    expect(result.statusLabel).toBe("3 待处理");
-    expect(result.sidebarSubtitle).toBe("8 Take · 3 待处理");
+    expect(result.statusLabel).toBe("3 需关注");
+    expect(result.sidebarSubtitle).toBe("8 Take · 3 需关注");
   });
 
   it("lets active background work override static stats while it is actually running", () => {

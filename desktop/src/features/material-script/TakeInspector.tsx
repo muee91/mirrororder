@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation } from "../media/cameraPresentation";
+import { reviewTakeAttention } from "../review/reviewAttention";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { CandidateEvidence } from "./CandidateEvidence";
 import { mappingLabel, mappingSourceLabel, takeDisplayLabel } from "./TakeCard";
@@ -68,6 +69,7 @@ export function TakeInspector({
   if (!take) return <aside className="take-inspector"><div className="player-empty">当前项目没有 Take。</div></aside>;
 
   const displayLabel = takeDisplayLabel(take);
+  const attention = showEditorial ? reviewTakeAttention(take) : null;
 
   return (
     <aside className="take-inspector">
@@ -89,6 +91,16 @@ export function TakeInspector({
           ))}
           {take.issues.length > 2 ? <span className="take-inspector-issue-overflow">+{take.issues.length - 2}</span> : null}
         </div>
+      ) : null}
+
+      {attention?.hasAttention ? (
+        <section className="take-attention-summary" aria-label={`${displayLabel} 需关注`}>
+          <div className="take-attention-heading"><strong>需关注</strong><span>{attention.labels.length} 项</span></div>
+          <div className="take-attention-labels">
+            {attention.labels.slice(0, 4).map((label) => <span key={label}>{label}</span>)}
+          </div>
+          {attention.context ? <p>{attention.context}</p> : null}
+        </section>
       ) : null}
 
       <div className="inspector-actions">

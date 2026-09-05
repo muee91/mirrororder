@@ -15,7 +15,7 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).not.toContain("RoughCutWorkbench");
     expect(workbench).not.toContain("AssemblyWorkbench");
     expect(workbench).toContain('{ page: "timeline", label: "剪辑工作台" }');
-    expect(workbench).toContain('page === "rough-cut" || page === "assembly" ? "timeline" : page');
+    expect(workbench).toContain('if (page === "rough-cut" || page === "assembly") return "timeline";');
     expect(workbench).toContain('label: "剪辑"');
     expect(workbench).toContain("professional-project-toolbar");
     expect(workbench).toContain("readProjectPage");
@@ -36,12 +36,11 @@ describe("Swift golden product fidelity", () => {
 
   it("restores the multicam slate workflow rather than only its column labels", () => {
     const slate = source("./GoldenSlateWorkbench.tsx");
+    const row = source("./SlateRow.tsx");
+    const takeCard = source("../material-script/TakeCard.tsx");
     const css = source("./golden-slate.css");
+    for (const label of ["A 机", "B 机", "C 机", "辅助 / 特殊"]) expect(row).toContain(label);
     for (const label of [
-      "A 机",
-      "B 机",
-      "C 机",
-      "辅助 / 特殊",
       "加入 Take / 镜头",
       "团队审阅",
       "同场下一条",
@@ -54,8 +53,11 @@ describe("Swift golden product fidelity", () => {
       "第 {selected.episode} 集候选",
       "− 移除",
     ]) expect(slate).toContain(label);
+    expect(takeCard).toContain("takeCameraSlots");
+    expect(takeCard).toContain("STABLE_CAMERA_SLOTS.map");
+    expect(takeCard).toContain("data-camera-tone={slot.tone}");
     expect(slate).toContain("golden-take-picker");
-    expect(slate).toContain("golden-status-control");
+    expect(row).toContain("golden-status-control");
     expect(slate).toContain("removeAttachment");
     expect(slate).toContain("onDragDropEvent");
     expect(slate).toContain("slateMedia.resolveDrop");
@@ -98,6 +100,7 @@ describe("Swift golden product fidelity", () => {
 
   it("keeps visible Slate order, scene identity, row numbering and delete semantics aligned", () => {
     const slate = source("./GoldenSlateWorkbench.tsx");
+    const row = source("./SlateRow.tsx");
     expect(slate).toContain("function sceneOrderValue");
     expect(slate).toContain("draft.scene.trim() || draft.script_scene_id.trim()");
     expect(slate).toContain("function displayOrder");
@@ -106,7 +109,7 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("displayedDrafts[visualIndex - 1]");
     expect(slate).toContain("script_scene_id: previous.script_scene_id");
     expect(slate).toContain("const rowNumber = displayIndex >= 0 ? displayIndex + 1 : 0");
-    expect(slate).toContain("placeholder={mappedScenePlaceholder}");
+    expect(row).toContain("placeholder={row.mappedScenePlaceholder}");
     expect(slate).toContain("selected.scene || selected.script_scene_id || \"—\"");
     expect(slate).toContain("requestDeleteSelected");
     expect(slate).toContain("globalThis.confirm(prompt)");

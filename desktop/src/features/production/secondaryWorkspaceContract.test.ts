@@ -26,7 +26,7 @@ describe("project production workspace product contract", () => {
     expect(workbench).toContain('className="professional-project-toolbar"');
     expect(workbench).toContain('aria-label="制作区域"');
     expect(workbench).toContain('className="professional-secondary-nav"');
-    expect(workbench).toContain('areaDefinition.pages.filter((item) => item.page !== "media-binding")');
+    expect(workbench).toContain("const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);");
 
     const editArea = workbench.slice(workbench.indexOf("edit: {"), workbench.indexOf("review: {"));
     expect(editArea).toContain('{ page: "timeline", label: "剪辑工作台" }');
@@ -38,7 +38,7 @@ describe("project production workspace product contract", () => {
   it("uses shared semantic tokens and resolved Desktop theme authority", () => {
     const experience = read("./product-experience.css");
     const production = read("./production.css");
-    const review = read("../review/review.css");
+    const review = read("../material-script/take-review.css");
     const mediaLibrary = read("../media/media-library.css");
     const planning = read("../planning/planning.css");
     const timeline = read("../editor/timeline.css");
@@ -79,8 +79,8 @@ describe("project production workspace product contract", () => {
     const projectWorkbench = read("./ProjectWorkbench.tsx");
     const mediaLibrary = read("../media/MediaLibraryWorkbench.tsx");
 
-    expect(projectWorkbench).toContain('{ page: "media-binding", label: "本机素材" }');
-    expect(projectWorkbench).toContain('areaDefinition.pages.filter((item) => item.page !== "media-binding")');
+    expect(projectWorkbench).toContain('{ page: "media-binding", label: "本机素材", hidden: true }');
+    expect(projectWorkbench).toContain("const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);");
     expect(projectWorkbench).toContain('onOpenMediaBinding={() => navigate("media-binding")}');
     expect(mediaLibrary).toContain("onOpenMediaBinding?: () => void");
     expect(mediaLibrary).not.toContain('import { MediaBindingWorkbench }');

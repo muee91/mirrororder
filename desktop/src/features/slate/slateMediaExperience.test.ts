@@ -16,12 +16,11 @@ describe("golden slate media experience", () => {
   });
 
   it("uses the shared camera presentation for take evidence instead of raw camera text", () => {
-    const workbench = source("./GoldenSlateWorkbench.tsx");
-    expect(workbench).toContain('import { cameraPresentation } from "../media/cameraPresentation"');
-    expect(workbench).toContain("golden-take-picker-angles");
-    expect(workbench).toContain("golden-take-angle");
-    expect(workbench).toContain("data-camera-tone={camera.tone}");
-    expect(workbench).toContain('cameraPresentation(angle.camera || "?")');
+    const takeCard = source("../material-script/TakeCard.tsx");
+    expect(takeCard).toContain('import { cameraPresentation, STABLE_CAMERA_SLOTS, type CameraTone } from "../media/cameraPresentation"');
+    expect(takeCard).toContain("takeCameraSlots");
+    expect(takeCard).toContain("data-camera-tone={slot.tone}");
+    expect(takeCard).toContain('cameraPresentation(angle.camera || "")');
   });
 
   it("recovers from a playback error without forcing a project refresh", () => {

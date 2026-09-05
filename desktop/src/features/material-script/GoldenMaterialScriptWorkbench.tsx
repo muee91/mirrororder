@@ -18,6 +18,7 @@ import {
   takeStatus,
   type TakeStatusFilter,
 } from "./model";
+import { reviewTakeAttention } from "../review/reviewAttention";
 import "./golden-material-script.css";
 
 interface Props {
@@ -28,6 +29,7 @@ interface Props {
   showEditorial?: boolean;
   onBack?: () => void;
   onOpenPrecise?: (groupId: string) => void;
+  onOpenCoverage?: () => void;
 }
 
 type WriteState = "idle" | "saving" | "error";
@@ -71,6 +73,7 @@ export function GoldenMaterialScriptWorkbench({
   showEditorial = false,
   onBack,
   onOpenPrecise,
+  onOpenCoverage,
 }: Props) {
   const connection = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const rough = useMemo(() => new RoughPlacementClient(baseUrl), [baseUrl]);
@@ -127,8 +130,17 @@ export function GoldenMaterialScriptWorkbench({
   const selectedTake = selectedGroupId ? takes.find((take) => take.group_id === selectedGroupId) ?? null : null;
   const selectedEpisode = episodes.find((episode) => episode.episode === activeEpisode) ?? episodes[0] ?? null;
   const statusCounts = useMemo(() => {
-    const counts = { candidate: 0, pending: 0, placed: 0, rejected: 0 };
-    for (const take of takes) counts[takeStatus(take)] += 1;
+    const counts: Record<Exclude<TakeStatusFilter, "all">, number> = {
+      attention: 0,
+      candidate: 0,
+      pending: 0,
+      placed: 0,
+      rejected: 0,
+    };
+    for (const take of takes) {
+      counts[takeStatus(take)] += 1;
+      if (reviewTakeAttention(take).hasAttention) counts.attention += 1;
+    }
     return counts;
   }, [takes]);
 
@@ -256,7 +268,7 @@ export function GoldenMaterialScriptWorkbench({
     return (
       <header className="golden-ms-toolbar">
         <div className="golden-ms-heading">
-          {onBack ? <button type="button" className="golden-ms-back secondary" onClick={onBack}>‹ 场记</button> : null}
+          {onBack ? <button type="button" className="golden-ms-back secondary" onClick={onBack}>‹ 场记</button> : phase === "precise" && onOpenCoverage ? <button type="button" className="golden-ms-back secondary" onClick={onOpenCoverage}>覆盖视图</button> : null}
           <div className="golden-ms-title"><p className="eyebrow">Production</p><h2>{phase === "rough" ? "镜次归集" : "剧本匹配"}</h2><span>{message}</span></div>
         </div>
         <label className="golden-ms-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="写入时必填" /></label>

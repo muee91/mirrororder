@@ -27,12 +27,14 @@ App 面向真正制作项目的人，负责：
 
 项目 Production 只保留四个一级工作区：
 
-- 素材：素材库 / Take / 人物 / 场记
-- 剧本：剧本 / 覆盖
-- 剪辑：粗剪 / 组接
-- 审阅：看片 / 待处理 / 概览
+- 素材：场记 / 素材库 / Take / 人物
+- 剧本：剧本；Coverage 是剧本内部覆盖视图
+- 剪辑：Timeline / 交付；粗剪与组接属于 Timeline proposal / preparation 语义
+- 审阅：看片；“需关注”是看片 filter，不是独立页面
 
-内部工程模块原则上只能成为二级功能或设置项。
+项目首页负责轻量 production summary，例如 Take / 素材、未归集、剧本缺口、需关注和决定完成度；它不恢复独立 Overview Dashboard。
+
+内部工程模块原则上只能成为二级功能、view/filter 或设置项。一个能力只有在产生新的用户工作类型时才应拥有新页面。
 
 ### Web — Review
 
@@ -51,15 +53,34 @@ Web 不暴露项目创建、素材目录、电子场记编辑、本地模型、F
 ## Interaction hierarchy
 
 1. 一个功能只有一个明确的“家”。上下文菜单可以提供快捷方式，但不能形成第二套控制中心。
-2. 高频动作直接显示；低频、危险和系统级动作放入 `…` 菜单或设置。
-3. 永久删除永远不是列表行常驻按钮。
-4. 项目状态和待处理项是两个维度：一个项目可以同时“已整理”且“有 18 项需处理”。
-5. 可选增强不伪装成主处理流水线的必经步骤。
-6. 普通制作界面使用制作语言：素材、Take、剧本、场记、人物、同步、转写。模型名、embedding、runtime 等实现术语只进入高级设置或诊断。
-7. 功能增长优先进入已有一级工作区的二级入口，不按代码模块数量增长导航数量。
-8. 高频专门任务可以独占中央画布；电子场记就是这种任务，不应寄生在 Take 折叠详情里。
-9. 普通读操作必须保持轻量。GET、打开页面、切换项目/素材、展开 Inspector 不得隐式触发全盘素材扫描、长时 FFmpeg 解码、模型下载/加载、整项目索引或其它可持续数秒以上的派生重建；昂贵工作必须由明确动作提交为 durable background task，进入状态中心并支持进度、失败、取消/重试。读面只消费已有派生结果、缓存和任务状态，不因为“缓存缺失”就偷偷把读请求升级成重计算。
-10. 可重建派生缓存不等于可以在读请求中随意写入。若一次刷新需要真实计算或磁盘遍历，应进入后台任务；只有有界、近似常数成本的轻量状态投影可以在读取时即时计算。
+2. 页面代表新的工作类型；Coverage、Attention、Overview、Binding、Audit、AI Matching 等能力若只是同一对象的 view/filter/tool/state，就必须依附已有对象，而不是扩张导航。
+3. 高频动作直接显示；低频、危险和系统级动作放入 `…` 菜单或设置。
+4. 永久删除永远不是列表行常驻按钮。
+5. 项目状态和需关注项是两个维度：一个项目可以同时“已整理”且“有 18 项需关注”。
+6. 可选增强不伪装成主处理流水线的必经步骤。
+7. 普通制作界面使用制作语言：素材、Take、剧本、场记、人物、同步、转写。模型名、embedding、runtime、API revision 等实现术语只进入高级设置或诊断。
+8. 功能增长优先进入已有一级工作区的二级入口、filter、Inspector 或 view，不按代码模块数量增长导航数量。
+9. 高频专门任务可以独占中央画布；电子场记就是这种任务，不应寄生在 Take 折叠详情里。
+10. 普通读操作必须保持轻量。GET、打开页面、切换项目/素材、展开 Inspector 不得隐式触发全盘素材扫描、长时 FFmpeg 解码、模型下载/加载、整项目索引或其它可持续数秒以上的派生重建；昂贵工作必须由明确动作提交为 durable background task，进入状态中心并支持进度、失败、取消/重试。读面只消费已有派生结果、缓存和任务状态，不因为“缓存缺失”就偷偷把读请求升级成重计算。
+11. 可重建派生缓存不等于可以在读请求中随意写入。若一次刷新需要真实计算或磁盘遍历，应进入后台任务；只有有界、近似常数成本的轻量状态投影可以在读取时即时计算。
+
+## Review / Attention
+
+本地审阅只有一个 Production surface：**看片**。
+
+“需关注”是看片的统一 queue/filter，允许把以下 read-model evidence 聚合到同一筛选：
+
+- Review issue；
+- Audit / analysis stale；
+- mapping stale；
+- 尚未形成有效归集；
+- Team Web 的未裁决意见、最终决定之后的新意见或意见分歧。
+
+Attention ranking 只是排序和提示，不产生新的 authority。切换“需关注”不能自动修改人工归集、Individual Opinion 或 Final Editorial Decision。
+
+当前 Take 的原因在 Inspector 内解释；不另开 Attention Workbench。
+
+旧 Overview 的价值只保留为项目首页的轻量 summary。项目首页可以显示未归集、剧本缺口、需关注和决定完成度，但不能复制一个完整 Review Dashboard，也不能提供第二套决定入口。
 
 ## Electronic Script Supervisor
 
@@ -74,6 +95,23 @@ Web 不暴露项目创建、素材目录、电子场记编辑、本地模型、F
 - “前半段”“后半段”等自然语言不能被 AI 猜成具体秒数。
 - 场记人工景别比同 clip 的 AI 景别更可信，但不能传播到其它机位。
 - 场记状态不等于 Editorial Decision；NG 不是 Delivery Reject。
+
+## Canonical production objects
+
+同一个制作对象在同一 Product Surface 内必须只有一个 canonical renderer。
+
+当前核心对象包括：
+
+- Slate Row；
+- Take Card / compact Take Row；
+- Media Card；
+- Script Block；
+- Identity Candidate Row / Person Row；
+- Timeline objects。
+
+页面只组合这些对象或适配数据。Workbench、theme、redesign、feature CSS 不得重新声明 canonical 对象的核心 anatomy、固定 geometry、slot 顺序或 selection geometry。
+
+组件自己的 stylesheet 是其 anatomy owner；页面 stylesheet 只负责 pane/grid/context layout。迁移到 canonical component 后，旧 page/theme selector 必须同步删除，不能保留“备用覆盖”。
 
 ## Visual language
 
@@ -94,7 +132,7 @@ Web 不暴露项目创建、素材目录、电子场记编辑、本地模型、F
 
 专业不等于拥挤。默认界面应高信息密度但低视觉噪音：
 
-- 列表行展示名称、制作状态、待处理项和少量关键计数。
+- 列表行展示名称、制作状态、需关注项和少量关键计数。
 - 详细证据、日志和高级控制进入 Inspector / Disclosure / Settings。
 - 同一信息不在列表、Inspector 和弹窗重复完整展示。
 - 项目左栏保持紧凑；项目详情不再重复占据中央与右侧。

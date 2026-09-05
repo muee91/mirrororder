@@ -1,0 +1,115 @@
+.mo-take-list-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  border: 1px solid var(--mo-border-default, #29333d);
+  border-radius: var(--mo-radius-pane, 4px);
+  padding: 7px 8px;
+  color: var(--mo-text-primary, #e2e8ed);
+  background: var(--mo-surface-raised, #151b20);
+  cursor: default;
+}
+
+.mo-take-list-row[draggable="true"] { cursor: grab; }
+.mo-take-list-row[draggable="true"]:active { cursor: grabbing; }
+.mo-take-list-row:hover { border-color: var(--mo-border-strong, #3a4651); background: var(--mo-surface-hover, #171f26); }
+.mo-take-list-row.state-used { opacity: .56; }
+.mo-take-list-row:focus-visible { outline: 1px solid var(--mo-accent, #6fa7e8); outline-offset: 1px; box-shadow: var(--mo-focus-ring, 0 0 0 2px rgba(111, 167, 232, .34)); }
+
+.mo-take-list-core { display: grid; min-width: 0; gap: 5px; }
+.mo-take-list-heading { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mo-take-list-heading strong {
+  overflow: hidden;
+  color: var(--mo-text-primary, #e2e8ed);
+  font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--mo-font-sm, 11px);
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mo-take-list-heading > span {
+  flex: 0 0 auto;
+  color: var(--mo-text-muted, #778590);
+  font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--mo-font-xs, 10px);
+  font-variant-numeric: tabular-nums;
+}
+
+.mo-take-list-cameras {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 3px;
+  align-items: stretch;
+}
+.mo-take-list-camera {
+  display: grid;
+  min-width: 0;
+  height: 22px;
+  grid-template-columns: auto auto;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--mo-border-subtle, #202830);
+  border-radius: 3px;
+  padding: 0 3px;
+  color: var(--mo-text-muted, #778590);
+  background: var(--mo-surface-app, #0b0f13);
+}
+.mo-take-list-camera strong {
+  overflow: hidden;
+  font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--mo-font-xs, 10px);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mo-take-list-camera em { color: var(--mo-text-disabled, #56626c); font-size: var(--mo-font-xs, 10px); font-style: normal; }
+.mo-take-list-camera.has-media { color: var(--mo-text-secondary, #a6b1ba); background: var(--mo-surface-control, #11171c); }
+.mo-take-list-camera.has-media em { color: var(--mo-success, #65bb87); }
+.mo-take-list-camera.is-empty { opacity: .62; }
+.mo-take-list-camera-overflow {
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 3px;
+  color: var(--mo-text-muted, #778590);
+  background: var(--mo-surface-control, #11171c);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.mo-take-list-detail { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; align-items: center; }
+.mo-take-list-detail > span {
+  overflow: hidden;
+  color: var(--mo-text-secondary, #a6b1ba);
+  font-size: var(--mo-font-xs, 10px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mo-take-list-detail > small {
+  color: var(--mo-text-muted, #778590);
+  font-size: var(--mo-font-xs, 10px);
+  white-space: nowrap;
+}
+.mo-take-list-row.take-status-rejected .mo-take-list-detail > small { color: var(--mo-danger, #d66f6f); }
+.mo-take-list-row.take-status-placed .mo-take-list-detail > small { color: var(--mo-success, #65bb87); }
+
+.mo-take-list-action {
+  align-self: stretch;
+  min-width: 42px;
+  min-height: 28px;
+  border-color: var(--mo-border-default, #29333d);
+  padding: 4px 6px;
+  color: var(--mo-text-secondary, #a6b1ba);
+  background: var(--mo-surface-control, #11171c);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+@media (max-width: 1180px) {
+  .mo-take-list-row { padding-inline: 7px; }
+  .mo-take-list-detail > small { display: none; }
+}

@@ -17,6 +17,7 @@ MirrorOrder 是专业影视后期 Production 软件，不是 AI Dashboard、模�
 3. **高密度、低噪音**：信息密度来自行高、列宽、Split View、Inspector 和渐进披露，不来自 7–9px 小字。
 4. **统一行为，不统一模板**：Focus、Selection、Status、Camera、Toolbar、Inspector、Dialog 等交互语法统一；场记、素材、剧本、审阅、剪辑保留各自专业工作区结构。
 5. **人类 authority 清晰**：AI 只提供线索、候选和证据，不用视觉权重伪装成人工决定。
+6. **对象 renderer 单一 ownership**：固定 production object 的 anatomy 只能由 canonical component + component stylesheet 定义；Workbench、page、theme、redesign CSS 只能负责上下文布局或 semantic token，不得重新接管对象 geometry。
 
 ## 2. Non-negotiable rules
 
@@ -34,6 +35,8 @@ MirrorOrder 是专业影视后期 Production 软件，不是 AI Dashboard、模�
 - 表格列、时间码列、数字列使用稳定宽度与 tabular numerals。
 - 可拖拽区域必须有明确抓取对象和明确目标反馈，不能让整个页面都成为模糊 drop zone。
 - 危险操作不得作为列表/卡片永久主按钮。
+- 同一 Product Surface 内，同一 production object 只能有一个 canonical renderer。
+- canonical renderer 的核心 anatomy、固定尺寸、slot 顺序、selection geometry 不得被 page/theme/redesign stylesheet 覆盖。
 
 ## 3. Product shell and navigation
 
@@ -55,18 +58,18 @@ Global Sidebar 只承载长期上下文与全局功能：
 
 项目内保留四个稳定 Area：
 
-- 素材：场记 / 素材库 / Take / 人物
-- 剧本：剧本 / 覆盖
-- 剪辑：粗剪 / 组接 / 时间线 / 交付
-- 审阅：看片 / 待处理 / 概览
+- 素材：场记 / 素材库 / Take / 人物；本机素材是隐藏修复工具
+- 剧本：剧本；Coverage 是 Script 内部覆盖视图，不是常驻 peer page
+- 剪辑：Timeline / 交付；粗剪 / 组接是 Timeline proposal / preparation 语义，不建立第二 editor
+- 审阅：看片；“需关注”是 Watch filter，旧“待处理”不再是 Workbench；Overview 摘要进入 Project Home
 
-Area 使用稳定 segmented navigation；当前 Area 的二级对象使用低噪声 secondary navigation。
+Area 使用稳定 segmented navigation。只有存在多个正式工作对象时才显示 secondary navigation；view/filter/tool 不为了“看起来对称”而升级为页面。
 
 ### 3.3 Toolbar rule
 
 Toolbar 只保留当前工作对象的高频动作。
 
-禁止将“去另一个页面”长期当作 Toolbar 主动作。页面导航应由正式导航承担。
+禁止将“去另一个页面”长期当作 Toolbar 主动作。页面导航应由正式导航承担；Coverage 等对象内 view 可以由 contextual action 打开，但不能因此成为平级产品页。
 
 每个工作区 Toolbar 建议最多：
 
@@ -97,6 +100,8 @@ Toolbar 只保留当前工作对象的高频动作。
 - popover/dialog radius: `8px`
 - status pill: `999px`，仅短语义状态
 - divider: `1px`
+
+这些是 token / primitive 级参考。若 canonical component 已定义自己的对象 anatomy，页面/theme 不得利用全局 selector 再覆盖它的几何结构。
 
 ### 4.3 Split pane
 
@@ -236,6 +241,8 @@ MirrorOrder 不使用一个万能 `Card`。每个对象族必须有独立组件�
 
 Take Card 不能直接复用 Media Card 视觉；Media 是成员，Take 是组。
 
+Compact Take Row 与 Take Card 属于同一 Take component family，必须由同一 canonical owner 定义；Slate picker、placement pools 等 consumer 不得用本地 descendant selector 重画 compact Take anatomy。
+
 ### 7.3 Slate Row
 
 Slate Row 不是 Card。
@@ -269,13 +276,22 @@ Slate Row 不是 Card。
 
 用途：人物/声纹/演员候选。
 
-固定：
+固定 anatomy：
 
-- portrait / avatar slot；
-- display name；
-- evidence count / confidence；
-- confirmation state；
-- 人工确认操作。
+1. portrait / avatar slot；
+2. display name + candidate/human authority copy；
+3. evidence count / confidence；
+4. confirmation state；
+5. 人工确认操作在 Inspector，不把危险/低频动作塞进每行。
+
+`IdentityCandidateRow` 与 `PersonRow` 是 canonical Identity row renderer；`IdentityPortrait` 是同一 component family 的固定 portrait slot。
+
+**Style ownership：**
+
+- `IdentityRows.tsx` 负责对象 DOM anatomy；
+- `identity-rows.css` 负责 row / copy / meta / portrait geometry、typography、selection 和 responsive anatomy；
+- `identity-workbench.css` 只负责列表、Inspector、evidence 和 pane layout；
+- app redesign/theme CSS 不得再声明 `.identity-row`、`.identity-row-copy`、`.identity-row-meta`、`.identity-portrait` 的结构规则。
 
 不得将人物候选、已确认人物和“未知人物”只靠颜色区分。
 
@@ -287,10 +303,10 @@ Project 是导航/管理对象，默认用 List Row，不使用大 Dashboard Car
 
 - project name；
 - lightweight production status；
-- attention count；
+- attention count / unmapped / script gaps 等少量制作摘要；
 - current activity marker。
 
-低频操作进入 context menu。
+Project Row 可以承接旧 Overview 的轻量数据，但不能扩张成 KPI Dashboard。低频操作进入 context menu。
 
 ### 7.7 Task Row
 
@@ -417,25 +433,33 @@ Grid 与 List 使用同一 Camera identity 和 selected state。
 
 精确归集：左边是 Script segment target。
 
+Coverage 是 Script 的只读覆盖 view，不建立 parallel Script workbench。
+
 Selection Thread 必须贯穿：
 
 `Episode → Scene → Segment → Take → Camera → Viewer / Inspector`
 
 拖拽目标只在合法 target 上高亮。
 
-### 10.4 Review — Review Queue + Player
+### 10.4 Review — Watch + Attention Filter
 
 主循环：
 
 `Watch → Judge → Comment/Opinion → Next`
 
-顶部只保留：项目 / 集数 / reviewer / connection / search / pending filter。
+本地 Review 只有一个 Production surface：Watch/看片。
+
+顶部/列表筛选可以包含“需关注”，该 filter 汇总 issue、stale evidence、未归集和团队未裁决意见；原因在当前 Take Inspector 解释。Attention ranking 不能写入 authority。
+
+Overview 不作为 Review peer page；轻量 production summary 进入 Project Home。
+
+顶部只保留：项目 / 集数 / reviewer / connection / search / filter。
 
 人物、建议、刷新等次级工具进入 secondary actions / overflow。
 
 ### 10.5 Timeline / Assembly
 
-未来/现有剪辑工作区遵循 NLE 语法：
+剪辑工作区遵循 NLE 语法：
 
 - Viewer / Canvas；
 - Timeline tracks；
@@ -445,7 +469,7 @@ Selection Thread 必须贯穿：
 - timecode；
 - markers。
 
-不要复用列表卡片模板代替 Timeline 对象。
+粗剪 / 组接属于 Timeline 上的 proposal / preparation，不建立第二套 authoritative edit state。不要复用列表卡片模板代替 Timeline 对象。
 
 ## 11. Inspector contract
 
@@ -566,7 +590,8 @@ Camera identity、decision control、player controls 在所有断点保持可用
 1. 将现有 feature CSS 替换为 semantic tokens；
 2. 删除重复 override；
 3. v2 最终从“最后加载的修补层”收敛成基础 token/primitives；
-4. workspace CSS 只描述各自独特 layout，不重新发明全局 button/card/status。
+4. workspace CSS 只描述各自独特 layout，不重新发明全局 button/card/status；
+5. canonical component 完成迁移后，旧 page/theme/redesign 对其 anatomy 的 selector 必须删除，而不是留作兼容覆盖。
 
 ### 16.3 Semantic components
 
@@ -574,8 +599,11 @@ Camera identity、decision control、player controls 在所有断点保持可用
 
 - `CameraBadge`
 - `CameraSlot`
-- `MediaCard`
-- `TakeCard`
+- `MirrorOrderMediaCard`
+- `TakeCard / TakeListRow`
+- `SlateRow / SlateTableHead`
+- `ScriptBlock`
+- `IdentityCandidateRow / PersonRow / IdentityPortrait`
 - `SlateStatusControl`
 - `ConnectionIndicator`
 - `TaskStatus`
@@ -597,6 +625,9 @@ Camera identity、decision control、player controls 在所有断点保持可用
 6. Web responsive breakpoints 不回退。
 7. status family 禁止直接复用 Slate status 作为 Editorial Decision。
 8. MediaCard optional state 不改变核心 grid columns。
+9. Take compact anatomy 只能由 `take-card.css` 所有；Slate/page stylesheet 不得重建。
+10. Identity row / portrait anatomy 只能由 `identity-rows.css` 所有；Workbench/redesign stylesheet 不得重建。
+11. Review 保持单一 Watch production surface；Attention 是 filter，Overview 摘要进入 Project Home。
 
 ## 18. Acceptance checklist
 
@@ -616,6 +647,8 @@ Camera identity、decision control、player controls 在所有断点保持可用
 - 不出现无意义 Card/Pill 堆叠；
 - 不出现 AI 装饰性发光；
 - 不出现同一个动作在三处不同 UI 重复；
+- 不出现为 view/filter/summary 人为新增的平级页面；
+- canonical production object 不被 page/theme/redesign CSS 改写 anatomy；
 - Desktop 与 Web 共享 semantic grammar，但保持不同任务密度。
 
 ## 19. Migration priority
@@ -623,7 +656,7 @@ Camera identity、decision control、player controls 在所有断点保持可用
 ### P0 — correctness and visual invariants
 
 - Camera identity + A/B/C/AUX slot contract
-- MediaCard / TakeCard anatomy
+- MediaCard / TakeCard / SlateRow / ScriptBlock / Identity row anatomy ownership
 - Slate column alignment
 - status family split
 - typography floor
@@ -631,7 +664,10 @@ Camera identity、decision control、player controls 在所有断点保持可用
 
 ### P1 — product shell
 
-- restore four Production Areas
+- four Production Areas
+- Coverage → Script view
+- Attention → Watch filter
+- Overview → Project Home summary
 - Current Operator / reviewer identity model
 - Toolbar reduction
 - Inspector contract
@@ -641,14 +677,12 @@ Camera identity、decision control、player controls 在所有断点保持可用
 - Slate
 - Media Browser List/Grid
 - Material/Script
-- Web Review
+- Watch/Review
+- Timeline
 
 ### P3 — remaining professional surfaces
 
 - Identity
-- Coverage
-- Rough Cut / Assembly
-- Timeline
 - Delivery
 - Status Center
 - Settings

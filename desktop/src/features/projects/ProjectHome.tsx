@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
-import { HostConnectionError } from "../../api/host";
+import { HostConnection, HostConnectionError } from "../../api/host";
 import { collectProjectPackage, projectTransferAvailable, saveProjectCopy } from "../../app/projectTransferActions";
+import { reviewProjectSummary, type ReviewProjectSummary } from "../review/reviewAttention";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
 import { projectPresentation } from "./projectPresentation";
@@ -53,11 +54,33 @@ export function ProjectHome({
   const [menu, setMenu] = useState<HomeMenuState | null>(null);
   const [actionMessage, setActionMessage] = useState("");
   const [transferBusy, setTransferBusy] = useState(false);
+  const [reviewSummaries, setReviewSummaries] = useState<Record<string, ReviewProjectSummary>>({});
   const visible = useMemo(() => {
     const value = query.trim().toLowerCase();
     if (!value) return workspace.projects;
     return workspace.projects.filter((project) => `${project.name} ${project.project_id}`.toLowerCase().includes(value));
   }, [query, workspace.projects]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const host = new HostConnection(baseUrl);
+    void Promise.all(workspace.projects.map(async (project) => {
+      try {
+        const summary = reviewProjectSummary(await host.reviewModel(project.project_id));
+        return [project.project_id, summary] as const;
+      } catch {
+        return [project.project_id, null] as const;
+      }
+    })).then((rows) => {
+      if (cancelled) return;
+      const next: Record<string, ReviewProjectSummary> = {};
+      for (const [projectId, summary] of rows) {
+        if (summary) next[projectId] = summary;
+      }
+      setReviewSummaries(next);
+    });
+    return () => { cancelled = true; };
+  }, [baseUrl, workspace.projects]);
 
   useEffect(() => {
     if (!menu) return;
@@ -133,7 +156,9 @@ export function ProjectHome({
         <div className="project-home-list" aria-label="项目列表">
           {visible.map((project) => {
             const activity = activities[project.project_id];
-            const presentation = projectPresentation(project, activity);
+            const review = reviewSummaries[project.project_id];
+            const presentation = projectPresentation(project, activity, review);
+            const reviewedDecisions = review ? review.bestCount + review.keepCount + review.rejectCount : 0;
             return (
               <article
                 className={`project-home-card status-${presentation.statusTone}`}
@@ -155,7 +180,15 @@ export function ProjectHome({
                 >
                   <span className="project-home-project-copy">
                     <span className="project-home-title-row"><strong>{project.name || project.project_id}</strong><small>{presentation.kind}</small></span>
-                    <span className="project-home-stats"><span>{presentation.takes} Take</span><span>{presentation.clips} 素材</span></span>
+                    <span className="project-home-stats">
+                      <span>{presentation.takes} Take</span>
+                      <span>{presentation.clips} 素材</span>
+                      {review?.unmappedCount ? <span className="needs-attention">{review.unmappedCount} 未归集</span> : null}
+                      {review?.scriptGapCount ? <span className="needs-attention">{review.scriptGapCount} 剧本缺口</span> : null}
+                      {review && !review.attentionCount && !review.unmappedCount && !review.scriptGapCount
+                        ? <span>{review.unreviewedCount ? `${review.unreviewedCount} 未决定` : `已决定 ${reviewedDecisions}`}</span>
+                        : null}
+                    </span>
                   </span>
                   <span className={`project-home-state status-${presentation.statusTone}`}>
                     {activity?.state === "active" ? <span className="project-activity-spinner" aria-hidden="true" /> : <span className="project-home-state-dot" aria-hidden="true" />}

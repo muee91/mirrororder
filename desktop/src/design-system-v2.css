@@ -286,10 +286,7 @@ input, textarea, select {
   background: var(--mo-surface-pane);
 }
 .golden-take-picker > header input,
-.golden-take-picker-list span,
-.golden-take-picker-list small,
 .golden-take-picker-empty { font-size: var(--mo-font-sm); }
-.golden-take-picker-list > button { border-radius: 4px; }
 
 /* Inspector should read as a contextual pane, never as a second navigation system. */
 .golden-slate-inspector,
@@ -298,8 +295,9 @@ input, textarea, select {
 .golden-inspector-media > header strong { font-size: var(--mo-font-sm); }
 .golden-slate-player { border-radius: 4px; }
 
-/* Controls and overlays share a compact desktop radius scale. */
-:where(.production-panel, .parse-preview, .identity-row, .assistant-item, .occurrence-row, .take-card, .take-inspector, .script-scene) {
+/* Controls and overlays share a compact desktop radius scale. Canonical production-object
+ * renderers own their own anatomy/radius and are deliberately excluded here. */
+:where(.production-panel, .parse-preview, .assistant-item, .occurrence-row, .take-card, .take-inspector, .script-scene) {
   border-radius: var(--mo-radius-pane);
 }
 

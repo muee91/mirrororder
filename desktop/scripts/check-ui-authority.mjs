@@ -92,6 +92,29 @@ assert(cssImports.includes("./design-system-v2.css"), "Design System v2 must rem
 const sourceTsxFiles = listFiles("src", new Set([".tsx"]));
 const sourceCssFiles = listFiles("src", new Set([".css"]));
 
+const projectWorkbench = read("src/features/production/ProjectWorkbench.tsx");
+const resumeState = read("src/app/resumeState.ts");
+assert(projectWorkbench.includes('review: {\n    label: "审阅",\n    defaultPage: "watch",\n    pages: [\n      { page: "watch", label: "看片" },\n    ],'), "Review must remain one production surface; attention/overview are not standalone pages");
+assert(!projectWorkbench.includes("ReviewAttentionWorkbench"), "Attention must not return as a standalone production workbench");
+assert(!projectWorkbench.includes("ProjectOverviewWorkbench"), "Project overview must not return as a standalone review workbench");
+assert(projectWorkbench.includes('{ page: "media-binding", label: "本机素材", hidden: true }'), "Media binding must stay a hidden repair tool, not a primary production page");
+assert(projectWorkbench.includes("visibleAreaPages.length > 1"), "Single-page production areas must not render redundant secondary navigation");
+assert(resumeState.includes('if (page === "attention" || page === "overview") return "watch";'), "Legacy attention/overview resume routes must collapse into Review");
+
+const forbiddenContextTakeSelectors = [
+  ".golden-take-picker-list > button",
+  ".golden-take-picker-list strong",
+  ".golden-take-picker-list span",
+  ".golden-take-picker-list small",
+  ".golden-episode-candidates > button",
+];
+for (const relativePath of sourceCssFiles) {
+  const source = read(relativePath);
+  for (const selector of forbiddenContextTakeSelectors) {
+    assert(!source.includes(selector), `${relativePath} must not style canonical compact Take anatomy through ${selector}`);
+  }
+}
+
 const canonicalRenderers = [
   ["MirrorOrderMediaCard", "src/features/media/MirrorOrderMediaCard.tsx"],
   ["TakeCard", "src/features/material-script/TakeCard.tsx"],
@@ -99,6 +122,8 @@ const canonicalRenderers = [
   ["ScriptBlock", "src/features/material-script/ScriptBlock.tsx"],
   ["IdentityCandidateRow", "src/features/identity/IdentityRows.tsx"],
   ["PersonRow", "src/features/identity/IdentityRows.tsx"],
+  ["SlateRow", "src/features/slate/SlateRow.tsx"],
+  ["SlateTableHead", "src/features/slate/SlateRow.tsx"],
 ];
 for (const [symbol, ownerPath] of canonicalRenderers) {
   assertCanonicalDefinition(symbol, ownerPath, sourceTsxFiles);
@@ -155,6 +180,14 @@ const takeCard = read("src/features/material-script/TakeCard.tsx");
 assert(takeCard.includes("export function TakeCard"), "TakeCard must remain an independently importable canonical renderer");
 assert(takeCard.includes("export function TakeListRow"), "TakeListRow must remain owned beside the canonical TakeCard");
 assert(takeCard.includes("STABLE_CAMERA_SLOTS"), "TakeCard must consume the shared camera slot definition");
+assert(takeCard.includes('import "./take-card.css"'), "canonical Take renderers must own their compact stylesheet import");
+assert(takeCard.includes('data-ui-authority="take-compact"'), "TakeListRow must expose the canonical compact Take authority marker");
+assert(!takeCard.includes("className?: string;"), "TakeListRow must not expose arbitrary className styling escape hatches");
+const compactTakeStyleOwners = sourceCssFiles.filter((relativePath) => read(relativePath).includes(".mo-take-list-"));
+assert(
+  compactTakeStyleOwners.length === 1 && compactTakeStyleOwners[0] === "src/features/material-script/take-card.css",
+  `compact Take styling must have one owner; found ${compactTakeStyleOwners.length ? compactTakeStyleOwners.join(", ") : "none"}`,
+);
 
 const virtualTakeList = read("src/features/material-script/VirtualTakeList.tsx");
 assert(!/\bfunction\s+TakeCard\b/.test(virtualTakeList), "VirtualTakeList must not hide a second TakeCard implementation");
@@ -164,6 +197,24 @@ assert(virtualTakeList.includes('from "./TakeCard"'), "VirtualTakeList must cons
 const slatePlacementPools = read("src/features/slate/SlatePlacementPools.tsx");
 assert(slatePlacementPools.includes("TakeListRow"), "SlatePlacementPools must consume the canonical compact Take renderer");
 assert(!/\bfunction\s+TakeCard\b/.test(slatePlacementPools), "SlatePlacementPools must not reintroduce a second TakeCard implementation");
+assert(!slatePlacementPools.includes("golden-placement-take"), "SlatePlacementPools must not style Take rows through a local card class");
+
+const slateRow = read("src/features/slate/SlateRow.tsx");
+assert(slateRow.includes("export const SLATE_CAMERA_COLUMNS"), "SlateRow must own the fixed A/B/C/AUX camera column contract");
+assert(slateRow.includes("export const SLATE_COLUMN_KEYS"), "SlateRow must own the fixed ledger column order");
+const goldenSlate = read("src/features/slate/GoldenSlateWorkbench.tsx");
+assert(goldenSlate.includes('from "./SlateRow"'), "GoldenSlateWorkbench must consume the canonical SlateRow renderer");
+assert(!goldenSlate.includes("<td className=\"col-"), "GoldenSlateWorkbench must not own SlateRow table cells");
+assert(!goldenSlate.includes("<th className=\"col-"), "GoldenSlateWorkbench must not own Slate column headers");
+assert(!goldenSlate.includes("SlateStatusIndicator"), "Slate status placement must remain inside the canonical SlateRow");
+assert(goldenSlate.includes('from "../material-script/TakeCard"'), "GoldenSlateWorkbench must consume the canonical compact Take renderer");
+assert((goldenSlate.match(/<TakeListRow\b/g) ?? []).length >= 2, "Slate Take picker and episode candidates must both use TakeListRow");
+assert(!goldenSlate.includes("golden-take-angle"), "GoldenSlateWorkbench must not hand-render camera chips for Take candidates");
+assert(!goldenSlate.includes("cameraPresentation("), "GoldenSlateWorkbench must not rebuild compact Take camera presentation locally");
+const goldenSlateCss = read("src/features/slate/golden-slate.css");
+assert(!goldenSlateCss.includes(".golden-take-picker-list > button"), "Golden Slate CSS must not reclaim compact Take row anatomy in the picker");
+assert(!goldenSlateCss.includes(".golden-take-picker-list strong"), "Golden Slate CSS must not style canonical Take descendants through broad picker selectors");
+assert(!goldenSlateCss.includes(".golden-episode-candidates > button"), "Golden Slate CSS must not reclaim compact Take row anatomy in episode candidates");
 
 const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
 assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
@@ -174,11 +225,29 @@ assert(!scriptEpisode.includes('className={`script-block'), "ScriptEpisodeView m
 const identityRows = read("src/features/identity/IdentityRows.tsx");
 assert(identityRows.includes("export function IdentityCandidateRow"), "IdentityCandidateRow must remain independently importable");
 assert(identityRows.includes("export function PersonRow"), "PersonRow must remain independently importable");
+assert(identityRows.includes('import "./identity-rows.css"'), "canonical Identity rows must own their stylesheet import");
+assert(identityRows.includes('data-ui-authority="identity-row"'), "Identity rows must expose the canonical row authority marker");
 assert(identityRows.includes('data-authority="candidate"'), "identity candidates must expose evidence/candidate authority");
 assert(identityRows.includes('data-authority="human"'), "confirmed people must expose human authority");
 const identityWorkbench = read("src/features/identity/IdentityWorkbench.tsx");
 assert(identityWorkbench.includes('from "./IdentityRows"'), "IdentityWorkbench must consume canonical identity rows");
 assert(!identityWorkbench.includes('className={`identity-row'), "IdentityWorkbench must not hide another identity row renderer");
+const identityWorkbenchCss = read("src/features/identity/identity-workbench.css");
+for (const selector of [".identity-row {", ".identity-row-copy", ".identity-row-meta", ".identity-portrait"]) {
+  assert(!identityWorkbenchCss.includes(selector), `identity-workbench.css must not own canonical Identity anatomy through ${selector}`);
+}
+const workspaceRedesignCss = read("src/app/mirrororder-workspaces-redesign.css");
+for (const selector of [".identity-row {", ".identity-workbench .identity-row", ".identity-row-copy", ".identity-row-meta", ".identity-avatar"]) {
+  assert(!workspaceRedesignCss.includes(selector), `mirrororder-workspaces-redesign.css must not reclaim canonical Identity anatomy through ${selector}`);
+}
+const identityAnatomyOwners = sourceCssFiles.filter((relativePath) => {
+  const source = read(relativePath);
+  return source.includes(".identity-row-copy") || source.includes(".identity-row-meta") || source.includes(".identity-portrait");
+});
+assert(
+  identityAnatomyOwners.length === 1 && identityAnatomyOwners[0] === "src/features/identity/identity-rows.css",
+  `Identity row/portrait anatomy must have one stylesheet owner; found ${identityAnatomyOwners.length ? identityAnatomyOwners.join(", ") : "none"}`,
+);
 
 const angleEvidence = read("src/features/material-script/AngleEvidenceCard.tsx");
 assert(angleEvidence.includes("MirrorOrderMediaCard"), "AngleEvidenceCard must remain a data adapter over the canonical MediaCard renderer");

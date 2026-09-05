@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { IdentityRow } from "../../api/production";
+import "./identity-rows.css";
 
 export function identityKindLabel(row: IdentityRow): string {
   return row.kind === "speaker" ? "声纹" : "人物";
@@ -44,7 +45,7 @@ export function IdentityPortrait({
   }, [row.identity_id, row.updated_at]);
 
   return (
-    <span className={`identity-portrait ${large ? "is-large" : ""} is-${row.kind}`}>
+    <span className={`identity-portrait ${large ? "is-large" : ""} is-${row.kind}`} data-ui-authority="identity-portrait">
       {available ? (
         <img
           src={portraitUrl(baseUrl, projectId, row.identity_id)}
@@ -75,6 +76,7 @@ export function IdentityCandidateRow({ baseUrl, projectId, row, index, selected,
     <button
       type="button"
       className={`identity-row identity-candidate-row ${selected ? "is-selected" : ""}`}
+      data-ui-authority="identity-row"
       data-authority="candidate"
       onClick={onSelect}
       aria-pressed={selected}
@@ -99,6 +101,7 @@ export function PersonRow({ baseUrl, projectId, row, index, selected, onSelect }
     <button
       type="button"
       className={`identity-row person-row ${selected ? "is-selected" : ""}`}
+      data-ui-authority="identity-row"
       data-authority="human"
       onClick={onSelect}
       aria-pressed={selected}

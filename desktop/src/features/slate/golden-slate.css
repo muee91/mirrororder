@@ -25,12 +25,6 @@
 .golden-take-picker > header strong { color: #dbe2e7; font-size: 11px; }
 .golden-take-picker > header input { min-width: 0; height: 28px; border: 1px solid #303944; border-radius: 6px; padding: 0 8px; color: #d7dfe5; background: #0b1014; font-size: 10px; }
 .golden-take-picker-list { display: grid; max-height: 430px; gap: 4px; overflow-y: auto; padding: 7px; }
-.golden-take-picker-list > button { display: grid; grid-template-columns: 42px minmax(0,1fr); gap: 2px 8px; width: 100%; border-color: #29323a; padding: 8px 9px; color: #aeb9c2; background: #151b20; text-align: left; }
-.golden-take-picker-list > button:hover { border-color: #496179; background: #18222c; }
-.golden-take-picker-list > button.is-used { opacity: .55; }
-.golden-take-picker-list strong { grid-row: 1 / 3; color: #dfe6eb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
-.golden-take-picker-list span { overflow: hidden; color: #aab5be; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.golden-take-picker-list small { overflow: hidden; color: #6f7c87; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .golden-take-picker-empty { padding: 18px; color: #6e7b85; text-align: center; font-size: 10px; }
 
 .golden-slate-body { display: grid; min-height: 0; grid-template-columns: minmax(0,1fr); }
@@ -100,10 +94,6 @@
 .golden-episode-candidates { display: grid; gap: 5px; margin: 0 12px 10px; border: 1px solid rgba(87,150,223,.22); border-radius: 7px; padding: 8px; background: rgba(87,150,223,.06); }
 .golden-episode-candidates > header { display: flex; align-items: center; justify-content: space-between; color: #84919c; font-size: 9px; }
 .golden-episode-candidates > header strong { color: #a9bfd4; font-size: 10px; }
-.golden-episode-candidates > button { display: grid; grid-template-columns: 34px auto minmax(0,1fr); gap: 6px; align-items: center; width: 100%; border-color: #2b3946; padding: 6px 7px; color: #9aa7b1; background: #121b23; text-align: left; }
-.golden-episode-candidates > button strong { color: #d7dfe5; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
-.golden-episode-candidates > button span { color: #7fa4c8; font-size: 9px; }
-.golden-episode-candidates > button small { overflow: hidden; color: #6e7b85; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 
 .golden-inspector-media { display: grid; gap: 8px; margin: 0 12px 10px; }
 .golden-inspector-media > header { display: flex; align-items: center; justify-content: space-between; color: #6f7c87; font-size: 9px; }
@@ -171,6 +161,5 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
   .golden-slate-table input:hover, .golden-slate-table input:focus { border-color: #c9d2da; background: #fff; }
   .golden-slate-empty-media { border-color: #d7dee4; color: #7b8791; background: #f3f5f7; }
   .golden-take-picker { border-color: #cdd6de; background: #fff; }
-  .golden-take-picker-list > button, .golden-episode-candidates > button { border-color: #d7dee4; color: #45525c; background: #f8fafb; }
   .golden-slate-review-tools { background: #f4f6f8; }
 }

@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_PATH = ROOT / "src/script_organizer/identity_api_runtime.py"
 UI_PATH = ROOT / "desktop/src/features/identity/IdentityWorkbench.tsx"
 IDENTITY_ROWS_PATH = ROOT / "desktop/src/features/identity/IdentityRows.tsx"
-CSS_PATH = ROOT / "desktop/src/features/identity/identity-workbench.css"
+WORKBENCH_CSS_PATH = ROOT / "desktop/src/features/identity/identity-workbench.css"
+IDENTITY_ROWS_CSS_PATH = ROOT / "desktop/src/features/identity/identity-rows.css"
 
 
 def _load_runtime():
@@ -173,7 +174,8 @@ def test_decorated_identity_rows_keep_paths_server_side():
 def test_identity_ui_uses_face_portraits_and_existing_camera_cards():
     ui = UI_PATH.read_text(encoding="utf-8")
     rows_ui = IDENTITY_ROWS_PATH.read_text(encoding="utf-8")
-    css = CSS_PATH.read_text(encoding="utf-8")
+    workbench_css = WORKBENCH_CSS_PATH.read_text(encoding="utf-8")
+    rows_css = IDENTITY_ROWS_CSS_PATH.read_text(encoding="utf-8")
     runtime = RUNTIME_PATH.read_text(encoding="utf-8")
 
     assert "MirrorOrderMediaCard" in ui
@@ -182,9 +184,11 @@ def test_identity_ui_uses_face_portraits_and_existing_camera_cards():
     assert 'from "./IdentityRows"' in ui
     assert "IdentityCandidateRow" in rows_ui
     assert "PersonRow" in rows_ui
+    assert 'import "./identity-rows.css"' in rows_ui
     assert "portrait_available" in rows_ui
     assert "/portrait" in rows_ui
-    assert "identity-portrait" in css
-    assert "@container" in css
+    assert "identity-portrait" in rows_css
+    assert "@container" in rows_css
+    assert "identity-portrait" not in workbench_css
     assert '"full_frame_portrait_fallback": False' in runtime
     assert 'portable_example.pop("source_frame_path", None)' in runtime

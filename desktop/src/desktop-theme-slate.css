@@ -2,6 +2,9 @@
  * Golden Slate must follow the resolved Desktop theme, not the OS media query.
  * This file loads after feature CSS so manual Light/Dark remains authoritative
  * even when macOS is using the opposite appearance.
+ *
+ * Compact Take anatomy is intentionally excluded: TakeListRow owns its own
+ * theme-aware geometry and typography in take-card.css.
  */
 
 html[data-mirrororder-theme="light"] .golden-slate-workbench { color: #27323b; background: #f7f8fa; }
@@ -52,13 +55,6 @@ html[data-mirrororder-theme="light"] .golden-slate-empty-media { border-color: #
 html[data-mirrororder-theme="light"] .golden-take-picker { border-color: #cdd6de; background: #fff; }
 html[data-mirrororder-theme="light"] .golden-take-picker > header { border-color: #d7dee4; }
 html[data-mirrororder-theme="light"] .golden-take-picker > header strong { color: #26313a; }
-html[data-mirrororder-theme="light"] .golden-take-picker-list > button,
-html[data-mirrororder-theme="light"] .golden-episode-candidates > button { border-color: #d7dee4; color: #45525c; background: #f8fafb; }
-html[data-mirrororder-theme="light"] .golden-take-picker-list > button:hover { border-color: #aebbc7; background: #eef4f8; }
-html[data-mirrororder-theme="light"] .golden-take-picker-list strong,
-html[data-mirrororder-theme="light"] .golden-episode-candidates > button strong { color: #26313a; }
-html[data-mirrororder-theme="light"] .golden-take-picker-list span { color: #596773; }
-html[data-mirrororder-theme="light"] .golden-take-picker-list small,
 html[data-mirrororder-theme="light"] .golden-take-picker-empty { color: #74818c; }
 html[data-mirrororder-theme="light"] .golden-angle-editor,
 html[data-mirrororder-theme="light"] .golden-inspector-link { border-color: #dfe5ea; }
@@ -108,14 +104,7 @@ html[data-mirrororder-theme="dark"] .golden-slate-empty-media { border-color: #2
 html[data-mirrororder-theme="dark"] .golden-take-picker { border-color: #35414c; background: #11171c; }
 html[data-mirrororder-theme="dark"] .golden-take-picker > header { border-color: #29323a; }
 html[data-mirrororder-theme="dark"] .golden-take-picker > header strong { color: #dbe2e7; }
-html[data-mirrororder-theme="dark"] .golden-take-picker-list > button { border-color: #29323a; color: #aeb9c2; background: #151b20; }
-html[data-mirrororder-theme="dark"] .golden-take-picker-list > button:hover { border-color: #496179; background: #18222c; }
-html[data-mirrororder-theme="dark"] .golden-take-picker-list strong { color: #dfe6eb; }
-html[data-mirrororder-theme="dark"] .golden-take-picker-list span { color: #aab5be; }
-html[data-mirrororder-theme="dark"] .golden-take-picker-list small,
 html[data-mirrororder-theme="dark"] .golden-take-picker-empty { color: #6f7c87; }
-html[data-mirrororder-theme="dark"] .golden-episode-candidates > button { border-color: #2b3946; color: #9aa7b1; background: #121b23; }
-html[data-mirrororder-theme="dark"] .golden-episode-candidates > button strong { color: #d7dfe5; }
 html[data-mirrororder-theme="dark"] .golden-angle-editor,
 html[data-mirrororder-theme="dark"] .golden-inspector-link { border-color: #28313a; }
 html[data-mirrororder-theme="dark"] button.danger-subtle { border-color: #533636; color: #d58b8b; background: transparent; }

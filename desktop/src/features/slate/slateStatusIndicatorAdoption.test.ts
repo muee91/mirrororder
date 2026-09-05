@@ -7,14 +7,14 @@ function source(relative: string): string {
 
 describe("Slate editable status indicator adoption", () => {
   it("renders the shared SlateStatusIndicator while keeping direct select editing", () => {
-    const workbench = source("./GoldenSlateWorkbench.tsx");
-    expect(workbench).toContain('import { SlateStatusIndicator } from "../../components/StatusIndicators"');
-    expect(workbench).toContain('<SlateStatusIndicator state={draft.status} />');
-    expect(workbench).toContain('select value={draft.status} aria-label={`第 ${rowNumber} 条状态`}');
-    expect(workbench).not.toContain('className={`golden-status-control status-${draft.status}`}');
-    expect(workbench).not.toContain('className="status-dot"');
-    expect(workbench).not.toContain('className="status-label"');
-    expect(workbench).not.toContain("function statusLabel(status: SlateStatus)");
+    const row = source("./SlateRow.tsx");
+    expect(row).toContain('import { SlateStatusIndicator } from "../../components/StatusIndicators"');
+    expect(row).toContain("<SlateStatusIndicator state={row.status} />");
+    expect(row).toContain('select value={row.status} aria-label={`第 ${row.rowNumber} 条状态`}');
+    expect(row).not.toContain('className={`golden-status-control status-${row.status}`}');
+    expect(row).not.toContain('className="status-dot"');
+    expect(row).not.toContain('className="status-label"');
+    expect(row).not.toContain("function statusLabel(status: SlateStatus)");
   });
 
   it("keeps the select hit target full-size without changing the status column geometry", () => {

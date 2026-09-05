@@ -100,7 +100,8 @@ describe("startup and production resume product contract", () => {
     expect(workbench).toContain("rememberProjectPage(project.project_id, page)");
     expect(resume).toContain('const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"');
     expect(resume).toContain("VALID_PROJECT_PAGES.has(value)");
-    expect(resume).toContain('return page === "rough-cut" || page === "assembly" ? "timeline" : page');
+    expect(resume).toContain('if (page === "rough-cut" || page === "assembly") return "timeline";');
+    expect(resume).toContain('if (page === "attention" || page === "overview") return "watch";');
     expect(resume).toContain("return canonicalProductionPage(value as ProductionPage)");
     expect(resume).toContain("storage.setItem(projectPageKey(id), canonicalProductionPage(page))");
   });

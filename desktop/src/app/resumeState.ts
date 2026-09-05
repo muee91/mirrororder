@@ -46,7 +46,9 @@ function normalized(value: unknown): string {
 }
 
 export function canonicalProductionPage(page: ProductionPage): ProductionPage {
-  return page === "rough-cut" || page === "assembly" ? "timeline" : page;
+  if (page === "rough-cut" || page === "assembly") return "timeline";
+  if (page === "attention" || page === "overview") return "watch";
+  return page;
 }
 
 export function loadAppResume(storage: StorageLike | null = browserStorage()): AppResumeState {

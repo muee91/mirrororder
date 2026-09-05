@@ -11,14 +11,9 @@
 .golden-placement-pool > header strong { color: #9da8b1; font-size: 8px; }
 .golden-placement-pool > header span { min-width: 18px; border-radius: 999px; padding: 1px 5px; color: #788590; background: #1c242b; font-size: 7px; text-align: center; }
 .golden-placement-pool > div { display: grid; align-content: start; gap: 5px; max-height: 260px; overflow-y: auto; padding: 6px; }
-.golden-placement-take, .golden-placement-orphan { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 5px; border: 1px solid #29323b; border-radius: 6px; padding: 6px 7px; color: #cbd3d9; background: #141b20; }
-.golden-placement-take { cursor: grab; }
-.golden-placement-take:hover { border-color: #3a4651; background: #182028; }
-.golden-placement-take > div, .golden-placement-orphan { min-width: 0; }
-.golden-placement-take strong, .golden-placement-orphan strong { display: block; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-.golden-placement-take span, .golden-placement-orphan span { display: block; overflow: hidden; margin-top: 2px; color: #6f7c87; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
-.golden-placement-take button { border-color: #343e47; padding: 3px 5px; color: #9ba7b0; background: #10161a; font-size: 7px; }
-.golden-placement-orphan { display: grid; }
+.golden-placement-orphan { display: grid; min-width: 0; gap: 2px; border: 1px solid #29323b; border-radius: 6px; padding: 6px 7px; color: #cbd3d9; background: #141b20; }
+.golden-placement-orphan strong { display: block; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.golden-placement-orphan span { display: block; overflow: hidden; color: #6f7c87; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
 .golden-placement-empty { padding: 10px 6px; color: #5f6d78; font-size: 8px; text-align: center; }
 .golden-placement-targets { overflow: hidden; border: 1px solid #28313a; border-radius: 7px; background: #10161b; }
 .golden-placement-targets > header { display: grid; gap: 2px; border-bottom: 1px solid #273039; padding: 7px 8px; }
@@ -39,6 +34,6 @@
   .golden-placement-workbench { background: #f5f7f9; }
   .golden-placement-pool, .golden-placement-targets { border-color: #d7dee4; background: #fff; }
   .golden-placement-pool > header, .golden-placement-targets > header { border-color: #e0e5e9; }
-  .golden-placement-take, .golden-placement-orphan, .golden-placement-targets button { border-color: #d8e0e6; color: #2e3942; background: #f7f9fa; }
-  .golden-placement-take:hover, .golden-placement-targets button:hover:not(:disabled) { border-color: #aac6e6; background: #edf5ff; }
+  .golden-placement-orphan, .golden-placement-targets button { border-color: #d8e0e6; color: #2e3942; background: #f7f9fa; }
+  .golden-placement-targets button:hover:not(:disabled) { border-color: #aac6e6; background: #edf5ff; }
 }

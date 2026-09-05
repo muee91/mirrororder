@@ -55,7 +55,7 @@ describe("Desktop UI polish contract", () => {
     const library = read("../features/projects/ProjectLibrary.tsx");
     const css = read("../features/projects/project-home.css");
 
-    expect(home).toContain("projectPresentation(project, activity)");
+    expect(home).toContain("projectPresentation(project, activity, review)");
     expect(library).toContain("projectPresentation(project, activity)");
     expect(home).not.toContain("function projectStatus(");
     expect(library).not.toContain("function projectSubtitle(");
