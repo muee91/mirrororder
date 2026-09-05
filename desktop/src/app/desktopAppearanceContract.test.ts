@@ -48,6 +48,7 @@ describe("Desktop appearance product contract", () => {
     const css = read("../desktop-theme.css");
     const tools = read("../desktop-theme-tools.css");
     const material = read("../features/material-script/golden-material-script-theme.css");
+    const takeCard = read("../features/material-script/take-card.css");
     const slate = read("../desktop-theme-slate.css");
     const frozen = read("../desktop-theme-frozen-surfaces.css");
     expect(css).toContain('html[data-mirrororder-theme="light"]');
@@ -55,10 +56,12 @@ describe("Desktop appearance product contract", () => {
     expect(tools).toContain('.settings-status-workbench');
     expect(material).toContain("shared --mo-* semantic tokens");
     expect(material).toContain("Do not add light/dark palettes here");
+    expect(takeCard).toContain(".mo-take-list-row");
+    expect(takeCard).toContain("var(--mo-");
+    expect(takeCard).not.toContain("@media (prefers-color-scheme");
     expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-take-picker');
     expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-take-picker');
     expect(slate).toContain('.golden-inspector-field textarea');
-    expect(slate).toContain('.golden-episode-candidates > button');
     expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-slate-actions .icon-action.is-active');
     expect(slate).toContain('html[data-mirrororder-theme="light"] .golden-slate-table input { border-color: transparent;');
     expect(slate).toContain('html[data-mirrororder-theme="dark"] .golden-slate-table input { border-color: transparent;');

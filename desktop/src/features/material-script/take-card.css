@@ -62,12 +62,12 @@
 .mo-take-list-camera strong {
   overflow: hidden;
   font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 9px;
+  font-size: var(--mo-font-xs, 10px);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mo-take-list-camera em { color: var(--mo-text-disabled, #56626c); font-size: 8px; font-style: normal; }
+.mo-take-list-camera em { color: var(--mo-text-disabled, #56626c); font-size: var(--mo-font-xs, 10px); font-style: normal; }
 .mo-take-list-camera.has-media { color: var(--mo-text-secondary, #a6b1ba); background: var(--mo-surface-control, #11171c); }
 .mo-take-list-camera.has-media em { color: var(--mo-success, #65bb87); }
 .mo-take-list-camera.is-empty { opacity: .62; }
@@ -79,7 +79,7 @@
   border-radius: 3px;
   color: var(--mo-text-muted, #778590);
   background: var(--mo-surface-control, #11171c);
-  font-size: 9px;
+  font-size: var(--mo-font-xs, 10px);
 }
 
 .mo-take-list-detail { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; align-items: center; }
@@ -92,7 +92,7 @@
 }
 .mo-take-list-detail > small {
   color: var(--mo-text-muted, #778590);
-  font-size: 9px;
+  font-size: var(--mo-font-xs, 10px);
   white-space: nowrap;
 }
 .mo-take-list-row.take-status-rejected .mo-take-list-detail > small { color: var(--mo-danger, #d66f6f); }
