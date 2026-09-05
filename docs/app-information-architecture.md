@@ -1,6 +1,6 @@
 # App Product Experience Architecture
 
-> 当前产品体验 authority：2026-09-02。
+> 当前产品体验 authority：2026-09-05。
 >
 > 本文约束信息架构与产品壳层。当前 Desktop 开发入口见 [`../desktop/README.md`](../desktop/README.md)，跨层技术边界见 [`architecture/desktop-bridge.md`](./architecture/desktop-bridge.md)，视觉与交互规则见 [`ux-principles.md`](./ux-principles.md) 与 [`design-system-v2.md`](./design-system-v2.md)。
 
@@ -12,6 +12,7 @@
 - 项目是长期上下文，始终可见；
 - 每个项目有一个明确 Primary Canvas，而不是功能目录首页；
 - 复杂能力按制作对象和阶段组织，不按工程模块组织；
+- 页面只在产生新的用户工作类型时存在；Coverage、Attention、Overview 等派生能力优先成为已有对象的 view / filter / summary，而不是平级工作台；
 - Host、端口、workspace.toml、模型实现等技术细节只在恢复/设置/高级区域出现；
 - 视觉保持高密度、低噪声、Table / Split View / Inspector / Toolbar 的专业工具纪律。
 
@@ -27,6 +28,13 @@
 4. 没有页面历史的新项目默认进入 **素材 → 场记**。
 
 App 不允许用 `projects[0]` 作为隐式产品默认。
+
+历史页面恢复必须 canonicalize：
+
+- `rough-cut / assembly` → `timeline`；
+- `attention / overview` → `watch`。
+
+这只是兼容旧状态，不代表这些名称仍是独立页面。
 
 ### 恢复失败
 
@@ -54,7 +62,7 @@ Host 地址、端口和“连接已运行服务”只放在 **工作区与连接
 ┌──────────── Global Sidebar ────────────┬──────────────── Production Canvas ────────────────┐
 │ 镜序                                  │ 项目 Toolbar                                      │
 │                                       │ 素材 / 剧本 / 剪辑 / 审阅                         │
-│ 项目                                  │ 当前区二级工作对象                                 │
+│ 项目                                  │ 当前区二级工作对象 / 当前对象视图                  │
 │ · 项目 A                              │                                                    │
 │ · 项目 B                              │                 Primary Canvas                     │
 │ · 项目 C                              │                                                    │
@@ -83,7 +91,8 @@ Sidebar 只承担长期上下文与全局工具：
 
 - 项目名；
 - Take / 素材等轻量摘要；
-- 明确错误提示。
+- 需要关注的制作摘要；
+- 当前后台活动或明确错误提示。
 
 不得在 Sidebar 常驻展示路径、端口、模型名称、API revision 或后台日志。
 
@@ -104,30 +113,55 @@ Sidebar 只承担长期上下文与全局工具：
 
 默认页：**场记**
 
+正式工作对象：
+
 - 场记
 - 素材库
 - Take
 - 人物
 
+`本机素材 / 换素材盘` 是素材库关联的修复工具，不是常驻二级页面。它可以被路由到隐藏 canvas 处理设备本地绑定，但不能重新进入主导航。
+
 ### 剧本
 
-- 剧本
-- 覆盖
+正式工作对象：**剧本**。
+
+Coverage 是剧本对象的**覆盖视图**：
+
+- 从剧本工作区进入；
+- 使用同一 Script 上下文；
+- 不作为与“剧本”平级的常驻页面；
+- 只读 Coverage 不能反向成为新的 placement authority。
 
 ### 剪辑
 
-- 粗剪
-- 组接
+正式工作对象：
+
 - 时间线
 - 交付
 
+粗剪 / 组接是 Timeline 上的 proposal / preparation / view 语义，不建立第二套 authoritative editor。历史 `rough-cut / assembly` 路由统一回到 Timeline。
+
 ### 审阅
 
-- 看片
-- 待处理
-- 概览
+正式 Production surface：**看片**。
 
-一级制作区使用项目 Toolbar 中的稳定 segmented navigation；二级工作对象在其下方使用低噪声二级导航。
+看片内部承载：
+
+- 全部 Take；
+- AI / 算法候选；
+- 待归集；
+- 已归集；
+- 已排除；
+- **需关注**。
+
+“需关注”是看片的 filter / queue projection，聚合问题、stale evidence、未形成有效归集以及尚待裁决的团队意见。筛选本身不得自动修改 Review placement、Individual Opinion 或 Final Editorial Decision。
+
+旧“待处理”不再拥有独立 Workbench。
+
+旧“概览”不再拥有独立 Workbench。它有价值的轻量数据——例如 Take 数、未归集、剧本缺口、需关注计数和决定完成度——进入**项目首页 / Project Row**；详细裁决仍在看片对象内完成。
+
+一级制作区使用项目 Toolbar 中的稳定 segmented navigation；只有一个正式页面的 Area 不重复显示无意义二级导航。
 
 `Audit`、`Agent`、`IdentityIndexer`、`Coverage Graph`、`Delivery Resolver`、embedding/runtime 等工程名不得成为一级导航。
 
@@ -137,16 +171,16 @@ Sidebar 只承担长期上下文与全局工具：
 
 ### 新项目默认：电子场记
 
-电子场记恢复为项目的 Primary Canvas，而不是被降级成普通功能页。
+电子场记是项目 Primary Canvas，而不是普通 Dashboard 功能页。
 
 原因：
 
 - 它是素材、Take、剧本、拍摄事实进入后期的第一个人工生产界面；
 - Table 适合长时间、高密度扫描；
 - 多机位事实、状态、备注、可用范围都需要稳定肌肉记忆；
-- 后续 Coverage / Rough Cut / Assembly / Timeline 都消费其上下文，但不能取代它作为新项目的起点。
+- 后续 Coverage / Timeline 都消费其上下文，但不能取代它作为新项目的起点。
 
-已有项目恢复上次页面，不强制回到场记。
+已有项目恢复上次 canonical Production 页面，不强制回到场记。
 
 ### 场记空间纪律
 
@@ -176,7 +210,7 @@ Sidebar 只承担长期上下文与全局工具：
 
 ### 状态中心
 
-所有后台任务统一进入状态中心：
+所有 durable background task 统一进入状态中心：
 
 - 同步；
 - 转写；
@@ -187,7 +221,7 @@ Sidebar 只承担长期上下文与全局工具：
 - 语义索引；
 - 其它 durable tasks。
 
-Production Canvas 只展示轻量进度/失败提示，不复制完整任务控制器。
+Production Canvas 只展示轻量进度/失败提示，不复制完整任务控制器。Status Center 是 project/device durable task 的唯一全局控制面。
 
 ### 设置
 
@@ -236,7 +270,8 @@ Team Web 权限保持：
 - 清晰 selected state；
 - Toolbar 不堆 permanent buttons；
 - 主工作区不使用 KPI Dashboard、大卡片瀑布流、大面积渐变或 AI 发光视觉；
-- 右侧区域解释当前选择，不成为第二套导航。
+- 右侧区域解释当前选择，不成为第二套导航；
+- Project Home 的摘要是列表行 metadata，不恢复“概览 Dashboard”。
 
 技术实现使用 React/Tauri，但最终产品应保持 macOS 专业工具的空间纪律，并为 Windows 提供同构 Production experience。
 
@@ -247,6 +282,8 @@ Team Web 权限保持：
 - 首屏 Host/端口/Workspace launcher 大面板；
 - “制作 / 团队协作”占据 App 顶部的巨大模式切换；
 - 项目内部“设置”Tab；
+- `Coverage / 待处理 / 概览` 作为平级常驻页面；
+- 粗剪 / 组接作为第二套 Timeline authority；
 - 每个算法一个一级页面；
 - 自动选择 `projects[0]`；
 - 新项目默认 Take/素材库而不是场记；

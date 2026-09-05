@@ -1,4 +1,5 @@
 import type { ProjectSummary } from "../../api/host";
+import type { ReviewProjectSummary } from "../review/reviewAttention";
 import type { ProjectActivitySummary } from "./projectActivity";
 
 export type ProjectPresentationTone = "idle" | "ready" | "attention" | "active" | "error";
@@ -32,10 +33,11 @@ function attentionCount(project: ProjectSummary): number {
 export function projectPresentation(
   project: ProjectSummary,
   activity?: ProjectActivitySummary,
+  review?: ReviewProjectSummary,
 ): ProjectPresentation {
-  const takes = numberStat(project, "groups", "takes");
+  const takes = review?.takeCount ?? numberStat(project, "groups", "takes");
   const clips = numberStat(project, "clips", "media");
-  const attention = attentionCount(project);
+  const attention = Math.max(attentionCount(project), review?.attentionCount ?? 0);
   const kind = project.input_kind === "fcpxml" ? "FCPXML" : "素材目录";
 
   if (project.error) {
@@ -69,9 +71,9 @@ export function projectPresentation(
       takes,
       clips,
       attention,
-      statusLabel: `${attention} 待处理`,
+      statusLabel: `${attention} 需关注`,
       statusTone: "attention",
-      sidebarSubtitle: takes > 0 ? `${takes} Take · ${attention} 待处理` : `${attention} 待处理`,
+      sidebarSubtitle: takes > 0 ? `${takes} Take · ${attention} 需关注` : `${attention} 需关注`,
     };
   }
 

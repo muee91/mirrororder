@@ -7,11 +7,25 @@ function read(relative: string): string {
 }
 
 describe("MirrorOrder product surface contraction", () => {
-  it("keeps Review as one production surface", () => {
+  it("keeps Review as one production surface with attention as a watch filter", () => {
     const workbench = read("../features/production/ProjectWorkbench.tsx");
+    const watch = read("../features/material-script/MaterialScriptWorkbench.tsx");
+    const attention = read("../features/review/reviewAttention.ts");
     expect(workbench).toContain('review: {\n    label: "审阅",\n    defaultPage: "watch",\n    pages: [\n      { page: "watch", label: "看片" },\n    ],');
     expect(workbench).not.toContain("ReviewAttentionWorkbench");
     expect(workbench).not.toContain("ProjectOverviewWorkbench");
+    expect(watch).toContain('{ value: "attention", label: "需关注" }');
+    expect(watch).toContain("reviewTakeAttention(take).hasAttention");
+    expect(attention).toContain("export function reviewTakeAttention");
+  });
+
+  it("moves useful project overview signals into Project Home", () => {
+    const home = read("../features/projects/ProjectHome.tsx");
+    const presentation = read("../features/projects/projectPresentation.ts");
+    expect(home).toContain("reviewProjectSummary(await host.reviewModel(project.project_id))");
+    expect(home).toContain("review.unmappedCount");
+    expect(home).toContain("review.scriptGapCount");
+    expect(presentation).toContain("review?.attentionCount");
   });
 
   it("keeps repair and diagnostic views out of primary navigation", () => {

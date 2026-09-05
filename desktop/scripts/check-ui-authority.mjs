@@ -225,11 +225,29 @@ assert(!scriptEpisode.includes('className={`script-block'), "ScriptEpisodeView m
 const identityRows = read("src/features/identity/IdentityRows.tsx");
 assert(identityRows.includes("export function IdentityCandidateRow"), "IdentityCandidateRow must remain independently importable");
 assert(identityRows.includes("export function PersonRow"), "PersonRow must remain independently importable");
+assert(identityRows.includes('import "./identity-rows.css"'), "canonical Identity rows must own their stylesheet import");
+assert(identityRows.includes('data-ui-authority="identity-row"'), "Identity rows must expose the canonical row authority marker");
 assert(identityRows.includes('data-authority="candidate"'), "identity candidates must expose evidence/candidate authority");
 assert(identityRows.includes('data-authority="human"'), "confirmed people must expose human authority");
 const identityWorkbench = read("src/features/identity/IdentityWorkbench.tsx");
 assert(identityWorkbench.includes('from "./IdentityRows"'), "IdentityWorkbench must consume canonical identity rows");
 assert(!identityWorkbench.includes('className={`identity-row'), "IdentityWorkbench must not hide another identity row renderer");
+const identityWorkbenchCss = read("src/features/identity/identity-workbench.css");
+for (const selector of [".identity-row {", ".identity-row-copy", ".identity-row-meta", ".identity-portrait"]) {
+  assert(!identityWorkbenchCss.includes(selector), `identity-workbench.css must not own canonical Identity anatomy through ${selector}`);
+}
+const workspaceRedesignCss = read("src/app/mirrororder-workspaces-redesign.css");
+for (const selector of [".identity-row {", ".identity-workbench .identity-row", ".identity-row-copy", ".identity-row-meta", ".identity-avatar"]) {
+  assert(!workspaceRedesignCss.includes(selector), `mirrororder-workspaces-redesign.css must not reclaim canonical Identity anatomy through ${selector}`);
+}
+const identityAnatomyOwners = sourceCssFiles.filter((relativePath) => {
+  const source = read(relativePath);
+  return source.includes(".identity-row-copy") || source.includes(".identity-row-meta") || source.includes(".identity-portrait");
+});
+assert(
+  identityAnatomyOwners.length === 1 && identityAnatomyOwners[0] === "src/features/identity/identity-rows.css",
+  `Identity row/portrait anatomy must have one stylesheet owner; found ${identityAnatomyOwners.length ? identityAnatomyOwners.join(", ") : "none"}`,
+);
 
 const angleEvidence = read("src/features/material-script/AngleEvidenceCard.tsx");
 assert(angleEvidence.includes("MirrorOrderMediaCard"), "AngleEvidenceCard must remain a data adapter over the canonical MediaCard renderer");

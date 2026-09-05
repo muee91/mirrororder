@@ -1,3 +1,5 @@
+import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
+
 export interface CollaborationTarget {
   kind?: string;
   group_id?: string;
@@ -41,6 +43,40 @@ export interface CollaborationAttention {
   hasAttention: boolean;
   summary: string;
 }
+
+export interface ReviewTakeAttentionProjection {
+  labels: string[];
+  priority: number;
+  context: string;
+  hasAttention: boolean;
+}
+
+export interface ReviewProjectSummary {
+  takeCount: number;
+  episodeCount: number;
+  scriptGapCount: number;
+  attentionCount: number;
+  humanMappingCount: number;
+  automaticMappingCount: number;
+  unmappedCount: number;
+  bestCount: number;
+  keepCount: number;
+  rejectCount: number;
+  unreviewedCount: number;
+  teamAttentionCount: number;
+}
+
+type EnrichedTake = ReviewTakeGroup & {
+  audit_state?: {
+    available?: boolean;
+    stale?: boolean;
+    analysis_stale?: boolean;
+    mapping_stale?: boolean;
+    priority?: number;
+    judge?: { verdict?: string; confidence?: number; reason?: string };
+  };
+  editorial_state: ReviewTakeGroup["editorial_state"] & CollaborationEditorialState;
+};
 
 function timestamp(value: string | undefined): number | null {
   if (!value) return null;
@@ -151,4 +187,78 @@ export function collaborationAttention(
     hasAttention,
     summary,
   };
+}
+
+export function reviewTakeAttention(take: ReviewTakeGroup): ReviewTakeAttentionProjection {
+  const enriched = take as EnrichedTake;
+  const audit = enriched.audit_state;
+  const collaboration = collaborationAttention(enriched.editorial_state);
+  const labels = take.issues.map((issue) => issue.label).filter(Boolean);
+
+  if (audit?.analysis_stale) labels.unshift("分析证据已过期");
+  else if (audit?.mapping_stale) labels.unshift("归集变化，旧分析判断已隐藏");
+  labels.push(...collaboration.labels);
+  if (take.effective_mapping.source === "none") labels.push("尚未形成有效归集");
+
+  let priority = Number(audit?.priority ?? 0);
+  if (take.issues.some((issue) => issue.severity === "error")) priority = Math.max(priority, 1000);
+  else if (audit?.mapping_stale || audit?.analysis_stale) priority = Math.max(priority, 800 + Number(audit.priority ?? 0));
+  else if (take.issues.some((issue) => issue.severity === "warning")) priority = Math.max(priority, 600 + Number(audit?.priority ?? 0));
+  else if (take.effective_mapping.source === "none") priority = Math.max(priority, 500);
+  priority = Math.max(priority, collaboration.priority);
+
+  const context = audit?.judge?.reason && !audit.stale
+    ? audit.judge.reason
+    : collaboration.hasAttention
+      ? collaboration.summary
+      : "";
+  const uniqueLabels = [...new Set(labels)];
+
+  return {
+    labels: uniqueLabels,
+    priority,
+    context,
+    hasAttention: uniqueLabels.length > 0,
+  };
+}
+
+function finalEditorialState(take: ReviewTakeGroup): string {
+  const enriched = take as EnrichedTake;
+  return String(enriched.editorial_state?.editorial_decision?.group?.state || "unreviewed");
+}
+
+export function reviewProjectSummary(model: ReviewModelPayload): ReviewProjectSummary {
+  const result: ReviewProjectSummary = {
+    takeCount: model.take_groups.length,
+    episodeCount: model.episodes.length,
+    scriptGapCount: Number(model.summary.script_gaps || 0),
+    attentionCount: 0,
+    humanMappingCount: 0,
+    automaticMappingCount: 0,
+    unmappedCount: 0,
+    bestCount: 0,
+    keepCount: 0,
+    rejectCount: 0,
+    unreviewedCount: 0,
+    teamAttentionCount: 0,
+  };
+
+  for (const take of model.take_groups) {
+    const source = take.effective_mapping.source;
+    if (source === "human") result.humanMappingCount += 1;
+    else if (source === "automatic") result.automaticMappingCount += 1;
+    else result.unmappedCount += 1;
+
+    const state = finalEditorialState(take);
+    if (state === "best") result.bestCount += 1;
+    else if (state === "keep") result.keepCount += 1;
+    else if (state === "reject") result.rejectCount += 1;
+    else result.unreviewedCount += 1;
+
+    const attention = reviewTakeAttention(take);
+    if (attention.hasAttention) result.attentionCount += 1;
+    if (collaborationAttention((take as EnrichedTake).editorial_state).hasAttention) result.teamAttentionCount += 1;
+  }
+
+  return result;
 }

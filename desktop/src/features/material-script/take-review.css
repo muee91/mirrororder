@@ -60,6 +60,49 @@
   background: transparent;
 }
 
+.take-attention-summary {
+  display: grid;
+  gap: 6px;
+  margin-top: 9px;
+  border-left: 2px solid var(--mo-warning, #d0aa54);
+  padding: 7px 8px;
+  background: color-mix(in srgb, var(--mo-warning, #d0aa54) 7%, var(--mo-surface-raised, #171d23));
+}
+
+.take-attention-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--mo-warning, #d0aa54);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.take-attention-heading strong { font-size: var(--mo-font-sm, 11px); }
+.take-attention-heading span { font-variant-numeric: tabular-nums; }
+
+.take-attention-labels {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--mo-text-secondary, #aeb8c2);
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.take-attention-labels span::before {
+  content: "·";
+  margin-right: 4px;
+  color: var(--mo-warning, #d0aa54);
+}
+
+.take-attention-summary > p {
+  margin: 0;
+  color: var(--mo-text-muted, #74808d);
+  font-size: var(--mo-font-xs, 10px);
+  line-height: 1.45;
+}
+
 .take-inspector .inspector-angle-cards {
   display: flex;
   min-width: 0;

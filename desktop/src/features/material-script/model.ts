@@ -1,6 +1,7 @@
 import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
+import { reviewTakeAttention } from "../review/reviewAttention";
 
-export type TakeStatusFilter = "all" | "candidate" | "pending" | "placed" | "rejected";
+export type TakeStatusFilter = "all" | "attention" | "candidate" | "pending" | "placed" | "rejected";
 
 export interface VirtualRange {
   start: number;
@@ -12,7 +13,7 @@ export interface VirtualRange {
 export const TAKE_ROW_HEIGHT = 314;
 export const TAKE_VIRTUAL_OVERSCAN = 3;
 
-export function takeStatus(take: ReviewTakeGroup): Exclude<TakeStatusFilter, "all"> {
+export function takeStatus(take: ReviewTakeGroup): Exclude<TakeStatusFilter, "all" | "attention"> {
   if (take.editorial_state.legacy_manual?.effective_state === "reject") {
     return "rejected";
   }
@@ -54,7 +55,11 @@ export function takeMatchesFilters(
   status: TakeStatusFilter,
   episode: number | null,
 ): boolean {
-  if (status !== "all" && takeStatus(take) !== status) return false;
+  if (status === "attention") {
+    if (!reviewTakeAttention(take).hasAttention) return false;
+  } else if (status !== "all" && takeStatus(take) !== status) {
+    return false;
+  }
   if (episode !== null && !takeEpisodeIds(take).includes(episode)) return false;
   return true;
 }

@@ -274,43 +274,6 @@
   border-right: 1px solid var(--mo-border) !important;
 }
 
-.mirrororder-redesign-shell .identity-row {
-  width: 100%;
-  min-height: 58px;
-  margin: 0;
-  padding: 8px 12px;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  gap: 2px 8px;
-  border: 0;
-  border-bottom: 1px solid var(--mo-border);
-  border-radius: 0;
-  background: transparent;
-  color: var(--mo-text);
-  text-align: left;
-}
-
-.mirrororder-redesign-shell .identity-row:hover { background: var(--mo-surface-soft); }
-.mirrororder-redesign-shell .identity-row.is-selected {
-  background: var(--mo-accent-soft);
-  box-shadow: inset 3px 0 0 var(--mo-accent);
-}
-
-.mirrororder-redesign-shell .identity-row .identity-kind {
-  grid-row: 1 / span 2;
-  align-self: center;
-  padding: 4px 5px;
-  border-radius: 6px;
-  background: var(--mo-surface-muted);
-  color: var(--mo-text-2);
-  font-size: 8px;
-  text-align: center;
-}
-
-.mirrororder-redesign-shell .identity-row strong { color: var(--mo-text); font-size: 10px; }
-.mirrororder-redesign-shell .identity-row > span:not(.identity-kind) { color: var(--mo-text-3); font-size: 9px; }
-.mirrororder-redesign-shell .identity-row em { color: var(--mo-accent); font-size: 8px; font-style: normal; }
-
 .mirrororder-redesign-shell .identity-inspector {
   padding: 16px 18px;
   background: var(--mo-surface-soft) !important;
@@ -437,7 +400,6 @@
   color: var(--mo-text);
   list-style: none;
 }
-
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary::-webkit-details-marker { display: none; }
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary > div { display: grid; gap: 2px; }
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary span,
@@ -526,80 +488,6 @@
   scrollbar-gutter: stable;
 }
 
-.mirrororder-redesign-shell .identity-workbench .identity-row {
-  min-height: 66px;
-  padding: 9px 12px;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 10px;
-}
-
-.mirrororder-redesign-shell .identity-avatar,
-.mirrororder-redesign-shell .identity-person-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: var(--mo-surface-muted);
-  color: var(--mo-text-2);
-  font-size: 10px;
-  font-weight: 750;
-}
-
-.mirrororder-redesign-shell .identity-avatar {
-  width: 34px;
-  height: 34px;
-}
-
-.mirrororder-redesign-shell .identity-avatar.is-speaker,
-.mirrororder-redesign-shell .identity-person-avatar.is-speaker {
-  background: color-mix(in srgb, var(--mo-accent) 9%, var(--mo-surface-muted));
-  color: var(--mo-accent);
-}
-
-.mirrororder-redesign-shell .identity-row-copy,
-.mirrororder-redesign-shell .identity-row-meta {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.mirrororder-redesign-shell .identity-row-copy strong {
-  overflow: hidden;
-  color: var(--mo-text);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mirrororder-redesign-shell .identity-row-copy small,
-.mirrororder-redesign-shell .identity-row-meta small {
-  color: var(--mo-text-3);
-  font-size: 9px;
-}
-
-.mirrororder-redesign-shell .identity-row-copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mirrororder-redesign-shell .identity-row-meta {
-  justify-items: end;
-  text-align: right;
-}
-
-.mirrororder-redesign-shell .identity-row-meta strong {
-  color: var(--mo-text-2);
-  font-size: 9px;
-  font-weight: 650;
-}
-
-.mirrororder-redesign-shell .identity-workbench .identity-row.is-selected {
-  background: var(--mo-accent-soft);
-  box-shadow: inset 3px 0 0 var(--mo-accent);
-}
-
 .mirrororder-redesign-shell .identity-workbench .identity-inspector {
   min-width: 0;
   min-height: 0;
@@ -627,13 +515,6 @@
   border-bottom: 1px solid var(--mo-border);
 }
 
-.mirrororder-redesign-shell .identity-person-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  font-size: 13px;
-}
-
 .mirrororder-redesign-shell .identity-person-copy {
   min-width: 0;
   display: grid;
@@ -657,7 +538,6 @@
   color: var(--mo-text-3);
   font-size: 9px;
 }
-
 .mirrororder-redesign-shell .identity-person-state {
   width: fit-content;
   padding: 2px 6px;
