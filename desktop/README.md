@@ -4,8 +4,9 @@
 
 ## Start here
 
-Before changing Production UI, read:
+Before changing Production UI, start from the repository documentation index, then read the current authorities:
 
+- `../docs/README.md`
 - `../docs/app-information-architecture.md`
 - `../docs/engineering/STATUS.md`
 - `../docs/engineering/BACKLOG.md`
