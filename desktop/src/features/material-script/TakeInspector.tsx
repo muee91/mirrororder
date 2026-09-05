@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation } from "../media/cameraPresentation";
-import { reviewTakeAttention } from "../review/reviewAttention";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { CandidateEvidence } from "./CandidateEvidence";
 import { mappingLabel, mappingSourceLabel, takeDisplayLabel } from "./TakeCard";
@@ -27,6 +26,7 @@ export function TakeInspector({
   onClearPlacement,
   writeSaving,
   showEditorial = false,
+  afterPlayback = null,
 }: {
   connection: HostConnection;
   projectId: string;
@@ -37,6 +37,7 @@ export function TakeInspector({
   onClearPlacement?: () => void;
   writeSaving: boolean;
   showEditorial?: boolean;
+  afterPlayback?: ReactNode;
 }) {
   const angle = take?.angles.find((item) => item.clip_id === selectedClipId) ?? take?.angles[0] ?? null;
   const playbackUrl = useMemo(
@@ -69,7 +70,6 @@ export function TakeInspector({
   if (!take) return <aside className="take-inspector"><div className="player-empty">当前项目没有 Take。</div></aside>;
 
   const displayLabel = takeDisplayLabel(take);
-  const attention = showEditorial ? reviewTakeAttention(take) : null;
 
   return (
     <aside className="take-inspector">
@@ -83,25 +83,6 @@ export function TakeInspector({
         </span>
       </div>
       <p className="inspector-mapping">{mappingLabel(take)}</p>
-
-      {take.issues.length ? (
-        <div className="take-inspector-statusline" aria-label={`${displayLabel} 当前问题`}>
-          {take.issues.slice(0, 2).map((issue) => (
-            <span className={`take-inspector-issue issue-${issue.severity}`} key={`${take.group_id}-${issue.code}`}>{issue.label}</span>
-          ))}
-          {take.issues.length > 2 ? <span className="take-inspector-issue-overflow">+{take.issues.length - 2}</span> : null}
-        </div>
-      ) : null}
-
-      {attention?.hasAttention ? (
-        <section className="take-attention-summary" aria-label={`${displayLabel} 需关注`}>
-          <div className="take-attention-heading"><strong>需关注</strong><span>{attention.labels.length} 项</span></div>
-          <div className="take-attention-labels">
-            {attention.labels.slice(0, 4).map((label) => <span key={label}>{label}</span>)}
-          </div>
-          {attention.context ? <p>{attention.context}</p> : null}
-        </section>
-      ) : null}
 
       {onShowScript || (onClearPlacement && take.effective_mapping.source === "human") ? (
         <div className="inspector-actions">
@@ -154,12 +135,22 @@ export function TakeInspector({
         </div>
       ) : null}
 
+      {afterPlayback}
+      {showEditorial ? <EditorialDecisionPanel baseUrl={connection.baseUrl} projectId={projectId} groupId={take.group_id} /> : null}
+
+      {take.issues.length ? (
+        <div className="take-inspector-statusline" aria-label={`${displayLabel} 当前问题`}>
+          {take.issues.slice(0, 2).map((issue) => (
+            <span className={`take-inspector-issue issue-${issue.severity}`} key={`${take.group_id}-${issue.code}`}>{issue.label}</span>
+          ))}
+          {take.issues.length > 2 ? <span className="take-inspector-issue-overflow">+{take.issues.length - 2}</span> : null}
+        </div>
+      ) : null}
+
       <div className="dialogue-panel">
         <p className="eyebrow">对白</p>
         <p>{take.transcript.text || "当前没有可靠对白投影。"}</p>
       </div>
-
-      {showEditorial ? <EditorialDecisionPanel baseUrl={connection.baseUrl} projectId={projectId} groupId={take.group_id} /> : null}
 
       <details className="take-inspector-evidence">
         <summary>

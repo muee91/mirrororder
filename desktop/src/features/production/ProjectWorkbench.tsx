@@ -249,6 +249,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               baseUrl={baseUrl}
               project={project}
               initialGroupId={currentIntent?.groupId ?? null}
+              onOpenMaterial={(groupId) => focusTake(groupId, "material")}
               onOpenScript={(groupId) => focusTake(groupId, "script")}
               onOpenTimeline={(groupId, clipId) => focusTake(groupId, "timeline", clipId)}
             />
