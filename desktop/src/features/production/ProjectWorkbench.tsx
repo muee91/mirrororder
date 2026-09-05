@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import { readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
-import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorkspace";
 import "../media/media.css";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
 import { ScriptWorkspace } from "../script/ScriptWorkspace";
 import "../script/script-workspace.css";
+import type { ProductionNavigationIntent, ProductionWorkspace } from "./productionNavigation";
 import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
@@ -25,12 +25,11 @@ interface Props {
   onPageChange?: (page: ProductionPage) => void;
 }
 
-type ProductionArea = "material" | "script" | "timeline" | "review";
+type ProductionArea = ProductionWorkspace;
 
 interface AreaPageDefinition {
   page: ProductionPage;
   label: string;
-  hidden?: boolean;
 }
 
 interface AreaDefinition {
@@ -48,30 +47,23 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
       { page: "media-library", label: "素材库" },
       { page: "takes", label: "Take" },
       { page: "identity", label: "人物" },
-      { page: "media-binding", label: "本机素材", hidden: true },
+      { page: "media-binding", label: "本机素材" },
     ],
   },
   script: {
     label: "剧本",
     defaultPage: "script",
-    pages: [
-      { page: "script", label: "剧本" },
-    ],
+    pages: [{ page: "script", label: "剧本" }],
   },
   timeline: {
     label: "时间线",
     defaultPage: "timeline",
-    pages: [
-      { page: "timeline", label: "时间线" },
-      { page: "delivery", label: "交付" },
-    ],
+    pages: [{ page: "timeline", label: "时间线" }],
   },
   review: {
     label: "审阅",
     defaultPage: "watch",
-    pages: [
-      { page: "watch", label: "看片" },
-    ],
+    pages: [{ page: "watch", label: "看片" }],
   },
 };
 
@@ -79,7 +71,7 @@ const ALL_PAGES = new Set<ProductionPage>(Object.values(AREAS).flatMap((area) =>
 
 function safeProductionPage(page: ProductionPage): ProductionPage {
   if (page === "coverage") return "script";
-  if (page === "rough-cut" || page === "assembly") return "timeline";
+  if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline";
   if (page === "attention" || page === "overview") return "watch";
   return ALL_PAGES.has(page) ? page : "slate";
 }
@@ -120,29 +112,61 @@ function pageForMaterialView(view: MaterialView): ProductionPage {
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)));
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [focusedTakeGroupId, setFocusedTakeGroupId] = useState<string | null>(null);
+  const [navigationIntent, setNavigationIntent] = useState<ProductionNavigationIntent | null>(null);
+  const [deliveryRequestNonce, setDeliveryRequestNonce] = useState(0);
   const [operatorRevision, setOperatorRevision] = useState(0);
+  const navigationNonce = useRef(0);
 
   const area = areaForPage(page);
-  const areaDefinition = AREAS[area];
-  const visibleAreaPages = areaDefinition.pages.filter((item) => !item.hidden);
-  const currentPageDefinition = areaDefinition.pages.find((item) => item.page === page) ?? null;
-  const showSecondaryNavigation = area !== "material" && (visibleAreaPages.length > 1 || Boolean(currentPageDefinition?.hidden));
+  const currentIntent = navigationIntent?.projectId === project.project_id ? navigationIntent : null;
+
+  function nextIntent(
+    workspace: ProductionWorkspace,
+    groupId?: string | null,
+    clipId?: string | null,
+  ): ProductionNavigationIntent {
+    navigationNonce.current += 1;
+    return {
+      projectId: project.project_id,
+      workspace,
+      nonce: navigationNonce.current,
+      ...(groupId?.trim() ? { groupId: groupId.trim() } : {}),
+      ...(clipId?.trim() ? { clipId: clipId.trim() } : {}),
+    };
+  }
 
   function navigate(next: ProductionPage): void {
+    if (next === "delivery") {
+      setDeliveryRequestNonce((value) => value + 1);
+      setPage("timeline");
+      return;
+    }
     setPage(safeProductionPage(next));
   }
 
   function switchArea(next: ProductionArea): void {
     if (next === area) return;
+    if (currentIntent) {
+      navigationNonce.current += 1;
+      setNavigationIntent({ ...currentIntent, workspace: next, nonce: navigationNonce.current });
+    }
     navigate(AREAS[next].defaultPage);
   }
 
-  function focusTake(groupId: string, destination: "takes" | "script" | "watch" | "timeline"): void {
+  function focusTake(
+    groupId: string,
+    destination: "material" | "script" | "review" | "timeline",
+    clipId?: string | null,
+  ): void {
     const value = groupId.trim();
     if (!value) return;
-    setFocusedTakeGroupId(value);
-    navigate(destination);
+    setNavigationIntent(nextIntent(destination, value, clipId));
+    navigate(destination === "material" ? "takes" : destination === "script" ? "script" : destination === "review" ? "watch" : "timeline");
+  }
+
+  function openReviewWithoutSelection(): void {
+    setNavigationIntent(null);
+    navigate("watch");
   }
 
   useEffect(() => {
@@ -155,8 +179,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }, [pageRequest?.nonce]);
 
   const assistantVisible = assistantOpen;
-  const canvasScope = area === "material" ? "material" : page;
-  const canvasKey = `${project.project_id}:${canvasScope}:operator-${operatorRevision}`;
+  const canvasKey = `${project.project_id}:${area}:operator-${operatorRevision}`;
   const primaryNavigation = useMemo(() => Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>, []);
 
   return (
@@ -186,25 +209,6 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
         </div>
       </header>
 
-      {showSecondaryNavigation ? (
-        <nav className="professional-secondary-nav" aria-label={`${AREAS[area].label}工作区`}>
-          <div className="professional-secondary-pages">
-            {visibleAreaPages.map((item) => (
-              <button
-                type="button"
-                className={page === item.page ? "is-active" : ""}
-                aria-current={page === item.page ? "page" : undefined}
-                key={item.page}
-                onClick={() => navigate(item.page)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <span className="professional-page-context">{AREAS[area].label} / {pageLabel(page)}</span>
-        </nav>
-      ) : null}
-
       <div className="project-workbench-canvas">
         <div className="project-workbench-main owns-chrome" key={canvasKey}>
           {area === "material" ? (
@@ -212,16 +216,13 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               baseUrl={baseUrl}
               project={project}
               view={materialViewForPage(page)}
-              initialGroupId={focusedTakeGroupId}
+              initialGroupId={currentIntent?.groupId ?? null}
               onViewChange={(view, groupId) => {
-                if (groupId?.trim()) setFocusedTakeGroupId(groupId.trim());
+                if (groupId?.trim()) setNavigationIntent(nextIntent("material", groupId));
                 navigate(pageForMaterialView(view));
               }}
               onOpenScript={(groupId) => focusTake(groupId, "script")}
-              onOpenReview={(groupId) => {
-                if (!groupId?.trim()) setFocusedTakeGroupId(null);
-                groupId ? focusTake(groupId, "watch") : navigate("watch");
-              }}
+              onOpenReview={(groupId) => groupId ? focusTake(groupId, "review") : openReviewWithoutSelection()}
               onOpenTimeline={(groupId) => focusTake(groupId, "timeline")}
             />
           ) : null}
@@ -230,19 +231,26 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             <ScriptWorkspace
               baseUrl={baseUrl}
               project={project}
-              initialGroupId={focusedTakeGroupId}
+              initialGroupId={currentIntent?.groupId ?? null}
             />
           ) : null}
 
-          {page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-          {page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
+          {page === "timeline" ? (
+            <TimelineWorkbench
+              baseUrl={baseUrl}
+              projectId={project.project_id}
+              focusIntent={currentIntent?.workspace === "timeline" ? currentIntent : null}
+              deliveryRequestNonce={deliveryRequestNonce}
+            />
+          ) : null}
 
           {page === "watch" ? (
             <ReviewWorkspace
               baseUrl={baseUrl}
               project={project}
-              initialGroupId={focusedTakeGroupId}
+              initialGroupId={currentIntent?.groupId ?? null}
               onOpenScript={(groupId) => focusTake(groupId, "script")}
+              onOpenTimeline={(groupId, clipId) => focusTake(groupId, "timeline", clipId)}
             />
           ) : null}
         </div>

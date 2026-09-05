@@ -1,13 +1,20 @@
+import { useEffect, useState } from "react";
 import { EditorMonitors } from "./EditorMonitors";
 import { sourceOptionEnd } from "./timelineSourceMarks";
 import { frameLabel, localizedEditorialText } from "./timelineWorkbenchSupport";
 
 export function TimelineSourcePanel(props: { [key: string]: any }) {
-  const { sourceOptions, sourceOption, chooseSource, sourceIn, setSourceInPrecisely, sourceDuration, setSourceDuration, sourcePosition, changeSourcePosition, markInAtCursor, markOutAtCursor, sourceOut, sourceRangeError, playhead, videoInsertBlocked, audioInsertBlocked, audioTargetTrackId, busy, editFromSource, editAudioFromSource, baseUrl, projectId, snapshot, sequence, selection, changePlayhead, stepPlayhead } = props;
+  const { sourceOptions, sourceOption, chooseSource, sourceIn, setSourceInPrecisely, sourceDuration, setSourceDuration, sourcePosition, changeSourcePosition, markInAtCursor, markOutAtCursor, sourceOut, sourceRangeError, playhead, videoInsertBlocked, audioInsertBlocked, audioTargetTrackId, busy, editFromSource, editAudioFromSource, baseUrl, projectId, snapshot, sequence, selection, changePlayhead, stepPlayhead, focusIntent, focusLabel } = props;
+  const [toolsOpen, setToolsOpen] = useState(Boolean(focusIntent?.groupId));
+
+  useEffect(() => {
+    if (focusIntent?.groupId) setToolsOpen(true);
+  }, [focusIntent?.nonce]);
+
   return (
     <>
-      <details className="timeline-source-edit production-panel editorial-source-tools">
-        <summary><span><strong>素材监看与插入</strong><small>需要手工补镜头、补音频或精确设入出点时使用</small></span><em>{sourceOptions.length} 个可播放素材</em></summary>
+      <details className="timeline-source-edit production-panel editorial-source-tools" open={toolsOpen} onToggle={(event) => setToolsOpen(event.currentTarget.open)}>
+        <summary><span><strong>素材监看与插入</strong><small>{focusIntent?.groupId ? `当前 ${focusLabel || "Take"} 已带入 Source 上下文` : "需要手工补镜头、补音频或精确设入出点时使用"}</small></span><em>{sourceOptions.length} 个可播放素材</em></summary>
         <div className="editorial-source-body">
           {sourceOption ? <>
             <div className="timeline-source-fields">

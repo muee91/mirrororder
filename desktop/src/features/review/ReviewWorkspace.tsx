@@ -16,6 +16,7 @@ interface Props {
   project: ProjectSummary;
   initialGroupId?: string | null;
   onOpenScript?: (groupId: string) => void;
+  onOpenTimeline?: (groupId: string, clipId?: string | null) => void;
 }
 
 const STATUS_OPTIONS: Array<{ value: TakeStatusFilter; label: string }> = [
@@ -32,6 +33,7 @@ export function ReviewWorkspace({
   project,
   initialGroupId = null,
   onOpenScript,
+  onOpenTimeline,
 }: Props) {
   const { connection, loadState, message, model } = useReviewModelSnapshot(baseUrl, project.project_id);
   const [statusFilter, setStatusFilter] = useState<TakeStatusFilter>("all");
@@ -122,6 +124,12 @@ export function ReviewWorkspace({
           ) : <div className="phase-placeholder compact-placeholder">当前筛选没有 Take。</div>}
         </aside>
         <section className="review-viewer-pane" aria-label="看片与人工决定">
+          {selectedTake ? (
+            <div className="review-cross-actions" aria-label="继续处理当前 Take">
+              <button type="button" className="secondary" onClick={() => onOpenScript?.(selectedTake.group_id)}>在剧本中打开</button>
+              <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId)}>到时间线</button>
+            </div>
+          ) : null}
           <TakeInspector
             connection={connection}
             projectId={project.project_id}

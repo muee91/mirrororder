@@ -47,7 +47,7 @@ function normalized(value: unknown): string {
 
 export function canonicalProductionPage(page: ProductionPage): ProductionPage {
   if (page === "coverage") return "script";
-  if (page === "rough-cut" || page === "assembly") return "timeline";
+  if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline";
   if (page === "attention" || page === "overview") return "watch";
   return page;
 }
