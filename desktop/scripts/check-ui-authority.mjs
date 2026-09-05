@@ -68,7 +68,6 @@ const allowedGlobalCssImports = new Set([
   "./styles.css",
   "./desktop-theme.css",
   "./desktop-theme-tools.css",
-  "./features/material-script/golden-material-script-theme.css",
   "./desktop-theme-slate.css",
   "./desktop-theme-frozen-surfaces.css",
   "./features/media/media-binding-recovery.css",
@@ -88,11 +87,13 @@ for (const cssImport of cssImports) {
   );
 }
 assert(cssImports.includes("./design-system-v2.css"), "Design System v2 must remain loaded by the Desktop entry point");
+assert(!mainSource.includes("golden-material-script-theme.css"), "retired Golden Material/Script theme must not return to the global stylesheet graph");
 
 const sourceTsxFiles = listFiles("src", new Set([".tsx"]));
 const sourceCssFiles = listFiles("src", new Set([".css"]));
 
 const projectWorkbench = read("src/features/production/ProjectWorkbench.tsx");
+const materialScriptWorkbench = read("src/features/material-script/MaterialScriptWorkbench.tsx");
 const resumeState = read("src/app/resumeState.ts");
 assert(projectWorkbench.includes('review: {\n    label: "审阅",\n    defaultPage: "watch",\n    pages: [\n      { page: "watch", label: "看片" },\n    ],'), "Review must remain one production surface; attention/overview are not standalone pages");
 assert(!projectWorkbench.includes("ReviewAttentionWorkbench"), "Attention must not return as a standalone production workbench");
@@ -100,6 +101,21 @@ assert(!projectWorkbench.includes("ProjectOverviewWorkbench"), "Project overview
 assert(projectWorkbench.includes('{ page: "media-binding", label: "本机素材", hidden: true }'), "Media binding must stay a hidden repair tool, not a primary production page");
 assert(projectWorkbench.includes("visibleAreaPages.length > 1"), "Single-page production areas must not render redundant secondary navigation");
 assert(resumeState.includes('if (page === "attention" || page === "overview") return "watch";'), "Legacy attention/overview resume routes must collapse into Review");
+
+assert(!projectWorkbench.includes("GoldenMaterialScriptWorkbench"), "Material/Script must not regain a parallel Golden workbench");
+for (const surface of ["takes", "script", "review"]) {
+  assert(projectWorkbench.includes(`surface="${surface}"`), `MaterialScriptWorkbench must own the ${surface} production role`);
+}
+assert(materialScriptWorkbench.includes('export type MaterialScriptSurface = "takes" | "script" | "review";'), "MaterialScriptWorkbench must expose explicit role-based surfaces");
+assert(!materialScriptWorkbench.includes("WorkbenchTab"), "MaterialScriptWorkbench must not restore page-internal Material/Script tabs");
+assert(materialScriptWorkbench.includes("material-script-context-drawer"), "Take detail and Script matching must remain contextual drawers");
+for (const retiredPath of [
+  "src/features/material-script/GoldenMaterialScriptWorkbench.tsx",
+  "src/features/material-script/golden-material-script.css",
+  "src/features/material-script/golden-material-script-theme.css",
+]) {
+  assert(!fs.existsSync(path.join(desktopRoot, retiredPath)), `${retiredPath} is retired and must not return`);
+}
 
 const forbiddenContextTakeSelectors = [
   ".golden-take-picker-list > button",
@@ -148,8 +164,6 @@ for (const relativePath of sourceCssFiles) {
 }
 
 const grandfatheredGoldenStyles = new Set([
-  "src/features/material-script/golden-material-script-theme.css",
-  "src/features/material-script/golden-material-script.css",
   "src/features/slate/golden-slate-media-experience.css",
   "src/features/slate/golden-slate.css",
 ]);
@@ -162,7 +176,6 @@ for (const relativePath of sourceCssFiles) {
 }
 
 const grandfatheredGoldenComponents = new Set([
-  "src/features/material-script/GoldenMaterialScriptWorkbench.tsx",
   "src/features/slate/GoldenSlateWorkbench.tsx",
 ]);
 for (const relativePath of sourceTsxFiles) {
@@ -193,6 +206,7 @@ const virtualTakeList = read("src/features/material-script/VirtualTakeList.tsx")
 assert(!/\bfunction\s+TakeCard\b/.test(virtualTakeList), "VirtualTakeList must not hide a second TakeCard implementation");
 assert(!virtualTakeList.includes("const STABLE_CAMERA_SLOTS"), "VirtualTakeList must not redefine stable camera slots");
 assert(virtualTakeList.includes('from "./TakeCard"'), "VirtualTakeList must consume the canonical TakeCard");
+assert(virtualTakeList.includes("TakeListRow"), "compact Material/Review lists must consume the canonical TakeListRow");
 
 const slatePlacementPools = read("src/features/slate/SlatePlacementPools.tsx");
 assert(slatePlacementPools.includes("TakeListRow"), "SlatePlacementPools must consume the canonical compact Take renderer");
@@ -218,9 +232,11 @@ assert(!goldenSlateCss.includes(".golden-episode-candidates > button"), "Golden 
 
 const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
 assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
+assert(!scriptBlock.includes("<code>{block.segment_id}</code>"), "primary Script UI must not expose raw segment ids");
 const scriptEpisode = read("src/features/material-script/ScriptEpisodeView.tsx");
 assert(scriptEpisode.includes('from "./ScriptBlock"'), "ScriptEpisodeView must consume the canonical ScriptBlock");
 assert(!scriptEpisode.includes('className={`script-block'), "ScriptEpisodeView must not hide a second ScriptBlock anatomy");
+assert(!scriptEpisode.includes("{scene.scene_id}</p>"), "primary Script UI must not expose raw scene ids");
 
 const identityRows = read("src/features/identity/IdentityRows.tsx");
 assert(identityRows.includes("export function IdentityCandidateRow"), "IdentityCandidateRow must remain independently importable");

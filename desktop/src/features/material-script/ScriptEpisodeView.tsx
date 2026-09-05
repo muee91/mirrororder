@@ -28,10 +28,7 @@ export function ScriptEpisodeView({
       {episode.scenes.map((scene) => (
         <section className="script-scene" key={scene.scene_id}>
           <header>
-            <div>
-              <p className="eyebrow">{scene.scene_id}</p>
-              <h3>{scene.heading || "未命名场"}</h3>
-            </div>
+            <h3>{scene.heading || "未命名场"}</h3>
             <span className="count-pill">{scene.take_group_ids.length} Take</span>
           </header>
           <div className="script-block-list">

@@ -52,13 +52,12 @@ export function ScriptBlock({
         <div className="script-block-actions">
           {placementGroupId && canPlace ? (
             <button type="button" className="place-current" onClick={() => onClickPlacement(block)}>
-              归集 {placementGroupId}
+              归集当前 Take
             </button>
           ) : null}
           {linkedTakeIds.length > 0 ? (
             <button type="button" onClick={() => onShowTake(linkedTakeIds[0])}>素材 {linkedTakeIds.length}</button>
           ) : null}
-          <code>{block.segment_id}</code>
         </div>
       </div>
       <p>{block.raw_text || block.text || "—"}</p>

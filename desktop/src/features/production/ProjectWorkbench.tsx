@@ -6,9 +6,9 @@ import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { DeliveryWorkbench } from "../delivery/DeliveryWorkbench";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
-import { GoldenMaterialScriptWorkbench } from "../material-script/GoldenMaterialScriptWorkbench";
 import { MaterialScriptWorkbench } from "../material-script/MaterialScriptWorkbench";
 import "../material-script/material-script.css";
+import "../material-script/material-script-workbench.css";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
 import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
 import "../media/media.css";
@@ -113,7 +113,7 @@ function pageLabel(page: ProductionPage): string {
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)));
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [materialFocusGroupId, setMaterialFocusGroupId] = useState<string | null>(null);
+  const [takeFocusGroupId, setTakeFocusGroupId] = useState<string | null>(null);
   const [reviewReturn, setReviewReturn] = useState<ReviewReturnContext | null>(null);
   const [operatorRevision, setOperatorRevision] = useState(0);
   const area = areaForPage(page);
@@ -147,15 +147,15 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
     const value = groupId.trim();
     if (!value) return;
     const sourcePage = page;
-    setMaterialFocusGroupId(value);
+    setTakeFocusGroupId(value);
     setReviewReturn(sourcePage === "watch" ? null : { page: sourcePage, label: pageLabel(sourcePage) });
     navigate("watch", { preserveReviewReturn: true });
   }
 
-  function openTakeInPreciseScript(groupId: string): void {
+  function openTakeInScript(groupId: string): void {
     const value = groupId.trim();
     if (!value) return;
-    setMaterialFocusGroupId(value);
+    setTakeFocusGroupId(value);
     navigate("script");
   }
 
@@ -164,7 +164,6 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
     navigate(reviewReturn.page);
   }
 
-  const materialScript = page === "takes" || page === "script";
   const assistantVisible = assistantOpen;
   const canvasKey = `${project.project_id}:${page}:operator-${operatorRevision}`;
   const primaryNavigation = useMemo(() => Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>, []);
@@ -211,15 +210,23 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             </>
           ) : null}
 
-          {materialScript ? (
-            <GoldenMaterialScriptWorkbench
+          {page === "takes" ? (
+            <MaterialScriptWorkbench
               baseUrl={baseUrl}
               project={project}
-              initialGroupId={materialFocusGroupId}
-              phase={page === "takes" ? "rough" : "precise"}
-              onOpenPrecise={openTakeInPreciseScript}
-              onOpenCoverage={page === "script" ? () => navigate("coverage") : undefined}
-              showEditorial={false}
+              initialGroupId={takeFocusGroupId}
+              surface="takes"
+              onOpenScript={openTakeInScript}
+            />
+          ) : null}
+
+          {page === "script" ? (
+            <MaterialScriptWorkbench
+              baseUrl={baseUrl}
+              project={project}
+              initialGroupId={takeFocusGroupId}
+              surface="script"
+              onOpenCoverage={() => navigate("coverage")}
             />
           ) : null}
 
@@ -229,7 +236,16 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
           {page === "coverage" ? <CoverageWorkbench baseUrl={baseUrl} projectId={project.project_id} onOpenTake={openTakeFromEvidence} /> : null}
           {page === "timeline" ? <TimelineWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
           {page === "delivery" ? <DeliveryWorkbench baseUrl={baseUrl} projectId={project.project_id} /> : null}
-          {page === "watch" ? <MaterialScriptWorkbench baseUrl={baseUrl} project={project} initialGroupId={materialFocusGroupId} initialTab="material" showEditorial /> : null}
+          {page === "watch" ? (
+            <MaterialScriptWorkbench
+              baseUrl={baseUrl}
+              project={project}
+              initialGroupId={takeFocusGroupId}
+              surface="review"
+              showEditorial
+              onOpenScript={openTakeInScript}
+            />
+          ) : null}
         </div>
 
         {assistantVisible ? (

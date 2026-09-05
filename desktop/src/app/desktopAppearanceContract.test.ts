@@ -11,8 +11,9 @@ describe("Desktop appearance product contract", () => {
     const main = read("../main.tsx");
     expect(main).toContain("initializeDesktopAppearance();");
     expect(main.indexOf('import "./styles.css"')).toBeLessThan(main.indexOf('import "./desktop-theme.css"'));
-    expect(main.indexOf('import "./features/material-script/golden-material-script-theme.css"')).toBeLessThan(main.indexOf('import "./desktop-theme-slate.css"'));
+    expect(main.indexOf('import "./desktop-theme.css"')).toBeLessThan(main.indexOf('import "./desktop-theme-slate.css"'));
     expect(main.indexOf('import "./desktop-theme-slate.css"')).toBeLessThan(main.indexOf('import "./desktop-theme-frozen-surfaces.css"'));
+    expect(main).not.toContain("golden-material-script-theme.css");
     expect(main.indexOf("initializeDesktopAppearance();")).toBeLessThan(main.indexOf("createRoot("));
   });
 
@@ -47,15 +48,18 @@ describe("Desktop appearance product contract", () => {
   it("provides explicit root-prefixed light and dark overrides across frozen Demo surfaces", () => {
     const css = read("../desktop-theme.css");
     const tools = read("../desktop-theme-tools.css");
-    const material = read("../features/material-script/golden-material-script-theme.css");
+    const material = read("../features/material-script/material-script.css");
+    const materialSurface = read("../features/material-script/material-script-workbench.css");
     const takeCard = read("../features/material-script/take-card.css");
     const slate = read("../desktop-theme-slate.css");
     const frozen = read("../desktop-theme-frozen-surfaces.css");
     expect(css).toContain('html[data-mirrororder-theme="light"]');
     expect(css).toContain('html[data-mirrororder-theme="dark"]');
     expect(tools).toContain('.settings-status-workbench');
-    expect(material).toContain("shared --mo-* semantic tokens");
-    expect(material).toContain("Do not add light/dark palettes here");
+    expect(material).toContain("var(--mo-");
+    expect(materialSurface).toContain("var(--mo-");
+    expect(material).not.toContain("@media (prefers-color-scheme");
+    expect(materialSurface).not.toContain("@media (prefers-color-scheme");
     expect(takeCard).toContain(".mo-take-list-row");
     expect(takeCard).toContain("var(--mo-");
     expect(takeCard).not.toContain("@media (prefers-color-scheme");

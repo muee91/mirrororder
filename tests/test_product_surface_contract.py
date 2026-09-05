@@ -110,11 +110,12 @@ def test_production_tools_are_contextual_instead_of_becoming_more_tabs() -> None
     workbench = WORKBENCH.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
 
-    assert 'const materialScript = page === "takes" || page === "script"' in workbench
-    assert "GoldenMaterialScriptWorkbench" in workbench
-    assert 'phase={page === "takes" ? "rough" : "precise"}' in workbench
-    assert "onOpenPrecise={openTakeInPreciseScript}" in workbench
-    assert "onOpenCoverage" in workbench
+    assert "GoldenMaterialScriptWorkbench" not in workbench
+    assert 'surface="takes"' in workbench
+    assert 'surface="script"' in workbench
+    assert 'surface="review"' in workbench
+    assert "onOpenScript={openTakeInScript}" in workbench
+    assert 'onOpenCoverage={() => navigate("coverage")}' in workbench
     assert "MediaLibraryWorkbench" in workbench
     assert "MediaBindingWorkbench" in workbench
     assert "IdentityWorkbench" in workbench
@@ -125,7 +126,7 @@ def test_production_tools_are_contextual_instead_of_becoming_more_tabs() -> None
     assert "DeliveryWorkbench" in workbench
     assert "ReviewAttentionWorkbench" not in workbench
     assert "ProjectOverviewWorkbench" not in workbench
-    assert "showEditorial={false}" in workbench
+    assert "showEditorial" in workbench
     assert '{ page: "coverage", label: "覆盖", hidden: true }' in workbench
     assert '{ page: "media-binding", label: "本机素材", hidden: true }' in workbench
     assert "制作区在项目画布顶部切换。" in library

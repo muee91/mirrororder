@@ -84,7 +84,11 @@ def test_active_desktop_surface_uses_workspace_home_and_production_ia() -> None:
     assert "制作区在项目画布顶部切换。" in library
     assert "最近项目" in workspace_home
     assert "GoldenSlateWorkbench" in workbench
-    assert "GoldenMaterialScriptWorkbench" in workbench
+    assert "MaterialScriptWorkbench" in workbench
+    assert "GoldenMaterialScriptWorkbench" not in workbench
+    assert 'surface="takes"' in workbench
+    assert 'surface="script"' in workbench
+    assert 'surface="review"' in workbench
     assert 'className="professional-project-toolbar"' in workbench
     assert 'className="professional-secondary-nav"' in workbench
     for label in ("素材", "剧本", "剪辑", "审阅"):

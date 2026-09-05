@@ -1,8 +1,0 @@
-/*
- * Legacy compatibility hook.
- *
- * Golden Material / Script now consumes the shared --mo-* semantic tokens from
- * design-system-v2.css and its workspace layout lives in golden-material-script.css.
- * Do not add light/dark palettes here: explicit appearance is owned by the
- * semantic token layer so Material / Script cannot drift into a second theme.
- */

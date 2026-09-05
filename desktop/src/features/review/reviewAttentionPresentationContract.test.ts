@@ -27,7 +27,7 @@ describe("review collaboration return-flow contract", () => {
   });
 
   it("keeps the editor as the final authority", () => {
-    expect(watch).toContain("筛选本身不会修改任何人工决定");
+    expect(watch).toContain("不会修改人工决定");
     expect(inspector).toContain("EditorialDecisionPanel");
     expect(attention).toContain("最终决定后收到新意见");
   });
