@@ -18,6 +18,7 @@ import {
   takeStatus,
   type TakeStatusFilter,
 } from "./model";
+import { reviewTakeAttention } from "../review/reviewAttention";
 import "./golden-material-script.css";
 
 interface Props {
@@ -129,8 +130,17 @@ export function GoldenMaterialScriptWorkbench({
   const selectedTake = selectedGroupId ? takes.find((take) => take.group_id === selectedGroupId) ?? null : null;
   const selectedEpisode = episodes.find((episode) => episode.episode === activeEpisode) ?? episodes[0] ?? null;
   const statusCounts = useMemo(() => {
-    const counts = { candidate: 0, pending: 0, placed: 0, rejected: 0 };
-    for (const take of takes) counts[takeStatus(take)] += 1;
+    const counts: Record<Exclude<TakeStatusFilter, "all">, number> = {
+      attention: 0,
+      candidate: 0,
+      pending: 0,
+      placed: 0,
+      rejected: 0,
+    };
+    for (const take of takes) {
+      counts[takeStatus(take)] += 1;
+      if (reviewTakeAttention(take).hasAttention) counts.attention += 1;
+    }
     return counts;
   }, [takes]);
 

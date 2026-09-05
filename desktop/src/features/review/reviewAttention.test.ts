@@ -159,12 +159,30 @@ describe("review attention projections", () => {
           group: { target: { kind: "group", group_id: "take-2" }, state: "best", actor: "Editor", updated_at: "2026-09-03T11:00:00Z" },
         },
       },
-    } as Partial<ReviewTakeGroup>);
-    const model = {
-      summary: { script_gaps: 2 },
+    });
+    const model: ReviewModelPayload = {
+      contract_version: "review.v1",
+      project: {
+        project_id: "project-1",
+        name: "测试项目",
+        input_kind: "fcpxml",
+        stats: {},
+        local_media: {},
+        issues: [],
+      },
+      revisions: {
+        analysis: "analysis-1",
+        automation_analysis: "analysis-1",
+        automation_updated_at: "",
+        review: 1,
+      },
+      capabilities: {},
+      summary: { automation: {}, script_gaps: 2, take_groups: 2, episodes: 1 },
       episodes: [{ episode: 1, scenes: [] }],
       take_groups: [take(), decided],
-    } as ReviewModelPayload;
+      script_gaps: [],
+      review_state: {},
+    };
     const result = reviewProjectSummary(model);
     expect(result.takeCount).toBe(2);
     expect(result.episodeCount).toBe(1);
