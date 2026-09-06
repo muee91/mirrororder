@@ -49,14 +49,14 @@ describe("MirrorOrder Design System v2 contract", () => {
     expect(css).toContain("font-size: var(--mo-font-xs)");
   });
 
-  it("keeps project chrome compact and selected navigation stable through hover", () => {
+  it("keeps project chrome compact and aligned with the current toolbar-plus-canvas authority", () => {
     const project = read("../features/production/professional-project-workbench.css");
     const secondary = read("./project-context-redesign.css");
 
-    expect(project).toContain("grid-template-rows: 48px 32px minmax(0, 1fr)");
+    expect(project).toContain("grid-template-rows: 48px minmax(0, 1fr)");
+    expect(project).not.toContain("grid-template-rows: 48px 32px");
     expect(project).toContain(".professional-area-nav button.is-active:hover");
-    expect(project).toContain(".professional-secondary-pages button.is-active:hover");
-    expect(project).toContain("box-shadow: inset 0 -2px 0 var(--mo-accent");
+    expect(project).not.toContain(".professional-secondary-pages");
     expect(secondary).toContain("Project Area navigation remains authoritative in ProjectWorkbench's project toolbar");
     expect(secondary).toContain("background: var(--mo-surface-pane)");
     expect(secondary).not.toMatch(/font-size:\s*9px/);
