@@ -23,7 +23,7 @@ jobs:
 
   desktop-linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,6 +39,9 @@ jobs:
       - name: Install Desktop dependencies
         working-directory: desktop
         run: npm install --no-audit --no-fund
+      - name: Install Chromium for layout runtime checks
+        working-directory: desktop
+        run: npx playwright install --with-deps chromium
       - name: Prepare Tauri icons
         working-directory: desktop
         run: npm run prepare:icons
@@ -54,6 +57,16 @@ jobs:
       - name: Test Desktop
         working-directory: desktop
         run: npm test
+      - name: Test Desktop layout runtime
+        working-directory: desktop
+        run: npm run test:layout-runtime
+      - name: Upload layout runtime screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-layout-runtime
+          path: desktop/artifacts/layout-runtime/
+          if-no-files-found: ignore
       - name: Build Desktop frontend
         working-directory: desktop
         run: npm run build

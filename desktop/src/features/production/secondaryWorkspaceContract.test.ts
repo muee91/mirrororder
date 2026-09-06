@@ -28,6 +28,13 @@ describe("project production workspace contract", () => {
     expect(workbench).not.toContain('{ page: "coverage", label: "覆盖" }');
   });
 
+  it("does not retain CSS ownership for the retired project secondary-navigation row", () => {
+    const css = read("./professional-project-workbench.css");
+    expect(css).not.toContain(".professional-secondary-nav");
+    expect(css).not.toContain(".professional-secondary-pages");
+    expect(css).not.toContain(".professional-page-context");
+  });
+
   it("keeps Material recovery contextual and removes retired planning workbenches", () => {
     const material = read("../material/MaterialWorkspace.tsx");
     const project = read("./ProjectWorkbench.tsx");
