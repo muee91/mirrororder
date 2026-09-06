@@ -313,23 +313,35 @@ def _decoded_file_url_path(url: str) -> str:
     return urllib.parse.unquote(value)
 
 
+def _is_absolute_file_locator(url: str) -> bool:
+    """绝对 file locator 是设备绑定（跨设备必然失效），无论盘符/挂载点形式。"""
+    path = _decoded_file_url_path(url)
+    if not path:
+        return False
+    if path.startswith("/"):
+        return True
+    return bool(re.match(r"^[A-Za-z]:[\\/]", path))
+
+
 def _strip_document_device_locators(text: str) -> tuple[str, int]:
-    """Remove device file locators from NLE documents, keeping element structure.
+    """Remove absolute file locators from NLE documents, keeping element structure.
 
     不发明新的伪 relative locator：fcpxml_reader 对空 src 有显式守护
     （``_asset_media_path`` 返回 ""；``media_ids[asset_id] = media_identity(p)
     if p else ""``），空 src 是 importer 认可的"无 locator"状态。跨设备
     media truth 只保留在 material_index 的 media_id 与 mirrorpkg media
-    manifest；导入端经 DeviceMediaStore 绑定（binding_key = media_id）进入
-    既有 rebind/recovery，文档内旧路径仅作哈希验证回退，不可能误绑。
+    manifest；重分析身份经 material_index 的 previous-index reconciliation
+    恢复（见 ``_reconcile_previous_clip_identity``），DeviceMediaStore 绑定
+    仍是设备侧唯一 authority。剥除规则是"一切绝对 file locator"——任何
+    挂载点形式的绝对路径跨设备都失效，不以是否命中枚举模式为条件；
+    document-relative src 原样保留。
     """
     stripped = 0
 
     def replace(match: re.Match[str]) -> str:
         nonlocal stripped
         prefix, url, suffix = match.group(1), match.group(2), match.group(3)
-        path = _decoded_file_url_path(url)
-        if not _DEVICE_PATH_PATTERN.search(path):
+        if not _is_absolute_file_locator(url):
             return match.group(0)
         stripped += 1
         return f"{prefix}{suffix}"
