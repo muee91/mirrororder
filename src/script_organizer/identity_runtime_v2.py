@@ -394,6 +394,3 @@ class IdentityRuntime:
             "root": str(identity_model_root()),
             "python_runtime_root": str(identity_python_root()),
         }
-
-
-_activate_runtime_packages()
