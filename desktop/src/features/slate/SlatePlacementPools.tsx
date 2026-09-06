@@ -97,8 +97,13 @@ export function SlatePlacementPools({ baseUrl, projectId, review, actor = "", on
     setBusy(true);
     try {
       await action(actorValue);
-      await onChanged();
+      // 写入已成功；随后的父级刷新失败不能改写成功结果，只报告刷新失败。
       setMessage(success);
+      try {
+        await onChanged();
+      } catch {
+        setMessage(`${success}；界面刷新失败，请手动刷新核对。`);
+      }
     } catch (error) {
       if (needsRefresh(error)) {
         await onChanged().catch(() => undefined);

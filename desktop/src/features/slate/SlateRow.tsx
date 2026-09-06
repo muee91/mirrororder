@@ -74,7 +74,15 @@ export function SlateRow({ row, onSelect, onPatch, renderMedia }: SlateRowProps)
     <tr
       className={`${row.selected ? "is-selected" : ""} ${row.dirty ? "is-dirty" : ""}`}
       data-slate-columns={SLATE_COLUMN_KEYS.join(" ")}
+      tabIndex={0}
+      aria-current={row.selected ? "true" : undefined}
       onClick={onSelect}
+      onKeyDown={onSelect ? (event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onSelect();
+      } : undefined}
     >
       <td className="col-index">
         <strong>{String(row.rowNumber).padStart(3, "0")}</strong>

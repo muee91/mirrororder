@@ -2,6 +2,16 @@ import { useEffect } from "react";
 
 export type SlatePlaybackKey = "j" | "k" | "l" | " ";
 
+// Slate 拥有自己的 transport 目标判定：button / editable target 保留原生
+// Space 语义，只有自由焦点才进入全局播放快捷键。刻意不 import editor 域的
+// isEditableKeyboardTarget，避免 Slate → editor 的跨域依赖。
+export function slatePlaybackTargetBlocked(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const editableAttribute = target.getAttribute("contenteditable");
+  const editable = target.isContentEditable || (editableAttribute !== null && editableAttribute !== "false");
+  return editable || ["input", "textarea", "select", "button"].includes(target.tagName.toLowerCase());
+}
+
 export async function applySlatePlaybackKey(video: HTMLVideoElement, key: SlatePlaybackKey): Promise<void> {
   if (key === " ") {
     if (video.paused) await video.play();
@@ -31,8 +41,7 @@ function activeSlateVideo(): HTMLVideoElement | null {
 export function SlatePlaybackShortcuts() {
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (slatePlaybackTargetBlocked(event.target)) return;
       const key = event.key === " " ? " " : event.key.toLowerCase();
       if (key !== "j" && key !== "k" && key !== "l" && key !== " ") return;
       const video = activeSlateVideo();

@@ -296,13 +296,11 @@ export function ScriptWorkspace({
     setDraggingGroupId(groupId);
   }
 
-  async function refreshAfterWrite(groupId: string, summary: string): Promise<void> {
+  async function refreshSelectionAfterWrite(groupId: string): Promise<void> {
     const next = await refresh();
     const refreshed = next.take_groups.find((take) => take.group_id === groupId) ?? null;
     setSelectedGroupId(refreshed?.group_id ?? null);
     setSelectedClipId((current) => refreshed?.angles.some((angle) => angle.clip_id === current) ? current : refreshed?.angles[0]?.clip_id ?? null);
-    setWriteState("idle");
-    setWriteMessage(summary);
   }
 
   async function placeTake(
@@ -337,7 +335,14 @@ export function ScriptWorkspace({
       const summary = segmentIds.length
         ? `已人工归集 ${label} → 当前剧本段`
         : `已人工粗归集 ${label} → ${episodeIds.map(episodeLabel).join(" / ")}`;
-      await refreshAfterWrite(groupId, summary);
+      // 写入已落库；随后的只读刷新失败不能改写成功结果，只报告刷新失败。
+      setWriteState("idle");
+      setWriteMessage(summary);
+      try {
+        await refreshSelectionAfterWrite(groupId);
+      } catch {
+        setWriteMessage(`${summary}；界面刷新失败，请手动刷新核对状态。`);
+      }
     } catch (error) {
       setWriteState("error");
       if (reviewWriteNeedsRefresh(error)) {
@@ -384,7 +389,14 @@ export function ScriptWorkspace({
         expectedRevision: model.revisions.review,
         sourceSurface: "desktop-script",
       });
-      await refreshAfterWrite(selectedTake.group_id, `已清除 ${takeDisplayLabel(selectedTake)} 的人工归集；自动状态未改动。`);
+      const summary = `已清除 ${takeDisplayLabel(selectedTake)} 的人工归集；自动状态未改动。`;
+      setWriteState("idle");
+      setWriteMessage(summary);
+      try {
+        await refreshSelectionAfterWrite(selectedTake.group_id);
+      } catch {
+        setWriteMessage(`${summary}；界面刷新失败，请手动刷新核对状态。`);
+      }
     } catch (error) {
       setWriteState("error");
       if (reviewWriteNeedsRefresh(error)) {
@@ -426,10 +438,15 @@ export function ScriptWorkspace({
     saveActor(actor);
     try {
       const result = await roughPlacement.apply(project.project_id, roughText, actor, model.revisions.review);
-      await refresh();
+      const summary = `已批量归集 ${result.resolved_groups} 个 Take`;
       setRoughPreview(null);
       setWriteState("idle");
-      setWriteMessage(`已批量归集 ${result.resolved_groups} 个 Take`);
+      setWriteMessage(summary);
+      try {
+        await refresh();
+      } catch {
+        setWriteMessage(`${summary}；界面刷新失败，请手动刷新核对状态。`);
+      }
       setDrawerOpen(false);
     } catch (error) {
       setWriteState("error");
