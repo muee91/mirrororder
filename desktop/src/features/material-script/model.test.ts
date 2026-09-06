@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import {
+  buildScriptTakeProjection,
+  candidateTakeIds,
+  mappedTakeIds,
   preferredScriptSegmentId,
   relatedTakeIds,
   takeMatchesFilters,
@@ -164,6 +167,83 @@ describe("material-script model", () => {
     });
     const model = { take_groups: [context, candidate, mapped] } as ReviewModelPayload;
     expect(relatedTakeIds(model, "s1")).toEqual(["mapped", "candidate", "context"]);
+  });
+
+  it("projects segment take lookups once with mapped/candidate/context separation", () => {
+    const candidateEntry = (groupId: string, candidateId: string, segmentIds: string[]) => ({
+      candidate_id: candidateId,
+      group_id: groupId,
+      script_segment_id: segmentIds[0] ?? "",
+      script_segment_ids: segmentIds,
+      episode_ids: [1],
+      confidence: "candidate",
+      total_score: 0.6,
+      dialogue_score: 0.6,
+      sequence_score: 0.5,
+      context_score: 0.5,
+      margin: 0.1,
+      method: "test",
+      transcript_text: "",
+      evidence: [],
+      context_episodes: [],
+    });
+    const mapped = take({
+      group_id: "mapped",
+      effective_mapping: {
+        source: "human",
+        mapping_status: "confirmed",
+        script_segment_ids: ["s1", "s2"],
+        episode_ids: [1],
+      },
+      candidates: [candidateEntry("mapped", "c-mapped", ["s1", "s3"])],
+    });
+    const candidate = take({
+      group_id: "candidate",
+      candidates: [candidateEntry("candidate", "c1", ["s1"])],
+    });
+    const multi = take({
+      group_id: "multi",
+      candidates: [
+        candidateEntry("multi", "c2", ["s9", "s9"]),
+        candidateEntry("multi", "c3", ["s9"]),
+      ],
+    });
+    const context = take({ group_id: "context", context: { episode_ids: [1], script_segment_ids: ["s1", "ctx"] } });
+    const model = { take_groups: [context, candidate, mapped, multi] } as ReviewModelPayload;
+
+    const projection = buildScriptTakeProjection(model);
+    expect(projection.mappedTakeIds.get("s1")).toEqual(["mapped"]);
+    expect(projection.mappedTakeIds.get("s2")).toEqual(["mapped"]);
+    // mapped take 即使同时携带重叠 candidate，也不再进入 candidate 列表。
+    expect(projection.candidateTakeIds.get("s1")).toEqual(["candidate"]);
+    expect(projection.candidateTakeIds.get("s3")).toEqual(["mapped"]);
+    // 重复 candidate segment id 去重，take 顺序稳定。
+    expect(projection.candidateTakeIds.get("s9")).toEqual(["multi"]);
+    expect(projection.relatedTakeIds.get("s1")).toEqual(["mapped", "candidate", "context"]);
+    expect(projection.relatedTakeIds.get("ctx")).toEqual(["context"]);
+    expect(projection.mappedTakeIds.has("ctx")).toBe(false);
+    expect(candidateTakeIds(model, "ctx")).toEqual([]);
+  });
+
+  it("caches the projection per model payload and rebuilds for a new payload", () => {
+    const model = {
+      take_groups: [
+        take({
+          group_id: "mapped",
+          effective_mapping: {
+            source: "human",
+            mapping_status: "confirmed",
+            script_segment_ids: ["s1"],
+            episode_ids: [1],
+          },
+        }),
+      ],
+    } as ReviewModelPayload;
+    const first = mappedTakeIds(model, "s1");
+    expect(mappedTakeIds(model, "s1")).toBe(first);
+    const rebuilt = { ...model, take_groups: [...model.take_groups] } as ReviewModelPayload;
+    expect(mappedTakeIds(rebuilt, "s1")).toEqual(first);
+    expect(mappedTakeIds(rebuilt, "s1")).not.toBe(first);
   });
 
   it("computes a bounded virtual window rather than rendering the full list", () => {

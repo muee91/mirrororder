@@ -309,22 +309,26 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
 
   async function reload(preferredRecordId?: string): Promise<void> {
     setMessage("正在读取多机位电子场记…");
-    const [nextReview, nextBoard] = await Promise.all([host.reviewModel(projectId), production.scriptSupervisor(projectId)]);
-    const nextDrafts = buildDrafts(nextBoard, nextReview);
-    const nextSelected = preferredRecordId && nextDrafts.some((row) => row.record_id === preferredRecordId)
-      ? preferredRecordId
-      : nextDrafts.some((row) => row.record_id === selectedRecordId)
-        ? selectedRecordId
-        : nextDrafts.find((row) => !isPlacedDraft(row))?.record_id ?? nextDrafts[0]?.record_id ?? "";
-    setReview(nextReview);
-    setBoard(nextBoard);
-    setDrafts(nextDrafts);
-    setSelectedRecordId(nextSelected);
-    const selected = nextDrafts.find((row) => row.record_id === nextSelected) ?? null;
-    setSelectedClipId(selected?.preferred_clip_id || (selected?.attachments[0] ? attachmentKey(selected.attachments[0]) : ""));
-    setPlaybackFailedClipId("");
-    setPlaybackRetry(0);
-    setMessage(`Slate r${nextBoard.revision} · ${nextDrafts.length} 条`);
+    try {
+      const [nextReview, nextBoard] = await Promise.all([host.reviewModel(projectId), production.scriptSupervisor(projectId)]);
+      const nextDrafts = buildDrafts(nextBoard, nextReview);
+      const nextSelected = preferredRecordId && nextDrafts.some((row) => row.record_id === preferredRecordId)
+        ? preferredRecordId
+        : nextDrafts.some((row) => row.record_id === selectedRecordId)
+          ? selectedRecordId
+          : nextDrafts.find((row) => !isPlacedDraft(row))?.record_id ?? nextDrafts[0]?.record_id ?? "";
+      setReview(nextReview);
+      setBoard(nextBoard);
+      setDrafts(nextDrafts);
+      setSelectedRecordId(nextSelected);
+      const selected = nextDrafts.find((row) => row.record_id === nextSelected) ?? null;
+      setSelectedClipId(selected?.preferred_clip_id || (selected?.attachments[0] ? attachmentKey(selected.attachments[0]) : ""));
+      setPlaybackFailedClipId("");
+      setPlaybackRetry(0);
+      setMessage(`Slate r${nextBoard.revision} · ${nextDrafts.length} 条`);
+    } catch (error) {
+      setMessage(`刷新失败：${errorMessage(error)}`);
+    }
   }
 
   useEffect(() => {

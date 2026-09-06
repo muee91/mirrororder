@@ -87,38 +87,100 @@ function candidateSegmentIds(take: ReviewTakeGroup): string[] {
   return [...values];
 }
 
+export interface ScriptTakeProjection {
+  mappedTakeIds: Map<string, string[]>;
+  candidateTakeIds: Map<string, string[]>;
+  relatedTakeIds: Map<string, string[]>;
+}
+
+/**
+ * 派生读模型：一次 O(takes × segments) 扫描建立 segmentId → Take 索引，
+ * 剧本侧所有 mapped/candidate/related 查询都应消费这里的结果，而不是在
+ * render 路径里反复全量扫描 take_groups（1500 Take 规模下每键一扫不可接受）。
+ * 顺序语义与旧的逐 take filter 完全一致：mapped → candidate → context，
+ * 同 rank 内保持 take_groups 顺序。
+ *
+ * 缓存契约：projection 按 ReviewModelPayload 对象身份缓存（WeakMap）。
+ * payload 视为不可变值——唯一更新路径是 useReviewModelSnapshot 用新解码的
+ * payload 整体替换（setModel(next)），任何代码不得原地修改
+ * model / take_groups / effective_mapping / candidates；对象身份变化即重建，
+ * 由此保证不会出现 stale derived state。
+ */
+export function buildScriptTakeProjection(model: ReviewModelPayload): ScriptTakeProjection {
+  const mapped = new Map<string, Array<{ index: number; groupId: string }>>();
+  const candidates = new Map<string, Array<{ index: number; groupId: string }>>();
+  const contextOnly = new Map<string, Array<{ index: number; groupId: string }>>();
+  const addEntry = (
+    target: Map<string, Array<{ index: number; groupId: string }>>,
+    segmentId: string,
+    index: number,
+    groupId: string,
+  ): void => {
+    const rows = target.get(segmentId);
+    if (rows) rows.push({ index, groupId });
+    else target.set(segmentId, [{ index, groupId }]);
+  };
+
+  model.take_groups.forEach((take, index) => {
+    const groupId = take.group_id;
+    const mappedIds = new Set(take.effective_mapping.script_segment_ids);
+    const candidateIds = candidateSegmentIds(take);
+    const candidateIdSet = new Set(candidateIds);
+    for (const segmentId of mappedIds) addEntry(mapped, segmentId, index, groupId);
+    for (const segmentId of candidateIds) {
+      if (!mappedIds.has(segmentId)) addEntry(candidates, segmentId, index, groupId);
+    }
+    for (const segmentId of take.context.script_segment_ids) {
+      if (!mappedIds.has(segmentId) && !candidateIdSet.has(segmentId)) {
+        addEntry(contextOnly, segmentId, index, groupId);
+      }
+    }
+  });
+
+  const toIdMap = (source: Map<string, Array<{ index: number; groupId: string }>>): Map<string, string[]> => {
+    const result = new Map<string, string[]>();
+    for (const [segmentId, rows] of source) {
+      result.set(segmentId, rows.map((row) => row.groupId));
+    }
+    return result;
+  };
+
+  const mappedTakeIds = toIdMap(mapped);
+  const candidateTakeIds = toIdMap(candidates);
+  const contextTakeIds = toIdMap(contextOnly);
+  const relatedTakeIds = new Map<string, string[]>();
+  const relatedKeys = new Set<string>([...mappedTakeIds.keys(), ...candidateTakeIds.keys(), ...contextTakeIds.keys()]);
+  for (const segmentId of relatedKeys) {
+    relatedTakeIds.set(segmentId, [
+      ...(mappedTakeIds.get(segmentId) ?? []),
+      ...(candidateTakeIds.get(segmentId) ?? []),
+      ...(contextTakeIds.get(segmentId) ?? []),
+    ]);
+  }
+  return { mappedTakeIds, candidateTakeIds, relatedTakeIds };
+}
+
+const scriptTakeProjectionCache = new WeakMap<ReviewModelPayload, ScriptTakeProjection>();
+
+function projectionOf(model: ReviewModelPayload): ScriptTakeProjection {
+  let projection = scriptTakeProjectionCache.get(model);
+  if (!projection) {
+    projection = buildScriptTakeProjection(model);
+    scriptTakeProjectionCache.set(model, projection);
+  }
+  return projection;
+}
+
 export function mappedTakeIds(model: ReviewModelPayload, segmentId: string): string[] {
-  return model.take_groups
-    .filter((take) => take.effective_mapping.script_segment_ids.includes(segmentId))
-    .map((take) => take.group_id);
+  return projectionOf(model).mappedTakeIds.get(segmentId) ?? [];
 }
 
 export function candidateTakeIds(model: ReviewModelPayload, segmentId: string): string[] {
-  return model.take_groups
-    .filter((take) => (
-      !take.effective_mapping.script_segment_ids.includes(segmentId) &&
-      candidateSegmentIds(take).includes(segmentId)
-    ))
-    .map((take) => take.group_id);
+  return projectionOf(model).candidateTakeIds.get(segmentId) ?? [];
 }
 
 export function relatedTakeIds(model: ReviewModelPayload, segmentId: string): string[] {
-  const ranked: Array<{ rank: number; index: number; groupId: string }> = [];
-  model.take_groups.forEach((take, index) => {
-    if (take.effective_mapping.script_segment_ids.includes(segmentId)) {
-      ranked.push({ rank: 0, index, groupId: take.group_id });
-      return;
-    }
-    if (candidateSegmentIds(take).includes(segmentId)) {
-      ranked.push({ rank: 1, index, groupId: take.group_id });
-      return;
-    }
-    if (take.context.script_segment_ids.includes(segmentId)) {
-      ranked.push({ rank: 2, index, groupId: take.group_id });
-    }
-  });
-  ranked.sort((left, right) => left.rank - right.rank || left.index - right.index);
-  return ranked.map((item) => item.groupId);
+  return projectionOf(model).relatedTakeIds.get(segmentId) ?? [];
 }
 
 export function virtualRange(

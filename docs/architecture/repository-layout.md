@@ -103,7 +103,7 @@ desktop/src-tauri/resources/     构建生成/占位的 packaged resources
 - 一个领域开始出现多组 engine/store/runtime/support 文件时，优先规划独立子 package，再以兼容 import 逐步迁移，而不是继续堆几十个顶层模块；
 - 大规模 package 迁移必须作为独立、可审阅的原子工作包，并有 import、packaging、stage-runtime 与 pytest contract，不能和产品功能修改混在一个提交中。
 
-详细目标 ownership、dependency direction、compatibility facade 与迁移 slice 见 [`python-package-boundaries.md`](./python-package-boundaries.md)。
+长期 package 边界与 compatibility facade 约束以 `docs/engineering/INVARIANTS.md` 的 "Python package" 一节为当前 authority；历史迁移边界文档已退役（见 `tests/test_repository_layout_guard.py` 的 RETIRED_DOCS tombstone）。
 
 ## 6. 测试与 fixture
 

@@ -111,6 +111,12 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
         if ((event.target as HTMLElement).closest("button")) return;
         onSelect();
       }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onSelect();
+      }}
       onDragStart={(event: DragEvent<HTMLElement>) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData(DRAG_TAKE_MIME, take.group_id);

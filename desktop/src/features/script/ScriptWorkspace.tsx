@@ -8,9 +8,9 @@ import type {
 import { RoughPlacementClient, type RoughPlacementPayload } from "../../api/roughPlacement";
 import { ScriptEpisodeView, dragGroupId, scriptDomId } from "../material-script/ScriptEpisodeView";
 import type { ScriptProjectionMode } from "../material-script/ScriptBlock";
-import { mappingLabel, TakeListRow, takeDisplayLabel } from "../material-script/TakeCard";
+import { mappingLabel, takeDisplayLabel } from "../material-script/TakeCard";
 import { TakeInspector } from "../material-script/TakeInspector";
-import { DRAG_TAKE_MIME, episodeLabel } from "../material-script/VirtualTakeList";
+import { DRAG_TAKE_MIME, VirtualTakeList, episodeLabel } from "../material-script/VirtualTakeList";
 import {
   candidateTakeIds,
   mappedTakeIds,
@@ -296,13 +296,11 @@ export function ScriptWorkspace({
     setDraggingGroupId(groupId);
   }
 
-  async function refreshAfterWrite(groupId: string, summary: string): Promise<void> {
+  async function refreshSelectionAfterWrite(groupId: string): Promise<void> {
     const next = await refresh();
     const refreshed = next.take_groups.find((take) => take.group_id === groupId) ?? null;
     setSelectedGroupId(refreshed?.group_id ?? null);
     setSelectedClipId((current) => refreshed?.angles.some((angle) => angle.clip_id === current) ? current : refreshed?.angles[0]?.clip_id ?? null);
-    setWriteState("idle");
-    setWriteMessage(summary);
   }
 
   async function placeTake(
@@ -337,7 +335,14 @@ export function ScriptWorkspace({
       const summary = segmentIds.length
         ? `已人工归集 ${label} → 当前剧本段`
         : `已人工粗归集 ${label} → ${episodeIds.map(episodeLabel).join(" / ")}`;
-      await refreshAfterWrite(groupId, summary);
+      // 写入已落库；随后的只读刷新失败不能改写成功结果，只报告刷新失败。
+      setWriteState("idle");
+      setWriteMessage(summary);
+      try {
+        await refreshSelectionAfterWrite(groupId);
+      } catch {
+        setWriteMessage(`${summary}；界面刷新失败，请手动刷新核对状态。`);
+      }
     } catch (error) {
       setWriteState("error");
       if (reviewWriteNeedsRefresh(error)) {
@@ -384,7 +389,14 @@ export function ScriptWorkspace({
         expectedRevision: model.revisions.review,
         sourceSurface: "desktop-script",
       });
-      await refreshAfterWrite(selectedTake.group_id, `已清除 ${takeDisplayLabel(selectedTake)} 的人工归集；自动状态未改动。`);
+      const summary = `已清除 ${takeDisplayLabel(selectedTake)} 的人工归集；自动状态未改动。`;
+      setWriteState("idle");
+      setWriteMessage(summary);
+      try {
+        await refreshSelectionAfterWrite(selectedTake.group_id);
+      } catch {
+        setWriteMessage(`${summary}；界面刷新失败，请手动刷新核对状态。`);
+      }
     } catch (error) {
       setWriteState("error");
       if (reviewWriteNeedsRefresh(error)) {
@@ -426,10 +438,15 @@ export function ScriptWorkspace({
     saveActor(actor);
     try {
       const result = await roughPlacement.apply(project.project_id, roughText, actor, model.revisions.review);
-      await refresh();
+      const summary = `已批量归集 ${result.resolved_groups} 个 Take`;
       setRoughPreview(null);
       setWriteState("idle");
-      setWriteMessage(`已批量归集 ${result.resolved_groups} 个 Take`);
+      setWriteMessage(summary);
+      try {
+        await refresh();
+      } catch {
+        setWriteMessage(`${summary}；界面刷新失败，请手动刷新核对状态。`);
+      }
       setDrawerOpen(false);
     } catch (error) {
       setWriteState("error");
@@ -617,21 +634,32 @@ export function ScriptWorkspace({
                       <input className="script-candidate-search" type="search" value={candidateQuery} onChange={(event) => setCandidateQuery(event.target.value)} placeholder="搜索 Take、对白或机位" aria-label="搜索全部 Take" />
                     ) : null}
                     <div className="script-context-take-list">
-                      {candidateTakes.length ? candidateTakes.map((take) => {
-                        const mappedHere = take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id);
-                        const candidateHere = selectedCandidateTakeIds.includes(take.group_id);
-                        return (
-                          <TakeListRow
-                            take={take}
-                            detail={mappedHere ? `已归集此段 · ${mappingLabel(take)}` : candidateHere ? `候选 · ${mappingLabel(take)}` : mappingLabel(take)}
-                            action={() => mappedHere ? selectTake(take, true) : void placeTakeOnSelectedBlock(take)}
-                            actionLabel={mappedHere ? "查看" : "归集到此段"}
-                            onSelect={() => selectTake(take, true)}
-                            onDragStart={(event, rowTake) => beginDrag(event, rowTake.group_id)}
-                            key={take.group_id}
-                          />
-                        );
-                      }) : <div className="workspace-context-empty">当前剧本段没有已归集或候选 Take。可切到“全部 Take”搜索并人工归集。</div>}
+                      {candidateTakes.length ? (
+                        <VirtualTakeList
+                          variant="compact"
+                          takes={candidateTakes}
+                          selectedGroupId={selectedGroupId}
+                          onSelect={(take) => selectTake(take, true)}
+                          onDragBegin={(groupId) => setDraggingGroupId(groupId)}
+                          onDragFinish={() => setDraggingGroupId(null)}
+                          detailForTake={(take) => {
+                            if (!selectedBlock) return mappingLabel(take);
+                            const mappedHere = take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id);
+                            if (mappedHere) return `已归集此段 · ${mappingLabel(take)}`;
+                            const candidateHere = selectedCandidateTakeIds.includes(take.group_id);
+                            return candidateHere ? `候选 · ${mappingLabel(take)}` : mappingLabel(take);
+                          }}
+                          actionForTake={(take) => {
+                            if (!selectedBlock) return () => selectTake(take, true);
+                            const mappedHere = take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id);
+                            return mappedHere ? () => selectTake(take, true) : () => void placeTakeOnSelectedBlock(take);
+                          }}
+                          actionLabelForTake={(take) => {
+                            if (!selectedBlock) return "查看";
+                            return take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id) ? "查看" : "归集到此段";
+                          }}
+                        />
+                      ) : <div className="workspace-context-empty">当前剧本段没有已归集或候选 Take。可切到“全部 Take”搜索并人工归集。</div>}
                     </div>
                   </>
                 ) : <div className="workspace-context-empty">先在剧本正文选择一个剧本段。</div>}

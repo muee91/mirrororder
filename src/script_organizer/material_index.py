@@ -21,7 +21,7 @@ from .matcher import (
     normalize_text,
     rescue_scene_prefix_candidates,
 )
-from .models import Candidate, MulticamGroup
+from .models import Candidate, Clip, MulticamGroup
 from .known_text_alignment import align_known_text
 from .review_store import ReviewStore
 from .script_parser import ScriptDocument, parse_script
@@ -544,6 +544,57 @@ def _reviewed_group_ids(review: dict[str, Any]) -> set[str]:
     return reviewed
 
 
+def _reconcile_previous_clip_identity(
+    clips: list[Clip],
+    previous_index: dict[str, Any],
+) -> list[Clip]:
+    """Restore verified media/clip identity for locator-less portable FCPXML.
+
+    portable export 会剥除 FCPXML 设备 src；重解析时 (media_path,
+    source_asset_id) 键与 media_identity() 都失去原始设备路径，若不干预，
+    重分析将产出空 media_id 与不同 clip_id 并覆盖 material_index。previous
+    index（随 portable package 保留）按 (source_asset_id, asset 内出现序)
+    保存原始身份——source_asset_id 是 FCPXML asset UUID（只取决于文档），
+    出现序由 spine 解析顺序决定，导出投影不改元素顺序。只恢复已验证的
+    M_ content id（MP_ provisional 不作为身份替代）；clip_id 整体恢复以
+    保持 group/review 连续（group_id 是 sorted clip_ids 的哈希）。本机
+    原始项目重分析时 fresh 推导与 previous 一致，恢复为 no-op。
+    """
+    previous_clips = previous_index.get("clips", []) if isinstance(previous_index, dict) else []
+    if not isinstance(previous_clips, list) or not previous_clips:
+        return clips
+    previous_by_asset: dict[str, list[dict[str, Any]]] = {}
+    for row in previous_clips:
+        if not isinstance(row, dict):
+            continue
+        asset_id = str(row.get("source_asset_id", "") or "")
+        if asset_id:
+            previous_by_asset.setdefault(asset_id, []).append(row)
+    if not previous_by_asset:
+        return clips
+    counters: dict[str, int] = {}
+    reconciled: list[Clip] = []
+    for clip in clips:
+        rows = previous_by_asset.get(clip.source_asset_id, [])
+        index = counters.get(clip.source_asset_id, 0)
+        counters[clip.source_asset_id] = index + 1
+        if index >= len(rows):
+            reconciled.append(clip)
+            continue
+        previous = rows[index]
+        media_id = clip.media_id
+        if not media_id:
+            candidate = str(previous.get("media_id", "") or "")
+            if candidate.startswith("M_"):
+                media_id = candidate
+        clip_id = str(previous.get("clip_id", "") or "") or clip.clip_id
+        if media_id == clip.media_id and clip_id == clip.clip_id:
+            reconciled.append(clip)
+            continue
+        reconciled.append(replace(clip, clip_id=clip_id, media_id=media_id))
+    return reconciled
+
+
 def analyze(
     config: ProjectConfig,
     affected_group_ids: set[str] | None = None,
@@ -558,7 +609,7 @@ def analyze(
     if config.is_fcpxml:
         if config.fcpxml is None:
             raise ValueError("FCPXML 项目缺少 input.fcpxml")
-        clips = read_fcpxml(config.fcpxml)
+        clips = _reconcile_previous_clip_identity(read_fcpxml(config.fcpxml), previous_index)
     elif config.is_media_directory:
         if config.media_root is None:
             raise ValueError("媒体目录项目缺少 media.root")

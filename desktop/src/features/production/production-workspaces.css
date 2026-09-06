@@ -211,6 +211,10 @@
   padding: 8px 12px 14px;
 }
 
+.script-context-take-list .take-virtual-scroll.is-compact {
+  height: clamp(320px, 52vh, 560px);
+}
+
 .rough-placement-tool {
   display: grid;
   gap: 12px;

@@ -148,7 +148,7 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     assert '{ value: "issues", label: "问题" }' in script
     assert 'placeholder="搜索剧本、角色或场景"' in script
     assert "placeTakeOnSelectedBlock" in script
-    assert 'actionLabel={mappedHere ? "查看" : "归集到此段"}' in script
+    assert "actionForTake=" in script and '"归集到此段"' in script
     assert "connection.setGroupPlacement" in script
     assert "connection.clearGroupPlacement" in script
     assert "onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId, selectedScriptSegmentId)" in script

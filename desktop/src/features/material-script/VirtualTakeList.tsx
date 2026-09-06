@@ -15,6 +15,8 @@ export function VirtualTakeList({
   onDragFinish,
   allowDrag = true,
   detailForTake,
+  actionForTake,
+  actionLabelForTake,
   variant = "card",
 }: {
   takes: ReviewTakeGroup[];
@@ -24,6 +26,8 @@ export function VirtualTakeList({
   onDragFinish?: () => void;
   allowDrag?: boolean;
   detailForTake?: (take: ReviewTakeGroup) => string | undefined;
+  actionForTake?: (take: ReviewTakeGroup) => (() => void) | undefined;
+  actionLabelForTake?: (take: ReviewTakeGroup) => string | undefined;
   variant?: "card" | "compact";
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -99,6 +103,8 @@ export function VirtualTakeList({
                 <TakeListRow
                   take={take}
                   detail={compactDetail}
+                  action={actionForTake?.(take)}
+                  actionLabel={actionLabelForTake?.(take)}
                   onSelect={() => onSelect(take)}
                   onDragStart={allowDrag ? (event, rowTake) => {
                     event.dataTransfer.effectAllowed = "move";
