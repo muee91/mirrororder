@@ -317,3 +317,212 @@ def test_project_transfer_runtime_keeps_request_after_failure_for_retry(tmp_path
     assert manager.updates[-1]["status"] == "failed"
     assert "目标已存在" in manager.updates[-1]["error"]
     assert "task_2" not in manager._threads
+
+
+def _transfer_project(root: Path) -> Path:
+    """带真实设备绑定的项目：material_index + FCPXML 都引用 /Volumes 媒体。"""
+    from urllib.parse import quote
+
+    package = root / "device-project.mirrorproj"
+    (package / "inputs").mkdir(parents=True)
+    (package / "output").mkdir()
+    media_paths = {
+        "M_aaa": "/Volumes/TESTVOL/《剧》/素材/A1/A001.mp4",
+        "M_bbb": "/Volumes/TESTVOL/《剧》/素材/B1/B001.mov",
+        "M_ccc": "/Users/tester/Desktop/A002.mov",
+        "M_ddd": "C:\\Users\\tester\\Media\\A003.mov",
+    }
+    index = {
+        "version": 3,
+        "source": {
+            "kind": "fcpxml",
+            "fcpxml": "./inputs/source.fcpxml",
+            "fcpxml_sha256": "stale-digest",
+            "script": "./inputs/script.md",
+            "script_sha256": "script-digest",
+            "media_root": "",
+            "media_binding": "not-required",
+        },
+        "clips": [
+            {"clip_id": "C1", "name": "A001.mp4", "camera": "A", "media_path": media_paths["M_aaa"], "exists": True, "media_id": "M_aaa"},
+            {"clip_id": "C2", "name": "B001.mov", "camera": "B", "media_path": media_paths["M_bbb"], "exists": True, "media_id": "M_bbb"},
+            {"clip_id": "C3", "name": "A002.mov", "camera": "A", "media_path": media_paths["M_ccc"], "exists": True, "media_id": "M_ccc"},
+            {"clip_id": "C4", "name": "A003.mov", "camera": "A", "media_path": media_paths["M_ddd"], "exists": True, "media_id": "M_ddd"},
+        ],
+        "groups": [
+            {"group_id": "G1", "members": [{"clip_id": "C1", "media_path": media_paths["M_aaa"], "exists": True, "media_id": "M_aaa"}]}
+        ],
+        "stats": {"clips": 4, "groups": 1},
+    }
+    (package / "output" / "material_index.json").write_text(
+        json.dumps(index, ensure_ascii=False), encoding="utf-8"
+    )
+    (package / "output" / "review.json").write_text(
+        json.dumps(
+            {"revision": 1, "groups": {"G1": {"legacy_source": "/Volumes/TESTVOL/codex/人工核对.json"}}},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    fcpxml = "\n".join(
+        [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            "<fcpxml>",
+            f'  <ff:asset id="a1" src="file://{quote(media_paths["M_aaa"])}"/>',
+            f'  <ff:asset id="b1" src="file://{quote(media_paths["M_bbb"])}"/>',
+            f'  <ff:asset id="c1" src="file://{quote(media_paths["M_ccc"])}"/>',
+            '  <ff:asset id="d1" src="file:///C:/Users/tester/Media/A003.mov"/>',
+            "</fcpxml>",
+        ]
+    )
+    (package / "inputs" / "source.fcpxml").write_text(fcpxml, encoding="utf-8")
+    (package / "inputs" / "script.md").write_text("# 第1集\n", encoding="utf-8")
+    project = [
+        "[project]",
+        'format = "mirrororder-project"',
+        "schema_version = 1",
+        'id = "device-project"',
+        'name = "Device Project"',
+        "",
+        "[input]",
+        'kind = "fcpxml"',
+        'script = "./inputs/script.md"',
+        'fcpxml = "./inputs/source.fcpxml"',
+        "",
+        "[output]",
+        'directory = "./output"',
+    ]
+    (package / "project.toml").write_text("\n".join(project) + "\n", encoding="utf-8")
+    return package
+
+
+def test_copy_project_package_rebinds_device_bindings_for_portability(tmp_path):
+    import hashlib
+
+    from script_organizer.project_transfer.operations import _DEVICE_PATH_PATTERN
+
+    source = _transfer_project(tmp_path)
+    live_index_before = (source / "output" / "material_index.json").read_bytes()
+    live_document_before = (source / "inputs" / "source.fcpxml").read_bytes()
+    result = copy_project_package(source, tmp_path / "Export", include_cache=False)
+
+    target = tmp_path / "Export.mirrorproj"
+    assert result["projected_artifacts"] >= 3
+    # live 源项目未被原地修改：导出只发生在 staging/目标里。
+    assert (source / "output" / "material_index.json").read_bytes() == live_index_before
+    assert (source / "inputs" / "source.fcpxml").read_bytes() == live_document_before
+    for path in target.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        assert not _DEVICE_PATH_PATTERN.search(text), path
+
+    index = json.loads((target / "output" / "material_index.json").read_text(encoding="utf-8"))
+    assert [clip["media_id"] for clip in index["clips"]] == ["M_aaa", "M_bbb", "M_ccc", "M_ddd"]
+    assert all(clip["media_path"] == "" for clip in index["clips"])
+    assert all(clip["exists"] is False for clip in index["clips"])
+    serialized = (target / "output" / "material_index.json").read_text(encoding="utf-8")
+    assert "/Volumes/" not in serialized
+    assert "/Users/tester" not in serialized
+    assert "C:/Users" not in serialized
+    clip_a = index["clips"][0]
+    assert clip_a["media_id"] == "M_aaa"
+    member = index["groups"][0]["members"][0]
+    assert member["media_id"] == "M_aaa"
+    assert member["media_path"] == ""
+
+    document = (target / "inputs" / "source.fcpxml").read_text(encoding="utf-8")
+    # 设备 locator 剥除为空 src（fcpxml_reader 认可的无 locator 状态），
+    # 不发明新的伪 relative locator；media_id 只留在 material_index 里。
+    assert document.count('src=""') == 4
+    assert "file://" not in document
+    assert "/Volumes/" not in document
+    assert "/Users/tester" not in document
+    assert "C:/Users" not in document
+    assert index["source"]["fcpxml_sha256"] == hashlib.sha256(document.encode("utf-8")).hexdigest()
+
+    review = json.loads((target / "output" / "review.json").read_text(encoding="utf-8"))
+    assert review["revision"] == 1
+    assert review["groups"]["G1"]["legacy_source"] == ""
+
+
+def test_import_copy_round_trip_stays_portable(tmp_path):
+    from script_organizer.project_transfer.operations import _DEVICE_PATH_PATTERN
+
+    source = _transfer_project(tmp_path)
+    copy_project_package(source, tmp_path / "Export")
+    target = tmp_path / "Export.mirrorproj"
+
+    # runtime._device_import_run 的导入复制走同一条 copy_project_package 边界。
+    imported = tmp_path / "workspace" / "imported"
+    imported.parent.mkdir(parents=True)
+    copy_project_package(target, imported, require_external_source=True, destination_extension=None)
+
+    manifest = load_project_package_manifest(imported)
+    assert manifest.project_id == "device-project"
+    index = json.loads((imported / "output" / "material_index.json").read_text(encoding="utf-8"))
+    assert [clip["media_id"] for clip in index["clips"]] == ["M_aaa", "M_bbb", "M_ccc", "M_ddd"]
+    assert all(clip["media_path"] == "" for clip in index["clips"])
+    for path in imported.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        assert not _DEVICE_PATH_PATTERN.search(text), path
+
+
+def test_collect_archive_contains_no_device_paths(tmp_path):
+    from script_organizer.project_transfer.operations import _DEVICE_PATH_PATTERN
+
+    source = _transfer_project(tmp_path)
+    media_a = tmp_path / "A001.mp4"
+    media_a.write_bytes(b"\x00\x01media-bytes")
+    media_b = tmp_path / "B001.mov"
+    media_b.write_bytes(b"\x00\x02media-bytes")
+
+    result = collect_project_archive(
+        source,
+        tmp_path / "Archive",
+        include_cache=False,
+        media_files=[("M_aaa", media_a), ("M_bbb", media_b)],
+    )
+
+    assert result["projected_artifacts"] >= 3
+    with zipfile.ZipFile(tmp_path / "Archive.mirrorpkg") as archive:
+        for name in archive.namelist():
+            if name.startswith("media/"):
+                continue
+            data = archive.read(name)
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            assert not _DEVICE_PATH_PATTERN.search(text), name
+        document = archive.read("project/inputs/source.fcpxml").decode("utf-8")
+        assert document.count('src=""') == 4
+        assert "file://" not in document
+        index = json.loads(archive.read("project/output/material_index.json"))
+        assert index["clips"][1]["media_id"] == "M_bbb"
+        assert index["clips"][1]["media_path"] == ""
+
+
+def test_export_strips_device_locator_without_requiring_media_map(tmp_path):
+    source = _transfer_project(tmp_path)
+    document = (source / "inputs" / "source.fcpxml").read_text(encoding="utf-8")
+    document = document.replace(
+        "</fcpxml>",
+        '  <ff:asset id="zz" src="file:///Volumes/Unknown/zzz.mp4"/>\n</fcpxml>',
+    )
+    (source / "inputs" / "source.fcpxml").write_text(document, encoding="utf-8")
+
+    # 剥除不依赖 media map：任何设备 locator 都直接移除，不产生伪绑定。
+    result = copy_project_package(source, tmp_path / "Export")
+    exported = ((tmp_path / "Export.mirrorproj") / "inputs" / "source.fcpxml").read_text(encoding="utf-8")
+    assert exported.count('src=""') == 5
+    assert "/Volumes/" not in exported
+    assert result["projected_artifacts"] >= 3
