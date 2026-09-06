@@ -11,6 +11,7 @@ import {
 import { MediaHealthIndicator } from "../../components/StatusIndicators";
 import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
 import { mediaHealthState } from "./mediaHealthState";
+import { useNearViewportGate } from "./nearViewport";
 import "./media-library.css";
 import "./media-health-adoption.css";
 import "./camera-presentation.css";
@@ -113,6 +114,65 @@ function playbackForItem(
     };
   }
   return reviewFallback;
+}
+
+function MediaLibraryRow({
+  item,
+  selected,
+  roles,
+  preview,
+  onSelect,
+}: {
+  item: MediaInventoryItem;
+  selected: boolean;
+  roles: MediaRoleStore | null;
+  preview: PlaybackEntry | undefined;
+  onSelect: () => void;
+}) {
+  // Viewport-gated preview：屏幕外的行保持静态占位，列表不再一次挂载
+  // 上百个 <video> decoder surface（模式与 MirrorOrderMediaCard 一致）。
+  const [rowRef, nearViewport] = useNearViewportGate<HTMLButtonElement>(true, "160px 0px");
+  const role = roleFor(item, roles);
+  const auxiliary = isAuxiliary(role);
+  const camera = effectiveCamera(role.camera_override, item.inferred_camera);
+  const manualCamera = Boolean(role.camera_override?.trim());
+  const healthState = mediaHealthState({ indexed: item.indexed, playable: Boolean(preview) });
+  return (
+    <button
+      ref={rowRef}
+      type="button"
+      className={`media-library-row ${selected ? "is-selected" : ""}`}
+      onClick={onSelect}
+      aria-pressed={selected}
+    >
+      <span className="media-library-thumb" data-camera-tone={camera.tone} aria-hidden="true">
+        {preview && nearViewport ? (
+          <video
+            src={preview.url}
+            muted
+            preload="metadata"
+            playsInline
+            onLoadedMetadata={(event) => {
+              if (preview.sourceStart > 0) {
+                try { event.currentTarget.currentTime = preview.sourceStart; } catch { /* metadata may still be settling */ }
+              }
+            }}
+            onMouseEnter={(event) => { void event.currentTarget.play().catch(() => undefined); }}
+            onMouseLeave={(event) => {
+              event.currentTarget.pause();
+              if (preview.sourceStart > 0) {
+                try { event.currentTarget.currentTime = preview.sourceStart; } catch { /* keep hover scrub best-effort */ }
+              }
+            }}
+          />
+        ) : <span className="media-library-thumb-fallback">{camera.label}</span>}
+      </span>
+      <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
+      <span className="media-library-name"><strong>{item.display_name}</strong><small>{item.folder_label || "素材"}</small></span>
+      <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{role.scene_id ? `场 ${role.scene_id}` : auxiliary ? "不参与主机位同步" : ""}</small></span>
+      <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><MediaHealthIndicator state={healthState} /></span>
+    </button>
+  );
 }
 
 export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }: Props) {
@@ -301,45 +361,16 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
       <div className="media-library-layout">
         <div className={`media-library-list is-${viewMode}`} role="list" aria-label={viewMode === "grid" ? "素材缩略图" : "素材列表"}>
-          {visible.map((item) => {
-            const role = roleFor(item, roles);
-            const auxiliary = isAuxiliary(role);
-            const camera = effectiveCamera(role.camera_override, item.inferred_camera);
-            const manualCamera = Boolean(role.camera_override?.trim());
-            const preview = playbackForItem(host, projectId, item, playbackByMedia[item.media_id]);
-            const canPlay = Boolean(preview);
-            const healthState = mediaHealthState({ indexed: item.indexed, playable: canPlay });
-            return (
-              <button type="button" className={`media-library-row ${selectedId === item.media_id ? "is-selected" : ""}`} key={item.media_id} onClick={() => select(item)} aria-pressed={selectedId === item.media_id}>
-                <span className="media-library-thumb" data-camera-tone={camera.tone} aria-hidden="true">
-                  {preview ? (
-                    <video
-                      src={preview.url}
-                      muted
-                      preload="metadata"
-                      playsInline
-                      onLoadedMetadata={(event) => {
-                        if (preview.sourceStart > 0) {
-                          try { event.currentTarget.currentTime = preview.sourceStart; } catch { /* metadata may still be settling */ }
-                        }
-                      }}
-                      onMouseEnter={(event) => { void event.currentTarget.play().catch(() => undefined); }}
-                      onMouseLeave={(event) => {
-                        event.currentTarget.pause();
-                        if (preview.sourceStart > 0) {
-                          try { event.currentTarget.currentTime = preview.sourceStart; } catch { /* keep hover scrub best-effort */ }
-                        }
-                      }}
-                    />
-                  ) : <span className="media-library-thumb-fallback">{camera.label}</span>}
-                </span>
-                <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
-                <span className="media-library-name"><strong>{item.display_name}</strong><small>{item.folder_label || "素材"}</small></span>
-                <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{role.scene_id ? `场 ${role.scene_id}` : auxiliary ? "不参与主机位同步" : ""}</small></span>
-                <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><MediaHealthIndicator state={healthState} /></span>
-              </button>
-            );
-          })}
+          {visible.map((item) => (
+            <MediaLibraryRow
+              key={item.media_id}
+              item={item}
+              selected={selectedId === item.media_id}
+              roles={roles}
+              preview={playbackForItem(host, projectId, item, playbackByMedia[item.media_id])}
+              onSelect={() => select(item)}
+            />
+          ))}
           {filtered.length > visible.length ? <p className="production-note">当前显示前 {visible.length} 条；继续缩小搜索范围以定位其它素材。</p> : null}
           {!visible.length ? <p className="empty-copy">当前筛选下没有素材。</p> : null}
         </div>

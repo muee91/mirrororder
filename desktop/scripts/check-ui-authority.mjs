@@ -161,7 +161,7 @@ assert(scriptWorkspace.includes('{ value: "coverage", label: "覆盖" }'), "Cove
 assert(scriptWorkspace.includes('{ value: "issues", label: "问题" }'), "Script must expose an issue-focused projection");
 assert(scriptWorkspace.includes('placeholder="搜索剧本、角色或场景"'), "Script must support direct script search");
 assert(scriptWorkspace.includes("placeTakeOnSelectedBlock"), "Script segment context must support direct Take placement");
-assert(scriptWorkspace.includes('actionLabel={mappedHere ? "查看" : "归集到此段"}'), "Script candidates must act on the selected ScriptBlock instead of a generic material tray");
+assert(scriptWorkspace.includes("actionForTake=") && scriptWorkspace.includes('"归集到此段"'), "Script candidates must act on the selected ScriptBlock instead of a generic material tray");
 assert(scriptWorkspace.includes("connection.setGroupPlacement"), "Script must own Review placement writes");
 assert(scriptWorkspace.includes("connection.clearGroupPlacement"), "Script must own placement correction/clear");
 assert(scriptWorkspace.includes("RoughPlacementClient"), "batch episode-only placement must stay inside Script authority");

@@ -8,9 +8,9 @@ import type {
 import { RoughPlacementClient, type RoughPlacementPayload } from "../../api/roughPlacement";
 import { ScriptEpisodeView, dragGroupId, scriptDomId } from "../material-script/ScriptEpisodeView";
 import type { ScriptProjectionMode } from "../material-script/ScriptBlock";
-import { mappingLabel, TakeListRow, takeDisplayLabel } from "../material-script/TakeCard";
+import { mappingLabel, takeDisplayLabel } from "../material-script/TakeCard";
 import { TakeInspector } from "../material-script/TakeInspector";
-import { DRAG_TAKE_MIME, episodeLabel } from "../material-script/VirtualTakeList";
+import { DRAG_TAKE_MIME, VirtualTakeList, episodeLabel } from "../material-script/VirtualTakeList";
 import {
   candidateTakeIds,
   mappedTakeIds,
@@ -617,21 +617,32 @@ export function ScriptWorkspace({
                       <input className="script-candidate-search" type="search" value={candidateQuery} onChange={(event) => setCandidateQuery(event.target.value)} placeholder="搜索 Take、对白或机位" aria-label="搜索全部 Take" />
                     ) : null}
                     <div className="script-context-take-list">
-                      {candidateTakes.length ? candidateTakes.map((take) => {
-                        const mappedHere = take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id);
-                        const candidateHere = selectedCandidateTakeIds.includes(take.group_id);
-                        return (
-                          <TakeListRow
-                            take={take}
-                            detail={mappedHere ? `已归集此段 · ${mappingLabel(take)}` : candidateHere ? `候选 · ${mappingLabel(take)}` : mappingLabel(take)}
-                            action={() => mappedHere ? selectTake(take, true) : void placeTakeOnSelectedBlock(take)}
-                            actionLabel={mappedHere ? "查看" : "归集到此段"}
-                            onSelect={() => selectTake(take, true)}
-                            onDragStart={(event, rowTake) => beginDrag(event, rowTake.group_id)}
-                            key={take.group_id}
-                          />
-                        );
-                      }) : <div className="workspace-context-empty">当前剧本段没有已归集或候选 Take。可切到“全部 Take”搜索并人工归集。</div>}
+                      {candidateTakes.length ? (
+                        <VirtualTakeList
+                          variant="compact"
+                          takes={candidateTakes}
+                          selectedGroupId={selectedGroupId}
+                          onSelect={(take) => selectTake(take, true)}
+                          onDragBegin={(groupId) => setDraggingGroupId(groupId)}
+                          onDragFinish={() => setDraggingGroupId(null)}
+                          detailForTake={(take) => {
+                            if (!selectedBlock) return mappingLabel(take);
+                            const mappedHere = take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id);
+                            if (mappedHere) return `已归集此段 · ${mappingLabel(take)}`;
+                            const candidateHere = selectedCandidateTakeIds.includes(take.group_id);
+                            return candidateHere ? `候选 · ${mappingLabel(take)}` : mappingLabel(take);
+                          }}
+                          actionForTake={(take) => {
+                            if (!selectedBlock) return () => selectTake(take, true);
+                            const mappedHere = take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id);
+                            return mappedHere ? () => selectTake(take, true) : () => void placeTakeOnSelectedBlock(take);
+                          }}
+                          actionLabelForTake={(take) => {
+                            if (!selectedBlock) return "查看";
+                            return take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id) ? "查看" : "归集到此段";
+                          }}
+                        />
+                      ) : <div className="workspace-context-empty">当前剧本段没有已归集或候选 Take。可切到“全部 Take”搜索并人工归集。</div>}
                     </div>
                   </>
                 ) : <div className="workspace-context-empty">先在剧本正文选择一个剧本段。</div>}
