@@ -76,7 +76,16 @@ class SemanticSearcher:
         limit: int = 16,
         sources: Sequence[str] | None = None,
         refresh: bool = True,
+        allow_query_embedding: bool = True,
     ) -> dict[str, Any]:
+        """Hybrid retrieval over cached production evidence.
+
+        ``allow_query_embedding=False`` is mandatory on GET read paths: a page
+        request must never run provider/network inference. Blocked searches
+        keep the deterministic keyword/FTS recall and simply lose the vector
+        contribution. Explicit AI flows (assistant / agent tools) keep the
+        default so query embeddings stay evidence for a user-invoked action.
+        """
         text = str(query or "").strip()[:1000]
         if not text:
             raise ValueError("语义搜索内容不能为空")
@@ -93,7 +102,7 @@ class SemanticSearcher:
 
         query_vector: list[float] | None = None
         vector_rows: list[tuple[dict[str, Any], float]] = []
-        if self.encoder.enabled:
+        if allow_query_embedding and self.encoder.enabled:
             query_vector = self.encoder.encode_one(text)
             if query_vector:
                 documents = self.store.documents(
@@ -177,6 +186,7 @@ class SemanticSearcher:
                 "device_paths_exposed": False,
                 "keyword_fallback": True,
                 "shared_encoder_for_documents_and_query": True,
+                "read_path_blocks_query_embedding": not allow_query_embedding,
             },
         }
 

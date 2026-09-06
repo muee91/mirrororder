@@ -360,6 +360,7 @@ def install_semantic_runtime() -> None:
                         limit=limit,
                         sources=sources,
                         refresh=False,
+                        allow_query_embedding=False,
                     )
                     self._send_json(payload)
                     return
@@ -383,6 +384,7 @@ def install_semantic_runtime() -> None:
                             limit=limit,
                             sources=sources,
                             refresh=False,
+                            allow_query_embedding=False,
                         )
                     )
                     service.tokens.audit(agent, "read:semantic-search", project_id)

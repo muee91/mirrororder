@@ -304,6 +304,83 @@ def test_safe_search_payload_hides_model_details() -> None:
     assert "secret-model" not in json.dumps(safe, ensure_ascii=False)
 
 
+def test_read_path_search_never_runs_query_embedding(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    store = SemanticStore(database)
+    store.replace_documents(
+        "demo",
+        "visual",
+        [_doc("visual-door", "visual", "门口有人回头，人物从室内走向外景。", [1.0, 0.0], "G-door")],
+    )
+    encoder = FakeEncoder()
+    searcher = SemanticSearcher(
+        "semantic-test",
+        "demo",
+        object(),
+        database=database,
+        encoder=encoder,
+    )
+    payload = searcher.search("门口", refresh=False, allow_query_embedding=False)
+    assert encoder.encoded_batches == []
+    assert payload["mode"] == "keyword"
+    assert payload["summary"]["vector_available"] is False
+    assert payload["results"][0]["group_id"] == "G-door"
+    assert payload["results"][0]["vector_similarity"] is None
+    assert payload["results"][0]["vector_rank"] is None
+    assert payload["semantics"]["read_path_blocks_query_embedding"] is True
+
+
+def test_read_path_search_never_touches_provider_transport(tmp_path: Path, monkeypatch) -> None:
+    import urllib.request
+
+    from script_organizer.semantic_encoder import SemanticEmbeddingConfig, SemanticEncoder
+
+    database = _database(tmp_path)
+    store = SemanticStore(database)
+    store.replace_documents(
+        "demo",
+        "visual",
+        [_doc("visual-door", "visual", "门口有人回头，人物从室内走向外景。", [1.0, 0.0], "G-door")],
+    )
+    encoder = SemanticEncoder(
+        SemanticEmbeddingConfig(
+            provider="openai-compatible",
+            base_url="http://embedding.invalid",
+            api_key="k",
+            model="m",
+            timeout_seconds=5,
+            source="test",
+        )
+    )
+    assert encoder.enabled
+
+    def blocked(*_args, **_kwargs):
+        raise AssertionError("read-path search must not call the embedding provider transport")
+
+    monkeypatch.setattr(urllib.request, "urlopen", blocked)
+    searcher = SemanticSearcher(
+        "semantic-test",
+        "demo",
+        object(),
+        database=database,
+        encoder=encoder,
+    )
+    payload = searcher.search("门口", refresh=False, allow_query_embedding=False)
+    assert payload["mode"] == "keyword"
+    assert payload["results"][0]["group_id"] == "G-door"
+    assert payload["summary"]["vector_available"] is False
+
+
+def test_semantic_get_handlers_declare_read_path_purity() -> None:
+    root = Path(__file__).resolve().parents[1]
+    runtime = (root / "src" / "script_organizer" / "semantic_runtime.py").read_text(encoding="utf-8")
+    search_source = (root / "src" / "script_organizer" / "semantic_search.py").read_text(encoding="utf-8")
+    # App GET 和 agent GET 都必须显式关闭读路径查询向量；agent tool / assistant
+    # 的显式 AI 流保持默认开启。
+    assert runtime.count("allow_query_embedding=False") == 2
+    assert "allow_query_embedding: bool = True" in search_source
+
+
 def test_static_semantic_runtime_stays_read_only_and_is_installed_last() -> None:
     root = Path(__file__).resolve().parents[1]
     runtime = (root / "src" / "script_organizer" / "semantic_runtime.py").read_text(encoding="utf-8")
