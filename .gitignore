@@ -6,6 +6,11 @@
 __pycache__/
 *.py[cod]
 
+# Local secret files must never enter the repository.
+.env
+.env.*
+!.env.example
+
 # Generated desktop applications and browser QA artifacts.
 *.app/
 output/
