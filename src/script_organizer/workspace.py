@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import tempfile
 import tomllib
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +23,7 @@ from .project_package import (
 )
 from .runtime_diagnostics import environment_payload
 from .script_parser import parse_script
+from .source_descriptor import shared_source_descriptor
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -49,7 +52,21 @@ def _now() -> str:
 
 
 def project_id_for(value: str) -> str:
-    candidate = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    """Create a safe, deterministic project directory/route identifier.
+
+    Project names are user-facing and commonly contain CJK characters. The
+    previous ASCII-only normalizer erased those names, making every such
+    project fall back to the same ``project`` directory. Keep IDs ASCII so
+    they remain compatible with the current Host route parser, and add a
+    deterministic digest when the name contains non-ASCII characters.
+    """
+    normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+    ascii_name = unicodedata.normalize("NFKD", normalized).encode("ascii", "ignore").decode("ascii")
+    candidate = re.sub(r"[^a-z0-9]+", "-", ascii_name).strip("-")
+    if any(ord(character) > 127 for character in normalized) or (normalized.strip() and not candidate):
+        digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:10]
+        prefix = candidate[: 48 - len(digest) - 1].rstrip("-")
+        candidate = f"{prefix}-{digest}" if prefix else f"project-{digest}"
     return candidate[:48] or "project"
 
 
@@ -226,7 +243,14 @@ class WorkspaceRegistry:
             "input_kind": config.input_kind,
             "created_at": _now(),
             "updated_at": _now(),
+            "source": shared_source_descriptor(config),
         }
+        # Project discovery must stay cheap, but an explicit registration can
+        # retain the existing index's small summary so legacy projects do not
+        # appear as empty/unprepared in the Desktop library.
+        index = _read_json(config.output_dir / "material_index.json", {})
+        if isinstance(index, dict) and isinstance(index.get("stats"), dict):
+            entry["stats"] = dict(index["stats"])
         projects.append(entry)
         payload["projects"] = projects
         _write_json(self.config.registry_path, payload)

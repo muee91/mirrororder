@@ -31,7 +31,7 @@ from script_organizer.web_server import (
     make_handler,
 )
 from script_organizer import web_server
-from script_organizer.workspace import WorkspaceConfig, WorkspaceRegistry
+from script_organizer.workspace import WorkspaceConfig, WorkspaceRegistry, project_id_for
 
 
 def _workspace(tmp_path: Path) -> WorkspaceConfig:
@@ -163,6 +163,42 @@ def test_workspace_payload_uses_registry_only_without_materializing_projects(tmp
         }
     ]
     assert service._projects == {}
+
+
+def test_project_id_for_preserves_unicode_names_without_collapsing_to_project() -> None:
+    chinese_id = project_id_for("人不狠，站不稳")
+    assert chinese_id.startswith("project-")
+    assert len(chinese_id) <= 48
+    assert chinese_id != project_id_for("在制项目")
+    assert project_id_for("FCP 项目").startswith("fcp-")
+    assert project_id_for("A/B") == "a-b"
+
+
+def test_register_existing_keeps_index_summary_and_portable_source(tmp_path) -> None:
+    workspace = _workspace(tmp_path)
+    project_dir = workspace.registry_path.parent / "legacy"
+    inputs = project_dir / "inputs"
+    output = project_dir / "output"
+    inputs.mkdir(parents=True)
+    output.mkdir()
+    (inputs / "script.md").write_text("# 第1集\n", encoding="utf-8")
+    (inputs / "source.fcpxml").write_text("<fcpxml />", encoding="utf-8")
+    config_path = project_dir / "project.toml"
+    config_path.write_text(
+        """[project]\nname = \"Legacy\"\n\n[input]\nkind = \"fcpxml\"\nscript = \"./inputs/script.md\"\nfcpxml = \"./inputs/source.fcpxml\"\n\n[output]\ndirectory = \"./output\"\n""",
+        encoding="utf-8",
+    )
+    (output / "material_index.json").write_text(
+        json.dumps({"stats": {"clips": 7, "groups": 3}, "source": {"fcpxml": "/Volumes/old.fcpxml"}}),
+        encoding="utf-8",
+    )
+
+    entry = WorkspaceRegistry(workspace).register_existing("legacy", config_path)
+
+    assert entry["stats"] == {"clips": 7, "groups": 3}
+    assert entry["source"]["fcpxml"] == "./inputs/source.fcpxml"
+    assert entry["source"]["script"] == "./inputs/script.md"
+    assert "/Volumes/" not in json.dumps(entry, ensure_ascii=False)
 
 
 def test_workspace_service_deduplicates_concurrent_project_materialization(tmp_path, monkeypatch):
