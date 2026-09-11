@@ -71,4 +71,32 @@ export class SemanticSearchClient {
     }
     return await response.json() as SemanticSearchPayload;
   }
+
+  /** 显式计算面：POST 允许查询向量编码（本地模型或已配置的远程模型）。 */
+  async searchCompute(projectId: string, query: string, options?: { limit?: number; sources?: string[] }): Promise<SemanticSearchPayload> {
+    const project = projectId.trim();
+    const text = query.trim();
+    if (!project) throw new HostConnectionError("项目搜索需要 project_id");
+    if (!text) throw new HostConnectionError("输入要搜索的画面、对白或场记内容");
+    const response = await transportFetch(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/semantic-search`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        q: text,
+        limit: Math.max(1, Math.min(60, options?.limit ?? 16)),
+        ...(options?.sources?.length ? { sources: options.sources } : {}),
+      }),
+    });
+    if (!response.ok) {
+      let message = `${response.status} ${response.statusText}`.trim();
+      try {
+        const payload = await response.json() as { error?: string };
+        message = payload.error || message;
+      } catch {
+        // Keep HTTP fallback.
+      }
+      throw new HostConnectionError(message, { status: response.status });
+    }
+    return await response.json() as SemanticSearchPayload;
+  }
 }

@@ -94,19 +94,41 @@ class SemanticEmbeddingConfig:
 
 
 class SemanticEncoder:
-    """OpenAI-compatible embedding client shared by index and query paths."""
+    """Embedding client shared by index and query paths.
+
+    优先使用配置的 OpenAI 兼容远程模型；未配置且设备上存在内置本地
+    模型目录（local_embedding）时自动降级为本机 ONNX 编码，向量身份
+    以 ``local-onnx:<目录名>`` 与远程模型严格区分，绝不混空间。
+    """
 
     def __init__(self, config: SemanticEmbeddingConfig | None = None):
         self.config = config or SemanticEmbeddingConfig.from_env()
         self.last_error = ""
+        self._local = None
+        if not self.config.enabled:
+            try:
+                from .local_embedding import LocalEmbeddingEncoder, local_embedding_model_dir
+
+                model_dir = local_embedding_model_dir()
+                if model_dir is not None:
+                    self._local = LocalEmbeddingEncoder(model_dir)
+            except Exception:
+                self._local = None
 
     @property
     def enabled(self) -> bool:
-        return self.config.enabled
+        return self._local is not None or self.config.enabled
 
     @property
     def identity(self) -> str:
+        if self._local is not None and not self.config.enabled:
+            return self._local.identity
         return self.config.identity
+
+    def public(self) -> dict:
+        if self._local is not None and not self.config.enabled:
+            return self._local.config.public()
+        return self.config.public()
 
     @staticmethod
     def _normalize(values: Sequence[object]) -> list[float] | None:
@@ -126,6 +148,13 @@ class SemanticEncoder:
         clean = [str(text or "").strip()[:12000] for text in texts]
         if not clean:
             return []
+        if self._local is not None and not self.config.enabled:
+            vectors = self._local.encode(clean)
+            if vectors is None:
+                self.last_error = self._local.last_error
+                return None
+            self.last_error = ""
+            return vectors
         if not self.enabled:
             self.last_error = "embedding encoder disabled"
             return None

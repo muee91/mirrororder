@@ -177,7 +177,7 @@ class SemanticSearcher:
                 "fts": bool(summary.get("fts", False)),
                 "vector_available": bool(query_vector),
             },
-            "encoder": self.encoder.config.public(),
+            "encoder": self.encoder.public(),
             "refresh": refresh_report,
             "semantics": {
                 "read_only": True,

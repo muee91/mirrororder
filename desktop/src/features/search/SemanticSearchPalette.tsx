@@ -61,12 +61,16 @@ export function SemanticSearchPalette({ baseUrl, projectId, onOpenTake }: Props)
     setBusy(true);
     setMessage("正在检索当前项目证据…");
     try {
-      const next = await client.search(projectId, query, {
+      const next = await client.searchCompute(projectId, query, {
         limit: 20,
         sources: source === "all" ? undefined : [source],
       });
       setPayload(next);
-      setMessage(next.results.length ? `找到 ${next.results.length} 条相关制作证据` : "没有找到足够相关的制作证据；可以换一个更具体的动作、对白或场记关键词。 ");
+      setMessage(
+        next.results.length
+          ? `找到 ${next.results.length} 条相关制作证据${next.mode === "vector" || next.mode === "hybrid" ? "（向量语义）" : "（关键词）"}`
+          : "没有找到足够相关的制作证据；可以换一个更具体的动作、对白或场记关键词。 ",
+      );
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {

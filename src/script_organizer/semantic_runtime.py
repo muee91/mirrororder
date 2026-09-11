@@ -168,12 +168,14 @@ def install_semantic_runtime() -> None:
     def capabilities_with_semantic(service: Any, agent: dict[str, Any]) -> dict[str, Any]:
         payload = original_capabilities(service, agent)
         embedding = SemanticEmbeddingConfig.from_env()
+        from .local_embedding import local_embedding_available
+
         payload["semantic_search"] = {
             "contract": "semantic_search.v1",
             "read": True,
             "sources": ["visual", "speech", "slate"],
             "keyword_fallback": True,
-            "vector_enabled": embedding.enabled,
+            "vector_enabled": embedding.enabled or local_embedding_available(),
             "device_local_index": True,
             "editorial_authority": False,
         }
@@ -342,6 +344,38 @@ def install_semantic_runtime() -> None:
                 raw_sources = str((query.get("sources") or [""])[0] or "")
                 sources = [value for value in raw_sources.split(",") if value] or None
                 return text, limit, sources
+
+            def _app_post(self, parsed):
+                parts = web_server._parts(parsed.path)
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "semantic-search"
+                ):
+                    # 显式计算面：用户在搜索面板按下"搜索"是主动动作，这里
+                    # 允许对查询做一次有界的 embedding 编码（本地模型毫秒
+                    # 级；远程模型由配置决定）。GET 读路径仍然永不推理。
+                    self._local_only()
+                    project_id = parts[3]
+                    body = web_server._body(self)
+                    text = str(body.get("q", "") or "").strip()
+                    if not text:
+                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "语义搜索内容不能为空")
+                    try:
+                        limit = max(1, min(60, int(body.get("limit", 16) or 16)))
+                    except (TypeError, ValueError):
+                        limit = 16
+                    raw_sources = body.get("sources")
+                    sources = [str(value) for value in raw_sources if str(value)] if isinstance(raw_sources, list) else None
+                    payload = _searcher(service, project_id).search(
+                        text,
+                        limit=limit,
+                        sources=sources,
+                        refresh=False,
+                    )
+                    self._send_json(payload)
+                    return
+                return super()._app_post(parsed)
 
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)

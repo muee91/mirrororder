@@ -1,5 +1,8 @@
-# Optional local identity runtime. These packages are not required for the core
+# Optional local intelligence runtime. These packages are not required for the core
 # sync/ASR/script-matching path when actor/speaker recognition is disabled.
 # Release packaging should vendor the arm64 wheels instead of pip-installing at app launch.
 opencv-python==4.14.0.94
 sherpa-onnx==1.13.5
+# Built-in local embedding encoder (vector-zh ONNX model).
+onnxruntime
+tokenizers
