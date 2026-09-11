@@ -32,6 +32,11 @@ TASK_TYPES = {
     "identity_index",
 }
 PROCESS_RUNNER_ID = "host_" + uuid4().hex
+# 每进程只做一次"重启恢复"：把其他 runner 的 queued/running 标记为
+# interrupted。若在每次 _load 都做，两个 Host 进程服务同一 workspace 时会
+# 互相把对方正在跑的任务反复打成 interrupted（GET 触发写风暴 + 重复提交）。
+_RECOVERED_TASK_PATHS: set[str] = set()
+_RECOVERY_LOCK = RLock()
 
 
 def _now() -> str:
@@ -117,15 +122,20 @@ class TaskManager:
         if not isinstance(raw, dict) or not isinstance(raw.get("tasks"), list):
             return {"version": 2, "tasks": []}
         tasks = raw["tasks"]
+        path = str(self._path(config))
+        with _RECOVERY_LOCK:
+            first_read_this_process = path not in _RECOVERED_TASK_PATHS
+            _RECOVERED_TASK_PATHS.add(path)
         changed = False
-        for task in tasks:
-            if not isinstance(task, dict):
-                continue
-            if task.get("status") in {"queued", "running"} and task.get("runner_id") != PROCESS_RUNNER_ID:
-                task["status"] = "interrupted"
-                task["interrupted_at"] = task.get("interrupted_at") or _now()
-                task.setdefault("logs", []).append("Host 已重启；旧内存任务标记为 interrupted，可安全重跑")
-                changed = True
+        if first_read_this_process:
+            for task in tasks:
+                if not isinstance(task, dict):
+                    continue
+                if task.get("status") in {"queued", "running"} and task.get("runner_id") != PROCESS_RUNNER_ID:
+                    task["status"] = "interrupted"
+                    task["interrupted_at"] = task.get("interrupted_at") or _now()
+                    task.setdefault("logs", []).append("Host 已重启；旧内存任务标记为 interrupted，可安全重跑")
+                    changed = True
         payload = {"version": 2, "tasks": tasks}
         if changed:
             _write_json(self._path(config), payload)
