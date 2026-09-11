@@ -8,11 +8,18 @@ import shutil
 import tempfile
 import tomllib
 import unicodedata
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import RLock
 from typing import Any
 from uuid import uuid4
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None
 
 from .config import ProjectConfig
 from .fcpxml_reader import read_fcpxml
@@ -160,8 +167,28 @@ def ensure_workspace_id(path: str | Path) -> WorkspaceConfig:
 
 
 class WorkspaceRegistry:
+    _thread_lock = RLock()
+
     def __init__(self, config: WorkspaceConfig):
         self.config = config
+
+    @contextmanager
+    def _registry_lock(self):
+        """Serialize registry read-modify-write within and across processes.
+
+        HTTP 线程（create/delete）与任务线程（导入完成注册）并发改写同一份
+        registry.json；无锁的三段式 RMW 会整体覆盖前一次写入并丢项目条目。
+        """
+        self.config.registry_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.config.registry_path.with_name(self.config.registry_path.name + ".lock")
+        with self._thread_lock, lock_path.open("a+", encoding="utf-8") as handle:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                if fcntl is not None:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def load(self) -> dict[str, Any]:
         raw = _read_json(self.config.registry_path, {"version": 1, "projects": []})
@@ -169,7 +196,6 @@ class WorkspaceRegistry:
             return {"version": 1, "projects": []}
         projects = raw.get("projects", [])
         normalized = []
-        changed = False
         root = self.config.config_path.parent.resolve()
         for item in projects if isinstance(projects, list) else []:
             if not isinstance(item, dict):
@@ -180,15 +206,13 @@ class WorkspaceRegistry:
                 config_path = Path(config_value).expanduser()
                 if config_path.is_absolute():
                     try:
+                        # 归一化只在内存进行：读路径不得写盘（与写路径共享
+                        # 文件会把 GET 变成无锁写入者）。
                         current["config_path"] = os.path.relpath(config_path.resolve(), root)
-                        changed = True
                     except ValueError:
                         pass
             normalized.append(current)
-        payload = {"version": 1, "projects": normalized}
-        if changed:
-            _write_json(self.config.registry_path, payload)
-        return payload
+        return {"version": 1, "projects": normalized}
 
     def list(self) -> list[dict[str, Any]]:
         return sorted(
@@ -231,8 +255,6 @@ class WorkspaceRegistry:
         if not manifest.legacy and manifest.project_id != project_id:
             raise ValueError("项目 manifest id 与注册 project_id 不一致")
         config = ProjectConfig.from_file(config_path)
-        payload = self.load()
-        projects = [item for item in payload["projects"] if item.get("project_id") != project_id]
         entry = {
             "project_id": project_id,
             "name": config.name,
@@ -251,9 +273,12 @@ class WorkspaceRegistry:
         index = _read_json(config.output_dir / "material_index.json", {})
         if isinstance(index, dict) and isinstance(index.get("stats"), dict):
             entry["stats"] = dict(index["stats"])
-        projects.append(entry)
-        payload["projects"] = projects
-        _write_json(self.config.registry_path, payload)
+        with self._registry_lock():
+            payload = self.load()
+            projects = [item for item in payload["projects"] if item.get("project_id") != project_id]
+            projects.append(entry)
+            payload["projects"] = projects
+            _write_json(self.config.registry_path, payload)
         return entry
 
     def create(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -385,16 +410,17 @@ class WorkspaceRegistry:
         if not project_dir.is_dir():
             raise ValueError("项目目录不存在，无法删除")
 
-        payload = self.load()
-        remaining = [
-            item for item in payload["projects"]
-            if str(item.get("project_id", "")) != project_id
-        ]
         quarantine = projects_root / f".mirrororder-delete-{project_id}-{uuid4().hex}"
         os.replace(project_dir, quarantine)
         try:
-            payload["projects"] = remaining
-            _write_json(self.config.registry_path, payload)
+            # 锁内重新 load + 过滤：并发注册/删除不会互相整文件覆盖。
+            with self._registry_lock():
+                payload = self.load()
+                payload["projects"] = [
+                    item for item in payload["projects"]
+                    if str(item.get("project_id", "")) != project_id
+                ]
+                _write_json(self.config.registry_path, payload)
         except Exception:
             os.replace(quarantine, project_dir)
             raise

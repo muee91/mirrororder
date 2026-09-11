@@ -7,10 +7,17 @@ import platform
 import tempfile
 import uuid
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
+from threading import RLock
 from typing import Any, Callable, Iterable
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None
 
 MEDIA_SUFFIXES = {".mp4", ".mov", ".m4v", ".mxf", ".mts", ".avi", ".mkv", ".wav", ".aif", ".aiff", ".m4a"}
 _SAMPLE_BYTES = 1024 * 1024
@@ -120,9 +127,29 @@ def iter_project_media(index: dict[str, Any]) -> list[dict[str, Any]]:
 class DeviceMediaStore:
     """Per-device media roots and bindings stored outside the shared workspace."""
 
+    _thread_lock = RLock()
+
     def __init__(self, path: Path | None = None):
         self.path = path or (device_state_dir() / "media-bindings.json")
         self._ensure()
+
+    @contextmanager
+    def _write_lock(self):
+        """Serialize media-binding read-modify-write within and across processes.
+
+        后台扫描（分钟级枚举+哈希）与 UI 确认/加根（HTTP 线程）并发改写同一份
+        media-bindings.json；无锁整文件回写会把并发写入无声丢失。
+        """
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.path.with_name(self.path.name + ".lock")
+        with self._thread_lock, lock_path.open("a+", encoding="utf-8") as handle:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                if fcntl is not None:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _default(self) -> dict[str, Any]:
         return {
@@ -404,11 +431,47 @@ class DeviceMediaStore:
             },
             "updated_at": _now(),
         }
-        projects[project_id] = next_project
-        legacy_projects = payload.get("projects", {})
-        if isinstance(legacy_projects, dict):
-            legacy_projects.pop(project_id, None)
-        self._save(payload)
+        # 提交在锁内进行，并与最新状态合并：扫描期间发生的人工确认/加根
+        # 不能被这份过期快照覆盖。bindings 按 key 并集（扫描到的同 key 经
+        # 内容哈希重验，等价覆盖）；replace 语义下扫描结果即全部。
+        with self._write_lock():
+            fresh = self.load()
+            fresh_workspaces = fresh.setdefault("workspaces", {})
+            fresh_workspace = fresh_workspaces.setdefault(workspace_id, {"projects": {}})
+            fresh_projects = fresh_workspace.setdefault("projects", {})
+            fresh_current = fresh_projects.get(project_id)
+            fresh_current = fresh_current if isinstance(fresh_current, dict) else self._empty_project()
+            if replace:
+                merged_bindings = dict(next_project["bindings"])
+                merged_confirmed = dict(next_project["confirmed_provisional"])
+            else:
+                fresh_bindings = fresh_current.get("bindings")
+                fresh_bindings = fresh_bindings if isinstance(fresh_bindings, dict) else {}
+                fresh_confirmed = fresh_current.get("confirmed_provisional")
+                fresh_confirmed = fresh_confirmed if isinstance(fresh_confirmed, dict) else {}
+                merged_bindings = dict(next_project["bindings"])
+                for key, value in fresh_bindings.items():
+                    if key in merged_bindings:
+                        continue  # 扫描已重验覆盖（同 key 内容哈希等价）
+                    if str(key).startswith("MP_"):
+                        # 与 scan 的过滤规则一致：未确认的 MP_ 绑定不可信，
+                        # 只保留已人工确认且文件仍存在的。
+                        if fresh_confirmed.get(key) == value and Path(str(value)).is_file():
+                            merged_bindings[key] = value
+                        continue
+                    # 扫描范围外的绑定保留：resolve 时的内容哈希校验仍兜底。
+                    merged_bindings[key] = value
+                merged_confirmed = {
+                    **fresh_confirmed,
+                    **next_project["confirmed_provisional"],
+                }
+            next_project["bindings"] = merged_bindings
+            next_project["confirmed_provisional"] = merged_confirmed
+            fresh_projects[project_id] = next_project
+            legacy_projects = fresh.get("projects", {})
+            if isinstance(legacy_projects, dict):
+                legacy_projects.pop(project_id, None)
+            self._save(fresh)
         summary = self.summary(workspace_id, project_id, index)
         summary["scan"] = {
             "files_seen": len(files),
@@ -433,73 +496,77 @@ class DeviceMediaStore:
         key = str(media_id or "").strip()
         if not key.startswith("MP_"):
             raise ValueError("只有 provisional media identity 需要人工确认")
-        payload = self.load()
-        workspaces = payload.setdefault("workspaces", {})
-        workspace = workspaces.setdefault(workspace_id, {"projects": {}})
-        project = workspace.setdefault("projects", {}).setdefault(project_id, self._empty_project())
-        candidates = project.setdefault("candidates", {})
-        expected = str(candidates.get(key, "") or "")
         path = Path(str(candidate_path or "")).expanduser()
-        if not expected or str(path) != expected:
-            raise ValueError("候选素材已变化，请重新扫描后再确认")
-        if not path.is_file():
-            raise ValueError("候选素材已离线，请重新扫描")
         if provisional_media_id(path.name) != key:
             raise ValueError("候选文件名与 provisional media identity 不一致")
-        project.setdefault("bindings", {})[key] = str(path)
-        project.setdefault("confirmed_provisional", {})[key] = str(path)
-        project["updated_at"] = _now()
-        self._save(payload)
-        return self.project_snapshot(workspace_id, project_id, payload)
+        with self._write_lock():
+            payload = self.load()
+            workspaces = payload.setdefault("workspaces", {})
+            workspace = workspaces.setdefault(workspace_id, {"projects": {}})
+            project = workspace.setdefault("projects", {}).setdefault(project_id, self._empty_project())
+            candidates = project.setdefault("candidates", {})
+            expected = str(candidates.get(key, "") or "")
+            if not expected or str(path) != expected:
+                raise ValueError("候选素材已变化，请重新扫描后再确认")
+            if not path.is_file():
+                raise ValueError("候选素材已离线，请重新扫描")
+            project.setdefault("bindings", {})[key] = str(path)
+            project.setdefault("confirmed_provisional", {})[key] = str(path)
+            project["updated_at"] = _now()
+            self._save(payload)
+            return self.project_snapshot(workspace_id, project_id, payload)
 
     def add_roots(self, workspace_id: str, project_id: str, roots: Iterable[str]) -> dict[str, Any]:
         """Register host-local roots before the first analysis creates an index."""
-        payload = self.load()
-        workspaces = payload.setdefault("workspaces", {})
-        workspace = workspaces.setdefault(workspace_id, {"projects": {}})
-        projects = workspace.setdefault("projects", {})
-        project = projects.setdefault(project_id, self._empty_project())
-        stored = [str(value) for value in project.get("roots", []) if str(value)]
-        for raw_root in roots:
-            root = str(Path(raw_root).expanduser().resolve())
-            if root and root not in stored:
-                stored.append(root)
-        project["roots"] = stored
-        project["updated_at"] = _now()
-        self._save(payload)
-        return self.project_snapshot(workspace_id, project_id, payload)
+        with self._write_lock():
+            payload = self.load()
+            workspaces = payload.setdefault("workspaces", {})
+            workspace = workspaces.setdefault(workspace_id, {"projects": {}})
+            projects = workspace.setdefault("projects", {})
+            project = projects.setdefault(project_id, self._empty_project())
+            stored = [str(value) for value in project.get("roots", []) if str(value)]
+            for raw_root in roots:
+                root = str(Path(raw_root).expanduser().resolve())
+                if root and root not in stored:
+                    stored.append(root)
+            project["roots"] = stored
+            project["updated_at"] = _now()
+            self._save(payload)
+            return self.project_snapshot(workspace_id, project_id, payload)
 
     def replace_roots(self, workspace_id: str, project_id: str, roots: Iterable[str]) -> dict[str, Any]:
         """Replace one project's device-local roots and discard stale bindings."""
-        payload = self.load()
-        workspaces = payload.setdefault("workspaces", {})
-        workspace = workspaces.setdefault(workspace_id, {"projects": {}})
-        projects = workspace.setdefault("projects", {})
-        project = projects.setdefault(project_id, self._empty_project())
-        selected: list[str] = []
-        for raw_root in roots:
-            root = str(Path(raw_root).expanduser().resolve())
-            if root and root not in selected:
-                selected.append(root)
-        project["roots"] = selected
-        project["bindings"] = {}
-        project["candidates"] = {}
-        project["confirmed_provisional"] = {}
+        with self._write_lock():
+            payload = self.load()
+            workspaces = payload.setdefault("workspaces", {})
+            workspace = workspaces.setdefault(workspace_id, {"projects": {}})
+            projects = workspace.setdefault("projects", {})
+            project = projects.setdefault(project_id, self._empty_project())
+            selected: list[str] = []
+            for raw_root in roots:
+                root = str(Path(raw_root).expanduser().resolve())
+                if root and root not in selected:
+                    selected.append(root)
+            project["roots"] = selected
+            project["bindings"] = {}
+            project["candidates"] = {}
+            project["confirmed_provisional"] = {}
         project["updated_at"] = _now()
         self._save(payload)
         return self.project_snapshot(workspace_id, project_id, payload)
 
     def remove_project(self, workspace_id: str, project_id: str) -> None:
-        payload = self.load()
-        workspaces = payload.setdefault("workspaces", {})
-        workspace = workspaces.get(workspace_id)
-        if not isinstance(workspace, dict):
-            return
-        projects = workspace.get("projects")
-        if not isinstance(projects, dict) or project_id not in projects:
-            return
-        projects.pop(project_id, None)
-        self._save(payload)
+        with self._write_lock():
+            payload = self.load()
+            workspaces = payload.setdefault("workspaces", {})
+            workspace = workspaces.get(workspace_id)
+            if not isinstance(workspace, dict):
+                return
+            projects = workspace.get("projects")
+            if not isinstance(projects, dict) or project_id not in projects:
+                return
+            projects.pop(project_id, None)
+            self._save(payload)
 
     def probe_roots(
         self,
@@ -552,19 +619,20 @@ class DeviceMediaStore:
         }
 
     def forget_missing(self, workspace_id: str, project_id: str) -> None:
-        payload = self.load()
-        workspace = payload.setdefault("workspaces", {}).setdefault(workspace_id, {"projects": {}})
-        project = workspace.setdefault("projects", {}).setdefault(project_id, self._empty_project())
-        bindings = project.setdefault("bindings", {})
-        confirmed = project.setdefault("confirmed_provisional", {})
-        candidates = project.setdefault("candidates", {})
-        project["bindings"] = {key: value for key, value in bindings.items() if Path(str(value)).is_file()}
-        project["confirmed_provisional"] = {
-            key: value
-            for key, value in confirmed.items()
-            if Path(str(value)).is_file() and project["bindings"].get(key) == value
-        }
-        project["candidates"] = {
-            key: value for key, value in candidates.items() if Path(str(value)).is_file()
-        }
-        self._save(payload)
+        with self._write_lock():
+            payload = self.load()
+            workspace = payload.setdefault("workspaces", {}).setdefault(workspace_id, {"projects": {}})
+            project = workspace.setdefault("projects", {}).setdefault(project_id, self._empty_project())
+            bindings = project.setdefault("bindings", {})
+            confirmed = project.setdefault("confirmed_provisional", {})
+            candidates = project.setdefault("candidates", {})
+            project["bindings"] = {key: value for key, value in bindings.items() if Path(str(value)).is_file()}
+            project["confirmed_provisional"] = {
+                key: value
+                for key, value in confirmed.items()
+                if Path(str(value)).is_file() and project["bindings"].get(key) == value
+            }
+            project["candidates"] = {
+                key: value for key, value in candidates.items() if Path(str(value)).is_file()
+            }
+            self._save(payload)
