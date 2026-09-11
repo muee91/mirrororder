@@ -437,3 +437,42 @@ class IdentityLibrary:
                 }
             )
         return result
+
+    def identities_by_group(self) -> dict[str, dict[str, list[dict[str, Any]]]]:
+        """Bulk variant of :meth:`group_identities`: one query for the whole
+        project. Read models that need evidence for every take must consume
+        this — per-group calls open one SQLite connection per take, which is
+        the dominant cost of refreshing a 1500-take review payload."""
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT o.group_id, o.kind, o.identity_id, o.confidence, o.start, o.end,
+                       i.label, i.role_name, i.metadata_json
+                FROM identity_observations AS o
+                LEFT JOIN identities AS i
+                  ON i.project_id=o.project_id AND i.identity_id=o.identity_id
+                WHERE o.project_id=?
+                ORDER BY o.group_id, o.kind, o.confidence DESC, o.observation_id
+                """,
+                (self.project_id,),
+            ).fetchall()
+        grouped: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        for row in rows:
+            kind = str(row["kind"])
+            if kind not in {"face", "speaker"}:
+                continue
+            group_id = str(row["group_id"] or "")
+            metadata = _json_object(row["metadata_json"])
+            bucket = grouped.setdefault(group_id, {"face": [], "speaker": []})
+            bucket[kind].append(
+                {
+                    "identity_id": str(row["identity_id"] or ""),
+                    "label": str(row["label"] or ""),
+                    "role_name": str(row["role_name"] or ""),
+                    "confidence": float(row["confidence"] or 0),
+                    "start": float(row["start"] or 0),
+                    "end": float(row["end"] or 0),
+                    "confirmed": bool(metadata.get("human_confirmed")),
+                }
+            )
+        return grouped

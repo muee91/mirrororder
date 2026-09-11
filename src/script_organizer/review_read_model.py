@@ -342,6 +342,16 @@ def _people_loader(project: Any) -> Callable[[str], dict[str, list[dict[str, Any
     except Exception:
         return lambda _group_id: {"face": [], "speaker": []}
 
+    # Bulk-load once: a per-group query means one SQLite connection per take,
+    # which dominated refresh cost on 1500-take payloads.
+    try:
+        grouped = library.identities_by_group()
+    except Exception:
+        grouped = None
+    if grouped is not None:
+        empty: dict[str, list[dict[str, Any]]] = {"face": [], "speaker": []}
+        return lambda group_id: grouped.get(str(group_id)) or empty
+
     def load(group_id: str) -> dict[str, list[dict[str, Any]]]:
         try:
             return library.group_identities(group_id)
