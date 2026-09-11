@@ -268,8 +268,8 @@ class PerceptionIndexer:
             if mode == "tier0":
                 cached = self.database.frames(self.project_id, group_id)
                 if any(Path(str(item.get("path", ""))).is_file() for item in cached):
-                    # An old profile exists. Rebuild it only when its settings
-                    # fingerprint differs from the active local profile.
+                    # 到达这里说明状态指纹已判定需要重建；旧帧文件仍在时无需
+                    # 删除，抽取会用 replace_frames 原地覆盖。
                     pass
             result.append(group_id)
         return result
