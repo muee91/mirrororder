@@ -12,7 +12,7 @@ export function TimelineWorkbenchView(props: { [key: string]: any }) {
         <div>
           <p className="eyebrow">时间线</p>
           <h2>时间线</h2>
-          <p className="production-note">这里是唯一正式剪辑版本。初始顺片和自动建议只能建立或修改同一条 Rust Timeline，不形成第二编辑器。</p>
+          <p className="production-note">这里是唯一正式剪辑版本。初始顺片和自动建议都修改同一条本机时间线，不会形成第二套剪辑。</p>
         </div>
         <div className="timeline-heading-actions">
           <span className="production-state">{message}</span>

@@ -148,7 +148,7 @@ export function ReviewDecisionPanel({ baseUrl, projectId, groupId, onDecisionCha
   return (
     <section className="editorial-decision-section review-decision-panel" aria-label="当前 Take 最终决定">
       <div className="take-evidence-heading">
-        <div><p className="eyebrow">审阅 authority</p><strong>Take 最终决定</strong></div>
+        <div><p className="eyebrow">审阅 · 最终决定</p><strong>Take 最终决定</strong></div>
         <span>{message}</span>
       </div>
 

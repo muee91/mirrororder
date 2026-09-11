@@ -244,7 +244,7 @@ export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
         <section className="production-panel">
           <p className="eyebrow">最终剪辑 → NLE</p>
           <h3>Final Cut Pro / Adobe Premiere Pro</h3>
-          <p className="production-note">两种格式都从当前 Rust Timeline 的不可变快照，经同一个 NLE Sequence IR 生成。多机位、独立音频和剪辑位置不会从 Review Best 再推导一遍。</p>
+          <p className="production-note">两种格式都从当前时间线的同一份不可变快照生成；多机位、独立音频与剪辑位置不会从 Review Best 再推导一遍。</p>
 
           <div className="production-panel delivery-preflight">
             <div className="parse-heading"><div><p className="eyebrow">交付前检查</p><strong>{readinessLabel}</strong></div><button type="button" className="secondary" disabled={!isTauri() || busy || preflightBusy} onClick={() => void refreshTimelineSnapshot(true)}>刷新检查</button></div>

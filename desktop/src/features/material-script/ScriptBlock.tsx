@@ -27,6 +27,18 @@ interface ScriptBlockProps {
   onClickPlacement: (block: ReviewScriptBlock) => void;
 }
 
+const BLOCK_TYPE_LABELS: Record<string, string> = {
+  action: "动作",
+  dialogue: "对白",
+  scene_heading: "场头",
+  transition: "转场",
+  parenthetical: "旁注",
+};
+
+export function scriptBlockTypeLabel(block: ReviewScriptBlock): string {
+  return BLOCK_TYPE_LABELS[block.type] || block.type || "剧本";
+}
+
 export function ScriptBlock({
   block,
   mappedTakeIds,
@@ -78,7 +90,7 @@ export function ScriptBlock({
       } : undefined}
     >
       <div className="script-block-meta">
-        <span>{block.speaker || block.type || "剧本"}</span>
+        <span>{block.speaker || scriptBlockTypeLabel(block)}</span>
         <div className="script-block-actions">
           {showCoverage ? (
             <div className="script-block-coverage" aria-label="当前剧本段素材状态">

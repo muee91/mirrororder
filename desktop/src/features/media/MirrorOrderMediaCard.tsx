@@ -60,9 +60,34 @@ function seconds(value?: number): string {
   return value >= 60 ? `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, "0")}` : `${value.toFixed(1)}s`;
 }
 
+const SHOT_VALUE_LABELS: Record<string, string> = {
+  wide: "大远景",
+  full: "全景",
+  medium: "中景",
+  medium_closeup: "中近景",
+  closeup: "近景",
+  extreme_closeup: "大特写",
+  big_closeup: "特写",
+  insert: "插入镜头",
+};
+
+const SOURCE_ROLE_LABELS: Record<string, string> = {
+  sync_camera: "同步机位",
+  aerial: "航拍",
+  broll: "空镜 / B-roll",
+  gopro: "GoPro",
+  insert: "细节 / Insert",
+  custom: "自定义",
+};
+
 function shotLabel(value?: string): string {
   if (!value || value === "unknown") return "景别—";
-  return `景别${value}`;
+  return SHOT_VALUE_LABELS[value] ?? `景别${value}`;
+}
+
+function sourceRoleLabel(value?: string): string {
+  if (!value) return "";
+  return SOURCE_ROLE_LABELS[value] ?? value;
 }
 
 export function MirrorOrderMediaCard({
@@ -136,7 +161,7 @@ export function MirrorOrderMediaCard({
     };
   }, [model.sourceStart, previewEnabled]);
 
-  const supportText = model.available === false ? "设备缺失" : (!compact && model.sourceRole ? model.sourceRole : "");
+  const supportText = model.available === false ? "设备缺失" : (!compact ? sourceRoleLabel(model.sourceRole) : "");
 
   const content = (
     <>

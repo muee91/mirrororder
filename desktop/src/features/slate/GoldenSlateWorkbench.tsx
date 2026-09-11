@@ -27,7 +27,19 @@ type Draft = SlateRecord & { dirty: boolean; derived: boolean; derivedSource: st
 type SceneLink = { episode: number; sceneId: string };
 
 const ACTOR_KEY = "mirrororder.productionActor";
-const SHOT_OPTIONS = ["unknown", "wide", "full", "medium", "medium_closeup", "closeup", "extreme_closeup", "big_closeup", "insert"];
+// 值是 supervisor 存储/解析层的英文枚举；下拉展示中文景别。
+const SHOT_LABELS: Record<string, string> = {
+  unknown: "未知",
+  wide: "大远景",
+  full: "全景",
+  medium: "中景",
+  medium_closeup: "中近景",
+  closeup: "近景",
+  extreme_closeup: "大特写",
+  big_closeup: "特写",
+  insert: "插入镜头",
+};
+const SHOT_OPTIONS = Object.keys(SHOT_LABELS);
 
 function storedActor(): string {
   try { return globalThis.localStorage?.getItem(ACTOR_KEY)?.trim() ?? ""; } catch { return ""; }
@@ -883,7 +895,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
                         <MirrorOrderMediaCard model={model} selected={key === selectedClipId} preferred={selected.preferred_clip_id === key} showPreview onSelect={selectClip} onPrefer={(clipId) => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === clipId ? "" : clipId })} />
                         <div className="golden-angle-fields">
                           <label><span>机位</span><input value={attachment.camera} onChange={(event) => patchAttachment(selected.record_id, key, { camera: event.target.value })} /></label>
-                          <label><span>景别</span><select value={attachment.shot_type || "unknown"} onChange={(event) => patchAttachment(selected.record_id, key, { shot_type: event.target.value })}>{SHOT_OPTIONS.map((shot) => <option value={shot} key={shot}>{shot}</option>)}</select></label>
+                          <label><span>景别</span><select value={attachment.shot_type || "unknown"} onChange={(event) => patchAttachment(selected.record_id, key, { shot_type: event.target.value })}>{SHOT_OPTIONS.map((shot) => <option value={shot} key={shot}>{SHOT_LABELS[shot] ?? shot}</option>)}</select></label>
                           <label className="golden-angle-note"><span>素材备注</span><input value={attachment.note || ""} onChange={(event) => patchAttachment(selected.record_id, key, { note: event.target.value })} placeholder="该机位独立备注" /></label>
                         </div>
                         <div className="golden-angle-actions"><button type="button" className="secondary" onClick={() => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === key ? "" : key })}>{selected.preferred_clip_id === key ? "★ 取消首选" : "☆ 场记首选"}</button><button type="button" className="secondary danger-text" onClick={() => removeAttachment(selected.record_id, key)}>− 移除</button></div>
