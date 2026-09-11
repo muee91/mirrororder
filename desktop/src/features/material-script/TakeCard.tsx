@@ -12,7 +12,11 @@ export function episodeLabel(episode: number): string {
 }
 
 export function takeDisplayLabel(take: ReviewTakeGroup): string {
-  return take.take_index > 0 ? `Take #${take.take_index}` : "Take";
+  const base = take.take_index > 0 ? `Take #${take.take_index}` : "Take";
+  // 真实项目里不同场常各自从 #1 计数，单看 "Take #1" 无法区分；
+  // 拼上主机位 clip 名（剪辑师辨认 Take 的主要线索）。
+  const clipStem = take.angles[0]?.name?.replace(/\.[^.]+$/, "").trim();
+  return clipStem ? `${base} · ${clipStem}` : base;
 }
 
 export function mappingLabel(take: ReviewTakeGroup): string {

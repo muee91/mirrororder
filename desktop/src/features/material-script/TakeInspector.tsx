@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
@@ -42,6 +42,12 @@ export function TakeInspector({
     () => angle ? connection.mediaUrl(projectId, angle.clip_id) : "",
     [angle, connection, projectId],
   );
+  // 播放失败（404 = 素材盘未挂载/文件移动）要有行内提示与重试，不能只留黑屏。
+  const [playbackFailed, setPlaybackFailed] = useState(false);
+  const [playbackRetry, setPlaybackRetry] = useState(0);
+  useEffect(() => {
+    setPlaybackFailed(false);
+  }, [playbackUrl, playbackRetry]);
   const previousGroupId = useRef(take?.group_id ?? "");
   const preferredCamera = useRef(cameraContinuityKey(angle?.camera));
 
@@ -109,13 +115,14 @@ export function TakeInspector({
 
       {angle?.playback.available === false ? (
         <div className="player-empty">当前设备未解析到这条媒体。</div>
-      ) : angle && playbackUrl ? (
+      ) : angle && playbackUrl && !playbackFailed ? (
         <video
           className="take-player"
           controls
           preload="metadata"
           src={playbackUrl}
-          key={angle.clip_id}
+          key={`${angle.clip_id}-${playbackRetry}`}
+          onError={() => setPlaybackFailed(true)}
           onLoadedMetadata={(event) => {
             if (angle.source_start > 0) event.currentTarget.currentTime = angle.source_start;
           }}
@@ -124,6 +131,12 @@ export function TakeInspector({
             if (angle.source_end !== null && event.currentTarget.currentTime >= angle.source_end) event.currentTarget.pause();
           }}
         />
+      ) : angle && playbackUrl ? (
+        <div className="player-empty take-player-error">
+          <strong>素材无法读取</strong>
+          <span>可能是素材盘未挂载或文件已移动。重新挂载后重试。</span>
+          <button type="button" className="secondary" onClick={() => setPlaybackRetry((value) => value + 1)}>重试</button>
+        </div>
       ) : (
         <div className="player-empty">当前 Take 没有可播放机位。</div>
       )}

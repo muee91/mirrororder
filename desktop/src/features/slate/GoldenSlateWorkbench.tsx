@@ -162,6 +162,12 @@ function draftFromRecord(record: SlateRecord, take: ReviewTakeGroup | null, xmlO
   return { ...record, attachments: mergeTakeAttachments(record, take), dirty: false, derived: false, derivedSource: "", xmlOrder };
 }
 
+function prettySceneId(value: string): string {
+  // SC_1_1 这类内部段 ID 对用户没有意义；转成场号习惯的 "1-1"。
+  const match = /^SC_?(\d+)_(\d+)$/.exec(value.trim());
+  return match ? `${match[1]}-${match[2]}` : value;
+}
+
 function draftFromTake(review: ReviewModelPayload, take: ReviewTakeGroup, xmlOrder: number): Draft {
   const mapped = mappedScene(review, take);
   return {
@@ -771,7 +777,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     return rows.map((draft) => {
       const displayIndex = displayIndexByRecord.get(draft.record_id) ?? -1;
       const rowNumber = displayIndex >= 0 ? displayIndex + 1 : 0;
-      const mappedScenePlaceholder = !draft.scene && draft.script_scene_id ? draft.script_scene_id : "";
+      const mappedScenePlaceholder = !draft.scene && draft.script_scene_id ? prettySceneId(draft.script_scene_id) : "";
       return (
         <SlateRow
           key={draft.record_id}
