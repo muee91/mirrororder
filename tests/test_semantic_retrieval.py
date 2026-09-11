@@ -33,6 +33,9 @@ class FakeEncoder:
         self.config = _FakePublicConfig(True)
         self.encoded_batches: list[list[str]] = []
 
+    def public(self):
+        return self.config.public()
+
     @staticmethod
     def _vector(text: str) -> list[float]:
         value = text.casefold()
@@ -56,6 +59,9 @@ class DisabledEncoder:
 
     def __init__(self):
         self.config = _FakePublicConfig(False)
+
+    def public(self):
+        return self.config.public()
 
     def encode(self, _texts):
         raise AssertionError("disabled encoder must not be called")
