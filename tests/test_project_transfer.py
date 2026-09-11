@@ -144,6 +144,20 @@ def test_collect_rejects_unsafe_media_identity(tmp_path):
         collect_project_archive(source, tmp_path / "Archive", media_files=[("../escape", media)])
 
 
+def test_collect_rejects_symlinked_media(tmp_path):
+    """fail-closed：符号链接媒体不得被静默跟随打包（is_symlink 必须在 resolve 前判）。"""
+    source = _project(tmp_path)
+    real_media = tmp_path / "real" / "A001.mov"
+    real_media.parent.mkdir(parents=True)
+    real_media.write_bytes(b"media")
+    link = tmp_path / "A001-link.mov"
+    link.symlink_to(real_media)
+
+    with pytest.raises(ProjectTransferError, match="不可读取"):
+        collect_project_archive(source, tmp_path / "Archive", media_files=[("M_abc", link)])
+    assert not (tmp_path / "Archive.mirrorpkg").exists()
+
+
 def test_cancel_does_not_publish_partial_target(tmp_path):
     source = _project(tmp_path)
     calls = {"count": 0}

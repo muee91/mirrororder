@@ -81,6 +81,10 @@ def _collect_media_files(config: Any, workspace_id: str, project_id: str) -> lis
         if not resolved or not Path(resolved).is_file():
             missing.append(media_id)
             continue
+        # 与 operations._inventory 的 fail-closed 语义一致：符号链接媒体不打包。
+        if Path(resolved).is_symlink():
+            missing.append(media_id)
+            continue
         result.append((media_id, Path(resolved).resolve()))
     if missing:
         preview = "、".join(missing[:8])

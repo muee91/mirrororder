@@ -631,9 +631,12 @@ def collect_project_archive(
             raise ProjectTransferError(f"收集媒体身份无效：{identity[:80]}")
         if identity in seen_media:
             continue
-        path = Path(raw_path).expanduser().resolve()
-        if path.is_symlink() or not path.is_file():
+        # is_symlink() must run on the unresolved path: resolve() follows
+        # links, so checking afterwards can never reject a symlinked source.
+        candidate = Path(raw_path).expanduser()
+        if candidate.is_symlink() or not candidate.is_file():
             raise ProjectTransferError(f"收集媒体不可读取：{identity}")
+        path = candidate.resolve()
         seen_media.add(identity)
         stat = path.stat()
         size = stat.st_size
