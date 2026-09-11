@@ -515,7 +515,21 @@ export function ScriptWorkspace({
               onDrop={(event) => {
                 event.preventDefault();
                 const groupId = dragGroupId(event);
-                if (groupId) void placeTake(groupId, [episode.episode], [], "drag", "desktop-script-episode");
+                if (!groupId) return;
+                // set_group_placement 是整项替换：把已有精确剧本归集的 Take
+                // 拖到集数条会把它降级为 episode-only。先确认，防止误拖销毁
+                // 人工精确归集。
+                const dragged = model.take_groups.find((item) => item.group_id === groupId);
+                if (
+                  dragged
+                  && dragged.effective_mapping.script_segment_ids.length > 0
+                  && !globalThis.confirm(
+                    `${takeDisplayLabel(dragged)} 已精确归集到 ${dragged.effective_mapping.script_segment_ids.length} 个剧本段。拖到 ${episodeLabel(episode.episode)} 会替换为仅集数粗归集。继续？`,
+                  )
+                ) {
+                  return;
+                }
+                void placeTake(groupId, [episode.episode], [], "drag", "desktop-script-episode");
               }}
             >
               {episodeLabel(episode.episode)}
