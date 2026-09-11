@@ -82,10 +82,12 @@ export function TakeInspector({
       </div>
       <p className="inspector-mapping">{mappingLabel(take)}</p>
 
-      {onShowScript || (onClearPlacement && take.effective_mapping.source === "human") ? (
+      {/* 继承自父组的人工 placement 清除是空操作（authority 在父组），
+          因此对 inherited 只提供"定位剧本"，不渲染清除按钮。 */}
+      {onShowScript || (onClearPlacement && take.effective_mapping.source === "human" && !take.effective_mapping.inherited) ? (
         <div className="inspector-actions">
           {onShowScript ? <button type="button" className="secondary" onClick={onShowScript}>定位剧本</button> : null}
-          {onClearPlacement && take.effective_mapping.source === "human" ? (
+          {onClearPlacement && take.effective_mapping.source === "human" && !take.effective_mapping.inherited ? (
             <button type="button" className="secondary danger-quiet" disabled={writeSaving} onClick={onClearPlacement}>
               清除人工归集
             </button>
