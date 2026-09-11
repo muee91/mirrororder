@@ -29,6 +29,7 @@ TASK_TYPES = {
     "auto_resolve",
     "transcribe",
     "evidence_extract",
+    "identity_index",
 }
 PROCESS_RUNNER_ID = "host_" + uuid4().hex
 

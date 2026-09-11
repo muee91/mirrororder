@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -15,6 +19,37 @@ def test_python_package_migration_is_explicitly_deferred_during_product_recovery
     assert "runtime_stack.py" in invariants
     assert "Product Recovery 期间不进行与五步主链无关的大规模 package migration" in invariants
     assert "Product Recovery 期间不启动与主链无关的大规模 package migration" in agents
+
+
+def test_tasks_compatibility_module_is_pure_reexport() -> None:
+    """facade 契约：import tasks 不得修改全局任务 registry（INVARIANTS "Python package"）。"""
+    tasks_source = (ROOT / "src" / "script_organizer" / "tasks.py").read_text(encoding="utf-8")
+    assert "TASK_TYPES.add(" not in tasks_source
+
+    code = "\n".join(
+        [
+            "import json, sys",
+            "from script_organizer import tasks_v2, tasks",
+            "json.dump(",
+            "    {'identity_index': 'identity_index' in tasks_v2.TASK_TYPES,",
+            "     'same_object': tasks.TASK_TYPES is tasks_v2.TASK_TYPES},",
+            "    sys.stdout,",
+            ")",
+        ]
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "src"
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    state = json.loads(completed.stdout)
+    assert state["identity_index"] is True
+    assert state["same_object"] is True
 
 
 def test_python_build_contract_uses_setuptools_src_layout() -> None:

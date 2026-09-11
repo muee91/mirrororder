@@ -33,9 +33,6 @@ from .media_identity import DeviceMediaStore
 from .perception_index import PerceptionIndexer
 from .resource_scheduler import GLOBAL_RESOURCE_SCHEDULER, ResourceCancelled
 
-# Extend the durable v2 submit validator without duplicating its task store.
-_impl.TASK_TYPES.add("identity_index")
-
 # Public compatibility symbol. Older tests/tools monkeypatch this name.
 analyze = _default_analyze
 TASK_TYPES = _impl.TASK_TYPES
