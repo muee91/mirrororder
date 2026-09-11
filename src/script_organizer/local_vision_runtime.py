@@ -178,6 +178,17 @@ class LocalVisionRuntime:
         os.replace(temporary, path)
         return cache_bytes
 
+    def model_downloaded(self) -> bool:
+        """True once the -hf model has actually landed in the local cache.
+
+        对话路径用它做门禁：模型未下载时不能借问答静默触发 GB 级下载，
+        用户应当在设置里显式完成"准备模型"。
+        """
+        try:
+            return any(self.cache_dir.rglob("*.gguf"))
+        except OSError:
+            return False
+
     def ensure_server(self, cancel_requested: Callable[[], bool] | None = None) -> str:
         cls = self.__class__
         if _cancelled(cancel_requested):

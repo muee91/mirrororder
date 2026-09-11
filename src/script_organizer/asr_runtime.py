@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -115,11 +115,26 @@ class ASRRuntime:
             except Exception:
                 if not self.fallback_allowed:
                     raise
+                # MLX 降级要留下可发现的痕迹：换名字必须可还原，且降级记录
+                # 写进转写缓存，否则同一项目里会混入两种无法区分的 backend。
+                import logging
+
+                logging.getLogger("mirrororder.asr").warning(
+                    "MLX 转写失败，本次起降级为 faster-whisper：%s", clip.clip_id
+                )
+                original_model = self.model
                 self.backend = "faster-whisper"
                 self.model = self.model.split("/")[-1].replace("whisper-", "").replace("-mlx", "")
                 if self.model == "large-v3-turbo":
                     self.model = "large-v3-turbo"
-        return self._transcribe_faster(clip, store, initial_prompt)
+                self.degraded_from = ("mlx-whisper", original_model)
+        transcript = self._transcribe_faster(clip, store, initial_prompt)
+        if getattr(self, "degraded_from", None):
+            transcript = replace(
+                transcript,
+                backend=f"{transcript.backend}（已从 mlx 降级；原模型 {self.degraded_from[1]}）",
+            )
+        return transcript
 
     def _transcribe_mlx(self, clip: Clip, store: TranscriptStore, initial_prompt: str) -> Transcript:
         _configure_model_cache()

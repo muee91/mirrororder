@@ -98,6 +98,11 @@ def _normalize_connection(
     if provider not in {"openai-compatible", "openai", "local", "llama", "llama.cpp", "llama-server"}:
         raise ValueError("当前只支持 OpenAI-compatible 或本地兼容接口")
     base_url = _valid_base_url(str(raw.get("base_url", current.get("base_url", "")) or ""))
+    # 声称"本地"却指向远程地址通常是配置笔误：数据不出设备的承诺会被打破。
+    if provider in {"local", "llama", "llama.cpp", "llama-server"} and base_url:
+        host = urlparse(base_url).hostname or ""
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            raise ValueError(f"{label}声明为本地模型，但地址指向远程主机 {host}；请改为本机地址或改用 openai-compatible")
     model = str(raw.get("model", current.get("model", "")) or "").strip()[:300]
     if enabled and (not base_url or not model):
         raise ValueError(f"启用{label}需要模型地址和模型名")

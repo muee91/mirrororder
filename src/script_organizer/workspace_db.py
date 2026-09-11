@@ -460,6 +460,16 @@ class WorkspaceDatabase:
     def start_perception_run(self, project_id: str, mode: str) -> str:
         run_id = "prun_" + uuid4().hex
         with self._lock, self.connection() as connection:
+            # 感知运行被资源调度器串行化：新一次 run 开始即意味着旧的
+            # running 记录已死（进程被杀），标记 interrupted 而不是永远悬挂。
+            connection.execute(
+                """
+                UPDATE perception_runs
+                SET status='interrupted', error='被新一次感知运行取代', completed_at=?
+                WHERE project_id=? AND status='running'
+                """,
+                (_now(), project_id),
+            )
             connection.execute(
                 """
                 INSERT INTO perception_runs(

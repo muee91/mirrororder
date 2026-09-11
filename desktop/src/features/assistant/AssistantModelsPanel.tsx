@@ -24,7 +24,7 @@ interface Draft extends ModelConnectionWrite {
 const ROLES: Array<{ role: ModelRole; label: string; description: string }> = [
   { role: "text", label: "对话与推理", description: "覆盖小镜自动选择的语言模型" },
   { role: "vision", label: "画面理解", description: "覆盖自动选择的多模态视觉模型" },
-  { role: "embedding", label: "向量检索", description: "覆盖项目证据的语义向量编码器" },
+  { role: "embedding", label: "向量检索", description: "覆盖项目证据的语义向量编码器；本地方案可用 llama-server / Ollama 等提供 OpenAI 兼容 /embeddings 端点（如 bge-m3）" },
 ];
 
 const CAPABILITY_LABELS: Record<ModelRole, string> = {

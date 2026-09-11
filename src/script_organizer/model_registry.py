@@ -216,6 +216,10 @@ class AssistantLanguageModel:
             return self.config.base_url.rstrip("/")
         if self._local_runtime is None:
             self._local_runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(self.config.model))
+        # 本地模型未下载时不能借问答路径静默触发 GB 级下载：
+        # 拒绝本次推理（上层降级为无模型回答），下载只走设置里的显式准备。
+        if not self._local_runtime.model_downloaded():
+            return ""
         return self._local_runtime.ensure_server().rstrip("/")
 
     @staticmethod
