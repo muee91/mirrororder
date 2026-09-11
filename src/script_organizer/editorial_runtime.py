@@ -56,11 +56,21 @@ def install_editorial_runtime() -> None:
         store = _store_for_project(project)
         editorial = store.load()
         counts = _counts(editorial)
+        collaboration_index = store.collaboration_index()
+        empty_collaboration: dict[str, Any] | None = None
         for take in payload.get("take_groups", []):
             if not isinstance(take, dict):
                 continue
             group_id = str(take.get("group_id", "") or "")
-            collaboration = store.for_group(group_id)
+            collaboration = collaboration_index.get(group_id)
+            if collaboration is None:
+                if empty_collaboration is None:
+                    empty_collaboration = {
+                        "revision": int(editorial.get("revision", 0) or 0),
+                        "opinions": {"group": [], "assignments": []},
+                        "decision": {"group": None, "assignments": []},
+                    }
+                collaboration = empty_collaboration
             state = take.get("editorial_state", {})
             if not isinstance(state, dict):
                 state = {}

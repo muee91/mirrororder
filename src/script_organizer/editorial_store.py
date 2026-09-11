@@ -283,3 +283,63 @@ class EditorialStore:
             "opinions": {"group": group_opinions, "assignments": assignment_opinions},
             "decision": {"group": group_decision, "assignments": assignment_decisions},
         }
+
+    def collaboration_index(self) -> dict[str, dict[str, Any]]:
+        """All groups' collaboration from a single load; per-group results
+        are identical to :meth:`for_group`. Read models building payloads for
+        every take must consume this instead of looping over ``for_group``
+        (1500 groups used to mean 1501 full-file parses per request)."""
+        payload = self.load()
+        revision = int(payload.get("revision", 0) or 0)
+        group_opinions: dict[str, list[dict[str, Any]]] = {}
+        assignment_opinions: dict[str, list[dict[str, Any]]] = {}
+        group_decisions: dict[str, dict[str, Any]] = {}
+        assignment_decisions: dict[str, list[dict[str, Any]]] = {}
+        for row in payload.get("opinions", {}).values():
+            if not isinstance(row, dict):
+                continue
+            target = row.get("target", {}) if isinstance(row.get("target"), dict) else {}
+            group_id = str(target.get("group_id", "") or "")
+            if not group_id:
+                continue
+            reviewers = row.get("reviewers", {}) if isinstance(row.get("reviewers"), dict) else {}
+            destination = (
+                assignment_opinions.setdefault(group_id, [])
+                if target.get("kind") == "assignment"
+                else group_opinions.setdefault(group_id, [])
+            )
+            for opinion in reviewers.values():
+                if isinstance(opinion, dict):
+                    destination.append({"target": dict(target), **opinion})
+        for decision in payload.get("decisions", {}).values():
+            if not isinstance(decision, dict):
+                continue
+            target = decision.get("target", {}) if isinstance(decision.get("target"), dict) else {}
+            group_id = str(target.get("group_id", "") or "")
+            if not group_id:
+                continue
+            row = {"target": dict(target), **{key: value for key, value in decision.items() if key != "target"}}
+            if target.get("kind") == "assignment":
+                assignment_decisions.setdefault(group_id, []).append(row)
+            else:
+                group_decisions[group_id] = row
+        key = lambda item: (
+            str(item.get("target", {}).get("segment_id", "")),
+            str(item.get("reviewer_id", "")),
+            str(item.get("actor", "")),
+            str(item.get("updated_at", "")),
+        )
+        index: dict[str, dict[str, Any]] = {}
+        for group_id in set(group_opinions) | set(assignment_opinions) | set(group_decisions) | set(assignment_decisions):
+            group_rows = group_opinions.get(group_id, [])
+            group_rows.sort(key=key)
+            assignment_rows = assignment_opinions.get(group_id, [])
+            assignment_rows.sort(key=key)
+            decision_rows = assignment_decisions.get(group_id, [])
+            decision_rows.sort(key=key)
+            index[group_id] = {
+                "revision": revision,
+                "opinions": {"group": group_rows, "assignments": assignment_rows},
+                "decision": {"group": group_decisions.get(group_id), "assignments": decision_rows},
+            }
+        return index
