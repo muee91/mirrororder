@@ -124,7 +124,14 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--mo-border-strong); background: var(--mo-surface-hover); }
 button.secondary { border-color: var(--mo-border-default); color: var(--mo-text-secondary); background: var(--mo-surface-raised); }
-button:disabled { color: var(--mo-text-disabled); }
+/* 禁用必须一眼可辨：降透明 + 中性底 + not-allowed，与"可用但次要"（muted 文字）拉开差距。 */
+button:disabled {
+  color: var(--mo-text-disabled);
+  background: var(--mo-surface-raised);
+  border-color: var(--mo-border-subtle);
+  opacity: .72;
+  cursor: not-allowed;
+}
 
 input, textarea, select {
   border-color: var(--mo-border-default);
@@ -160,7 +167,7 @@ input, textarea, select {
 .project-workbench-primary button,
 .project-workbench-secondary button,
 .project-workbench-utility button { font-size: var(--mo-font-sm); }
-.project-workbench-primary button { min-height: 28px; border-radius: 4px; color: var(--mo-text-muted); }
+.project-workbench-primary button { min-height: 28px; border-radius: 4px; }
 .project-workbench-primary button:hover,
 .project-workbench-secondary button:hover { color: var(--mo-text-primary); background: var(--mo-surface-hover); }
 .project-workbench-primary button.is-active,

@@ -188,7 +188,6 @@ export function ReviewWorkspace({
           ))}
         </div>
         <div className="review-queue-summary" aria-label="审阅进度">
-          <span><strong>{counts.unreviewed}</strong> 未决定</span>
           <span><strong>{decidedCount}</strong> 已决定</span>
           <span>{filteredTakes.length} / {model.take_groups.length} Take</span>
         </div>

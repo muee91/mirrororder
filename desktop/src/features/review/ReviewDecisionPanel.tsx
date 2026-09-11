@@ -89,6 +89,18 @@ export function ReviewDecisionPanel({ baseUrl, projectId, groupId, onDecisionCha
   const [message, setMessage] = useState("正在读取团队意见与最终决定…");
   const [busy, setBusy] = useState(false);
 
+  // 顶栏设置操作者后这里要跟上：否则决定按钮保持禁用，
+  // 用户只能靠刷新页面才能让"已设置操作者"生效。
+  useEffect(() => {
+    const sync = () => setActor(storedActor());
+    globalThis.addEventListener("mirrororder:operator-change", sync);
+    globalThis.addEventListener("storage", sync);
+    return () => {
+      globalThis.removeEventListener("mirrororder:operator-change", sync);
+      globalThis.removeEventListener("storage", sync);
+    };
+  }, []);
+
   async function reload(quiet = false): Promise<void> {
     if (!quiet) setMessage("正在读取团队意见与最终决定…");
     try {

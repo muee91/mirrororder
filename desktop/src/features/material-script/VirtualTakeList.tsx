@@ -103,6 +103,7 @@ export function VirtualTakeList({
                 <TakeListRow
                   take={take}
                   detail={compactDetail}
+                  state={take.group_id === selectedGroupId ? "current" : undefined}
                   action={actionForTake?.(take)}
                   actionLabel={actionLabelForTake?.(take)}
                   onSelect={() => onSelect(take)}

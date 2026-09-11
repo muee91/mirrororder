@@ -171,7 +171,7 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
   );
 }
 
-export type TakeListRowState = "default" | "used";
+export type TakeListRowState = "default" | "used" | "current";
 
 export interface TakeListRowProps {
   take: ReviewTakeGroup;

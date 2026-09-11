@@ -5,6 +5,10 @@
 .timeline-proposal-heading > div:first-child { min-width: 0; flex: 1 1 auto; }
 .timeline-proposal-heading strong { display: block; margin-top: 3px; }
 .timeline-fps { display: flex; align-items: center; gap: 6px; color: var(--mo-text-muted, #778491); font-size: 10px; }
+.timeline-timebase-value { color: var(--mo-text-secondary, #9fb0bd); font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+.timeline-timebase-advanced { display: inline-flex; align-items: center; gap: 6px; }
+.timeline-timebase-advanced summary { cursor: pointer; color: var(--mo-text-secondary, #9fb0bd); text-decoration: underline dotted; text-underline-offset: 2px; }
+.timeline-timebase-advanced[open] summary { margin-right: 2px; }
 .timeline-fps input,
 .timeline-toolbar input,
 .timeline-move-control input {

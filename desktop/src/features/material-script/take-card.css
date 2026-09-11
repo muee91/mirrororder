@@ -17,6 +17,12 @@
 .mo-take-list-row[draggable="true"]:active { cursor: grabbing; }
 .mo-take-list-row:hover { border-color: var(--mo-border-strong, #3a4651); background: var(--mo-surface-hover, #171f26); }
 .mo-take-list-row.state-used { opacity: .56; }
+/* 看片队列/抽屉的当前行：accent 边 + 选中底，必须一眼可辨。 */
+.mo-take-list-row.state-current {
+  border-color: var(--mo-accent, #6fa7e8);
+  background: var(--mo-surface-selected, #182535);
+  box-shadow: inset 2px 0 0 var(--mo-accent, #6fa7e8);
+}
 .mo-take-list-row:focus-visible { outline: 1px solid var(--mo-accent, #6fa7e8); outline-offset: 1px; box-shadow: var(--mo-focus-ring, 0 0 0 2px rgba(111, 167, 232, .34)); }
 
 .mo-take-list-core { display: grid; min-width: 0; gap: 5px; }

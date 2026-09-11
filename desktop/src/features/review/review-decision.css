@@ -51,7 +51,8 @@
 }
 
 .editorial-decision-actions { display: flex; gap: 5px; flex-wrap: wrap; }
-.editorial-decision-actions button { border-color: var(--mo-border-default, #303a44); color: var(--mo-text-secondary, #a4afb9); background: var(--mo-surface-control, #151c22); }
+/* 未选中态就要让"可点"一眼可见：accent 描边 + accent 文字，选中后才升级为语义色底。 */
+.editorial-decision-actions button { border-color: color-mix(in srgb, var(--mo-accent, #566d80) 46%, var(--mo-border-default, #303a44)); color: var(--mo-accent-strong, #bfd3e2); background: var(--mo-surface-control, #151c22); }
 .editorial-decision-actions button.is-selected { border-color: var(--mo-border-strong, #788896); color: var(--mo-text-primary, #f3f6f8); background: var(--mo-surface-selected, #28323b); }
 .editorial-decision-actions button.is-selected.state-best { border-color: color-mix(in srgb, var(--mo-success, #557564) 70%, var(--mo-border-default)); color: var(--mo-success, #bce0ca); background: color-mix(in srgb, var(--mo-success, #557564) 12%, var(--mo-surface-raised)); }
 .editorial-decision-actions button.is-selected.state-keep { border-color: color-mix(in srgb, var(--mo-accent, #566d80) 70%, var(--mo-border-default)); color: var(--mo-accent, #bfd3e2); background: color-mix(in srgb, var(--mo-accent, #566d80) 12%, var(--mo-surface-raised)); }

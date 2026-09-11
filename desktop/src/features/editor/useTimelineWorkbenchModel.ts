@@ -86,6 +86,14 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
   }, [rateDenominator, rateNumerator]);
   const proposal = useMemo(() => review && plan && frameRate ? buildAssemblyTimelineProposal(review, plan, frameRate) : null, [frameRate, plan, review]);
   const timebaseDetected = plan?.timebase?.status === "confirmed";
+  // 项目里识别到权威时间基时自动预填：不该让剪辑师手抄 24000/1001。
+  const detectedNumerator = plan?.timebase?.numerator;
+  const detectedDenominator = plan?.timebase?.denominator;
+  useEffect(() => {
+    if (!detectedNumerator || !detectedDenominator) return;
+    setRateNumerator((current) => current || String(detectedNumerator));
+    setRateDenominator((current) => current || String(detectedDenominator));
+  }, [detectedDenominator, detectedNumerator]);
   const sequence = activeSequence(snapshot);
   const selection = findClip(snapshot, selectedClipId);
   const sourceOptions = useMemo(() => snapshot && sequence ? buildTimelineSourceOptions(review, snapshot.project, sequence) : [], [review, sequence, snapshot]);

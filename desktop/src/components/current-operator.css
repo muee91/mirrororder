@@ -13,7 +13,12 @@
   color: var(--mo-text-primary, #e2e8ed);
   text-align: left;
 }
-.current-operator-chip.needs-operator { border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 52%, var(--mo-border-default, #29333d)); }
+.current-operator-chip.needs-operator {
+  border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 55%, var(--mo-border-default, #29333d));
+  background: color-mix(in srgb, var(--mo-warning, #d0aa54) 7%, var(--mo-surface-control, #11171c));
+}
+.current-operator-chip.needs-operator .current-operator-avatar { background: color-mix(in srgb, var(--mo-warning, #d0aa54) 22%, var(--mo-surface-raised, #151b20)); color: var(--mo-warning, #d0aa54); }
+.current-operator-chip.needs-operator .current-operator-copy strong { color: var(--mo-warning, #d0aa54); }
 .current-operator-avatar {
   width: 24px;
   height: 24px;
