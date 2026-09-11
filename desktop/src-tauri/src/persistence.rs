@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     env,
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, Write},
+    io::Write,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
@@ -50,6 +50,11 @@ pub struct JournalEntry {
 pub struct JournalRead {
     pub entries: Vec<JournalEntry>,
     pub ignored_partial_tail: bool,
+    /// Byte offset just past the last successfully parsed journal line
+    /// (including its trailing newline). Recovery must truncate the file to
+    /// this boundary before the next append, or the torn tail fuses with the
+    /// new entry and every later read fails permanently.
+    pub valid_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -285,29 +290,42 @@ impl TimelineStorage {
 
     pub fn read_journal(&self) -> Result<JournalRead, String> {
         if !self.journal_path.exists() {
-            return Ok(JournalRead { entries: Vec::new(), ignored_partial_tail: false });
+            return Ok(JournalRead { entries: Vec::new(), ignored_partial_tail: false, valid_bytes: 0 });
         }
         let bytes = fs::read(&self.journal_path).map_err(|error| format!("无法读取 Timeline journal：{error}"))?;
         let ended_with_newline = bytes.ends_with(b"\n");
-        let reader = BufReader::new(bytes.as_slice());
         let mut entries = Vec::new();
         let mut ignored_partial_tail = false;
-        let lines: Vec<_> = reader.lines().collect::<Result<Vec<_>, _>>().map_err(|error| format!("无法解析 Timeline journal 行：{error}"))?;
-        let last_index = lines.len().saturating_sub(1);
-        for (index, line) in lines.into_iter().enumerate() {
-            if line.trim().is_empty() {
+        let mut valid_bytes = 0u64;
+        let mut offset = 0usize;
+        let mut line_number = 0usize;
+        while offset < bytes.len() {
+            line_number += 1;
+            let line_end = match bytes[offset..].iter().position(|&byte| byte == b'\n') {
+                Some(position) => offset + position,
+                None => bytes.len(),
+            };
+            let line = &bytes[offset..line_end];
+            let consumed = if line_end < bytes.len() { line_end + 1 } else { line_end };
+            offset = consumed;
+            if line.trim_ascii().is_empty() {
                 continue;
             }
-            match serde_json::from_str::<JournalEntry>(&line) {
-                Ok(entry) => entries.push(entry),
-                Err(error) if index == last_index && !ended_with_newline => {
+            match serde_json::from_slice::<JournalEntry>(line) {
+                Ok(entry) => {
+                    entries.push(entry);
+                    valid_bytes = consumed as u64;
+                }
+                Err(error) if consumed == bytes.len() && !ended_with_newline => {
+                    // Torn final write: tolerate it here; recovery truncates
+                    // the file back to valid_bytes before the next append.
                     ignored_partial_tail = true;
                     let _ = error;
                 }
-                Err(error) => return Err(format!("Timeline journal 第 {} 行损坏：{error}", index + 1)),
+                Err(error) => return Err(format!("Timeline journal 第 {} 行损坏：{error}", line_number)),
             }
         }
-        Ok(JournalRead { entries, ignored_partial_tail })
+        Ok(JournalRead { entries, ignored_partial_tail, valid_bytes })
     }
 
     pub fn truncate_journal(&self) -> Result<(), String> {
@@ -317,6 +335,17 @@ impl TimelineStorage {
         let file = OpenOptions::new().create(true).truncate(true).write(true).open(&self.journal_path)
             .map_err(|error| format!("无法清空 Timeline journal：{error}"))?;
         file.sync_all().map_err(|error| format!("无法同步空 Timeline journal：{error}"))?;
+        Ok(())
+    }
+
+    /// Cut the journal back to the last fully valid entry boundary. Recovery
+    /// calls this when a torn final write was tolerated, so the next append
+    /// cannot fuse new JSON into the残行 and corrupt every later read.
+    pub fn truncate_journal_to(&self, valid_bytes: u64) -> Result<(), String> {
+        let file = OpenOptions::new().write(true).open(&self.journal_path)
+            .map_err(|error| format!("无法打开 Timeline journal 以修复残行：{error}"))?;
+        file.set_len(valid_bytes).map_err(|error| format!("无法截断 Timeline journal 残行：{error}"))?;
+        file.sync_all().map_err(|error| format!("无法同步 Timeline journal 修复：{error}"))?;
         Ok(())
     }
 
@@ -384,6 +413,51 @@ mod tests {
         assert_eq!(restored.generation, generation);
         assert_eq!(restored.journal_sequence, 0);
         assert_eq!(storage.read_journal().unwrap().entries[0].sequence, 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_tolerated_partial_tail_is_repaired_before_the_next_append() {
+        let root = temp_root("timeline-partial-tail");
+        let storage = TimelineStorage::with_root("p1", root.clone()).unwrap();
+        let generation = new_generation("p1");
+        storage.append(&journal_entry(&generation, 1, JournalOperation::Undo)).unwrap();
+
+        // 模拟崩溃留下的 torn tail：无换行的半行 JSON。
+        let torn = b"{\"generation\":\"" ;
+        {
+            let mut file = OpenOptions::new().append(true).open(&storage.journal_path).unwrap();
+            file.write_all(torn).unwrap();
+        }
+        let first_read = storage.read_journal().unwrap();
+        assert!(first_read.ignored_partial_tail);
+        assert_eq!(first_read.entries.len(), 1);
+
+        // recovery 语义：按 valid_bytes 截断后再 append，journal 保持可读。
+        storage.truncate_journal_to(first_read.valid_bytes).unwrap();
+        storage.append(&journal_entry(&generation, 2, JournalOperation::Redo)).unwrap();
+        let repaired = storage.read_journal().unwrap();
+        assert!(!repaired.ignored_partial_tail);
+        assert_eq!(repaired.entries.len(), 2);
+        assert_eq!(repaired.entries[1].sequence, 2);
+        assert_eq!(repaired.valid_bytes as usize, fs::read(&storage.journal_path).unwrap().len());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn append_without_repair_fuses_the_tail_and_breaks_every_later_read() {
+        // 反向证明：不复位就 append，正是 P1 缺陷所阻止的损坏链——
+        // 残行与新 entry 融合后，journal 从此每次读取都硬错误。
+        let root = temp_root("timeline-partial-tail-no-repair");
+        let storage = TimelineStorage::with_root("p1", root.clone()).unwrap();
+        let generation = new_generation("p1");
+        storage.append(&journal_entry(&generation, 1, JournalOperation::Undo)).unwrap();
+        {
+            let mut file = OpenOptions::new().append(true).open(&storage.journal_path).unwrap();
+            file.write_all(b"{\"torn\"").unwrap();
+        }
+        storage.append(&journal_entry(&generation, 2, JournalOperation::Redo)).unwrap();
+        assert!(storage.read_journal().is_err());
         fs::remove_dir_all(root).unwrap();
     }
 

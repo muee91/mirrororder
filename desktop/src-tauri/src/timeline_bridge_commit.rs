@@ -80,6 +80,14 @@ fn recover_with_storage(
         recovered_operations += 1;
     }
 
+    // 修复被容忍的 torn tail：不截断的话，下一次 append 会把新 entry 拼进
+    // 残行，之后该项目 journal 每次读取都硬错误、再也无法恢复。
+    if journal.ignored_partial_tail {
+        storage
+            .truncate_journal_to(journal.valid_bytes)
+            .map_err(TimelineBridgeError::message)?;
+    }
+
     Ok(ManagedTimeline {
         engine,
         storage,

@@ -38,7 +38,12 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
   const refreshPersistence = useCallback(async () => {
     if (!isTauri()) return;
     try { setPersistence(await timeline.persistenceStatus()); }
-    catch { setPersistence(null); }
+    catch (error) {
+      // 持久化状态读取失败（如 journal 损坏）不能静默——
+      // 那正是用户最需要看见"已从备份恢复/恢复失败"提示的时刻。
+      setPersistence(null);
+      setMessage(`时间线持久化状态不可用：${errorMessage(error)}`);
+    }
   }, [timeline]);
 
   useEffect(() => {
