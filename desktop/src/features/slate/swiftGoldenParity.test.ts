@@ -105,7 +105,7 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("function sceneOrderValue");
     expect(slate).toContain("draft.scene.trim() || draft.script_scene_id.trim()");
     expect(slate).toContain("function displayOrder");
-    expect(slate).toContain("const displayedDrafts = displayOrder(drafts)");
+    expect(slate).toContain("const displayedDrafts = useMemo(() => displayOrder(drafts), [drafts])");
     expect(slate).toContain('script_scene_id: selected?.script_scene_id ?? ""');
     expect(slate).toContain("displayedDrafts[visualIndex - 1]");
     expect(slate).toContain("script_scene_id: previous.script_scene_id");

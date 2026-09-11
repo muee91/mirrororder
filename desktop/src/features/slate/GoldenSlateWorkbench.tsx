@@ -276,14 +276,7 @@ function primaryAttachment(draft: Draft, camera: SlateCameraColumn): { item: Sla
   return rows[0] ? { item: rows[0], count: rows.length } : null;
 }
 
-function findReviewAngle(review: ReviewModelPayload | null, clipId: string, mediaId = ""): ReviewAngle | null {
-  if (!review) return null;
-  for (const take of review.take_groups) {
-    const angle = take.angles.find((item) => item.clip_id === clipId || (mediaId && item.media_id === mediaId));
-    if (angle) return angle;
-  }
-  return null;
-}
+
 
 export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false, onToggleAssistant, onOpenMaterialScript, onOpenIdentity, onOpenReview }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
@@ -352,15 +345,35 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
   const selected = drafts.find((row) => row.record_id === selectedRecordId) ?? null;
   const selectedTake = selected?.source_group_id ? review?.take_groups.find((take) => take.group_id === selected.source_group_id) ?? null : null;
   const selectedAttachment = selected?.attachments.find((item) => attachmentKey(item) === selectedClipId) ?? null;
-  const selectedAngle = selectedAttachment ? findReviewAngle(review, selectedAttachment.clip_id, selectedAttachment.media_id) : findReviewAngle(review, selectedClipId);
+  // 1500-Take 渲染预算：displayOrder/索引只随输入重建，行渲染一律 O(1) 查表。
+  const angleIndex = useMemo(() => {
+    const byClip = new Map<string, ReviewAngle>();
+    const byMedia = new Map<string, ReviewAngle>();
+    for (const take of review?.take_groups ?? []) {
+      for (const angle of take.angles) {
+        if (angle.clip_id && !byClip.has(angle.clip_id)) byClip.set(angle.clip_id, angle);
+        if (angle.media_id && !byMedia.has(angle.media_id)) byMedia.set(angle.media_id, angle);
+      }
+    }
+    return { byClip, byMedia };
+  }, [review]);
+  const selectedAngle = selectedAttachment
+    ? angleIndex.byClip.get(selectedAttachment.clip_id)
+      ?? (selectedAttachment.media_id ? angleIndex.byMedia.get(selectedAttachment.media_id) : undefined)
+      ?? null
+    : angleIndex.byClip.get(selectedClipId) ?? null;
   const selectedPlaybackKey = selectedAngle?.clip_id || selectedClipId;
   const selectedPlaybackFailed = Boolean(selectedPlaybackKey && playbackFailedClipId === selectedPlaybackKey);
   const selectedPersisted = Boolean(selected && board?.records[selected.record_id]);
   const selectedCanDelete = Boolean(selected && (selectedPersisted || !selected.derived));
   const dirtyCount = drafts.filter((row) => row.dirty).length;
-  const displayedDrafts = displayOrder(drafts);
-  const placedDrafts = displayedDrafts.filter(isPlacedDraft);
-  const unplacedDrafts = displayedDrafts.filter((row) => !isPlacedDraft(row));
+  const displayedDrafts = useMemo(() => displayOrder(drafts), [drafts]);
+  const displayIndexByRecord = useMemo(
+    () => new Map(displayedDrafts.map((row, index) => [row.record_id, index])),
+    [displayedDrafts],
+  );
+  const placedDrafts = useMemo(() => displayedDrafts.filter(isPlacedDraft), [displayedDrafts]);
+  const unplacedDrafts = useMemo(() => displayedDrafts.filter((row) => !isPlacedDraft(row)), [displayedDrafts]);
   const usedTakeIds = useMemo(() => new Set(drafts.filter((row) => !row.derived && row.source_group_id).map((row) => row.source_group_id)), [drafts]);
   const takeCandidates = useMemo(() => {
     const query = takeSearch.trim().toLowerCase();
@@ -736,7 +749,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     if (!row) {
       return <button type="button" className="golden-slate-empty-media" onClick={(event) => { event.stopPropagation(); selectRecord(draft.record_id); setTakePickerOpen(true); }}>{camera === "AUX" ? "—" : `＋ ${camera}`}</button>;
     }
-    const angle = findReviewAngle(review, row.item.clip_id, row.item.media_id);
+    const angle = angleIndex.byClip.get(row.item.clip_id) ?? (row.item.media_id ? angleIndex.byMedia.get(row.item.media_id) : undefined) ?? null;
     const model = angle ? mediaCardFromAngle(angle, row.item) : mediaCardFromAttachment(row.item);
     model.duplicateCount = row.count;
     return <MirrorOrderMediaCard model={model} compact selected={draft.record_id === selectedRecordId && model.id === selectedClipId} preferred={draft.preferred_clip_id === model.id} onSelect={() => { selectRecord(draft.record_id); selectClip(model.id); }} />;
@@ -744,7 +757,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
 
   function renderRows(rows: Draft[]) {
     return rows.map((draft) => {
-      const displayIndex = displayedDrafts.findIndex((row) => row.record_id === draft.record_id);
+      const displayIndex = displayIndexByRecord.get(draft.record_id) ?? -1;
       const rowNumber = displayIndex >= 0 ? displayIndex + 1 : 0;
       const mappedScenePlaceholder = !draft.scene && draft.script_scene_id ? draft.script_scene_id : "";
       return (
@@ -863,7 +876,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
                 <section className="golden-inspector-media"><header><strong>机位素材</strong><span>{inspectorAttachments.length}</span></header>
                   {inspectorAttachments.map((attachment) => {
                     const key = attachmentKey(attachment);
-                    const angle = findReviewAngle(review, attachment.clip_id, attachment.media_id);
+                    const angle = angleIndex.byClip.get(attachment.clip_id) ?? (attachment.media_id ? angleIndex.byMedia.get(attachment.media_id) : undefined) ?? null;
                     const model = angle ? mediaCardFromAngle(angle, attachment) : mediaCardFromAttachment(attachment);
                     return (
                       <div className="golden-angle-editor" key={`${attachment.clip_id}-${attachment.media_id}`}>
