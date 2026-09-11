@@ -172,7 +172,24 @@ def install_script_supervisor_runtime() -> None:
                             raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
                         except ValueError as error:
                             raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
-                        self._send_json(_safe_board(saved)); _refresh_assistant(service, project_id); return
+                        self._send_json(_safe_board(saved)); _refresh_assistant(service, project_id)
+                        # 场记是语义索引的 slate 证据源；写入后刷新对应 Take 的
+                        # 索引，否则语义搜索永远看不到最新的人工事实。刷新失败
+                        # 不影响场记写入本身（Status Center 可观察/重试）。
+                        record = body.get("record") if isinstance(body.get("record"), dict) else {}
+                        group_id = str(record.get("source_group_id", "") or "")
+                        targets = {"sources": ["slate"], **({"group_ids": [group_id]} if group_id else {})}
+                        try:
+                            service.tasks.submit(
+                                project_id,
+                                "semantic_index",
+                                targets,
+                                idempotency_key=f"semantic-refresh:supervisor:{int(saved.get('revision', 0) or 0)}",
+                                actor="system",
+                            )
+                        except Exception:
+                            pass
+                        return
                     if parts[4] == "script-supervisor-parse":
                         self._local_only(); body = web_server._body(self); text = str(body.get("text", "") or "").strip()
                         if not text:

@@ -1402,14 +1402,16 @@ async function refreshProposals() {
   const payload = await fetchJson(projectApi('/proposals'));
   state.proposals = payload.proposals || [];
   const target = $('#proposal-list');
-  const pending = state.proposals.filter((proposal) => proposal.status === 'pending');
+  const pending = state.proposals.filter((proposal) => proposal.status === 'pending' && !proposal.stale);
   target.innerHTML = state.proposals.map((proposal) => {
     const evidence = (proposal.evidence || []).map((item) => (
       `<li>${esc(item.clip_id)} · ${esc(item.summary)}</li>`
     )).join('');
     const episodes = (proposal.episode_ids || []).map((episode) => `第${episode}集`).join('、') || '未指定集数';
-    return `<label class="proposal-row"><input type="checkbox" value="${esc(proposal.proposal_id)}" ${proposal.status === 'pending' ? '' : 'disabled'}>`
-      + `<span><div class="proposal-row-head"><strong>${esc(proposal.agent_name || '智能体')} · ${esc(episodes)}</strong><span class="task-state ${esc(proposal.status)}">${esc(proposal.status)}</span></div>`
+    const staleNote = proposal.stale ? ` · ${esc(proposal.stale_reason || '已过期，请让智能体重新分析')}` : '';
+    const selectable = proposal.status === 'pending' && !proposal.stale;
+    return `<label class="proposal-row"><input type="checkbox" value="${esc(proposal.proposal_id)}" ${selectable ? '' : 'disabled'}>`
+      + `<span><div class="proposal-row-head"><strong>${esc(proposal.agent_name || '智能体')} · ${esc(episodes)}</strong><span class="task-state ${esc(proposal.status)}">${esc(proposal.status)}${staleNote}</span></div>`
       + `<small>${esc(proposal.group_id)}${proposal.note ? ` · ${esc(proposal.note)}` : ''}</small>`
       + (evidence ? `<ul class="proposal-evidence">${evidence}</ul>` : '') + '</span></label>';
   }).join('') || '<div class="proposal-empty">当前项目没有智能体提案</div>';
@@ -1431,7 +1433,10 @@ async function applySelectedProposals() {
   state.reviewRevision = Number(payload.review?.revision || 0);
   renderContent();
   await refreshProposals();
-  showToast(`已应用 ${payload.applied?.length || 0} 条提案`);
+  const failedCount = (payload.results || []).length - (payload.applied?.length || 0);
+  showToast(failedCount > 0
+    ? `已应用 ${payload.applied?.length || 0} 条提案；${failedCount} 条已过期或失败，请让智能体重新分析`
+    : `已应用 ${payload.applied?.length || 0} 条提案`);
 }
 
 async function reloadAnalysis(showNotice = false) {

@@ -165,6 +165,21 @@ class ProposalStore:
         with self._lock:
             return list(reversed(self._load()["proposals"]))
 
+    @staticmethod
+    def stale_reason_for(proposal: dict[str, Any], analysis_revision: str, review_revision: int) -> str:
+        """纯函数：pending 提案相对当前 revision 是否已过期。只用于展示与
+        apply 前置判断；过期落盘只发生在 apply 时（读路径保持无写）。"""
+        if proposal.get("status") != "pending":
+            return ""
+        if proposal.get("base_analysis_revision") != analysis_revision:
+            return "分析版本已变化"
+        try:
+            if int(proposal.get("base_review_revision", -1)) != int(review_revision):
+                return "人工审核版本已变化"
+        except (TypeError, ValueError):
+            return "人工审核版本已变化"
+        return ""
+
     def create(
         self,
         proposal: dict[str, Any],
@@ -253,30 +268,42 @@ class ProposalStore:
         segments: dict[str, dict[str, Any]],
         analysis_revision: str,
         review_store: ReviewStore,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
+        """Apply proposals one by one: a stale proposal expires instead of
+        aborting the whole batch. Returns per-proposal results so the reviewer
+        sees partial success instead of a single opaque error."""
         if not proposal_ids:
             raise ValueError("请选择至少一条提案")
         with self._lock:
             payload = self._load()
-            selected = [item for item in payload["proposals"] if item.get("proposal_id") in set(proposal_ids)]
-            if len(selected) != len(set(proposal_ids)):
+            by_id = {str(item.get("proposal_id", "")): item for item in payload["proposals"]}
+            unknown = [pid for pid in proposal_ids if pid not in by_id]
+            if unknown:
                 raise ValueError("存在未知提案")
             current_review = review_store.load()
-            actions = []
-            for proposal in selected:
-                if proposal.get("status") != "pending":
-                    raise ValueError("提案不是待确认状态")
-                if proposal.get("base_analysis_revision") != analysis_revision:
-                    proposal["stale_reason"] = "分析版本已变化"
-                    _write_json(self.path, payload)
-                    raise ValueError("提案已过期，分析版本已变化，请让智能体重新分析")
-                if int(proposal.get("base_review_revision", -1)) != int(current_review.get("revision", 0)):
-                    proposal["stale_reason"] = "人工审核版本已变化"
-                    _write_json(self.path, payload)
-                    raise ValueError("提案已过期，人工审核版本已变化，请人工重新确认")
-                if proposal.get("group_id") not in groups or any(segment_id not in segments for segment_id in proposal.get("script_segment_ids", [])):
-                    raise ValueError("提案引用的数据已不存在")
-                actions.append(
+            current_revision = int(current_review.get("revision", 0))
+            results: list[dict[str, Any]] = []
+            ready: list[tuple[dict[str, Any], dict[str, Any]]] = []
+            for pid in proposal_ids:
+                proposal = by_id[pid]
+                base = {"proposal_id": pid, "group_id": str(proposal.get("group_id", "") or "")}
+                reason = self.stale_reason_for(proposal, analysis_revision, current_revision)
+                if reason:
+                    proposal["status"] = "expired"
+                    proposal["stale_reason"] = reason
+                    results.append({**base, "status": "expired", "reason": reason})
+                    continue
+                if proposal.get("group_id") not in groups or any(
+                    segment_id not in segments for segment_id in proposal.get("script_segment_ids", [])
+                ):
+                    proposal["status"] = "expired"
+                    proposal["stale_reason"] = "提案引用的数据已不存在"
+                    results.append({**base, "status": "expired", "reason": "提案引用的数据已不存在"})
+                    continue
+                ready.append((proposal, base))
+                results.append({**base, "status": "applied"})
+            if ready:
+                actions = [
                     {
                         "action": "set_group_placement",
                         "group_id": proposal["group_id"],
@@ -284,14 +311,23 @@ class ProposalStore:
                         "script_segment_ids": proposal.get("script_segment_ids", []),
                         "actor": actor,
                     }
-                )
-            review_store.apply_actions(actions)
-            for proposal in selected:
-                proposal["status"] = "applied"
-                proposal["applied_at"] = _now()
-                proposal["applied_by"] = actor[:80]
+                    for proposal, _base in ready
+                ]
+                review_store.apply_actions(actions)
+                for proposal, _base in ready:
+                    proposal["status"] = "applied"
+                    proposal["applied_at"] = _now()
+                    proposal["applied_by"] = actor[:80]
+            applied_ids = {proposal["proposal_id"] for proposal, _base in ready}
             _write_json(self.path, payload)
-            return selected
+            applied = [dict(item) for item in payload["proposals"] if item.get("proposal_id") in applied_ids]
+            return {
+                "applied": applied,
+                "results": results,
+                "applied_count": len(ready),
+                "failed_count": len(results) - len(ready),
+                "review_revision": current_revision,
+            }
 
     @staticmethod
     def _episode_ids(raw: object) -> list[int]:

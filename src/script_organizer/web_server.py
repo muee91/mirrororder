@@ -801,7 +801,16 @@ def make_handler(service: WorkspaceService, web_root: Path):
             elif rest == ["tasks"]:
                 self._send_json({"tasks": service.tasks.list(project_id)})
             elif rest == ["proposals"]:
-                self._send_json({"proposals": project.proposals.list()})
+                review_revision = int(project.review.load().get("revision", 0) or 0)
+                rows = []
+                for item in project.proposals.list():
+                    row = dict(item)
+                    reason = ProposalStore.stale_reason_for(item, project.analysis_revision, review_revision)
+                    if reason:
+                        row["stale"] = True
+                        row["stale_reason"] = reason
+                    rows.append(row)
+                self._send_json({"proposals": rows})
             elif rest == ["search"]:
                 self._send_json({"query": (query.get("q") or [""])[0], "results": project.search((query.get("q") or [""])[0])})
             elif len(rest) == 2 and rest[0] == "candidates":

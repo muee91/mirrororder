@@ -3,6 +3,7 @@ import type { ProjectSummary } from "../../api/host";
 import { readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
+import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorkspace";
 import "../media/media.css";
@@ -247,6 +248,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
           ))}
         </nav>
         <div className="professional-project-tools">
+          <SemanticSearchPalette baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} />
           <CurrentOperatorControl onChange={() => setOperatorRevision((value) => value + 1)} />
           <button type="button" className={`professional-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)} aria-pressed={assistantOpen}>小镜</button>
           {onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>团队审阅</button> : null}
@@ -317,7 +319,14 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               <div><p className="eyebrow">{AREAS[area].label} / {pageLabel(page)}</p><strong>小镜</strong></div>
               <button type="button" className="secondary" onClick={() => setAssistantOpen(false)} aria-label="关闭小镜">关闭</button>
             </div>
-            <AssistantWorkbench baseUrl={baseUrl} projectId={project.project_id} />
+            <AssistantWorkbench
+              baseUrl={baseUrl}
+              projectId={project.project_id}
+              onFocusTake={(groupId, destination) => {
+                setAssistantOpen(false);
+                focusTake(groupId, destination ?? "material");
+              }}
+            />
           </aside>
         ) : null}
       </div>

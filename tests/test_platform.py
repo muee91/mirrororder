@@ -504,7 +504,8 @@ def test_agent_tokens_proposals_and_atomic_review_revision(tmp_path):
         "a1",
         review,
     )
-    assert applied[0]["status"] == "applied"
+    assert applied["applied"][0]["status"] == "applied"
+    assert applied["applied_count"] == 1
     assert review.load()["revision"] == 1
     assert review.load()["placements"][group["group_id"]]["actor"] == "审核人"
 
@@ -550,15 +551,75 @@ def test_proposal_rejects_stale_review_revision_and_invalid_evidence(tmp_path):
         0,
     )
     review.apply_action({"action": "set_group", "group_id": "another", "state": "keep", "actor": "other"})
-    with pytest.raises(ValueError, match="人工审核版本"):
-        proposals.apply(
-            [proposal["proposal_id"]],
-            "审核人",
+    result = proposals.apply(
+        [proposal["proposal_id"]],
+        "审核人",
+        {group["group_id"]: group},
+        {segment["segment_id"]: segment},
+        "a1",
+        review,
+    )
+    # 过期提案不再让整批失败：标记 expired 并给出原因。
+    assert result["applied_count"] == 0
+    assert result["results"][0]["status"] == "expired"
+    assert "人工审核版本" in result["results"][0]["reason"]
+    stored = proposals.list()[0]
+    assert stored["status"] == "expired"
+    assert "人工审核版本" in stored["stale_reason"]
+
+
+def test_proposal_apply_settles_each_proposal_independently(tmp_path):
+    """一条过期不再拖垮整批：新鲜的照常落库，过期的标记 expired 并给出原因。"""
+    workspace = _workspace(tmp_path)
+    config_path = _register_demo(workspace, tmp_path)
+    config = ProjectConfig.from_file(config_path)
+    index = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
+    script = json.loads((config.output_dir / "script.json").read_text(encoding="utf-8"))
+    group = index["groups"][0]
+    segment = next(row for row in script["segments"] if row.get("type") != "scene_heading")
+    proposals = ProposalStore(config.output_dir)
+    review = ReviewStore(config.output_dir / "review.json")
+    agent = {"token_id": "a", "name": "agent"}
+
+    def _proposal(base_review_revision, suffix):
+        return proposals.create(
+            {
+                "group_id": group["group_id"],
+                "episode_ids": [1],
+                "script_segment_ids": [segment["segment_id"]],
+                "evidence": [{"clip_id": group["members"][0]["clip_id"], "start": 0, "end": 1, "summary": f"证据 {suffix}"}],
+                "base_analysis_revision": "a1",
+                "base_review_revision": base_review_revision,
+                "note": suffix,
+            },
+            agent,
             {group["group_id"]: group},
             {segment["segment_id"]: segment},
             "a1",
-            review,
+            base_review_revision,
         )
+
+    stale_proposal = _proposal(0, "旧")
+    review.apply_action({"action": "set_group", "group_id": "another", "state": "unreviewed", "actor": "other"})
+    fresh_proposal = _proposal(review.load()["revision"], "新")
+
+    result = proposals.apply(
+        [stale_proposal["proposal_id"], fresh_proposal["proposal_id"]],
+        "审核人",
+        {group["group_id"]: group},
+        {segment["segment_id"]: segment},
+        "a1",
+        review,
+    )
+    assert result["applied_count"] == 1
+    assert result["failed_count"] == 1
+    statuses = {row["proposal_id"]: row["status"] for row in result["results"]}
+    assert statuses[stale_proposal["proposal_id"]] == "expired"
+    assert statuses[fresh_proposal["proposal_id"]] == "applied"
+    stored = {row["proposal_id"]: row for row in proposals.list()}
+    assert stored[fresh_proposal["proposal_id"]]["status"] == "applied"
+    assert stored[stale_proposal["proposal_id"]]["status"] == "expired"
+    assert review.load()["placements"][group["group_id"]]["actor"] == "审核人"
 
 
 def test_task_targets_only_affected_groups_and_is_idempotent(tmp_path, monkeypatch):
