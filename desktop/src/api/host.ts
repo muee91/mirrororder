@@ -139,6 +139,8 @@ export interface ReviewLegacyManualState {
 
 export interface ReviewEditorialState {
   legacy_manual?: ReviewLegacyManualState;
+  /** placement 轴的排除事实；与 legacy 创意 state、Editorial Decision 均独立。 */
+  excluded?: boolean;
   individual_opinion?: unknown;
   editorial_decision?: unknown;
 }
@@ -497,15 +499,16 @@ export class HostConnection {
     const groupId = normalizedGroupId(write.groupId);
     const actor = normalizedActor(write.actor);
     const expectedRevision = normalizedExpectedRevision(write.expectedRevision, "写入素材排除状态");
+    // 排除走独立的 exclusion 事实（placement 轴），不再伪装成 legacy 创意
+    // reject——delivery 裁决由创意轴（legacy/Editorial）决定，二者不可互写。
     return requestJson<LegacyReviewPayload>(
       this.baseUrl,
       `/api/v1/projects/${encodeURIComponent(project)}/review`,
       {
         method: "POST",
         body: JSON.stringify({
-          action: "set_group",
+          action: write.excluded ? "set_group_exclusion" : "clear_group_exclusion",
           group_id: groupId,
-          state: write.excluded ? "reject" : "unreviewed",
           actor,
           interaction: write.interaction ?? "click",
           source_surface: write.sourceSurface ?? "desktop-v2-slate-table",

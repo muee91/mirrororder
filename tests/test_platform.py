@@ -800,14 +800,14 @@ def test_workspace_gateway_isolates_same_project_ids_and_pairing(tmp_path):
             base,
             "/api/v1/workspaces/ws_right/projects/shared/review",
             method="POST",
-            payload={"action": "set_group", "group_id": "right-only", "state": "keep", "actor": "tester"},
+            payload={"action": "set_group_exclusion", "group_id": "right-only", "actor": "tester"},
         )
         assert status == 200
         right_review = json.loads((right.registry_path.parent / "shared" / "output" / "review.json").read_text(encoding="utf-8"))
         left_review_path = left.registry_path.parent / "shared" / "output" / "review.json"
-        left_review = json.loads(left_review_path.read_text(encoding="utf-8")) if left_review_path.exists() else {"groups": {}}
-        assert "right-only" in right_review["groups"]
-        assert "right-only" not in left_review["groups"]
+        left_review = json.loads(left_review_path.read_text(encoding="utf-8")) if left_review_path.exists() else {"exclusions": {}}
+        assert "right-only" in right_review["exclusions"]
+        assert "right-only" not in left_review.get("exclusions", {})
 
         status, _payload = _request(base, "/api/v1/workspaces/ws_left/projects/shared")
         assert status == 200
@@ -905,11 +905,11 @@ def test_gateway_binds_review_actor_to_browser_identity(tmp_path, monkeypatch):
             base,
             "/api/v1/workspaces/ws_people/projects/demo/review",
             method="POST",
-            payload={"action": "set_group", "group_id": "group_0001", "state": "keep", "actor": "冒名者"},
+            payload={"action": "set_group_exclusion", "group_id": "group_0001", "actor": "冒名者"},
             headers=headers,
         )
         assert status == 200
-        assert review["groups"]["group_0001"]["actor"] == "剪辑甲"
+        assert review["exclusions"]["group_0001"]["actor"] == "剪辑甲"
 
         status, users = _request(base, "/api/v1/workspaces/ws_people/users")
         assert status == 200
@@ -927,7 +927,7 @@ def test_gateway_binds_review_actor_to_browser_identity(tmp_path, monkeypatch):
             base,
             "/api/v1/workspaces/ws_people/projects/demo/review",
             method="POST",
-            payload={"action": "set_group", "group_id": "group_0001", "state": "best"},
+            payload={"action": "set_group_exclusion", "group_id": "group_0001", "actor": "剪辑甲"},
             headers=headers,
         )
         assert status == 403

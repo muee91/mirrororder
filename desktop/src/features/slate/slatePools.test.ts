@@ -59,15 +59,20 @@ describe("slate intake pools", () => {
       editorial_state: { legacy_manual: { placement: { episode_ids: [3], script_segment_ids: ["s1"] } } },
       effective_mapping: { source: "human", mapping_status: "exact", script_segment_ids: ["s1"], episode_ids: [3] },
     });
-    const excluded = take({ group_id: "excluded", editorial_state: { legacy_manual: { effective_state: "reject" } } });
+    // 排除是独立事实（excluded），与 legacy 创意 reject 分离：
+    // 只有前者进排除池，后者保持创意语义留在待归集。
+    const excluded = take({ group_id: "excluded", editorial_state: { excluded: true } });
+    const legacyCreativeReject = take({ group_id: "legacy-reject", editorial_state: { legacy_manual: { effective_state: "reject" } } });
     const slateNg = take({ group_id: "slate-ng" });
     const editorialReject = take({ group_id: "editorial-reject", editorial_state: { legacy_manual: {}, editorial_decision: { state: "reject" } } });
-    const pools = buildSlatePools([pending, placed, excluded, slateNg, editorialReject], [media("media-1"), media("orphan-1")]);
+    const pools = buildSlatePools([pending, placed, excluded, legacyCreativeReject, slateNg, editorialReject], [media("media-1"), media("orphan-1")]);
 
-    expect(pools.pending.map((item) => item.group_id)).toEqual(["pending", "slate-ng", "editorial-reject"]);
+    expect(pools.pending.map((item) => item.group_id)).toEqual(["pending", "legacy-reject", "slate-ng", "editorial-reject"]);
     expect(pools.placed.map((item) => item.group_id)).toEqual(["placed"]);
     expect(pools.excluded.map((item) => item.group_id)).toEqual(["excluded"]);
     expect(pools.orphan.map((item) => item.media_id)).toEqual(["orphan-1"]);
+    expect(isReviewExcluded(excluded)).toBe(true);
+    expect(isReviewExcluded(legacyCreativeReject)).toBe(false);
     expect(isReviewExcluded(slateNg)).toBe(false);
     expect(hasHumanPlacement(placed)).toBe(true);
   });

@@ -176,8 +176,8 @@ describe("HostConnection", () => {
     expect(payload.state).toBeUndefined();
   });
 
-  it("uses the existing Review group state action for exclusion and restore", async () => {
-    const saved = { version: 2, revision: 7, updated_at: "", assignments: {}, groups: {}, clips: {}, placements: {} };
+  it("writes exclusion as an independent fact, not a legacy creative state", async () => {
+    const saved = { version: 2, revision: 7, updated_at: "", assignments: {}, groups: {}, clips: {}, placements: {}, exclusions: {} };
     const browserFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(saved));
     vi.stubGlobal("fetch", browserFetch);
 
@@ -202,16 +202,17 @@ describe("HostConnection", () => {
     expect(browserFetch).toHaveBeenCalledTimes(2);
     const excluded = JSON.parse(String(browserFetch.mock.calls[0]?.[1]?.body));
     expect(excluded).toMatchObject({
-      action: "set_group",
+      action: "set_group_exclusion",
       group_id: "g1",
-      state: "reject",
       expected_revision: 6,
       source_surface: "slate-table",
       source_clip_id: "clip-1",
     });
+    expect(excluded.state).toBeUndefined();
     expect(excluded.editorial_decision).toBeUndefined();
     const restored = JSON.parse(String(browserFetch.mock.calls[1]?.[1]?.body));
-    expect(restored).toMatchObject({ action: "set_group", group_id: "g1", state: "unreviewed", expected_revision: 7 });
+    expect(restored).toMatchObject({ action: "clear_group_exclusion", group_id: "g1", expected_revision: 7 });
+    expect(restored.state).toBeUndefined();
   });
 
   it("validates expected Review revisions before sending a write", async () => {

@@ -656,6 +656,19 @@ def _body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     return payload
 
 
+_LEGACY_CREATIVE_STATES = {"keep", "best", "reject"}
+
+
+def _is_legacy_creative_state_write(payload: dict[str, Any]) -> bool:
+    """创意评分（keep/best/reject）是 Editorial 域事实：legacy /review 边界
+    拒绝这类写入，防止绕过意见隔离直接改写交付语义。排除走
+    set_group_exclusion（placement 轴），placement 走 *_placement。"""
+    return (
+        str(payload.get("action", "") or "") in {"set_group", "set_clip", "set_assignment"}
+        and str(payload.get("state", "") or "") in _LEGACY_CREATIVE_STATES
+    )
+
+
 def make_handler(service: WorkspaceService, web_root: Path):
     class Handler(BaseHTTPRequestHandler):
         server_version = "VideoMaterialPlatform/1.0"
@@ -856,6 +869,11 @@ def make_handler(service: WorkspaceService, web_root: Path):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "审核写入必须使用原子 action")
                 if not str(payload.get("actor", "")).strip():
                     raise ApiError(HTTPStatus.BAD_REQUEST, "审核写入需要审核昵称")
+                if _is_legacy_creative_state_write(payload):
+                    raise ApiError(
+                        HTTPStatus.BAD_REQUEST,
+                        "创意评分请使用 Editorial 意见/决定接口；legacy review 不再接受 keep/best/reject 写入",
+                    )
                 saved = project.review.apply_action(payload)
                 self._send_json(saved)
             elif rest == ["tasks"]:

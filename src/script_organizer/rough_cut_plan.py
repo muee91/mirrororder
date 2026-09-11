@@ -8,7 +8,7 @@ from typing import Any
 from .coverage_graph import build_coverage_graph
 from .delivery_semantics import resolve_delivery_state
 from .editorial_store import EditorialStore
-from .review_store import ReviewStore
+from .review_store import ReviewStore, is_group_excluded
 
 
 ROUGH_CUT_CONTRACT = "rough_cut_plan.v1"
@@ -110,6 +110,8 @@ def _role_pools(candidates: list[dict[str, Any]]) -> dict[str, list[dict[str, An
     for candidate in candidates:
         if candidate.get("delivery_state") == "reject" or candidate.get("supervisor_blocked"):
             continue
+        if candidate.get("excluded"):
+            continue
         group_id = str(candidate.get("group_id", "") or "")
         for raw_angle in _as_list(candidate.get("angles")):
             if not isinstance(raw_angle, dict):
@@ -157,6 +159,13 @@ def _segment_plan(
                 "delivery_state": str(resolved.get("state", "unreviewed") or "unreviewed"),
                 "decision_source": str(resolved.get("decision_source", "unreviewed") or "unreviewed"),
                 "creative_authority": str(resolved.get("decision_source", "")) != "automatic_mapping_fallback",
+                # 排除是 placement 轴的卫生事实，不改写 delivery_state——
+                # 只在这里作为独立的不可选原因出现。
+                "excluded": is_group_excluded(
+                    review,
+                    group_id,
+                    str(group.get("parent_group_id", "") or ""),
+                ),
                 "angles": [dict(item) for item in _as_list(coverage_group.get("angles")) if isinstance(item, dict)],
                 "continuity_risk": str(_as_dict(coverage_group.get("rough_cut")).get("continuity_risk", "unknown") or "unknown"),
                 "audit_mapping_current": bool(_as_dict(coverage_group.get("audit")).get("mapping_current", False)),
@@ -176,7 +185,7 @@ def _segment_plan(
     best_ng = [item for item in best if item["supervisor_blocked"]]
     eligible = [
         item for item in candidates
-        if item["delivery_state"] != "reject" and not item["supervisor_blocked"]
+        if item["delivery_state"] != "reject" and not item["supervisor_blocked"] and not item["excluded"]
     ]
     explicit_human = [item for item in eligible if item["creative_authority"]]
     issues: list[dict[str, Any]] = []
@@ -385,6 +394,7 @@ def build_rough_cut_plan(
             "keep_promoted_to_best": False,
             "script_supervisor_ng_is_delivery_reject": False,
             "script_supervisor_constrains_planning": True,
+            "exclusion_is_delivery_reject": False,
             "writes_review": False,
             "writes_editorial": False,
             "writes_selection_manifest": False,

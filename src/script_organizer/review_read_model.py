@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 from .automation_store import AutomationStore, COMPLETED_STATUSES
 from .identity_library import IdentityLibrary
-from .review_store import effective_group_entry, effective_group_state
+from .review_store import effective_group_entry, effective_group_state, is_group_excluded
 from .workspace_db import WorkspaceDatabase
 
 CONTRACT_VERSION = "review.v1"
@@ -515,6 +515,8 @@ def build_review_read_model(
                 "automatic_state": automatic,
                 "editorial_state": {
                     "legacy_manual": _legacy_manual_state(review, group),
+                    # placement 轴的独立排除事实；不写 legacy 创意 state。
+                    "excluded": is_group_excluded(review, group_id, str(group.get("parent_group_id", "") or "")),
                     "individual_opinion": None,
                     "editorial_decision": None,
                 },

@@ -12,7 +12,7 @@ from .automation_store import AutomationStore, COMPLETED_STATUSES
 from .config import ProjectConfig
 from .delivery_semantics import resolve_delivery_state
 from .editorial_store import EditorialStore
-from .review_store import ReviewStore
+from .review_store import ReviewStore, is_group_excluded
 
 
 class UnsafeFCPXMLExport(RuntimeError):
@@ -140,6 +140,13 @@ def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
                     "decision_updated_at": resolved["decision_updated_at"],
                     "legacy_state": resolved["legacy_state"],
                     "automatic_state": resolved["automatic_state"],
+                    # 排除是独立事实：交付行保留 state 的纯创意语义，
+                    # 排除与否单独透出，二者不可互写。
+                    "excluded": is_group_excluded(
+                        review,
+                        str(group_id or ""),
+                        str(group.get("parent_group_id", "") or ""),
+                    ),
                 }
             )
         selected.sort(
@@ -187,6 +194,7 @@ def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
             "majority_vote_enabled": False,
             "automatic_mapping_fallback": "legacy_compatibility",
             "editorial_parent_inheritance": False,
+            "exclusion_is_delivery_reject": False,
         },
         "summary": {
             "states": dict(sorted(state_counts.items())),

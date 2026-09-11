@@ -32,6 +32,7 @@ def empty_review() -> dict[str, Any]:
         "groups": {},
         "clips": {},
         "placements": {},
+        "exclusions": {},
         "history": [],
     }
 
@@ -40,7 +41,7 @@ def normalize_review(raw: object) -> dict[str, Any]:
     result = empty_review()
     if not isinstance(raw, dict):
         return result
-    for key in ("assignments", "groups", "clips", "placements"):
+    for key in ("assignments", "groups", "clips", "placements", "exclusions"):
         value = raw.get(key, {})
         result[key] = value if isinstance(value, dict) else {}
     history = raw.get("history", [])
@@ -211,6 +212,25 @@ class ReviewStore:
                 review["clips"].pop(clip_id, None)
             else:
                 review["clips"][clip_id] = self._review_entry(state, timestamp, actor)
+        elif action_type == "set_group_exclusion":
+            group_id = str(action.get("group_id", ""))
+            if not group_id:
+                raise ValueError("set_group_exclusion 缺少 group_id")
+            # Exclusion 是 placement 轴的卫生事实，与 legacy 创意评分
+            # （groups/clips state）和 Editorial Decision 都不是同一个东西。
+            entry_exclusion: dict[str, Any] = {"method": "manual", "updated_at": timestamp}
+            if actor:
+                entry_exclusion["actor"] = actor
+            for key, limit in (("source_surface", 40), ("source_kind", 24), ("source_clip_id", 180)):
+                value = str(action.get(key, "") or "").strip()[:limit]
+                if value:
+                    entry_exclusion[key] = value
+            review["exclusions"][group_id] = entry_exclusion
+        elif action_type == "clear_group_exclusion":
+            group_id = str(action.get("group_id", ""))
+            if not group_id:
+                raise ValueError("clear_group_exclusion 缺少 group_id")
+            review["exclusions"].pop(group_id, None)
         elif action_type == "set_group_placement":
             group_id = str(action.get("group_id", ""))
             if not group_id:
@@ -286,6 +306,10 @@ class ReviewStore:
         if action_type in {"set_group_placement", "clear_group_placement"}:
             group_id = str(action.get("group_id", "") or "")
             existing = review.get("placements", {}).get(group_id, {})
+            return dict(existing) if isinstance(existing, dict) else {}
+        if action_type in {"set_group_exclusion", "clear_group_exclusion"}:
+            group_id = str(action.get("group_id", "") or "")
+            existing = review.get("exclusions", {}).get(group_id, {})
             return dict(existing) if isinstance(existing, dict) else {}
         return {}
 
@@ -400,3 +424,19 @@ def effective_group_state(
     if "reject" in clip_states:
         return "reject"
     return "unreviewed"
+
+
+def is_group_excluded(
+    review: dict[str, Any],
+    group_id: str,
+    parent_group_id: str = "",
+) -> bool:
+    """Placement-axis hygiene fact, separate from legacy creative state and
+    from Editorial Decision. Excluding a Take removes it from rough-cut
+    candidacy but is never a creative Reject and never touches delivery_state."""
+    exclusions = review.get("exclusions", {}) if isinstance(review, dict) else {}
+    if not isinstance(exclusions, dict):
+        return False
+    if str(group_id or "") in exclusions:
+        return True
+    return bool(parent_group_id) and str(parent_group_id) in exclusions

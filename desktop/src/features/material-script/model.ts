@@ -14,7 +14,7 @@ export const TAKE_ROW_HEIGHT = 314;
 export const TAKE_VIRTUAL_OVERSCAN = 3;
 
 export function takeStatus(take: ReviewTakeGroup): Exclude<TakeStatusFilter, "all" | "attention"> {
-  if (take.editorial_state.legacy_manual?.effective_state === "reject") {
+  if (take.editorial_state.excluded === true || take.editorial_state.legacy_manual?.effective_state === "reject") {
     return "rejected";
   }
   const mapping = take.effective_mapping;

@@ -85,7 +85,9 @@ export function hasHumanPlacement(take: ReviewTakeGroup): boolean {
 }
 
 export function isReviewExcluded(take: ReviewTakeGroup): boolean {
-  return take.editorial_state.legacy_manual?.effective_state === "reject";
+  // 排除是独立事实（editorial_state.excluded）；legacy state reject 是创意
+  // 评分，不再混入排除池。
+  return take.editorial_state.excluded === true;
 }
 
 export function buildSlatePools(takes: ReviewTakeGroup[], mediaItems: MediaInventoryItem[]): SlatePools {

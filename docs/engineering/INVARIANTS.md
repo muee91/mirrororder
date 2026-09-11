@@ -57,6 +57,8 @@ Desktop 项目内一级工作区固定为：
 - 因为复用方便，把素材治理、Review placement、Editorial Decision、Timeline edit 控制塞进同一页面控制面。
 - 为 Coverage、Attention、Overview、Binding、Rough Cut、Assembly、Audit 等派生能力建立新的平级主工作台，除非它真的形成新的稳定用户工作类型并更新产品 authority。
 - 让 Inspector / drawer 重新成为第二套路由或第二套控制中心。
+- 在 Script 域外新增 placement/exclusion 写面。当前唯一具名豁免：场记视图内的 `golden-slate-placement-pools`（`source_surface=golden-slate-placement-pools`），由 `check:ui-authority` 的全树 allowlist 强制；新豁免必须先落本文档再改 allowlist。
+- 把 Review 排除（placement 轴卫生事实）写成 legacy 创意 state（keep/best/reject）。排除经 `set_group_exclusion`/`clear_group_exclusion` 存入 review.json 独立 `exclusions`；legacy `/review` 边界拒绝创意 state 写入，创意评分只能走 Editorial 意见/决定接口。
 
 ## Read path / durable work
 
