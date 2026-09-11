@@ -137,8 +137,26 @@ for (const directImport of ["IdentityWorkbench", "MediaLibraryWorkbench", "Media
 }
 assert(materialWorkspace.includes('onOpenMediaBinding={() => onViewChange("repair")}'), "media repair must remain a contextual Material tool");
 assert(materialWorkspace.includes('onClick={() => onViewChange("library")}'), "Material repair must return to the library context");
-assert(!materialWorkspace.includes("setGroupPlacement"), "Material must not own Review placement writes");
-assert(!materialWorkspace.includes("clearGroupPlacement"), "Material must not clear Review placement");
+
+// Review placement/exclusion writes have exactly one home (Script) plus one
+// sanctioned auxiliary surface (golden-slate-placement-pools, 具名豁免见
+// INVARIANTS Product workflow boundaries)。扫描整个 features/app 树：任何
+// 新组件进入某个 workspace 合成树都不能悄悄 reintroduce 第二个归集控制器。
+const placementWriteAllowlist = new Set([
+  "src/features/script/ScriptWorkspace.tsx", // Script owns placement correction/clear
+  "src/features/slate/SlatePlacementPools.tsx", // sanctioned golden-slate auxiliary surface
+]);
+for (const file of listFiles("src", new Set([".ts", ".tsx"]))) {
+  if (file.startsWith("src/api/") || file.includes(".test.")) continue;
+  const text = read(file);
+  for (const token of ["setGroupPlacement", "clearGroupPlacement", "setGroupExclusion"]) {
+    if (!text.includes(token)) continue;
+    assert(
+      placementWriteAllowlist.has(file),
+      `${file} must not own Review placement/exclusion writes (${token}); the only sanctioned surfaces are Script and the golden-slate placement pools exemption`,
+    );
+  }
+}
 
 assert(materialTakeView.includes("production.scriptSupervisor(project.project_id)"), "Material Take view must project Script Supervisor facts");
 assert(materialTakeView.includes("slateFactIndex"), "Material Take view must join Slate facts to Take identity without exposing raw ids");
@@ -149,8 +167,6 @@ assert(materialTakeView.includes(">在审阅中打开</button>"), "Material Take
 assert(materialTakeView.includes(">到时间线</button>"), "Material Take must deep-link to Timeline");
 assert(materialTakeView.includes(">修复本机素材</button>"), "offline Material Take must expose contextual media repair");
 assert(materialTakeView.includes("onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId)"), "Material Take selection must propagate through typed project context");
-assert(!materialTakeView.includes("setGroupPlacement"), "Material Take view must not write Review placement");
-assert(!materialTakeView.includes("clearGroupPlacement"), "Material Take view must not clear Review placement");
 for (const selector of [".mo-take-list-row", ".mo-take-list-core", ".mo-take-list-heading", ".mo-take-list-cameras"]) {
   assert(!materialWorkspaceCss.includes(selector), `material-workspace.css must not reclaim canonical compact Take anatomy through ${selector}`);
 }
