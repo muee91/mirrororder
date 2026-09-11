@@ -46,6 +46,7 @@ export function ScriptBlock({
   const showCoverage = canPlace && (projectionMode !== "script" || selected || relatedTakeIds.length > 0);
 
   function selectFromKeyboard(event: KeyboardEvent<HTMLElement>): void {
+    if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     onSelect(block);

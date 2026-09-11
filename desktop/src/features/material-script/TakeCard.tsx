@@ -205,6 +205,7 @@ export function TakeListRow({ take, detail, state = "default", action, actionLab
         onSelect?.();
       }}
       onKeyDown={onSelect ? (event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         onSelect();

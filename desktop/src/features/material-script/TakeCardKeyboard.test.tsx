@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewTakeGroup } from "../../api/host";
-import { TakeCard } from "./TakeCard";
+import { TakeCard, TakeListRow } from "./TakeCard";
 
 function take(): ReviewTakeGroup {
   return {
@@ -86,5 +86,59 @@ describe("TakeCard keyboard activation", () => {
     const click = new MouseEvent("click", { bubbles: true });
     actionButton.dispatchEvent(click);
     expect(select).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TakeListRow keyboard target ownership", () => {
+  let container: HTMLDivElement;
+
+  beforeEach(() => {
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(() => {
+    container.remove();
+  });
+
+  function renderRow(): { select: ReturnType<typeof vi.fn>; action: ReturnType<typeof vi.fn>; row: HTMLElement } {
+    const select = vi.fn();
+    const action = vi.fn();
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <TakeListRow
+          take={take()}
+          action={action}
+          actionLabel="归集到此段"
+          onSelect={select}
+        />,
+      );
+    });
+    const row = container.querySelector("article.mo-take-list-row") as HTMLElement;
+    return { select, action, row };
+  }
+
+  it("activates row selection with Enter/Space on the row surface", () => {
+    const { select, row } = renderRow();
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    row.dispatchEvent(enter);
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(enter.defaultPrevented).toBe(true);
+  });
+
+  it("keeps Enter/Space activation on the row's own action button", () => {
+    const { select, action, row } = renderRow();
+    const actionButton = row.querySelector("button.mo-take-list-action") as HTMLButtonElement;
+    expect(actionButton).not.toBeNull();
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    actionButton.dispatchEvent(enter);
+    // 行级 keydown 不得拦截按钮的键盘激活（按钮默认行为生成 click）。
+    expect(select).not.toHaveBeenCalled();
+    expect(enter.defaultPrevented).toBe(false);
+    actionButton.click();
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(select).not.toHaveBeenCalled();
   });
 });
