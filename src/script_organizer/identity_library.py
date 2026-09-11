@@ -343,6 +343,80 @@ class IdentityLibrary:
         self._refresh_mapping_rescue()
         return result
 
+    def merge_suggestions(
+        self,
+        *,
+        min_shared_groups: int = 2,
+        min_containment: float = 0.6,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Same-kind identity pairs that likely describe the same person.
+
+        聚类常把同一人拆成多个候选（跨场噪音/遮挡）。若两个同类型身份的
+        出场 Take 集合高度重合（共享组数 ≥ min_shared_groups 且较小集合的
+        包含率 ≥ min_containment），建议把较小的合并进较大的。纯读取，不
+        改任何数据；合并由人工通过 merge() 执行。
+        """
+        with self.database.connection() as connection:
+            observation_rows = connection.execute(
+                """
+                SELECT DISTINCT identity_id, group_id
+                FROM identity_observations
+                WHERE project_id=? AND identity_id != ''
+                """,
+                (self.project_id,),
+            ).fetchall()
+            identity_rows = connection.execute(
+                "SELECT identity_id, kind, label, metadata_json FROM identities WHERE project_id=?",
+                (self.project_id,),
+            ).fetchall()
+        groups_by_identity: dict[str, set[str]] = {}
+        for row in observation_rows:
+            groups_by_identity.setdefault(str(row["identity_id"] or ""), set()).add(str(row["group_id"] or ""))
+        meta = {}
+        for row in identity_rows:
+            metadata = _json_object(row["metadata_json"])
+            meta[str(row["identity_id"])] = {
+                "kind": str(row["kind"] or ""),
+                "label": str(row["label"] or ""),
+                "confirmed": bool(metadata.get("human_confirmed")),
+            }
+        candidate_ids = [
+            identity_id
+            for identity_id, groups in groups_by_identity.items()
+            if meta.get(identity_id, {}).get("kind") in {"face", "speaker"} and groups
+        ]
+        candidate_ids.sort(key=lambda identity_id: (-len(groups_by_identity[identity_id]), identity_id))
+
+        suggestions: list[dict[str, Any]] = []
+        for position, larger in enumerate(candidate_ids):
+            larger_groups = groups_by_identity[larger]
+            for smaller in candidate_ids[position + 1:]:
+                if meta.get(larger, {}).get("kind") != meta.get(smaller, {}).get("kind"):
+                    continue
+                smaller_groups = groups_by_identity[smaller]
+                shared = larger_groups & smaller_groups
+                if len(shared) < min_shared_groups:
+                    continue
+                containment = len(shared) / max(1, min(len(larger_groups), len(smaller_groups)))
+                if containment < min_containment:
+                    continue
+                suggestions.append(
+                    {
+                        "kind": meta[larger]["kind"],
+                        "target_identity_id": larger,
+                        "target_label": meta[larger]["label"],
+                        "target_groups": len(larger_groups),
+                        "source_identity_id": smaller,
+                        "source_label": meta[smaller]["label"],
+                        "source_groups": len(smaller_groups),
+                        "shared_groups": len(shared),
+                        "containment": round(containment, 3),
+                    }
+                )
+        suggestions.sort(key=lambda item: (-item["shared_groups"], item["target_identity_id"]))
+        return suggestions[:limit]
+
     def merge(
         self,
         target_identity_id: str,

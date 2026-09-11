@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { HostConnection, HostConnectionError } from "../../api/host";
-import { ProductionClient, type IdentityOccurrence, type IdentityRow } from "../../api/production";
+import { ProductionClient, type IdentityMergeSuggestion, type IdentityOccurrence, type IdentityRow } from "../../api/production";
 import { MirrorOrderMediaCard, type MirrorOrderMediaCardModel } from "../media/MirrorOrderMediaCard";
 import { confidenceLabel, IdentityCandidateRow, IdentityPortrait, identityTitle, PersonRow } from "./IdentityRows";
 import "./identity-workbench.css";
@@ -55,6 +55,34 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
   const [roleName, setRoleName] = useState("");
   const [message, setMessage] = useState("正在更新人物识别…");
   const [busy, setBusy] = useState(false);
+  const [suggestions, setSuggestions] = useState<IdentityMergeSuggestion[]>([]);
+  const [merging, setMerging] = useState("");
+
+  async function reloadSuggestions(): Promise<void> {
+    try {
+      const payload = await client.mergeSuggestions(projectId);
+      setSuggestions(payload.suggestions);
+    } catch {
+      setSuggestions([]);
+    }
+  }
+
+  async function applyMerge(suggestion: IdentityMergeSuggestion): Promise<void> {
+    setMerging(suggestion.source_identity_id);
+    setMessage("正在合并重复身份…");
+    try {
+      await client.mergeIdentities(projectId, {
+        targetId: suggestion.target_identity_id,
+        sourceIds: [suggestion.source_identity_id],
+      });
+      setMessage(`已把 ${suggestion.source_label || "来源身份"} 合并进 ${suggestion.target_label || "目标身份"}`);
+      await Promise.all([reload(), reloadSuggestions()]);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setMerging("");
+    }
+  }
 
   async function reload(): Promise<void> {
     setMessage("正在更新人物识别…");
@@ -68,6 +96,7 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
     } catch (error) {
       setMessage(errorMessage(error));
     }
+    await reloadSuggestions();
   }
 
   useEffect(() => {
@@ -136,6 +165,37 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
         </div>
         <span className="identity-toolbar-status" role="status">{message}</span>
       </div>
+
+      {suggestions.length ? (
+        <details className="identity-merge-suggestions" data-testid="identity-merge-suggestions">
+          <summary>
+            可能的重复身份 <strong>{suggestions.length}</strong>
+            <small>同一人的两簇线索高度重合；合并后识别证据会归到一起</small>
+          </summary>
+          <div className="identity-merge-list">
+            {suggestions.map((suggestion) => (
+              <div className="identity-merge-row" key={suggestion.source_identity_id}>
+                <span className="identity-merge-kind">{suggestion.kind === "speaker" ? "声纹" : "人脸"}</span>
+                <span className="identity-merge-copy">
+                  <strong>{suggestion.source_label || "未命名候选"}</strong>
+                  <small>{suggestion.source_groups} 个 Take</small>
+                  <span aria-hidden="true">→</span>
+                  <strong>{suggestion.target_label || "未命名候选"}</strong>
+                  <small>{suggestion.target_groups} 个 Take · 重合 {suggestion.shared_groups} 个</small>
+                </span>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || merging === suggestion.source_identity_id}
+                  onClick={() => void applyMerge(suggestion)}
+                >
+                  {merging === suggestion.source_identity_id ? "合并中…" : "合并"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <div className="production-grid identity-grid">
         <div className="identity-list production-panel" aria-label="人物线索">

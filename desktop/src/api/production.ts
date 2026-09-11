@@ -110,6 +110,24 @@ export interface IdentityOccurrence {
   transcript_text: string;
 }
 
+export interface IdentityMergeSuggestion {
+  kind: string;
+  target_identity_id: string;
+  target_label: string;
+  target_groups: number;
+  source_identity_id: string;
+  source_label: string;
+  source_groups: number;
+  shared_groups: number;
+  containment: number;
+}
+
+export interface IdentityMergeSuggestions {
+  contract: string;
+  project_id: string;
+  suggestions: IdentityMergeSuggestion[];
+}
+
 export interface IdentityRow {
   identity_id: string;
   kind: "face" | "speaker" | string;
@@ -468,6 +486,36 @@ export class ProductionClient {
           identity_id: identityId,
           label: write.label.trim(),
           role_name: write.roleName.trim(),
+        }),
+      },
+    );
+    return response.identity;
+  }
+
+  async mergeSuggestions(projectId: string): Promise<IdentityMergeSuggestions> {
+    return requestJson<IdentityMergeSuggestions>(
+      this.baseUrl,
+      `${projectPath(projectId)}/identities/merge-suggestions`,
+    );
+  }
+
+  async mergeIdentities(
+    projectId: string,
+    write: { targetId: string; sourceIds: string[]; label?: string; roleName?: string },
+  ): Promise<IdentityRow> {
+    const targetId = write.targetId.trim();
+    const sourceIds = write.sourceIds.map((value) => value.trim()).filter(Boolean);
+    if (!targetId || !sourceIds.length) throw new HostConnectionError("合并身份需要目标身份和至少一个来源身份");
+    const response = await requestJson<{ identity: IdentityRow }>(
+      this.baseUrl,
+      `${projectPath(projectId)}/identities/merge`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          target_identity_id: targetId,
+          source_identity_ids: sourceIds,
+          ...(write.label?.trim() ? { label: write.label.trim() } : {}),
+          ...(write.roleName?.trim() ? { role_name: write.roleName.trim() } : {}),
         }),
       },
     );

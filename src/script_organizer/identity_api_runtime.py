@@ -165,6 +165,23 @@ def install_identity_api_runtime() -> None:
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
                 if (
+                    len(parts) == 6
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "identities"
+                    and parts[5] == "merge-suggestions"
+                ):
+                    self._local_only()
+                    project = service.project(parts[3])
+                    suggestions = _library(project).merge_suggestions()
+                    self._send_json(
+                        {
+                            "contract": "identity_merge_suggestions.v1",
+                            "project_id": str(project.project_id),
+                            "suggestions": suggestions,
+                        }
+                    )
+                    return
+                if (
                     len(parts) == 7
                     and parts[:3] == ["api", "v1", "projects"]
                     and parts[4] == "identities"
@@ -208,6 +225,45 @@ def install_identity_api_runtime() -> None:
 
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
+                if (
+                    len(parts) == 6
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "identities"
+                    and parts[5] == "merge"
+                ):
+                    # 人工裁决：把拆碎的候选身份合并回一个（merge 会迁移全部
+                    # 观察记录并删除来源身份）。
+                    self._local_only()
+                    project = service.project(parts[3])
+                    body = web_server._body(self)
+                    target = str(body.get("target_identity_id", "") or "").strip()
+                    sources = body.get("source_identity_ids", [])
+                    if not isinstance(sources, list):
+                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "source_identity_ids 必须是数组")
+                    library = _library(project)
+                    try:
+                        row = library.merge(
+                            target,
+                            [str(value or "") for value in sources],
+                        )
+                        label = str(body.get("label", "") or "").strip()
+                        role_name = str(body.get("role_name", "") or "").strip()
+                        if label or role_name:
+                            row = library.update(target, label=label or str(row.get("label", "") or ""), role_name=role_name or str(row.get("role_name", "") or ""))
+                    except KeyError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "identity 不存在") from error
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
+                    row = _decorate_rows(project, [row])[0]
+                    self._send_json(
+                        {
+                            "contract": "identity_library.v1",
+                            "project_id": str(project.project_id),
+                            "identity": row,
+                            "merged_from": [str(value or "") for value in sources],
+                        }
+                    )
+                    return
                 if (
                     len(parts) == 5
                     and parts[:3] == ["api", "v1", "projects"]
