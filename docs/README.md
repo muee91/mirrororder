@@ -17,6 +17,8 @@
 7. [`architecture/desktop-bridge.md`](./architecture/desktop-bridge.md) — Desktop / Python / Rust / Team Web 边界。
 8. [`architecture/repository-layout.md`](./architecture/repository-layout.md) — 源码仓库、workspace 与 device data 边界。
 
+面向实际剪片用户（剪辑助理 / 后期）的操作说明：[`user-guide.md`](./user-guide.md) — 五步主链、术语与 FAQ。本文只解释界面怎么用，不定义产品；产品 authority 仍是 `app-information-architecture.md`。
+
 涉及具体领域时再读下面对应 contract，不要为了“了解全部项目”把所有 Markdown 都当必读。
 
 ## 2. 产品定义摘要
