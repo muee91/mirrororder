@@ -48,14 +48,5 @@
     "heavy_capabilities_require_isolated_module_or_worktree": true,
     "promotion_rule": "Promote an isolated capability only after its typed contract, authority boundary, failure isolation and native smoke gate are explicit."
   },
-  "active_workstreams": {
-    "runtime_packaging": {
-      "branch": "work/runtime-packaging",
-      "status": "isolated_release_workstream"
-    },
-    "auto_score": {
-      "branch": "work/auto-score",
-      "status": "isolated_feature_workstream"
-    }
-  }
+  "active_workstreams": {}
 }

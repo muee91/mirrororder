@@ -1,8 +1,12 @@
 # Optional local intelligence runtime. These packages are not required for the core
 # sync/ASR/script-matching path when actor/speaker recognition is disabled.
 # Release packaging should vendor the arm64 wheels instead of pip-installing at app launch.
+#
+# Pin source: versions below are the ones actually installed in the development
+# environment on 2026-10-25 (macOS, Python 3.14) — re-check with
+# `python3 -m pip show onnxruntime tokenizers` before bumping either pin.
 opencv-python==4.14.0.94
 sherpa-onnx==1.13.5
 # Built-in local embedding encoder (vector-zh ONNX model).
-onnxruntime
-tokenizers
+onnxruntime==1.25.1
+tokenizers==0.22.2

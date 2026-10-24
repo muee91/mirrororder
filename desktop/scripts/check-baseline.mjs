@@ -37,8 +37,10 @@ for (const [name, value] of Object.entries(baseline.release_gates ?? {})) {
 assert(baseline.isolation_policy?.production_project_tabs_are_product_surfaces === true, "project tabs must remain product surfaces");
 assert(baseline.isolation_policy?.team_web_is_top_level_workspace === true, "Team Web must remain a top-level workspace");
 assert(baseline.isolation_policy?.heavy_capabilities_require_isolated_module_or_worktree === true, "heavy capabilities must remain isolated before promotion");
-assert(baseline.active_workstreams?.runtime_packaging?.branch === "work/runtime-packaging", "runtime packaging workstream branch is incorrect");
-assert(baseline.active_workstreams?.auto_score?.branch === "work/auto-score", "auto-score workstream branch is incorrect");
+for (const [name, workstream] of Object.entries(baseline.active_workstreams ?? {})) {
+  assert(typeof workstream?.branch === "string" && workstream.branch.length > 0, `active workstream ${name} must declare a branch`);
+  assert(typeof workstream?.status === "string" && workstream.status.length > 0, `active workstream ${name} must declare a status`);
+}
 
 if (!process.exitCode) {
   console.log(`Development baseline OK: ${Object.keys(baseline.capabilities).length} capabilities, ${Object.keys(baseline.release_gates).length} release gates.`);

@@ -1,0 +1,94 @@
+# MirrorOrder Desktop release workflow — SCAFFOLD, NOT VERIFIED END TO END.
+#
+# This file is a starting point for signed macOS release packaging with the official
+# tauri-apps/tauri-action. It has never been executed on GitHub Actions. Treat the first
+# real run as a bring-up exercise: signing, notarization, artifact contents, release
+# creation for tag pushes and the portable runtime staging below are all unvalidated by
+# this repository. Tag pushes (v*) pass the tag to tauri-action so it can attach the
+# bundle to a draft GitHub release; manual dispatch has no tag, so it is expected to
+# produce build artifacts only.
+#
+# Portable runtime staging (the reason a plain CI machine cannot build a release):
+# desktop/src-tauri/tauri.conf.json runs `npm run prepare:icons && npm run stage:runtime`
+# before every production build. desktop/scripts/stage-runtime.mjs (see lines 101-120)
+# requires runtime assets that do not live in this repository:
+#   MIRRORORDER_PORTABLE_PYTHON_ROOT   portable Python runtime directory (must be self-contained)
+#   MIRRORORDER_MEDIA_TOOLS_ROOT       ffmpeg/ffprobe runtime directory (must be self-contained)
+#   MIRRORORDER_MEDIA_TOOLS_SOURCE     media tool provenance (required, no implicit default)
+#   MIRRORORDER_MEDIA_TOOLS_LICENSE    media tool license classification (required)
+#   MIRRORORDER_ALLOW_NON_MAC_RUNTIME_STAGE  escape hatch for non-macOS staging only
+# When those paths or variables are absent, stage-runtime.mjs fails with an explicit
+# message and the release build stops before signing. Supply them through a self-hosted
+# runner, repository variables, or a step that stages the runtimes at the referenced
+# paths; this workflow does not fetch or fabricate them.
+#
+# Required secrets: APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+# APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
+
+name: MirrorOrder Desktop Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-macos:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pin npm for Arborist stability
+        run: npm install --global npm@11.6.0 --no-audit --no-fund
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Desktop dependencies
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+      - name: Import Apple signing certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::error::APPLE_CERTIFICATE is not configured; a signed macOS bundle cannot be produced."
+            exit 1
+          fi
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          CERTIFICATE_PATH="$RUNNER_TEMP/build_certificate.p12"
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode --output "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+      - name: Build and publish signed macOS bundle
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MIRRORORDER_PORTABLE_PYTHON_ROOT: ${{ vars.MIRRORORDER_PORTABLE_PYTHON_ROOT }}
+          MIRRORORDER_MEDIA_TOOLS_ROOT: ${{ vars.MIRRORORDER_MEDIA_TOOLS_ROOT }}
+          MIRRORORDER_MEDIA_TOOLS_SOURCE: ${{ vars.MIRRORORDER_MEDIA_TOOLS_SOURCE }}
+          MIRRORORDER_MEDIA_TOOLS_LICENSE: ${{ vars.MIRRORORDER_MEDIA_TOOLS_LICENSE }}
+        with:
+          projectPath: desktop
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: '镜序 ${{ github.ref_name }}'
+          releaseBody: |
+            镜序 Desktop ${{ github.ref_name }}.
+
+            本工作流为脚手架，首次发布前需核对签名、公证与打包进 bundle 的 runtime 内容。
+          releaseDraft: true
+          prerelease: false

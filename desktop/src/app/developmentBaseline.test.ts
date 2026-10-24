@@ -19,8 +19,10 @@ describe("Desktop development baseline", () => {
     expect(baseline.isolation_policy.production_project_tabs_are_product_surfaces).toBe(true);
     expect(baseline.isolation_policy.team_web_is_top_level_workspace).toBe(true);
     expect(baseline.isolation_policy.heavy_capabilities_require_isolated_module_or_worktree).toBe(true);
-    expect(baseline.active_workstreams.runtime_packaging.branch).toBe("work/runtime-packaging");
-    expect(baseline.active_workstreams.auto_score.branch).toBe("work/auto-score");
+    for (const workstream of Object.values(baseline.active_workstreams) as Array<{ branch?: unknown; status?: unknown }>) {
+      expect(typeof workstream.branch).toBe("string");
+      expect(typeof workstream.status).toBe("string");
+    }
   });
 
   it("does not downgrade unverified release gates", () => {
