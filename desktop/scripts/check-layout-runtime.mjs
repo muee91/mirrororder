@@ -1,3 +1,16 @@
+// Production layout runtime guard for the Desktop material workspace.
+//
+// It mounts the real ProjectWorkbench / MaterialWorkspace shell (the Slate body is
+// stubbed so the guard measures workbench, navigation and pane geometry instead of
+// Slate data) in Chromium and asserts that the canvas fills the window and that the
+// document never overflows horizontally.
+//
+// Supported window sizes:
+// - desktop 1440×900: regular desktop window.
+// - compact 1180×768: `tauri.conf.json` sets `minWidth: 1180` and `src/styles.css`
+//   keeps html/body/#root at `min-width: 1180px`, so 1180 is the narrowest real
+//   product window. A narrower viewport only measured a clipped 1180px surface and
+//   could never fail, which is why the old 1024 viewport was a fake gate.
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -117,11 +130,14 @@ async function collectMetrics(page) {
       rowVisibleHeight,
       gridRows: getComputedStyle(workbench).gridTemplateRows.trim().split(/\s+/).filter(Boolean),
       mainOverflow: getComputedStyle(main).overflow,
+      innerWidth: window.innerWidth,
+      documentWidth: document.scrollingElement?.scrollWidth ?? 0,
     };
   });
 }
 
 function assertLayout(name, viewport, metrics) {
+  assert.equal(metrics.innerWidth, viewport.width, `${name}: browser viewport width drifted from the requested size`);
   assert.equal(metrics.gridRows.length, 2, `${name}: ProjectWorkbench must have exactly toolbar + canvas grid rows (${metrics.gridRows.join(" ")})`);
   approxEqual(metrics.canvas.top, metrics.toolbar.bottom, 1.5, `${name}: canvas must begin immediately after toolbar`);
   approxEqual(metrics.canvas.height, metrics.workbench.height - metrics.toolbar.height, 2, `${name}: canvas must consume the remaining workbench height`);
@@ -138,6 +154,26 @@ function assertLayout(name, viewport, metrics) {
   assert.ok(metrics.slate.height > 250, `${name}: Slate body collapsed to ${metrics.slate.height}px`);
   assert.ok(metrics.slate.bottom <= metrics.canvas.bottom + 2, `${name}: Slate extends beyond the production canvas`);
   assert.ok(metrics.rowVisibleHeight > 0, `${name}: representative Slate data row is not visible`);
+
+  const boxes = [
+    ["workbench", metrics.workbench],
+    ["toolbar", metrics.toolbar],
+    ["canvas", metrics.canvas],
+    ["main", metrics.main],
+    ["material", metrics.material],
+    ["domainBar", metrics.domainBar],
+    ["activeSubtitle", metrics.activeSubtitle],
+    ["slate", metrics.slate],
+    ["dataRow", metrics.dataRow],
+  ];
+  assert.ok(
+    metrics.documentWidth <= metrics.innerWidth,
+    `${name}: document scrolls horizontally (${metrics.documentWidth}px > ${metrics.innerWidth}px viewport)`,
+  );
+  const escaped = boxes
+    .filter(([, box]) => box.left < -0.5 || box.right > metrics.innerWidth + 0.5)
+    .map(([label, box]) => `${label} [${box.left.toFixed(1)}, ${box.right.toFixed(1)}]`);
+  assert.deepEqual(escaped, [], `${name}: layout escapes the ${metrics.innerWidth}px viewport horizontally: ${escaped.join(", ")}`);
 }
 
 const server = await createServer({
@@ -163,7 +199,8 @@ try {
 
   for (const viewport of [
     { name: "desktop", width: 1440, height: 900 },
-    { name: "compact", width: 1024, height: 768 },
+    // 1180 = tauri.conf.json minWidth = styles.css root min-width, the real floor.
+    { name: "compact", width: 1180, height: 768 },
   ]) {
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
     const pageErrors = [];
