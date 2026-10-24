@@ -3,7 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 PORT="${SCRIPT_ORGANIZER_PORT:-8765}"
-HOST="${SCRIPT_ORGANIZER_HOST:-0.0.0.0}"
+# 默认只监听本机；需要局域网直连时显式设置 SCRIPT_ORGANIZER_HOST=0.0.0.0
+# （Team Web 的局域网协作请走 gateway 配对，不要直接开放单工作区 serve）
+HOST="${SCRIPT_ORGANIZER_HOST:-127.0.0.1}"
 LOG_DIR="$ROOT/.workspace/logs"
 LOG_FILE="$LOG_DIR/platform-$PORT.log"
 PID_FILE="$ROOT/.workspace/platform-$PORT.pid"

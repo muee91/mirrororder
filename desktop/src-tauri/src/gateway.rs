@@ -334,8 +334,12 @@ pub fn start_team_gateway(
         command.arg(path);
     }
     command.arg("--port").arg(config.port.to_string());
+    // Python 侧 gateway 默认只绑 127.0.0.1；Desktop 的局域网模式是用户显式选择，
+    // 因此这里必须显式传 --host 0.0.0.0，与 ensure_port_available 的绑定探测保持一致。
     if config.local_only {
         command.arg("--local-only");
+    } else {
+        command.arg("--host").arg("0.0.0.0");
     }
     if config.trusted_lan {
         command.arg("--trusted-lan");

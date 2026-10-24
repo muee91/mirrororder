@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import mimetypes
 import os
@@ -54,6 +55,25 @@ class ApiError(RuntimeError):
     def __init__(self, status: HTTPStatus, message: str):
         super().__init__(message)
         self.status = status
+
+
+def _is_loopback_source(host: str) -> bool:
+    """判定 HTTP 来源是否本机。
+
+    单工作区 ``serve`` 的写权限以「来源是否本机」为界，网关的免配对判定
+    也用它，所以只保留这一处判定：127.0.0.0/8、``::1`` 与 IPv4-mapped IPv6
+    形式都算本机。不做 DNS 反解，避免解析超时与名称欺骗。
+    """
+    value = str(host or "").strip().strip("[]")
+    if not value:
+        return False
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped.is_loopback
+    return address.is_loopback
 
 
 def _read_json(path: Path, fallback: object) -> object:
@@ -504,16 +524,24 @@ class WorkspaceService:
 class GatewaySecurity:
     """Small in-memory LAN pairing boundary for the local gateway."""
 
+    PAIRING_FAILURE_LIMIT = 5
+    PAIRING_COOLDOWN_SECONDS = 30.0
+
     def __init__(
         self,
         require_pairing: bool = True,
         pairing_code: str | None = None,
         session_ttl_seconds: int = 12 * 60 * 60,
+        pairing_failure_limit: int = PAIRING_FAILURE_LIMIT,
+        pairing_cooldown_seconds: float = PAIRING_COOLDOWN_SECONDS,
     ):
         self.require_pairing = require_pairing
-        self.pairing_code = pairing_code or secrets.token_urlsafe(6)
+        self.pairing_code = pairing_code or secrets.token_urlsafe(8)
         self.session_ttl_seconds = max(60, session_ttl_seconds)
+        self.pairing_failure_limit = max(1, int(pairing_failure_limit))
+        self.pairing_cooldown_seconds = max(0.01, float(pairing_cooldown_seconds))
         self._sessions: dict[str, float] = {}
+        self._pairing_failures: dict[str, tuple[int, float]] = {}
         self._lock = threading.RLock()
 
     def _purge_expired(self) -> None:
@@ -534,19 +562,50 @@ class GatewaySecurity:
             "pairing_code": self.pairing_code if local else "",
         }
 
-    def exchange(self, code: str) -> str:
+    def _pairing_cooldown(self, source: str) -> float:
+        """返回该来源剩余的冷却秒数；冷却结束即清掉计数，允许重新尝试。"""
+        count, blocked_until = self._pairing_failures.get(source, (0, 0.0))
+        if count < self.pairing_failure_limit or not blocked_until:
+            return 0.0
+        remaining = blocked_until - time.monotonic()
+        if remaining <= 0:
+            self._pairing_failures.pop(source, None)
+            return 0.0
+        return remaining
+
+    def _note_pairing_failure(self, source: str) -> None:
+        count, _blocked_until = self._pairing_failures.get(source, (0, 0.0))
+        count += 1
+        reached_limit = count >= self.pairing_failure_limit
+        blocked_until = time.monotonic() + self.pairing_cooldown_seconds if reached_limit else 0.0
+        self._pairing_failures[source] = (count, blocked_until)
+        if len(self._pairing_failures) > 1024:
+            # 计数只服务于限速，超过上限整体丢弃即可，不做持久化。
+            self._pairing_failures.clear()
+
+    def exchange(self, code: str, source: str = "") -> str:
         if not self.require_pairing:
             return ""
+        with self._lock:
+            cooldown = self._pairing_cooldown(source)
+        if cooldown > 0:
+            raise ApiError(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                f"配对失败次数过多，请在约 {max(1, round(cooldown))} 秒后重试",
+            )
         if not secrets.compare_digest(str(code or ""), self.pairing_code):
+            with self._lock:
+                self._note_pairing_failure(source)
             raise ApiError(HTTPStatus.UNAUTHORIZED, "局域网配对码无效")
         token = "mos_" + secrets.token_urlsafe(24)
         with self._lock:
+            self._pairing_failures.pop(source, None)
             self._purge_expired()
             self._sessions[token] = time.monotonic() + self.session_ttl_seconds
         return token
 
     def allow(self, client_host: str, session: str) -> bool:
-        if client_host in {"127.0.0.1", "::1"} or not self.require_pairing:
+        if _is_loopback_source(client_host) or not self.require_pairing:
             return True
         with self._lock:
             self._purge_expired()
@@ -696,14 +755,24 @@ def make_handler(service: WorkspaceService, web_root: Path):
                 return
 
         def _local_only(self) -> None:
-            if self.client_address[0] not in {"127.0.0.1", "::1"}:
+            if not _is_loopback_source(self.client_address[0]):
                 raise ApiError(HTTPStatus.FORBIDDEN, "此操作只能在本机执行")
 
         def _review_actor(self, requested: object) -> str:
             return str(requested or "").strip()[:80]
 
         def _require_review_access(self) -> None:
-            return
+            """Review placement 是人工 authority。
+
+            单工作区 ``serve`` 没有配对身份，只接受本机写入：局域网任意主机
+            不得只凭自报昵称改写 ReviewStore。网关子类用配对 session + reviewer
+            角色覆盖本方法，局域网写入只保留那一条入口。
+            """
+            if not _is_loopback_source(self.client_address[0]):
+                raise ApiError(
+                    HTTPStatus.FORBIDDEN,
+                    "审核写入仅限本机；局域网协作请通过 Team Web Gateway 配对后进入",
+                )
 
         def _agent(self, scope: str, project_id: str | None = None) -> dict[str, Any]:
             authorization = self.headers.get("Authorization", "")
@@ -1095,7 +1164,7 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
                 raise ApiError(HTTPStatus.UNAUTHORIZED, "需要先完成局域网配对")
 
         def _is_local_client(self) -> bool:
-            return self.client_address[0] in {"127.0.0.1", "::1"}
+            return _is_loopback_source(self.client_address[0])
 
         def _browser_user(self) -> dict[str, Any]:
             service = gateway.current
@@ -1238,8 +1307,7 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
             parsed = urllib.parse.urlparse(self.path)
             try:
                 if parsed.path == "/api/v1/pairing":
-                    local = self.client_address[0] in {"127.0.0.1", "::1"}
-                    self._send_json(gateway.security.public(local))
+                    self._send_json(gateway.security.public(self._is_local_client()))
                     return
                 if parsed.path == "/api/v1/ping":
                     self._send_json({"status": "ok", "service": "mirrororder-gateway"})
@@ -1279,7 +1347,7 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
             try:
                 if parsed.path == "/api/v1/pairing":
                     payload = _body(self)
-                    token = gateway.security.exchange(str(payload.get("code", "")))
+                    token = gateway.security.exchange(str(payload.get("code", "")), self.client_address[0])
                     headers = (
                         {"Set-Cookie": self._session_cookie(token, gateway.security.session_ttl_seconds)}
                         if token
@@ -1308,7 +1376,7 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
     return Handler
 
 
-def serve(workspace: WorkspaceConfig, host: str = "0.0.0.0", port: int = 8765) -> None:
+def serve(workspace: WorkspaceConfig, host: str = "127.0.0.1", port: int = 8765) -> None:
     service = WorkspaceService(workspace)
     server = MirrorOrderHTTPServer((host, port), make_handler(service, workspace.web_dir))
     print(f"Video Material Platform: http://{host}:{port}/")
@@ -1333,7 +1401,7 @@ def serve(workspace: WorkspaceConfig, host: str = "0.0.0.0", port: int = 8765) -
 
 def serve_gateway(
     workspaces: list[WorkspaceConfig],
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8766,
     *,
     require_pairing: bool = True,

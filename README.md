@@ -103,16 +103,23 @@ npm install
 npm run dev
 ```
 
-Production Host 默认本机 `8765`：
+Production Host 默认只监听本机 `127.0.0.1:8765`：
 
 ```bash
-python -m script_organizer.cli serve <workspace> --local-only --port 8765
+./script-organizer serve <workspace> --port 8765
 ```
 
-Team Gateway 默认 `8766`：
+需要局域网直连时才显式绑定（审阅写入仍只接受本机；Team Web 协作请走下面的 Gateway）：
 
 ```bash
-python -m script_organizer.cli gateway workspace.toml --port 8766
+./script-organizer serve <workspace> --host 0.0.0.0 --port 8765
+```
+
+Team Gateway 默认只监听本机 `127.0.0.1:8766`，开局域网必须显式绑定，
+首次访问时用终端打印的配对码完成配对，配对失败会按来源限速：
+
+```bash
+./script-organizer gateway workspace.toml --host 0.0.0.0 --port 8766
 ```
 
 ## 验证

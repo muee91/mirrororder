@@ -100,15 +100,31 @@ def main(argv: list[str] | None = None) -> int:
     for command in ("serve", "run"):
         serve_parser = subparsers.add_parser(command, help="启动本地多项目工作台")
         serve_parser.add_argument("workspace", help="workspace.toml 或工作区目录")
-        serve_parser.add_argument("--host", default="0.0.0.0")
+        serve_parser.add_argument(
+            "--host",
+            default="127.0.0.1",
+            help="监听地址；默认只绑本机，局域网直连需显式指定 0.0.0.0",
+        )
         serve_parser.add_argument("--port", default=8765, type=int)
-        serve_parser.add_argument("--local-only", action="store_true", help="仅允许本机访问")
+        serve_parser.add_argument(
+            "--local-only",
+            action="store_true",
+            help="仅允许本机访问（默认行为，保留该开关兼容既有启动脚本）",
+        )
 
     gateway_parser = subparsers.add_parser("gateway", help="启动多工作区局域网网关")
     gateway_parser.add_argument("workspace", nargs="+", help="一个或多个 workspace.toml 或工作区目录")
-    gateway_parser.add_argument("--host", default="0.0.0.0")
+    gateway_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="监听地址；默认只绑本机，Team Web 局域网访问需显式指定 0.0.0.0",
+    )
     gateway_parser.add_argument("--port", default=8766, type=int)
-    gateway_parser.add_argument("--local-only", action="store_true", help="仅允许本机访问")
+    gateway_parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help="仅允许本机访问（默认行为，保留该开关兼容既有启动脚本）",
+    )
     gateway_parser.add_argument("--trusted-lan", action="store_true", help="可信局域网免配对")
     gateway_parser.add_argument("--pairing-code", default="", help="指定局域网首次配对码")
 
