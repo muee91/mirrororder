@@ -304,7 +304,7 @@ input, textarea, select {
 
 /* Controls and overlays share a compact desktop radius scale. Canonical production-object
  * renderers own their own anatomy/radius and are deliberately excluded here. */
-:where(.production-panel, .parse-preview, .assistant-item, .occurrence-row, .take-card, .take-inspector, .script-scene) {
+:where(.production-panel, .parse-preview, .assistant-item, .occurrence-row, .take-inspector, .script-scene) {
   border-radius: var(--mo-radius-pane);
 }
 

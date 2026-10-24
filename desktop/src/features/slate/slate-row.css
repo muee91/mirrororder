@@ -1,0 +1,15 @@
+/* Canonical SlateRow renderer: the row owns its cell content, editors and camera slot.
+ * The ledger grid itself (column widths, cell box, row-state surface, sticky header) stays
+ * with .golden-slate-table in golden-slate.css because it composes the table, not the row.
+ */
+
+.slate-row td.col-index strong { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 620; }
+.slate-row td.col-index small.derived-source { color: #7fa6d0; font-weight: 650; }
+.slate-row input { width: 100%; border: 1px solid transparent; border-radius: 5px; padding: 6px 5px; color: #d7dee4; background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.slate-row input:hover, .slate-row input:focus { border-color: #34414c; background: #0a0f13; }
+.slate-row td.col-media .mo-media-card { margin: 0 auto; }
+
+@media (prefers-color-scheme: light) {
+  .slate-row input { color: #26313a; }
+  .slate-row input:hover, .slate-row input:focus { border-color: #c9d2da; background: #fff; }
+}

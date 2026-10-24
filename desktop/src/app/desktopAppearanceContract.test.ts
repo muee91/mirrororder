@@ -55,6 +55,7 @@ describe("Desktop appearance product contract", () => {
     const takeCard = read("../features/material-script/take-card.css");
     const slate = read("../desktop-theme-slate.css");
     const frozen = read("../desktop-theme-frozen-surfaces.css");
+    const mediaCard = read("../features/media/mirrororder-media-card.css");
     expect(css).toContain('html[data-mirrororder-theme="light"]');
     expect(css).toContain('html[data-mirrororder-theme="dark"]');
     expect(tools).toContain(".settings-status-workbench");
@@ -80,7 +81,7 @@ describe("Desktop appearance product contract", () => {
     expect(slate).toContain(".golden-inspector-actions .danger-subtle { flex: 0 0 auto;");
     expect(frozen).toContain('html[data-mirrororder-theme="light"] .project-home-heading');
     expect(frozen).toContain('html[data-mirrororder-theme="dark"] .project-home-heading');
-    expect(frozen).toContain('html[data-mirrororder-theme="light"] .mo-media-prefer');
-    expect(frozen).toContain('html[data-mirrororder-theme="dark"] .mo-media-prefer');
+    expect(mediaCard).toContain('html[data-mirrororder-theme="light"] .mo-media-prefer');
+    expect(mediaCard).toContain('html[data-mirrororder-theme="dark"] .mo-media-prefer');
   });
 });

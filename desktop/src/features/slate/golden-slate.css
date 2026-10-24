@@ -53,12 +53,7 @@
 .golden-slate-table .col-text { width: 66px; }
 .golden-slate-table .col-media { width: 188px; }
 .golden-slate-table .col-status { width: 110px; }
-.golden-slate-table td.col-index strong { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 620; }
 .golden-slate-table td.col-index small { display: block; margin-top: 3px; color: #77848f; font-size: 9px; }
-.golden-slate-table td.col-index small.derived-source { color: #7fa6d0; font-weight: 650; }
-.golden-slate-table input { width: 100%; border: 1px solid transparent; border-radius: 5px; padding: 6px 5px; color: #d7dee4; background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
-.golden-slate-table input:hover, .golden-slate-table input:focus { border-color: #34414c; background: #0a0f13; }
-.golden-slate-table td.col-media .mo-media-card { margin: 0 auto; }
 .golden-slate-empty-media { display: grid; width: 180px; height: 88px; place-items: center; border: 1px solid #28323b; border-radius: 8px; color: #596671; background: #12181d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
 .golden-slate-empty-media:hover { border-color: #405364; color: #9fb7cb; background: #16202a; }
 
@@ -157,8 +152,6 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
   .golden-slate-table td { border-color: #e0e5e9; background: #fff; }
   .golden-slate-table tr:hover td { background: #f6f8fa; }
   .golden-slate-table tr.is-selected td { background: #edf5ff; }
-  .golden-slate-table input { color: #26313a; }
-  .golden-slate-table input:hover, .golden-slate-table input:focus { border-color: #c9d2da; background: #fff; }
   .golden-slate-empty-media { border-color: #d7dee4; color: #7b8791; background: #f3f5f7; }
   .golden-take-picker { border-color: #cdd6de; background: #fff; }
   .golden-slate-review-tools { background: #f4f6f8; }

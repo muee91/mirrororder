@@ -1,3 +1,68 @@
+/* Canonical Take renderers: TakeCard owns the grouped card, TakeListRow owns the compact row.
+ * Desktop Light/Dark color overrides for these objects live here as well, so the global
+ * theme layer never recolors a canonical object (INVARIANTS: Production UI authority).
+ */
+
+/* Take is a grouped production object, not a generic media card. */
+.take-card {
+  position: relative;
+  height: 304px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--mo-border-default, #252d36);
+  border-radius: var(--mo-radius-pane, 4px);
+  padding: 10px;
+  background: var(--mo-surface-pane, #0d1115);
+  color: var(--mo-text-primary, #e2e8ed);
+  cursor: pointer;
+}
+.take-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 2px; background: transparent; pointer-events: none; }
+.take-card.is-selected { border-color: var(--mo-border-strong, #536170); background: var(--mo-surface-selected, #182535); box-shadow: none; }
+.take-card.is-selected::before { background: var(--mo-accent, #6fa7e8); }
+.take-card[draggable="true"] { cursor: grab; }
+.take-card[draggable="true"]:active { cursor: grabbing; }
+.take-card:focus-visible { outline: 1px solid var(--mo-accent, #6fa7e8); outline-offset: -2px; box-shadow: inset 2px 0 0 var(--mo-accent, #6fa7e8); }
+
+.take-card-heading {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(118px, auto) auto;
+  align-items: center;
+  gap: 10px;
+}
+.take-card-identity { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) 34px; align-items: baseline; gap: 6px; }
+.take-card-kicker { color: var(--mo-text-muted, #778590); font-size: var(--mo-font-xs, 10px); font-weight: 720; letter-spacing: .06em; }
+.take-card-id { min-width: 0; overflow: hidden; font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: var(--mo-font-md, 12px); text-overflow: ellipsis; white-space: nowrap; }
+.take-card-index { min-width: 34px; color: var(--mo-text-muted, #778590); font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: var(--mo-font-xs, 10px); text-align: right; font-variant-numeric: tabular-nums; }
+.take-card-state { min-width: 0; display: grid; grid-template-columns: 54px minmax(64px, 1fr); align-items: center; gap: 5px; }
+
+.take-bucket { min-height: 22px; display: inline-flex; min-width: 0; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--mo-border-default, #303a44); border-radius: 4px; padding: 0 6px; color: var(--mo-text-secondary, #9aa5b1); background: var(--mo-surface-control, #171d23); font-size: var(--mo-font-xs, 10px); text-overflow: ellipsis; white-space: nowrap; }
+.bucket-rejected { border-color: color-mix(in srgb, var(--mo-danger, #d66f6f) 42%, var(--mo-border-default, #303a44)); color: var(--mo-danger, #e2a1a1); }
+.bucket-placed { border-color: color-mix(in srgb, var(--mo-success, #65bb87) 38%, var(--mo-border-default, #303a44)); color: var(--mo-success, #b8dec7); }
+.bucket-candidate { border-color: color-mix(in srgb, var(--mo-accent, #6fa7e8) 36%, var(--mo-border-default, #303a44)); color: var(--mo-text-primary, #cdd6ec); }
+.bucket-pending { border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 38%, var(--mo-border-default, #303a44)); color: var(--mo-warning, #d8bd83); }
+.take-heading-actions { display: grid; grid-template-columns: 54px 54px; align-items: center; gap: 5px; }
+.duration-label { min-width: 54px; color: var(--mo-text-muted, #9aa5b1); font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: var(--mo-font-xs, 10px); text-align: right; font-variant-numeric: tabular-nums; }
+.take-select { min-width: 54px; min-height: 26px; border-color: color-mix(in srgb, var(--mo-accent, #6fa7e8) 44%, var(--mo-border-default, #303a44)); padding: 0 7px; color: var(--mo-accent-strong, #cfe2f5); background: var(--mo-surface-control, #171d23); font-size: var(--mo-font-xs, 10px); }
+.take-select[aria-pressed="true"] { border-color: var(--mo-accent, #6fa7e8); color: var(--mo-text-primary, #eef2f6); background: var(--mo-accent-soft, #182535); }
+
+.take-card-mapping { min-height: 18px; margin-top: 3px; overflow: hidden; color: var(--mo-text-muted, #7c8895); font-size: var(--mo-font-sm, 11px); line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.take-transcript { display: -webkit-box; height: 38px; margin: 5px 0 0; overflow: hidden; color: var(--mo-text-secondary, #aab4bf); font-size: var(--mo-font-sm, 11px); line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.take-transcript.is-empty { color: var(--mo-text-muted, #5e6975); }
+
+/* Stable first-class camera slots. A/B/C/AUX never shift because another camera is missing. */
+.take-camera-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 196px; gap: 6px; margin-top: 6px; padding-bottom: 3px; overflow-x: auto; scrollbar-width: thin; }
+.take-camera-slot { width: 196px; min-width: 196px; display: grid; grid-template-rows: 20px 96px; gap: 3px; }
+.take-camera-slot > header { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 5px; padding-inline: 2px; color: var(--camera-ink, var(--mo-text-secondary, #a6b1ba)); }
+.take-camera-slot > header strong { overflow: hidden; font-size: var(--mo-font-xs, 10px); text-overflow: ellipsis; white-space: nowrap; }
+.take-camera-slot > header span { color: var(--mo-text-muted, #778590); font-size: var(--mo-font-xs, 10px); text-align: right; white-space: nowrap; }
+.take-camera-slot .mo-media-card.is-compact { width: 196px; height: 96px; }
+.take-camera-empty { height: 96px; display: grid; place-content: center; gap: 3px; border: 1px dashed var(--camera-border, var(--mo-border-default, #29333d)); border-radius: 6px; background: var(--camera-fill, var(--mo-surface-raised, #151b20)); color: var(--camera-ink, var(--mo-text-muted, #778590)); text-align: center; }
+.take-camera-empty span { font-size: var(--mo-font-sm, 11px); font-weight: 760; }
+.take-camera-empty small { color: var(--mo-text-muted, #778590); font-size: var(--mo-font-xs, 10px); }
+
+.take-issue-slot { height: 24px; display: flex; min-width: 0; align-items: end; gap: 5px; margin-top: 4px; overflow: hidden; }
+
 .mo-take-list-row {
   display: grid;
   width: 100%;
@@ -119,3 +184,9 @@
   .mo-take-list-row { padding-inline: 7px; }
   .mo-take-list-detail > small { display: none; }
 }
+
+/* Resolved Desktop theme: canonical Take colors are owned here, not by desktop-theme.css. */
+html[data-mirrororder-theme="light"] .take-card { border-color: #dde3e9; background: #fff; }
+html[data-mirrororder-theme="dark"] .take-card { border-color: #252d36; background: #0d1115; }
+html[data-mirrororder-theme="light"] .take-select { border-color: #d5dde5; color: #5c6875; background: #eef2f6; }
+html[data-mirrororder-theme="dark"] .take-select { border-color: #2d3742; color: #8793a0; background: #151b21; }

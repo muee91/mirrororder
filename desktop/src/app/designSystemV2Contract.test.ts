@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -9,10 +9,11 @@ function read(relative: string): string {
 describe("MirrorOrder Design System v2 contract", () => {
   it("loads the v2 layer after legacy theme and workspace overrides", () => {
     const main = read("../main.tsx");
-    const redesignIndex = main.indexOf('import "./app/project-context-redesign.css";');
+    const redesignIndex = main.indexOf('import "./app/mirrororder-workspaces-redesign.css";');
     const chromeIndex = main.indexOf('import "./app/app-chrome.css";');
     const v2Index = main.indexOf('import "./design-system-v2.css";');
 
+    expect(redesignIndex).toBeGreaterThan(-1);
     expect(chromeIndex).toBeGreaterThan(redesignIndex);
     expect(v2Index).toBeGreaterThan(chromeIndex);
   });
@@ -51,15 +52,13 @@ describe("MirrorOrder Design System v2 contract", () => {
 
   it("keeps project chrome compact and aligned with the current toolbar-plus-canvas authority", () => {
     const project = read("../features/production/professional-project-workbench.css");
-    const secondary = read("./project-context-redesign.css");
 
     expect(project).toContain("grid-template-rows: 48px minmax(0, 1fr)");
     expect(project).not.toContain("grid-template-rows: 48px 32px");
     expect(project).toContain(".professional-area-nav button.is-active:hover");
     expect(project).not.toContain(".professional-secondary-pages");
-    expect(secondary).toContain("Project Area navigation remains authoritative in ProjectWorkbench's project toolbar");
-    expect(secondary).toContain("background: var(--mo-surface-pane)");
-    expect(secondary).not.toMatch(/font-size:\s*9px/);
+    // The dead second context-bar layer is gone; ProjectWorkbench keeps the only chrome authority.
+    expect(existsSync(fileURLToPath(new URL("./project-context-redesign.css", import.meta.url)))).toBe(false);
   });
 
   it("keeps global chrome quiet, compact and row-oriented", () => {

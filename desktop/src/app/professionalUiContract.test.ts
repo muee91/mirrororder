@@ -62,7 +62,7 @@ describe("MirrorOrder professional UI contracts", () => {
   });
 
   it("locks Take card identity, state, action and camera regions to explicit grids", () => {
-    const css = read("../features/material-script/material-script.css");
+    const css = read("../features/material-script/take-card.css");
     expect(css).toContain(".take-card-heading");
     expect(css).toContain("grid-template-columns: minmax(130px, 1fr) minmax(118px, auto) auto");
     expect(css).toContain(".take-card-state");
@@ -82,6 +82,7 @@ describe("MirrorOrder professional UI contracts", () => {
       "../features/script/script-workspace.css",
       "../features/review/review-workspace.css",
       "../features/review/review-decision.css",
+      "../features/slate/slate-row.css",
       "../features/production/production-workspaces.css",
       "../features/production/production.css",
       "../features/editor/timeline.css",

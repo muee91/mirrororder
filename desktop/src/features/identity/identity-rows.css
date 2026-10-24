@@ -131,3 +131,7 @@
     display: none;
   }
 }
+
+/* Resolved Desktop theme: canonical Identity row colors are owned here, not by desktop-theme.css. */
+html[data-mirrororder-theme="light"] .identity-row { border-color: #dde3e9; background: #fff; }
+html[data-mirrororder-theme="dark"] .identity-row { border-color: #252d36; background: #0d1115; }

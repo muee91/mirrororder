@@ -195,3 +195,24 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
   outline-offset: 1px;
   box-shadow: var(--mo-focus-ring, 0 0 0 2px rgba(111, 167, 232, .34));
 }
+
+/* Resolved Desktop theme: the shared Media Card owns its own Light/Dark colors. */
+html[data-mirrororder-theme="light"] .mo-media-card { border-color: #d2dae1; color: #26313a; background: #fff; }
+html[data-mirrororder-theme="light"] .mo-media-card.is-selected { border-color: #3f86d9; background: #edf5ff; }
+html[data-mirrororder-theme="light"] .mo-media-thumb { background: #e9eef2; color: #697782; }
+html[data-mirrororder-theme="light"] .mo-media-preview-fallback { color: #6f7d88; background: #e9eef2; }
+html[data-mirrororder-theme="light"] .mo-media-name { color: #26313a; }
+html[data-mirrororder-theme="light"] .mo-media-shot.is-unknown,
+html[data-mirrororder-theme="light"] .mo-media-meta,
+html[data-mirrororder-theme="light"] .mo-media-role { color: #6b7883; }
+html[data-mirrororder-theme="light"] .mo-media-prefer { background: rgba(255,255,255,.90); }
+
+html[data-mirrororder-theme="dark"] .mo-media-card { border-color: #303942; color: #dfe6eb; background: #141a20; }
+html[data-mirrororder-theme="dark"] .mo-media-card.is-selected { border-color: #5a9ef4; background: #142131; }
+html[data-mirrororder-theme="dark"] .mo-media-thumb { background: #05080a; color: #81909c; }
+html[data-mirrororder-theme="dark"] .mo-media-preview-fallback { color: #7d8b96; background: #080c0f; }
+html[data-mirrororder-theme="dark"] .mo-media-name { color: #dce3e8; }
+html[data-mirrororder-theme="dark"] .mo-media-shot.is-unknown { color: #65727d; }
+html[data-mirrororder-theme="dark"] .mo-media-meta { color: #84919c; }
+html[data-mirrororder-theme="dark"] .mo-media-role { color: #6f7c87; }
+html[data-mirrororder-theme="dark"] .mo-media-prefer { background: rgba(8,11,14,.82); }

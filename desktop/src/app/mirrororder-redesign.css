@@ -655,8 +655,7 @@ textarea {
   gap: 20px;
 }
 
-.workspace-home-hero .eyebrow,
-.production-secondary-title .eyebrow {
+.workspace-home-hero .eyebrow {
   margin: 0 0 5px;
   color: var(--mo-text-3);
   font-size: 10px;
@@ -939,73 +938,6 @@ textarea {
 .mirrororder-redesign-shell .project-workbench-main {
   height: 100%;
   min-height: 0;
-}
-
-.mirrororder-redesign-shell .production-secondary-workspace {
-  height: 100%;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: 50px minmax(0, 1fr);
-  background: var(--mo-bg);
-}
-
-.mirrororder-redesign-shell .production-secondary-bar-redesign {
-  min-width: 0;
-  height: 50px;
-  padding: 0 14px 0 18px;
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--mo-border);
-  background: var(--mo-surface);
-}
-
-.production-secondary-title {
-  min-width: 0;
-  display: grid;
-  gap: 0;
-}
-
-.production-secondary-title .eyebrow { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.production-secondary-title strong { color: var(--mo-text); font-size: 12px; }
-
-.production-secondary-tabs {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.production-secondary-tabs button,
-.production-secondary-assistant {
-  min-height: 29px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--mo-text-2);
-  font-size: 9px;
-}
-
-.production-secondary-tabs button:hover,
-.production-secondary-assistant:hover { background: var(--mo-surface-soft); color: var(--mo-text); }
-.production-secondary-tabs button.is-active,
-.production-secondary-assistant.is-active { background: var(--mo-accent-soft); color: var(--mo-accent); font-weight: 650; }
-
-.mirrororder-redesign-shell .production-secondary-canvas {
-  min-height: 0;
-  overflow: hidden;
-  padding: 14px;
-  background: var(--mo-bg);
-}
-
-.mirrororder-redesign-shell .production-secondary-canvas > * {
-  height: 100%;
-  min-height: 0;
-  border: 1px solid var(--mo-border);
-  border-radius: var(--mo-radius);
-  background: var(--mo-surface);
-  box-shadow: 0 1px 0 rgba(38, 55, 73, .02);
 }
 
 /* Status/settings/global tools inherit the same canvas */

@@ -1,6 +1,7 @@
 import type { DragEvent, KeyboardEvent } from "react";
 import type { ReviewScriptBlock } from "../../api/host";
 import { DRAG_TAKE_MIME } from "./TakeCard";
+import "./script-block.css";
 
 export type ScriptProjectionMode = "script" | "coverage" | "issues";
 

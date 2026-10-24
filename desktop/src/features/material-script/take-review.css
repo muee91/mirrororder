@@ -7,20 +7,6 @@
   outline-offset: -1px;
 }
 
-.take-card {
-  cursor: pointer;
-}
-
-.take-card[draggable="true"] {
-  cursor: grab;
-}
-
-.take-card:focus-visible {
-  outline: 1px solid var(--mo-accent, #6fa7e8);
-  outline-offset: -2px;
-  box-shadow: inset 2px 0 0 var(--mo-accent, #6fa7e8);
-}
-
 .take-inspector-statusline {
   display: flex;
   min-width: 0;

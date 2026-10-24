@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { SlateRecord, SlateStatus } from "../../api/production";
 import { SlateStatusIndicator } from "../../components/StatusIndicators";
+import "./slate-row.css";
 
 export const SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"] as const;
 export type SlateCameraColumn = typeof SLATE_CAMERA_COLUMNS[number];
@@ -72,7 +73,7 @@ export function SlateTableHead() {
 export function SlateRow({ row, onSelect, onPatch, renderMedia }: SlateRowProps) {
   return (
     <tr
-      className={`${row.selected ? "is-selected" : ""} ${row.dirty ? "is-dirty" : ""}`}
+      className={`slate-row ${row.selected ? "is-selected" : ""} ${row.dirty ? "is-dirty" : ""}`}
       data-slate-columns={SLATE_COLUMN_KEYS.join(" ")}
       tabIndex={0}
       aria-current={row.selected ? "true" : undefined}

@@ -73,7 +73,6 @@ const allowedGlobalCssImports = new Set([
   "./features/media/media-binding-recovery.css",
   "./app/mirrororder-redesign.css",
   "./app/mirrororder-workspaces-redesign.css",
-  "./app/project-context-redesign.css",
   "./app/app-chrome.css",
   "./design-system-v2.css",
 ]);
@@ -213,6 +212,7 @@ for (const retiredPath of [
   "src/features/material-script/golden-material-script-theme.css",
   "src/features/material-script/TakeEvidencePanels.tsx",
   "src/features/material-script/editorial-inspector.css",
+  "src/app/project-context-redesign.css",
   "src/features/planning/PlanningWorkbenches.tsx",
   "src/features/planning/planning.css",
   "src/features/production/secondary-tools-theme.css",
@@ -305,6 +305,31 @@ assert(
   `compact Take styling must have one owner; found ${compactTakeStyleOwners.length ? compactTakeStyleOwners.join(", ") : "none"}`,
 );
 
+// Canonical object anatomy lives in the object's own stylesheet: one owner per object, and no
+// global theme/redesign layer may recolor it (INVARIANTS: Production UI implementation authority).
+const canonicalObjectStyleOwners = [
+  [".take-card", "src/features/material-script/take-card.css"],
+  [".script-block", "src/features/material-script/script-block.css"],
+  [".slate-row", "src/features/slate/slate-row.css"],
+];
+for (const [selector, ownerPath] of canonicalObjectStyleOwners) {
+  const pattern = new RegExp(`${escapeRegex(selector)}(?![-\\w])`);
+  const owners = sourceCssFiles.filter((relativePath) => pattern.test(read(relativePath)));
+  assert(
+    owners.length === 1 && owners[0] === ownerPath,
+    `${selector} anatomy must have one stylesheet owner (${ownerPath}); found ${owners.length ? owners.join(", ") : "none"}`,
+  );
+}
+
+const canonicalGlobalClassPattern = /\.(?:take-card|script-block|mo-media-card|identity-row)(?![-\w])/;
+for (const cssImport of cssImports) {
+  const relativePath = normalize(path.join("src", cssImport));
+  assert(
+    !canonicalGlobalClassPattern.test(read(relativePath)),
+    `global stylesheet layer ${relativePath} must not own canonical object colors; move the override into the object's own stylesheet`,
+  );
+}
+
 const virtualTakeList = read("src/features/material-script/VirtualTakeList.tsx");
 assert(!/\bfunction\s+TakeCard\b/.test(virtualTakeList), "VirtualTakeList must not hide a second TakeCard implementation");
 assert(!virtualTakeList.includes("const STABLE_CAMERA_SLOTS"), "VirtualTakeList must not redefine stable camera slots");
@@ -320,6 +345,8 @@ assert(!slatePlacementPools.includes("golden-placement-take"), "SlatePlacementPo
 const slateRow = read("src/features/slate/SlateRow.tsx");
 assert(slateRow.includes("export const SLATE_CAMERA_COLUMNS"), "SlateRow must own the fixed A/B/C/AUX camera column contract");
 assert(slateRow.includes("export const SLATE_COLUMN_KEYS"), "SlateRow must own the fixed ledger column order");
+assert(slateRow.includes('import "./slate-row.css"'), "canonical SlateRow must own its cell stylesheet import");
+assert(slateRow.includes("className={`slate-row "), "SlateRow must expose its own row class instead of relying on table ancestor selectors");
 const goldenSlate = read("src/features/slate/GoldenSlateWorkbench.tsx");
 assert(goldenSlate.includes('from "./SlateRow"'), "GoldenSlateWorkbench must consume the canonical SlateRow renderer");
 assert(!goldenSlate.includes("<td className=\"col-"), "GoldenSlateWorkbench must not own SlateRow table cells");
@@ -336,6 +363,7 @@ assert(!goldenSlateCss.includes(".golden-episode-candidates > button"), "Golden 
 
 const scriptBlock = read("src/features/material-script/ScriptBlock.tsx");
 assert(scriptBlock.includes("export function ScriptBlock"), "ScriptBlock must remain an independently importable canonical renderer");
+assert(scriptBlock.includes('import "./script-block.css"'), "canonical ScriptBlock must own its stylesheet import");
 assert(scriptBlock.includes('data-script-projection={projectionMode}'), "ScriptBlock must expose projection state without duplicating renderers");
 assert(scriptBlock.includes("mappedTakeIds"), "ScriptBlock must present mapped Take state");
 assert(scriptBlock.includes("candidateTakeIds"), "ScriptBlock must present candidate Take state");

@@ -1,0 +1,21 @@
+/* Canonical ScriptBlock renderer: the block owns its own anatomy.
+ * ScriptEpisodeView keeps only the list container; Desktop theme colors for the block
+ * stay here instead of the global theme layer (INVARIANTS: Production UI authority).
+ */
+
+.script-block { border: 1px solid transparent; border-left: 2px solid var(--mo-border-strong, #2d3742); padding: 8px 10px; background: var(--mo-surface-raised, #12171c); transition: border-color .12s ease, background .12s ease; }
+.script-block.is-selected { border-color: var(--mo-border-strong, #526171); border-left-color: var(--mo-accent, #8d9eae); background: var(--mo-surface-selected, #182535); }
+.script-block.is-drop-target { border-color: var(--mo-accent, #697b8b); border-style: dashed; background: var(--mo-accent-soft, #171e24); }
+.script-block p { margin: 5px 0 0; color: var(--mo-text-secondary, #bdc6cf); font-size: var(--mo-font-md, 12px); line-height: 1.55; }
+.script-block-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; color: var(--mo-text-muted, #7e8a97); font-size: var(--mo-font-xs, 10px); }
+.script-block-actions { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.script-block-actions button { border-color: color-mix(in srgb, var(--mo-accent, #6fa7e8) 40%, var(--mo-border-default, #303a44)); padding: 3px 7px; color: var(--mo-accent-strong, #cfe2f5); background: var(--mo-surface-control, #171d23); font-size: var(--mo-font-xs, 10px); }
+.script-block-actions .place-current { color: var(--mo-success, #c4dccd); }
+.script-block-meta code { color: var(--mo-text-muted, #687583); }
+.drop-hint { display: inline-block; margin-top: 6px; border-left: 2px solid var(--mo-accent, #6fa7e8); padding: 3px 6px; color: var(--mo-text-secondary, #c7d1db); background: var(--mo-accent-soft, #25313b); font-size: var(--mo-font-xs, 10px); }
+
+/* Resolved Desktop theme: canonical ScriptBlock colors are owned here. */
+html[data-mirrororder-theme="light"] .script-block { border-color: #dde3e9; background: #f7f9fb; }
+html[data-mirrororder-theme="dark"] .script-block { border-color: transparent; border-left-color: #2d3742; background: #12171c; }
+html[data-mirrororder-theme="light"] .script-block-actions button { border-color: #d5dde5; color: #5c6875; background: #eef2f6; }
+html[data-mirrororder-theme="dark"] .script-block-actions button { border-color: #2d3742; color: #8793a0; background: #151b21; }
