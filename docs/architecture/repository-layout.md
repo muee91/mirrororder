@@ -17,8 +17,7 @@ mirrororder/
 ├── desktop/                      React / Tauri / Rust Desktop
 ├── web/                          Team Web 静态资源/轻量前端
 ├── docs/                         当前产品、领域与工程文档
-│   ├── architecture/             跨层长期工程架构
-│   └── verification/             某个 commit/环境的一次性验证证据
+│   └── architecture/             跨层长期工程架构
 ├── tests/                        Python 合同、单元与集成测试
 ├── projects/.gitkeep             仅用于保留空的本地 workspace 容器目录
 ├── vendor/                       固定的第一方/第三方 vendored runtime source
@@ -67,8 +66,9 @@ mirrororder/
 - `README.md`：唯一根级产品/仓库总览；
 - `docs/README.md`：唯一文档索引；
 - `docs/*.md`：当前产品 IA、UX、领域 contract；
-- `docs/architecture/*.md`：跨 Python/Desktop/Runtime/Sync 等多个层的长期工程架构；
-- `docs/verification/*.md`：带日期、commit、执行环境的一次性验证/审计证据。
+- `docs/architecture/*.md`：跨 Python/Desktop/Runtime/Sync 等多个层的长期工程架构。
+
+一次性验证/审计证据**不进入源码 Git**：带日期的 run 记录放在 `.workspace/audits/<日期>/`（已被 `.gitignore` 排除），需要长期保留的结论只把**仍然成立的那部分**升格进对应领域的 contract 或 `docs/engineering/STATUS.md`。某次 CI、某个 SHA、某轮 parity 的证据由 Git 历史与 GitHub Actions artifact 承担；把它们当作当前 Markdown 保存会误导后续开发（同一棵树里曾同时存在「docs/README.md 禁止 verification/」与「repository-layout 允许 verification/」两条相反规则）。
 
 临时 prompt、迁移清单、已经结束的操作脚本不作为长期文档提交；Git 历史已经承担过程留档。
 
