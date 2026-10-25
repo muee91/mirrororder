@@ -8,7 +8,7 @@ from script_organizer.config import ProjectConfig
 from script_organizer.delivery_runtime import _decorate_premiere_report, _decorate_report, _decorate_timeline_report
 from script_organizer.fcpxml_exporter import export
 from script_organizer.nle_delivery import PREMIERE_XMEML_NAME
-from script_organizer.timeline_delivery import TIMELINE_FCPXML_NAME
+from script_organizer.nle_delivery import TIMELINE_FCPXML_NAME
 
 
 def _config(tmp_path: Path) -> ProjectConfig:

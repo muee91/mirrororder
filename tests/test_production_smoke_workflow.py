@@ -7,7 +7,7 @@ from pathlib import Path
 
 from script_organizer.config import ProjectConfig
 from script_organizer.nle_delivery import export_timeline_delivery, export_timeline_premiere_delivery
-from script_organizer.timeline_delivery import TIMELINE_DELIVERY_CONTRACT, TIMELINE_FCPXML_NAME
+from script_organizer.nle_delivery import TIMELINE_DELIVERY_CONTRACT, TIMELINE_FCPXML_NAME
 
 
 def _sha256(path: Path) -> str:

@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from fractions import Fraction
 from typing import Any
 
-from ..timeline_delivery import UnsafeTimelineDelivery, _format_time, _object
+from .delivery_support import UnsafeTimelineDelivery, _format_time, _object
 from .fcpxml_resources import non_negative_int, positive_int, validate_source_range
 
 

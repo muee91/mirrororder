@@ -6,7 +6,7 @@ from typing import Any
 
 from ..config import ProjectConfig
 from ..nle_sequence_ir import NLE_SEQUENCE_IR_CONTRACT, UnsafeNLESequenceIR, build_nle_sequence_ir
-from ..timeline_delivery import (
+from .delivery_support import (
     TIMELINE_DELIVERY_CONTRACT,
     TIMELINE_FCPXML_NAME,
     TIMELINE_REPORT_NAME,

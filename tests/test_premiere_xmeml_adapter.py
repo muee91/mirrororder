@@ -8,7 +8,7 @@ import pytest
 
 from script_organizer.config import ProjectConfig
 from script_organizer.nle_delivery import export_timeline_premiere_delivery
-from script_organizer.timeline_delivery import TIMELINE_DELIVERY_CONTRACT, UnsafeTimelineDelivery
+from script_organizer.nle_delivery import TIMELINE_DELIVERY_CONTRACT, UnsafeTimelineDelivery
 
 
 def _tag(element: ET.Element) -> str:

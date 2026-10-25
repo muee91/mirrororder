@@ -8,13 +8,11 @@ from .fcpxml_exporter import UnsafeFCPXMLExport, export
 from .nle_delivery import (
     PREMIERE_REPORT_NAME,
     PREMIERE_XMEML_NAME,
-    export_timeline_delivery,
-    export_timeline_premiere_delivery,
-)
-from .timeline_delivery import (
     TIMELINE_FCPXML_NAME,
     TIMELINE_REPORT_NAME,
     UnsafeTimelineDelivery,
+    export_timeline_delivery,
+    export_timeline_premiere_delivery,
 )
 
 _INSTALLED = False

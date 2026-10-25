@@ -5,7 +5,7 @@ from fractions import Fraction
 from typing import Any
 
 from ..config import ProjectConfig
-from ..timeline_delivery import (
+from .delivery_support import (
     UnsafeTimelineDelivery,
     _asset_bounds,
     _material_clip_map,
