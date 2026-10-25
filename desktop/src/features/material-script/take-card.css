@@ -57,6 +57,8 @@
 .take-camera-slot > header strong { overflow: hidden; font-size: var(--mo-font-xs, 10px); text-overflow: ellipsis; white-space: nowrap; }
 .take-camera-slot > header span { color: var(--mo-text-muted, #778590); font-size: var(--mo-font-xs, 10px); text-align: right; white-space: nowrap; }
 .take-camera-slot .mo-media-card.is-compact { width: 196px; height: 96px; }
+.take-camera-slot.is-offline > header { color: var(--mo-warning, #d0aa54); }
+.take-camera-slot.is-offline { border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 45%, var(--mo-border-subtle, #202830)); }
 .take-camera-empty { height: 96px; display: grid; place-content: center; gap: 3px; border: 1px dashed var(--camera-border, var(--mo-border-default, #29333d)); border-radius: 6px; background: var(--camera-fill, var(--mo-surface-raised, #151b20)); color: var(--camera-ink, var(--mo-text-muted, #778590)); text-align: center; }
 .take-camera-empty span { font-size: var(--mo-font-sm, 11px); font-weight: 760; }
 .take-camera-empty small { color: var(--mo-text-muted, #778590); font-size: var(--mo-font-xs, 10px); }
@@ -142,6 +144,12 @@
 .mo-take-list-camera.has-media { color: var(--mo-text-secondary, #a6b1ba); background: var(--mo-surface-control, #11171c); }
 .mo-take-list-camera.has-media em { color: var(--mo-success, #65bb87); }
 .mo-take-list-camera.is-empty { opacity: .62; }
+.mo-take-list-camera.is-offline {
+  border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 45%, var(--mo-border-subtle, #202830));
+  color: var(--mo-warning, #d0aa54);
+  background: color-mix(in srgb, var(--mo-warning, #d0aa54) 6%, var(--mo-surface-app, #0b0f13));
+}
+.mo-take-list-camera.is-offline em { color: var(--mo-warning, #d0aa54); }
 .mo-take-list-camera-overflow {
   display: grid;
   min-width: 22px;

@@ -24,7 +24,8 @@ describe("Slate inspector safety contract", () => {
     expect(slate).toContain("const [playbackFailedClipId, setPlaybackFailedClipId] = useState(\"\")");
     expect(slate).toContain("const selectedPlaybackFailed = Boolean(selectedPlaybackKey && playbackFailedClipId === selectedPlaybackKey)");
     expect(slate).toContain("selectedAngle.playback.available !== false && !selectedPlaybackFailed");
-    expect(slate).toContain("onError={() => setPlaybackFailedClipId(selectedPlaybackKey)}");
+    // 报错后仍置失败态，并探测一次给出分类指引（缺失/解码/连接）。
+    expect(slate).toContain("setPlaybackFailedClipId(selectedPlaybackKey); void classifyPlaybackFailure");
     expect(slate).toContain("当前设备无法读取或解码这个素材");
     expect(slate).toContain("setPlaybackFailedClipId(\"\")");
   });

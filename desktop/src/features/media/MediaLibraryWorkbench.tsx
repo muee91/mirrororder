@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewAngle, errorMessage } from "../../api/host";
+import { classifyPlaybackFailure, type PlaybackFailure } from "./playbackFailure";
 import {
   MediaRoleClient,
   type MediaInventory,
@@ -187,6 +188,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [message, setMessage] = useState("正在读取本机素材清单与共享素材角色…");
   const [busy, setBusy] = useState(false);
   const [playbackFailedMediaId, setPlaybackFailedMediaId] = useState("");
+  const [playbackFailureDetail, setPlaybackFailureDetail] = useState<PlaybackFailure | null>(null);
   const [playbackRetry, setPlaybackRetry] = useState(0);
 
   async function reload(preferredId = selectedId): Promise<void> {
@@ -262,6 +264,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const selectedCamera = selectedItem ? effectiveCamera(draft.camera_override, selectedItem.inferred_camera) : null;
   const selectedHasOverride = Boolean(draft.camera_override?.trim());
   const selectedPlaybackFailed = Boolean(selectedItem && playbackFailedMediaId === selectedItem.media_id);
+  useEffect(() => {
+    if (!selectedPlaybackFailed) setPlaybackFailureDetail(null);
+  }, [selectedPlaybackFailed]);
 
   function select(item: MediaInventoryItem): void {
     setSelectedId(item.media_id);
@@ -391,7 +396,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                       controls
                       preload="metadata"
                       playsInline
-                      onError={() => setPlaybackFailedMediaId(selectedItem.media_id)}
+                      onError={() => { setPlaybackFailedMediaId(selectedItem.media_id); void classifyPlaybackFailure(selectedPlayback.url).then(setPlaybackFailureDetail); }}
                       onLoadedMetadata={(event) => {
                         const start = selectedPlayback.sourceStart;
                         if (start > 0) {
@@ -400,7 +405,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                       }}
                     />
                   ) : selectedPlaybackFailed ? (
-                    <div className="media-library-player-state is-error"><strong>这条原片当前无法在 App 内播放</strong><span>镜序已经通过索引定位素材，但当前 WebView 无法读取或解码它。请先确认素材盘在线；仍失败时可能是编码格式不受当前播放器支持。</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
+                    <div className="media-library-player-state is-error"><strong>这条原片当前无法在 App 内播放</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
                   ) : !selectedItem.indexed ? (
                     <div className="media-library-player-state"><strong>这条素材尚未进入项目索引</strong><span>未入索引素材不会绕过本机素材身份校验直接按路径播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : (

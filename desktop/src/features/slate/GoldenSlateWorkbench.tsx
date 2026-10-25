@@ -7,6 +7,7 @@ import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMe
 import { SlateRecordClient } from "../../api/slateRecords";
 import { TakeListRow } from "../material-script/TakeCard";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
+import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
 import { SlateRow, SlateTableHead, type SlateCameraColumn } from "./SlateRow";
 import { SlateWorkbench } from "./SlateWorkbench";
 import "../media/camera-presentation.css";
@@ -311,6 +312,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
   const [takeSearch, setTakeSearch] = useState("");
   const [playbackFailedClipId, setPlaybackFailedClipId] = useState("");
   const [playbackRetry, setPlaybackRetry] = useState(0);
+  const [playbackFailureDetail, setPlaybackFailureDetail] = useState<PlaybackFailure | null>(null);
   const playerRef = useRef<HTMLVideoElement | null>(null);
 
   async function reload(preferredRecordId?: string): Promise<void> {
@@ -377,6 +379,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     : angleIndex.byClip.get(selectedClipId) ?? null;
   const selectedPlaybackKey = selectedAngle?.clip_id || selectedClipId;
   const selectedPlaybackFailed = Boolean(selectedPlaybackKey && playbackFailedClipId === selectedPlaybackKey);
+  useEffect(() => {
+    if (!selectedPlaybackFailed) setPlaybackFailureDetail(null);
+  }, [selectedPlaybackFailed]);
   const selectedPersisted = Boolean(selected && board?.records[selected.record_id]);
   const selectedCanDelete = Boolean(selected && (selectedPersisted || !selected.derived));
   const dirtyCount = drafts.filter((row) => row.dirty).length;
@@ -878,9 +883,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
                 <div className="golden-inspector-head"><div><strong>选中素材</strong><span>EP {selected.episode ?? "—"} / 场 {selected.scene || selected.script_scene_id || "—"} / 镜 {selected.shot || "—"} / 次 {selected.take_number ?? "—"}</span></div>{selected.dirty ? <em>未保存</em> : null}</div>
                 <div className="golden-slate-player">
                   {selectedAngle?.playback.url && selectedAngle.playback.available !== false && !selectedPlaybackFailed ? (
-                    <video ref={playerRef} key={`${selectedAngle.clip_id}-${playbackRetry}`} src={selectedAngle.playback.url} controls preload="metadata" playsInline onError={() => setPlaybackFailedClipId(selectedPlaybackKey)} onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
+                    <video ref={playerRef} key={`${selectedAngle.clip_id}-${playbackRetry}`} src={selectedAngle.playback.url} controls preload="metadata" playsInline onError={() => { setPlaybackFailedClipId(selectedPlaybackKey); void classifyPlaybackFailure(selectedAngle.playback.url).then(setPlaybackFailureDetail); }} onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
                   ) : selectedPlaybackFailed ? (
-                    <div className="golden-player-error"><strong>当前设备无法读取或解码这个素材</strong><span>素材已经定位成功。请先确认素材盘在线；若仍失败，可能是当前 WebView 不支持这个原片编码。</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedClipId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
+                    <div className="golden-player-error"><strong>当前设备无法读取或解码这个素材</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedClipId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
                   ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                 </div>
 

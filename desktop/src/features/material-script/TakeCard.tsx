@@ -56,6 +56,18 @@ export interface TakeCameraSlotModel {
   angles: ReviewAngle[];
 }
 
+export type TakeSlotAvailability = "none" | "available" | "offline" | "mixed";
+
+// 机位槽位三态：空槽 = 该机位未拍摄；offline = 有素材但服务端判定不可用（素材盘/绑定问题）。
+// 空槽和离线在走查截图里都呈现为“空白占位”，用户无从区分是没拍还是出问题。
+export function takeSlotAvailability(angles: ReviewAngle[]): TakeSlotAvailability {
+  if (!angles.length) return "none";
+  const offline = angles.filter((angle) => angle.playback.available === false).length;
+  if (offline === 0) return "available";
+  if (offline === angles.length) return "offline";
+  return "mixed";
+}
+
 export function takeCameraSlots(angles: ReviewAngle[]): TakeCameraSlotModel[] {
   const grouped = new Map<CameraTone, ReviewAngle[]>();
   for (const angle of angles) {
@@ -153,11 +165,17 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
       <div className="take-camera-strip" aria-label={`${displayLabel} 机位槽位`}>
         {slots.map((slot) => {
           const primary = slot.angles[0] ?? null;
+          const availability = takeSlotAvailability(slot.angles);
           return (
-            <section className={`take-camera-slot ${primary ? "has-media" : "is-empty"}`} data-camera-tone={slot.tone} key={slot.key} aria-label={`${slot.label} 槽位`}>
+            <section
+              className={`take-camera-slot ${availability === "none" ? "is-empty" : availability === "offline" ? "is-offline" : "has-media"}`}
+              data-camera-tone={slot.tone}
+              key={slot.key}
+              aria-label={`${slot.label} 槽位${availability === "offline" ? "（素材离线）" : availability === "mixed" ? "（部分素材离线）" : ""}`}
+            >
               <header>
                 <strong>{slot.label}</strong>
-                <span>{slot.angles.length > 1 ? `+${slot.angles.length - 1}` : primary ? "已绑定" : "空"}</span>
+                <span>{availability === "offline" ? "离线" : slot.angles.length > 1 ? `+${slot.angles.length - 1}` : primary ? "已绑定" : "空"}</span>
               </header>
               {primary ? <AngleEvidenceCard angle={primary} compact /> : <div className="take-camera-empty"><span>{slot.label}</span><small>无素材</small></div>}
             </section>
@@ -221,17 +239,23 @@ export function TakeListRow({ take, detail, state = "default", action, actionLab
           <span>{take.duration.toFixed(1)}s</span>
         </header>
         <div className="mo-take-list-cameras" aria-label={`${displayLabel} 机位槽位`}>
-          {stableSlots.map((slot) => (
-            <span
-              className={`mo-take-list-camera ${slot.angles.length ? "has-media" : "is-empty"}`}
-              data-camera-tone={slot.tone}
-              key={slot.key}
-              title={slot.angles.map((angle) => angle.name).filter(Boolean).join(" / ") || `${slot.label} 无素材`}
-            >
-              <strong>{slot.label.replace("机", "")}</strong>
-              <em>{slot.angles.length > 1 ? `×${slot.angles.length}` : slot.angles.length ? "•" : "—"}</em>
-            </span>
-          ))}
+          {stableSlots.map((slot) => {
+            const availability = takeSlotAvailability(slot.angles);
+            const slotTitle = slot.angles.length
+              ? `${slot.angles.map((angle) => angle.name).filter(Boolean).join(" / ") || slot.label}${availability === "offline" ? "（素材离线）" : availability === "mixed" ? "（部分素材离线）" : ""}`
+              : `${slot.label} 无素材`;
+            return (
+              <span
+                className={`mo-take-list-camera ${availability === "none" ? "is-empty" : availability === "offline" ? "is-offline" : "has-media"}`}
+                data-camera-tone={slot.tone}
+                key={slot.key}
+                title={slotTitle}
+              >
+                <strong>{slot.label.replace("机", "")}</strong>
+                <em>{availability === "offline" ? "离" : slot.angles.length > 1 ? `×${slot.angles.length}` : slot.angles.length ? "•" : "—"}</em>
+              </span>
+            );
+          })}
           {trailingCount ? <span className="mo-take-list-camera-overflow" title="自定义或未知机位">+{trailingCount}</span> : null}
         </div>
         <div className="mo-take-list-detail">
