@@ -1,0 +1,18 @@
+镜序 MirrorOrder
+Copyright 2026 MirrorOrder contributors
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+Third-party components
+----------------------
+
+This product depends on, and in packaged distributions bundles, third-party
+software provided under separate terms. The bundled runtime inventory recorded in
+`desktop/src-tauri/resources/mirrororder-runtime/mirrororder-runtime-manifest.json`
+identifies the media toolchain as an FFmpeg build licensed GPL-2.0-or-later, with its
+license files bundled alongside.
+
+A complete, version-accurate third-party license inventory for a given release is
+generated at build time rather than maintained by hand here, so that it cannot drift
+from the resolved dependency set.

@@ -7,6 +7,40 @@ name = "script-material-organizer"
 version = "0.1.0"
 description = "Local, script-driven multicamera material organizer for editors"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Multimedia :: Video",
+]
+
+# Declared from the real import graph of src/script_organizer + vendor/multicam-audio-sync
+# (AST scan, 2026-10-25). Floors are conservative; the development environment currently
+# resolves numpy 2.4.3 / pandas 3.0.1 / scipy 1.17.1 on Python 3.14, while CI uses 3.11,
+# so the 3.11 floor is not yet evidence of a green install.
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.0",
+  "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+# CapCut / 剪映 draft container codec only (vendored engine scripts).
+capcut = ["pycryptodome>=3.17"]
+# Local embedding + vision runtime. Same intent as requirements-local-intelligence.txt,
+# which keeps exact release pins; this file is the install path for source checkouts.
+local-intelligence = [
+  "onnxruntime>=1.17",
+  "tokenizers>=0.19",
+  "opencv-python>=4.9",
+  "sherpa-onnx>=1.10",
+]
+# Speech-to-text back-ends. mlx-whisper is Apple Silicon only.
+asr = ["faster-whisper>=1.0", "mlx-whisper>=0.4; platform_machine == 'arm64'"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
 
 [project.scripts]
 script-organizer = "script_organizer.cli:main"

@@ -97,9 +97,21 @@ Desktop UI 的长期实现原则是：
 
 ## 快速开发
 
+Python core（需要 Python 3.11+；macOS 自带的 `python` 不存在，请用 `python3`）：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e ".[dev]"        # 可选：".[dev,asr,local-intelligence,capcut]"
+```
+
+未做 editable 安装时，用仓库根的 `./script-organizer` 包装脚本即可，它自己把 `src/` 加进路径。
+
+Desktop（需要 Node 22+ 与 Rust stable）：
+
 ```bash
 cd desktop
-npm install
+npm ci
 npm run dev
 ```
 
@@ -125,9 +137,9 @@ Team Gateway 默认只监听本机 `127.0.0.1:8766`，开局域网必须显式�
 ## 验证
 
 ```bash
-python scripts/check_python.py
-python scripts/check_fast.py
-python scripts/check_full.py
+python3 scripts/check_python.py
+python3 scripts/check_fast.py
+python3 scripts/check_full.py
 ```
 
 只有实际成功的目标 commit/run 可以写 PASS。CI red 需要修复，但测试绿灯不能替代真实产品可用性验收。
@@ -154,3 +166,13 @@ media_id = 与设备路径无关的物理媒体身份
 - [`docs/README.md`](docs/README.md) — 其余领域/架构文档索引。
 - [`AGENTS.md`](AGENTS.md) — Agent 接手约束。
 - [`desktop/README.md`](desktop/README.md) — Desktop 工程入口。
+
+## 许可
+
+本仓库源码采用 **Apache License 2.0**（全文见 [`LICENSE`](LICENSE)）。
+
+分发打包版本时需要注意（结论待法务复核，不要当作已确认）：
+
+- 随包媒体工具链是 **FFmpeg GPL-2.0-or-later** 构建，分发时须附带其许可证与源码获取途径；`desktop/scripts/runtime-tools.mjs` 已把 `--enable-nonfree` 作为拒绝条件。
+- `vendor/multicam-audio-sync/` 的第一方实现参考了三个外部仓库的算法思路，upstream 许可证与版本记录尚缺，属于发布前必须补齐的溯源项。
+- 剪映 / CapCut draft 的读写是**无官方规范的逆向兼容层**：上游版本变动即失效，且第三方代码的 MIT/Apache 许可证只覆盖代码本身，不构成对厂商加密措施的反规避授权。该通道是否对外提供，需要单独的产品与法务决策。
