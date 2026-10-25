@@ -106,6 +106,124 @@ describe("HostConnection", () => {
     expect(String(browserFetch.mock.calls[0]?.[0])).toMatch(/\/api\/v1\/projects\/p%2F1\/review-model$/);
   });
 
+  it("serves concurrent review-model readers from one in-flight request", async () => {
+    const payload = {
+      contract_version: "review.v1",
+      project: { project_id: "p_dedup", name: "Episode 1", input_kind: "fcpxml", stats: {}, local_media: {}, issues: [] },
+      revisions: { analysis: "a1", automation_analysis: "a1", automation_updated_at: "", review: 3 },
+      capabilities: {},
+      summary: { automation: {}, script_gaps: 0, take_groups: 1, episodes: 1 },
+      episodes: [],
+      take_groups: [],
+      script_gaps: [],
+      review_state: {},
+    };
+    let calls = 0;
+    const browserFetch = vi.fn(async () => {
+      calls += 1;
+      return jsonResponse(payload);
+    });
+    vi.stubGlobal("fetch", browserFetch);
+
+    // Each workspace surface builds its own HostConnection; the cache has to be
+    // shared anyway, otherwise ProjectHome-to-canvas switching re-pulls the payload.
+    const clients = [new HostConnection(), new HostConnection(), new HostConnection()];
+    const [first, second, third] = await Promise.all([
+      clients[0]!.reviewModel("p_dedup"),
+      clients[1]!.reviewModel("p_dedup"),
+      clients[2]!.reviewModel("p_dedup"),
+    ]);
+
+    expect(calls).toBe(1);
+    expect(first.take_groups).toEqual([]);
+    expect(second).toEqual(first);
+    expect(third).toEqual(first);
+  });
+
+  it("hands cached review models out as copies so one surface cannot mutate another", async () => {
+    const payload = {
+      contract_version: "review.v1",
+      project: { project_id: "p_copy", name: "Episode 1", input_kind: "fcpxml", stats: {}, local_media: {}, issues: [] },
+      revisions: { analysis: "a1", automation_analysis: "a1", automation_updated_at: "", review: 3 },
+      capabilities: {},
+      summary: { automation: {}, script_gaps: 0, take_groups: 1, episodes: 1 },
+      episodes: [],
+      take_groups: [{ group_id: "G1", angles: [{ clip_id: "C1", playback: { url: "http://127.0.0.1:8765/media/C1" } }] }],
+      script_gaps: [],
+      review_state: {},
+    };
+    const browserFetch = vi.fn(async () => jsonResponse(payload));
+    vi.stubGlobal("fetch", browserFetch);
+
+    const host = new HostConnection();
+    const first = await host.reviewModel("p_copy");
+    first.summary.take_groups = 99;
+    const second = await host.reviewModel("p_copy");
+
+    expect(second.summary.take_groups).toBe(1);
+    expect(browserFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the cached review model when a human placement write is attempted", async () => {
+    const payload = {
+      contract_version: "review.v1",
+      project: { project_id: "p_write", name: "Episode 1", input_kind: "fcpxml", stats: {}, local_media: {}, issues: [] },
+      revisions: { analysis: "a1", automation_analysis: "a1", automation_updated_at: "", review: 3 },
+      capabilities: {},
+      summary: { automation: {}, script_gaps: 0, take_groups: 1, episodes: 1 },
+      episodes: [],
+      take_groups: [],
+      script_gaps: [],
+      review_state: {},
+    };
+    const browserFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(init?.method) === "POST") {
+        return jsonResponse({ revision: 4, groups: [] });
+      }
+      return jsonResponse(payload);
+    });
+    vi.stubGlobal("fetch", browserFetch);
+
+    const host = new HostConnection();
+    await host.reviewModel("p_write");
+    await host.setGroupPlacement("p_write", {
+      groupId: "G1",
+      actor: "剪辑指导",
+      episodeIds: [1],
+      expectedRevision: 3,
+    });
+    await host.reviewModel("p_write");
+
+    const reads = browserFetch.mock.calls.filter(([, init]) => String(init?.method) !== "POST");
+    expect(reads).toHaveLength(2);
+  });
+
+  it("does not cache a failed review-model read", async () => {
+    const payload = {
+      contract_version: "review.v1",
+      project: { project_id: "p_fail", name: "Episode 1", input_kind: "fcpxml", stats: {}, local_media: {}, issues: [] },
+      revisions: { analysis: "a1", automation_analysis: "a1", automation_updated_at: "", review: 3 },
+      capabilities: {},
+      summary: { automation: {}, script_gaps: 0, take_groups: 0, episodes: 1 },
+      episodes: [],
+      take_groups: [],
+      script_gaps: [],
+      review_state: {},
+    };
+    let attempts = 0;
+    const browserFetch = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) return jsonResponse({ error: "temporarily unavailable" }, 503);
+      return jsonResponse(payload);
+    });
+    vi.stubGlobal("fetch", browserFetch);
+
+    const host = new HostConnection();
+    await expect(host.reviewModel("p_fail")).rejects.toBeTruthy();
+    await expect(host.reviewModel("p_fail")).resolves.toMatchObject({ contract_version: "review.v1" });
+    expect(attempts).toBe(2);
+  });
+
   it("writes episode-only placement through the atomic review action", async () => {
     const saved = {
       version: 2,

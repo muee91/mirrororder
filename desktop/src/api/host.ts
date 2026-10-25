@@ -354,6 +354,24 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
   }
 }
 
+const REVIEW_MODEL_TTL_MS = 1_200;
+
+const reviewModelCache = new Map<string, { expiresAt: number; promise: Promise<ReviewModelPayload> }>();
+
+function reviewModelCacheKey(baseUrl: string, projectId: string): string {
+  return `${baseUrl}\u0000${projectId}`;
+}
+
+/**
+ * Cached payloads are handed out as copies. Consumers canonicalize and annotate
+ * review models in place, so sharing one object across workspaces would let one
+ * surface's local edit corrupt another's view of the same human authority.
+ */
+function cloneReviewModelPayload(payload: ReviewModelPayload): ReviewModelPayload {
+  const clone = (globalThis as { structuredClone?: (value: unknown) => ReviewModelPayload }).structuredClone;
+  return typeof clone === "function" ? clone(payload) : JSON.parse(JSON.stringify(payload)) as ReviewModelPayload;
+}
+
 function normalizedProjectId(projectId: string, action: string): string {
   const value = projectId.trim();
   if (!value) throw new HostConnectionError(`${action}需要 project_id`);
@@ -408,8 +426,39 @@ export class HostConnection {
     return `${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/media/${encodeURIComponent(clip)}`;
   }
 
+  // Review-model is the heaviest read on the Production main chain, and every
+  // workspace used to pull a full copy on mount (Material / Script / Review /
+  // golden-slate / ProjectHome-per-project) — switching back and forth re-downloaded
+  // the whole payload. The cache is module-scoped because each surface constructs its
+  // own HostConnection; instance state would never be shared. Keyed by base URL so two
+  // hosts can never serve each other's project data.
+  invalidateReviewModel(projectId?: string): void {
+    if (projectId === undefined) {
+      for (const key of [...reviewModelCache.keys()]) {
+        if (key.startsWith(`${this.baseUrl}\u0000`)) reviewModelCache.delete(key);
+      }
+      return;
+    }
+    reviewModelCache.delete(reviewModelCacheKey(this.baseUrl, normalizedProjectId(projectId, "失效 review-model ")));
+  }
+
   async reviewModel(projectId: string): Promise<ReviewModelPayload> {
     const project = normalizedProjectId(projectId, "读取 review-model ");
+    const key = reviewModelCacheKey(this.baseUrl, project);
+    const cached = reviewModelCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cloneReviewModelPayload(await cached.promise);
+    }
+    const promise = this.fetchReviewModel(project);
+    reviewModelCache.set(key, { promise, expiresAt: Date.now() + REVIEW_MODEL_TTL_MS });
+    promise.catch(() => {
+      // A rejected request must not stay cached: the next caller has to retry.
+      if (reviewModelCache.get(key)?.promise === promise) reviewModelCache.delete(key);
+    });
+    return cloneReviewModelPayload(await promise);
+  }
+
+  private async fetchReviewModel(project: string): Promise<ReviewModelPayload> {
     const payload = await requestJson<ReviewModelPayload>(
       this.baseUrl,
       `/api/v1/projects/${encodeURIComponent(project)}/review-model`,
@@ -449,6 +498,10 @@ export class HostConnection {
     if (episodeIds.length === 0 && scriptSegmentIds.length === 0) {
       throw new HostConnectionError("人工归集至少需要 episode_id 或 script_segment_id");
     }
+    // Invalidate before the write: a rejected write (revision conflict) only costs
+    // one extra refetch, while invalidating after success could leave a cached model
+    // that still shows the pre-write placement.
+    this.invalidateReviewModel(project);
     return requestJson<LegacyReviewPayload>(
       this.baseUrl,
       `/api/v1/projects/${encodeURIComponent(project)}/review`,
@@ -475,6 +528,7 @@ export class HostConnection {
     const groupId = normalizedGroupId(write.groupId);
     const actor = normalizedActor(write.actor);
     const expectedRevision = normalizedExpectedRevision(write.expectedRevision, "清除人工归集");
+    this.invalidateReviewModel(project);
     return requestJson<LegacyReviewPayload>(
       this.baseUrl,
       `/api/v1/projects/${encodeURIComponent(project)}/review`,
@@ -501,6 +555,7 @@ export class HostConnection {
     const expectedRevision = normalizedExpectedRevision(write.expectedRevision, "写入素材排除状态");
     // 排除走独立的 exclusion 事实（placement 轴），不再伪装成 legacy 创意
     // reject——delivery 裁决由创意轴（legacy/Editorial）决定，二者不可互写。
+    this.invalidateReviewModel(project);
     return requestJson<LegacyReviewPayload>(
       this.baseUrl,
       `/api/v1/projects/${encodeURIComponent(project)}/review`,
