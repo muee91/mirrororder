@@ -6,6 +6,20 @@
 __pycache__/
 *.py[cod]
 
+# Scratch state written by external CLI/agent tooling while working in this repo.
+# These are per-machine run logs and staged probes, not project source.
+.zwork/
+.video_agent/
+.v2c/
+out/
+.codex-logs/
+
+# Packaging staging scratch produced by desktop/scripts/stage-runtime.mjs experiments.
+.packaged-home/
+.packaged-home-*/
+.packaged-tmp-*/
+.runtime-inputs/
+
 # Local secret files must never enter the repository.
 .env
 .env.*

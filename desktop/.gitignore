@@ -2,5 +2,7 @@ node_modules/
 dist/
 artifacts/
 src-tauri/target/
+src-tauri/crates/timeline-core/target/
+src-tauri/gen/
 *.log
 .DS_Store
