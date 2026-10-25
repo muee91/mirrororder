@@ -32,13 +32,39 @@ CI green 不能替代这一条；这一条也不能替代 CI green。
 
 - [ ] **让 `release.yml` 从脚手架变成真流水线**：文件头部已如实标注「SCAFFOLD, NOT VERIFIED END TO END」；需要配齐签名/公证 secrets、在 `bundle.macOS` 写 `signing_identity`/`entitlements`/`hardened_runtime`/`minimum_system_version`，并把 `MIRRORORDER_REQUIRE_CODESIGN=1` 从 opt-in 改默认。
 - [ ] **补 notarization 检查**：`verify-macos-bundle.mjs` 目前不看签名/公证/stapler，只扫 Mach-O 依赖卫生。
-- [ ] **打包内容黑名单**：`stage-runtime.mjs:183` 的 `copyDirectory` 无排除规则——上一份 bundle 里带着 `vendor/multicam-audio-sync/scripts/config.json`（内含 `/Volumes/TESTVOL` 与真实项目名）和约 5,000 个 `.pyc`，直接违反 `.gitignore:24-25` 自己写的「must never enter the repo or App bundle」。给 staging 加排除清单，并让 `verify-macos-bundle` 对 `/Volumes/`、`/Users/`、盘符做文本扫描即 fail。
-- [ ] **禁止运行期写回 bundle**：`host.rs:186` 以 `-m` 起 Python 时未设 `-B`/`PYTHONDONTWRITEBYTECODE`/`PYTHONPYCACHEPREFIX`，DMG 只读卷挂载下会失败。
+- [x] **打包内容黑名单**（2026-10-25 已完成）：staging 与 bundle 闸门共用 `runtime-tools.mjs` 的同一份判定，排除 `config.json` / `__pycache__` / `*.pyc` / `._*` / `.DS_Store`，并对随包数据文件扫描 `/Volumes/`、`/Users/`、盘符路径。卷名含空格的形态由测试暴露后修正（按 JSON 分隔符收尾，不按空格截断）。
+- [x] **禁止运行期写回 bundle**（2026-10-25 已完成）：`host.rs` 与 `gateway.rs` 起 Python 时设 `PYTHONDONTWRITEBYTECODE=1`。缺口：该行为目前只靠代码审查保证，`Command` 构造未抽成可测函数，补一个 Rust 单元测试即可闭环。
 - [ ] **版本单一来源 + CHANGELOG**：`0.1.0` 目前手工散在 `tauri.conf.json`、两个 `Cargo.toml`、`package.json`、`pyproject.toml`。
 - [ ] **决定本地智能能力的交付形态**：manifest 明列 `llama-server / faster_whisper / mlx_whisper / cv2 / model weights` 不随包，实测 staged site-packages 无 `onnxruntime`/`tokenizers`——即宣传中的向量检索/ASR 在装好的 app 里开箱不可用。要么随包，要么显式「首次启用时下载」，不能保持现状。
 - [ ] **portable Python 换成单版本真 relocatable 构建**：上一份 staging 的 `lib/` 里同时有 `python3.11/3.12/3.14` 三棵树、numpy/pandas/scipy 各两份，617 MB app 里约 200 MB 是冗余；且 `pyvenv.cfg` 与 `sys._base_executable` 仍指回构建机，staging 的 relocation probe 只查 `sys.executable`/`prefix`，看不见这个洞。
 
-## Phase 2 · 真实可用性（产品成立与否的证据）
+## 开源优先替换清单（2026-10-25 选型结论）
+
+原则：能借现成开源组件就不自研，但**权威状态不自外源**——Rust Timeline Core 仍是唯一编辑
+权威，OSS 只做适配层与能力提供，不允许任何依赖变成第二套 truth。
+
+| 能力 | 现在的自研 | 结论 | 许可证 / 注意 |
+|---|---|---|---|
+| EDL / Premiere(FCP7-xmeml) 读写 | `fcpxml_reader.py` 等手写 | **换 OpenTimelineIO** 的 `cmx_3600` / `fcp_xml` adapter | Apache-2.0；1.x 起 adapter 拆到 `OpenTimelineIO-Plugins`，社区维护、成熟度低于核心 |
+| FCPXML 1.8 写出（含多机位） | 自研 exporter | **保留自研**——OTIO 的 `fcpx_xml` 实质只有导入、且 multicam 非一等公民 | 只可把 OTIO 用于"读回校验"，不可作为交付依赖 |
+| 剪映 / CapCut draft | pycryptodome 解密 + 自建 draft | **保留但降级为逆向兼容层**，UI 与文档不得承诺稳定性，需单列法务结论 | 无官方规范；MIT/Apache 的上游代码许可**不等于**反规避授权 |
+| 中文 ASR | 惰性 import whisper 系（且未随包） | **sherpa-onnx + SenseVoiceSmall(int8 ONNX)** 首选，Paraformer 备选 | 运行时与 SenseVoice 权重 Apache-2.0；Paraformer 权重需按 FunASR Model License 署名；显式传模型路径，不自动联网 |
+| 句向量检索 | 自研 `semantic_index.py` + bundled encoder | **bge-small-zh ONNX 直推 + onnxruntime**（路线已正确，补随包即可）；向量存储 **sqlite-vec**，超过约 50 万条再换 hnswlib | 均 MIT / Apache-2.0；单项目剧本句级用 numpy 暴力扫也够 |
+| 人物识别 | YuNet + SFace（OpenCV DNN） | **路线正确，继续用**；如需更高精度只走商业授权谈判 | 现用权重来自 OpenCV 侧（Apache 系）；**insightface 的 buffalo/antelopev2 权重是 research-only，禁止随包**；换任何新权重都要单独核 model card |
+| 镜头 / Take 边界 | 自研分组 | **PySceneDetect（AdaptiveDetector）** 做候选边界，渐变转场再评估 TransNetV2 | BSD-3-Clause / MIT |
+| 重复与跨设备同一媒体 | hash + 头尾指纹 | 保留确定性 hash 为主，**imagehash pHash + chromaprint/fpcalc** 做辅助 | chromaprint LGPL-2.1（动态链接可闭源）；**AcoustID 在线库是 CC BY-NC，不得接入** |
+| 波形 | `waveform_runtime.py` 490 行 | **收缩为 ffmpeg 解码 + numpy 分桶 peaks**，删自研采样；不引 audiowaveform | audiowaveform 是 GPL-3.0，随包义务重，不划算 |
+| 打包 / 更新 / 公证 | 手工 stage + adhoc | **tauri-apps/tauri-action + 官方 updater（minisign）+ GitHub Releases 静态 latest.json**；公证用 App Store Connect API key（.p8） | 前置条件是付费 Apple Developer 账号 |
+| 制品可信 | 无 | GitHub artifact attestations（一条 Action）+ `cargo-license` / `pip-licenses` 生成 THIRD_PARTY_LICENSES + `syft` 出 SBOM | 成本近乎为零；`NOTICE` 已声明清单由构建生成而非手工维护 |
+| 局域网配对 | 64bit 配对码 + 按来源限速 | 保留限速；把码交换升级为 **SPAKE2**（python-spake2 / RustCrypto），发现层用 **zeroconf + rcgen** 起 TLS | MIT / Apache-2.0；`--trusted-lan` 空码这条旁路必须收掉 |
+| 日志与诊断 | 近乎零日志、500 直吐 error | **structlog**（Python）+ **tracing / tracing-subscriber**（Rust），500 改错误 ID + 本地关联；自建"导出支持包"按钮 | 默认不外发；将来若要外发选 GlitchTip（MIT）而非 Sentry（FSL，非 OSI 开源） |
+| 视觉/无障碍回归 | 自研 layout-runtime 几何断言 | **几何断言保留**（无可替代），像素级加 Playwright `toHaveScreenshot` + `odiff-bin`，a11y 用 axe-core | axe-core MPL-2.0（仅测试依赖，不传染） |
+| 时间线持久化 | checkpoint + journal + 撕裂尾修复 | **不替换**。redb / SQLite / RocksDB 解决的正是这套代码已经解决的事，Recovery 期不做迁移 | redb MIT OR Apache-2.0；RocksDB GPLv2/Apache 双许可 |
+
+落地顺序：Phase 1 先做 updater/公证/SBOM 这三件"分发基建"；能力替换按 ASR → 向量随包 →
+PySceneDetect → 波形收缩 的次序，每项都要带一条"打包后开箱可用"的真实验收，不接受
+"requirements 里写了但 app 里没有"。
+
 
 - [ ] **五步主链真机验收**（在本机 `projects/` 下的在制真实项目上跑，项目数据不入库）：项目恢复与切换、大量 Take 搜索/滚动、A/B/C 多机位、场记→素材→剧本→审阅→Timeline 连续上下文、placement revision conflict、Viewer/media binding、Timeline insert/overwrite/replace/undo/redo/persistence、FCPXML/Premiere XML 导出、1280 与宽屏、light/dark、外部拖放。
 - [ ] **把 `ux-real.mjs` 变成正式 gate**：它现在只打 timing 日志和 `/tmp` 截图、失败仅 `console.log` 继续跑、无断言无稳定退出码、不进 CI。要求：断言 + 非零退出 + 产物归档为 CI artifact，否则「真机验收」永远只有操作者记忆。注意它 mount 的是 `ProjectWorkbench` 共用壳，需要与 workspace ownership 现状对齐。
