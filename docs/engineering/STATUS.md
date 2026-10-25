@@ -19,7 +19,7 @@
 - **errorMessage 17 处重复收敛**：16 份逐字相同的本地实现 + Delivery 的子集实现统一为 `api/host.ts` 的单一导出（与 `HostConnectionError` 同址）；editor 域 `timelineWorkbenchSupport.errorMessage` 因行为不同（解析 `{message, issues[]}` 载荷）保留不动。
 - **页面 canonicalize 单一 owner**：`ProjectWorkbench.safeProductionPage` 不再复制旧页面映射，改委托 `resumeState.canonicalProductionPage`；`App.tsx` 页面标题表删除 6 条永不可达的旧键（attention/overview/coverage/rough-cut/assembly/delivery）。`swiftGoldenParity` 的源码文本断言同步改为断言“委托存在 + 映射仍在 resumeState”，行为红线由 `resumeState.editorMigration.test.ts` 继续以真实调用覆盖。
 - **删除一处无引用脚本**：`desktop/scripts/ux-probe.mjs`（dev-only 一次性探针，不在任何 npm script）。
-- **拒绝两笔误删**：`web/automation.js` 是被 3 个契约测试锁定的注入桥（有意不进 bootstrap），不是死代码；`timeline_delivery_sync.py`/`timeline_audio_delivery.py`（共 434 行 + 各自测试）是“已建未接线”的交付能力（timeline v1 明确拒绝独立音轨，音频导出是下一步），删除属 owner 决策，已在 BACKLOG 记录。
+- **拒绝两笔误删**：`web/automation.js` 是被 3 个契约测试锁定的注入桥（有意不进 bootstrap），不是死代码。`timeline_delivery_sync.py`/`timeline_audio_delivery.py` 初判为“已建未接线能力”**有误**（2026-10-26 深挖修正）：它们与 `timeline_delivery.py` v1（同样零引用，552 行）同属被 `nle_delivery` IR 路径取代的死并行导出实现；**独立音轨与多机位同步导出在活链路已完整实现**（IR 每角度 sync 帧 → FCPXML connected audio / mcAngled、Premiere typed range 换算，Rust 模型携带并校验同步帧）。裁决记录见 BACKLOG。
 - **无调用方端点复核**：`POST /api/v1/agent-tokens` 有 `_local_only()` 保护且与 CLI `agent-token-create` 对等，保留；`workspace-database`、`intelligence-settings` 仅测试使用，维持现状并记录。
 
 本轮验证（全部实跑）：

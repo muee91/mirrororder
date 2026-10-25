@@ -6,6 +6,17 @@
 
 此前 backlog 只有「Desktop Product Recovery 收尾」。审计（2026-10-25 两轮）确认代码侧结构恢复确实已经收口，真正缺的是**把一个能跑的代码库变成一个能交付的产品**。因此按正规 App 开发路线重排为六个阶段，顺序不可打乱：先把证据与授权补齐，再让它可分发，然后才谈体验优化与还债。
 
+## 产品方向修正（owner 2026-10-26 决策）
+
+- **剔除内置剪辑面**：owner 判断当前剪辑模块基本不可用，不值得继续投入；镜序自身不承担剪辑，**主链终点改为导出**——人工决定 → 组接（assembly）→ FCPXML / Premiere XML 导出 → 在外部 NLE 继续剪。
+- **导出质量即关键路径**：独立音轨与多机位同步导出已在活链路实现（见 STATUS），下一步的验收重心是**真实 NLE 导入**（FCP/Premiere 实际打开、音画对齐、多机位可用），而非浏览器内剪辑体验。
+- **未来若恢复剪辑能力，必须模块化**：不回退到整体 Workbench；Rust Timeline Core 与 command bridge 保留为组接/导出引擎，剪辑 UI 若回归则以独立模块挂在时间线工作区，不与组接/导出耦合。
+- 待执行切片（owner 确认范围后实施，产品定义同步改 `app-information-architecture.md`）：
+  1. 时间线工作区收缩为「组接 + 导出」视图：保留初始顺片、时间线只读预览、交付抽屉；移除 EditorMonitors 精修编辑面（插入/覆盖/切分/修剪/移动/波纹删除/undo-redo UI）。
+  2. 五步主链第 5 步措辞改为「把需要的素材/决定组接并导出到外部 NLE」。
+  3. Rust Timeline Core 及编辑命令**不删**——组接写入仍经 command bridge；仅移除 Desktop 编辑 surface，为未来模块化剪辑留接口。
+  4. `EditorMonitors` 的 Source 监看与失败态若仍被组接/审阅需要，单独裁决去留。
+
 ## 最低产品验收（定义不变，仍是全站 P0 关闭条件）
 
 真实项目上连续走通，且目标 commit 的必要自动 gate 真实通过：
@@ -88,7 +99,7 @@ PySceneDetect → 波形收缩 的次序，每项都要带一条"打包后开箱
 - [ ] **测试形状**：Desktop 77 个测试文件里 35 个是 `readFileSync` 源码文本断言，真正 `render()` 的只有 5 个。把 `check-layout-runtime` 的真实盒子断言模式推广为渲染行为测试，并取消「源码文本断言」的 contract 身份。
 - [ ] **CSS 收口**：`main.tsx` 全局层 11→10，但 `desktop-theme-frozen-surfaces.css`（现约 40 条硬编码 hex 的 Project Home 明暗规则）与 `media-binding-recovery.css`（67 行）仍在；`designSystemV2Contract.test.ts:10-18` 仍用 `indexOf` 锁 import 顺序，把债务固化。目标：配色迁进 token、失去 owner 的层删除、测试改为断言真实计算样式。
 - [ ] **兼容债退出计划**：identity facade→v3→v2→legacy 四层活动 import 链（legacy 614 行仍在用）、前端 `LegacyReviewPayload`、素材/场记页里折叠的旧 `SlateWorkbench`。每条给 owner 或删除条件。
-- [ ] **“已建未接线”交付能力的去留**：`timeline_delivery_sync.py`（111 行，多机位同步证据进 delivery request）与 `timeline_audio_delivery.py`（323 行，时间线独立音轨导出）各自带测试、生产零引用——`timeline_delivery.py` v1 明确拒绝独立音轨，这两个模块是为下一步准备的实现。owner 需二选一：接入 delivery HTTP 链并配“打包后导出含音轨”的真实验收，或整体删除（含测试）。在此之前不得当作死代码顺手清理。
+- [ ] **死并行导出路径的裁决（2026-10-26 事实修正后待 owner 重新表态）**：`timeline_delivery.py`（552 行，v1 转换器）本身生产零引用，是被 `nle_delivery` IR 路径取代的旧实现；`timeline_delivery_sync.py`（111 行）与 `timeline_audio_delivery.py`（323 行）是它的卫星模块。**音轨与多机位同步导出能力已在活链路完整实现**：`nle_sequence_ir` 接受 video/audio 轨道并建模每角度 `sync_start/end_frame`，FCPXML 导出为 connected audio + mcAngled 角度资源，Premiere 导出有 typed sync range 换算；Rust timeline-core 模型携带每角度同步帧并有校验。此前“导出会丢独立音轨/同步”的判断只对死路径成立。建议整体删除三个模块及其 4 个测试文件（约 986 行 + 测试），owner 基于修正后事实重新裁决；裁决前不得接线到交付链。
 - [ ] **单测耗时隔离**：全量 pytest 142 秒里 134 秒来自单个用例 `tests/test_core.py:606`，且它依赖可选的 `faster_whisper`/`huggingface_hub` 是否在位——本机与 CI（只装 pytest）走的不是同一条代码路径。标为 integration 或由 CI 用独立 job 覆盖，让默认 gate 回到 10 秒级。
 - [ ] **release gate 从声明变强制**：`development-baseline.json` 的 18 个 `release_gates` 里 9 个 macOS/Windows 原生门没有任何实现，`check-baseline.mjs:33-35` 仍只断言字符串等于 `"required"`。
 - [ ] **Windows 要么真做要么删承诺**：`cfg!(windows)` 分支从未编译，`stage-runtime.mjs:96` 主动拒绝非 macOS，而 `tauri.windows.conf.json` 声明了 nsis/msi。
