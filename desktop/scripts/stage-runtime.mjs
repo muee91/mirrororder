@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { buildToolMetadata, parseToolVersionOutput } from "./runtime-tools.mjs";
+import { buildToolMetadata, isBundleJunkPath, parseToolVersionOutput } from "./runtime-tools.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(here, "..");
@@ -84,12 +84,20 @@ function cleanGeneratedTarget(target) {
   }
 }
 
+// Per-machine or generated files must never reach a distributable bundle. The sync engine
+// reads scripts/config.json through MIRRORORDER_MULTICAM_CONFIG and falls back to built-in
+// defaults when it is absent, so a staged copy only leaks the build machine's volume paths
+// and project names. AppleDouble `._*` files additionally break CapCut draft parsing on
+// external volumes, and byte-code caches inside a sealed (possibly read-only) bundle are a
+// runtime failure waiting to happen. Rule lives in runtime-tools.mjs so the stager and the
+// bundle gate cannot drift apart.
 function copyDirectory(source, target) {
   fs.cpSync(source, target, {
     recursive: true,
     force: true,
     dereference: false,
     preserveTimestamps: true,
+    filter: (candidate) => !isBundleJunkPath(candidate),
   });
 }
 

@@ -3,6 +3,49 @@ import fs from "node:fs";
 
 export const NONFREE_CONFIGURATION_FLAG = "--enable-nonfree";
 
+// Distribution hygiene. A previous release bundle shipped the build machine's
+// `multicam-audio-sync/scripts/config.json` (absolute volume paths plus a real project
+// name) and ~5,000 `.pyc` files, because staging copied directories without exclusions
+// and the bundle gate only inspected Mach-O dependencies. These predicates are shared by
+// the stager and the bundle gate so the same rule cannot drift between them.
+export const BUNDLE_JUNK_PATH_PATTERNS = [
+  /(?:^|\/)multicam-audio-sync\/scripts\/config\.json$/,
+  /(?:^|\/)__pycache__(?:\/|$)/,
+  /\.py[cod]$/,
+  /(?:^|\/)\._[^/]+$/,
+  /(?:^|\/)\.DS_Store$/,
+];
+
+// Volume and home paths routinely contain spaces ("TESTVOL", "交付"), so the tail class
+// stops on JSON/prose delimiters rather than whitespace; otherwise the detector would only
+// report "/Volumes/PSSD" and could be evaded by any path with a space in it.
+const HOST_PATH_TAIL = '[^"\'`,]*';
+
+export const HOST_PATH_PATTERNS = [
+  new RegExp(`/Volumes/${HOST_PATH_TAIL}`, "g"),
+  new RegExp(`/Users/${HOST_PATH_TAIL}`, "g"),
+  new RegExp(`\\b[A-Za-z]:[\\\\/]${HOST_PATH_TAIL}`, "g"),
+];
+
+export function isBundleJunkPath(candidate) {
+  const normalized = String(candidate).replaceAll("\\", "/");
+  return BUNDLE_JUNK_PATH_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+export function findHostPathsInText(text) {
+  const hits = [];
+  for (const line of String(text).split("\n")) {
+    for (const pattern of HOST_PATH_PATTERNS) {
+      pattern.lastIndex = 0;
+      for (const match of line.matchAll(pattern)) {
+        const value = match[0].trimEnd();
+        if (value) hits.push(value);
+      }
+    }
+  }
+  return hits;
+}
+
 function requireText(value, label) {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${label} must be explicit and non-empty`);

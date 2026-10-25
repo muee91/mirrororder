@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { assertManifestToolMatches, buildToolMetadata } from "./runtime-tools.mjs";
+import { assertManifestToolMatches, buildToolMetadata, findHostPathsInText, isBundleJunkPath } from "./runtime-tools.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(here, "..");
@@ -166,6 +166,45 @@ const appExecutables = fs.readdirSync(executableDir).map((name) => path.join(exe
 if (!appExecutables.length) fail("app bundle has no Contents/MacOS executable");
 for (const executable of appExecutables) inspectMachO(executable, app);
 
+// Distribution hygiene. A previous release bundle shipped the build machine's per-machine
+// sync config (absolute volume paths plus a real project name) and ~5,000 .pyc files, and
+// nothing failed because this gate only inspected Mach-O dependencies. Path rules catch the
+// known shapes; the data-file scan catches other generated files that were not imagined yet.
+// Source and doc files are deliberately not scanned for host paths — they legitimately carry
+// the `/Volumes/...` rule text and the sanitizer regex itself.
+const HYGIENE_DATA_SUFFIXES = new Set([".json", ".toml", ".yaml", ".yml", ".txt", ".csv"]);
+
+function* walkFiles(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) yield* walkFiles(full);
+    else if (entry.isFile()) yield full;
+  }
+}
+
+const junkHits = [];
+const hostPathHits = [];
+const resourcesDir = path.join(app, "Contents", "Resources");
+for (const file of walkFiles(resourcesDir)) {
+  const relative = path.relative(app, file);
+  if (isBundleJunkPath(file)) {
+    junkHits.push(relative);
+    continue;
+  }
+  if (HYGIENE_DATA_SUFFIXES.has(path.extname(file).toLowerCase())) {
+    for (const hit of findHostPathsInText(fs.readFileSync(file, "utf8").slice(0, 2_000_000))) {
+      hostPathHits.push(`${relative} → ${hit}`);
+    }
+  }
+}
+
+if (junkHits.length) {
+  fail(`bundle ships per-machine or generated files (${junkHits.length}): ${junkHits.slice(0, 12).join(", ")}`);
+}
+if (hostPathHits.length) {
+  fail(`bundle data files carry host absolute paths (${hostPathHits.length}): ${hostPathHits.slice(0, 12).join(" | ")}`);
+}
+
 if (process.env.MIRRORORDER_REQUIRE_CODESIGN === "1") {
   run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", app], "codesign verification");
 }
@@ -176,5 +215,6 @@ console.log(`runtime: ${pythonOutput}`);
 console.log(`ffmpeg: ${ffmpegMetadata.version} · configuration=${ffmpegMetadata.configuration} · sha256=${ffmpegMetadata.sha256}`);
 console.log(`ffprobe: ${ffprobeMetadata.version} · configuration=${ffprobeMetadata.configuration} · sha256=${ffprobeMetadata.sha256}`);
 console.log(`media tools: source=${manifest.tools.source} · license=${manifest.tools.license_classification} · redistributable=true`);
+console.log(`bundle hygiene: no per-machine files, no host paths in data files (Resources scanned, data suffixes ${HYGIENE_DATA_SUFFIXES.size})`);
 console.log(`codesign gate: ${process.env.MIRRORORDER_REQUIRE_CODESIGN === "1" ? "required and passed" : "not required for this local build"}`);
 console.log("Final Cut import, real-media playback, multicam sync and LAN second-device smoke remain explicit native gates.");

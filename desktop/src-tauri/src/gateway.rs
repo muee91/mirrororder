@@ -327,6 +327,9 @@ pub fn start_team_gateway(
     command
         .current_dir(&runtime.core_root)
         .env("PYTHONPATH", python_path_with_source(&runtime.source_dir)?)
+        // Packaged code lives inside a signed, read-only bundle: letting CPython write
+        // __pycache__ there breaks the bundle seal and fails outright on a mounted DMG.
+        .env("PYTHONDONTWRITEBYTECODE", "1")
         .arg("-m")
         .arg("script_organizer.cli")
         .arg("gateway");
