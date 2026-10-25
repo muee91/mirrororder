@@ -175,7 +175,7 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
             handle.flush()
-            handle.fsync(handle.fileno())
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
     finally:
         if os.path.exists(temporary):
