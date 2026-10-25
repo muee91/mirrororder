@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
-import { HostConnectionError } from "./host";
+import { HostConnectionError, invalidateReviewModelCache } from "./host";
 
 export type EditorialState = "unreviewed" | "keep" | "best" | "reject";
 
@@ -398,6 +398,9 @@ export class EditorialClient {
     if (!actor) throw new HostConnectionError("最终编辑决定需要操作者昵称");
     if (write.targetKind === "assignment" && !segmentId) throw new HostConnectionError("剧本段最终决定需要 segment_id");
     if (!Number.isInteger(write.expectedRevision) || write.expectedRevision < 0) throw new HostConnectionError("最终编辑决定需要有效 expected_revision");
+    // review-model projects editorial_decisions, so a final decision must bust the
+    // shared read cache even though the write goes through this client, not HostConnection.
+    invalidateReviewModelCache(this.baseUrl, projectId.trim());
     return requestJson<EditorialWriteResponse>(this.baseUrl, `${projectPath(projectId)}/editorial-decision`, {
       method: "POST",
       body: JSON.stringify({

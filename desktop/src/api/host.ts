@@ -363,6 +363,31 @@ function reviewModelCacheKey(baseUrl: string, projectId: string): string {
 }
 
 /**
+ * Shared review-model invalidation entry point. Review placement writes live on
+ * HostConnection, but the final Editorial Decision write is issued by PlanningClient
+ * against the same host, and review-model projects `editorial_decisions` — so the
+ * cache has one owner outside the class that owns the read.
+ */
+export function invalidateReviewModelCache(baseUrl?: string, projectId?: string): void {
+  if (baseUrl === undefined) {
+    reviewModelCache.clear();
+    return;
+  }
+  const prefix = `${normalizeReviewModelBaseUrl(baseUrl)}\u0000`;
+  if (projectId === undefined) {
+    for (const key of [...reviewModelCache.keys()]) {
+      if (key.startsWith(prefix)) reviewModelCache.delete(key);
+    }
+    return;
+  }
+  reviewModelCache.delete(`${prefix}${projectId}`);
+}
+
+function normalizeReviewModelBaseUrl(baseUrl: string): string {
+  return baseUrl.trim().replace(/\/+$/, "");
+}
+
+/**
  * Cached payloads are handed out as copies. Consumers canonicalize and annotate
  * review models in place, so sharing one object across workspaces would let one
  * surface's local edit corrupt another's view of the same human authority.
@@ -433,13 +458,7 @@ export class HostConnection {
   // own HostConnection; instance state would never be shared. Keyed by base URL so two
   // hosts can never serve each other's project data.
   invalidateReviewModel(projectId?: string): void {
-    if (projectId === undefined) {
-      for (const key of [...reviewModelCache.keys()]) {
-        if (key.startsWith(`${this.baseUrl}\u0000`)) reviewModelCache.delete(key);
-      }
-      return;
-    }
-    reviewModelCache.delete(reviewModelCacheKey(this.baseUrl, normalizedProjectId(projectId, "失效 review-model ")));
+    invalidateReviewModelCache(this.baseUrl, projectId);
   }
 
   async reviewModel(projectId: string): Promise<ReviewModelPayload> {

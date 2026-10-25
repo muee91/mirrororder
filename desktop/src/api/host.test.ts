@@ -18,6 +18,7 @@ import {
   type HostProcessStatus,
   type WorkspacePayload,
 } from "./host";
+import { EditorialClient } from "./planning";
 
 const mockedInvoke = vi.mocked(invoke);
 const mockedIsTauri = vi.mocked(isTauri);
@@ -222,6 +223,43 @@ describe("HostConnection", () => {
     await expect(host.reviewModel("p_fail")).rejects.toBeTruthy();
     await expect(host.reviewModel("p_fail")).resolves.toMatchObject({ contract_version: "review.v1" });
     expect(attempts).toBe(2);
+  });
+
+  it("busts the shared review-model cache on a final editorial decision", async () => {
+    const payload = {
+      contract_version: "review.v1",
+      project: { project_id: "p_ed", name: "Episode 1", input_kind: "fcpxml", stats: {}, local_media: {}, issues: [] },
+      revisions: { analysis: "a1", automation_analysis: "a1", automation_updated_at: "", review: 3 },
+      capabilities: {},
+      summary: { automation: {}, script_gaps: 0, take_groups: 1, episodes: 1 },
+      episodes: [],
+      take_groups: [],
+      script_gaps: [],
+      review_state: {},
+    };
+    const browserFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(init?.method) === "POST") {
+        return jsonResponse({ editorial: { revision: 9, opinions: {}, decisions: {} }, group: { revision: 9, opinions: { group: [], assignments: [] }, decision: { group: {}, assignments: [] } } });
+      }
+      return jsonResponse(payload);
+    });
+    vi.stubGlobal("fetch", browserFetch);
+
+    const host = new HostConnection();
+    await host.reviewModel("p_ed");
+    // The decision is written by EditorialClient, a different class than the one
+    // that reads review-model — the cache must still be invalidated across them.
+    await new EditorialClient("http://127.0.0.1:8765").decision("p_ed", {
+      targetKind: "group",
+      groupId: "g1",
+      state: "best",
+      actor: "剪辑指导",
+      expectedRevision: 8,
+    });
+    await host.reviewModel("p_ed");
+
+    const reads = browserFetch.mock.calls.filter(([, init]) => String(init?.method) !== "POST");
+    expect(reads).toHaveLength(2);
   });
 
   it("writes episode-only placement through the atomic review action", async () => {
