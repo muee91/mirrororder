@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation } from "../media/cameraPresentation";
+import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { AuditEvidencePanel } from "./AuditEvidencePanel";
 import { CandidateEvidence } from "./CandidateEvidence";
@@ -47,8 +48,10 @@ export function TakeInspector({
   // 播放失败（404 = 素材盘未挂载/文件移动）要有行内提示与重试，不能只留黑屏。
   const [playbackFailed, setPlaybackFailed] = useState(false);
   const [playbackRetry, setPlaybackRetry] = useState(0);
+  const [failureDetail, setFailureDetail] = useState<PlaybackFailure | null>(null);
   useEffect(() => {
     setPlaybackFailed(false);
+    setFailureDetail(null);
   }, [playbackUrl, playbackRetry]);
   // 运行时加载结果上抛给所属工作区聚合；服务端"可用"与本机"能播"是两层口径。
   useEffect(() => {
@@ -123,13 +126,17 @@ export function TakeInspector({
       {angle?.playback.available === false ? (
         <div className="player-empty">当前设备未解析到这条媒体。</div>
       ) : angle && playbackUrl && !playbackFailed ? (
-        <video
+          <video
           className="take-player"
           controls
           preload="metadata"
           src={playbackUrl}
           key={`${angle.clip_id}-${playbackRetry}`}
-          onError={() => setPlaybackFailed(true)}
+          onError={() => {
+            setPlaybackFailed(true);
+            // video.error 分不清缺失和解码；报错后探测一次给出可行动的原因。
+            void classifyPlaybackFailure(playbackUrl).then(setFailureDetail);
+          }}
           onLoadedMetadata={(event) => {
             if (angle.source_start > 0) event.currentTarget.currentTime = angle.source_start;
           }}
@@ -141,7 +148,7 @@ export function TakeInspector({
       ) : angle && playbackUrl ? (
         <div className="player-empty take-player-error">
           <strong>素材无法读取</strong>
-          <span>可能是素材盘未挂载或文件已移动。重新挂载后重试。</span>
+          <span>{failureDetail?.detail ?? "正在确认失败原因；可先检查素材盘挂载后重试。"}</span>
           <button type="button" className="secondary" onClick={() => setPlaybackRetry((value) => value + 1)}>重试</button>
         </div>
       ) : (

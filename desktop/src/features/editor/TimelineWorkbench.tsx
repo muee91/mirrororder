@@ -14,6 +14,7 @@ interface Props {
   focusIntent?: ProductionNavigationIntent | null;
   deliveryRequestNonce?: number;
   onSelectionChange?: (groupId: string | null, clipId: string | null, timelineClipId: string | null) => void;
+  onOpenRepair?: (clipId: string) => void;
 }
 
 export function TimelineWorkbench({
@@ -22,6 +23,7 @@ export function TimelineWorkbench({
   focusIntent = null,
   deliveryRequestNonce = 0,
   onSelectionChange,
+  onOpenRepair,
 }: Props) {
   const model = useTimelineWorkbenchModel(baseUrl, projectId);
   const timelineActions = useTimelineAuthorityActions(model);
@@ -97,6 +99,7 @@ export function TimelineWorkbench({
         focusIntent={focusIntent}
         focusLabel={focusLabel}
         onOpenDelivery={() => setDeliveryOpen(true)}
+        onOpenRepair={onOpenRepair}
       />
       {deliveryOpen ? (
         <div className="workspace-context-layer timeline-delivery-layer">

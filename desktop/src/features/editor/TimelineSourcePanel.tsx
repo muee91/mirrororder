@@ -6,10 +6,10 @@ import type { TimelineWorkbenchProps } from "./timelineWorkbenchProps";
 type SourcePanelProps = Pick<TimelineWorkbenchProps,
   "sourceOptions" | "sourceOption" | "chooseSource" | "sourcePosition" | "changeSourcePosition"
   | "baseUrl" | "projectId" | "snapshot" | "sequence" | "selection" | "playhead"
-  | "changePlayhead" | "stepPlayhead" | "focusIntent" | "focusLabel">;
+  | "changePlayhead" | "stepPlayhead" | "focusIntent" | "focusLabel" | "onOpenRepair">;
 
 export function TimelineSourcePanel(props: SourcePanelProps) {
-  const { sourceOptions, sourceOption, chooseSource, sourcePosition, changeSourcePosition, baseUrl, projectId, snapshot, sequence, selection, playhead, changePlayhead, stepPlayhead, focusIntent, focusLabel } = props;
+  const { sourceOptions, sourceOption, chooseSource, sourcePosition, changeSourcePosition, baseUrl, projectId, snapshot, sequence, selection, playhead, changePlayhead, stepPlayhead, focusIntent, focusLabel, onOpenRepair } = props;
   const [toolsOpen, setToolsOpen] = useState(Boolean(focusIntent?.groupId));
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export function TimelineSourcePanel(props: SourcePanelProps) {
           ) : <p className="empty-copy">当前剪辑没有可播放素材。先确认本机素材绑定和审阅媒体证据。</p>}
         </div>
       </details>
-      <EditorMonitors baseUrl={baseUrl} projectId={projectId} project={snapshot.project} sequence={sequence} selectedClip={selection?.clip ?? null} sourcePreview={sourceOption ? { source: sourceOption.source, frame: sourcePosition, rangeStart: sourceOption.availableIn, rangeEnd: sourceOptionEnd(sourceOption) } : null} playhead={playhead} onPlayheadChange={changePlayhead} onStepFrames={stepPlayhead} onSourceFrameChange={changeSourcePosition} />
+      <EditorMonitors baseUrl={baseUrl} projectId={projectId} project={snapshot.project} sequence={sequence} selectedClip={selection?.clip ?? null} sourcePreview={sourceOption ? { source: sourceOption.source, frame: sourcePosition, rangeStart: sourceOption.availableIn, rangeEnd: sourceOptionEnd(sourceOption) } : null} playhead={playhead} onPlayheadChange={changePlayhead} onStepFrames={stepPlayhead} onSourceFrameChange={changeSourcePosition} onOpenRepair={onOpenRepair} />
     </>
   );
 }

@@ -17,6 +17,14 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 媒体失败态补齐（恢复切片 1 的 UI 侧，已实跑验证）
+
+- **共享失败分类器 `media/playbackFailure.ts`**：`video.error` 分不清 HTTP 404（素材缺失）与解码失败（Chromium 都报 code 4），报错后用一次 1 字节 Range 探测把失败分为 缺失 / 解码失败 / 连接失败 三种可行动原因（仅在 video 报错后调用，不进正常读路径）。行为单测 3 组覆盖 206/404/403/410/500/网络异常。
+- **EditorMonitors 双监看失败态（此前完全无提示黑屏）**：素材/节目监看的 `<video>` 报错后显示失败卡——分类标题、行动指引、当前素材名、重试、以及「到素材·恢复」入口（`onOpenRepair` 经 TimelineWorkbench/View/SourcePanel 从 ProjectWorkbench 的 `navigate("media-binding")` 接入）。素材切换即复位失败态，重新挂载后不残留旧失败。
+- **Take 详情（含审阅 Viewer）接分类详情**：失败卡标题保持「素材无法读取」（ux-real 门的 404 断言锚点），详情行改为分类结果——404 给出挂载指引、可达但解码失败给出编码指引、Host 不可达给出服务指引。
+- 遗留（并入切片 1 后续）：场记（GoldenSlate）与素材库右栏的失败文案收敛到共享词汇；「未知/已验证可用/缺失/解码失败」四态在五工作区的完整统一投影。
+- 验证：tsc exit 0；Vitest 77 文件 / 379 项全过（新增分类器 3 项）；`test:ux-real` 9/9；`test:layout-runtime` desktop + compact OK。
+
 ## 2026-10-26 UI 计数口径统一（修复顺序②，已实跑验证）
 
 - **审阅「需关注」分层**：`reviewTakeAttention` 投影新增 `tier`（blocking=error 级 / stale=证据过期 / watch=其余），审阅头部条件显示 阻断/证据过期 计数、筛选按钮 aria 读出三层分布。fixture 数据（668 Take 全部 warning、668 条「自动决策落后」= 项目级过期）此前让 全部=未决定=需关注 三计数相同；分层后该状态可解释为「证据过期 668」。

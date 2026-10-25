@@ -9,4 +9,5 @@ export type TimelineWorkbenchProps = TimelineWorkbenchModel &
     focusIntent: ProductionNavigationIntent | null;
     focusLabel: string;
     onOpenDelivery: () => void;
+    onOpenRepair?: (clipId: string) => void;
   };

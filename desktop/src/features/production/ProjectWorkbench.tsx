@@ -294,6 +294,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               focusIntent={currentIntent?.workspace === "timeline" ? currentIntent : null}
               deliveryRequestNonce={deliveryRequestNonce}
               onSelectionChange={(groupId, clipId, timelineClipId) => updateSelection({ groupId, clipId, timelineClipId, scriptSegmentId: currentSelection.scriptSegmentId })}
+              onOpenRepair={() => navigate("media-binding")}
             />
           ) : null}
 

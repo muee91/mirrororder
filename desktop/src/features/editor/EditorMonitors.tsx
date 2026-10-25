@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, HostConnectionError } from "../../api/host";
 import { ProductionClient, type WaveformPayload } from "../../api/production";
 import type { TimelineClip, TimelineProject, TimelineSequence, TimelineSource } from "../../api/timeline";
+import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
 import {
   isEditableKeyboardTarget,
   programMediaAtPlayhead,
@@ -29,6 +30,7 @@ interface Props {
   onPlayheadChange: (frame: number) => void;
   onStepFrames: (frames: number) => void;
   onSourceFrameChange?: (frame: number) => void;
+  onOpenRepair?: (clipId: string) => void;
 }
 
 type TransportDirection = -1 | 0 | 1;
@@ -57,6 +59,32 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
+function MonitorFailureCard({
+  failure,
+  clipId,
+  clipName,
+  onRetry,
+  onOpenRepair,
+}: {
+  failure: PlaybackFailure;
+  clipId: string;
+  clipName: string;
+  onRetry: () => void;
+  onOpenRepair?: (clipId: string) => void;
+}) {
+  return (
+    <div className="monitor-failure" role="alert">
+      <strong>{failure.title}</strong>
+      <span>{failure.detail}</span>
+      <small>当前素材：{clipName}</small>
+      <div className="monitor-failure-actions">
+        <button type="button" className="secondary" onClick={onRetry}>重试</button>
+        {onOpenRepair ? <button type="button" className="secondary" onClick={() => onOpenRepair(clipId)}>到素材·恢复</button> : null}
+      </div>
+    </div>
+  );
+}
+
 export function EditorMonitors({
   baseUrl,
   projectId,
@@ -68,6 +96,7 @@ export function EditorMonitors({
   onPlayheadChange,
   onStepFrames,
   onSourceFrameChange,
+  onOpenRepair,
 }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
@@ -77,6 +106,22 @@ export function EditorMonitors({
   const [waveform, setWaveform] = useState<WaveformPayload | null>(null);
   const [waveformMessage, setWaveformMessage] = useState("选择时间线片段或素材后读取波形");
   const [waveformBusy, setWaveformBusy] = useState(false);
+  // 双监看的失败态：video.error 分不清缺失和解码，报错后用一次轻量探测分类，
+  // 给出可行动原因与重试/修复入口；素材切换即复位，避免旧失败挡住重新挂载后的播放。
+  const [sourceFailure, setSourceFailure] = useState<{ clipId: string; failure: PlaybackFailure } | null>(null);
+  const [programFailure, setProgramFailure] = useState<{ clipId: string; failure: PlaybackFailure } | null>(null);
+  const [sourceRetry, setSourceRetry] = useState(0);
+  const [programRetry, setProgramRetry] = useState(0);
+
+  async function reportMonitorFailure(
+    monitor: "source" | "program",
+    clipId: string,
+    url: string,
+  ): Promise<void> {
+    const failure = await classifyPlaybackFailure(url);
+    const apply = monitor === "source" ? setSourceFailure : setProgramFailure;
+    apply({ clipId, failure });
+  }
 
   const fps = sequenceFps(sequence);
   const sourceState = useMemo(() => {
@@ -93,6 +138,13 @@ export function EditorMonitors({
   const sourceUrl = sourceState?.source.clip_id ? host.mediaUrl(projectId, sourceState.source.clip_id) : "";
   const programUrl = programState?.source.clip_id ? host.mediaUrl(projectId, programState.source.clip_id) : "";
   const waveformClipId = sourceState?.source.clip_id ?? "";
+
+  useEffect(() => {
+    setSourceFailure(null);
+  }, [sourceUrl, sourceRetry]);
+  useEffect(() => {
+    setProgramFailure(null);
+  }, [programUrl, programRetry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -220,16 +272,49 @@ export function EditorMonitors({
       <div className="monitor-grid">
         <article className="editor-monitor">
           <header><strong>素材监看</strong><span>{sourceState ? monitorLabel(sourceState.sourceFrame, fps) : "未选择素材"}</span></header>
-          {sourceUrl && sourceState ? (
-            <video ref={sourceVideoRef} src={sourceUrl} controls preload="metadata" key={`source-${sourceState.source.source_id}`} onTimeUpdate={(event) => reportSourceFrame(event.currentTarget)} onSeeked={(event) => reportSourceFrame(event.currentTarget)} />
+          {sourceUrl && sourceState && sourceFailure && sourceFailure.clipId === sourceState.source.clip_id ? (
+            <MonitorFailureCard
+              failure={sourceFailure.failure}
+              clipId={sourceState.source.clip_id}
+              clipName={sourceState.source.name || sourceState.source.clip_id}
+              onRetry={() => setSourceRetry((value) => value + 1)}
+              onOpenRepair={onOpenRepair}
+            />
+          ) : sourceUrl && sourceState ? (
+            <video
+              ref={sourceVideoRef}
+              src={sourceUrl}
+              controls
+              preload="metadata"
+              key={`source-${sourceState.source.source_id}-${sourceRetry}`}
+              onTimeUpdate={(event) => reportSourceFrame(event.currentTarget)}
+              onSeeked={(event) => reportSourceFrame(event.currentTarget)}
+              onError={() => void reportMonitorFailure("source", sourceState.source.clip_id, sourceUrl)}
+            />
           ) : <div className="monitor-empty">选择素材池或时间线片段查看原始素材。</div>}
           <footer>{sourceState?.source.name || sourceState?.source.clip_id || "—"}</footer>
         </article>
 
         <article className="editor-monitor program-monitor">
           <header><strong>节目监看</strong><span>{monitorLabel(playhead, fps)}</span></header>
-          {programUrl && programState ? (
-            <video ref={programVideoRef} src={programUrl} muted playsInline preload="metadata" key={`program-${programState.source.source_id}`} />
+          {programUrl && programState && programFailure && programFailure.clipId === programState.source.clip_id ? (
+            <MonitorFailureCard
+              failure={programFailure.failure}
+              clipId={programState.source.clip_id}
+              clipName={programState.source.name || programState.source.clip_id}
+              onRetry={() => setProgramRetry((value) => value + 1)}
+              onOpenRepair={onOpenRepair}
+            />
+          ) : programUrl && programState ? (
+            <video
+              ref={programVideoRef}
+              src={programUrl}
+              muted
+              playsInline
+              preload="metadata"
+              key={`program-${programState.source.source_id}-${programRetry}`}
+              onError={() => void reportMonitorFailure("program", programState.source.clip_id, programUrl)}
+            />
           ) : (
             <div className="monitor-empty">{programAnglePending ? "当前多机位片段机位待选；在右侧片段检查器明确选择 A/B/C 后预览。" : "当前播放头没有启用的视频片段。"}</div>
           )}
