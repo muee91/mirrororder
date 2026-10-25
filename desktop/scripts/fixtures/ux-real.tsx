@@ -12,7 +12,6 @@ import "../../src/desktop-theme-frozen-surfaces.css";
 import "../../src/features/media/media-binding-recovery.css";
 import "../../src/app/mirrororder-redesign.css";
 import "../../src/app/mirrororder-workspaces-redesign.css";
-import "../../src/app/project-context-redesign.css";
 import "../../src/app/app-chrome.css";
 import "../../src/design-system-v2.css";
 

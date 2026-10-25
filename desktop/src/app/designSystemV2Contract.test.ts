@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -16,6 +17,34 @@ describe("MirrorOrder Design System v2 contract", () => {
     expect(redesignIndex).toBeGreaterThan(-1);
     expect(chromeIndex).toBeGreaterThan(redesignIndex);
     expect(v2Index).toBeGreaterThan(chromeIndex);
+  });
+
+  it("resolves every global stylesheet imported by the app entry and the dev fixtures", () => {
+    // A layer was deleted while two dev fixtures still imported it, and no gate
+    // noticed: typecheck, vitest and `vite build` never compile scripts/fixtures.
+    // The ux-real evidence harness had therefore been broken for weeks.
+    const entrypoints = [
+      "../main.tsx",
+      "../../scripts/fixtures/ux-real.tsx",
+      "../../scripts/fixtures/ux-audit.tsx",
+      "../../scripts/fixtures/project-workbench-layout.tsx",
+    ];
+    const dangling: string[] = [];
+    const missing: string[] = [];
+    for (const entry of entrypoints) {
+      const entryPath = fileURLToPath(new URL(entry, import.meta.url));
+      if (!existsSync(entryPath)) {
+        // Silently skipping an entrypoint would turn this guard into a gate that
+        // can never go red, which is the exact failure mode being guarded against.
+        missing.push(entry);
+        continue;
+      }
+      const source = readFileSync(entryPath, "utf8");
+      for (const match of source.matchAll(/import\s+"([^"]+\.css)"/g)) {
+        if (!existsSync(resolve(dirname(entryPath), match[1]!))) dangling.push(`${entry} → ${match[1]}`);
+      }
+    }
+    expect({ missing, dangling }).toEqual({ missing: [], dangling: [] });
   });
 
   it("defines semantic production tokens instead of another page-specific palette", () => {

@@ -18,7 +18,8 @@
     "stage:runtime": "node scripts/stage-runtime.mjs",
     "verify:macos-bundle": "node scripts/verify-macos-bundle.mjs",
     "smoke:host": "node scripts/host-smoke.mjs",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check:ux-real": "node scripts/ux-real.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

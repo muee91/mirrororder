@@ -1,8 +1,20 @@
-// Dev-only: drives the real ProjectWorkbench against the real local Host
-// (start it first: PYTHONPATH=src python3 -m script_organizer.cli serve
-//  workspace.toml --host 127.0.0.1 --port 8765 --local-only).
-// Uses the ux-real.html fixture (real project identity) and a Vite /api
-// proxy, timing the five-step main chain at real production scale.
+// P0 evidence gate: drives the Production surfaces against the real local Host at
+// real project scale, asserts the main chain actually rendered, and archives the run.
+//
+// Prerequisite (explicit, never auto-started):
+//   PYTHONPATH=src python3 -m script_organizer.cli serve workspace.toml --port 8765
+//
+// Semantics this file must keep honest:
+//   exit 2 = NOT RUN (no Host reachable); never a PASS.
+//   exit 1 = FAIL (a required step did not render/assertion failed).
+//   exit 0 = PASS (all required steps asserted green); optional steps print WARN only.
+// Artifacts land in desktop/artifacts/ux-real/<run>/ (git-ignored) so the evidence can
+// be reviewed after the fact instead of living in /tmp and vanishing.
+//
+// Known limitation, printed in the report: this mounts the ux-real fixture shell, not
+// the packaged Application shell, so a PASS here proves data/render/interaction health
+// at the surface level — it is not a substitute for the packaged-app acceptance run.
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
@@ -10,7 +22,27 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const hostUrl = process.env.MIRRORORDER_HOST_URL ?? "http://127.0.0.1:8765";
+const hostUrl = (process.env.MIRRORORDER_HOST_URL ?? "http://127.0.0.1:8765").replace(/\/+$/, "");
+const runId = new Date().toISOString().replace(/[:.]/g, "-");
+const artifactDir = resolve(desktopRoot, "artifacts", "ux-real", runId);
+
+async function hostReachable() {
+  try {
+    const response = await fetch(`${hostUrl}/api/v1/ping`, { signal: AbortSignal.timeout(3000) });
+    const body = await response.json();
+    return body?.service === "mirrororder-host";
+  } catch {
+    return false;
+  }
+}
+
+if (!(await hostReachable())) {
+  console.log(`NOT RUN: 没有可达的 MirrorOrder Host（${hostUrl}/api/v1/ping）。`);
+  console.log("NOT RUN: 先按文件头部说明启动 Host，再重跑本 gate；本次没有产生任何验收证据。");
+  process.exit(2);
+}
+
+mkdirSync(artifactDir, { recursive: true });
 
 const server = await createServer({
   root: desktopRoot,
@@ -26,101 +58,152 @@ const server = await createServer({
 });
 await server.listen();
 const baseUrl = server.resolvedUrls?.local?.[0]?.replace(/\/$/, "");
-console.log("vite at", baseUrl);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const started = Date.now();
 const apiLog = [];
+const consoleErrors = [];
 page.on("response", (response) => {
-  if (response.url().includes("/api/")) apiLog.push(`${response.status()} ${response.url().split("/api/")[1]} +${Date.now() - started}ms`);
+  if (response.url().includes("/api/")) {
+    apiLog.push({ status: response.status(), path: response.url().split("/api/")[1], ms: Date.now() - started });
+  }
 });
 page.on("console", (message) => {
-  if (message.type() === "error") console.log("[console.error]", message.text().slice(0, 240));
+  if (message.type() === "error") consoleErrors.push(message.text().slice(0, 300));
 });
+
+const results = [];
 const timings = [];
-async function timed(label, action) {
+
+async function shot(name) {
+  await page.screenshot({ path: resolve(artifactDir, `${name}.png`) });
+}
+
+/**
+ * A step is required unless it explicitly opts out with a reason. Recording a failure
+ * instead of throwing keeps the run going so one broken surface does not hide the state
+ * of the rest of the chain — but the recorded failure decides the exit code.
+ */
+async function step(label, action, { required = true, reason = "" } = {}) {
   const start = Date.now();
-  await action();
-  const ms = Date.now() - start;
-  timings.push(`${label}: ${ms}ms`);
-  console.log(`${label}: ${ms}ms`);
-}
-async function diagnose() {
-  console.log("--- DIAGNOSTIC ---");
-  console.log("api calls:\n ", apiLog.slice(-14).join("\n  ") || "(none)");
-  console.log("page text:", (await page.evaluate(() => document.body.innerText)).slice(0, 400));
-  await page.screenshot({ path: "/tmp/ux-shots/real-fail.png" });
+  try {
+    const detail = await action();
+    const ms = Date.now() - start;
+    timings.push({ label, ms, status: required ? "PASS" : "PASS" });
+    results.push({ label, status: "PASS", ms, detail: detail ?? null });
+    console.log(`PASS  ${label} (${ms}ms)${detail ? ` — ${detail}` : ""}`);
+  } catch (error) {
+    const ms = Date.now() - start;
+    const message = String(error.message ?? error).split("\n")[0];
+    const status = required ? "FAIL" : "WARN";
+    timings.push({ label, ms, status });
+    results.push({ label, status, ms, message, optional_reason: required ? null : reason });
+    console.log(`${status}  ${label} (${ms}ms) — ${message}`);
+    // Chinese labels collapse to an empty slug under [^\w]; index the file instead of
+    // the label so two failures in one run cannot overwrite each other's evidence.
+    await shot(`fail-${String(results.length).padStart(2, "0")}`);
+  }
 }
 
-await page.goto(`${baseUrl}/scripts/fixtures/ux-real.html`);
-await page.waitForSelector("[class*=workbench]", { timeout: 30000 });
-await page.waitForTimeout(3000);
-
-try {
-  await timed("script workspace ready", async () => {
-    await page.getByRole("button", { name: /^剧本$/ }).first().click();
-    await page.waitForSelector(".script-block", { timeout: 30000 });
-  });
-} catch {
-  await diagnose();
-  throw new Error("script blocks never rendered");
+async function clickWorkspace(name) {
+  await page.getByRole("button", { name }).first().click({ timeout: 10000 });
 }
-await page.screenshot({ path: "/tmp/ux-shots/real-script.png" });
 
-await timed("script search 3 keystrokes", async () => {
+function firstFailureText() {
+  return apiLog.filter((row) => row.status >= 400).slice(-6).map((row) => `${row.status} ${row.path}`).join(" | ");
+}
+
+await page.goto(`${baseUrl}/scripts/fixtures/ux-real.html`, { timeout: 60000 });
+await step("shell mount", async () => {
+  await page.waitForSelector("[class*=workbench]", { timeout: 30000 });
+  const title = await page.evaluate(() => document.body.innerText.slice(0, 80).replace(/\s+/g, " "));
+  return title;
+});
+
+await step("剧本：ScriptBlock 主画布渲染", async () => {
+  await clickWorkspace(/^剧本$/);
+  await page.waitForSelector(".script-block", { timeout: 30000 });
+  const count = await page.locator(".script-block").count();
+  if (count < 1) throw new Error(`剧本画布只有 ${count} 个 ScriptBlock`);
+  return `${count} 个剧本块`;
+});
+await shot("script");
+
+await step("剧本：搜索后仍有结果或给出可读空状态", async () => {
   const search = page.getByRole("searchbox", { name: "搜索剧本" });
   await search.click();
-  await search.type("账本", { delay: 40 });
-  await page.waitForTimeout(400);
+  await search.type(process.env.MIRRORORDER_UX_QUERY ?? "账本", { delay: 40 });
+  await page.waitForTimeout(600);
+  const blocks = await page.locator(".script-block").count();
+  if (blocks > 0) return `${blocks} 个结果`;
+  // Zero matches is a legitimate outcome; the defect being guarded against is an
+  // unexplained blank canvas, so the empty state itself has to be asserted.
+  const emptyCopy = page.locator(".empty-copy");
+  if ((await emptyCopy.count()) < 1) throw new Error("搜索后既无结果也没有可读的空状态说明");
+  return `0 个结果，空状态文案：${(await emptyCopy.first().innerText()).slice(0, 40)}`;
 });
-await page.screenshot({ path: "/tmp/ux-shots/real-script-search.png" });
+await shot("script-search");
 
-try {
-  await timed("open segment drawer", async () => {
-    await page.getByRole("button", { name: "匹配素材" }).first().click({ timeout: 5000 });
-    await page.waitForSelector(".workspace-context-drawer", { timeout: 10000 });
-  });
-  await page.screenshot({ path: "/tmp/ux-shots/real-drawer.png" });
-  await timed("close drawer", async () => {
-    await page.getByRole("button", { name: "关闭" }).first().click();
-  });
-} catch (error) {
-  console.log("drawer step skipped:", error.message.split("\n")[0]);
-}
+await step("剧本：段详情抽屉可开可关", async () => {
+  await page.getByRole("button", { name: "匹配素材" }).first().click({ timeout: 8000 });
+  await page.waitForSelector(".workspace-context-drawer", { timeout: 10000 });
+  await page.getByRole("button", { name: "关闭" }).first().click({ timeout: 5000 });
+  await page.waitForSelector(".workspace-context-drawer", { state: "detached", timeout: 10000 });
+}, { required: false, reason: "部分项目在剧本段上没有匹配素材入口" });
+await shot("drawer");
 
-try {
-  await timed("review workspace ready", async () => {
-    await page.getByRole("button", { name: /^审阅$/ }).first().click();
-    await page.waitForSelector(".review-queue", { timeout: 30000 });
-  });
-  await timed("review next-take x2", async () => {
-    await page.getByRole("button", { name: "下一个" }).click();
-    await page.getByRole("button", { name: "下一个" }).click();
-  });
-  await page.screenshot({ path: "/tmp/ux-shots/real-review.png" });
-} catch (error) {
-  console.log("review step failed:", error.message.split("\n")[0]);
-  await diagnose();
-}
+await step("审阅：队列非空并可连续换 Take", async () => {
+  await clickWorkspace(/^审阅$/);
+  await page.waitForSelector(".review-queue", { timeout: 30000 });
+  const queued = await page.locator(".review-queue [role='option'], .review-queue .take-card, .review-queue li").count();
+  if (queued < 1) throw new Error("审阅队列为空，无法看片");
+  await page.getByRole("button", { name: "下一个" }).click({ timeout: 5000 });
+  await page.getByRole("button", { name: "下一个" }).click({ timeout: 5000 });
+  return `${queued} 项待审`;
+});
+await shot("review");
 
-try {
-  await timed("material workspace ready", async () => {
-    await page.getByRole("button", { name: /^素材$/ }).first().click();
-    await page.waitForTimeout(2500);
-  });
-  await page.screenshot({ path: "/tmp/ux-shots/real-material.png" });
-  await timed("timeline workspace ready", async () => {
-    await page.getByRole("button", { name: /^时间线$/ }).first().click();
-    await page.waitForTimeout(2500);
-  });
-  await page.screenshot({ path: "/tmp/ux-shots/real-timeline.png" });
-} catch (error) {
-  console.log("material/timeline step failed:", error.message.split("\n")[0]);
-}
+await step("素材：Take/场记画布渲染", async () => {
+  await clickWorkspace(/^素材$/);
+  await page.waitForTimeout(2500);
+  const cards = await page.locator(".take-card, .take-list-row, .mo-media-card, .slate-row").count();
+  if (cards < 1) throw new Error("素材画布没有渲染任何 canonical 对象");
+  return `${cards} 个对象`;
+});
+await shot("material");
+
+await step("时间线：编辑器画布就绪", async () => {
+  await clickWorkspace(/^时间线$/);
+  await page.waitForTimeout(2500);
+  const stage = await page.locator("[class*=timeline], [class*=editor-stage], .timeline-track").count();
+  if (stage < 1) throw new Error("时间线画布没有渲染");
+  return `${stage} 个时间线元素`;
+});
+await shot("timeline");
+
+const requiredFailures = results.filter((row) => row.status === "FAIL");
+const verdict = requiredFailures.length ? "FAIL" : "PASS";
+const report = {
+  verdict,
+  run_id: runId,
+  host: hostUrl,
+  surface_note: "ux-real fixture shell; packaged-app acceptance is a separate native gate",
+  timed: timings,
+  steps: results,
+  http_failures: apiLog.filter((row) => row.status >= 400),
+  console_errors: consoleErrors,
+  heaviest_api_calls: [...apiLog].sort((left, right) => right.ms - left.ms).slice(0, 12),
+};
+writeFileSync(resolve(artifactDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 
 console.log("---");
-console.log(timings.join("\n"));
+console.log(timings.map((row) => `${row.label}: ${row.ms}ms`).join("\n"));
+if (consoleErrors.length) console.log(`console.error 计数: ${consoleErrors.length}`);
+console.log(`证据目录: ${artifactDir}`);
+console.log(`${verdict}: 必需步骤 ${results.filter((row) => row.status !== "WARN").length} 项，失败 ${requiredFailures.length} 项`);
+if (requiredFailures.length) console.log(`首个失败: ${requiredFailures[0].label} — ${requiredFailures[0].message}${firstFailureText() ? ` | ${firstFailureText()}` : ""}`);
+
 await browser.close();
 await server.close();
-console.log("done");
+process.exit(requiredFailures.length ? 1 : 0);
