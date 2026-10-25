@@ -23,6 +23,7 @@
 - **Take 汇总双层口径**：服务端 `available=false`（改名「素材离线」，与筛选 chip 同词）与本机运行时加载失败（Take 详情 video onError 上抛 → 新增「本机播放失败 N」计数）分开呈现；实测 fixture `available=false` 为 0 而详情 404 报错，两层不再互相冒充。
 - **素材库过期清单标注**：`scan_required` 时汇总条降透明度并加「上次清单 · 当前需要重新扫描」整行标签，数字不再以当前状态呈现（修复「尚未扫描 vs 1502 可索引」同屏矛盾）。
 - 验证：tsc exit 0；Vitest 76 文件 / 376 项全过（新增 reviewAttentionTier 行为测试 4 项 + 契约分层断言）；`test:ux-real` 9/9。
+- **操作者首次引导**：未设置且未引导过时，`CurrentOperatorControl` 首次挂载自动弹出一次，可“暂不设置”（记忆在 device-local）；未设置 chip 文案改为行动性的「设置操作者」并在弹层说明后果。验证同轮：tsc / Vitest 376 / ux-real 9/9。
 
 ## 2026-10-26 结构收敛轮（已实跑验证）
 
