@@ -13,6 +13,7 @@
     "check:baseline": "node scripts/check-baseline.mjs",
     "check:ui-authority": "node scripts/check-ui-authority.mjs",
     "test:runtime-tools": "node --test scripts/runtime-tools.node-test.mjs",
+    "test:ux-real": "node --test scripts/ux-real-review.node-test.mjs",
     "verify:rc": "node scripts/verify-local-rc.mjs",
     "prepare:icons": "tauri icon ../branding/app-icon.png --output src-tauri/icons/generated",
     "stage:runtime": "node scripts/stage-runtime.mjs",
@@ -22,9 +23,9 @@
     "check:ux-real": "node scripts/ux-real.mjs"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.0",
-    "@tauri-apps/plugin-dialog": "^2.0.0",
-    "@tauri-apps/plugin-http": "^2.0.0",
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "2.7.2",
+    "@tauri-apps/plugin-http": "2.5.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

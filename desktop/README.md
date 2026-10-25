@@ -102,6 +102,7 @@ npm run check:baseline
 npm run check:ui-authority
 npm run typecheck
 npm test
+npm run test:ux-real
 npm run build
 cargo test --manifest-path src-tauri/crates/timeline-core/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
@@ -111,10 +112,31 @@ cargo check --manifest-path src-tauri/Cargo.toml
 Python tests remain at repository root:
 
 ```bash
-python -m pytest -q
+python3 -m pytest -q
 ```
 
 A gate is only PASS if it actually ran successfully on the tested commit. During Product Recovery, finish a coherent functional slice before running the necessary targeted validation; do not repeatedly dispatch CI for intermediate cosmetic edits.
+
+### 真实 Host 的画布与播放闸门
+
+从仓库根目录显式启动 Host（服务身份必须是 `mirrororder-host`）：
+
+```bash
+PYTHONPATH=src python3 script-organizer serve workspace.toml --port 8795
+```
+
+另一个终端进入 `desktop/`，按项目运行，无须改 fixture 源码：
+
+```bash
+MIRRORORDER_HOST_URL=http://127.0.0.1:8795 MIRRORORDER_UX_PROJECT_ID=project npm run check:ux-real
+MIRRORORDER_HOST_URL=http://127.0.0.1:8795 MIRRORORDER_UX_PROJECT_ID=beef npm run check:ux-real
+```
+
+fixture 从 Host 工作区读取所选项目摘要。审阅分别断言 canonical 队列、实际换 Take 与 Viewer 一致、媒体 metadata 和播放时间推进；缺媒体仍会失败。退出码 `2` 表示 Host 不可用或服务身份不符（NOT RUN），`1` 表示必需项失败，`0` 表示已执行项通过。报告和截图在 `artifacts/ux-real/<run>/`，报告含 project_id。
+
+`npm run test:ux-real` 使用 `tests/fixtures/desktop-review/` 的最小合成项目和 WebM，覆盖非空/空队列、无效导航、媒体 404 和播放停滞；CI 执行这组行为回归。它不需要真实 Host 或素材盘。
+
+这些闸门不写真实 placement、Final Editorial Decision 或 Timeline，不替代完整五步主链、原生播放/声音与打包应用验收；未执行部分在报告中保留 NOT RUN。
 
 ## Packaged runtime staging
 

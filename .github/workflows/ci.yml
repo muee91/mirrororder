@@ -60,6 +60,9 @@ jobs:
       - name: Test Desktop layout runtime
         working-directory: desktop
         run: npm run test:layout-runtime
+      - name: Test real UX gate against synthetic review media
+        working-directory: desktop
+        run: npm run test:ux-real
       - name: Upload layout runtime screenshots
         if: failure()
         uses: actions/upload-artifact@v4

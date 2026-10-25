@@ -2,7 +2,9 @@
 // real project scale, asserts the main chain actually rendered, and archives the run.
 //
 // Prerequisite (explicit, never auto-started):
-//   PYTHONPATH=src python3 -m script_organizer.cli serve workspace.toml --port 8765
+//   PYTHONPATH=src python3 script-organizer serve workspace.toml --port 8795
+//   cd desktop
+//   MIRRORORDER_HOST_URL=http://127.0.0.1:8795 MIRRORORDER_UX_PROJECT_ID=project npm run check:ux-real
 //
 // Semantics this file must keep honest:
 //   exit 2 = NOT RUN (no Host reachable); never a PASS.
@@ -20,9 +22,11 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { chromium } from "playwright";
 import { createServer } from "vite";
+import { verifyReviewPlayback, verifyReviewQueueNavigation } from "./ux-real-review.mjs";
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const hostUrl = (process.env.MIRRORORDER_HOST_URL ?? "http://127.0.0.1:8765").replace(/\/+$/, "");
+const projectId = process.env.MIRRORORDER_UX_PROJECT_ID?.trim() || "project";
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const artifactDir = resolve(desktopRoot, "artifacts", "ux-real", runId);
 
@@ -30,7 +34,7 @@ async function hostReachable() {
   try {
     const response = await fetch(`${hostUrl}/api/v1/ping`, { signal: AbortSignal.timeout(3000) });
     const body = await response.json();
-    return body?.service === "mirrororder-host";
+    return response.ok && body?.status === "ok" && body?.service === "mirrororder-host";
   } catch {
     return false;
   }
@@ -90,15 +94,16 @@ async function step(label, action, { required = true, reason = "" } = {}) {
   try {
     const detail = await action();
     const ms = Date.now() - start;
-    timings.push({ label, ms, status: required ? "PASS" : "PASS" });
-    results.push({ label, status: "PASS", ms, detail: detail ?? null });
-    console.log(`PASS  ${label} (${ms}ms)${detail ? ` — ${detail}` : ""}`);
+    timings.push({ label, ms, status: "PASS" });
+    results.push({ label, status: "PASS", required, ms, detail: detail ?? null });
+    const summary = typeof detail === "object" ? JSON.stringify(detail) : detail;
+    console.log(`PASS  ${label} (${ms}ms)${summary ? ` — ${summary}` : ""}`);
   } catch (error) {
     const ms = Date.now() - start;
     const message = String(error.message ?? error).split("\n")[0];
     const status = required ? "FAIL" : "WARN";
     timings.push({ label, ms, status });
-    results.push({ label, status, ms, message, optional_reason: required ? null : reason });
+    results.push({ label, status, required, ms, message, optional_reason: required ? null : reason });
     console.log(`${status}  ${label} (${ms}ms) — ${message}`);
     // Chinese labels collapse to an empty slug under [^\w]; index the file instead of
     // the label so two failures in one run cannot overwrite each other's evidence.
@@ -114,9 +119,10 @@ function firstFailureText() {
   return apiLog.filter((row) => row.status >= 400).slice(-6).map((row) => `${row.status} ${row.path}`).join(" | ");
 }
 
-await page.goto(`${baseUrl}/scripts/fixtures/ux-real.html`, { timeout: 60000 });
+await page.goto(`${baseUrl}/scripts/fixtures/ux-real.html?project_id=${encodeURIComponent(projectId)}`, { timeout: 60000 });
 await step("shell mount", async () => {
-  await page.waitForSelector("[class*=workbench]", { timeout: 30000 });
+  await page.waitForSelector(".project-production-workbench, [role='alert']", { timeout: 30000 });
+  if (await page.locator("[role='alert']").count()) throw new Error(await page.locator("[role='alert']").first().innerText());
   const title = await page.evaluate(() => document.body.innerText.slice(0, 80).replace(/\s+/g, " "));
   return title;
 });
@@ -155,19 +161,17 @@ await shot("drawer");
 
 await step("审阅：队列非空并可连续换 Take", async () => {
   await clickWorkspace(/^审阅$/);
-  await page.waitForSelector(".review-queue", { timeout: 30000 });
-  const queued = await page.locator(".review-queue [role='option'], .review-queue .take-card, .review-queue li").count();
-  if (queued < 1) throw new Error("审阅队列为空，无法看片");
-  await page.getByRole("button", { name: "下一个" }).click({ timeout: 5000 });
-  await page.getByRole("button", { name: "下一个" }).click({ timeout: 5000 });
-  return `${queued} 项待审`;
+  return verifyReviewQueueNavigation(page);
 });
 await shot("review");
+
+await step("审阅：媒体加载并实际播放", () => verifyReviewPlayback(page));
+await shot("review-playback");
 
 await step("素材：Take/场记画布渲染", async () => {
   await clickWorkspace(/^素材$/);
   await page.waitForTimeout(2500);
-  const cards = await page.locator(".take-card, .take-list-row, .mo-media-card, .slate-row").count();
+  const cards = await page.locator(".take-card, .mo-take-list-row, .mo-media-card, .slate-row").count();
   if (cards < 1) throw new Error("素材画布没有渲染任何 canonical 对象");
   return `${cards} 个对象`;
 });
@@ -188,7 +192,10 @@ const report = {
   verdict,
   run_id: runId,
   host: hostUrl,
+  project_id: projectId,
   surface_note: "ux-real fixture shell; packaged-app acceptance is a separate native gate",
+  acceptance_not_run: ["人工 placement 与最终决定写入", "Rust Timeline 插入与持久化", "原生播放、声音与 A/V 同步"]
+    .map((check) => ({ check, status: "NOT RUN" })),
   timed: timings,
   steps: results,
   http_failures: apiLog.filter((row) => row.status >= 400),
@@ -201,7 +208,7 @@ console.log("---");
 console.log(timings.map((row) => `${row.label}: ${row.ms}ms`).join("\n"));
 if (consoleErrors.length) console.log(`console.error 计数: ${consoleErrors.length}`);
 console.log(`证据目录: ${artifactDir}`);
-console.log(`${verdict}: 必需步骤 ${results.filter((row) => row.status !== "WARN").length} 项，失败 ${requiredFailures.length} 项`);
+console.log(`${verdict}: 必需步骤 ${results.filter((row) => row.required).length} 项，失败 ${requiredFailures.length} 项`);
 if (requiredFailures.length) console.log(`首个失败: ${requiredFailures[0].label} — ${requiredFailures[0].message}${firstFailureText() ? ` | ${firstFailureText()}` : ""}`);
 
 await browser.close();

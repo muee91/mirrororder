@@ -700,6 +700,9 @@ def _parts(path: str) -> list[str]:
 
 
 def _body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
+    cached = getattr(handler, "_parsed_json_body", None)
+    if isinstance(cached, dict):
+        return cached
     try:
         length = int(handler.headers.get("Content-Length", "0"))
     except ValueError as error:
@@ -712,6 +715,7 @@ def _body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         raise ApiError(HTTPStatus.BAD_REQUEST, "JSON请求无效") from error
     if not isinstance(payload, dict):
         raise ApiError(HTTPStatus.BAD_REQUEST, "请求必须是对象")
+    handler._parsed_json_body = payload
     return payload
 
 
@@ -731,6 +735,12 @@ def _is_legacy_creative_state_write(payload: dict[str, Any]) -> bool:
 def make_handler(service: WorkspaceService, web_root: Path):
     class Handler(BaseHTTPRequestHandler):
         server_version = "VideoMaterialPlatform/1.0"
+
+        def parse_request(self) -> bool:
+            # Runtime adapters can inspect then delegate the same POST. Reuse
+            # its decoded body, but never reuse it for a keep-alive request.
+            self._parsed_json_body = None
+            return super().parse_request()
 
         def log_message(self, format: str, *args: Any) -> None:
             return
