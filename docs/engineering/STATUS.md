@@ -17,6 +17,13 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 UI 计数口径统一（修复顺序②，已实跑验证）
+
+- **审阅「需关注」分层**：`reviewTakeAttention` 投影新增 `tier`（blocking=error 级 / stale=证据过期 / watch=其余），审阅头部条件显示 阻断/证据过期 计数、筛选按钮 aria 读出三层分布。fixture 数据（668 Take 全部 warning、668 条「自动决策落后」= 项目级过期）此前让 全部=未决定=需关注 三计数相同；分层后该状态可解释为「证据过期 668」。
+- **Take 汇总双层口径**：服务端 `available=false`（改名「素材离线」，与筛选 chip 同词）与本机运行时加载失败（Take 详情 video onError 上抛 → 新增「本机播放失败 N」计数）分开呈现；实测 fixture `available=false` 为 0 而详情 404 报错，两层不再互相冒充。
+- **素材库过期清单标注**：`scan_required` 时汇总条降透明度并加「上次清单 · 当前需要重新扫描」整行标签，数字不再以当前状态呈现（修复「尚未扫描 vs 1502 可索引」同屏矛盾）。
+- 验证：tsc exit 0；Vitest 76 文件 / 376 项全过（新增 reviewAttentionTier 行为测试 4 项 + 契约分层断言）；`test:ux-real` 9/9。
+
 ## 2026-10-26 结构收敛轮（已实跑验证）
 
 本轮目标：全栈子功能核查 + 收敛无序扩张，不新增产品面、不做 package migration。

@@ -77,14 +77,19 @@ export function ReviewWorkspace({
   const [selectedClipId, setSelectedClipId] = useState<string | null>(initialClipId);
   const appliedFocusKey = useRef("");
 
-  const counts = useMemo(() => {
+  const { counts, attentionTiers } = useMemo(() => {
     const next: Record<ReviewQueueFilter, number> = { all: 0, unreviewed: 0, attention: 0, best: 0, keep: 0, reject: 0 };
+    const tiers = { blocking: 0, stale: 0, watch: 0 };
     for (const take of model?.take_groups ?? []) {
       next.all += 1;
       next[finalState(take)] += 1;
-      if (reviewTakeAttention(take).hasAttention) next.attention += 1;
+      const attention = reviewTakeAttention(take);
+      if (attention.hasAttention) {
+        next.attention += 1;
+        tiers[attention.tier] += 1;
+      }
     }
-    return next;
+    return { counts: next, attentionTiers: tiers };
   }, [model]);
 
   const filteredTakes = useMemo(() => {
@@ -182,12 +187,15 @@ export function ReviewWorkspace({
               key={option.value}
               onClick={() => setFilter(option.value)}
               title={option.value === "attention" ? "只形成看片队列；问题仍回到所属工作区处理" : undefined}
+              aria-label={option.value === "attention" ? `需关注 ${counts.attention}：阻断 ${attentionTiers.blocking} · 证据过期 ${attentionTiers.stale} · 待关注 ${attentionTiers.watch}` : undefined}
             >
               {option.label} <span>{counts[option.value]}</span>
             </button>
           ))}
         </div>
         <div className="review-queue-summary" aria-label="审阅进度">
+          {attentionTiers.blocking ? <span className="needs-attention"><strong>{attentionTiers.blocking}</strong> 阻断</span> : null}
+          {attentionTiers.stale ? <span><strong>{attentionTiers.stale}</strong> 证据过期</span> : null}
           <span><strong>{decidedCount}</strong> 已决定</span>
           <span>{filteredTakes.length} / {model.take_groups.length} Take</span>
         </div>

@@ -44,11 +44,14 @@ export interface CollaborationAttention {
   summary: string;
 }
 
+export type ReviewAttentionTier = "blocking" | "stale" | "watch";
+
 export interface ReviewTakeAttentionProjection {
   labels: string[];
   priority: number;
   context: string;
   hasAttention: boolean;
+  tier: ReviewAttentionTier;
 }
 
 export interface ReviewProjectSummary {
@@ -214,11 +217,21 @@ export function reviewTakeAttention(take: ReviewTakeGroup): ReviewTakeAttentionP
       : "";
   const uniqueLabels = [...new Set(labels)];
 
+  // 计数口径分层：error 级为阻断；过期证据其次；其余（warning/未归集/团队）为待关注。
+  // 没有分层时，"需关注 = 全部" 这类退化数据会让筛选失去解释力。
+  const hasErrorIssue = take.issues.some((issue) => issue.severity === "error");
+  const tier: ReviewAttentionTier = hasErrorIssue
+    ? "blocking"
+    : audit?.analysis_stale || audit?.mapping_stale
+      ? "stale"
+      : "watch";
+
   return {
     labels: uniqueLabels,
     priority,
     context,
     hasAttention: uniqueLabels.length > 0,
+    tier,
   };
 }
 

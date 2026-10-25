@@ -324,7 +324,11 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
         <div className="assistant-heading-actions"><span className="production-state">{message}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>刷新</button></div>
       </header>
 
-      <div className="media-library-summary">
+      <div
+        className={`media-library-summary${inventory?.scan_required ? " is-stale" : ""}`}
+        aria-label={inventory?.scan_required ? "上次素材清单统计（当前需要重新扫描）" : "素材清单统计"}
+      >
+        {inventory?.scan_required ? <span className="media-library-stale-tag">上次清单 · 当前需要重新扫描，以下数字不是当前状态</span> : null}
         <span><strong>{inventory?.summary.files ?? 0}</strong>素材</span>
         <span><strong>{inventory?.summary.indexed ?? 0}</strong>可索引</span>
         <span className={(inventory?.summary.unindexed ?? 0) ? "needs-attention" : ""}><strong>{inventory?.summary.unindexed ?? 0}</strong>待恢复</span>

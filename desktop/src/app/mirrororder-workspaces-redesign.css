@@ -78,6 +78,19 @@
   color: var(--mo-warning);
 }
 
+/* 需要重新扫描时，汇总条降为“上次清单”事实，不再当作当前状态呈现。 */
+.mirrororder-redesign-shell .media-library-summary.is-stale {
+  opacity: 0.75;
+}
+
+.mirrororder-redesign-shell .media-library-summary.is-stale .media-library-stale-tag {
+  grid-column: 1 / -1;
+  justify-content: center;
+  border-color: color-mix(in srgb, var(--mo-warning) 35%, var(--mo-border));
+  background: var(--mo-warning-soft);
+  color: var(--mo-warning);
+}
+
 .mirrororder-redesign-shell .media-library-toolbar {
   min-height: 47px;
   padding: 7px 14px;

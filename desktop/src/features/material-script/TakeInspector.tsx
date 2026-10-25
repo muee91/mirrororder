@@ -24,6 +24,7 @@ export function TakeInspector({
   onSelectClip,
   onShowScript,
   onClearPlacement,
+  onPlaybackResult,
   writeSaving,
   afterPlayback = null,
 }: {
@@ -34,6 +35,7 @@ export function TakeInspector({
   onSelectClip: (clipId: string) => void;
   onShowScript?: () => void;
   onClearPlacement?: () => void;
+  onPlaybackResult?: (clipId: string, failed: boolean) => void;
   writeSaving: boolean;
   afterPlayback?: ReactNode;
 }) {
@@ -48,6 +50,11 @@ export function TakeInspector({
   useEffect(() => {
     setPlaybackFailed(false);
   }, [playbackUrl, playbackRetry]);
+  // 运行时加载结果上抛给所属工作区聚合；服务端"可用"与本机"能播"是两层口径。
+  useEffect(() => {
+    if (!angle) return;
+    onPlaybackResult?.(angle.clip_id, playbackFailed);
+  }, [angle?.clip_id, onPlaybackResult, playbackFailed]);
   const previousGroupId = useRef(take?.group_id ?? "");
   const preferredCamera = useRef(cameraContinuityKey(angle?.camera));
 

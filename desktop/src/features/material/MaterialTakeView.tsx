@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSummary, ReviewTakeGroup } from "../../api/host";
 import {
   ProductionClient,
@@ -153,6 +153,17 @@ export function MaterialTakeView({
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(initialGroupId);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(initialClipId);
   const [drawerOpen, setDrawerOpen] = useState(Boolean(initialGroupId));
+  const [playbackFailedClips, setPlaybackFailedClips] = useState<ReadonlySet<string>>(() => new Set());
+  // 服务端声明“可用”只代表绑定证据存在；真实加载失败（404/解码失败）发生在本机，
+  // 由 Take 详情上抛到这里聚合成独立计数，与“素材离线”（服务端口径）分开呈现。
+  const handlePlaybackResult = useCallback((clipId: string, failed: boolean) => {
+    setPlaybackFailedClips((current) => {
+      if (current.has(clipId) === failed) return current;
+      const next = new Set(current);
+      if (failed) next.add(clipId); else next.delete(clipId);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +180,10 @@ export function MaterialTakeView({
   }, [production, project.project_id]);
 
   const slateFacts = useMemo(() => slateFactIndex(slateBoard), [slateBoard]);
+  const runtimeFailedCount = useMemo(
+    () => (model?.take_groups ?? []).filter((take) => take.angles.some((angle) => playbackFailedClips.has(angle.clip_id))).length,
+    [model, playbackFailedClips],
+  );
 
   const counts = useMemo(() => {
     const next = { all: 0, unmapped: 0, candidate: 0, mapped: 0, offline: 0 };
@@ -272,7 +287,8 @@ export function MaterialTakeView({
         <span><strong>{model.take_groups.length}</strong> Take</span>
         <span><strong>{slateFacts.size}</strong> 有场记</span>
         <span className={counts.unmapped ? "needs-attention" : ""}><strong>{counts.unmapped}</strong> 待归集</span>
-        <span className={counts.offline ? "needs-attention" : ""}><strong>{counts.offline}</strong> 素材异常</span>
+        <span className={counts.offline ? "needs-attention" : ""} title="服务端判定不可用的机位素材"><strong>{counts.offline}</strong> 素材离线</span>
+        {runtimeFailedCount ? <span className="needs-attention" title="服务端声明可用、但本机加载失败的素材；多为素材盘未挂载或绑定变化，重新挂载后在详情里重试"><strong>{runtimeFailedCount}</strong> 本机播放失败</span> : null}
         {!slateAvailable ? <span className="needs-attention">场记关联暂不可用</span> : null}
       </div>
 
@@ -340,6 +356,7 @@ export function MaterialTakeView({
                   take={selectedTake}
                   selectedClipId={selectedClipId}
                   onSelectClip={setSelectedClipId}
+                  onPlaybackResult={handlePlaybackResult}
                   writeSaving={false}
                 />
               </>
