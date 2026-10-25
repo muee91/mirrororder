@@ -1,6 +1,6 @@
 # Engineering Backlog
 
-更新时间：2026-10-25。本文只拥有**当前执行顺序**；当前事实见 `STATUS.md`，长期硬约束见 `INVARIANTS.md`。
+更新时间：2026-10-26。本文只拥有**当前执行顺序**；当前事实见 `STATUS.md`，长期硬约束见 `INVARIANTS.md`。
 
 ## 总目标的变化
 
@@ -18,12 +18,21 @@
 
 CI green 不能替代这一条；这一条也不能替代 CI green。
 
+## 当前恢复切片的执行顺序
+
+队列为空已归因并修正闸门；当前缺真实素材，先完成可以独立验证的主链失败路径，优先于能力替换和一般技术债：
+
+1. **媒体状态与恢复**：以现有设备绑定/验证 authority 区分未知、已验证可用、缺失、解码失败；素材列表、Take、场记、审阅和 Timeline 使用一致语义。URL 存在不能证明可播放，省略 available 不能显示机位可用。EditorMonitors 补应用级失败原因、重试与携带当前对象的恢复入口，覆盖合成 404/解码失败/切换后的恢复。
+2. **轻量摘要与状态口径**：统一“需关注”投影，修正历史中断任务耗时与 Team 权限说明；媒体恢复 GET 只读验证快照，全量核验走显式 durable task。大项目冷缓存开销需要量测。
+3. **跨层最小验收**：在已有合成 Review 回归基础上，覆盖 React/Tauri/Python/Rust 的五步主链、持久化与导出，保留缺媒体、409、进程中断的负向验证。不能以声明 required、页面可渲染或 HTTP 200 代替。
+4. **恢复真实证据**：素材可用后，再走真实看片/决定、native 编辑与重启恢复、NLE 实际导入。当前均 NOT RUN；签名/公证等需要 owner 的事项保持单独裁决。
+
 ---
 
 ## Phase 0 · 止血与授权（1 个工作日，阻塞后面一切）
 
 - [ ] **推送并打 tag**：`main` 领先 `origin/main` 31 个提交（含符号链接拒收、registry 写串行化、journal 撕裂修复、局域网鉴权收口）。远端 CI 最后一次运行属于 `23bd253`（09-06），当前 HEAD 没有任何 CI 证据。
-- [ ] **LICENSE 决策并落地**：仓库根与 `vendor/multicam-audio-sync/` 均无 LICENSE；GitHub 返回 `license: null`。需要 owner 明确商用闭源 / 开源。
+- [ ] **LICENSE 落地（owner 已决策：开源，2026-10-26）**：方向已定，剩余执行项——选定许可证（MIT / Apache-2.0 为候选，NOTICE 已声明清单由构建生成）、补齐 `vendor/multicam-audio-sync/` 移植溯源（自述移植自 AudioAlign / syncdrop / Zelqivo-Video-Program，无 upstream 版本与许可记录）、`pycryptodome` 解密剪映 draft 容器的用途注记，然后落 LICENSE 文件并接入构建生成 THIRD_PARTY 清单。
 - [ ] **vendored 移植溯源**：`multicam-audio-sync` 的算法自述移植自 AudioAlign / syncdrop / Zelqivo-Video-Program 三个上游仓库，无 upstream 版本与许可记录；`pycryptodome` 用于解密剪映加密 draft 容器的用途需法务判断。
 - [ ] **Python 依赖声明**：`pyproject.toml` 无 `dependencies`，全仓无根 `requirements.txt`，但 core 实际使用 numpy（12 文件）/ pandas（8）/ scipy（6）。目标是干净 checkout 能装出可运行环境。
 - [ ] **Cargo.lock 入库**：两个 lock 目前只被 `.git/info/exclude`（本地文件，不随仓库分发）排除，CI 与任何新 clone 都会重新解析 `tauri = "2"` 的任意 2.x。同批把 `crates/timeline-core/target/`、`gen/` 的忽略规则落进 `desktop/.gitignore`。
@@ -67,10 +76,10 @@ PySceneDetect → 波形收缩 的次序，每项都要带一条"打包后开箱
 
 
 - [ ] **五步主链真机验收**（在本机 `projects/` 下的在制真实项目上跑，项目数据不入库）：项目恢复与切换、大量 Take 搜索/滚动、A/B/C 多机位、场记→素材→剧本→审阅→Timeline 连续上下文、placement revision conflict、Viewer/media binding、Timeline insert/overwrite/replace/undo/redo/persistence、FCPXML/Premiere XML 导出、1280 与宽屏、light/dark、外部拖放。
-- [ ] **把 `ux-real.mjs` 变成正式 gate**：它现在只打 timing 日志和 `/tmp` 截图、失败仅 `console.log` 继续跑、无断言无稳定退出码、不进 CI。要求：断言 + 非零退出 + 产物归档为 CI artifact，否则「真机验收」永远只有操作者记忆。注意它 mount 的是 `ProjectWorkbench` 共用壳，需要与 workspace ownership 现状对齐。
+- [x] **真实 Host surface gate 与合成回归**：`ux-real.mjs` 已有断言、稳定退出码与归档，修正 compact Take 行选择器并验证实际换 Take；项目参数从 Host 读取真实摘要。播放是独立必需项，缺媒体仍退出 1。合成 ReviewWorkspace/WebM 行为回归已配置进 CI，真实数据不进入源码或 CI；原生应用与完整五步主链仍由上一条验收拥有。当前 owner 暂无真实素材，等素材恢复后继续，不能以合成回归替代。
 - [ ] **消灭主链上的重复重拉**：review-model 无共享缓存，`GoldenSlateWorkbench.tsx:324,347`、`ScriptWorkspace.tsx:124`、`ReviewWorkspace.tsx:74`、`MaterialTakeView` 各自 mount 即全量拉；`ProjectHome.tsx:64-72` 打开项目页对每个项目并发拉完整 payload；`ProjectWorkbench.tsx:227` 的 canvasKey 含 operatorRevision，改操作者即整画布 remount。
 - [ ] **补齐失败态**：`EditorMonitors.tsx:224,232` 双 monitor 无播放失败态（看片到一半黑屏不提示）；全局只有一条 7 秒消失的顶部 message，409 placement 冲突信息容易被错过。
-- [ ] **时间线区可维护性**：`TimelineStagePanel.tsx:13`、`TimelineWorkbenchView.tsx:7`、`TimelineInitialAssembly.tsx:3` 仍用 `{[key: string]: any}` 整体解构，editor 域 aria 仅 5 处、无键盘导航——这是唯一有写权限的核心区。
+- [ ] **时间线区可维护性**：~~6 处 `{[key: string]: any}` 整体解构~~（2026-10-26 已清零：面板 props 全部由 hook 返回类型的 `Pick` 推导，内层 any 一并去除）；剩余缺口是 editor 域 aria 仅 5 处、无键盘导航——这是唯一有写权限的核心区。
 - [ ] **Timeline 规模上限实测**：每次 mutation/undo 返回全量 snapshot、单次编辑 3 份 project clone、`undo_stack: Vec<TimelineProject>` 保留每次编辑前整份 project。短剧 clip 量级下的内存与卡顿需要实测数字，不是猜测。
 
 ## Phase 3 · 质量与结构还债
@@ -79,6 +88,7 @@ PySceneDetect → 波形收缩 的次序，每项都要带一条"打包后开箱
 - [ ] **测试形状**：Desktop 77 个测试文件里 35 个是 `readFileSync` 源码文本断言，真正 `render()` 的只有 5 个。把 `check-layout-runtime` 的真实盒子断言模式推广为渲染行为测试，并取消「源码文本断言」的 contract 身份。
 - [ ] **CSS 收口**：`main.tsx` 全局层 11→10，但 `desktop-theme-frozen-surfaces.css`（现约 40 条硬编码 hex 的 Project Home 明暗规则）与 `media-binding-recovery.css`（67 行）仍在；`designSystemV2Contract.test.ts:10-18` 仍用 `indexOf` 锁 import 顺序，把债务固化。目标：配色迁进 token、失去 owner 的层删除、测试改为断言真实计算样式。
 - [ ] **兼容债退出计划**：identity facade→v3→v2→legacy 四层活动 import 链（legacy 614 行仍在用）、前端 `LegacyReviewPayload`、素材/场记页里折叠的旧 `SlateWorkbench`。每条给 owner 或删除条件。
+- [ ] **“已建未接线”交付能力的去留**：`timeline_delivery_sync.py`（111 行，多机位同步证据进 delivery request）与 `timeline_audio_delivery.py`（323 行，时间线独立音轨导出）各自带测试、生产零引用——`timeline_delivery.py` v1 明确拒绝独立音轨，这两个模块是为下一步准备的实现。owner 需二选一：接入 delivery HTTP 链并配“打包后导出含音轨”的真实验收，或整体删除（含测试）。在此之前不得当作死代码顺手清理。
 - [ ] **单测耗时隔离**：全量 pytest 142 秒里 134 秒来自单个用例 `tests/test_core.py:606`，且它依赖可选的 `faster_whisper`/`huggingface_hub` 是否在位——本机与 CI（只装 pytest）走的不是同一条代码路径。标为 integration 或由 CI 用独立 job 覆盖，让默认 gate 回到 10 秒级。
 - [ ] **release gate 从声明变强制**：`development-baseline.json` 的 18 个 `release_gates` 里 9 个 macOS/Windows 原生门没有任何实现，`check-baseline.mjs:33-35` 仍只断言字符串等于 `"required"`。
 - [ ] **Windows 要么真做要么删承诺**：`cfg!(windows)` 分支从未编译，`stage-runtime.mjs:96` 主动拒绝非 macOS，而 `tauri.windows.conf.json` 声明了 nsis/msi。

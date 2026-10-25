@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import { DesktopClient, type DesktopStatusPayload, type FrontendSettings } from "../../api/desktop";
-import { HostConnection, HostConnectionError, type HostProcessStatus } from "../../api/host";
+import { HostConnection, type HostProcessStatus, errorMessage } from "../../api/host";
 import { PlatformClient, type PlatformInfo } from "../../api/platform";
 import { AssistantModelsPanel } from "../assistant/AssistantModelsPanel";
 import { CollaborationPanel } from "./CollaborationPanel";
@@ -12,10 +12,6 @@ import "./settings-preferences.css";
 interface Props { baseUrl: string }
 type EpisodeMode = "first" | "all" | "number";
 
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 function availabilityLabel(value: boolean): string { return value ? "可用" : "缺失"; }
 function pollInterval(value: string): FrontendSettings["poll_interval_ms"] {
   const parsed = Number(value);

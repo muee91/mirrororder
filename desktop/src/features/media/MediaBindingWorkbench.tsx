@@ -2,7 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { DesktopClient, type MediaBindingSummary } from "../../api/desktop";
-import { HostConnectionError } from "../../api/host";
+import { HostConnectionError, errorMessage } from "../../api/host";
 import { PlatformClient } from "../../api/platform";
 import { ProjectTaskClient, canCancelTask, type ProjectTaskRecord } from "../../api/tasks";
 
@@ -13,11 +13,6 @@ interface Props {
 
 type ScanIntent = "reconnect" | "add" | "manual";
 const RESULT_LIMIT = 300;
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 function splitRoots(text: string): string[] {
   return [...new Set(text.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))];

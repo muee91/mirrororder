@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { HostConnectionError } from "../../api/host";
+import { errorMessage } from "../../api/host";
 import { SemanticSearchClient, type SemanticSearchPayload } from "../../api/semantic";
 import "./semantic-search.css";
 
@@ -17,10 +17,6 @@ const SOURCE_LABELS: Record<string, string> = {
   slate: "场记",
 };
 
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 export function SemanticSearchPalette({ baseUrl, projectId, onOpenTake }: Props) {
   const client = useMemo(() => new SemanticSearchClient(baseUrl), [baseUrl]);

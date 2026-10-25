@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
+import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModelPayload, type ReviewTakeGroup, errorMessage } from "../../api/host";
 import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord } from "../../api/production";
 import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
 import { SlateRecordClient } from "../../api/slateRecords";
@@ -47,11 +47,6 @@ function storedActor(): string {
 
 function saveActor(actor: string): void {
   try { globalThis.localStorage?.setItem(ACTOR_KEY, actor.trim()); } catch { /* device-local convenience only */ }
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
 }
 
 function newRecordId(): string {

@@ -6,6 +6,7 @@ import {
   HostConnection,
   HostConnectionError,
   defaultHostBaseUrl,
+  errorMessage,
   type HostConnectionState,
   type HostSnapshot,
   type ProjectSummary,
@@ -34,11 +35,6 @@ const EMPTY_PROJECTS: ProjectSummary[] = [];
 const NOTICE_DURATION_MS = 3200;
 const ERROR_NOTICE_DURATION_MS = 7000;
 
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
-
 function connectionLabel(state: HostConnectionState): string {
   return {
     idle: "未打开",
@@ -57,23 +53,22 @@ function projectById(snapshot: HostSnapshot, projectId: string | null | undefine
 type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings";
 interface ProjectPageRequest { projectId: string; page: ProductionPage; nonce: number }
 
+const PRODUCTION_PAGE_TITLES: Partial<Record<ProductionPage, string>> = {
+  slate: "场记",
+  takes: "Take",
+  script: "剧本",
+  "media-library": "素材",
+  "media-binding": "本机素材",
+  identity: "人物",
+  watch: "审阅",
+  timeline: "时间线",
+};
+
 function pageTitle(page: ProductionPage): string {
-  return {
-    slate: "场记",
-    takes: "Take",
-    script: "剧本",
-    "media-library": "素材",
-    "media-binding": "本机素材",
-    identity: "人物",
-    watch: "审阅",
-    attention: "待处理",
-    overview: "概览",
-    coverage: "覆盖",
-    "rough-cut": "粗剪",
-    assembly: "组装",
-    timeline: "时间线",
-    delivery: "交付",
-  }[page] ?? "制作";
+  // All page writes canonicalize through canonicalProductionPage; the legacy
+  // keys (coverage/rough-cut/assembly/delivery/attention/overview) never
+  // render, so the title table only owns canonical production pages.
+  return PRODUCTION_PAGE_TITLES[page] ?? "制作";
 }
 
 export function App() {

@@ -120,8 +120,9 @@ def test_project_resume_defaults_new_state_and_canonicalizes_retired_pages() -> 
     assert 'page === "attention" || page === "overview"' in resume
     assert 'return "watch"' in resume
     assert "return canonicalProductionPage(value as ProductionPage)" in resume
-    assert 'if (page === "coverage") return "script"' in workbench
-    assert 'if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline"' in workbench
+    # 旧页面归并（coverage/rough-cut/assembly/delivery/attention/overview）的唯一
+    # owner 是 resumeState.canonicalProductionPage；workbench 必须委托而不是复制映射。
+    assert "canonicalProductionPage(page)" in workbench
 
 
 def test_production_tools_are_contextual_and_selection_survives_workspace_navigation() -> None:

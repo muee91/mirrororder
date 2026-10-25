@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { HostConnectionError } from "../../api/host";
+import { HostConnectionError, errorMessage } from "../../api/host";
 import {
   EditorialClient,
   type EditorialDecision,
@@ -15,11 +15,6 @@ const STATE_LABELS: Record<string, string> = {
   reject: "Reject",
   unreviewed: "未决定",
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 function storedActor(): string {
   try {

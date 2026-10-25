@@ -6,7 +6,7 @@ import {
   type ProjectCreatePayload,
   type ProjectPreflight,
 } from "../../api/desktop";
-import { HostConnectionError } from "../../api/host";
+import { HostConnectionError, errorMessage } from "../../api/host";
 import { ProjectActionClient } from "../../api/projectActions";
 import { DeviceTaskClient } from "../../api/tasks";
 
@@ -18,11 +18,6 @@ interface Props {
 
 const IMPORT_POLL_MS = 750;
 const IMPORT_POLL_LIMIT = 120;
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 function rootsFromText(value: string): string[] {
   return [...new Set(value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))];

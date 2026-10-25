@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
-import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup } from "../../api/host";
+import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup, errorMessage } from "../../api/host";
 import { MediaRoleClient, type MediaInventoryItem } from "../../api/mediaRoles";
 import { TakeListRow } from "../material-script/TakeCard";
 import {
@@ -22,11 +22,6 @@ interface Props {
   actor?: string;
   onChanged: () => Promise<void>;
   onSelectTake?: (groupId: string) => void;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
 }
 
 function needsRefresh(error: unknown): boolean {

@@ -16,7 +16,12 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).toContain("<TimelineWorkbench");
     expect(workbench).toContain("<ReviewWorkspace");
     expect(workbench).toContain('{ page: "timeline", label: "时间线" }');
-    expect(workbench).toContain('if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline";');
+    // Legacy pages (rough-cut/assembly/delivery) must still collapse into the
+    // timeline workspace; the mapping has a single owner in resumeState and
+    // ProjectWorkbench must consume it instead of duplicating it.
+    expect(workbench).toContain("canonicalProductionPage(page)");
+    const resume = source("../../app/resumeState.ts");
+    expect(resume).toContain('if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline";');
     expect(workbench).toContain("professional-project-toolbar");
     expect(workbench).toContain("readProjectPage");
     expect(workbench).toContain('useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)))');

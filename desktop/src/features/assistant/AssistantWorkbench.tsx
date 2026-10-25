@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { HostConnectionError } from "../../api/host";
+import { errorMessage } from "../../api/host";
 import { ProductionClient, type AssistantAnswer, type AssistantItem, type AssistantStatus } from "../../api/production";
 
 interface Props {
@@ -35,11 +35,6 @@ function itemActions(item: AssistantItem): string[] {
 
 function itemText(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
 }
 
 function answerText(answer: AssistantAnswer | null): string {

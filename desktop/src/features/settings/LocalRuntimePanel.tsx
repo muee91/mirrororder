@@ -4,16 +4,11 @@ import {
   type LocalRuntimeAction,
   type LocalRuntimePayload,
 } from "../../api/desktop";
-import { HostConnectionError } from "../../api/host";
+import { errorMessage } from "../../api/host";
 import { MODEL_ROUTING_CHANGED_EVENT } from "../../api/models";
 
 interface Props { baseUrl: string }
 type Capability = "vision" | "face" | "speaker";
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 function bytesLabel(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0 MB";

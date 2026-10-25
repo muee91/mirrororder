@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
-import { readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
+import { canonicalProductionPage, readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
@@ -81,10 +81,8 @@ const AREAS: Record<ProductionArea, AreaDefinition> = {
 const ALL_PAGES = new Set<ProductionPage>(Object.values(AREAS).flatMap((area) => area.pages.map((item) => item.page)));
 
 function safeProductionPage(page: ProductionPage): ProductionPage {
-  if (page === "coverage") return "script";
-  if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline";
-  if (page === "attention" || page === "overview") return "watch";
-  return ALL_PAGES.has(page) ? page : "slate";
+  const canonical = canonicalProductionPage(page);
+  return ALL_PAGES.has(canonical) ? canonical : "slate";
 }
 
 function areaForPage(page: ProductionPage): ProductionArea {

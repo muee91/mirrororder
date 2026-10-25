@@ -1,15 +1,25 @@
 import { useEffect, useState } from "react";
 import { EditorMonitors } from "./EditorMonitors";
 import { sourceOptionEnd } from "./timelineSourceMarks";
+import type { TimelineWorkbenchProps } from "./timelineWorkbenchProps";
 import { frameLabel, localizedEditorialText } from "./timelineWorkbenchSupport";
 
-export function TimelineSourcePanel(props: { [key: string]: any }) {
+type SourcePanelProps = Pick<TimelineWorkbenchProps,
+  "sourceOptions" | "sourceOption" | "chooseSource" | "sourceIn" | "setSourceInPrecisely" | "sourceDuration"
+  | "setSourceDuration" | "sourcePosition" | "changeSourcePosition" | "markInAtCursor" | "markOutAtCursor"
+  | "sourceOut" | "sourceRangeError" | "playhead" | "videoInsertBlocked" | "audioInsertBlocked"
+  | "audioTargetTrackId" | "busy" | "editFromSource" | "editAudioFromSource" | "baseUrl" | "projectId"
+  | "snapshot" | "sequence" | "selection" | "changePlayhead" | "stepPlayhead" | "focusIntent" | "focusLabel">;
+
+export function TimelineSourcePanel(props: SourcePanelProps) {
   const { sourceOptions, sourceOption, chooseSource, sourceIn, setSourceInPrecisely, sourceDuration, setSourceDuration, sourcePosition, changeSourcePosition, markInAtCursor, markOutAtCursor, sourceOut, sourceRangeError, playhead, videoInsertBlocked, audioInsertBlocked, audioTargetTrackId, busy, editFromSource, editAudioFromSource, baseUrl, projectId, snapshot, sequence, selection, changePlayhead, stepPlayhead, focusIntent, focusLabel } = props;
   const [toolsOpen, setToolsOpen] = useState(Boolean(focusIntent?.groupId));
 
   useEffect(() => {
     if (focusIntent?.groupId) setToolsOpen(true);
   }, [focusIntent?.nonce]);
+
+  if (!snapshot || !sequence) return null;
 
   return (
     <>
@@ -18,7 +28,7 @@ export function TimelineSourcePanel(props: { [key: string]: any }) {
         <div className="editorial-source-body">
           {sourceOption ? <>
             <div className="timeline-source-fields">
-              <label className="production-field"><span>素材</span><select value={sourceOption.source.source_id} onChange={(event) => { const next = sourceOptions.find((option: any) => option.source.source_id === event.target.value); if (next) chooseSource(next); }}>{sourceOptions.map((option: any) => <option value={option.source.source_id} key={option.source.source_id}>{option.label}</option>)}</select></label>
+              <label className="production-field"><span>素材</span><select value={sourceOption.source.source_id} onChange={(event) => { const next = sourceOptions.find((option) => option.source.source_id === event.target.value); if (next) chooseSource(next); }}>{sourceOptions.map((option) => <option value={option.source.source_id} key={option.source.source_id}>{option.label}</option>)}</select></label>
               <label className="production-field"><span>源入点</span><input type="number" min={0} step={1} value={sourceIn} onChange={(event) => setSourceInPrecisely(Number(event.target.value) || 0)} /></label>
               <label className="production-field"><span>时长</span><input type="number" min={1} step={1} value={sourceDuration} onChange={(event) => setSourceDuration(Math.max(1, Math.round(Number(event.target.value) || 1)))} /></label>
             </div>

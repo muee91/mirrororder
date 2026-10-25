@@ -6,14 +6,9 @@ import {
   type CollaborationStatus,
   type CollaborationUser,
 } from "../../api/desktop";
-import { HostConnectionError } from "../../api/host";
+import { errorMessage } from "../../api/host";
 
 interface Props { baseUrl: string }
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 function teamSummary(next: CollaborationPayload): string {
   return next.users.length ? `${next.users.length} 位团队成员已登记` : "还没有团队成员访问记录";

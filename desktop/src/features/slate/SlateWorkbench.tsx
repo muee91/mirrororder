@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HostConnection, HostConnectionError, type ReviewModelPayload } from "../../api/host";
+import { HostConnection, type ReviewModelPayload, errorMessage } from "../../api/host";
 import { SlatePlacementPools } from "./SlatePlacementPools";
 
 interface Props {
   baseUrl: string;
   projectId: string;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
 }
 
 function storedActor(): string {

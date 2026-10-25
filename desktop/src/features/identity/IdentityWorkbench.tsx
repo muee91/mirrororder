@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { HostConnection, HostConnectionError } from "../../api/host";
+import { HostConnection, errorMessage } from "../../api/host";
 import { ProductionClient, type IdentityMergeSuggestion, type IdentityOccurrence, type IdentityRow } from "../../api/production";
 import { MirrorOrderMediaCard, type MirrorOrderMediaCardModel } from "../media/MirrorOrderMediaCard";
 import { confidenceLabel, IdentityCandidateRow, IdentityPortrait, identityTitle, PersonRow } from "./IdentityRows";
@@ -17,11 +17,6 @@ type VisualIdentityOccurrence = IdentityOccurrence & {
   duration?: number;
   shot_type?: string;
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 function sourceTimeLabel(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "时间未知";

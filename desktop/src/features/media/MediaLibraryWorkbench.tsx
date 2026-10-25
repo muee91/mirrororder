@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { HostConnection, HostConnectionError, type ReviewAngle } from "../../api/host";
+import { HostConnection, HostConnectionError, type ReviewAngle, errorMessage } from "../../api/host";
 import {
   MediaRoleClient,
   type MediaInventory,
@@ -35,11 +35,6 @@ const ROLE_LABELS: Record<string, string> = {
   insert: "细节 / Insert",
   custom: "自定义",
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 function storedActor(): string {
   try {

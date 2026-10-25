@@ -1,13 +1,54 @@
 # Engineering Status
 
-更新时间：2026-10-25
+更新时间：2026-10-26
 
 ## 当前基线
 
-- 仓库只维护 `main`；HEAD `8e26b0a`。
-- **`main` 领先 `origin/main` 31 个提交**（`23bd253` 之后未推送）。远端 CI 最后一次运行是 2026-09-06，因此**当前 HEAD 没有任何 CI 证据**；`git tag` 为 0。
+- 仓库只维护 `main`；本轮验证基线 HEAD `6386bf3`，与本地 `origin/main` 引用一致；审阅闸门修正与 2026-10-26 结构收敛轮（见下）尚在工作树。
+- 本轮远端 CI：**NOT RUN**，不沿用旧提交的 CI 结论。
 - Desktop 仍处于 Product Recovery 之后的**可交付化阶段**：代码结构恢复已收口，缺口在发布工程、授权与真实可用性证据（顺序见 `BACKLOG.md` Phase 0/1/2）。
 - 一级工作区固定：`素材 / 剧本 / 时间线 / 审阅`；原则仍是**共享对象，不共享工作流**。
+
+## 2026-10-26 结构收敛轮（已实跑验证）
+
+本轮目标：全栈子功能核查 + 收敛无序扩张，不新增产品面、不做 package migration。
+
+已落地并验证的收敛：
+
+- **时间线面板链类型断裂清零**：`TimelineWorkbenchView / StagePanel / SourcePanel / InspectorPanel / SuggestionsPanel / InitialAssembly` 的 6 处 `props: { [key: string]: any }` 全部改为从三个 hook 的真实返回类型（`timelineWorkbenchProps.ts` 组合的 `Pick`）推导；顺带删除面板内可推导的 `(item: any)/(clip: any)/(track: any)/(angle: any)/(suggestion: any)/(issue: any)`，并为 Stage/Source/Inspector 补上 `snapshot/sequence` 空值守卫——此前 any 掩盖了“仅在非空时挂载”这一契约。`grep "\[key: string\]: any" desktop/src` 现为 0 命中。
+- **errorMessage 17 处重复收敛**：16 份逐字相同的本地实现 + Delivery 的子集实现统一为 `api/host.ts` 的单一导出（与 `HostConnectionError` 同址）；editor 域 `timelineWorkbenchSupport.errorMessage` 因行为不同（解析 `{message, issues[]}` 载荷）保留不动。
+- **页面 canonicalize 单一 owner**：`ProjectWorkbench.safeProductionPage` 不再复制旧页面映射，改委托 `resumeState.canonicalProductionPage`；`App.tsx` 页面标题表删除 6 条永不可达的旧键（attention/overview/coverage/rough-cut/assembly/delivery）。`swiftGoldenParity` 的源码文本断言同步改为断言“委托存在 + 映射仍在 resumeState”，行为红线由 `resumeState.editorMigration.test.ts` 继续以真实调用覆盖。
+- **删除一处无引用脚本**：`desktop/scripts/ux-probe.mjs`（dev-only 一次性探针，不在任何 npm script）。
+- **拒绝两笔误删**：`web/automation.js` 是被 3 个契约测试锁定的注入桥（有意不进 bootstrap），不是死代码；`timeline_delivery_sync.py`/`timeline_audio_delivery.py`（共 434 行 + 各自测试）是“已建未接线”的交付能力（timeline v1 明确拒绝独立音轨，音频导出是下一步），删除属 owner 决策，已在 BACKLOG 记录。
+- **无调用方端点复核**：`POST /api/v1/agent-tokens` 有 `_local_only()` 保护且与 CLI `agent-token-create` 对等，保留；`workspace-database`、`intelligence-settings` 仅测试使用，维持现状并记录。
+
+本轮验证（全部实跑）：
+
+- `python3 scripts/check_python.py` exit 0；`python3 scripts/check_fast.py` exit 0；`python3 scripts/check_full.py` exit 0（含 614 Python / 379 Vitest / tsc / build / cargo；终态复跑再次 exit 0）。
+- 改动后复跑：`npx tsc --noEmit` exit 0；`npx vitest run` 77 文件 / 379 项全过；`npm run build` 成功；`test:layout-runtime` 桌面 + compact 视口 OK；`check:ui-authority` OK；`check:baseline` OK；`test:ux-real` 9/9（连续 5 次）。
+- 三个源码文本契约（`swiftGoldenParity.test.ts`、`test_product_surface_contract.py`、`test_production_review_boundary.py`）中锁定 workbench 内联归并映射的断言，已同步改为断言“workbench 委托 `canonicalProductionPage` + 映射仍在 resumeState”；归并行为本身由 `resumeState.editorMigration.test.ts` 以真实调用继续覆盖。
+- **抖动已修**：`test:ux-real` 的「media 404 remains a playback failure」曾约 5 次运行失败 1 次——`verifyReviewPlayback` 在等待命中后二次取值，与 React 在媒体错误后的 remount 竞态，404 被读成“duration 无效”。已改为 `waitForFunction` 命中轮次内原子采样载荷；修复后连续 5 次运行 9/9。
+- 用户角度读路径抽查：Host（`mirrororder-host`）loopback 启动，21 个只读探针全 200（项目/剧本/groups/review/review-model/editorial/script-supervisor/media-binding/media-inventory/coverage/assembly-timeline/assistant/tasks/device-tasks/desktop-status/desktop-local-runtime/desktop-collaboration/settings/semantic-search 等）。实测单项目载荷：`review-model` 4.3 MB、`groups` 1.0 MB、`media-binding` 508 KB、`tasks` 406 KB——为 BACKLOG“重复重拉”债提供了量化基线。未做任何写入。
+
+## 审阅主链恢复（当前事实）
+
+- **队列为空已归因于闸门选择器误报**：canonical compact row 是 `article.mo-take-list-row[data-ui-authority="take-compact"]`，旧闸门未识别。两个本机项目实际有 668 / 610 个未作最终决定的 Take，默认筛选为“全部”；fixture 与真实 React App 入口的 Take ID 序列一致，均能连续切换 1→2→3。
+- `check:ux-real` 已修正队列识别并验证 selection 与 Viewer 一致；使用 `MIRRORORDER_UX_PROJECT_ID` 选择项目，fixture 从 Host 读取项目摘要。媒体 metadata 与播放时间推进是单独的**必需**项，缺媒体不能被队列通过掩盖；未执行的人工写入和原生验收显式记录为 NOT RUN。
+- 两个真实项目复跑：队列与导航 PASS；媒体播放 FAIL，退出码均为 1。素材盘当前不可用，owner 已明确暂缺真实素材，先完成独立验证。真实看片、人工决定、完整五步主链和打包应用验收仍为 **NOT RUN**，未改写项目 authority 或设备绑定。
+- `npm run test:ux-real`：9 项真实 ReviewWorkspace 行为测试通过，使用最小合成 Take/WebM，覆盖空队列、无效 Next、媒体 404、metadata 后播放停滞和播放启动超时；旧选择器已实测让正向用例失败。CI 已配置运行这组回归，远端执行结果仍是 NOT RUN。
+- 本轮独立验证：`python3 scripts/check_full.py` exit 0，包含 614 项 Python、77 文件 / 379 项 Vitest、15 项 Timeline Core、33 项 Host，以及 TypeScript、前端 build、cargo check；UI authority 与 layout runtime 通过。`check_python.py` 的 78 项检查已通过；`check_fast.py` 未单独重跑，打包后的原生验收仍为 **NOT RUN**。
+- 审阅 Node 回归与 layout 并行运行曾因共享 Vite 预构建缓存而挂载超时，已受控复现 `504 Outdated Optimize Dep`；回归脚本隔离临时 cacheDir 后，两组再次并行均 exit 0，审阅 9/9 通过。全量 source gate 是缓存隔离前执行，修正后验证限于这两组。
+
+## 子功能审计（当前事实）
+
+- 真实 React App + 本机 Host 下检查两个项目，覆盖 45 项子能力及 22 个界面步骤；35 个 GET 探针和 6 个交付读取均 HTTP 200，只证明读取成功。未执行真实项目的创意决定、重绑、删除或导出写入，也未主动调用外部 AI 发送项目内容。
+- **媒体就绪状态不可信**：同一素材列表“可播放”、Inspector“无法播放”；恢复页 0/1502 可用，Take 仍显示离线/异常 0。列表把播放 URL 存在视作可播放，Take 把省略的 `available` 视作可用；场记 404 提示仍断言已经定位成功。
+- **EditorMonitors 失败恢复缺失已复现**：合成 404 挂载真实组件后，Source/Program 没有应用级失败原因、重试或恢复入口；浏览器控件自身有无法播放语义。
+- **摘要与状态存在口径冲突**：项目侧栏与卡片“需关注”分别为 68/668、46/607；历史中断任务缺少 completed_at 时，耗时仍以当前时间增长；团队入口的“不能改剧本归集”与受限 reviewer placement contract/实现不一致。
+- **读路径隐含重工作**：`GET media-binding` 调用 `DeviceMediaStore.summary()`，受控 3 个小文件触发 3 次未缓存内容指纹计算；大项目冷缓存 I/O 尚未量测。
+- 两项目 assembly 均 `needs_review`、timebase 为空。原生 Timeline UI、真实音画/同步/ASR、外部 AI 质量、双机与 NLE 实际导入均 **NOT RUN**；不能把浏览器 native 限制当作已确认的产品缺陷，也不能把 source gate 通过当作主链完成。
+
+以下修复轮记录不替代上述当前验证范围。
 
 ## 2026-10-25 修复轮（已复核，非自述）
 

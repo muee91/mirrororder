@@ -1,4 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
+import { errorMessage } from "../../api/host";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DeliveryClient,
@@ -13,10 +14,6 @@ import { buildTimelineDeliveryPreflight, sameTimelineAuthority } from "./deliver
 interface Props {
   baseUrl: string;
   projectId: string;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function fileName(path: string | undefined): string {

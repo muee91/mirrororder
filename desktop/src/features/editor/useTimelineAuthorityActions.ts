@@ -107,3 +107,5 @@ export function useTimelineAuthorityActions(model: TimelineWorkbenchModel) {
 
   return { apply, confirmProposal, undo, redo, checkpoint, splitSelected, adoptEditedSnapshot };
 }
+
+export type TimelineAuthorityActions = ReturnType<typeof useTimelineAuthorityActions>;

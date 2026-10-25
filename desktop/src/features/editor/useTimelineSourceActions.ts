@@ -111,3 +111,5 @@ export function useTimelineSourceActions(model: TimelineWorkbenchModel, apply: A
 
   return { chooseSource, changeSourcePosition, setSourceInPrecisely, markInAtCursor, markOutAtCursor, selectTimelineClip, locateClip, editFromSource, editAudioFromSource, replaceTake, refreshAssistantSuggestions };
 }
+
+export type TimelineSourceActions = ReturnType<typeof useTimelineSourceActions>;

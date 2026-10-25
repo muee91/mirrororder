@@ -272,6 +272,11 @@ export class HostConnectionError extends Error {
   }
 }
 
+export function errorMessage(error: unknown): string {
+  if (error instanceof HostConnectionError) return error.message;
+  return error instanceof Error ? error.message : String(error);
+}
+
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
 // A real workspace can take several seconds to materialize its first project
 // summaries on a cold packaged runtime. Keep this bounded, but do not let the

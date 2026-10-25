@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
-import { HostConnection, HostConnectionError } from "../../api/host";
+import { HostConnection, errorMessage } from "../../api/host";
 import { collectProjectPackage, projectTransferAvailable, saveProjectCopy } from "../../app/projectTransferActions";
 import { reviewProjectSummary, type ReviewProjectSummary } from "../review/reviewAttention";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
@@ -31,10 +31,6 @@ interface HomeMenuState {
   y: number;
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 export function ProjectHome({
   baseUrl,

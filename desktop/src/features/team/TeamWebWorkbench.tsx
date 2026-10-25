@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
-import { HostConnectionError } from "../../api/host";
+import { errorMessage } from "../../api/host";
 import { PlatformClient } from "../../api/platform";
 import {
   TeamGatewayClient,
@@ -16,11 +16,6 @@ interface Props {
   workspacePath: string;
   workspaceId?: string | null;
   projectId?: string | null;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
 }
 
 function uniquePaths(values: string[]): string[] {

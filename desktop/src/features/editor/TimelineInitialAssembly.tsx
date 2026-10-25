@@ -1,6 +1,11 @@
 import { localizedEditorialText } from "./timelineWorkbenchSupport";
+import type { TimelineWorkbenchProps } from "./timelineWorkbenchProps";
 
-export function TimelineInitialAssembly(props: { [key: string]: any }) {
+type InitialAssemblyProps = Pick<TimelineWorkbenchProps,
+  "snapshot" | "proposal" | "timebaseDetected" | "plan" | "rateNumerator" | "setRateNumerator"
+  | "rateDenominator" | "setRateDenominator" | "busy" | "confirmProposal" | "replaceProposalArmed" | "frameRate">;
+
+export function TimelineInitialAssembly(props: InitialAssemblyProps) {
   const { snapshot, proposal, timebaseDetected, plan, rateNumerator, setRateNumerator, rateDenominator, setRateDenominator, busy, confirmProposal, replaceProposalArmed, frameRate } = props;
   return (
     <details className="timeline-proposal production-panel editorial-initial-assembly" open={!snapshot}>
@@ -34,7 +39,7 @@ export function TimelineInitialAssembly(props: { [key: string]: any }) {
         ) : null}
         {replaceProposalArmed ? <div className="proposal-warnings"><span>⚠️ 再次确认会替换当前剪辑并清空撤销/重做历史。</span></div> : null}
         <div className="proposal-warnings">{(proposal?.warnings ?? []).map((warning: string) => <span key={warning}>{localizedEditorialText(warning)}</span>)}</div>
-        {proposal?.skipped.length ? <details><summary>查看 {proposal.skipped.length} 个未进入初始顺片的块</summary><div className="proposal-skipped">{proposal.skipped.slice(0, 30).map((row: any) => <span key={row.blockId}><code>{row.segmentId || row.blockId}</code> · {localizedEditorialText(row.reason)}</span>)}</div></details> : null}
+        {proposal?.skipped.length ? <details><summary>查看 {proposal.skipped.length} 个未进入初始顺片的块</summary><div className="proposal-skipped">{proposal.skipped.slice(0, 30).map((row) => <span key={row.blockId}><code>{row.segmentId || row.blockId}</code> · {localizedEditorialText(row.reason)}</span>)}</div></details> : null}
       </div>
     </details>
   );

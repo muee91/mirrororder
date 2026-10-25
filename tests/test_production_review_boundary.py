@@ -26,8 +26,9 @@ def test_app_production_is_native_and_team_web_remains_a_separate_surface() -> N
     assert "AssemblyWorkbench" not in workbench
     assert "MaterialScriptWorkbench" not in workbench
     assert "DeliveryWorkbench" in timeline
-    assert 'if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline"' in workbench
-    assert 'if (page === "attention" || page === "overview") return "watch"' in workbench
+    # 旧页面归并的唯一 owner 是 resumeState.canonicalProductionPage；
+    # workbench 必须委托共享 canonicalizer 而不是复制映射。
+    assert "canonicalProductionPage(page)" in workbench
     assert 'page === "rough-cut" || page === "assembly"' in resume
     assert 'page === "attention" || page === "overview"' in resume
 

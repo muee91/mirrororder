@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
-import { HostConnectionError } from "../../api/host";
+import { errorMessage } from "../../api/host";
 import {
   currentTaskStates,
   isTaskActive,
@@ -48,11 +48,6 @@ interface TaskContext {
 const ACTIVE_POLL_MS = 1000;
 const IDLE_POLL_MS = 8000;
 const DISMISSED_TASK_IDS_KEY = "mirrororder.status.dismissed-task-ids.v1";
-
-function errorMessage(error: unknown): string {
-  if (error instanceof HostConnectionError) return error.message;
-  return error instanceof Error ? error.message : String(error);
-}
 
 function active(task: ProjectTaskRecord): boolean {
   return isTaskActive(task);
