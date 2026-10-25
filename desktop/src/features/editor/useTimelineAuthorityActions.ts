@@ -2,11 +2,11 @@ import { isTauri } from "@tauri-apps/api/core";
 import { isTimelineAuthorityConflict, type TimelineCommand, type TimelineSnapshot } from "../../api/timeline";
 import { clampPlayhead } from "./editorPlayback";
 import type { TimelineWorkbenchModel } from "./useTimelineWorkbenchModel";
-import { activeSequence, errorMessage, findClip, frameLabel } from "./timelineWorkbenchSupport";
+import { activeSequence, errorMessage, findClip } from "./timelineWorkbenchSupport";
 
 export function useTimelineAuthorityActions(model: TimelineWorkbenchModel) {
   const {
-    timeline, projectId, proposal, snapshot, selectedClipId, sequence, playhead,
+    timeline, projectId, proposal, snapshot, selectedClipId,
     setSnapshot, setSelectedClipId, setPlayhead, setReplaceProposalArmed,
     replaceProposalArmed, setBusy, setMessage, refreshPersistence,
   } = model;
@@ -40,7 +40,7 @@ export function useTimelineAuthorityActions(model: TimelineWorkbenchModel) {
     if (!isTauri()) { setMessage("浏览器预览可以检查初始顺片；建立本机剪辑需要在桌面 App 中执行。"); return; }
     if (snapshot && !replaceProposalArmed) {
       setReplaceProposalArmed(true);
-      setMessage("当前已有剪辑。重新生成初始顺片会替换当前时间线并清空撤销/重做历史；再次点击确认才会执行。");
+      setMessage("当前已有剪辑。重新生成初始顺片会替换当前时间线；再次点击确认才会执行。");
       return;
     }
     setBusy(true);
@@ -69,43 +69,7 @@ export function useTimelineAuthorityActions(model: TimelineWorkbenchModel) {
     } finally { setBusy(false); }
   }
 
-  async function undo(): Promise<void> {
-    setBusy(true);
-    try {
-      const next = await timeline.undo(); adoptEditedSnapshot(next); await refreshPersistence();
-      setMessage(`已撤销 · 还可撤销 ${next.undo_depth} 步`);
-    } catch (error) { if (!(await recoverAuthorityConflict(error, "撤销"))) setMessage(errorMessage(error)); }
-    finally { setBusy(false); }
-  }
-
-  async function redo(): Promise<void> {
-    setBusy(true);
-    try {
-      const next = await timeline.redo(); adoptEditedSnapshot(next); await refreshPersistence();
-      setMessage(`已重做 · 当前可撤销 ${next.undo_depth} 步`);
-    } catch (error) { if (!(await recoverAuthorityConflict(error, "重做"))) setMessage(errorMessage(error)); }
-    finally { setBusy(false); }
-  }
-
-  async function checkpoint(): Promise<void> {
-    setBusy(true);
-    try {
-      const next = await timeline.checkpoint(); adoptEditedSnapshot(next); await refreshPersistence(); setMessage("当前剪辑已安全保存。");
-    } catch (error) { if (!(await recoverAuthorityConflict(error, "保存"))) setMessage(errorMessage(error)); }
-    finally { setBusy(false); }
-  }
-
-  function splitSelected(): void {
-    const selection = model.selection;
-    if (!selection || !sequence) return;
-    const { clip } = selection;
-    if (playhead <= clip.timeline_start || playhead >= clip.timeline_start + clip.duration) {
-      setMessage("切分位置必须严格位于当前片段内部。"); return;
-    }
-    void apply({ type: "split", sequence_id: sequence.sequence_id, clip_id: clip.clip_id, position: playhead, right_clip_id: `${clip.clip_id}:split:${playhead}` }, `已在 ${frameLabel(playhead)} 切分当前片段`);
-  }
-
-  return { apply, confirmProposal, undo, redo, checkpoint, splitSelected, adoptEditedSnapshot };
+  return { apply, confirmProposal, adoptEditedSnapshot };
 }
 
 export type TimelineAuthorityActions = ReturnType<typeof useTimelineAuthorityActions>;

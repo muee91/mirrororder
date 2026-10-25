@@ -10,8 +10,7 @@
 .timeline-timebase-advanced summary { cursor: pointer; color: var(--mo-text-secondary, #9fb0bd); text-decoration: underline dotted; text-underline-offset: 2px; }
 .timeline-timebase-advanced[open] summary { margin-right: 2px; }
 .timeline-fps input,
-.timeline-toolbar input,
-.timeline-move-control input {
+.timeline-toolbar input {
   width: 78px;
   border: 1px solid var(--mo-border-default, #303944);
   border-radius: 5px;
@@ -21,7 +20,6 @@
 }
 .timeline-fps input:focus-visible,
 .timeline-toolbar input:focus-visible,
-.timeline-move-control input:focus-visible,
 .timeline-source-fields input:focus-visible,
 .timeline-source-fields select:focus-visible {
   outline: 2px solid var(--mo-accent, #5a9ef4);
@@ -69,9 +67,8 @@
 }
 .timeline-toolbar > span { margin-left: auto; color: var(--mo-text-muted, #73808d); font-size: 10px; }
 .timeline-toolbar > label { display: flex; align-items: center; gap: 6px; color: var(--mo-text-secondary, #7d8996); font-size: 10px; }
-.timeline-history { display: flex; gap: 5px; }
 
-.timeline-source-edit {
+.timeline-source-view {
   display: grid;
   gap: 8px;
   margin-bottom: 8px;
@@ -80,22 +77,11 @@
   padding: 9px;
   background: var(--mo-surface-pane, #0f1419);
 }
-.timeline-source-fields { display: grid; grid-template-columns: minmax(240px, 2fr) minmax(120px, .75fr) minmax(120px, .75fr); gap: 8px; align-items: end; }
+.timeline-source-fields { display: grid; grid-template-columns: minmax(240px, 2fr) minmax(160px, auto); gap: 8px; align-items: end; }
+.timeline-source-range { color: var(--mo-text-muted, #74808d); font-size: 10px; }
 .timeline-source-fields .production-field { min-width: 0; }
 .timeline-source-fields select,
 .timeline-source-fields input { width: 100%; box-sizing: border-box; }
-.timeline-source-cursor { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--mo-text-secondary, #7d8996); font-size: 10px; }
-.timeline-source-cursor > span:last-child { margin-left: auto; color: var(--mo-text-secondary, #9aa7b3); }
-.timeline-source-cursor kbd {
-  margin-left: 4px;
-  border: 1px solid var(--mo-border-strong, #3b4651);
-  border-radius: 4px;
-  padding: 1px 4px;
-  color: var(--mo-text-secondary, #aeb9c4);
-  background: var(--mo-surface-soft, #11171c);
-  font: inherit;
-  font-size: 10px;
-}
 
 /* Timeline owns a track/lane grammar instead of reusing browser cards. */
 .timeline-stage {
@@ -164,10 +150,6 @@
 }
 .timeline-clip-facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 9px 0; color: var(--mo-text-secondary, #7d8995); font-size: 10px; }
 .timeline-clip-facts span { border-bottom: 1px solid var(--mo-border-subtle, #252e36); padding: 3px 1px; }
-.timeline-edit-actions { display: flex; flex-wrap: wrap; gap: 5px; }
-.timeline-edit-actions button { font-size: 10px; }
-.timeline-move-control { display: flex; align-items: flex-end; gap: 7px; margin: 9px 0; }
-.timeline-move-control label { display: grid; gap: 4px; color: var(--mo-text-muted, #74808d); font-size: 10px; }
 .timeline-validation { margin-top: 9px; color: var(--mo-danger, #d77b7b); font-size: 10px; }
 .timeline-validation p { margin: 4px 0; }
 .timeline-empty { text-align: center; }
@@ -181,5 +163,4 @@
   .timeline-toolbar > span { width: 100%; margin-left: 0; }
   .timeline-source-fields { grid-template-columns: 1fr 1fr; }
   .timeline-source-fields .production-field:first-child { grid-column: 1 / -1; }
-  .timeline-source-cursor > span:last-child { width: 100%; margin-left: 0; }
 }

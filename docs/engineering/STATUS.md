@@ -9,6 +9,14 @@
 - Desktop 仍处于 Product Recovery 之后的**可交付化阶段**：代码结构恢复已收口，缺口在发布工程、授权与真实可用性证据（顺序见 `BACKLOG.md` Phase 0/1/2）。
 - 一级工作区固定：`素材 / 剧本 / 时间线 / 审阅`；原则仍是**共享对象，不共享工作流**。
 
+## 2026-10-26 组接 + 导出收缩轮（owner 拍板后执行，已实跑验证）
+
+- **时间线工作区收缩为「组接 + 导出」**：移除帧级精修 UI——Source 面板的入/出点标记与插入/覆盖视频音频动作、Inspector 的「精修与技术操作」块（切分/入出点 ±1f/停用/波纹删除/移动）、Stage 工具条的撤销/重做/保存/标记。保留初始顺片、只读轨道预览（选择 + 播放头）、Source/节目双监看 + JKL + 波形（owner 裁决：监看为组接核对所需，保留）、换镜次与多机位决定（经 command bridge 写 Rust Timeline Core）、交付抽屉升为标题栏主按钮。随删死代码：`timelineAudioEditing.ts`、`buildManualSourceCommand`/`insertCutsExistingClip`、markIn/markOut、undo/redo/checkpoint/split 客户端函数、model 中 sourceIn/sourceDuration/moveStart/插入阻塞推导，及对应孤儿 CSS；`api/timeline.ts` 与 Rust/Python 编辑命令未动（未来模块化剪辑的接口面）。`editorLocalizationContract` 新增"精修不回到时间线工作区"的反向断言。
+- **死 v1 并行导出路径删除**：`timeline_delivery.py` / `timeline_delivery_sync.py` / `timeline_audio_delivery.py`（约 986 行）+ 3 个 v1 专属测试。事实修正：v1 入口确无生产调用方，但其私有 helper 被活链路 `nle_delivery` 引用——已原样提取为 `nle_delivery/delivery_support.py`，活链路四个测试改为从包导入。
+- **文档同步**：五步主链第 5 步改为「组接并导出到外部 NLE 继续剪」（README / IA / BACKLOG）；`app-information-architecture.md` §3.3 时间线改写为组接+导出定位（镜序不承担帧级精剪，交付为主终点动作）。
+- 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
+- LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
+
 ## 2026-10-26 结构收敛轮（已实跑验证）
 
 本轮目标：全栈子功能核查 + 收敛无序扩张，不新增产品面、不做 package migration。

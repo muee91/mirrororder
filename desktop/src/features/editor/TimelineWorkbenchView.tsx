@@ -12,12 +12,12 @@ export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
       <header className="production-heading timeline-heading">
         <div>
           <p className="eyebrow">时间线</p>
-          <h2>时间线</h2>
-          <p className="production-note">这里是唯一正式剪辑版本。初始顺片和自动建议都修改同一条本机时间线，不会形成第二套剪辑。</p>
+          <h2>组接与导出</h2>
+          <p className="production-note">时间线由人工选片组接生成，是唯一正式版本；本页负责核对与导出，精剪在导出后的外部 NLE 完成。</p>
         </div>
         <div className="timeline-heading-actions">
           <span className="production-state">{message}</span>
-          <button type="button" className="secondary" onClick={onOpenDelivery}>交付 / 导出</button>
+          <button type="button" onClick={onOpenDelivery}>交付 / 导出</button>
         </div>
       </header>
       {focusIntent?.groupId ? (
@@ -33,7 +33,7 @@ export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
         <TimelineSourcePanel {...props} />
         <div className="editorial-lower-grid"><TimelineInspectorPanel {...props} /><TimelineSuggestionsPanel {...props} /></div>
         {snapshot.validation.length ? <div className="timeline-validation production-panel">{snapshot.validation.map((issue) => <p key={`${issue.code}-${issue.path}`}><strong>{issue.code}</strong> · {issue.path} · {issue.message}</p>)}</div> : null}
-      </> : <div className="production-panel timeline-empty"><strong>尚未建立本机剪辑</strong><p>上方“初始顺片”只是建立本机时间线的起点。建立后，换镜次、多机位、修剪、手工插入与交付都围绕同一份持久化时间线继续。</p></div>}
+      </> : <div className="production-panel timeline-empty"><strong>尚未建立本机时间线</strong><p>上方“初始顺片”根据人工选片建立唯一的本机时间线。建立后即可核对片段与多机位，并交付 / 导出到外部 NLE 继续精剪。</p></div>}
     </section>
   );
 }

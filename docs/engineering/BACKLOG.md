@@ -11,11 +11,11 @@
 - **剔除内置剪辑面**：owner 判断当前剪辑模块基本不可用，不值得继续投入；镜序自身不承担剪辑，**主链终点改为导出**——人工决定 → 组接（assembly）→ FCPXML / Premiere XML 导出 → 在外部 NLE 继续剪。
 - **导出质量即关键路径**：独立音轨与多机位同步导出已在活链路实现（见 STATUS）。**真实 NLE 导入验收（owner 2026-10-26 调整）放到最后**：当前 UI 仍是半成品、功能布局混乱、可读性差，先把界面验证和完善做在前面；导出验收在 UI 收口、素材可用后于收尾阶段执行（FCP/Premiere 实际打开、音画对齐、多机位可用）。
 - **未来若恢复剪辑能力，必须模块化**：不回退到整体 Workbench；Rust Timeline Core 与 command bridge 保留为组接/导出引擎，剪辑 UI 若回归则以独立模块挂在时间线工作区，不与组接/导出耦合。
-- 待执行切片（owner 确认范围后实施，产品定义同步改 `app-information-architecture.md`）：
-  1. 时间线工作区收缩为「组接 + 导出」视图：保留初始顺片、时间线只读预览、交付抽屉；移除 EditorMonitors 精修编辑面（插入/覆盖/切分/修剪/移动/波纹删除/undo-redo UI）。
-  2. 五步主链第 5 步措辞改为「把需要的素材/决定组接并导出到外部 NLE」。
-  3. Rust Timeline Core 及编辑命令**不删**——组接写入仍经 command bridge；仅移除 Desktop 编辑 surface，为未来模块化剪辑留接口。
-  4. `EditorMonitors` 的 Source 监看与失败态若仍被组接/审阅需要，单独裁决去留。
+- 收缩切片（owner 2026-10-26 确认"按推荐执行"，同日落地，见 STATUS「组接 + 导出收缩轮」）：
+  1. [x] 时间线工作区收缩为「组接 + 导出」视图：保留初始顺片、只读预览、交付抽屉；移除插入/覆盖/切分/修剪/移动/波纹删除/undo-redo UI。
+  2. [x] 五步主链第 5 步措辞改为「把需要的素材/决定组接并导出到外部 NLE 继续剪」（README / IA / BACKLOG 三处）。
+  3. [x] Rust Timeline Core 及编辑命令**不删**——组接/换镜次写入仍经 command bridge；仅移除 Desktop 精修 surface，为未来模块化剪辑留接口。
+  4. [x] 裁决：`EditorMonitors` 的 Source/节目监看 + 波形保留——组接核对与素材检查仍需要，监看不是精修。
 
 ## UI 全工作区走查发现（2026-10-26，合成 fixture 项目，serve 模式 1440×900）
 
@@ -48,7 +48,7 @@
 2. 看懂拍摄事实、机位与当前归属；
 3. 修正到正确剧本位置；
 4. 看片并完成人工决定；
-5. 把需要的素材 / 决定带到时间线继续剪。
+5. 把需要的素材 / 决定组接并导出到外部 NLE 继续剪。
 
 CI green 不能替代这一条；这一条也不能替代 CI green。
 
@@ -66,7 +66,7 @@ CI green 不能替代这一条；这一条也不能替代 CI green。
 ## Phase 0 · 止血与授权（1 个工作日，阻塞后面一切）
 
 - [ ] **推送并打 tag**：`main` 领先 `origin/main` 31 个提交（含符号链接拒收、registry 写串行化、journal 撕裂修复、局域网鉴权收口）。远端 CI 最后一次运行属于 `23bd253`（09-06），当前 HEAD 没有任何 CI 证据。
-- [ ] **LICENSE 落地（owner 已决策：开源，2026-10-26）**：方向已定，剩余执行项——选定许可证（MIT / Apache-2.0 为候选，NOTICE 已声明清单由构建生成）、补齐 `vendor/multicam-audio-sync/` 移植溯源（自述移植自 AudioAlign / syncdrop / Zelqivo-Video-Program，无 upstream 版本与许可记录）、`pycryptodome` 解密剪映 draft 容器的用途注记，然后落 LICENSE 文件并接入构建生成 THIRD_PARTY 清单。
+- [ ] **LICENSE 落地（owner 已决策：开源；许可证选 Apache-2.0，2026-10-26 确认）**：LICENSE/NOTICE 与 `pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地。剩余：补齐 `vendor/multicam-audio-sync/` 移植溯源（自述移植自 AudioAlign / syncdrop / Zelqivo-Video-Program，无 upstream 版本与许可记录）、`pycryptodome` 解密剪映 draft 容器的用途注记、构建生成 THIRD_PARTY 清单。
 - [ ] **vendored 移植溯源**：`multicam-audio-sync` 的算法自述移植自 AudioAlign / syncdrop / Zelqivo-Video-Program 三个上游仓库，无 upstream 版本与许可记录；`pycryptodome` 用于解密剪映加密 draft 容器的用途需法务判断。
 - [ ] **Python 依赖声明**：`pyproject.toml` 无 `dependencies`，全仓无根 `requirements.txt`，但 core 实际使用 numpy（12 文件）/ pandas（8）/ scipy（6）。目标是干净 checkout 能装出可运行环境。
 - [ ] **Cargo.lock 入库**：两个 lock 目前只被 `.git/info/exclude`（本地文件，不随仓库分发）排除，CI 与任何新 clone 都会重新解析 `tauri = "2"` 的任意 2.x。同批把 `crates/timeline-core/target/`、`gen/` 的忽略规则落进 `desktop/.gitignore`。
@@ -122,7 +122,7 @@ PySceneDetect → 波形收缩 的次序，每项都要带一条"打包后开箱
 - [ ] **测试形状**：Desktop 77 个测试文件里 35 个是 `readFileSync` 源码文本断言，真正 `render()` 的只有 5 个。把 `check-layout-runtime` 的真实盒子断言模式推广为渲染行为测试，并取消「源码文本断言」的 contract 身份。
 - [ ] **CSS 收口**：`main.tsx` 全局层 11→10，但 `desktop-theme-frozen-surfaces.css`（现约 40 条硬编码 hex 的 Project Home 明暗规则）与 `media-binding-recovery.css`（67 行）仍在；`designSystemV2Contract.test.ts:10-18` 仍用 `indexOf` 锁 import 顺序，把债务固化。目标：配色迁进 token、失去 owner 的层删除、测试改为断言真实计算样式。
 - [ ] **兼容债退出计划**：identity facade→v3→v2→legacy 四层活动 import 链（legacy 614 行仍在用）、前端 `LegacyReviewPayload`、素材/场记页里折叠的旧 `SlateWorkbench`。每条给 owner 或删除条件。
-- [ ] **死并行导出路径的裁决（2026-10-26 事实修正后待 owner 重新表态）**：`timeline_delivery.py`（552 行，v1 转换器）本身生产零引用，是被 `nle_delivery` IR 路径取代的旧实现；`timeline_delivery_sync.py`（111 行）与 `timeline_audio_delivery.py`（323 行）是它的卫星模块。**音轨与多机位同步导出能力已在活链路完整实现**：`nle_sequence_ir` 接受 video/audio 轨道并建模每角度 `sync_start/end_frame`，FCPXML 导出为 connected audio + mcAngled 角度资源，Premiere 导出有 typed sync range 换算；Rust timeline-core 模型携带每角度同步帧并有校验。此前“导出会丢独立音轨/同步”的判断只对死路径成立。建议整体删除三个模块及其 4 个测试文件（约 986 行 + 测试），owner 基于修正后事实重新裁决；裁决前不得接线到交付链。
+- [x] **死并行导出路径已删除（owner 2026-10-26 拍板，`eca1fd0`）**：`timeline_delivery.py`（552 行 v1 转换器，入口零生产调用方）+ `timeline_delivery_sync.py` + `timeline_audio_delivery.py` 及 3 个 v1 专属测试整体删除。删除时发现并处理一处此前未记录的耦合：活链路 `nle_delivery` 引用了 v1 模块的私有 helper，已原样提取为 `nle_delivery/delivery_support.py`（行为不变）。**音轨与多机位同步导出能力在活链路完整保留**：`nle_sequence_ir` 每角度 sync 帧 → FCPXML connected audio / mcAngled、Premiere typed range 换算，Rust 模型携带并校验同步帧。
 - [ ] **单测耗时隔离**：全量 pytest 142 秒里 134 秒来自单个用例 `tests/test_core.py:606`，且它依赖可选的 `faster_whisper`/`huggingface_hub` 是否在位——本机与 CI（只装 pytest）走的不是同一条代码路径。标为 integration 或由 CI 用独立 job 覆盖，让默认 gate 回到 10 秒级。
 - [ ] **release gate 从声明变强制**：`development-baseline.json` 的 18 个 `release_gates` 里 9 个 macOS/Windows 原生门没有任何实现，`check-baseline.mjs:33-35` 仍只断言字符串等于 `"required"`。
 - [ ] **Windows 要么真做要么删承诺**：`cfg!(windows)` 分支从未编译，`stage-runtime.mjs:96` 主动拒绝非 macOS，而 `tauri.windows.conf.json` 声明了 nsis/msi。

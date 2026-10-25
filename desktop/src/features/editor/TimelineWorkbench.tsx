@@ -66,7 +66,7 @@ export function TimelineWorkbench({
     } else if (timelineClip) {
       model.setMessage(`已定位 ${focusLabel || "当前 Take"} 的时间线片段；当前 Source 不可播放或绑定已变化。`);
     } else if (sourceOption) {
-      model.setMessage(`已定位 ${focusLabel || "当前 Take"} 的 Source；可在当前播放头插入或覆盖。`);
+      model.setMessage(`已定位 ${focusLabel || "当前 Take"} 的 Source，可监看核对。`);
     } else {
       model.setMessage(`${focusLabel || "当前 Take"} 暂无可用 Timeline Source；先检查本机素材绑定或建立初始顺片。`);
     }

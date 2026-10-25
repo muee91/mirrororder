@@ -41,9 +41,6 @@
 .editorial-section-heading span,
 .editorial-section-heading small { color: var(--mo-text-muted, #75828e); font-size: 10px; }
 .editorial-camera-switch { margin-top: 12px; }
-.editorial-technical-actions { margin-top: 12px; border-top: 1px solid var(--mo-border-subtle, #252d36); padding-top: 9px; }
-.editorial-technical-actions summary { cursor: pointer; color: var(--mo-text-secondary, #9aa6b2); font-size: 10px; }
-.editorial-technical-actions[open] summary { margin-bottom: 8px; }
 .editorial-suggestions { position: sticky; top: 8px; max-height: 72vh; overflow: auto; }
 .editorial-suggestion-list { display: grid; gap: 6px; }
 .editorial-suggestion { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; border: 1px solid var(--mo-border-subtle, #252d36); border-left-width: 2px; border-radius: 5px; padding: 9px; background: var(--mo-surface-soft, #11171c); }

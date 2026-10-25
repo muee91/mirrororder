@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewModelPayload } from "../../api/host";
-import type { TimelineProject, TimelineSnapshot } from "../../api/timeline";
+import type { TimelineProject } from "../../api/timeline";
 import {
-  buildManualSourceCommand,
   buildReplaceTakeCommand,
   buildTimelineSourceOptions,
-  insertCutsExistingClip,
   validateManualSourceRange,
   validateReplaceTakeRange,
 } from "./timelineSourceEditing";
@@ -115,16 +113,6 @@ function project(): TimelineProject {
   };
 }
 
-function snapshot(): TimelineSnapshot {
-  return {
-    project: project(),
-    undo_depth: 2,
-    redo_depth: 0,
-    validation: [],
-    authority: { generation: "g1", revision: 7 },
-  };
-}
-
 describe("timeline source editing", () => {
   it("derives source ranges from Review evidence without turning them into timeline clips", () => {
     const value = project();
@@ -171,32 +159,6 @@ describe("timeline source editing", () => {
     expect(validateManualSourceRange(option, 350, 24)).toContain("可用 Source");
   });
 
-  it("builds human Insert/Overwrite commands with multicam identity and no legacy sync metadata", () => {
-    const value = snapshot();
-    const sequence = value.project.sequences[0];
-    const option = buildTimelineSourceOptions(review(), value.project, sequence)[1];
-    const command = buildManualSourceCommand("overwrite", value, sequence, option, 480, 48, 36);
-    expect(command.type).toBe("overwrite");
-    if (command.type !== "overwrite") throw new Error("expected overwrite");
-    expect(command.track_id).toBe("V1");
-    expect(command.clip).toMatchObject({
-      source_id: "source:b",
-      timeline_start: 36,
-      source_in: 480,
-      duration: 48,
-      multicam_group_id: "g1",
-      selected_angle_source_id: "source:b",
-    });
-    expect(command.clip.clip_id).toContain("manual:overwrite:g1:8:36:");
-    expect(command.clip.metadata).toMatchObject({
-      edit_source: "human_source_monitor",
-      edit_mode: "overwrite",
-      group_id: "g1",
-      camera: "B",
-    });
-    expect(command.clip.metadata.multicam_sync_v1).toBeUndefined();
-  });
-
   it("builds ReplaceTake as a semantic edit that preserves the selected clip duration", () => {
     const value = project();
     const sequence = value.sequences[0];
@@ -219,13 +181,5 @@ describe("timeline source editing", () => {
     const selected = sequence.tracks[0].clips[0];
     const option = buildTimelineSourceOptions(review(), value, sequence)[2];
     expect(validateReplaceTakeRange(option, selected, 1100)).toContain("可用 Source");
-  });
-
-  it("preflights Insert positions that cut through an existing video clip", () => {
-    const sequence = project().sequences[0];
-    expect(insertCutsExistingClip(sequence, 0)).toBe(false);
-    expect(insertCutsExistingClip(sequence, 60)).toBe(true);
-    expect(insertCutsExistingClip(sequence, 120)).toBe(false);
-    expect(insertCutsExistingClip(sequence, 240)).toBe(false);
   });
 });

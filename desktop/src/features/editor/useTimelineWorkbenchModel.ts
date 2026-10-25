@@ -6,8 +6,7 @@ import { TimelineClient, type FrameRate, type TimelineRuntimeStatus, type Timeli
 import { clampPlayhead } from "./editorPlayback";
 import { buildEditorialInspector, buildEditorialSuggestions, buildReplacementTakeOptions } from "./editorSemantics";
 import { buildAssemblyTimelineProposal } from "./timelineSeed";
-import { buildTimelineSourceOptions, insertCutsExistingClip, validateManualSourceRange } from "./timelineSourceEditing";
-import { audioInsertCutsExistingClip, audioTrackId } from "./timelineAudioEditing";
+import { buildTimelineSourceOptions } from "./timelineSourceEditing";
 import { clampSourceCursor } from "./timelineSourceMarks";
 import { activeSequence, errorMessage, findClip, positiveInteger, statusLabel } from "./timelineWorkbenchSupport";
 
@@ -23,10 +22,7 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
   const [persistence, setPersistence] = useState<TimelineRuntimeStatus | null>(null);
   const [selectedClipId, setSelectedClipId] = useState("");
   const [playhead, setPlayhead] = useState(0);
-  const [moveStart, setMoveStart] = useState(0);
   const [sourceId, setSourceId] = useState("");
-  const [sourceIn, setSourceIn] = useState(0);
-  const [sourceDuration, setSourceDuration] = useState(1);
   const [sourcePosition, setSourcePosition] = useState(0);
   const [rateNumerator, setRateNumerator] = useState("");
   const [rateDenominator, setRateDenominator] = useState("");
@@ -49,8 +45,8 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
   useEffect(() => {
     let cancelled = false;
     setSnapshot(null); setPersistence(null); setReview(null); setPlan(null); setSlate(null); setAssistantStatus(null);
-    setSelectedClipId(""); setReplacementKey(""); setPlayhead(0); setMoveStart(0); setSourceId("");
-    setSourceIn(0); setSourceDuration(1); setSourcePosition(0); setRateNumerator(""); setRateDenominator("");
+    setSelectedClipId(""); setReplacementKey(""); setPlayhead(0); setSourceId(""); setSourcePosition(0);
+    setRateNumerator(""); setRateDenominator("");
     setReplaceProposalArmed(false); setMessage("正在读取初始顺片与已保存剪辑…");
 
     Promise.all([host.reviewModel(projectId), production.assemblyTimeline(projectId)]).then(([nextReview, nextPlan]) => {
@@ -98,11 +94,6 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
   const selection = findClip(snapshot, selectedClipId);
   const sourceOptions = useMemo(() => snapshot && sequence ? buildTimelineSourceOptions(review, snapshot.project, sequence) : [], [review, sequence, snapshot]);
   const sourceOption = sourceOptions.find((option) => option.source.source_id === sourceId) ?? null;
-  const sourceRangeError = validateManualSourceRange(sourceOption, sourceIn, sourceDuration);
-  const sourceOut = sourceIn + sourceDuration;
-  const videoInsertBlocked = sequence ? insertCutsExistingClip(sequence, playhead) : false;
-  const audioTargetTrackId = sequence ? audioTrackId(sequence) : null;
-  const audioInsertBlocked = sequence ? audioInsertCutsExistingClip(sequence, playhead) : false;
   const maxEnd = Math.max(1, ...(sequence?.tracks.flatMap((track) => track.clips.map((clip) => clip.timeline_start + clip.duration)) ?? [1]));
   const selectedMulticam = selection?.clip.multicam_group_id ? snapshot?.project.multicam_groups.find((group) => group.group_id === selection.clip.multicam_group_id) ?? null : null;
   const inspector = useMemo(() => snapshot && selection ? buildEditorialInspector(review, slate, snapshot.project, selection.clip) : null, [review, selection, slate, snapshot]);
@@ -112,18 +103,18 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
 
   useEffect(() => { setReplacementKey(replacementOptions[0]?.key ?? ""); }, [selectedClipId, replacementOptions]);
   useEffect(() => {
-    if (!sourceOptions.length) { setSourceId(""); setSourceIn(0); setSourceDuration(1); setSourcePosition(0); return; }
+    if (!sourceOptions.length) { setSourceId(""); setSourcePosition(0); return; }
     const current = sourceOptions.find((option) => option.source.source_id === sourceId);
     if (current) { setSourcePosition((position) => clampSourceCursor(current, position)); return; }
     const selectedSourceId = selection?.clip.selected_angle_source_id ?? selection?.clip.source_id ?? "";
     const next = sourceOptions.find((option) => option.source.source_id === selectedSourceId) ?? sourceOptions[0];
-    setSourceId(next.source.source_id); setSourceIn(next.availableIn); setSourceDuration(next.availableDuration); setSourcePosition(next.availableIn);
+    setSourceId(next.source.source_id); setSourcePosition(next.availableIn);
   }, [selection?.clip.selected_angle_source_id, selection?.clip.source_id, sourceId, sourceOptions]);
 
   const changePlayhead = useCallback((frame: number) => setPlayhead(() => sequence ? clampPlayhead(sequence, frame) : Math.max(0, Math.round(frame))), [sequence]);
   const stepPlayhead = useCallback((frames: number) => setPlayhead((current) => sequence ? clampPlayhead(sequence, current + frames) : Math.max(0, current + frames)), [sequence]);
 
-  return { baseUrl, projectId, production, timeline, review, plan, slate, assistantStatus, setAssistantStatus, snapshot, setSnapshot, persistence, refreshPersistence, selectedClipId, setSelectedClipId, playhead, setPlayhead, moveStart, setMoveStart, sourceId, setSourceId, sourceIn, setSourceIn, sourceDuration, setSourceDuration, sourcePosition, setSourcePosition, rateNumerator, setRateNumerator, rateDenominator, setRateDenominator, replaceProposalArmed, setReplaceProposalArmed, replacementKey, setReplacementKey, busy, setBusy, message, setMessage, frameRate, proposal, timebaseDetected, sequence, selection, sourceOptions, sourceOption, sourceRangeError, sourceOut, videoInsertBlocked, audioTargetTrackId, audioInsertBlocked, maxEnd, selectedMulticam, inspector, replacementOptions, replacement, editorialSuggestions, changePlayhead, stepPlayhead };
+  return { baseUrl, projectId, production, timeline, review, plan, slate, assistantStatus, setAssistantStatus, snapshot, setSnapshot, persistence, refreshPersistence, selectedClipId, setSelectedClipId, playhead, setPlayhead, sourceId, setSourceId, sourcePosition, setSourcePosition, rateNumerator, setRateNumerator, rateDenominator, setRateDenominator, replaceProposalArmed, setReplaceProposalArmed, replacementKey, setReplacementKey, busy, setBusy, message, setMessage, frameRate, proposal, timebaseDetected, sequence, selection, sourceOptions, sourceOption, maxEnd, selectedMulticam, inspector, replacementOptions, replacement, editorialSuggestions, changePlayhead, stepPlayhead };
 }
 
 export type TimelineWorkbenchModel = ReturnType<typeof useTimelineWorkbenchModel>;

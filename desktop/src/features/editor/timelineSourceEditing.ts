@@ -4,13 +4,10 @@ import type {
   TimelineCommand,
   TimelineProject,
   TimelineSequence,
-  TimelineSnapshot,
   TimelineSource,
 } from "../../api/timeline";
 import { sequenceFps } from "./editorPlayback";
 import { multicamSourceIds } from "./timelineSync";
-
-export type ManualSourceEditMode = "insert" | "overwrite";
 
 export interface TimelineSourceOption {
   source: TimelineSource;
@@ -116,65 +113,6 @@ export function validateReplaceTakeRange(
   return validateManualSourceRange(option, sourceIn, clip.duration);
 }
 
-function targetVideoTrackId(sequence: TimelineSequence): string {
-  return sequence.tracks.find((track) => track.kind === "video")?.track_id ?? "V1";
-}
-
-function manualClipId(
-  mode: ManualSourceEditMode,
-  snapshot: TimelineSnapshot,
-  sourceId: string,
-  playhead: number,
-): string {
-  return [
-    "manual",
-    mode,
-    snapshot.authority.generation,
-    String(snapshot.authority.revision + 1),
-    String(playhead),
-    encodeURIComponent(sourceId),
-  ].join(":");
-}
-
-export function buildManualSourceCommand(
-  mode: ManualSourceEditMode,
-  snapshot: TimelineSnapshot,
-  sequence: TimelineSequence,
-  option: TimelineSourceOption,
-  sourceIn: number,
-  duration: number,
-  playhead: number,
-): TimelineCommand {
-  const validation = validateManualSourceRange(option, sourceIn, duration);
-  if (validation) throw new Error(validation);
-  const timelineStart = Math.max(0, Math.round(playhead));
-  const metadata: Record<string, string> = {
-    edit_source: "human_source_monitor",
-    edit_mode: mode,
-    source_clip_id: option.source.clip_id,
-    source_pool: "review_playable_media",
-  };
-  if (option.groupId) metadata.group_id = option.groupId;
-  if (option.camera) metadata.camera = option.camera;
-
-  return {
-    type: mode,
-    sequence_id: sequence.sequence_id,
-    track_id: targetVideoTrackId(sequence),
-    clip: {
-      clip_id: manualClipId(mode, snapshot, option.source.source_id, timelineStart),
-      source_id: option.source.source_id,
-      timeline_start: timelineStart,
-      source_in: sourceIn,
-      duration,
-      enabled: true,
-      multicam_group_id: option.multicamGroupId,
-      selected_angle_source_id: option.multicamGroupId ? option.source.source_id : null,
-      metadata,
-    },
-  };
-}
-
 export function buildReplaceTakeCommand(
   sequence: TimelineSequence,
   clip: TimelineClip,
@@ -191,11 +129,4 @@ export function buildReplaceTakeCommand(
     source_id: option.source.source_id,
     source_in: sourceIn,
   };
-}
-
-export function insertCutsExistingClip(sequence: TimelineSequence, playhead: number): boolean {
-  const frame = Math.max(0, Math.round(playhead));
-  return sequence.tracks
-    .filter((track) => track.kind === "video")
-    .some((track) => track.clips.some((clip) => clip.timeline_start < frame && frame < clip.timeline_start + clip.duration));
 }

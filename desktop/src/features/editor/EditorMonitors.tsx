@@ -140,7 +140,7 @@ export function EditorMonitors({
         setWaveformMessage(`波形生成返回未知任务类型：${payload.task.type}`);
         return;
       }
-      setWaveformMessage("波形生成已提交到状态中心；可以继续剪辑，完成后点“刷新”读取缓存。");
+      setWaveformMessage("波形生成已提交到状态中心；完成后点“刷新”读取缓存。");
     } catch (error) {
       setWaveformMessage(waveformError(error));
     } finally {

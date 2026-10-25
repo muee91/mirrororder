@@ -80,7 +80,7 @@ Timeline authority       = 最终本机剪辑结构
 2. 看懂它的拍摄事实、机位和当前归属；
 3. 把它修正到正确剧本位置；
 4. 看片并完成需要的人工决定；
-5. 把需要的素材 / 决定带到时间线继续剪。
+5. 把需要的素材 / 决定组接并导出到外部 NLE 继续剪。
 
 这五步未顺畅完成前，Desktop Product Recovery 不得以“功能齐全”“contract 很多”“组件复用率高”视为可用。
 
@@ -192,9 +192,11 @@ App 内“Take 对应剧本哪里”的人工修正以剧本工作区为主家�
 
 时间线回答：
 
-> 当前可剪结构和成片结构是什么？
+> 当前组接结果和成片结构是什么？
 
-Rust Timeline Core 是唯一 authoritative local timeline edit state。Desktop 时间线是唯一正式 editor surface。
+Rust Timeline Core 是唯一 authoritative local timeline edit state。Desktop 时间线是唯一正式剪辑版本的呈现与核对 surface。
+
+镜序自身不承担帧级精剪（owner 2026-10-26 决策）。时间线工作区 = 初始顺片组接 + 只读核对（含 Source/节目监看）+ 换镜次与多机位决定 + 交付 / 导出；切分、修剪、移动、波纹删除、手工插入 / 覆盖等帧级操作不在镜序内提供，导出到外部 NLE 后继续。初始顺片与换镜次等写操作仍经 command bridge 写入 Rust Timeline Core，不建立第二套编辑状态。
 
 粗剪、组接、AI editing、场记约束、Coverage 建议都只能形成 proposal / preparation / preview：
 
@@ -204,7 +206,7 @@ proposal → preview → human confirmation → Timeline commands
 
 历史 `rough-cut / assembly` 不再拥有第二套编辑器或第二套状态。
 
-交付 / 导出是时间线完成后的明确动作 / flow，可以拥有专门 modal、drawer 或流程页，但不得与 Timeline 形成竞争性的剪辑 authority。
+交付 / 导出是时间线的主终点动作（Primary action），可以拥有专门 modal、drawer 或流程页，但不得与 Timeline 形成竞争性的剪辑 authority。
 
 ### 3.4 审阅
 

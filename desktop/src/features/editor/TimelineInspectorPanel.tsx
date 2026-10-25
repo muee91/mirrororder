@@ -1,12 +1,12 @@
 import type { TimelineWorkbenchProps } from "./timelineWorkbenchProps";
-import { decisionLabel, frameLabel, statusLabel, trimLabel } from "./timelineWorkbenchSupport";
+import { decisionLabel, statusLabel, trimLabel } from "./timelineWorkbenchSupport";
 
 type InspectorPanelProps = Pick<TimelineWorkbenchProps,
   "selection" | "inspector" | "replacementOptions" | "replacement" | "setReplacementKey" | "replaceTake"
-  | "selectedMulticam" | "apply" | "sequence" | "busy" | "splitSelected" | "moveStart" | "setMoveStart">;
+  | "selectedMulticam" | "apply" | "sequence" | "busy">;
 
 export function TimelineInspectorPanel(props: InspectorPanelProps) {
-  const { selection, inspector, replacementOptions, replacement, setReplacementKey, replaceTake, selectedMulticam, apply, sequence, busy, splitSelected, moveStart, setMoveStart } = props;
+  const { selection, inspector, replacementOptions, replacement, setReplacementKey, replaceTake, selectedMulticam, apply, sequence, busy } = props;
   if (!selection || !inspector || !sequence) return <aside className="timeline-inspector production-panel editorial-inspector"><p className="empty-copy">选择一个时间线片段后，这里会显示场次、镜头、镜次、场记、机位与剧本上下文。</p></aside>;
   return (
     <aside className="timeline-inspector production-panel editorial-inspector">
@@ -19,7 +19,7 @@ export function TimelineInspectorPanel(props: InspectorPanelProps) {
         {replacement ? <><select value={replacement.key} onChange={(event) => setReplacementKey(event.target.value)}>{replacementOptions.map((item) => <option key={item.key} value={item.key} disabled={Boolean(item.blockedReason)}>{item.label}{item.camera ? ` · ${item.camera}机` : ""}{item.blockedReason ? ` · 不可用：${item.blockedReason}` : ""}</option>)}</select><p>{replacement.detail || "同场同镜头候选"}</p><button type="button" disabled={busy || Boolean(replacement.blockedReason)} onClick={() => replaceTake(replacement)}>换用此镜次</button></> : <p className="empty-copy">当前没有找到同场同镜头、且有本机媒体证据的其他镜次。</p>}
       </section>
       {selectedMulticam ? <label className="production-field editorial-camera-switch"><span>多机位</span><select value={selection.clip.selected_angle_source_id ?? ""} onChange={(event) => { if (event.target.value) void apply({ type: "multicam_switch", sequence_id: sequence.sequence_id, clip_id: selection.clip.clip_id, source_id: event.target.value }, `已切换机位 → ${event.target.options[event.target.selectedIndex]?.text || event.target.value}`); }}><option value="" disabled>请选择机位</option>{(selectedMulticam.angles?.length ? selectedMulticam.angles : selectedMulticam.angle_source_ids.map((source_id: string) => ({ source_id, camera: source_id.replace(/^source:/, ""), name: "" }))).map((angle) => <option value={angle.source_id} key={angle.source_id}>{angle.camera ? `${angle.camera} 机` : angle.name || angle.source_id}</option>)}</select></label> : null}
-      <details className="editorial-technical-actions"><summary>精修与技术操作</summary><div className="timeline-edit-actions"><button type="button" className="secondary" disabled={busy || selection.clip.duration <= 1} onClick={splitSelected}>在播放头切分</button><button type="button" className="secondary" disabled={busy || selection.clip.duration <= 1} onClick={() => void apply({ type: "trim", sequence_id: sequence.sequence_id, clip_id: selection.clip.clip_id, timeline_start: selection.clip.timeline_start + 1, source_in: selection.clip.source_in + 1, duration: selection.clip.duration - 1 }, "已向后修剪入点 1 帧")}>入点 +1f</button><button type="button" className="secondary" disabled={busy || selection.clip.duration <= 1} onClick={() => void apply({ type: "trim", sequence_id: sequence.sequence_id, clip_id: selection.clip.clip_id, timeline_start: selection.clip.timeline_start, source_in: selection.clip.source_in, duration: selection.clip.duration - 1 }, "已向前修剪出点 1 帧")}>出点 -1f</button><button type="button" className="secondary" disabled={busy} onClick={() => void apply({ type: "disable", sequence_id: sequence.sequence_id, clip_id: selection.clip.clip_id, disabled: selection.clip.enabled }, selection.clip.enabled ? "片段已停用" : "片段已启用")}>{selection.clip.enabled ? "停用" : "启用"}</button><button type="button" className="secondary danger-quiet" disabled={busy} onClick={() => void apply({ type: "ripple_delete", sequence_id: sequence.sequence_id, clip_id: selection.clip.clip_id }, "已波纹删除")}>波纹删除</button></div><div className="timeline-move-control"><label>移动到 <input type="number" min={0} value={moveStart} onChange={(event) => setMoveStart(Math.max(0, Number(event.target.value) || 0))} /></label><button type="button" className="secondary" disabled={busy} onClick={() => void apply({ type: "move", sequence_id: sequence.sequence_id, clip_id: selection.clip.clip_id, target_track_id: selection.track.track_id, timeline_start: moveStart }, `已移动 → ${frameLabel(moveStart)}`)}>移动</button></div></details>
+      <p className="editorial-readonly-note">片段级精修（切分、修剪、移动、波纹删除）不在镜序内完成；导出到外部 NLE 后继续。</p>
     </aside>
   );
 }
