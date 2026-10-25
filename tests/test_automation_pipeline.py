@@ -163,8 +163,11 @@ def test_first_party_multicam_engine_is_complete_and_path_clean() -> None:
                       if path.is_file()
                       and path.name != "config.json"
                       and path.suffix in {".md", ".py", ".json"})
-    assert "/Users/editor/" not in text
-    assert "/Volumes/PSSD" not in text
+    # Guards must not encode the author's own home directory or volume name:
+    # broadening them to the generic prefixes both removes personal data from
+    # the repository and makes the check strictly stronger.
+    assert "/Users/" not in text
+    assert "/Volumes/" not in text
     assert "MIRRORORDER_MULTICAM_SYNC_ROOT" not in text
 
 

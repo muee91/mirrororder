@@ -169,7 +169,7 @@ def test_project_id_for_preserves_unicode_names_without_collapsing_to_project() 
     chinese_id = project_id_for("人不狠，站不稳")
     assert chinese_id.startswith("project-")
     assert len(chinese_id) <= 48
-    assert chinese_id != project_id_for("在制项目")
+    assert chinese_id != project_id_for("雨夜别后")
     assert project_id_for("FCP 项目").startswith("fcp-")
     assert project_id_for("A/B") == "a-b"
 
