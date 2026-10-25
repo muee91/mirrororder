@@ -110,9 +110,9 @@ AI proposal、Audit、retrieval score、Team Web Individual Opinion 都不能自
 ## 验证
 
 ```bash
-python scripts/check_python.py
-python scripts/check_fast.py
-python scripts/check_full.py
+python3 scripts/check_python.py
+python3 scripts/check_fast.py
+python3 scripts/check_full.py
 ```
 
 需要定位时再运行 targeted Desktop/Rust/Python checks。没有实际执行的检查不得写 PASS；失败测试不得通过删除或弱化真正的行为红线规避。非必要不手动反复触发 CI，功能切片完成后再做适用验证。

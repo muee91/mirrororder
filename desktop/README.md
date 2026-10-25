@@ -116,6 +116,37 @@ python -m pytest -q
 
 A gate is only PASS if it actually ran successfully on the tested commit. During Product Recovery, finish a coherent functional slice before running the necessary targeted validation; do not repeatedly dispatch CI for intermediate cosmetic edits.
 
+## Packaged runtime staging
+
+`src-tauri/tauri.conf.json` runs `prepare:icons && stage:runtime` before every production
+build, so `tauri build` fails unless the runtime inputs are supplied. They are not stored in
+this repository. `desktop/scripts/stage-runtime.mjs` requires four variables:
+
+```bash
+export MIRRORORDER_PORTABLE_PYTHON_ROOT=<self-contained CPython 3.11 tree>
+export MIRRORORDER_MEDIA_TOOLS_ROOT=<dir containing bin/ffmpeg, bin/ffprobe, lib/*.dylib>
+export MIRRORORDER_MEDIA_TOOLS_SOURCE=<provenance string, recorded into the manifest>
+export MIRRORORDER_MEDIA_TOOLS_LICENSE=<license classification>
+```
+
+The last two are mandatory with no implicit default, and staging refuses non-macOS unless
+`MIRRORORDER_ALLOW_NON_MAC_RUNTIME_STAGE` is set. Known-good inputs recorded by the last
+staged build (`src-tauri/resources/mirrororder-runtime/mirrororder-runtime-manifest.json`):
+CPython `3.11.15` for the interpreter, and the Homebrew `ffmpeg` arm64 formula (`8.1.2_1`,
+`GPL-2.0-or-later` build, license files bundled) for the media toolchain.
+
+```bash
+npm run stage:runtime          # populate src-tauri/resources/mirrororder-*
+npm run verify:macos-bundle    # check a built bundle against the manifest contract
+npx tauri build                # full .app + .dmg
+```
+
+`src-tauri/resources/mirrororder-*` staging output is git-ignored and survives
+`cargo clean`, so re-staging is only needed when the interpreter or FFmpeg version changes.
+`ASR / embedding / vision` backends (`faster_whisper`, `mlx_whisper`, `llama-server`, `cv2`,
+model weights) are **not** staged by this path; the packaged app therefore does not ship
+local intelligence features until that decision is made explicit.
+
 ## Current usability acceptance
 
 P0 is not closed until a real project can smoothly complete:
