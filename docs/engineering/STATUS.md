@@ -17,6 +17,11 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 真实项目 P0 闸门首跑（beef，6/7 必需步骤通过）
+
+- `check:ux-real` 首次对真实项目 beef 运行（610 Take 真实规模）：shell 挂载、剧本主画布（53 块）、搜索空态、审阅队列连续换 Take（12 行渲染 / positions 1→2→3）、素材画布（2092 对象）、时间线画布 6 项 PASS；唯一 FAIL 是看片播放——**运行中途外置 SSD 从总线掉落**（先前同会话 `/media/{clip_id}` 实测 206 真实字节；FAIL 后 `diskutil` 已无该物理设备，绑定与确认状态完好，纯物理断连）。段详情抽屉 8s 超时为 WARN（真实项目抽屉打开慢，待查）。
+- 证据归档 `desktop/artifacts/ux-real/2026-10-26T06-11-06-512Z/`（git-ignored）。盘稳定连接后重跑同一命令即为完整 PASS 证据；这也意味着 BACKLOG「五步主链真机验收」的真实看片环节已具备执行条件。
+
 ## 2026-10-26 beef 索引重注记（owner 项目实测，已实跑验证）
 
 **盘恢复后对齐（同日完成，真实出片）**：素材盘实际是目录树上移了一层（`/Volumes/PSSD 2TB/8.13 牛肉/` → `/Volumes/PSSD 2TB/天价牛肉/8.13 牛肉/`）。走产品内建流程完成重连：`media-scan --replace` 两个新根（两拍摄日 786+716=1502 文件，文件名唯一匹配生成 1502 个 provisional 候选）→ 经 `confirm_provisional` 同 API 逐条确认（1502/1502，0 失败；device-local 确认，不提升为共享身份、不改项目 JSON）。**实测：1533/1533 review angle 可用，`GET /media/{clip_id}` 返回 206 + video/mp4 真实字节；media-status 1502/1502 local_exists、0 待确认。**此前所有“素材离线/播放失败”的真因是盘迁移导致绑定失效，现已按产品语义恢复。素材库行 join 已解锁（同日）：`inventory_payload` 在直接 ID 未命中时按 provisional 文件名 ID 二次查找（与扫描候选同一启发式，纯字符串哈希、读路径零字节读取），迁移项目行级 clip_id/时长/Take 连接恢复；beef 实测 3004/3004 行带 clip_id+时长、3004/3004 连上 Take。索引 media_path 仍是 FCPXML 旧路径（exists=false），re-link 写路径（绑定回写索引）留作后续以恢复 exists/ASR/Waveform 语义。
