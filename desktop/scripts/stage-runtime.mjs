@@ -91,6 +91,14 @@ function cleanGeneratedTarget(target) {
 // external volumes, and byte-code caches inside a sealed (possibly read-only) bundle are a
 // runtime failure waiting to happen. Rule lives in runtime-tools.mjs so the stager and the
 // bundle gate cannot drift apart.
+function* walkDirectoryFiles(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) yield* walkDirectoryFiles(full);
+    else if (entry.isFile()) yield full;
+  }
+}
+
 function copyDirectory(source, target) {
   fs.cpSync(source, target, {
     recursive: true,
@@ -140,6 +148,9 @@ const pythonProbe = run(
   pythonExecutable,
   [
     "-I",
+    // -B on every python invocation against trees that ship in the bundle:
+    // imports otherwise write __pycache__ into the packaged runtime.
+    "-B",
     "-c",
     [
       "import json, sys",
@@ -177,7 +188,9 @@ for (const [source, label] of [
 const sourcePathLiteral = JSON.stringify(path.join(repoRoot, "src"));
 run(
   pythonExecutable,
-  ["-I", "-c", `import sys; sys.path.insert(0, ${sourcePathLiteral}); import script_organizer.cli; print('mirrororder-core-import-ok')`],
+  // -B: this probe imports the REPO source tree; without it Python writes
+  // __pycache__ into src/, which is exactly what staging must not copy.
+  ["-I", "-B", "-c", `import sys; sys.path.insert(0, ${sourcePathLiteral}); import script_organizer.cli; print('mirrororder-core-import-ok')`],
   "MirrorOrder Core import probe",
 );
 
@@ -192,6 +205,9 @@ copyDirectory(multicamSource, path.join(coreTarget, "vendor", "multicam-audio-sy
 fs.copyFileSync(pyprojectSource, path.join(coreTarget, "pyproject.toml"));
 copyDirectory(portablePythonRoot, pythonTarget);
 copyDirectory(mediaToolsRoot, toolsTarget);
+// Upstream Homebrew dylibs ship read-only (444); the Tauri build script and
+// codesigning rewrite these files, so staged copies must be writable.
+for (const file of walkDirectoryFiles(toolsTarget)) fs.chmodSync(file, 0o644);
 
 const stagedPython = path.join(pythonTarget, pythonRelativeExecutable);
 const stagedFfmpeg = path.join(toolsTarget, "bin", "ffmpeg");
@@ -206,6 +222,7 @@ const stagedPythonProbe = run(
   stagedPython,
   [
     "-I",
+    "-B",
     "-c",
     [
       "import json, sys",
@@ -231,7 +248,9 @@ for (const [label, candidate] of [["sys.executable", stagedPythonInfo.executable
 const stagedCorePathLiteral = JSON.stringify(path.join(coreTarget, "src"));
 run(
   stagedPython,
-  ["-I", "-c", `import sys; sys.path.insert(0, ${stagedCorePathLiteral}); import script_organizer.cli; print('staged-core-import-ok')`],
+  // -B keeps the probe from writing __pycache__ into the staged tree it is
+  // validating - the bundle must not ship build-machine bytecode.
+  ["-I", "-B", "-c", `import sys; sys.path.insert(0, ${stagedCorePathLiteral}); import script_organizer.cli; print('staged-core-import-ok')`],
   "staged MirrorOrder Core import probe",
   {
     env: {

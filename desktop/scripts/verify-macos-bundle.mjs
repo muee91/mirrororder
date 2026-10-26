@@ -126,7 +126,9 @@ const probe = [
   "import numpy, pandas, scipy",
   "print(json.dumps({'python': sys.version.split()[0], 'executable': sys.executable, 'prefix': sys.prefix}))",
 ].join("; ");
-const pythonOutput = run(python, ["-I", "-c", probe], "bundled Python/Core probe", {
+// -B: this probe imports the bundled runtime; without it the verification
+// itself writes __pycache__ into the app it is supposed to be judging.
+const pythonOutput = run(python, ["-I", "-B", "-c", probe], "bundled Python/Core probe", {
   env: {
     ...process.env,
     PATH: `${tools}${path.delimiter}/usr/bin:/bin:/usr/sbin:/sbin`,

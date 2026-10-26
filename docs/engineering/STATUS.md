@@ -17,6 +17,13 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 打包验证轮（本地 release 构建全绿，已实跑验证）
+
+- **产物**：`镜序.app`（448MB）+ `镜序_0.1.0_aarch64.dmg`（129MB），本地未签名。App 内嵌 Python Host 起服成功（`--local-only --port 8765`，ping/项目列表实测），桌面进程与 shell 均正常。
+- **runtime staging 补齐**：从 debug 树复用 portable Python（3.11/3.12/3.14 三棵，Phase 1 已知的冗余问题仍在），并用 Homebrew ffmpeg 9.0.2 组装了**自包含 media-tools 树**（27 个 dylib 全部改写为 `@executable_path/../lib` 相对路径 + 重签名，零 build-machine 引用）。
+- **三处打包脚本修复（真实缺陷）**：① stage-runtime 的 4 个 Python 探针（repo import / staged relocation ×2 / gate 内 bundled probe）全部缺 `-B`，导入 numpy/pandas/script_organizer 时把 561 个 `__pycache__` 写进打包资源——正是"打包内容黑名单"闸门设计要抓的东西，本轮 gate 如实拦截并推动修复；② gate 自身探针同样缺 `-B`（gate 一跑就污染被验对象，导致"越验越脏"的假象）；③ Homebrew dylib 只读权限（444）使 tauri build script 报 Permission denied，stager 对 staged tools 统一 chmod 644。修复后：app 内 pyc 0，gate 绿。
+- **如实边界**：签名/公证仍 NOT RUN（需要 owner 证书）；`MIRRORORDER_PORTABLE_PYTHON_ROOT` 等环境变量需在构建命令手工提供（release.yml 脚手架未接）；portable python 三棵树冗余未清。
+
 ## 2026-10-26 分辨率扫描期采样（走查清单最后一块数据面，已实跑验证）
 
 - **扫描任务 ffprobe 采样**：`_write_inventory_snapshot` 在扫描任务触碰媒体文件（本就在做哈希）时对每个文件做一次 12s 超时的 `ffprobe stream=width,height`，成功则快照行携带 `width/height`（快照 version 2），失败/无 ffprobe 静默留空——读路径仍零字节读取。单测覆盖采样成功透传与 ffprobe 缺失两条路径。
