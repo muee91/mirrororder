@@ -35,6 +35,9 @@ export interface MediaInventoryItem {
   inferred_camera: string;
   /** Scan-time duration in seconds from material_index; null when unknown. */
   duration_seconds?: number | null;
+  /** Scan-time ffprobe sampling; absent when not sampled. */
+  width?: number | null;
+  height?: number | null;
   indexed: boolean;
   label: MediaRole;
 }

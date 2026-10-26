@@ -72,6 +72,12 @@ function defaultDraft(item: MediaInventoryItem, store: MediaRoleStore | null): M
   };
 }
 
+function resolutionLabel(width: number | null | undefined, height: number | null | undefined): string {
+  if (!width || !height) return "";
+  const p = width >= 1920 ? "4K" : width >= 1440 ? "2K" : width >= 1080 ? "1080p" : width >= 720 ? "720p" : "";
+  return p ? `${p} ${width}×${height}` : `${width}×${height}`;
+}
+
 function durationLabel(seconds: number | null | undefined): string {
   if (!Number.isFinite(seconds) || Number(seconds) <= 0) return "";
   const total = Math.round(Number(seconds));
@@ -191,7 +197,7 @@ function MediaLibraryRow({
         ) : <span className="media-library-thumb-fallback">{camera.label}</span>}
       </span>
       <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
-      <span className="media-library-name"><strong>{item.display_name}</strong><small>{[item.folder_label || "素材", durationLabel(item.duration_seconds)].filter(Boolean).join(" · ")}</small></span>
+      <span className="media-library-name"><strong>{item.display_name}</strong><small>{[item.folder_label || "素材", resolutionLabel(item.width, item.height), durationLabel(item.duration_seconds)].filter(Boolean).join(" · ")}</small></span>
       <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{[role.scene_id ? `场 ${role.scene_id}` : "", takeLabel].filter(Boolean).join(" · ") || (auxiliary ? "不参与主机位同步" : "")}</small></span>
       <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><MediaHealthIndicator state={healthState} /></span>
     </button>
@@ -415,7 +421,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
               <section className="media-library-monitor">
                 <header>
                   <span className="media-library-monitor-camera" data-camera-tone={selectedCamera.tone}>{selectedCamera.label}</span>
-                  <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{[durationLabel(selectedItem.duration_seconds), selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"].filter(Boolean).join(" · ")}</small></span>
+                  <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{[resolutionLabel(selectedItem.width, selectedItem.height), durationLabel(selectedItem.duration_seconds), selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"].filter(Boolean).join(" · ")}</small></span>
                   <MediaHealthIndicator state={mediaHealthState({ indexed: selectedItem.indexed, playable: Boolean(selectedPlayback), playbackFailed: selectedPlaybackFailed })} />
                 </header>
                 <div className="media-library-player">

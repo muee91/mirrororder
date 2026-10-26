@@ -17,6 +17,12 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 分辨率扫描期采样（走查清单最后一块数据面，已实跑验证）
+
+- **扫描任务 ffprobe 采样**：`_write_inventory_snapshot` 在扫描任务触碰媒体文件（本就在做哈希）时对每个文件做一次 12s 超时的 `ffprobe stream=width,height`，成功则快照行携带 `width/height`（快照 version 2），失败/无 ffprobe 静默留空——读路径仍零字节读取。单测覆盖采样成功透传与 ffprobe 缺失两条路径。
+- **前端消费**：素材库行名称行与右栏监看标题显示分辨率（≥1920 显示 4K、≥1440 2K、≥1080 1080p、其余原尺寸）；未采样行为空，不冒充。
+- 验证：inventory pytest 9 项全过；`check_python` exit 0；tsc exit 0；Vitest 379 项全过。beef 需重扫描一次（另一台电脑上执行）才能获得分辨率字段——扫描期采样的固有边界。
+
 ## 2026-10-26 字号下限专项清偿（157 处 8/9px → 10px，已实跑验证 + 截图验收）
 
 - **全量批改**：19 个 CSS 文件里 47 处 8px + 110 处 9px 全部提升到 10px（历史存量下限），现零残留；design-system-v2 的「10px 为历史存量、不再新增」规则自此全站成立。

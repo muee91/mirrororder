@@ -20,6 +20,55 @@ def _project(tmp_path: Path) -> SimpleNamespace:
     )
 
 
+def test_snapshot_rows_carry_probe_dimensions_and_projection_passes_them_through(tmp_path: Path, monkeypatch) -> None:
+    """扫描期 ffprobe 采样进快照行；读路径只透传不重读。"""
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    project = _project(tmp_path)
+    project.index = {"clips": [], "groups": []}
+
+    device = DeviceMediaStore()
+    device.add_roots(project.workspace_id, project.project_id, [str(tmp_path)])
+    media_file = tmp_path / "A001.MP4"
+    media_file.write_bytes(b"media")
+
+    monkeypatch.setattr(
+        media_inventory_task_runtime,
+        "_probe_dimensions",
+        lambda _path: {"width": 3840, "height": 2160},
+    )
+    media_inventory_task_runtime._write_inventory_snapshot(
+        device,
+        project.workspace_id,
+        project.project_id,
+        [str(tmp_path)],
+        media_files=[media_file],
+    )
+
+    payload = media_inventory_task_runtime.inventory_payload(
+        project,
+        device,
+        MediaRoleStore(project.config.output_dir),
+    )
+    (row,) = payload["items"]
+    assert row["width"] == 3840
+    assert row["height"] == 2160
+
+
+def test_probe_dimensions_survives_missing_ffprobe(tmp_path: Path, monkeypatch) -> None:
+    """无 ffprobe / 探测失败静默留空，扫描任务不炸。"""
+    import subprocess as real_subprocess
+    monkeypatch.setattr(
+        media_inventory_task_runtime,
+        "subprocess",
+        SimpleNamespace(run=_raise_file_not_found, SubprocessError=real_subprocess.SubprocessError, timeout=12),
+    )
+    assert media_inventory_task_runtime._probe_dimensions("/nonexistent/x.mp4") == {}
+
+
+def _raise_file_not_found(*_args, **_kwargs):
+    raise FileNotFoundError("ffprobe missing")
+
+
 def test_inventory_projection_includes_indexed_duration_without_touching_media(tmp_path: Path, monkeypatch) -> None:
     """素材库行的决策字段：material_index 已有的扫描期秒数直接投影，读路径不碰媒体。"""
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))

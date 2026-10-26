@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,6 +62,39 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _probe_dimensions(path_text: str) -> dict[str, int]:
+    """Best-effort scan-time ffprobe sampling; missing/failed dims stay absent.
+
+    Runs only inside the explicit scan task while the file is being hashed
+    anyway; the read path never touches media bytes.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "json",
+                path_text,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=12,
+            check=True,
+        )
+        streams = json.loads(result.stdout).get("streams", [])
+        width = int(streams[0].get("width") or 0) if streams else 0
+        height = int(streams[0].get("height") or 0) if streams else 0
+    except (OSError, ValueError, json.JSONDecodeError, subprocess.SubprocessError):
+        return {}
+    return {"width": width, "height": height} if width > 0 and height > 0 else {}
+
+
 def _write_inventory_snapshot(
     device: DeviceMediaStore,
     workspace_id: str,
@@ -84,15 +118,18 @@ def _write_inventory_snapshot(
             if media_id:
                 candidates.append((media_id, str(path)))
 
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, Any]] = []
     seen_media: set[str] = set()
     for media_id, path_text in candidates[:_MAX_INVENTORY_FILES]:
         if not media_id or media_id in seen_media:
             continue
         seen_media.add(media_id)
-        rows.append({"media_id": media_id, "path": path_text})
+        row: dict[str, Any] = {"media_id": media_id, "path": path_text}
+        if Path(path_text).is_file():
+            row.update(_probe_dimensions(path_text))
+        rows.append(row)
     payload = {
-        "version": 1,
+        "version": 2,
         "workspace_id": workspace_id,
         "project_id": project_id,
         "updated_at": _now(),
@@ -199,11 +236,13 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
         if not media_id:
             continue
         path = Path(path_text)
+        path_row = next((item for item in snapshot.get("items", []) if isinstance(item, dict) and str(item.get("media_id", "")) == media_id), {})
         # 快照行带扫描期内容哈希 M_；索引在文件迁移后可能只有文件名派生的 MP_
         # （与扫描候选同一启发式）。直接 ID 未命中时按 provisional 文件名 ID
         # 二次查找，让行级 clip_id/时长/Take 连接对迁移项目继续可用。
         # 纯字符串哈希，读路径仍然不触碰媒体字节。
         indexed_row = indexed.get(media_id) or indexed.get(provisional_media_id(path_text), {})
+        # 扫描期 ffprobe 采样（快照 version 2 行）；缺席即未采样，前端显示为空。
         rows_by_id[media_id] = {
             "media_id": media_id,
             "clip_id": indexed_row.get("clip_id", ""),
@@ -216,6 +255,8 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
                 else indexed_row.get("inferred_camera", "")
             ),
             "duration_seconds": indexed_row.get("duration_seconds"),
+            "width": path_row.get("width"),
+            "height": path_row.get("height"),
             "indexed": media_id in indexed,
             "label": _safe_role(labels.get(media_id)),
         }
