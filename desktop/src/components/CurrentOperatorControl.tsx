@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import "./current-operator.css";
 
 const OPERATOR_KEYS = [
@@ -77,6 +77,30 @@ export function CurrentOperatorControl({ onChange }: Props) {
     if (!readCurrentOperator() && !readOperatorGuided()) setOpen(true);
   }, []);
 
+  // 引导弹层悬在顶栏按钮下方，会挡住它后面的页面控件；任何点击弹层之外或按
+  // Escape 都要能收起并记住"已引导"，不能把用户困在弹层里。
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        writeOperatorGuided();
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      writeOperatorGuided();
+      setOpen(false);
+    };
+    globalThis.addEventListener("pointerdown", onPointerDown);
+    globalThis.addEventListener("keydown", onKeyDown);
+    return () => {
+      globalThis.removeEventListener("pointerdown", onPointerDown);
+      globalThis.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   function commit(): void {
     const next = writeCurrentOperator(draft);
     setOperator(next);
@@ -105,7 +129,7 @@ export function CurrentOperatorControl({ onChange }: Props) {
         <span className="current-operator-chevron" aria-hidden="true">⌄</span>
       </button>
       {open ? (
-        <div className="current-operator-popover" role="dialog" aria-label="当前操作者">
+        <div ref={rootRef} className="current-operator-popover" role="dialog" aria-label="当前操作者">
           <header><strong>当前操作者</strong><span>用于场记、归集和素材人工修改的审计记录。</span></header>
           {!operator ? <p className="current-operator-note">不设置也可以浏览项目；保存场记、归集或作最终决定时会再次要求。</p> : null}
           <label htmlFor={inputId}><span>昵称</span><input id={inputId} autoFocus maxLength={40} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(); } if (event.key === "Escape") setOpen(false); }} placeholder="例如：大王" /></label>

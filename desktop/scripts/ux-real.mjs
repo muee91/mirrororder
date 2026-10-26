@@ -65,6 +65,16 @@ const baseUrl = server.resolvedUrls?.local?.[0]?.replace(/\/$/, "");
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+// The gate profile is fresh every run; seed the operator identity and the guided
+// flag so the first-use onboarding popover cannot cover the buttons later steps
+// click. Mirrors what a returning user's browser already has.
+await page.addInitScript(() => {
+  try {
+    globalThis.localStorage.setItem("mirrororder.productionActor", "镜序验收");
+    globalThis.localStorage.setItem("mirrororder.operator-guided", "1");
+    globalThis.localStorage.setItem("mirrororder.desktop-v2.review-actor", "镜序验收");
+  } catch { /* storage unavailable: surfaces fall back to their own prompts */ }
+});
 const started = Date.now();
 const apiLog = [];
 const consoleErrors = [];
