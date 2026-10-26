@@ -37,7 +37,7 @@
   max-width: 520px;
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -63,7 +63,7 @@
   border-radius: 7px;
   background: var(--mo-surface);
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -127,7 +127,7 @@
   border-radius: 6px;
   background: transparent;
   color: var(--mo-text-2);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .mirrororder-redesign-shell .media-library-filters button.is-active {
@@ -143,7 +143,7 @@
   align-items: center;
   gap: 6px;
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .mirrororder-redesign-shell .media-library-layout {
@@ -257,7 +257,7 @@
   border-radius: 7px;
   background: transparent;
   color: var(--mo-text-2);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .mirrororder-redesign-shell .identity-filter button.is-active {
@@ -384,7 +384,7 @@
 }
 
 .mirrororder-redesign-shell .settings-section-heading h3 { margin: 1px 0 0; color: var(--mo-text); font-size: 13px; }
-.mirrororder-redesign-shell .settings-section-heading > span { color: var(--mo-text-3); font-size: 9px; }
+.mirrororder-redesign-shell .settings-section-heading > span { color: var(--mo-text-3); font-size: 10px; }
 .mirrororder-redesign-shell .settings-preference-surface,
 .mirrororder-redesign-shell .settings-preference-section > .local-runtime-panel,
 .mirrororder-redesign-shell .settings-preference-section > .assistant-models-panel { border: 0; border-radius: 0; box-shadow: none; }
@@ -416,7 +416,7 @@
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary::-webkit-details-marker { display: none; }
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary > div { display: grid; gap: 2px; }
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary span,
-.mirrororder-redesign-shell .settings-advanced-diagnostics > summary small { color: var(--mo-text-3); font-size: 9px; }
+.mirrororder-redesign-shell .settings-advanced-diagnostics > summary small { color: var(--mo-text-3); font-size: 10px; }
 .mirrororder-redesign-shell .settings-diagnostics-note { padding: 0 14px; }
 .mirrororder-redesign-shell .settings-diagnostics-grid { padding: 12px; gap: 10px; }
 
@@ -480,14 +480,14 @@
   border-radius: 999px;
   background: color-mix(in srgb, currentColor 8%, transparent);
   color: inherit;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .mirrororder-redesign-shell .identity-toolbar-status {
   min-width: 0;
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -549,7 +549,7 @@
 .mirrororder-redesign-shell .identity-person-copy small {
   grid-column: 1 / -1;
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
 }
 .mirrororder-redesign-shell .identity-person-state {
   width: fit-content;
@@ -557,7 +557,7 @@
   border-radius: 999px;
   background: var(--mo-surface-muted);
   color: var(--mo-text-2);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -582,7 +582,7 @@
 
 .mirrororder-redesign-shell .identity-suggestion > div > span {
   color: var(--mo-accent);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -597,7 +597,7 @@
 .mirrororder-redesign-shell .identity-suggestion > div > small {
   grid-column: 1 / -1;
   color: var(--mo-text-2);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .mirrororder-redesign-shell .identity-suggestion > button {
@@ -608,7 +608,7 @@
   border-radius: 7px;
   background: var(--mo-accent);
   color: #fff;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -632,7 +632,7 @@
 
 .mirrororder-redesign-shell .identity-section-heading span {
   color: var(--mo-text-3);
-  font-size: 8px;
+  font-size: 10px;
   text-align: right;
 }
 
@@ -683,7 +683,7 @@
 
 .mirrororder-redesign-shell .occurrence-order {
   color: var(--mo-text-3);
-  font-size: 8px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -696,12 +696,12 @@
 }
 
 .mirrororder-redesign-shell .occurrence-copy strong { color: var(--mo-text); font-size: 10px; }
-.mirrororder-redesign-shell .occurrence-copy > span { color: var(--mo-text-3); font-size: 8px; }
+.mirrororder-redesign-shell .occurrence-copy > span { color: var(--mo-text-3); font-size: 10px; }
 .mirrororder-redesign-shell .occurrence-copy small {
   grid-column: 1 / -1;
   overflow: hidden;
   color: var(--mo-text-2);
-  font-size: 9px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -719,7 +719,7 @@
 .mirrororder-redesign-shell .identity-technical > summary {
   padding: 10px 0 0;
   color: var(--mo-text-3);
-  font-size: 8px;
+  font-size: 10px;
   cursor: default;
 }
 
@@ -742,7 +742,7 @@
 .mirrororder-redesign-shell .identity-technical dt,
 .mirrororder-redesign-shell .identity-technical dd {
   margin: 0;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .mirrororder-redesign-shell .identity-technical dt { color: var(--mo-text-3); }
@@ -768,13 +768,13 @@
 
 .mirrororder-redesign-shell .identity-confirm-bar strong {
   color: var(--mo-text);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .mirrororder-redesign-shell .identity-confirm-bar small {
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 8px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

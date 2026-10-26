@@ -6,7 +6,7 @@
 .media-binding-scan-state > div { display: grid; min-width: 0; gap: 4px; }
 .media-binding-scan-state .eyebrow { margin: 0; }
 .media-binding-scan-state strong { color: #dbe2e8; font-size: 11px; }
-.media-binding-scan-state span { color: #83909b; font-size: 9px; line-height: 1.5; }
+.media-binding-scan-state span { color: #83909b; font-size: 10px; line-height: 1.5; }
 .media-binding-scan-state progress { width: min(460px, 100%); height: 5px; margin-top: 3px; }
 .media-binding-scan-state > button { min-height: 31px; white-space: nowrap; }
 
@@ -17,19 +17,19 @@
 .media-binding-recovery-copy { display: grid; min-width: 0; gap: 4px; }
 .media-binding-recovery-copy .eyebrow { margin: 0; }
 .media-binding-recovery-copy > strong { color: #dbe2e8; font-size: 12px; }
-.media-binding-recovery-copy > span { max-width: 720px; color: #83909b; font-size: 9px; line-height: 1.55; }
+.media-binding-recovery-copy > span { max-width: 720px; color: #83909b; font-size: 10px; line-height: 1.55; }
 .media-binding-recovery-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .media-binding-recovery-actions button { min-height: 31px; white-space: nowrap; }
 
 .media-binding-location-heading { margin-top: 2px; }
 .media-binding-current-roots { display: grid; gap: 5px; max-width: 760px; margin-bottom: 12px; }
-.media-binding-current-roots code { display: block; overflow: hidden; border: 1px solid #29323b; border-radius: 6px; padding: 6px 8px; color: #85929e; background: #0f151a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.media-binding-current-roots > span { color: #74818d; font-size: 9px; }
-.media-binding-result-limit { margin: 8px 0 2px; color: #74818d; font-size: 9px; text-align: center; }
+.media-binding-current-roots code { display: block; overflow: hidden; border: 1px solid #29323b; border-radius: 6px; padding: 6px 8px; color: #85929e; background: #0f151a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.media-binding-current-roots > span { color: #74818d; font-size: 10px; }
+.media-binding-result-limit { margin: 8px 0 2px; color: #74818d; font-size: 10px; text-align: center; }
 
 .media-binding-advanced { margin-top: 10px; border-top: 1px solid #252d35; padding-top: 10px; color: #74818c; }
-.media-binding-advanced > summary { width: fit-content; cursor: pointer; font-size: 9px; font-weight: 600; }
-.media-binding-advanced > p { max-width: 760px; margin: 8px 0 10px; color: #6f7c88; font-size: 9px; line-height: 1.6; }
+.media-binding-advanced > summary { width: fit-content; cursor: pointer; font-size: 10px; font-weight: 600; }
+.media-binding-advanced > p { max-width: 760px; margin: 8px 0 10px; color: #6f7c88; font-size: 10px; line-height: 1.6; }
 .media-binding-advanced .media-binding-roots-field { margin-bottom: 8px; }
 .media-binding-help { margin-top: 10px; }
 

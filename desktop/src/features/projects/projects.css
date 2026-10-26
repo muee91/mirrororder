@@ -3,12 +3,12 @@
 .mirror-mark { display: block; flex: 0 0 auto; width: 28px; height: 28px; border: 1px solid #343d46; border-radius: 8px; background-color: #1a2026; background-image: url("../../../src-tauri/icons/icon.png"); background-position: center; background-repeat: no-repeat; background-size: cover; }
 .project-library-brand div { display: grid; gap: 0; }
 .project-library-brand strong { color: #e2e8ed; font-size: 13px; line-height: 1.15; }
-.project-library-brand span:not(.mirror-mark) { color: #697681; font-size: 9px; letter-spacing: .03em; }
+.project-library-brand span:not(.mirror-mark) { color: #697681; font-size: 10px; letter-spacing: .03em; }
 .project-library-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid #222930; padding: 10px 5px 7px; }
 .project-library-section-heading > div { display: flex; align-items: baseline; gap: 6px; color: #87939e; font-size: 10px; font-weight: 650; }
-.project-library-section-heading small { color: #56636f; font-size: 9px; font-weight: 500; }
+.project-library-section-heading small { color: #56636f; font-size: 10px; font-weight: 500; }
 .project-library-heading-actions { display: flex; align-items: center; gap: 3px; }
-.project-new-button, .project-manage-button { border-color: #303943; border-radius: 6px; color: #aeb8c1; background: #161c22; font-size: 9px; font-weight: 650; }
+.project-new-button, .project-manage-button { border-color: #303943; border-radius: 6px; color: #aeb8c1; background: #161c22; font-size: 10px; font-weight: 650; }
 .project-new-button { padding: 4px 7px; }
 .project-manage-button { min-width: 28px; padding: 4px 6px; letter-spacing: .08em; }
 .project-new-button:hover, .project-manage-button:hover { color: #e1e7ec; background: #1d242b; }
@@ -17,30 +17,30 @@
 .project-row:hover { background: #13191f; }
 .project-row-copy { display: grid; min-width: 0; gap: 2px; }
 .project-row-copy strong { overflow: hidden; color: inherit; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.project-row-copy small { overflow: hidden; color: #65727e; font-size: 8px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
-.project-row-alert { display: inline-flex; min-height: 18px; align-items: center; justify-content: center; border-radius: 5px; padding: 2px 5px; color: #e6ac84; background: #38271f; font-size: 8px; font-weight: 700; white-space: nowrap; }
+.project-row-copy small { overflow: hidden; color: #65727e; font-size: 10px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
+.project-row-alert { display: inline-flex; min-height: 18px; align-items: center; justify-content: center; border-radius: 5px; padding: 2px 5px; color: #e6ac84; background: #38271f; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .project-row.is-selected { border-color: #2f3943; color: #edf1f4; background: #192027; }
 .project-list-empty { display: grid; gap: 4px; margin: 8px 5px; border: 1px dashed #2e3740; border-radius: 8px; padding: 12px; }
 .project-list-empty strong { color: #9ca7b1; font-size: 10px; }
-.project-list-empty span { color: #65717c; font-size: 9px; line-height: 1.45; }
+.project-list-empty span { color: #65717c; font-size: 10px; line-height: 1.45; }
 .project-library-global-tools { display: grid; gap: 2px; margin-top: auto; border-top: 1px solid #222930; padding: 8px 0; }
 .project-library-global-tools button { display: grid; width: 100%; gap: 1px; border: 1px solid transparent; border-radius: 6px; padding: 7px 9px; color: #84909b; background: transparent; text-align: left; }
 .project-library-global-tools button:hover { color: #b5bec7; background: #13191f; }
 .project-library-global-tools button.is-active { border-color: #303a44; color: #e0e6eb; background: #192027; }
-.project-library-global-tools button span { font-size: 9px; font-weight: 650; }
-.project-library-global-tools button small { color: #5f6c77; font-size: 8px; font-weight: 400; }
+.project-library-global-tools button span { font-size: 10px; font-weight: 650; }
+.project-library-global-tools button small { color: #5f6c77; font-size: 10px; font-weight: 400; }
 
 .project-lifecycle-overlay { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 30px; background: rgba(3, 5, 7, .62); backdrop-filter: blur(8px); }
 .project-lifecycle-dialog { width: min(620px, calc(100vw - 60px)); max-height: min(760px, calc(100vh - 60px)); overflow: hidden; border: 1px solid #313a44; border-radius: 12px; color: #dbe2e8; background: #11161b; box-shadow: 0 24px 80px rgba(0, 0, 0, .42); }
 .project-lifecycle-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid #252d35; padding: 16px 18px; }
 .project-lifecycle-header > div { display: grid; gap: 2px; }
 .project-lifecycle-header h2 { margin: 2px 0 0; font-size: 18px; }
-.project-lifecycle-header > div > span { color: #71808b; font-size: 9px; }
+.project-lifecycle-header > div > span { color: #71808b; font-size: 10px; }
 .dialog-close { border-color: transparent; padding: 5px 8px; color: #7f8b96; background: transparent; font-size: 10px; }
 .dialog-close:hover { color: #dce3e9; background: #1b2229; }
 .project-lifecycle-body { display: grid; gap: 12px; max-height: calc(100vh - 150px); overflow-y: auto; padding: 16px 18px 18px; }
-.project-lifecycle-message { min-height: 15px; margin: 0; color: #75828e; font-size: 9px; line-height: 1.5; }
-.project-lifecycle-body label { display: grid; gap: 5px; color: #788590; font-size: 9px; }
+.project-lifecycle-message { min-height: 15px; margin: 0; color: #75828e; font-size: 10px; line-height: 1.5; }
+.project-lifecycle-body label { display: grid; gap: 5px; color: #788590; font-size: 10px; }
 .project-lifecycle-body input, .project-lifecycle-body textarea { width: 100%; min-width: 0; border: 1px solid #303a44; border-radius: 7px; padding: 8px 9px; color: #dbe2e8; background: #0d1216; outline: none; }
 .project-lifecycle-body input:focus, .project-lifecycle-body textarea:focus { border-color: #687888; }
 .project-lifecycle-body textarea { resize: vertical; }
@@ -53,18 +53,18 @@
 .lifecycle-checkbox input { width: auto; margin-top: 2px; }
 .lifecycle-checkbox > span { display: grid; gap: 2px; }
 .lifecycle-checkbox strong { color: #aeb9c3; font-size: 10px; font-weight: 600; }
-.lifecycle-checkbox small { color: #687681; font-size: 8px; line-height: 1.45; }
+.lifecycle-checkbox small { color: #687681; font-size: 10px; line-height: 1.45; }
 .lifecycle-actions { display: flex; justify-content: flex-end; gap: 7px; border-top: 1px solid #252d35; padding-top: 12px; }
-.lifecycle-preflight { display: grid; gap: 4px; border: 1px solid #303944; border-radius: 8px; padding: 9px; color: #a9b5c0; font-size: 9px; }
+.lifecycle-preflight { display: grid; gap: 4px; border: 1px solid #303944; border-radius: 8px; padding: 9px; color: #a9b5c0; font-size: 10px; }
 .lifecycle-preflight.is-ready { border-color: #3c6653; background: rgba(67, 113, 90, .08); }
 .lifecycle-preflight.is-error { border-color: #6f4a4a; background: rgba(111, 74, 74, .08); }
 .project-manage-body { gap: 16px; }
 .project-manage-summary { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 7px 12px; border: 1px solid #2c353e; border-radius: 8px; padding: 11px; background: #0d1216; }
-.project-manage-summary span { color: #687581; font-size: 9px; }
+.project-manage-summary span { color: #687581; font-size: 10px; }
 .project-manage-summary code, .project-manage-summary strong { overflow: hidden; color: #c0c9d0; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .lifecycle-delete { display: grid; gap: 7px; border: 1px solid #3b2c2c; border-radius: 8px; padding: 11px; background: #171111; }
 .lifecycle-delete > strong { color: #d0a2a2; font-size: 10px; }
-.lifecycle-delete p { margin: 0; color: #8b7779; font-size: 9px; line-height: 1.45; }
+.lifecycle-delete p { margin: 0; color: #8b7779; font-size: 10px; line-height: 1.45; }
 .lifecycle-delete code { color: #b79595; }
 .lifecycle-delete .danger-quiet { border-color: #6a4141; color: #cf9898; background: #221616; }
 

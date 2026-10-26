@@ -17,6 +17,11 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 字号下限专项清偿（157 处 8/9px → 10px，已实跑验证 + 截图验收）
+
+- **全量批改**：19 个 CSS 文件里 47 处 8px + 110 处 9px 全部提升到 10px（历史存量下限），现零残留；design-system-v2 的「10px 为历史存量、不再新增」规则自此全站成立。
+- **验收**：layout-runtime desktop + compact OK（无换行破坏/位置漂移）；Vitest 379 全过；ux-real 合成 9/9；beef 真实项目闸门 6/7 PASS（播放项仍因 SSD 在另一台电脑）+ 截图人工复核（剧本/审阅两屏，分层计数 需关注607≠全部610 已生效可见，布局无挤压）。
+
 ## 2026-10-26 四态媒体状态模型·服务端权威字段（owner 拍板先忽略 SSD 后执行，已实跑验证）
 
 - **review-model 每个 angle 的 `playback` 新增 `state`**：`verified`（本机绑定经内容身份校验解析成功，服务端权威声明"可取到字节"）/ `missing`（设备绑定过、本次解析失败——盘离线或文件移动）/ `unknown`（本机从未登记绑定）。`decode` 只由本机播放失败产生（前端 `playbackFailure` 探测），服务端不假装知道——四态口径与 `design-system-v2.md` §6.1 词汇表一一对应。

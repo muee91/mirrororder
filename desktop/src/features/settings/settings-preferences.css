@@ -11,7 +11,7 @@
 .settings-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; padding: 0 2px; }
 .settings-section-heading > div { display: grid; gap: 2px; }
 .settings-section-heading h3 { margin: 0; color: #cfd7de; font-size: 13px; font-weight: 650; }
-.settings-section-heading > span { color: #66737e; font-size: 9px; text-align: right; }
+.settings-section-heading > span { color: #66737e; font-size: 10px; text-align: right; }
 .settings-preference-surface,
 .settings-preference-section > .production-panel,
 .settings-team-grid > .production-panel { border: 1px solid #29323a; border-radius: 10px; background: #10161b; box-shadow: none; }
@@ -23,7 +23,7 @@
 .settings-team-grid .parse-heading > div { display: grid; gap: 3px; }
 .settings-team-grid .parse-heading .production-note { margin: 0; }
 .team-web-advanced { margin-top: 2px; border-top: 1px solid #252d36; padding-top: 8px; }
-.team-web-advanced > summary { width: fit-content; cursor: pointer; color: #8996a1; font-size: 9px; font-weight: 600; }
+.team-web-advanced > summary { width: fit-content; cursor: pointer; color: #8996a1; font-size: 10px; font-weight: 600; }
 .team-web-advanced[open] > summary { margin-bottom: 8px; }
 .team-web-advanced .production-field { width: min(300px, 100%); margin: 0; }
 .assistant-routing-card { display: grid; gap: 12px; padding: 16px; }
@@ -36,15 +36,15 @@
 .assistant-routing-mode.mode-external { border-color: #4a465b; color: #c3bad9; }
 .assistant-routing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .assistant-route { display: grid; min-width: 0; gap: 4px; border: 1px solid #27323a; border-radius: 8px; padding: 10px; background: #0e1418; }
-.assistant-route > span { color: #778590; font-size: 9px; font-weight: 650; }
+.assistant-route > span { color: #778590; font-size: 10px; font-weight: 650; }
 .assistant-route > strong { overflow: hidden; color: #d3dbe1; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.assistant-route > small { color: #697781; font-size: 9px; line-height: 1.45; }
+.assistant-route > small { color: #697781; font-size: 10px; line-height: 1.45; }
 .assistant-routing-message,
 .assistant-routing-privacy { margin: 0; }
 .assistant-models { margin-top: 2px; border-top: 1px solid #252d36; padding-top: 4px; }
 .assistant-models > summary { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; padding: 8px 20px 8px 0; }
 .assistant-models > summary span { color: #aab5be; font-size: 10px; font-weight: 650; }
-.assistant-models > summary small { color: #697681; font-size: 9px; font-weight: 500; }
+.assistant-models > summary small { color: #697681; font-size: 10px; font-weight: 500; }
 .assistant-models > summary::after { position: absolute; top: 50%; right: 2px; content: "›"; color: #697681; font-size: 15px; line-height: 1; transform: translateY(-50%); transition: transform .14s ease; }
 .assistant-models[open] > summary::after { transform: translateY(-50%) rotate(90deg); }
 .assistant-models[open] > summary { margin-bottom: 4px; }

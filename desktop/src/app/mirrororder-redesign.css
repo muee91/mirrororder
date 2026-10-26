@@ -237,7 +237,7 @@ textarea {
 
 .project-nav-section-label small {
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
   text-transform: none;
 }
@@ -276,7 +276,7 @@ textarea {
 .project-recent-list small {
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -309,7 +309,7 @@ textarea {
 }
 
 .project-current-empty strong { color: var(--mo-text-2); font-size: 11px; }
-.project-current-empty span { font-size: 9px; line-height: 1.4; }
+.project-current-empty span { font-size: 10px; line-height: 1.4; }
 
 .project-sidebar-spacer {
   flex: 1 1 auto;
@@ -382,7 +382,7 @@ textarea {
 
 .mirrororder-redesign-shell .workspace-control > summary::-webkit-details-marker { display: none; }
 .mirrororder-redesign-shell .workspace-control > summary > span:nth-child(2) { overflow: hidden; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.mirrororder-redesign-shell .workspace-control > summary small { color: var(--mo-text-3); font-size: 9px; }
+.mirrororder-redesign-shell .workspace-control > summary small { color: var(--mo-text-3); font-size: 10px; }
 
 .mirrororder-redesign-shell .workspace-control-body {
   margin-top: 6px;
@@ -422,7 +422,7 @@ textarea {
 .app-global-context > span {
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -511,7 +511,7 @@ textarea {
 
 .app-workspace-chip small {
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
 }
 
@@ -561,14 +561,14 @@ textarea {
 .app-workspace-menu-heading small {
   flex: 0 0 auto;
   color: var(--mo-success);
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .app-workspace-menu-heading code {
   overflow: hidden;
   color: var(--mo-text-3);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 8px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -593,7 +593,7 @@ textarea {
 .app-workspace-advanced > summary {
   padding: 2px 0 6px;
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
   list-style-position: inside;
 }
 
@@ -605,7 +605,7 @@ textarea {
 
 .app-workspace-advanced label > span {
   color: var(--mo-text-3);
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .app-workspace-advanced input {
@@ -617,7 +617,7 @@ textarea {
   border-radius: 7px;
   background: var(--mo-surface-soft);
   color: var(--mo-text);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .app-workspace-advanced button {
@@ -729,7 +729,7 @@ textarea {
 .workspace-home-metrics article > small {
   align-self: end;
   color: var(--mo-text-3);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .workspace-home-metrics article.is-active { border-color: color-mix(in srgb, var(--mo-accent) 36%, var(--mo-border)); }
@@ -764,9 +764,9 @@ textarea {
   border-bottom: 1px solid var(--mo-border);
 }
 
-.workspace-home-panel > header .eyebrow { margin: 0 0 2px; color: var(--mo-text-3); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.workspace-home-panel > header .eyebrow { margin: 0 0 2px; color: var(--mo-text-3); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .workspace-home-panel > header h2 { margin: 0; color: var(--mo-text); font-size: 14px; }
-.workspace-home-panel > header button { min-height: 28px; padding: 0 10px; border: 1px solid var(--mo-border); border-radius: 7px; background: var(--mo-surface-soft); color: var(--mo-text-2); font-size: 9px; }
+.workspace-home-panel > header button { min-height: 28px; padding: 0 10px; border: 1px solid var(--mo-border); border-radius: 7px; background: var(--mo-surface-soft); color: var(--mo-text-2); font-size: 10px; }
 
 .workspace-home-project-list {
   display: grid;
@@ -790,7 +790,7 @@ textarea {
 .workspace-home-project-list > button:hover { background: var(--mo-surface-soft); }
 .workspace-home-project-copy { min-width: 0; display: grid; gap: 3px; }
 .workspace-home-project-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-home-project-copy small { color: var(--mo-text-3); font-size: 9px; }
+.workspace-home-project-copy small { color: var(--mo-text-3); font-size: 10px; }
 .workspace-home-project-arrow { color: var(--mo-text-3); font-size: 20px; }
 
 .workspace-home-empty { padding: 26px; display: grid; gap: 4px; color: var(--mo-text-3); text-align: center; }
@@ -819,7 +819,7 @@ textarea {
 
 .workspace-home-system-row > span:first-child { min-width: 0; display: grid; gap: 3px; }
 .workspace-home-system-row strong { font-size: 11px; }
-.workspace-home-system-row small { color: var(--mo-text-3); font-size: 9px; line-height: 1.35; }
+.workspace-home-system-row small { color: var(--mo-text-3); font-size: 10px; line-height: 1.35; }
 .workspace-home-system-row > span:last-child { color: var(--mo-text-3); font-size: 18px; }
 
 .workspace-home-flow {
@@ -832,7 +832,7 @@ textarea {
   border-radius: 9px;
   background: var(--mo-accent-soft);
   color: var(--mo-accent);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 650;
 }
 
@@ -929,7 +929,7 @@ textarea {
 .mirrororder-redesign-shell .project-home-title-row strong { color: var(--mo-text); font-size: 13px; }
 .mirrororder-redesign-shell .project-home-title-row small,
 .mirrororder-redesign-shell .project-home-stats,
-.mirrororder-redesign-shell .project-home-state { color: var(--mo-text-3); font-size: 9px; }
+.mirrororder-redesign-shell .project-home-state { color: var(--mo-text-3); font-size: 10px; }
 .mirrororder-redesign-shell .project-home-more { border-left: 1px solid var(--mo-border); color: var(--mo-text-2); background: var(--mo-surface-soft); }
 
 /* Project secondary tools */

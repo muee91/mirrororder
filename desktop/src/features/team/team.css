@@ -40,7 +40,7 @@
 .team-web-state > span {
   border-radius: 999px;
   padding: 5px 8px;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .team-web-state .is-running {
@@ -107,7 +107,7 @@
   display: grid;
   gap: 5px;
   color: #788692;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .team-web-options input,
@@ -135,7 +135,7 @@
 
 .team-web-facts dt {
   color: #667580;
-  font-size: 9px;
+  font-size: 10px;
   text-transform: uppercase;
 }
 
@@ -163,7 +163,7 @@
 .team-review-primary-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 12px; }
 .team-review-primary-grid .team-share-panel { grid-column: auto; }
 .team-pairing-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #303a44; border-radius: 8px; padding: 9px 10px; background: #0d1216; }
-.team-pairing-card span { color: #71808c; font-size: 9px; }
+.team-pairing-card span { color: #71808c; font-size: 10px; }
 .team-pairing-card strong { letter-spacing: .14em; color: #d6dde4; font-size: 15px; }
 .team-review-boundary-card ul { display: grid; gap: 7px; margin: 0; padding-left: 18px; color: #86939f; font-size: 10px; line-height: 1.55; }
 .team-advanced-settings { border: 1px solid #29323a; border-radius: 10px; background: #0e1318; }

@@ -12,13 +12,13 @@
 .production-secondary-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 44px; border-bottom: 1px solid #252d35; padding: 0 14px; background: #11171c; }
 .production-secondary-bar > strong { min-width: 0; overflow: hidden; color: #aeb8c1; font-size: 11px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
 .production-secondary-back,
-.production-secondary-actions button { min-height: 28px; border-color: transparent; border-radius: 6px; padding: 4px 8px; color: #7c8994; background: transparent; font-size: 9px; }
+.production-secondary-actions button { min-height: 28px; border-color: transparent; border-radius: 6px; padding: 4px 8px; color: #7c8994; background: transparent; font-size: 10px; }
 .production-secondary-back:hover,
 .production-secondary-actions button:hover { color: #c7d0d7; background: #1a2127; }
 .production-secondary-actions { display: flex; align-items: center; gap: 6px; }
 .production-secondary-actions button.is-active { color: #e4e9ed; background: #242c33; }
 .production-secondary-switcher { display: block; }
-.production-secondary-switcher select { min-width: 102px; height: 28px; border: 1px solid #2c353e; border-radius: 6px; padding: 0 26px 0 8px; color: #aeb8c1; background: #151b21; font-size: 9px; outline: none; }
+.production-secondary-switcher select { min-width: 102px; height: 28px; border: 1px solid #2c353e; border-radius: 6px; padding: 0 26px 0 8px; color: #aeb8c1; background: #151b21; font-size: 10px; outline: none; }
 .production-secondary-switcher select:focus { border-color: #566675; }
 .production-secondary-canvas { min-width: 0; min-height: 0; height: 100%; overflow: auto; padding: 18px 22px 30px; }
 

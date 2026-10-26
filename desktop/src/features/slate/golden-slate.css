@@ -36,7 +36,7 @@
 .golden-slate-section > header .section-dot { width: 7px; height: 7px; border-radius: 50%; background: #d1a84c; }
 .golden-slate-section.is-placed > header .section-dot { background: #55b27d; }
 .golden-slate-section > header strong { color: #cbd4da; font-size: 10px; font-weight: 650; }
-.golden-slate-section > header small { color: #697681; font-size: 9px; font-variant-numeric: tabular-nums; }
+.golden-slate-section > header small { color: #697681; font-size: 10px; font-variant-numeric: tabular-nums; }
 .golden-slate-section-scroll { min-width: 0; min-height: 0; overflow: auto; }
 .golden-slate-drop-overlay { position: absolute; z-index: 30; inset: 12px; display: grid; place-items: center; border: 2px dashed #5796df; border-radius: 9px; color: #dcecff; background: rgba(27,53,78,.90); box-shadow: 0 10px 32px rgba(0,0,0,.24); font-size: 12px; font-weight: 680; pointer-events: none; }
 .golden-slate-workbench.is-file-drop-active .golden-slate-table-shell { box-shadow: inset 0 0 0 2px rgba(87,150,223,.25); }
@@ -53,7 +53,7 @@
 .golden-slate-table .col-text { width: 66px; }
 .golden-slate-table .col-media { width: 188px; }
 .golden-slate-table .col-status { width: 110px; }
-.golden-slate-table td.col-index small { display: block; margin-top: 3px; color: #77848f; font-size: 9px; }
+.golden-slate-table td.col-index small { display: block; margin-top: 3px; color: #77848f; font-size: 10px; }
 .golden-slate-empty-media { display: grid; width: 180px; height: 88px; place-items: center; border: 1px solid #28323b; border-radius: 8px; color: #596671; background: #12181d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
 .golden-slate-empty-media:hover { border-color: #405364; color: #9fb7cb; background: #16202a; }
 
@@ -80,24 +80,24 @@
 .golden-inspector-head { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid #28313a; padding: 0 12px; background: #11171c; }
 .golden-inspector-head > div { display: grid; gap: 2px; min-width: 0; }
 .golden-inspector-head strong { color: #dfe6eb; font-size: 11px; }
-.golden-inspector-head span { overflow: hidden; color: #75828d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.golden-inspector-head em { color: #d1a84c; font-size: 9px; font-style: normal; font-weight: 650; }
+.golden-inspector-head span { overflow: hidden; color: #75828d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.golden-inspector-head em { color: #d1a84c; font-size: 10px; font-style: normal; font-weight: 650; }
 .golden-slate-player { display: grid; width: calc(100% - 24px); max-height: 250px; aspect-ratio: 16 / 9; overflow: hidden; place-items: center; margin: 12px; border-radius: 8px; background: #06090b; }
 .golden-slate-player video { width: 100%; height: 100%; object-fit: contain; }
 .golden-player-empty { color: #66737d; font-size: 10px; }
 
 .golden-episode-candidates { display: grid; gap: 5px; margin: 0 12px 10px; border: 1px solid rgba(87,150,223,.22); border-radius: 7px; padding: 8px; background: rgba(87,150,223,.06); }
-.golden-episode-candidates > header { display: flex; align-items: center; justify-content: space-between; color: #84919c; font-size: 9px; }
+.golden-episode-candidates > header { display: flex; align-items: center; justify-content: space-between; color: #84919c; font-size: 10px; }
 .golden-episode-candidates > header strong { color: #a9bfd4; font-size: 10px; }
 
 .golden-inspector-media { display: grid; gap: 8px; margin: 0 12px 10px; }
-.golden-inspector-media > header { display: flex; align-items: center; justify-content: space-between; color: #6f7c87; font-size: 9px; }
+.golden-inspector-media > header { display: flex; align-items: center; justify-content: space-between; color: #6f7c87; font-size: 10px; }
 .golden-inspector-media > header strong { color: #9da9b3; font-size: 10px; }
 .golden-inspector-media .mo-media-card { width: 100%; }
 .golden-angle-editor { display: grid; gap: 5px; border-bottom: 1px solid #252e36; padding-bottom: 8px; }
 .golden-angle-editor:last-of-type { border-bottom: 0; }
 .golden-angle-fields { display: grid; grid-template-columns: 74px minmax(0,1fr); gap: 5px; }
-.golden-angle-fields label { display: grid; gap: 3px; color: #74818c; font-size: 9px; }
+.golden-angle-fields label { display: grid; gap: 3px; color: #74818c; font-size: 10px; }
 .golden-angle-fields input, .golden-angle-fields select { width: 100%; min-width: 0; border: 1px solid #303a43; border-radius: 5px; padding: 5px 6px; color: #d5dde3; background: #0a0f13; font-size: 10px; }
 .golden-angle-fields .golden-angle-note { grid-column: 1 / -1; }
 .golden-angle-actions { display: flex; gap: 7px; }
@@ -108,14 +108,14 @@
 
 .golden-io-row { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 5px; align-items: end; margin: 10px 12px; }
 .golden-io-row button { min-height: 31px; padding: 5px 7px; font-size: 10px; }
-.golden-io-row label, .golden-inspector-field { display: grid; gap: 4px; color: #75838e; font-size: 9px; }
+.golden-io-row label, .golden-inspector-field { display: grid; gap: 4px; color: #75838e; font-size: 10px; }
 .golden-io-row input, .golden-inspector-field textarea { width: 100%; border: 1px solid #303a43; border-radius: 6px; padding: 6px 7px; color: #d8e0e6; background: #0a0f13; font-size: 10px; }
 .golden-inspector-field { margin: 8px 12px 0; }
 .golden-inspector-field textarea { resize: vertical; line-height: 1.45; }
 .golden-inspector-link { display: grid; gap: 3px; margin: 10px 12px 0; border-top: 1px solid #28313a; padding-top: 9px; }
-.golden-inspector-link > span { color: #6f7c87; font-size: 9px; }
+.golden-inspector-link > span { color: #6f7c87; font-size: 10px; }
 .golden-inspector-link strong { color: #d2dae0; font-size: 10px; }
-.golden-inspector-link small { color: #74818c; font-size: 9px; line-height: 1.45; }
+.golden-inspector-link small { color: #74818c; font-size: 10px; line-height: 1.45; }
 .golden-inspector-actions { display: flex; gap: 6px; margin: 10px 12px 14px; }
 .golden-inspector-actions button { flex: 1; min-height: 30px; font-size: 10px; }
 button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b1212; }
