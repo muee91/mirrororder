@@ -115,8 +115,8 @@ def _read_inventory_snapshot(
     return payload
 
 
-def _indexed_rows(project: Any) -> dict[str, dict[str, str]]:
-    result: dict[str, dict[str, str]] = {}
+def _indexed_rows(project: Any) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
 
     def add(row: object) -> None:
         if not isinstance(row, dict):
@@ -131,10 +131,17 @@ def _indexed_rows(project: Any) -> dict[str, dict[str, str]]:
                 existing["clip_id"] = clip_id
             return
         source = str(row.get("source_media_path", "") or row.get("media_path", "") or "")
+        # duration 是素材库列表行的决策字段；material_index 已有扫描期秒数，直接投影。
+        raw_duration = row.get("duration")
+        try:
+            duration = round(float(raw_duration), 2) if raw_duration is not None else None
+        except (TypeError, ValueError):
+            duration = None
         result[media_id] = {
             "clip_id": clip_id,
             "display_name": (Path(source).name or str(row.get("name", "") or media_id))[:300],
             "inferred_camera": str(row.get("camera", "") or "")[:40],
+            "duration_seconds": duration if duration is not None and duration > 0 else None,
         }
 
     # ProjectService resolves /media/{clip_id} from material_index.clips, so
@@ -204,6 +211,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
                 if path_text
                 else indexed_row.get("inferred_camera", "")
             ),
+            "duration_seconds": indexed_row.get("duration_seconds"),
             "indexed": media_id in indexed,
             "label": _safe_role(labels.get(media_id)),
         }
@@ -217,6 +225,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
                 "display_name": indexed_row.get("display_name", media_id),
                 "folder_label": "",
                 "inferred_camera": indexed_row.get("inferred_camera", ""),
+                "duration_seconds": indexed_row.get("duration_seconds"),
                 "indexed": True,
                 "label": _safe_role(labels.get(media_id)),
             },
@@ -233,6 +242,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
             "display_name": str(role.get("display_name", "") or key)[:300],
             "folder_label": "",
             "inferred_camera": "",
+            "duration_seconds": indexed.get(key, {}).get("duration_seconds"),
             "indexed": key in indexed,
             "label": role,
         }

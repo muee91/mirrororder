@@ -17,6 +17,14 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 素材库行决策字段（切片 5 服务端前置项落地，已实跑验证）
+
+- **`media_inventory.v1` items 新增 `duration_seconds`**：直接投影 material_index 行已有的扫描期秒数（含 groups members 合并、非法/非正值归一为 null），读路径仍不碰媒体（新增单测 + 既有“读路径不枚举不哈希”红线测试保持通过）。
+- **前端接线**：行名称块显示时长（60s 以上 mm:ss）、右栏监看标题带时长；新增 Take 关联小字——review angle 按 media_id/clip_id 双键注册、行侧双键回退连接（与 playbackIndex 同思路）。
+- **真实载荷验证**（fixture 项目 project，Host 实测）：1502/1502 行投影出时长（如 28.8s）、抽样 400/400 行成功连接 Take 标签。
+- **如实边界**：beef 真实项目的 material_index 与 review angle 均无 media_id 注记（旧索引形态），行与 angle 分属两个 ID 空间，时长与 Take 关联在该项目上暂不可投影——需 identity 运行时重注记或重扫描后生效；这正是走查时素材库预览全撞墙的同一根因。分辨率字段需扫描期 ffprobe 采样，未在本切片实现。
+- 验证：`check_python` exit 0（inventory 单测 6 项）；tsc exit 0；Vitest 77 文件 / 379 项全过。
+
 ## 2026-10-26 媒体词汇收敛与机位槽位三态（切片 1 收尾 + 修复顺序④⑤，已实跑验证）
 
 - **失败文案全面收敛**：场记（GoldenSlate）与素材库右栏的播放失败详情改用共享 `playbackFailure` 分类器（缺失/解码/连接），与 Take 详情、时间线双监看同一词汇；标题保留各面锚点（ux-real 门与安全契约断言不变，契约同步到新 onError 形态）。至此五个面的媒体失败提示共享一套原因与指引。

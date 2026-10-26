@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { HostConnection, HostConnectionError, type ReviewAngle, errorMessage } from "../../api/host";
+import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewTakeGroup, errorMessage } from "../../api/host";
+import { takeDisplayLabel } from "../material-script/TakeCard";
 import { classifyPlaybackFailure, type PlaybackFailure } from "./playbackFailure";
 import {
   MediaRoleClient,
@@ -71,6 +72,30 @@ function defaultDraft(item: MediaInventoryItem, store: MediaRoleStore | null): M
   };
 }
 
+function durationLabel(seconds: number | null | undefined): string {
+  if (!Number.isFinite(seconds) || Number(seconds) <= 0) return "";
+  const total = Math.round(Number(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return minutes ? `${minutes}:${String(rest).padStart(2, "0")}` : `${total}s`;
+}
+
+// 按 media_id 连接（与 playbackIndex 同键）：快照行的 clip_id 只有现代索引才有，
+// 而 media_id 在扫描快照与 review angle 上都稳定存在。
+function takeLabelIndex(takes: ReviewTakeGroup[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const take of takes) {
+    const label = takeDisplayLabel(take);
+    for (const angle of take.angles) {
+      // 双键注册：media_id 与 clip_id 都可能是行侧唯一可用的连接键。
+      for (const key of [angle.media_id?.trim(), angle.clip_id?.trim()]) {
+        if (key && label && !result[key]) result[key] = label;
+      }
+    }
+  }
+  return result;
+}
+
 function inventoryUpdatedLabel(value: string): string {
   if (!value) return "";
   const date = new Date(value);
@@ -117,12 +142,14 @@ function MediaLibraryRow({
   selected,
   roles,
   preview,
+  takeLabel,
   onSelect,
 }: {
   item: MediaInventoryItem;
   selected: boolean;
   roles: MediaRoleStore | null;
   preview: PlaybackEntry | undefined;
+  takeLabel?: string;
   onSelect: () => void;
 }) {
   // Viewport-gated preview：屏幕外的行保持静态占位，列表不再一次挂载
@@ -164,8 +191,8 @@ function MediaLibraryRow({
         ) : <span className="media-library-thumb-fallback">{camera.label}</span>}
       </span>
       <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
-      <span className="media-library-name"><strong>{item.display_name}</strong><small>{item.folder_label || "素材"}</small></span>
-      <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{role.scene_id ? `场 ${role.scene_id}` : auxiliary ? "不参与主机位同步" : ""}</small></span>
+      <span className="media-library-name"><strong>{item.display_name}</strong><small>{[item.folder_label || "素材", durationLabel(item.duration_seconds)].filter(Boolean).join(" · ")}</small></span>
+      <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{[role.scene_id ? `场 ${role.scene_id}` : "", takeLabel].filter(Boolean).join(" · ") || (auxiliary ? "不参与主机位同步" : "")}</small></span>
       <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><MediaHealthIndicator state={healthState} /></span>
     </button>
   );
@@ -177,6 +204,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [inventory, setInventory] = useState<MediaInventory | null>(null);
   const [roles, setRoles] = useState<MediaRoleStore | null>(null);
   const [playbackByMedia, setPlaybackByMedia] = useState<Record<string, PlaybackEntry>>({});
+  const [takeLabelByClip, setTakeLabelByClip] = useState<Record<string, string>>({});
   const [playbackProjectionLoaded, setPlaybackProjectionLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState<MediaRole>({});
@@ -202,6 +230,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       setRoles(nextRoles);
       setPlaybackProjectionLoaded(Boolean(review));
       setPlaybackByMedia(review ? playbackIndex(host, projectId, review.take_groups) : {});
+      setTakeLabelByClip(review ? takeLabelIndex(review.take_groups) : {});
       const nextSelected = preferredId && nextInventory.items.some((item) => item.media_id === preferredId)
         ? preferredId
         : nextInventory.items[0]?.media_id ?? "";
@@ -372,6 +401,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
               selected={selectedId === item.media_id}
               roles={roles}
               preview={playbackForItem(host, projectId, item, playbackByMedia[item.media_id])}
+              takeLabel={takeLabelByClip[item.media_id] ?? (item.clip_id?.trim() ? takeLabelByClip[item.clip_id.trim()] : undefined)}
               onSelect={() => select(item)}
             />
           ))}
@@ -385,7 +415,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
               <section className="media-library-monitor">
                 <header>
                   <span className="media-library-monitor-camera" data-camera-tone={selectedCamera.tone}>{selectedCamera.label}</span>
-                  <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"}</small></span>
+                  <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{[durationLabel(selectedItem.duration_seconds), selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"].filter(Boolean).join(" · ")}</small></span>
                   <MediaHealthIndicator state={mediaHealthState({ indexed: selectedItem.indexed, playable: Boolean(selectedPlayback), playbackFailed: selectedPlaybackFailed })} />
                 </header>
                 <div className="media-library-player">

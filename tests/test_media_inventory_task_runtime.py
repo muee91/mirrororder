@@ -20,6 +20,31 @@ def _project(tmp_path: Path) -> SimpleNamespace:
     )
 
 
+def test_inventory_projection_includes_indexed_duration_without_touching_media(tmp_path: Path, monkeypatch) -> None:
+    """素材库行的决策字段：material_index 已有的扫描期秒数直接投影，读路径不碰媒体。"""
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    project = _project(tmp_path)
+    project.index = {
+        "clips": [
+            {"media_id": "M_dur", "clip_id": "C_dur", "duration": 68.16, "camera": "B"},
+            {"media_id": "M_bad", "clip_id": "C_bad", "duration": "not-a-number"},
+            {"media_id": "M_zero", "clip_id": "C_zero", "duration": 0},
+        ],
+        "groups": [],
+    }
+
+    payload = media_inventory_task_runtime.inventory_payload(
+        project,
+        DeviceMediaStore(),
+        MediaRoleStore(project.config.output_dir),
+    )
+
+    rows = {row["media_id"]: row for row in payload["items"]}
+    assert rows["M_dur"]["duration_seconds"] == 68.16
+    assert rows["M_bad"]["duration_seconds"] is None
+    assert rows["M_zero"]["duration_seconds"] is None
+
+
 def test_inventory_projection_never_enumerates_or_hashes_media_on_read(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
     media_root = tmp_path / "media"
@@ -92,6 +117,7 @@ def test_inventory_exposes_canonical_clip_identity_without_exposing_media_path(t
             "display_name": "A001.mov",
             "folder_label": "",
             "inferred_camera": "A",
+            "duration_seconds": None,
             "indexed": True,
             "label": {},
         }

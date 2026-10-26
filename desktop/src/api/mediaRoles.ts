@@ -33,6 +33,8 @@ export interface MediaInventoryItem {
   display_name: string;
   folder_label: string;
   inferred_camera: string;
+  /** Scan-time duration in seconds from material_index; null when unknown. */
+  duration_seconds?: number | null;
   indexed: boolean;
   label: MediaRole;
 }
