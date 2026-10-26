@@ -17,6 +17,13 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 beef 索引重注记（owner 项目实测，已实跑验证）
+
+- **执行**：备份 `projects/beef/output` 四个 JSON 后，以确定性核心 `material_index.analyze` 重跑 beef（FCPXML 项目；不走完整 analysis_runtime 以避免 ASR/identity 模型副作用）。1502 条 clip 全部获得 `media_id`；素材盘离线故为 `MP_` 路径稳定 ID（`media_identity` 的规定退化，不是错误）。
+- **连续性验证**：clip_id 序列 1502/1502 逐条一致、group_id 序列 610/610 一致、review-model 610 Take 完好——`_reconcile_previous_clip_identity` 的既有保障实测成立。
+- **行侧连接仍未解锁（按身份纪律，不做假连接）**：扫描快照行是盘在线时的字节哈希 `M_` ID，与本次 `MP_` 不同空间。盘恢复后任一显式动作即可对齐：在线重分析（索引变回 `M_` 匹配快照）或重扫描（快照变 `MP_` 匹配索引）。不在读路径上用路径字符串伪造内容身份连接。
+- 备份保留在 `/tmp/beef-output-backup-20261026/`（本机临时目录，不入库）。
+
 ## 2026-10-26 素材库行决策字段（切片 5 服务端前置项落地，已实跑验证）
 
 - **`media_inventory.v1` items 新增 `duration_seconds`**：直接投影 material_index 行已有的扫描期秒数（含 groups members 合并、非法/非正值归一为 null），读路径仍不碰媒体（新增单测 + 既有“读路径不枚举不哈希”红线测试保持通过）。
