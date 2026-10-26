@@ -96,12 +96,12 @@ function hasCandidate(take: ReviewTakeGroup): boolean {
 }
 
 function hasOfflineMedia(take: ReviewTakeGroup): boolean {
-  return take.angles.length === 0 || take.angles.some((angle) => angle.playback.available === false);
+  return take.angles.length === 0 || take.angles.some((angle) => angle.playback.state === "missing" || angle.playback.available === false);
 }
 
 function mediaAvailabilityLabel(take: ReviewTakeGroup): string {
   if (!take.angles.length) return "无机位素材";
-  const available = take.angles.filter((angle) => angle.playback.available !== false).length;
+  const available = take.angles.filter((angle) => angle.playback.state !== "missing" && angle.playback.available !== false).length;
   if (available === take.angles.length) return `${available} 机位可用`;
   if (available === 0) return `${take.angles.length} 机位离线`;
   return `${available}/${take.angles.length} 机位可用`;

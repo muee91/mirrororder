@@ -239,12 +239,24 @@ def _safe_angle(workspace_id: str, project_id: str, member: dict[str, Any]) -> d
     name = raw_name or Path(source).name or str(member.get("clip_id", "") or "未命名素材")
     local_exists = member.get("local_exists")
     available = bool(local_exists) if isinstance(local_exists, bool) else None
+    # 四态口径（见 docs/design-system-v2.md §6.1）：
+    #   verified = 本机绑定经内容身份校验解析成功，服务端权威声明"可取到字节"；
+    #   missing  = 设备绑定过但本次解析失败（盘离线/文件移动），与"从未绑定"分开；
+    #   unknown  = 本机从未登记绑定，服务端无从判断；
+    #   decode   = 只能由本机播放时报错产生（playbackFailure 探测），服务端不假装知道。
+    if available is True:
+        state = "verified"
+    elif available is False:
+        state = "missing"
+    else:
+        state = "unknown"
     playback: dict[str, Any] = {
         "url": _media_endpoint(workspace_id, project_id, str(member.get("clip_id", "") or "")),
         "source_start": _float(member.get("source_start"), 0.0),
         "source_end": (
             _float(member.get("source_end"), 0.0) if member.get("source_end") is not None else None
         ),
+        "state": state,
     }
     if available is not None:
         playback["available"] = available

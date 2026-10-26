@@ -62,7 +62,7 @@ export type TakeSlotAvailability = "none" | "available" | "offline" | "mixed";
 // 空槽和离线在走查截图里都呈现为“空白占位”，用户无从区分是没拍还是出问题。
 export function takeSlotAvailability(angles: ReviewAngle[]): TakeSlotAvailability {
   if (!angles.length) return "none";
-  const offline = angles.filter((angle) => angle.playback.available === false).length;
+  const offline = angles.filter((angle) => angle.playback.state === "missing" || angle.playback.available === false).length;
   if (offline === 0) return "available";
   if (offline === angles.length) return "offline";
   return "mixed";

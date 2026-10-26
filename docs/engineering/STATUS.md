@@ -17,6 +17,13 @@
 - 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
 - LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
 
+## 2026-10-26 四态媒体状态模型·服务端权威字段（owner 拍板先忽略 SSD 后执行，已实跑验证）
+
+- **review-model 每个 angle 的 `playback` 新增 `state`**：`verified`（本机绑定经内容身份校验解析成功，服务端权威声明"可取到字节"）/ `missing`（设备绑定过、本次解析失败——盘离线或文件移动）/ `unknown`（本机从未登记绑定）。`decode` 只由本机播放失败产生（前端 `playbackFailure` 探测），服务端不假装知道——四态口径与 `design-system-v2.md` §6.1 词汇表一一对应。
+- **前端消费**：`ReviewPlayback` 类型升级；机位槽位三态与 Take 汇总/筛选的离线判定改为 `state === "missing"` 优先（`available === false` 保留兼容旧 Host 快照）。五工作区自此共用一套服务端权威状态 + 本机运行时补充的_decode_ 层。
+- 语义边界如实记录：`verified` 只证明绑定路径通过内容校验（可取到字节），不等于本 WebView 可解码；`unknown` 不显示"可用"也不显示"离线"。
+- 验证：review/read-model 相关 pytest 通过；tsc exit 0；Vitest 379 项全过；Host 实测 fixture 项目 angle `state: unknown`（fixture 无设备绑定，语义正确）。
+
 ## 2026-10-26 真实项目 P0 闸门首跑（beef，6/7 必需步骤通过）
 
 - `check:ux-real` 首次对真实项目 beef 运行（610 Take 真实规模）：shell 挂载、剧本主画布（53 块）、搜索空态、审阅队列连续换 Take（12 行渲染 / positions 1→2→3）、素材画布（2092 对象）、时间线画布 6 项 PASS；唯一 FAIL 是看片播放——**运行中途外置 SSD 从总线掉落**（先前同会话 `/media/{clip_id}` 实测 206 真实字节；FAIL 后 `diskutil` 已无该物理设备，绑定与确认状态完好，纯物理断连）。段详情抽屉 8s 超时已归因并修复（非慢）：真因是操作者首次引导弹层在干净 profile 上自动展开、恰好盖住闸门要点按的「匹配素材」——fixture 早已设置操作者所以从未触发。修复两处：弹层补外点/Escape 收起并记忆已引导（不能把用户困在弹层里）；闸门 addInitScript 预置操作者与引导标记（模拟回访用户环境）。重跑 beef：抽屉 92ms PASS，其余同前。

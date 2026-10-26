@@ -58,11 +58,19 @@ export interface ReviewIssue {
   label: string;
 }
 
+export type PlaybackState = "verified" | "missing" | "unknown";
+
 export interface ReviewPlayback {
   url: string;
   source_start: number;
   source_end: number | null;
   available?: boolean;
+  /**
+   * 服务端权威口径（design-system-v2 §6.1 媒体四态）：
+   * verified = 本机绑定经内容校验解析成功；missing = 曾绑定、本次解析失败；
+   * unknown = 本机从未登记绑定。"decode" 只由本机播放失败产生，不来自服务端。
+   */
+  state?: PlaybackState;
 }
 
 export interface ReviewAngle {
