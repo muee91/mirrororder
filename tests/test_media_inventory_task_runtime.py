@@ -45,6 +45,47 @@ def test_inventory_projection_includes_indexed_duration_without_touching_media(t
     assert rows["M_zero"]["duration_seconds"] is None
 
 
+def test_inventory_rows_join_index_clips_through_provisional_filename_after_media_move(tmp_path: Path, monkeypatch) -> None:
+    """迁移项目：快照行是内容哈希 M_，索引只剩文件名派生 MP_——行仍要连上 clip。"""
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    project = _project(tmp_path)
+    moved_path = "/Volumes/Disk/新位置/A001C001.MP4"
+    from script_organizer.media_identity import provisional_media_id
+    project.index = {
+        "clips": [
+            {"media_id": provisional_media_id(moved_path), "clip_id": "C_moved", "duration": 42.5, "camera": "A", "name": "A001C001.MP4"},
+        ],
+        "groups": [],
+    }
+
+    device = DeviceMediaStore()
+    device.add_roots(project.workspace_id, project.project_id, ["/Volumes/Disk/新位置"])
+    # 直接写一份快照：行 ID 是扫描期内容哈希，路径是迁移后的新位置。
+    media_inventory_task_runtime._write_inventory_snapshot(
+        device,
+        project.workspace_id,
+        project.project_id,
+        ["/Volumes/Disk/新位置"],
+        media_rows=[("M_realhash0000000000000000", moved_path)],
+    )
+
+    payload = media_inventory_task_runtime.inventory_payload(
+        project,
+        device,
+        MediaRoleStore(project.config.output_dir),
+    )
+
+    assert payload["scan_required"] is False
+    rows = {row["media_id"]: row for row in payload["items"]}
+    # 快照行（M_）经 provisional 文件名二次查找连上索引 clip；索引自身行（MP_）照常存在。
+    moved_row = rows["M_realhash0000000000000000"]
+    assert moved_row["clip_id"] == "C_moved"
+    assert moved_row["duration_seconds"] == 42.5
+    assert moved_row["inferred_camera"] == "A"
+    indexed_media_id = provisional_media_id(moved_path)
+    assert rows[indexed_media_id]["clip_id"] == "C_moved"
+
+
 def test_inventory_projection_never_enumerates_or_hashes_media_on_read(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
     media_root = tmp_path / "media"

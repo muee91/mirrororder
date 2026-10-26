@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 from uuid import uuid4
 
-from .media_identity import DeviceMediaStore, MediaScanCancelled, media_id_for_path
+from .media_identity import DeviceMediaStore, MediaScanCancelled, media_id_for_path, provisional_media_id
 from .media_reader import infer_camera_label
 from .media_role_store import MediaRoleStore
 from .resource_scheduler import ResourceCancelled
@@ -199,7 +199,11 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
         if not media_id:
             continue
         path = Path(path_text)
-        indexed_row = indexed.get(media_id, {})
+        # 快照行带扫描期内容哈希 M_；索引在文件迁移后可能只有文件名派生的 MP_
+        # （与扫描候选同一启发式）。直接 ID 未命中时按 provisional 文件名 ID
+        # 二次查找，让行级 clip_id/时长/Take 连接对迁移项目继续可用。
+        # 纯字符串哈希，读路径仍然不触碰媒体字节。
+        indexed_row = indexed.get(media_id) or indexed.get(provisional_media_id(path_text), {})
         rows_by_id[media_id] = {
             "media_id": media_id,
             "clip_id": indexed_row.get("clip_id", ""),
