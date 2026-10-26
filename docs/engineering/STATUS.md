@@ -19,6 +19,9 @@
 
 ## 2026-10-26 beef 索引重注记（owner 项目实测，已实跑验证）
 
+**盘恢复后对齐（同日完成，真实出片）**：素材盘实际是目录树上移了一层（`/Volumes/PSSD 2TB/8.13 牛肉/` → `/Volumes/PSSD 2TB/天价牛肉/8.13 牛肉/`）。走产品内建流程完成重连：`media-scan --replace` 两个新根（两拍摄日 786+716=1502 文件，文件名唯一匹配生成 1502 个 provisional 候选）→ 经 `confirm_provisional` 同 API 逐条确认（1502/1502，0 失败；device-local 确认，不提升为共享身份、不改项目 JSON）。**实测：1533/1533 review angle 可用，`GET /media/{clip_id}` 返回 206 + video/mp4 真实字节；media-status 1502/1502 local_exists、0 待确认。**此前所有“素材离线/播放失败”的真因是盘迁移导致绑定失效，现已按产品语义恢复。素材库行 join 仍为 M_(快照)/MP_(索引) 两个 ID 空间——后续可做“经确认绑定回写索引路径”的 re-link 写路径解锁行级连接（与波形/分辨率同批）。
+
+
 - **执行**：备份 `projects/beef/output` 四个 JSON 后，以确定性核心 `material_index.analyze` 重跑 beef（FCPXML 项目；不走完整 analysis_runtime 以避免 ASR/identity 模型副作用）。1502 条 clip 全部获得 `media_id`；素材盘离线故为 `MP_` 路径稳定 ID（`media_identity` 的规定退化，不是错误）。
 - **连续性验证**：clip_id 序列 1502/1502 逐条一致、group_id 序列 610/610 一致、review-model 610 Take 完好——`_reconcile_previous_clip_identity` 的既有保障实测成立。
 - **行侧连接仍未解锁（按身份纪律，不做假连接）**：扫描快照行是盘在线时的字节哈希 `M_` ID，与本次 `MP_` 不同空间。盘恢复后任一显式动作即可对齐：在线重分析（索引变回 `M_` 匹配快照）或重扫描（快照变 `MP_` 匹配索引）。不在读路径上用路径字符串伪造内容身份连接。
