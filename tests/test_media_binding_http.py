@@ -8,7 +8,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
-from script_organizer import desktop_runtime, media_inventory_task_runtime, tasks, web_server
+from script_organizer import desktop_runtime, media_identity, media_inventory_task_runtime, tasks, web_server
 from script_organizer.media_identity import DeviceMediaStore, provisional_media_id
 
 
@@ -90,3 +90,18 @@ def test_invalid_action_does_not_poison_next_keepalive_confirmation(tmp_path, mo
         })
         assert status == 200
         assert payload["summary"]["resolved"] == 1
+
+
+def test_media_binding_get_uses_snapshot_without_rehashing_every_file(tmp_path, monkeypatch):
+    with _binding_server(tmp_path, monkeypatch) as (connection, _device, _files):
+        def fail_if_get_hashes(_path):
+            raise AssertionError("media-binding GET must not re-hash the full project")
+
+        monkeypatch.setattr(media_identity, "media_id_for_path", fail_if_get_hashes)
+        connection.request("GET", "/api/v1/projects/demo/media-binding")
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+        assert response.status == 200
+        assert payload["summary"]["resolved"] == 0
+        assert payload["summary"]["missing"] == 2
+        assert payload["summary"]["verification"] == "snapshot"

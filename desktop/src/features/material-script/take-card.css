@@ -59,6 +59,8 @@
 .take-camera-slot .mo-media-card.is-compact { width: 196px; height: 96px; }
 .take-camera-slot.is-offline > header { color: var(--mo-warning, #d0aa54); }
 .take-camera-slot.is-offline { border-color: color-mix(in srgb, var(--mo-warning, #d0aa54) 45%, var(--mo-border-subtle, #202830)); }
+.take-camera-slot.is-unknown > header { color: var(--mo-text-muted, #778590); }
+.take-camera-slot.is-unknown { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mo-text-muted, #778590) 48%, transparent); border-radius: 5px; background: color-mix(in srgb, var(--mo-text-muted, #778590) 4%, transparent); }
 .take-camera-empty { height: 96px; display: grid; place-content: center; gap: 3px; border: 1px dashed var(--camera-border, var(--mo-border-default, #29333d)); border-radius: 6px; background: var(--camera-fill, var(--mo-surface-raised, #151b20)); color: var(--camera-ink, var(--mo-text-muted, #778590)); text-align: center; }
 .take-camera-empty span { font-size: var(--mo-font-sm, 11px); font-weight: 760; }
 .take-camera-empty small { color: var(--mo-text-muted, #778590); font-size: var(--mo-font-xs, 10px); }
@@ -150,6 +152,12 @@
   background: color-mix(in srgb, var(--mo-warning, #d0aa54) 6%, var(--mo-surface-app, #0b0f13));
 }
 .mo-take-list-camera.is-offline em { color: var(--mo-warning, #d0aa54); }
+.mo-take-list-camera.is-unknown {
+  border-color: color-mix(in srgb, var(--mo-text-muted, #778590) 52%, var(--mo-border-subtle, #202830));
+  color: var(--mo-text-muted, #778590);
+  background: color-mix(in srgb, var(--mo-text-muted, #778590) 6%, var(--mo-surface-app, #0b0f13));
+}
+.mo-take-list-camera.is-unknown em { color: var(--mo-text-muted, #778590); }
 .mo-take-list-camera-overflow {
   display: grid;
   min-width: 22px;

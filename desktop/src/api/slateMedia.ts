@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export interface SlateResolvedMediaItem {
   media_id: string;
@@ -25,10 +24,6 @@ export interface SlateResolvedMediaPayload {
   };
 }
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 export class SlateMediaClient {
   readonly baseUrl: string;
 
@@ -43,7 +38,7 @@ export class SlateMediaClient {
     const values = paths.map((value) => value.trim()).filter(Boolean).slice(0, 33);
     if (!id) throw new HostConnectionError("场记素材拖入需要 project_id");
     if (!values.length) throw new HostConnectionError("拖入素材不能为空");
-    const response = await transportFetch(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(id)}/slate-media-resolve`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(id)}/slate-media-resolve`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ paths: values }),

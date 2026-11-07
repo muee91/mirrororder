@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export type SlateStatus = "unmarked" | "usable" | "partial" | "ng";
 
@@ -349,10 +348,6 @@ export interface WaveformBuildPayload {
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 async function decodeError(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as { error?: string };
@@ -364,18 +359,15 @@ async function decodeError(response: Response): Promise<string> {
 }
 
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
-  const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
   try {
-    const response = await transportFetch(`${baseUrl}${path}`, {
+    const response = await fetchWithTimeout(`${baseUrl}${path}`, {
       ...init,
       method: init?.method ?? "GET",
       headers,
-      signal: controller.signal,
-    });
+    }, timeoutMs);
     if (!response.ok) {
       throw new HostConnectionError(await decodeError(response), { status: response.status });
     }
@@ -384,8 +376,6 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit,
     if (error instanceof HostConnectionError) throw error;
     const message = error instanceof Error ? error.message : String(error);
     throw new HostConnectionError(`Desktop Production API 请求失败：${message}`, { cause: error });
-  } finally {
-    globalThis.clearTimeout(timeout);
   }
 }
 

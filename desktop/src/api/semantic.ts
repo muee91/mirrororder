@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export interface SemanticSearchResult {
   document_id: string;
@@ -36,10 +35,6 @@ export interface SemanticSearchPayload {
   semantics: Record<string, boolean>;
 }
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 export class SemanticSearchClient {
   readonly baseUrl: string;
 
@@ -55,7 +50,7 @@ export class SemanticSearchClient {
     if (!text) throw new HostConnectionError("输入要搜索的画面、对白或场记内容");
     const params = new URLSearchParams({ q: text, limit: String(Math.max(1, Math.min(60, options?.limit ?? 16))) });
     if (options?.sources?.length) params.set("sources", options.sources.join(","));
-    const response = await transportFetch(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/semantic-search?${params.toString()}`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/semantic-search?${params.toString()}`, {
       method: "GET",
       headers: { Accept: "application/json" },
     });
@@ -78,7 +73,7 @@ export class SemanticSearchClient {
     const text = query.trim();
     if (!project) throw new HostConnectionError("项目搜索需要 project_id");
     if (!text) throw new HostConnectionError("输入要搜索的画面、对白或场记内容");
-    const response = await transportFetch(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/semantic-search`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/semantic-search`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({

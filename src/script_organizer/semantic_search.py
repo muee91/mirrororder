@@ -51,12 +51,13 @@ class SemanticSearcher:
         *,
         database: WorkspaceDatabase | None = None,
         encoder: SemanticEncoder | None = None,
+        read_only: bool = False,
     ):
         self.workspace_id = str(workspace_id or "")
         self.project_id = str(project_id or "")
         self.config = config
-        self.database = database or WorkspaceDatabase(self.workspace_id)
-        self.store = SemanticStore(self.database)
+        self.database = database or WorkspaceDatabase(self.workspace_id, read_only=read_only)
+        self.store = SemanticStore(self.database, read_only=read_only)
         self.encoder = encoder or SemanticEncoder()
 
     def _refresh(self) -> dict[str, Any]:

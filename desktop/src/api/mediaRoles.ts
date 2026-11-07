@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export type MediaSourceRole = "sync_camera" | "aerial" | "broll" | "gopro" | "insert" | "custom" | string;
 export type MediaSyncPolicy = "auto" | "exclude" | string;
@@ -28,6 +27,8 @@ export interface MediaRoleStore {
 
 export interface MediaInventoryItem {
   media_id: string;
+  /** Last explicit device verification state; unknown is neither ready nor offline. */
+  state?: "verified" | "missing" | "unknown" | string;
   /** Opaque material_index clip identity. Never a device path. */
   clip_id?: string;
   display_name: string;
@@ -59,10 +60,6 @@ export interface MediaInventory {
   semantics: Record<string, boolean>;
 }
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 function base(value: string): string {
   const result = value.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(result)) throw new HostConnectionError("素材库 Host 地址无效");
@@ -76,7 +73,7 @@ function route(projectId: string, suffix: string): string {
 }
 
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const response = await transportFetch(`${baseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     ...init,
     method: init?.method ?? "GET",
     headers: { Accept: "application/json", ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}), ...Object.fromEntries(new Headers(init?.headers).entries()) },

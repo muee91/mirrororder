@@ -10,6 +10,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from ..audit_engine import _read_analysis_inputs
 from ..config import ProjectConfig
 
 
@@ -81,7 +82,7 @@ def _authority(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def _material_clip_map(config: ProjectConfig) -> dict[str, dict[str, Any]]:
-    payload = _load_json(config.output_dir / "material_index.json", {})
+    payload, _script, _matches = _read_analysis_inputs(config.output_dir)
     if not isinstance(payload, dict):
         raise UnsafeTimelineDelivery("material_index.json is not a valid object")
     result: dict[str, dict[str, Any]] = {}

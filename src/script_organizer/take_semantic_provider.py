@@ -38,6 +38,9 @@ class TakeSemanticProvider:
             self._local_runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(self.config.model))
         return self._local_runtime.ensure_server()
 
+    def _request_model(self) -> str:
+        return self.config.model
+
     @staticmethod
     def _image_url(path: Path) -> str:
         mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
@@ -69,7 +72,7 @@ class TakeSemanticProvider:
             if frame.is_file():
                 content.append({"type": "image_url", "image_url": {"url": self._image_url(frame)}})
         payload = {
-            "model": self.config.model,
+            "model": self._request_model(),
             "temperature": 0,
             "messages": [
                 {"role": "system", "content": system},
@@ -115,6 +118,7 @@ class TakeSemanticProvider:
                 return []
             return [str(value).strip()[:120] for value in raw_value if str(value).strip()][:limit]
 
+        model = self._request_model()
         return {
             "description": str(result.get("description", "") or "")[:1600],
             "location": str(result.get("location", "") or "")[:160],
@@ -128,5 +132,5 @@ class TakeSemanticProvider:
             "tags": values("tags", limit=8),
             "summary": str(result.get("summary", "") or "")[:1000],
             "provider": self.config.provider,
-            "model": self.config.model,
+            "model": model,
         }

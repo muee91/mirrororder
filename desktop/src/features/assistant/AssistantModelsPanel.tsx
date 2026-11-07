@@ -223,7 +223,7 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
                       <div><strong>{label}</strong><small>{description}</small></div>
                       <label><input type="checkbox" checked={row.enabled} disabled={busy} onChange={(event) => patch(role, { enabled: event.target.checked })} />启用覆盖</label>
                     </div>
-                    <label className="production-field"><span>提供方</span><select value={row.provider} disabled={busy} onChange={(event) => patch(role, { provider: event.target.value })}><option value="openai-compatible">OpenAI-compatible</option><option value="openai">OpenAI</option><option value="local">本机服务</option><option value="llama.cpp">llama.cpp</option><option value="llama-server">llama-server</option></select></label>
+                    <label className="production-field"><span>提供方</span><select value={row.provider} disabled={busy} onChange={(event) => patch(role, { provider: event.target.value })}><option value="openai-compatible">OpenAI-compatible</option><option value="openai">OpenAI</option><option value="local">{role === "vision" ? "本机视觉语义" : "本机服务"}</option><option value="llama.cpp">llama.cpp</option><option value="llama-server">llama-server</option></select></label>
                     <label className="production-field"><span>服务地址</span><input value={row.base_url} disabled={busy} onChange={(event) => patch(role, { base_url: event.target.value })} placeholder="http://127.0.0.1:... 或兼容 API" /></label>
                     <label className="production-field"><span>模型</span><input value={row.model} disabled={busy} onChange={(event) => patch(role, { model: event.target.value })} /></label>
                     <div className="model-api-key-row">

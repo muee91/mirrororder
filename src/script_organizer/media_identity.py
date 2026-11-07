@@ -129,9 +129,10 @@ class DeviceMediaStore:
 
     _thread_lock = RLock()
 
-    def __init__(self, path: Path | None = None):
+    def __init__(self, path: Path | None = None, *, create: bool = True):
         self.path = path or (device_state_dir() / "media-bindings.json")
-        self._ensure()
+        if create:
+            self._ensure()
 
     @contextmanager
     def _write_lock(self):
@@ -243,14 +244,12 @@ class DeviceMediaStore:
         raw = projects.get(project_id, {}) if isinstance(projects.get(project_id, {}), dict) else {}
         if not raw:
             legacy_projects = root.get("projects", {})
-            legacy = legacy_projects.pop(project_id, None) if isinstance(legacy_projects, dict) else None
+            # Reads must stay read-only.  Legacy migration is performed by the
+            # write paths below while holding the file lock; a snapshot GET
+            # only projects the legacy row in its current location.
+            legacy = legacy_projects.get(project_id) if isinstance(legacy_projects, dict) else None
             if isinstance(legacy, dict):
-                workspace = root.setdefault("workspaces", {}).setdefault(workspace_id, {"projects": {}})
-                projects = workspace.setdefault("projects", {})
-                projects[project_id] = legacy
                 raw = legacy
-                if payload is None:
-                    self._save(root)
         return {
             "roots": [str(value) for value in raw.get("roots", []) if str(value)],
             "bindings": dict(raw.get("bindings", {})) if isinstance(raw.get("bindings", {}), dict) else {},
@@ -294,18 +293,73 @@ class DeviceMediaStore:
             return original
         return ""
 
+    @staticmethod
+    def state_from_snapshot(project: dict[str, Any], item: dict[str, Any]) -> str:
+        """Return the last explicit device verification state without hashing.
+
+        A scan or a provisional confirmation is the durable verification
+        boundary. Read-model construction may check whether that recorded path
+        still exists, but must not re-hash every project asset. Playback keeps
+        the stronger content-identity check for the one clip being opened.
+        """
+        key = binding_key(item)
+        bindings = project.get("bindings", {}) if isinstance(project.get("bindings", {}), dict) else {}
+        bound = str(bindings.get(key, "") or "")
+        if key.startswith("MP_"):
+            confirmed = (
+                project.get("confirmed_provisional", {})
+                if isinstance(project.get("confirmed_provisional", {}), dict)
+                else {}
+            )
+            if not bound or str(confirmed.get(key, "") or "") != bound:
+                return "unknown"
+        elif not key.startswith("M_") or not bound:
+            return "unknown"
+        return "verified" if Path(bound).is_file() else "missing"
+
     def resolve(self, workspace_id: str, project_id: str, item: dict[str, Any]) -> str:
         return self.resolve_from_snapshot(self.project_snapshot(workspace_id, project_id), item)
 
-    def summary(self, workspace_id: str, project_id: str, index: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def resolve_from_snapshot_light(project: dict[str, Any], item: dict[str, Any]) -> str:
+        """Resolve the last explicit binding without re-hashing media bytes.
+
+        Recovery/status GETs use this snapshot-only path. The one-clip
+        playback boundary continues to call ``resolve_from_snapshot`` so a
+        replaced file cannot be served under an old content identity.
+        """
+        key = binding_key(item)
+        bindings = project.get("bindings", {}) if isinstance(project.get("bindings", {}), dict) else {}
+        bound = str(bindings.get(key, "") or "")
+        if key.startswith("MP_"):
+            confirmed = (
+                project.get("confirmed_provisional", {})
+                if isinstance(project.get("confirmed_provisional", {}), dict)
+                else {}
+            )
+            if str(confirmed.get(key, "") or "") != bound:
+                return ""
+        if bound and Path(bound).is_file():
+            return bound
+        return ""
+
+    def summary(
+        self,
+        workspace_id: str,
+        project_id: str,
+        index: dict[str, Any],
+        *,
+        verify_content: bool = True,
+    ) -> dict[str, Any]:
         project = self.project_snapshot(workspace_id, project_id)
         payload = self.load()
         inventory = iter_project_media(index)
         resolved = []
         missing = []
         candidates = project.get("candidates", {}) if isinstance(project.get("candidates", {}), dict) else {}
+        resolver = self.resolve_from_snapshot if verify_content else self.resolve_from_snapshot_light
         for item in inventory:
-            path = self.resolve_from_snapshot(project, item)
+            path = resolver(project, item)
             candidate = str(candidates.get(str(item.get("media_id", "")), "") or "")
             if candidate and not Path(candidate).is_file():
                 candidate = ""
@@ -328,6 +382,7 @@ class DeviceMediaStore:
             "missing": len(missing),
             "items": resolved + missing,
             "pending_analysis": bool(project["roots"] and not inventory),
+            "verification": "content" if verify_content else "snapshot",
         }
 
     def scan(
@@ -472,7 +527,10 @@ class DeviceMediaStore:
             if isinstance(legacy_projects, dict):
                 legacy_projects.pop(project_id, None)
             self._save(fresh)
-        summary = self.summary(workspace_id, project_id, index)
+        # The scan has already established content identity for every file it
+        # accepted.  Reusing the committed snapshot avoids hashing the entire
+        # inventory a second time before returning the durable-task result.
+        summary = self.summary(workspace_id, project_id, index, verify_content=False)
         summary["scan"] = {
             "files_seen": len(files),
             "verified_matches": matched_verified,
@@ -503,7 +561,13 @@ class DeviceMediaStore:
             payload = self.load()
             workspaces = payload.setdefault("workspaces", {})
             workspace = workspaces.setdefault(workspace_id, {"projects": {}})
-            project = workspace.setdefault("projects", {}).setdefault(project_id, self._empty_project())
+            projects = workspace.setdefault("projects", {})
+            project = projects.get(project_id)
+            if not isinstance(project, dict):
+                legacy_projects = payload.get("projects", {})
+                legacy = legacy_projects.pop(project_id, None) if isinstance(legacy_projects, dict) else None
+                project = legacy if isinstance(legacy, dict) else self._empty_project()
+                projects[project_id] = project
             candidates = project.setdefault("candidates", {})
             expected = str(candidates.get(key, "") or "")
             if not expected or str(path) != expected:
@@ -523,7 +587,12 @@ class DeviceMediaStore:
             workspaces = payload.setdefault("workspaces", {})
             workspace = workspaces.setdefault(workspace_id, {"projects": {}})
             projects = workspace.setdefault("projects", {})
-            project = projects.setdefault(project_id, self._empty_project())
+            project = projects.get(project_id)
+            if not isinstance(project, dict):
+                legacy_projects = payload.get("projects", {})
+                legacy = legacy_projects.pop(project_id, None) if isinstance(legacy_projects, dict) else None
+                project = legacy if isinstance(legacy, dict) else self._empty_project()
+                projects[project_id] = project
             stored = [str(value) for value in project.get("roots", []) if str(value)]
             for raw_root in roots:
                 root = str(Path(raw_root).expanduser().resolve())
@@ -541,7 +610,12 @@ class DeviceMediaStore:
             workspaces = payload.setdefault("workspaces", {})
             workspace = workspaces.setdefault(workspace_id, {"projects": {}})
             projects = workspace.setdefault("projects", {})
-            project = projects.setdefault(project_id, self._empty_project())
+            project = projects.get(project_id)
+            if not isinstance(project, dict):
+                legacy_projects = payload.get("projects", {})
+                legacy = legacy_projects.pop(project_id, None) if isinstance(legacy_projects, dict) else None
+                project = legacy if isinstance(legacy, dict) else self._empty_project()
+                projects[project_id] = project
             selected: list[str] = []
             for raw_root in roots:
                 root = str(Path(raw_root).expanduser().resolve())
@@ -551,9 +625,9 @@ class DeviceMediaStore:
             project["bindings"] = {}
             project["candidates"] = {}
             project["confirmed_provisional"] = {}
-        project["updated_at"] = _now()
-        self._save(payload)
-        return self.project_snapshot(workspace_id, project_id, payload)
+            project["updated_at"] = _now()
+            self._save(payload)
+            return self.project_snapshot(workspace_id, project_id, payload)
 
     def remove_project(self, workspace_id: str, project_id: str) -> None:
         with self._write_lock():

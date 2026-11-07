@@ -302,6 +302,36 @@ class ProposalStore:
                     continue
                 ready.append((proposal, base))
                 results.append({**base, "status": "applied"})
+            # A group has one current placement.  Applying multiple fresh
+            # proposals for the same group in one batch would otherwise run
+            # several set_group_placement actions and silently keep only the
+            # last one while marking every proposal as applied.
+            proposals_by_group: dict[str, list[dict[str, Any]]] = {}
+            for proposal, _base in ready:
+                proposals_by_group.setdefault(str(proposal.get("group_id", "")), []).append(proposal)
+            conflicting_groups = {
+                group_id
+                for group_id, proposals in proposals_by_group.items()
+                if group_id and len(proposals) > 1
+            }
+            if conflicting_groups:
+                conflict_ids: set[str] = set()
+                reason = "同一批次包含多个互斥的同组提案，请分别确认"
+                for proposal, _base in ready:
+                    if str(proposal.get("group_id", "")) not in conflicting_groups:
+                        continue
+                    proposal["status"] = "conflict"
+                    proposal["stale_reason"] = reason
+                    conflict_ids.add(str(proposal.get("proposal_id", "")))
+                for row in results:
+                    if row.get("proposal_id") in conflict_ids and row.get("status") == "applied":
+                        row["status"] = "conflict"
+                        row["reason"] = reason
+                ready = [
+                    (proposal, base)
+                    for proposal, base in ready
+                    if str(proposal.get("proposal_id", "")) not in conflict_ids
+                ]
             if ready:
                 actions = [
                     {

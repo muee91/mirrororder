@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from fractions import Fraction
@@ -9,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .automation_store import AutomationStore, COMPLETED_STATUSES
+from .audit_engine import _read_analysis_inputs
 from .config import ProjectConfig
 from .delivery_semantics import resolve_delivery_state
 from .editorial_store import EditorialStore
@@ -25,6 +28,20 @@ def _load(path: Path, fallback: object) -> object:
             return json.load(handle)
     except (OSError, ValueError):
         return fallback
+
+
+def _write_json_atomic(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def _placement_for_group(review: dict[str, Any], group: dict[str, Any]) -> dict[str, Any]:
@@ -47,9 +64,7 @@ def _automatic_manifest_state(candidate: dict[str, Any]) -> str:
 
 
 def build_selection_manifest(config: ProjectConfig) -> dict[str, Any]:
-    index = _load(config.output_dir / "material_index.json", {})
-    script = _load(config.output_dir / "script.json", {})
-    matches = _load(config.output_dir / "matches.json", {})
+    index, script, matches = _read_analysis_inputs(config.output_dir)
     automatic_groups = AutomationStore(config.output_dir).load().get("groups", {})
     if not isinstance(automatic_groups, dict):
         automatic_groups = {}
@@ -409,8 +424,7 @@ def _inject_selection_keywords(
 def export(config: ProjectConfig, preserve_source: bool = True) -> dict[str, Any]:
     manifest = build_selection_manifest(config)
     manifest_path = config.output_dir / "selection_manifest.json"
-    with manifest_path.open("w", encoding="utf-8") as handle:
-        json.dump(manifest, handle, ensure_ascii=False, indent=2)
+    _write_json_atomic(manifest_path, manifest)
 
     output_fcpxml = config.output_dir / "organized.fcpxml"
     report: dict[str, Any] = {
@@ -429,7 +443,7 @@ def export(config: ProjectConfig, preserve_source: bool = True) -> dict[str, Any
         "device_paths_exposed": False,
     }
     if preserve_source and config.fcpxml:
-        index = _load(config.output_dir / "material_index.json", {})
+        index, _script, _matches = _read_analysis_inputs(config.output_dir)
         if not isinstance(index, dict):
             raise UnsafeFCPXMLExport("material_index.json is not a valid object")
         injected = _inject_selection_keywords(config.fcpxml, output_fcpxml, index, manifest)
@@ -452,6 +466,5 @@ def export(config: ProjectConfig, preserve_source: bool = True) -> dict[str, Any
         )
     else:
         raise UnsafeFCPXMLExport("Refusing to synthesize an FCPXML without a structure-specific safe exporter.")
-    with (config.output_dir / "export_report.json").open("w", encoding="utf-8") as handle:
-        json.dump(report, handle, ensure_ascii=False, indent=2)
+    _write_json_atomic(config.output_dir / "export_report.json", report)
     return report

@@ -122,6 +122,7 @@
 .mo-media-health-indicator[data-state="offline"],
 .mo-media-health-indicator[data-state="unsupported"],
 .mo-media-health-indicator[data-state="identity_missing"] { color: var(--mo-warning, #d0aa54); }
+.mo-media-health-indicator[data-state="unknown"] { color: var(--mo-text-muted, #778590); }
 
 /* Review decision: human judgement. Uses authority rail, not Slate dot semantics. */
 .mo-review-decision-indicator {

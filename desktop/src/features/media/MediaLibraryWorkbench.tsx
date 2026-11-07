@@ -14,6 +14,7 @@ import { MediaHealthIndicator } from "../../components/StatusIndicators";
 import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
 import { mediaHealthState } from "./mediaHealthState";
 import { useNearViewportGate } from "./nearViewport";
+import { canPreviewReviewPlayback } from "./mediaPlaybackProjection";
 import "./media-library.css";
 import "./media-health-adoption.css";
 import "./camera-presentation.css";
@@ -72,9 +73,11 @@ function defaultDraft(item: MediaInventoryItem, store: MediaRoleStore | null): M
   };
 }
 
-function resolutionLabel(width: number | null | undefined, height: number | null | undefined): string {
+export function resolutionLabel(width: number | null | undefined, height: number | null | undefined): string {
   if (!width || !height) return "";
-  const p = width >= 1920 ? "4K" : width >= 1440 ? "2K" : width >= 1080 ? "1080p" : width >= 720 ? "720p" : "";
+  const longEdge = Math.max(width, height);
+  const shortEdge = Math.min(width, height);
+  const p = longEdge >= 3840 ? "4K" : longEdge >= 2560 ? "2K" : shortEdge >= 1080 ? "1080p" : shortEdge >= 720 ? "720p" : "";
   return p ? `${p} ${width}×${height}` : `${width}×${height}`;
 }
 
@@ -115,7 +118,7 @@ function playbackIndex(host: HostConnection, projectId: string, takes: Array<{ a
     for (const angle of take.angles) {
       const mediaId = angle.media_id?.trim();
       const clipId = angle.clip_id?.trim();
-      if (!mediaId || !clipId || angle.playback.available === false || result[mediaId]) continue;
+      if (!mediaId || !clipId || !canPreviewReviewPlayback(angle.playback) || result[mediaId]) continue;
       result[mediaId] = {
         clipId,
         url: host.mediaUrl(projectId, clipId),
@@ -133,13 +136,16 @@ function playbackForItem(
   reviewFallback?: PlaybackEntry,
 ): PlaybackEntry | undefined {
   const indexedClipId = item.clip_id?.trim();
-  if (indexedClipId) {
+  if (indexedClipId && item.state === "verified") {
     return {
       clipId: indexedClipId,
       url: host.mediaUrl(projectId, indexedClipId),
       sourceStart: reviewFallback?.clipId === indexedClipId ? reviewFallback.sourceStart : 0,
     };
   }
+  // An explicit inventory state wins over an older Review compatibility
+  // fallback. A missing/unknown row must never mount a speculative URL.
+  if (item.state === "missing" || item.state === "unknown") return undefined;
   return reviewFallback;
 }
 
@@ -165,7 +171,7 @@ function MediaLibraryRow({
   const auxiliary = isAuxiliary(role);
   const camera = effectiveCamera(role.camera_override, item.inferred_camera);
   const manualCamera = Boolean(role.camera_override?.trim());
-  const healthState = mediaHealthState({ indexed: item.indexed, playable: Boolean(preview) });
+  const healthState = mediaHealthState({ indexed: item.indexed, state: item.state, playable: Boolean(preview) });
   return (
     <button
       ref={rowRef}
@@ -422,7 +428,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                 <header>
                   <span className="media-library-monitor-camera" data-camera-tone={selectedCamera.tone}>{selectedCamera.label}</span>
                   <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{[resolutionLabel(selectedItem.width, selectedItem.height), durationLabel(selectedItem.duration_seconds), selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"].filter(Boolean).join(" · ")}</small></span>
-                  <MediaHealthIndicator state={mediaHealthState({ indexed: selectedItem.indexed, playable: Boolean(selectedPlayback), playbackFailed: selectedPlaybackFailed })} />
+                  <MediaHealthIndicator state={mediaHealthState({ indexed: selectedItem.indexed, state: selectedItem.state, playable: Boolean(selectedPlayback), playbackFailed: selectedPlaybackFailed })} />
                 </header>
                 <div className="media-library-player">
                   {selectedPlayback && !selectedPlaybackFailed ? (
@@ -442,6 +448,10 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                     />
                   ) : selectedPlaybackFailed ? (
                     <div className="media-library-player-state is-error"><strong>这条原片当前无法在 App 内播放</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
+                  ) : selectedItem.state === "missing" ? (
+                    <div className="media-library-player-state"><strong>本机当前找不到这条素材</strong><span>设备绑定曾经确认过它，但文件已移动或素材盘暂时离线。重新连接素材后再加载。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
+                  ) : selectedItem.state === "unknown" ? (
+                    <div className="media-library-player-state"><strong>这条素材尚未在本机确认</strong><span>它有项目索引，但当前设备没有可验证的绑定。先扫描并确认素材位置，再开始播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : !selectedItem.indexed ? (
                     <div className="media-library-player-state"><strong>这条素材尚未进入项目索引</strong><span>未入索引素材不会绕过本机素材身份校验直接按路径播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : (

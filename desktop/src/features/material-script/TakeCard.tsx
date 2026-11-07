@@ -56,15 +56,17 @@ export interface TakeCameraSlotModel {
   angles: ReviewAngle[];
 }
 
-export type TakeSlotAvailability = "none" | "available" | "offline" | "mixed";
+export type TakeSlotAvailability = "none" | "available" | "offline" | "unknown" | "mixed";
 
 // 机位槽位三态：空槽 = 该机位未拍摄；offline = 有素材但服务端判定不可用（素材盘/绑定问题）。
 // 空槽和离线在走查截图里都呈现为“空白占位”，用户无从区分是没拍还是出问题。
 export function takeSlotAvailability(angles: ReviewAngle[]): TakeSlotAvailability {
   if (!angles.length) return "none";
   const offline = angles.filter((angle) => angle.playback.state === "missing" || angle.playback.available === false).length;
-  if (offline === 0) return "available";
+  const unknown = angles.filter((angle) => angle.playback.state === "unknown" || (!angle.playback.state && angle.playback.available === undefined)).length;
   if (offline === angles.length) return "offline";
+  if (unknown === angles.length) return "unknown";
+  if (offline === 0 && unknown === 0) return "available";
   return "mixed";
 }
 
@@ -168,14 +170,14 @@ export function TakeCard({ take, selected, onSelect, onDragBegin, onDragFinish }
           const availability = takeSlotAvailability(slot.angles);
           return (
             <section
-              className={`take-camera-slot ${availability === "none" ? "is-empty" : availability === "offline" ? "is-offline" : "has-media"}`}
+              className={`take-camera-slot ${availability === "none" ? "is-empty" : availability === "offline" ? "is-offline" : availability === "unknown" ? "is-unknown" : "has-media"}`}
               data-camera-tone={slot.tone}
               key={slot.key}
-              aria-label={`${slot.label} 槽位${availability === "offline" ? "（素材离线）" : availability === "mixed" ? "（部分素材离线）" : ""}`}
+              aria-label={`${slot.label} 槽位${availability === "offline" ? "（素材离线）" : availability === "unknown" ? "（素材状态未知）" : availability === "mixed" ? "（部分素材状态异常）" : ""}`}
             >
               <header>
                 <strong>{slot.label}</strong>
-                <span>{availability === "offline" ? "离线" : slot.angles.length > 1 ? `+${slot.angles.length - 1}` : primary ? "已绑定" : "空"}</span>
+                <span>{availability === "offline" ? "离线" : availability === "unknown" ? "未知" : slot.angles.length > 1 ? `+${slot.angles.length - 1}` : primary ? "已绑定" : "空"}</span>
               </header>
               {primary ? <AngleEvidenceCard angle={primary} compact /> : <div className="take-camera-empty"><span>{slot.label}</span><small>无素材</small></div>}
             </section>
@@ -242,17 +244,17 @@ export function TakeListRow({ take, detail, state = "default", action, actionLab
           {stableSlots.map((slot) => {
             const availability = takeSlotAvailability(slot.angles);
             const slotTitle = slot.angles.length
-              ? `${slot.angles.map((angle) => angle.name).filter(Boolean).join(" / ") || slot.label}${availability === "offline" ? "（素材离线）" : availability === "mixed" ? "（部分素材离线）" : ""}`
+              ? `${slot.angles.map((angle) => angle.name).filter(Boolean).join(" / ") || slot.label}${availability === "offline" ? "（素材离线）" : availability === "unknown" ? "（素材状态未知）" : availability === "mixed" ? "（部分素材状态异常）" : ""}`
               : `${slot.label} 无素材`;
             return (
               <span
-                className={`mo-take-list-camera ${availability === "none" ? "is-empty" : availability === "offline" ? "is-offline" : "has-media"}`}
+                className={`mo-take-list-camera ${availability === "none" ? "is-empty" : availability === "offline" ? "is-offline" : availability === "unknown" ? "is-unknown" : "has-media"}`}
                 data-camera-tone={slot.tone}
                 key={slot.key}
                 title={slotTitle}
               >
                 <strong>{slot.label.replace("机", "")}</strong>
-                <em>{availability === "offline" ? "离" : slot.angles.length > 1 ? `×${slot.angles.length}` : slot.angles.length ? "•" : "—"}</em>
+                <em>{availability === "offline" ? "离" : availability === "unknown" ? "?" : slot.angles.length > 1 ? `×${slot.angles.length}` : slot.angles.length ? "•" : "—"}</em>
               </span>
             );
           })}

@@ -27,9 +27,11 @@ from .review_store import ReviewStore
 from .script_parser import ScriptDocument, parse_script
 from .source_descriptor import redact_device_media_paths, shared_source_descriptor
 from .transcript import TranscriptStore, transcribe_with_faster_whisper
+from .resource_scheduler import ResourceCancelled
 
 
 ANALYSIS_CACHE_VERSION = 4
+ANALYSIS_SNAPSHOT_FILENAME = "analysis_snapshot.json"
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -44,6 +46,20 @@ def _write_json(path: Path, payload: Any) -> None:
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def _publish_analysis_snapshot(output_dir: Path, index: dict[str, Any], script: dict[str, Any], matches: dict[str, Any]) -> None:
+    """Publish one commit marker after the three legacy artifacts are ready.
+
+    Older consumers continue to read the individual files.  The snapshot is
+    written last and is the authoritative read model for consumers that need
+    cross-file consistency: an interrupted legacy write leaves the previous
+    committed snapshot intact instead of exposing a mixed revision.
+    """
+    _write_json(
+        output_dir / ANALYSIS_SNAPSHOT_FILENAME,
+        {"version": 1, "index": index, "script": script, "matches": matches},
+    )
 
 
 def _read_json(path: Path, fallback: Any) -> Any:
@@ -599,6 +615,7 @@ def analyze(
     config: ProjectConfig,
     affected_group_ids: set[str] | None = None,
     progress: Callable[[int, int, str], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     config.ensure_output()
     previous_index = _read_json(config.output_dir / "material_index.json", {})
@@ -614,7 +631,12 @@ def analyze(
         if config.media_root is None:
             raise ValueError("媒体目录项目缺少 media.root")
         roots = config.media_roots or (config.media_root,)
-        clips = read_media_directory(roots, config.camera_patterns, config.media_timeline_mode)
+        clips = read_media_directory(
+            roots,
+            config.camera_patterns,
+            config.media_timeline_mode,
+            cancelled=cancelled,
+        )
     else:
         raise ValueError(f"不支持的 input.kind: {config.input_kind}")
 
@@ -624,6 +646,8 @@ def analyze(
     transcripts = {}
     clip_by_id = {clip.clip_id: clip for clip in clips}
     for clip in clips:
+        if cancelled and cancelled():
+            raise ResourceCancelled("素材分析已取消")
         transcript = store.load(clip)
         if transcript and (transcript.text.strip() or transcript.segments):
             transcripts[clip.clip_id] = transcript
@@ -991,4 +1015,5 @@ def analyze(
     _write_json(config.output_dir / "material_index.json", index_payload)
     _write_json(config.output_dir / "script.json", script_payload)
     _write_json(config.output_dir / "matches.json", matches_payload)
+    _publish_analysis_snapshot(config.output_dir, index_payload, script_payload, matches_payload)
     return {"index": index_payload, "script": script_payload, "matches": matches_payload}

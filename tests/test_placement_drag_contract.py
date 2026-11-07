@@ -138,3 +138,37 @@ def test_review_store_rejects_stale_revision_without_overwriting_review(tmp_path
     assert current["revision"] == 1
     assert current["placements"] == {}
     assert current["groups"]["take-1"]["state"] == "keep"
+
+
+def test_review_store_validates_drag_targets_against_committed_snapshot(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+    (output / "material_index.json").write_text(
+        json.dumps({"groups": [{"group_id": "legacy-take"}]}), encoding="utf-8"
+    )
+    (output / "script.json").write_text(
+        json.dumps({"segments": [{"segment_id": "legacy-seg", "type": "dialogue"}]}), encoding="utf-8"
+    )
+    (output / "matches.json").write_text(json.dumps({"groups": {}}), encoding="utf-8")
+    (output / "analysis_snapshot.json").write_text(
+        json.dumps(
+            {
+                "index": {"groups": [{"group_id": "committed-take"}]},
+                "script": {"segments": [{"segment_id": "committed-seg", "type": "dialogue"}]},
+                "matches": {"groups": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = ReviewStore(output / "review.json")
+
+    saved = store.apply_action(
+        {
+            "action": "set_group_placement",
+            "group_id": "committed-take",
+            "script_segment_ids": ["committed-seg"],
+            "actor": "A",
+        }
+    )
+
+    assert saved["placements"]["committed-take"]["script_segment_ids"] == ["committed-seg"]

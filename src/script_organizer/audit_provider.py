@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -175,9 +176,12 @@ class TakeAuditProvider(TakeSemanticProvider):
         if verdict not in VERDICTS:
             verdict = "insufficient_evidence"
         try:
-            confidence = max(0.0, min(1.0, float(result.get("confidence", 0) or 0)))
+            confidence = float(result.get("confidence", 0) or 0)
         except (TypeError, ValueError):
             confidence = 0.0
+        if not math.isfinite(confidence):
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
         issues = []
         for raw in result.get("issues", []) if isinstance(result.get("issues"), list) else []:
             if not isinstance(raw, dict):

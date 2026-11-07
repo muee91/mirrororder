@@ -5,11 +5,21 @@ import json
 import os
 import re
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import RLock, Thread
+from threading import RLock, Thread, local
 from typing import Any
 from uuid import uuid4
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover
+    msvcrt = None
 
 from .device_runtime_settings import application_support_root
 from .identity_runtime import IdentityPreparationCancelled, IdentityRuntime
@@ -20,6 +30,42 @@ DEVICE_TASK_TYPES = {"local_vision_prepare", "identity_runtime_prepare"}
 PROCESS_RUNNER_ID = "device_host_" + uuid4().hex
 _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
 _MANAGER: DeviceTaskManager | None = None
+_FILE_LOCK_STATE = local()
+
+
+@contextmanager
+def _file_lock(path: Path):
+    """Serialize device task read/modify/write across Host processes."""
+    key = str(path.resolve())
+    held = getattr(_FILE_LOCK_STATE, "paths", set())
+    if key in held:
+        yield
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    with lock_path.open("a+b") as handle:
+        if fcntl is not None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        elif msvcrt is not None:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        held = set(held)
+        held.add(key)
+        _FILE_LOCK_STATE.paths = held
+        try:
+            yield
+        finally:
+            held.remove(key)
+            _FILE_LOCK_STATE.paths = held
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            elif msvcrt is not None:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 def _now() -> str:
@@ -101,7 +147,7 @@ class DeviceTaskManager:
 
     def recover_interrupted(self) -> None:
         """Run once at Host runtime install; ordinary list/GET remains read-only."""
-        with self._lock:
+        with self._lock, _file_lock(self.path):
             payload = self._load()
             changed = False
             for task in payload["tasks"]:
@@ -131,7 +177,7 @@ class DeviceTaskManager:
         normalized = _targets(task_type, targets)
         canonical = json.dumps({"type": task_type, "targets": normalized}, ensure_ascii=False, sort_keys=True)
         key = str(idempotency_key or "").strip() or hashlib.sha1(canonical.encode("utf-8")).hexdigest()
-        with self._lock:
+        with self._lock, _file_lock(self.path):
             payload = self._load()
             for task in payload["tasks"]:
                 if task.get("idempotency_key") == key and task.get("status") in {"queued", "running"}:
@@ -165,7 +211,7 @@ class DeviceTaskManager:
 
     def cancel(self, task_id: str) -> dict[str, Any]:
         stop_vision = False
-        with self._lock:
+        with self._lock, _file_lock(self.path):
             payload = self._load()
             task = self._task(payload, task_id)
             if task.get("status") == "queued":
@@ -205,7 +251,7 @@ class DeviceTaskManager:
         wanted_model = str(model or "").strip()
         now = _now()
         count = 0
-        with self._lock:
+        with self._lock, _file_lock(self.path):
             payload = self._load()
             for task in payload["tasks"]:
                 if task.get("type") != task_type or task.get("status") not in {"failed", "interrupted"}:
@@ -241,11 +287,20 @@ class DeviceTaskManager:
         error: str = "",
         message: str = "",
     ) -> None:
-        with self._lock:
+        with self._lock, _file_lock(self.path):
             payload = self._load()
             task = self._task(payload, task_id)
             if status == "running" and task.get("status") == "cancelled":
                 return
+            if status == "completed" and (
+                task.get("status") == "cancelled" or task.get("cancel_requested")
+            ):
+                status = "cancelled"
+                stage = "cancelled"
+                # Do not expose a successful device-runtime result after a
+                # cancellation won the terminal-state race.
+                result = None
+                message = "设备任务已取消"
             if status:
                 task["status"] = status
                 if status == "running" and not task.get("started_at"):

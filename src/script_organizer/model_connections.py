@@ -10,6 +10,9 @@ from urllib.parse import urlparse
 from .device_runtime_settings import application_support_root
 
 
+_LEGACY_EXTERNAL_VISION_PROVIDERS = {"renamerx", "renamerx-local", "renamerx-local-ai"}
+
+
 def _connections_path() -> Path:
     return application_support_root() / "model-connections.json"
 
@@ -62,9 +65,21 @@ def _valid_base_url(value: str) -> str:
 
 def _public_connection(raw: object, *, key_name: str) -> dict[str, Any]:
     row = raw if isinstance(raw, dict) else {}
+    provider = str(row.get("provider", "openai-compatible") or "openai-compatible")[:80]
+    # Older development builds stored the reference app as a provider. It is
+    # no longer a runtime capability; expose a disabled local slot so the
+    # existing device setting can be reselected without a broken URL/model.
+    if provider.strip().lower() in _LEGACY_EXTERNAL_VISION_PROVIDERS:
+        return {
+            "enabled": False,
+            "provider": "local",
+            "base_url": "",
+            "model": "",
+            "has_api_key": False,
+        }
     return {
         "enabled": bool(row.get("enabled", False)),
-        "provider": str(row.get("provider", "openai-compatible") or "openai-compatible")[:80],
+        "provider": provider,
         "base_url": str(row.get("base_url", "") or "")[:1000],
         "model": str(row.get("model", "") or "")[:300],
         "has_api_key": bool(_read(_secrets_path()).get(key_name)),
@@ -95,15 +110,16 @@ def _normalize_connection(
 ) -> dict[str, Any]:
     enabled = bool(raw.get("enabled", current.get("enabled", False)))
     provider = str(raw.get("provider", current.get("provider", "openai-compatible")) or "openai-compatible").strip().lower()
-    if provider not in {"openai-compatible", "openai", "local", "llama", "llama.cpp", "llama-server"}:
+    supported = {"openai-compatible", "openai", "local", "llama", "llama.cpp", "llama-server"}
+    if provider not in supported:
         raise ValueError("当前只支持 OpenAI-compatible 或本地兼容接口")
     base_url = _valid_base_url(str(raw.get("base_url", current.get("base_url", "")) or ""))
+    model = str(raw.get("model", current.get("model", "")) or "").strip()[:300]
     # 声称"本地"却指向远程地址通常是配置笔误：数据不出设备的承诺会被打破。
     if provider in {"local", "llama", "llama.cpp", "llama-server"} and base_url:
         host = urlparse(base_url).hostname or ""
         if host not in {"127.0.0.1", "localhost", "::1"}:
             raise ValueError(f"{label}声明为本地模型，但地址指向远程主机 {host}；请改为本机地址或改用 openai-compatible")
-    model = str(raw.get("model", current.get("model", "")) or "").strip()[:300]
     if enabled and (not base_url or not model):
         raise ValueError(f"启用{label}需要模型地址和模型名")
     return {

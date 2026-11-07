@@ -52,6 +52,32 @@ def test_device_media_store_binds_verified_copy_without_shared_path_change(tmp_p
     assert index["clips"][0]["media_path"] == "/Volumes/OTHER/A001.mov"
 
 
+def test_snapshot_summary_reports_verified_binding_without_rehashing(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "source" / "A001.mov"
+    source.parent.mkdir()
+    source.write_bytes(b"snapshot-summary-media" * 1000)
+    media_id = media_id_for_path(source)
+    index = {"clips": [{"clip_id": "C_snapshot", "media_id": media_id, "media_path": "/Volumes/OLD/A001.mov"}]}
+    store = DeviceMediaStore(tmp_path / "device" / "media-bindings.json")
+    store.scan("ws_demo", "demo", index, [str(source.parent)])
+
+    def fail_if_rehashed(_path):
+        raise AssertionError("snapshot summary must not re-hash media")
+
+    monkeypatch.setattr("script_organizer.media_identity.media_id_for_path", fail_if_rehashed)
+    summary = store.summary("ws_demo", "demo", index, verify_content=False)
+
+    assert summary["resolved"] == 1
+    assert summary["missing"] == 0
+    assert summary["verification"] == "snapshot"
+
+
+def test_read_only_device_store_does_not_create_state_file(tmp_path: Path) -> None:
+    path = tmp_path / "device" / "media-bindings.json"
+    DeviceMediaStore(path, create=False)
+    assert not path.exists()
+
+
 def test_legacy_project_unique_filename_requires_confirmation_before_relink(tmp_path: Path) -> None:
     local = tmp_path / "copies" / "A003C012.mov"
     local.parent.mkdir()

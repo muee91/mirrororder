@@ -6,6 +6,7 @@ from urllib.parse import parse_qs
 from .semantic_encoder import SemanticEmbeddingConfig
 from .semantic_index import ProjectSemanticIndexer, SEMANTIC_SOURCES
 from .semantic_search import SemanticSearcher, safe_search_payload
+from .vision_provider import VisionProviderConfig
 
 
 _INSTALLED = False
@@ -36,10 +37,10 @@ def _workspace_for_service(service: Any) -> Any:
     return current.workspace
 
 
-def _searcher(service: Any, project_id: str) -> SemanticSearcher:
+def _searcher(service: Any, project_id: str, *, read_only: bool = False) -> SemanticSearcher:
     project = service.project(project_id)
     workspace = _workspace_for_service(service)
-    return SemanticSearcher(workspace.workspace_id, project_id, project.config)
+    return SemanticSearcher(workspace.workspace_id, project_id, project.config, read_only=read_only)
 
 
 def _deterministic_answer(query: str, retrieval: dict[str, Any]) -> str:
@@ -178,6 +179,13 @@ def install_semantic_runtime() -> None:
             "vector_enabled": embedding.enabled or local_embedding_available(),
             "device_local_index": True,
             "editorial_authority": False,
+            "visual_providers": {
+                "local_vision": {
+                    "configured": VisionProviderConfig.from_env().is_local,
+                    "evidence_only": True,
+                    "requires_explicit_task": True,
+                }
+            },
         }
         return payload
 
@@ -389,7 +397,7 @@ def install_semantic_runtime() -> None:
                     text, limit, sources = self._search_parameters(parsed)
                     if not text:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "语义搜索内容不能为空")
-                    payload = _searcher(service, project_id).search(
+                    payload = _searcher(service, project_id, read_only=True).search(
                         text,
                         limit=limit,
                         sources=sources,
@@ -413,7 +421,7 @@ def install_semantic_runtime() -> None:
                     if not text:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "语义搜索内容不能为空")
                     payload = safe_search_payload(
-                        _searcher(service, project_id).search(
+                        _searcher(service, project_id, read_only=True).search(
                             text,
                             limit=limit,
                             sources=sources,

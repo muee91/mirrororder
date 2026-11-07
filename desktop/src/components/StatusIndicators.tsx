@@ -4,7 +4,7 @@ import "./status-indicators.css";
 export type ConnectionIndicatorState = "ready" | "connecting" | "offline" | "error";
 export type TaskIndicatorState = "queued" | "running" | "complete" | "warning" | "failed" | "cancelled";
 export type SlateIndicatorState = "unmarked" | "usable" | "partial" | "ng";
-export type MediaHealthState = "ready" | "offline" | "unsupported" | "identity_missing" | "index_pending";
+export type MediaHealthState = "ready" | "offline" | "unsupported" | "identity_missing" | "index_pending" | "unknown";
 export type ReviewDecision = "unset" | "best" | "keep" | "reject";
 export type ReviewAuthority = "individual" | "editorial";
 
@@ -46,6 +46,7 @@ const MEDIA_HEALTH: Record<MediaHealthState, { label: string; icon: string }> = 
   unsupported: { label: "无法播放", icon: "!" },
   identity_missing: { label: "播放身份缺失", icon: "?" },
   index_pending: { label: "等待索引", icon: "…" },
+  unknown: { label: "状态未知", icon: "?" },
 };
 
 const REVIEW_LABELS: Record<ReviewDecision, string> = {

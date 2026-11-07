@@ -1,13 +1,22 @@
 # Engineering Status
 
-更新时间：2026-10-26
+更新时间：2026-10-27
 
 ## 当前基线
 
-- 仓库只维护 `main`；本轮验证基线 HEAD `6386bf3`，与本地 `origin/main` 引用一致；审阅闸门修正与 2026-10-26 结构收敛轮（见下）尚在工作树。
+- 仓库只维护 `main`；当前基线 HEAD `dcc7202`，与本地 `origin/main` 引用一致。本轮媒体状态/素材库修复仍在工作树，尚未提交或推送。
 - 本轮远端 CI：**NOT RUN**，不沿用旧提交的 CI 结论。
 - Desktop 仍处于 Product Recovery 之后的**可交付化阶段**：代码结构恢复已收口，缺口在发布工程、授权与真实可用性证据（顺序见 `BACKLOG.md` Phase 0/1/2）。
 - 一级工作区固定：`素材 / 剧本 / 时间线 / 审阅`；原则仍是**共享对象，不共享工作流**。
+
+## 2026-10-27 媒体状态与素材库读路径修复（工作树，已实跑验证）
+
+- **服务端状态接通**：设备媒体 store 以最近一次显式扫描/临时身份确认快照投影 `verified / missing / unknown`，Review read model 消费该状态；普通 GET 只做绑定路径存在性检查，不重新哈希全项目。单条播放仍在 `resolve_from_snapshot` 边界做内容身份校验。
+- **素材库去重**：迁移项目的扫描快照 `M_` 行与旧索引 `MP_` 行在文件名 provisional 身份唯一时合并为一个 canonical 素材行；身份不唯一时保持分离，不做猜测连接。beef 当前 Host 实测 `1502` 行 / `1502` 已入索引，之前的 `3004` 重复投影消失。
+- **前端状态统一**：素材库、Take 卡、Take Inspector、场记 Inspector、Timeline source、canonical `MirrorOrderMediaCard` 共用同一播放资格判定；`missing/unknown` 不再生成或挂载预览 URL，unknown 有独立中性状态样式与文案，missing 指向素材恢复入口。
+- **当前 Host 证据**：自管端口 `8797` 的 ping 身份为 `{"status":"ok","service":"mirrororder-host"}`；真实 beef `review-model` 为 `610` Take / `1533` angle，全部 `missing`（当前终端 `/Volumes` 未挂载 PSSD），`media-inventory` 为 `1502` 行、`1502` `missing`。隔离副本 Host 8801 用一条存在文件和一条不存在文件验证出 `1 verified / 1 missing / 1531 unknown`，inventory 同样保持 `1502` 行；未修改真实项目 JSON。
+- **自动验证**：定向 Python `26` 项通过；`check_python.py` `66` 项通过；`check_fast.py` exit 0（Vitest `79` 文件 / `381` 项、Rust、cargo check）；本轮最终 `check_full.py` exit 0，包含 Python `602` 项、Vitest `79/381`、Timeline Core `15`、Host `33`、前端 build 与 cargo check；`npm run test:ux-real` `9/9`。
+- **真实 UX gate**：`MIRRORORDER_UX_PROJECT_ID=beef npm run check:ux-real` exit 1；shell、剧本 `53` 块、搜索空态、审阅队列 `610` Take 连续切换、素材 `2092` 对象、时间线 `10` 元素均 PASS，唯一 FAIL 为媒体播放（素材未解析）。证据目录：`desktop/artifacts/ux-real/2026-10-27T06-44-23-701Z/`（git-ignored）。
 
 ## 2026-10-26 组接 + 导出收缩轮（owner 拍板后执行，已实跑验证）
 
@@ -113,20 +122,20 @@
 
 ## 审阅主链恢复（当前事实）
 
-- **队列为空已归因于闸门选择器误报**：canonical compact row 是 `article.mo-take-list-row[data-ui-authority="take-compact"]`，旧闸门未识别。两个本机项目实际有 668 / 610 个未作最终决定的 Take，默认筛选为“全部”；fixture 与真实 React App 入口的 Take ID 序列一致，均能连续切换 1→2→3。
-- `check:ux-real` 已修正队列识别并验证 selection 与 Viewer 一致；使用 `MIRRORORDER_UX_PROJECT_ID` 选择项目，fixture 从 Host 读取项目摘要。媒体 metadata 与播放时间推进是单独的**必需**项，缺媒体不能被队列通过掩盖；未执行的人工写入和原生验收显式记录为 NOT RUN。
-- 两个真实项目复跑：队列与导航 PASS；媒体播放 FAIL，退出码均为 1。素材盘当前不可用，owner 已明确暂缺真实素材，先完成独立验证。真实看片、人工决定、完整五步主链和打包应用验收仍为 **NOT RUN**，未改写项目 authority 或设备绑定。
+- **历史“队列为空”已归因于闸门选择器误报**：canonical compact row 是 `article.mo-take-list-row[data-ui-authority="take-compact"]`，旧闸门未识别。当前 workspace 的真实 beef 项目有 `610` 个 Take，默认筛选为“全部”，队列可连续切换 `1→2→3`；并非 Review read model 没有 Take。
+- `check:ux-real` 使用 `MIRRORORDER_UX_PROJECT_ID` 选择项目，fixture 从 Host 读取项目摘要；媒体 metadata 与播放时间推进是单独的**必需**项，缺媒体不能被队列通过掩盖。2026-10-27 beef 运行中队列/导航 PASS，媒体播放 FAIL，退出码为 1，失败原因是本终端未解析到素材。
+- 人工 placement、Final Editorial Decision、Rust Timeline 写入/重启恢复、外部 NLE 实际导入和打包应用验收仍为 **NOT RUN**；本轮没有改写真实项目 authority、项目 JSON 或共享 artifact。
 - `npm run test:ux-real`：9 项真实 ReviewWorkspace 行为测试通过，使用最小合成 Take/WebM，覆盖空队列、无效 Next、媒体 404、metadata 后播放停滞和播放启动超时；旧选择器已实测让正向用例失败。CI 已配置运行这组回归，远端执行结果仍是 NOT RUN。
-- 本轮独立验证：`python3 scripts/check_full.py` exit 0，包含 614 项 Python、77 文件 / 379 项 Vitest、15 项 Timeline Core、33 项 Host，以及 TypeScript、前端 build、cargo check；UI authority 与 layout runtime 通过。`check_python.py` 的 78 项检查已通过；`check_fast.py` 未单独重跑，打包后的原生验收仍为 **NOT RUN**。
+- 本轮独立验证：`python3 scripts/check_full.py` exit 0，包含 602 项 Python、79 文件 / 381 项 Vitest、15 项 Timeline Core、33 项 Host，以及 TypeScript、前端 build、cargo check；`check_python.py` `66` 项与 `check_fast.py` 均再次通过。打包签名、公证、真实媒体、NLE 与原生五步验收仍为 **NOT RUN**。
 - 审阅 Node 回归与 layout 并行运行曾因共享 Vite 预构建缓存而挂载超时，已受控复现 `504 Outdated Optimize Dep`；回归脚本隔离临时 cacheDir 后，两组再次并行均 exit 0，审阅 9/9 通过。全量 source gate 是缓存隔离前执行，修正后验证限于这两组。
 
 ## 子功能审计（当前事实）
 
 - 真实 React App + 本机 Host 下检查两个项目，覆盖 45 项子能力及 22 个界面步骤；35 个 GET 探针和 6 个交付读取均 HTTP 200，只证明读取成功。未执行真实项目的创意决定、重绑、删除或导出写入，也未主动调用外部 AI 发送项目内容。
-- **媒体就绪状态不可信**：同一素材列表“可播放”、Inspector“无法播放”；恢复页 0/1502 可用，Take 仍显示离线/异常 0。列表把播放 URL 存在视作可播放，Take 把省略的 `available` 视作可用；场记 404 提示仍断言已经定位成功。
-- **EditorMonitors 失败恢复缺失已复现**：合成 404 挂载真实组件后，Source/Program 没有应用级失败原因、重试或恢复入口；浏览器控件自身有无法播放语义。
+- **媒体就绪状态已收口**：服务端四态由设备快照投影，素材列表、Take、场记、审阅和 Timeline source 不再把 URL 存在视作可播放；`missing/unknown` 不挂载预览，单条播放仍做内容身份校验。真实 beef 当前仍是 `1502/1502` missing，故 native playback 证据仍未完成。
+- **播放失败恢复已具备应用级状态**：EditorMonitors、Take Inspector、Golden Slate 与素材库右栏均有失败分类、重试或素材恢复入口；本轮只验证了状态投影和 UI gate，真实 codec/A/V 同步仍 NOT RUN。
 - **摘要与状态存在口径冲突**：项目侧栏与卡片“需关注”分别为 68/668、46/607；历史中断任务缺少 completed_at 时，耗时仍以当前时间增长；团队入口的“不能改剧本归集”与受限 reviewer placement contract/实现不一致。
-- **读路径隐含重工作**：`GET media-binding` 调用 `DeviceMediaStore.summary()`，受控 3 个小文件触发 3 次未缓存内容指纹计算；大项目冷缓存 I/O 尚未量测。
+- **读路径隐含重工作已收口一处**：`GET media-binding` 现在只消费最近扫描/确认快照和 `is_file()`，不再全项目重算内容指纹；播放边界仍对单条素材做身份校验。大项目冷缓存 I/O 与 durable scan 取消传播仍需真实量测。
 - 两项目 assembly 均 `needs_review`、timebase 为空。原生 Timeline UI、真实音画/同步/ASR、外部 AI 质量、双机与 NLE 实际导入均 **NOT RUN**；不能把浏览器 native 限制当作已确认的产品缺陷，也不能把 source gate 通过当作主链完成。
 
 以下修复轮记录不替代上述当前验证范围。

@@ -1,5 +1,6 @@
 import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import type { AssemblyBlock, AssemblyTimeline } from "../../api/production";
+import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
 import type {
   FrameRate,
   TimelineCommand,
@@ -51,7 +52,7 @@ function takeFor(review: ReviewModelPayload, groupId: string): ReviewTakeGroup |
 }
 
 function availableAngles(take: ReviewTakeGroup) {
-  return take.angles.filter((angle) => angle.playback.available !== false);
+  return take.angles.filter((angle) => canPreviewReviewPlayback(angle.playback));
 }
 
 function baseAngleForBlock(take: ReviewTakeGroup, block: AssemblyBlock) {

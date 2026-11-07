@@ -144,6 +144,8 @@ const AUTHORITY_CONFLICT_CODES = new Set([
   "timeline_authority_required",
 ]);
 
+const TIMELINE_REQUEST_TIMEOUT_MS = 20_000;
+
 export class TimelineBridgeError extends Error {
   readonly issues: TimelineValidationIssue[];
 
@@ -176,16 +178,31 @@ function bridgeError(error: unknown): TimelineBridgeError {
 
 async function callTimeline<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   requireTimelineRuntime();
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
   try {
-    return await invoke<T>(command, args);
+    const deadline = new Promise<never>((_, reject) => {
+      timer = globalThis.setTimeout(() => {
+        reject(new TimelineBridgeError(`Timeline Core 请求超过 ${TIMELINE_REQUEST_TIMEOUT_MS / 1000} 秒未响应`));
+      }, TIMELINE_REQUEST_TIMEOUT_MS);
+    });
+    return await Promise.race([invoke<T>(command, args), deadline]);
   } catch (error) {
     throw bridgeError(error);
+  } finally {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
   }
 }
 
 export class TimelineClient {
   private authority: TimelineAuthority | null = null;
   private authorityProjectId: string | null = null;
+  private operationQueue: Promise<void> = Promise.resolve();
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.operationQueue.then(operation, operation);
+    this.operationQueue = next.then(() => undefined, () => undefined);
+    return next;
+  }
 
   private accept(snapshot: TimelineSnapshot): TimelineSnapshot {
     this.authority = snapshot.authority;
@@ -201,7 +218,7 @@ export class TimelineClient {
   }
 
   private async readSnapshot(command: string, args?: Record<string, unknown>): Promise<TimelineSnapshot> {
-    return this.accept(await callTimeline<TimelineSnapshot>(command, args));
+    return this.enqueue(async () => this.accept(await callTimeline<TimelineSnapshot>(command, args)));
   }
 
   private async replaceSnapshot(
@@ -209,14 +226,18 @@ export class TimelineClient {
     projectId: string,
     args: Record<string, unknown>,
   ): Promise<TimelineSnapshot> {
-    const expectedAuthority = this.authorityProjectId === projectId ? this.expectedAuthority() : null;
-    const requestArgs = expectedAuthority ? { ...args, expectedAuthority } : args;
-    return this.accept(await callTimeline<TimelineSnapshot>(command, requestArgs));
+    return this.enqueue(async () => {
+      const expectedAuthority = this.authorityProjectId === projectId ? this.expectedAuthority() : null;
+      const requestArgs = expectedAuthority ? { ...args, expectedAuthority } : args;
+      return this.accept(await callTimeline<TimelineSnapshot>(command, requestArgs));
+    });
   }
 
   private async mutate(command: string, args: Record<string, unknown> = {}): Promise<TimelineSnapshot> {
-    const expectedAuthority = this.expectedAuthority();
-    return this.accept(await callTimeline<TimelineSnapshot>(command, { ...args, expectedAuthority }));
+    return this.enqueue(async () => {
+      const expectedAuthority = this.expectedAuthority();
+      return this.accept(await callTimeline<TimelineSnapshot>(command, { ...args, expectedAuthority }));
+    });
   }
 
   newProject(projectId: string, sequenceId = "main"): Promise<TimelineSnapshot> {
@@ -263,10 +284,10 @@ export class TimelineClient {
     // Status may describe a newer Rust authority than this client's last full
     // project snapshot. It is display-only and must never silently grant a new
     // mutation token without refreshing the actual Timeline snapshot.
-    return callTimeline<TimelineRuntimeStatus>("timeline_persistence_status");
+    return this.enqueue(() => callTimeline<TimelineRuntimeStatus>("timeline_persistence_status"));
   }
 
   validate(): Promise<TimelineValidationIssue[]> {
-    return callTimeline<TimelineValidationIssue[]>("timeline_validate");
+    return this.enqueue(() => callTimeline<TimelineValidationIssue[]>("timeline_validate"));
   }
 }

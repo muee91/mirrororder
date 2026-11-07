@@ -101,10 +101,13 @@ function hasOfflineMedia(take: ReviewTakeGroup): boolean {
 
 function mediaAvailabilityLabel(take: ReviewTakeGroup): string {
   if (!take.angles.length) return "无机位素材";
-  const available = take.angles.filter((angle) => angle.playback.state !== "missing" && angle.playback.available !== false).length;
+  const offline = take.angles.filter((angle) => angle.playback.state === "missing" || angle.playback.available === false).length;
+  const unknown = take.angles.filter((angle) => angle.playback.state === "unknown" || (!angle.playback.state && angle.playback.available === undefined)).length;
+  const available = take.angles.length - offline - unknown;
   if (available === take.angles.length) return `${available} 机位可用`;
-  if (available === 0) return `${take.angles.length} 机位离线`;
-  return `${available}/${take.angles.length} 机位可用`;
+  if (offline === take.angles.length) return `${take.angles.length} 机位离线`;
+  if (unknown === take.angles.length) return `${take.angles.length} 机位状态未知`;
+  return `${available} 可用 · ${offline} 离线 · ${unknown} 未知`;
 }
 
 function slateFactLabel(fact: SlateFact | undefined): string {

@@ -20,6 +20,6 @@ describe("desktop playback URL authority", () => {
     const slate = read("../features/slate/GoldenSlateWorkbench.tsx");
     const card = read("../features/media/MirrorOrderMediaCard.tsx");
     expect(slate).toContain("src={selectedAngle.playback.url}");
-    expect(card).toContain("playbackUrl: angle.playback.url");
+    expect(card).toContain("canPreviewReviewPlayback(angle.playback) ? angle.playback.url : undefined");
   });
 });

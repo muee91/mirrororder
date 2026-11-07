@@ -7,6 +7,7 @@ import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMe
 import { SlateRecordClient } from "../../api/slateRecords";
 import { TakeListRow } from "../material-script/TakeCard";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
+import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
 import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
 import { SlateRow, SlateTableHead, type SlateCameraColumn } from "./SlateRow";
 import { SlateWorkbench } from "./SlateWorkbench";
@@ -882,7 +883,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
               <>
                 <div className="golden-inspector-head"><div><strong>选中素材</strong><span>EP {selected.episode ?? "—"} / 场 {selected.scene || selected.script_scene_id || "—"} / 镜 {selected.shot || "—"} / 次 {selected.take_number ?? "—"}</span></div>{selected.dirty ? <em>未保存</em> : null}</div>
                 <div className="golden-slate-player">
-                  {selectedAngle?.playback.url && selectedAngle.playback.available !== false && !selectedPlaybackFailed ? (
+                  {selectedAngle?.playback.url && canPreviewReviewPlayback(selectedAngle.playback) && !selectedPlaybackFailed ? (
                     <video ref={playerRef} key={`${selectedAngle.clip_id}-${playbackRetry}`} src={selectedAngle.playback.url} controls preload="metadata" playsInline onError={() => { setPlaybackFailedClipId(selectedPlaybackKey); void classifyPlaybackFailure(selectedAngle.playback.url).then(setPlaybackFailureDetail); }} onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
                   ) : selectedPlaybackFailed ? (
                     <div className="golden-player-error"><strong>当前设备无法读取或解码这个素材</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedClipId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>

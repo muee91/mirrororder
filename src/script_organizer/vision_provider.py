@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import mimetypes
 import os
 import subprocess
@@ -56,11 +57,18 @@ class VisionProviderConfig:
             base_url = str(raw_base or "").strip().rstrip("/")
             api_key = str(raw_key or "").strip()
             model = str(raw_model or "").strip()
-        elif isinstance(saved, dict) and saved.get("enabled") and saved.get("base_url") and saved.get("model"):
-            provider = str(saved.get("provider", "openai-compatible") or "openai-compatible").strip().lower()
-            base_url = str(saved.get("base_url", "") or "").strip().rstrip("/")
-            api_key = str(saved.get("api_key", "") or "").strip()
-            model = str(saved.get("model", "") or "").strip()
+        elif isinstance(saved, dict) and saved.get("enabled"):
+            saved_provider = str(saved.get("provider", "openai-compatible") or "openai-compatible").strip().lower()
+            if saved.get("base_url") and saved.get("model"):
+                provider = saved_provider
+                base_url = str(saved.get("base_url", "") or "").strip().rstrip("/")
+                api_key = str(saved.get("api_key", "") or "").strip()
+                model = str(saved.get("model", "") or "").strip()
+            else:
+                provider = "local" if device.get("local_vision_enabled") else "none"
+                base_url = ""
+                api_key = ""
+                model = ""
         else:
             provider = "local" if device.get("local_vision_enabled") else "none"
             base_url = ""
@@ -131,6 +139,9 @@ class VisionProvider:
             self._local_runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(self.config.model))
         return self._local_runtime.ensure_server()
 
+    def _request_model(self) -> str:
+        return self.config.model
+
     @staticmethod
     def _encode_image(path: Path) -> str:
         mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
@@ -197,7 +208,7 @@ class VisionProvider:
         for frame in frames:
             content.append({"type": "image_url", "image_url": {"url": self._encode_image(frame)}})
         payload = {
-            "model": self.config.model,
+            "model": self._request_model(),
             "temperature": 0,
             "messages": [
                 {"role": "system", "content": system},
@@ -239,6 +250,8 @@ class VisionProvider:
         try:
             confidence = float(result.get("confidence", 0) or 0)
         except (TypeError, ValueError):
+            confidence = 0.0
+        if not math.isfinite(confidence):
             confidence = 0.0
         return {
             "candidate_id": str(result.get("candidate_id", "") or "")[:160],

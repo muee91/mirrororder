@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import tempfile
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -175,6 +176,7 @@ def _indexed_rows(project: Any) -> dict[str, dict[str, Any]]:
         except (TypeError, ValueError):
             duration = None
         result[media_id] = {
+            "media_id": media_id,
             "clip_id": clip_id,
             "display_name": (Path(source).name or str(row.get("name", "") or media_id))[:300],
             "inferred_camera": str(row.get("camera", "") or "")[:40],
@@ -228,7 +230,23 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
     labels = saved.get("media", {}) if isinstance(saved.get("media"), dict) else {}
     rows_by_id: dict[str, dict[str, Any]] = {}
 
-    for raw in snapshot.get("items", []) if isinstance(snapshot.get("items"), list) else []:
+    snapshot_rows = [
+        raw for raw in snapshot.get("items", [])
+        if isinstance(snapshot.get("items"), list) and isinstance(raw, dict)
+    ]
+    provisional_snapshot_rows: defaultdict[str, list[str]] = defaultdict(list)
+    for raw in snapshot_rows:
+        path_text = str(raw.get("path", "") or "")
+        if path_text:
+            provisional_snapshot_rows[provisional_media_id(path_text)].append(str(raw.get("media_id", "") or ""))
+    unique_provisional_media = {
+        key: values[0]
+        for key, values in provisional_snapshot_rows.items()
+        if key and len(values) == 1 and values[0]
+    }
+    joined_index_ids: set[str] = set()
+
+    for raw in snapshot_rows:
         if not isinstance(raw, dict):
             continue
         media_id = str(raw.get("media_id", "") or "")
@@ -236,13 +254,34 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
         if not media_id:
             continue
         path = Path(path_text)
-        path_row = next((item for item in snapshot.get("items", []) if isinstance(item, dict) and str(item.get("media_id", "")) == media_id), {})
         # 快照行带扫描期内容哈希 M_；索引在文件迁移后可能只有文件名派生的 MP_
         # （与扫描候选同一启发式）。直接 ID 未命中时按 provisional 文件名 ID
         # 二次查找，让行级 clip_id/时长/Take 连接对迁移项目继续可用。
         # 纯字符串哈希，读路径仍然不触碰媒体字节。
-        indexed_row = indexed.get(media_id) or indexed.get(provisional_media_id(path_text), {})
+        indexed_row = indexed.get(media_id, {})
+        provisional_key = provisional_media_id(path_text) if path_text else ""
+        if not indexed_row and unique_provisional_media.get(provisional_key) == media_id:
+            indexed_row = indexed.get(provisional_key, {})
+            if indexed_row:
+                joined_index_ids.add(provisional_key)
         # 扫描期 ffprobe 采样（快照 version 2 行）；缺席即未采样，前端显示为空。
+        # The inventory snapshot is the authoritative device binding view.
+        # During legacy migration the joined index row can still carry an
+        # MP_ provisional id while the snapshot is keyed by the canonical M_
+        # content id. Prefer the snapshot id whenever it has a binding; only
+        # fall back to the legacy index id for old snapshots that have no
+        # binding under their visible id.
+        state_media_id = media_id
+        bindings = device_state.get("bindings", {}) if isinstance(device_state, dict) else {}
+        indexed_media_id = str(indexed_row.get("media_id", "") or "")
+        if (
+            indexed_media_id
+            and indexed_media_id != media_id
+            and isinstance(bindings, dict)
+            and media_id not in bindings
+            and indexed_media_id in bindings
+        ):
+            state_media_id = indexed_media_id
         rows_by_id[media_id] = {
             "media_id": media_id,
             "clip_id": indexed_row.get("clip_id", ""),
@@ -255,13 +294,21 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
                 else indexed_row.get("inferred_camera", "")
             ),
             "duration_seconds": indexed_row.get("duration_seconds"),
-            "width": path_row.get("width"),
-            "height": path_row.get("height"),
-            "indexed": media_id in indexed,
+            "width": raw.get("width"),
+            "height": raw.get("height"),
+            # A migrated project can have a scan snapshot keyed by content M_
+            # while its old index is keyed by a confirmed filename MP_. Use
+            # the identity that owns the device binding for the state lookup;
+            # the visible row itself remains keyed by the canonical snapshot
+            # media_id and is emitted only once.
+            "state": device.state_from_snapshot(device_state, {"media_id": state_media_id, "media_path": path_text}),
+            "indexed": media_id in indexed or bool(indexed_row),
             "label": _safe_role(labels.get(media_id)),
         }
 
     for media_id, indexed_row in indexed.items():
+        if media_id in joined_index_ids:
+            continue
         rows_by_id.setdefault(
             media_id,
             {
@@ -271,6 +318,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
                 "folder_label": "",
                 "inferred_camera": indexed_row.get("inferred_camera", ""),
                 "duration_seconds": indexed_row.get("duration_seconds"),
+                "state": device.state_from_snapshot(device_state, {"media_id": media_id}),
                 "indexed": True,
                 "label": _safe_role(labels.get(media_id)),
             },
@@ -288,6 +336,7 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
             "folder_label": "",
             "inferred_camera": "",
             "duration_seconds": indexed.get(key, {}).get("duration_seconds"),
+            "state": device.state_from_snapshot(device_state, {"media_id": key}),
             "indexed": key in indexed,
             "label": role,
         }

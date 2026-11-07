@@ -11,6 +11,8 @@ describe("media health presentation", () => {
   it("distinguishes index-pending from indexed identity-missing media", () => {
     expect(mediaHealthState({ indexed: false, playable: false })).toBe("index_pending");
     expect(mediaHealthState({ indexed: true, playable: false })).toBe("identity_missing");
+    expect(mediaHealthState({ indexed: true, playable: false, state: "missing" })).toBe("offline");
+    expect(mediaHealthState({ indexed: true, playable: true, state: "unknown" })).toBe("unknown");
   });
 
   it("promotes an actual playback failure above an existing playback identity", () => {

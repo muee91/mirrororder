@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from fractions import Fraction
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable, Sequence
 
 from .config import ProjectConfig
@@ -37,6 +37,16 @@ def _as_list(value: object) -> list[Any]:
 
 def _clean_text(value: object, limit: int = 4000) -> str:
     return " ".join(str(value or "").replace("\x00", " ").split())[:limit]
+
+
+def _model_label(value: object) -> str:
+    """Keep provenance useful without persisting a device-local model path."""
+    model = _clean_text(value, 200)
+    if model.startswith("/"):
+        return Path(model).name
+    if len(model) > 2 and model[1] == ":" and model[2] in {"/", "\\"}:
+        return PureWindowsPath(model).name
+    return model
 
 
 def _document_id(project_id: str, source: str, key: str) -> str:
@@ -170,6 +180,15 @@ class ProjectSemanticIndexer:
                 "duration": float(group.get("duration", 0) or 0),
                 "member_count": len(members),
             }
+            provider = _clean_text(data.get("provider"), 120)
+            if provider:
+                if provider in {"renamerx", "renamerx-local", "renamerx-local-ai"}:
+                    provider = "local"
+                metadata["provider"] = provider
+                metadata["evidence_provenance"] = provider
+            model = _model_label(data.get("model"))
+            if model:
+                metadata["model"] = model
             documents.append(
                 {
                     "document_id": _document_id(self.project_id, "visual", group_id),

@@ -25,6 +25,7 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--mo-accent, #5a9ef4) 30%, transparent);
 }
 .mo-media-card.is-missing { opacity: .76; }
+.mo-media-card.is-unknown { opacity: .86; }
 
 .mo-media-select {
   position: relative;
@@ -77,6 +78,7 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
   background: #080c0f;
 }
 .mo-media-thumb > span:not(.mo-media-camera-badge).is-missing { color: var(--mo-danger, #d77b7b); }
+.mo-media-thumb > span:not(.mo-media-camera-badge).is-unknown { color: var(--mo-text-muted, #778590); }
 .mo-media-camera-badge {
   position: absolute;
   z-index: 2;
@@ -155,6 +157,7 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
   white-space: nowrap;
 }
 .mo-media-support.is-missing { color: var(--mo-danger, #d77b7b); }
+.mo-media-support.is-unknown { color: var(--mo-text-muted, #778590); }
 
 .mo-media-selected-slot {
   align-self: center;

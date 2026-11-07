@@ -69,6 +69,23 @@ def _normalize_text(value: object) -> str:
 
 
 def _analysis_revision(output_dir: Path) -> str:
+    snapshot = output_dir / "analysis_snapshot.json"
+    try:
+        snapshot_payload = json.loads(snapshot.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        snapshot_payload = None
+    if (
+        isinstance(snapshot_payload, dict)
+        and isinstance(snapshot_payload.get("index"), dict)
+        and isinstance(snapshot_payload.get("script"), dict)
+        and isinstance(snapshot_payload.get("matches"), dict)
+    ):
+        try:
+            stat = snapshot.stat()
+            signature = (("analysis_snapshot.json", stat.st_size, stat.st_mtime_ns),)
+            return hashlib.sha1(repr(signature).encode("utf-8")).hexdigest()[:16]
+        except OSError:
+            pass
     signature = []
     for name in ("material_index.json", "script.json", "matches.json"):
         path = output_dir / name
@@ -86,6 +103,22 @@ def _read_json(path: Path) -> dict[str, Any]:
         return value if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}
+
+
+def _read_analysis_inputs(output_dir: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Read one committed analysis revision, falling back for legacy projects."""
+    snapshot = _read_json(output_dir / "analysis_snapshot.json")
+    if (
+        isinstance(snapshot.get("index"), dict)
+        and isinstance(snapshot.get("script"), dict)
+        and isinstance(snapshot.get("matches"), dict)
+    ):
+        return snapshot["index"], snapshot["script"], snapshot["matches"]
+    return (
+        _read_json(output_dir / "material_index.json"),
+        _read_json(output_dir / "script.json"),
+        _read_json(output_dir / "matches.json"),
+    )
 
 
 def _candidate_ids(candidate: dict[str, Any]) -> list[str]:
@@ -240,9 +273,7 @@ class AuditEngine:
         self.identity_library = IdentityLibrary(self.database, self.project_id)
 
     def _inputs(self) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
-        index = _read_json(self.config.output_dir / "material_index.json")
-        script = _read_json(self.config.output_dir / "script.json")
-        matches = _read_json(self.config.output_dir / "matches.json")
+        index, script, matches = _read_analysis_inputs(self.config.output_dir)
         review = ReviewStore(self.config.output_dir / "review.json").load()
         automation = AutomationStore(self.config.output_dir).load()
         return index, script, matches, review, automation

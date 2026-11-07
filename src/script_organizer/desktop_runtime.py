@@ -51,9 +51,12 @@ def _normalize_roots(raw: object) -> list[str]:
 
 
 def _media_summary(service: Any, project: Any) -> dict[str, Any]:
-    store = DeviceMediaStore()
+    store = DeviceMediaStore(create=False)
     workspace_id = _workspace_id(service)
-    return store.summary(workspace_id, project.project_id, project.index)
+    # Recovery/status GETs consume the last explicit scan/confirmation
+    # snapshot. Playback remains the content-identity verification boundary
+    # for the one clip being opened.
+    return store.summary(workspace_id, project.project_id, project.index, verify_content=False)
 
 
 def _local_runtime_payload(service: Any) -> dict[str, Any]:
@@ -326,7 +329,15 @@ def install_desktop_runtime() -> None:
                             str(payload.get("media_id", "") or ""),
                             str(payload.get("candidate_path", "") or ""),
                         )
-                        summary = store.summary(workspace_id, project.project_id, project.index)
+                        # The confirmation write is already the durable device
+                        # binding boundary; do not re-hash the whole project
+                        # synchronously while returning the UI response.
+                        summary = store.summary(
+                            workspace_id,
+                            project.project_id,
+                            project.index,
+                            verify_content=False,
+                        )
                         project.reload()
                         self._send_json(
                             {

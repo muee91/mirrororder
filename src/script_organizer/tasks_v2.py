@@ -4,12 +4,22 @@ import hashlib
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path
-from threading import RLock, Thread
+from threading import RLock, Thread, local
 from typing import Any, Callable
 from uuid import uuid4
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover
+    msvcrt = None
 
 from .analysis_runtime import analyze, generated_sync_fcpxml
 from .asr_runtime import ASRRuntime, script_asr_prompt
@@ -37,6 +47,42 @@ PROCESS_RUNNER_ID = "host_" + uuid4().hex
 # 互相把对方正在跑的任务反复打成 interrupted（GET 触发写风暴 + 重复提交）。
 _RECOVERED_TASK_PATHS: set[str] = set()
 _RECOVERY_LOCK = RLock()
+_FILE_LOCK_STATE = local()
+
+
+@contextmanager
+def _file_lock(path: Path):
+    """Serialize task-file read/modify/write across Host processes."""
+    key = str(path.resolve())
+    held = getattr(_FILE_LOCK_STATE, "paths", set())
+    if key in held:
+        yield
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    with lock_path.open("a+b") as handle:
+        if fcntl is not None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        elif msvcrt is not None:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        held = set(held)
+        held.add(key)
+        _FILE_LOCK_STATE.paths = held
+        try:
+            yield
+        finally:
+            held.remove(key)
+            _FILE_LOCK_STATE.paths = held
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            elif msvcrt is not None:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 def _now() -> str:
@@ -138,7 +184,17 @@ class TaskManager:
                     changed = True
         payload = {"version": 2, "tasks": tasks}
         if changed:
-            _write_json(self._path(config), payload)
+            path = self._path(config)
+            with _file_lock(path):
+                latest = _read_json(path, payload)
+                if isinstance(latest, dict) and isinstance(latest.get("tasks"), list):
+                    for task in latest["tasks"]:
+                        if isinstance(task, dict) and task.get("status") in {"queued", "running"} and task.get("runner_id") != PROCESS_RUNNER_ID:
+                            task["status"] = "interrupted"
+                            task["interrupted_at"] = task.get("interrupted_at") or _now()
+                            task.setdefault("logs", []).append("Host 已重启；旧内存任务标记为 interrupted，可安全重跑")
+                    payload = {"version": 2, "tasks": latest["tasks"]}
+                _write_json(path, payload)
         return payload
 
     def _save(self, config: ProjectConfig, payload: dict[str, Any]) -> None:
@@ -163,7 +219,7 @@ class TaskManager:
         affected = self._affected_group_ids(config, targets) if task_type in {"incremental_analyze", "transcribe"} else []
         canonical = json.dumps({"type": task_type, "targets": targets}, ensure_ascii=False, sort_keys=True)
         key = idempotency_key or hashlib.sha1(canonical.encode("utf-8")).hexdigest()
-        with self._lock:
+        with self._lock, _file_lock(self._path(config)):
             payload = self._load(config)
             for task in payload["tasks"]:
                 if task.get("idempotency_key") == key and task.get("status") in {"queued", "running", "completed"}:
@@ -197,7 +253,7 @@ class TaskManager:
 
     def cancel(self, project_id: str, task_id: str) -> dict[str, Any]:
         config = self.project_loader(project_id)
-        with self._lock:
+        with self._lock, _file_lock(self._path(config)):
             payload = self._load(config)
             task = self._task(payload, task_id)
             if task["status"] == "queued":
@@ -240,7 +296,11 @@ class TaskManager:
             elif task["type"] == "incremental_analyze":
                 self._update(config, task_id, stage="analysis")
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
-                result = analyze(config, affected or None)["index"]["stats"]
+                result = analyze(
+                    config,
+                    affected or None,
+                    cancelled=lambda: self._cancel_requested(config, task_id),
+                )["index"]["stats"]
                 result["affected_group_ids"] = sorted(affected)
                 result["automation"] = resolve_project(config)["summary"]
             elif task["type"] == "auto_resolve":
@@ -256,7 +316,11 @@ class TaskManager:
                 if result.get("transcribed") and _analysis_inputs_available(config):
                     self._update(config, task_id, stage="analysis")
                     affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
-                    result["analysis"] = analyze(config, affected or None)["index"]["stats"]
+                    result["analysis"] = analyze(
+                        config,
+                        affected or None,
+                        cancelled=lambda: self._cancel_requested(config, task_id),
+                    )["index"]["stats"]
                     result["automation"] = resolve_project(config)["summary"]
                 elif result.get("transcribed"):
                     result["analysis_deferred"] = True
@@ -292,7 +356,10 @@ class TaskManager:
         if not _analysis_inputs_available(config):
             raise ValueError("项目源输入不完整，无法执行自动准备")
         self._update(config, task["task_id"], stage="analysis", message="开始 MLX/ASR 与剧本匹配")
-        analysis = analyze(config)
+        analysis = analyze(
+            config,
+            cancelled=lambda: self._cancel_requested(config, task["task_id"]),
+        )
         result["analysis"] = analysis["index"]["stats"]
         if self._cancel_requested(config, task["task_id"]):
             return {**result, "cancelled": True}
@@ -412,11 +479,24 @@ class TaskManager:
         error: str = "",
         message: str = "",
     ) -> None:
-        with self._lock:
+        with self._lock, _file_lock(self._path(config)):
             payload = self._load(config)
             task = self._task(payload, task_id)
             if status == "running" and task.get("status") == "cancelled":
                 return
+            # Cancellation is a durable terminal decision.  A long-running
+            # stage can finish after cancel() has persisted the request; do
+            # not let its unconditional completion update resurrect the task
+            # as completed.
+            if status == "completed" and (
+                task.get("status") == "cancelled" or task.get("cancel_requested")
+            ):
+                status = "cancelled"
+                stage = "cancelled"
+                # A late completion callback must not publish a successful
+                # result alongside the durable cancelled state.
+                result = None
+                message = "任务已取消"
             if status:
                 task["status"] = status
                 if status == "running":

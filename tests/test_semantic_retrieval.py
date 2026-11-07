@@ -5,10 +5,16 @@ from pathlib import Path
 
 from script_organizer.config import ProjectConfig
 from script_organizer.script_supervisor_store import ScriptSupervisorStore
-from script_organizer.semantic_index import ProjectSemanticIndexer
+from script_organizer.semantic_index import ProjectSemanticIndexer, _model_label
 from script_organizer.semantic_search import SemanticSearcher, safe_search_payload
 from script_organizer.semantic_store import SemanticStore
 from script_organizer.workspace_db import WorkspaceDatabase
+
+
+def test_visual_model_provenance_does_not_leak_device_paths() -> None:
+    assert _model_label("/Users/example/Library/models/Qwen.gguf") == "Qwen.gguf"
+    assert _model_label(r"C:\\Users\\example\\models\\Qwen.gguf") == "Qwen.gguf"
+    assert _model_label("Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M") == "Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M"
 
 
 class _FakePublicConfig:

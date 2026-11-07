@@ -172,6 +172,19 @@ class ProjectService:
         self.reload()
 
     def _signature(self) -> tuple[tuple[str, int, int], ...]:
+        snapshot = self.config.output_dir / "analysis_snapshot.json"
+        try:
+            stat = snapshot.stat()
+            snapshot_payload = _read_json(snapshot, {})
+            if (
+                isinstance(snapshot_payload, dict)
+                and isinstance(snapshot_payload.get("index"), dict)
+                and isinstance(snapshot_payload.get("script"), dict)
+                and isinstance(snapshot_payload.get("matches"), dict)
+            ):
+                return (("analysis_snapshot.json", stat.st_size, stat.st_mtime_ns),)
+        except OSError:
+            pass
         result = []
         for name in ("material_index.json", "script.json", "matches.json"):
             path = self.config.output_dir / name
@@ -183,9 +196,20 @@ class ProjectService:
         return tuple(result)
 
     def reload(self) -> None:
-        self.index = _read_json(self.config.output_dir / "material_index.json", {})
-        self.script = _read_json(self.config.output_dir / "script.json", {})
-        self.matches = _read_json(self.config.output_dir / "matches.json", {})
+        snapshot = _read_json(self.config.output_dir / "analysis_snapshot.json", {})
+        if (
+            isinstance(snapshot, dict)
+            and isinstance(snapshot.get("index"), dict)
+            and isinstance(snapshot.get("script"), dict)
+            and isinstance(snapshot.get("matches"), dict)
+        ):
+            self.index = snapshot["index"]
+            self.script = snapshot["script"]
+            self.matches = snapshot["matches"]
+        else:
+            self.index = _read_json(self.config.output_dir / "material_index.json", {})
+            self.script = _read_json(self.config.output_dir / "script.json", {})
+            self.matches = _read_json(self.config.output_dir / "matches.json", {})
         self.clips = {item.get("clip_id"): item for item in self.index.get("clips", []) if isinstance(item, dict)}
         self.groups = {item.get("group_id"): item for item in self.index.get("groups", []) if isinstance(item, dict)}
         self.segments = {item.get("segment_id"): item for item in self.script.get("segments", []) if isinstance(item, dict)}
@@ -368,7 +392,9 @@ class ProjectService:
         group = self.groups.get(group_id)
         if not group:
             raise KeyError(group_id)
-        store = TranscriptStore(self.config.transcript_dir)
+        # Evidence is a read path.  Do not create the transcript cache merely
+        # because a panel was opened before any transcription task ran.
+        store = TranscriptStore(self.config.transcript_dir, create=False)
         transcripts = []
         for member in group.get("members", []):
             if not isinstance(member, dict):
@@ -707,6 +733,8 @@ def _body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         length = int(handler.headers.get("Content-Length", "0"))
     except ValueError as error:
         raise ApiError(HTTPStatus.BAD_REQUEST, "无效请求长度") from error
+    if length < 0:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "无效请求长度")
     if length > 1024 * 1024:
         raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "请求过大")
     try:
@@ -820,6 +848,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
             try:
                 parts = _parts(parsed.path)
                 if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "media":
+                    self._local_only()
                     project = service.project(parts[3])
                     self._media(project, urllib.parse.unquote(parts[5]), head_only=True)
                 else:
@@ -878,6 +907,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
             elif rest == ["state"]:
                 self._send_json(project.state())
             elif rest == ["tasks"]:
+                self._local_only()
                 self._send_json({"tasks": service.tasks.list(project_id)})
             elif rest == ["proposals"]:
                 review_revision = int(project.review.load().get("revision", 0) or 0)
@@ -895,6 +925,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
             elif len(rest) == 2 and rest[0] == "candidates":
                 self._send_json(project.matches.get("by_segment", {}).get(urllib.parse.unquote(rest[1]), []))
             elif len(rest) == 2 and rest[0] == "media":
+                self._local_only()
                 self._media(project, urllib.parse.unquote(rest[1]))
             else:
                 raise ApiError(HTTPStatus.NOT_FOUND, "not found")
@@ -965,6 +996,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
                 saved = project.review.apply_action(payload)
                 self._send_json(saved)
             elif rest == ["tasks"]:
+                self._local_only()
                 task = service.tasks.submit(
                     project_id,
                     str(payload.get("type", "")),
@@ -974,6 +1006,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
                 )
                 self._send_json(task, HTTPStatus.ACCEPTED)
             elif len(rest) == 2 and rest[0] == "tasks":
+                self._local_only()
                 self._send_json(service.tasks.cancel(project_id, rest[1]))
             elif rest == ["proposals", "apply"]:
                 self._require_review_access()
@@ -1175,6 +1208,14 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
 
         def _is_local_client(self) -> bool:
             return _is_loopback_source(self.client_address[0])
+
+        def _local_only(self) -> None:
+            # The standalone Host must remain loopback-only for media and
+            # durable task routes.  The paired Workspace Gateway is the
+            # explicit remote entry point, so reuse its session boundary.
+            if self._is_local_client():
+                return
+            self._authorize_app()
 
         def _browser_user(self) -> dict[str, Any]:
             service = gateway.current

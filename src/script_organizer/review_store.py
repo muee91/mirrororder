@@ -37,6 +37,28 @@ def empty_review() -> dict[str, Any]:
     }
 
 
+def _read_analysis_inputs(output_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read placement validation inputs from one committed analysis revision."""
+    try:
+        snapshot = json.loads((output_dir / "analysis_snapshot.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        snapshot = {}
+    if (
+        isinstance(snapshot, dict)
+        and isinstance(snapshot.get("index"), dict)
+        and isinstance(snapshot.get("script"), dict)
+        and isinstance(snapshot.get("matches"), dict)
+    ):
+        return snapshot["index"], snapshot["script"]
+    def read(name: str) -> dict[str, Any]:
+        try:
+            value = json.loads((output_dir / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return value if isinstance(value, dict) else {}
+    return read("material_index.json"), read("script.json")
+
+
 def normalize_review(raw: object) -> dict[str, Any]:
     result = empty_review()
     if not isinstance(raw, dict):
@@ -270,35 +292,36 @@ class ReviewStore:
 
     def _validate_placement_targets(self, group_id: str, segment_ids: list[str]) -> None:
         """Reject stale/forged drag targets when canonical project outputs exist."""
-        material_path = self.path.parent / "material_index.json"
-        script_path = self.path.parent / "script.json"
-        if material_path.is_file():
-            try:
-                with material_path.open(encoding="utf-8") as handle:
-                    material = json.load(handle)
-                known_groups = {
-                    str(item.get("group_id", "") or "")
-                    for item in material.get("groups", [])
-                    if isinstance(item, dict)
-                }
-                if known_groups and group_id not in known_groups:
-                    raise ValueError("归集 Take 已不在当前项目中，请刷新后重试")
-            except json.JSONDecodeError as error:
-                raise ValueError("当前项目素材索引损坏，无法安全写入归集") from error
-        if segment_ids and script_path.is_file():
-            try:
-                with script_path.open(encoding="utf-8") as handle:
-                    script = json.load(handle)
-                known_segments = {
-                    str(item.get("segment_id", "") or "")
-                    for item in script.get("segments", [])
-                    if isinstance(item, dict) and str(item.get("type", "") or "") != "scene_heading"
-                }
-                missing = [segment_id for segment_id in segment_ids if segment_id not in known_segments]
-                if missing:
-                    raise ValueError("目标剧本段已变化，请刷新后重新拖入")
-            except json.JSONDecodeError as error:
-                raise ValueError("当前项目剧本索引损坏，无法安全写入归集") from error
+        material, script = _read_analysis_inputs(self.path.parent)
+        snapshot_path = self.path.parent / "analysis_snapshot.json"
+        snapshot_valid = False
+        try:
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            snapshot_valid = (
+                isinstance(snapshot, dict)
+                and isinstance(snapshot.get("index"), dict)
+                and isinstance(snapshot.get("script"), dict)
+                and isinstance(snapshot.get("matches"), dict)
+            )
+        except (OSError, ValueError):
+            pass
+        script_available = snapshot_valid or (self.path.parent / "script.json").is_file()
+        known_groups = {
+            str(item.get("group_id", "") or "")
+            for item in material.get("groups", [])
+            if isinstance(item, dict)
+        }
+        if known_groups and group_id not in known_groups:
+            raise ValueError("归集 Take 已不在当前项目中，请刷新后重试")
+        if segment_ids and script_available:
+            known_segments = {
+                str(item.get("segment_id", "") or "")
+                for item in script.get("segments", [])
+                if isinstance(item, dict) and str(item.get("type", "") or "") != "scene_heading"
+            }
+            missing = [segment_id for segment_id in segment_ids if segment_id not in known_segments]
+            if missing:
+                raise ValueError("目标剧本段已变化，请刷新后重新拖入")
 
     @staticmethod
     def _audit_snapshot(review: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
@@ -364,7 +387,9 @@ class ReviewStore:
 
     @staticmethod
     def _valid_state(state: str) -> str:
-        return state if state in VALID_STATES else "unreviewed"
+        if state not in VALID_STATES:
+            raise ValueError(f"不支持的审核状态：{state}")
+        return state
 
     @staticmethod
     def _episode_ids(raw: object) -> list[int]:

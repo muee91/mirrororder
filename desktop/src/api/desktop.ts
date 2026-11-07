@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError, type ProjectSummary } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export interface DesktopCommandStatus { name: string; available: boolean; path: string }
 export interface DesktopModuleStatus { name: string; available: boolean; required: boolean }
@@ -128,16 +127,12 @@ export interface ProjectTaskStatus {
 }
 export interface ProjectDeleteResult { project_id: string; deleted: boolean; config_path: string }
 
-const REQUEST_TIMEOUT_MS = 20_000;
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> { return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init); }
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
   try {
-    const response = await transportFetch(`${baseUrl}${path}`, { ...init, method: init?.method ?? "GET", headers, signal: controller.signal });
+    const response = await fetchWithTimeout(`${baseUrl}${path}`, { ...init, method: init?.method ?? "GET", headers });
     if (!response.ok) {
       let message = `${response.status} ${response.statusText}`.trim();
       try { const payload = await response.json() as { error?: string }; message = payload.error || message; } catch { /* fallback */ }
@@ -147,7 +142,7 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
   } catch (error) {
     if (error instanceof HostConnectionError) throw error;
     throw new HostConnectionError(`Desktop parity API 请求失败：${error instanceof Error ? error.message : String(error)}`, { cause: error });
-  } finally { globalThis.clearTimeout(timeout); }
+  }
 }
 function projectPath(projectId: string): string {
   const value = projectId.trim();

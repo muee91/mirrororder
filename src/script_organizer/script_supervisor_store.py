@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 import uuid
@@ -57,6 +58,8 @@ def _number(value: object) -> float | None:
         result = float(value)
     except (TypeError, ValueError) as error:
         raise ValueError("可用范围必须是秒数") from error
+    if not math.isfinite(result):
+        raise ValueError("可用范围必须是有限秒数")
     if result < 0:
         raise ValueError("可用范围不能小于 0 秒")
     return round(result, 4)
@@ -229,7 +232,11 @@ class ScriptSupervisorStore:
         if not isinstance(payload, dict):
             return _default()
         records: dict[str, dict[str, Any]] = {}
-        if int(payload.get("version", 1) or 1) >= 2 and isinstance(payload.get("records"), dict):
+        try:
+            version = int(payload.get("version", 1) or 1)
+        except (TypeError, ValueError):
+            return _default()
+        if version >= 2 and isinstance(payload.get("records"), dict):
             for record_id, row in payload["records"].items():
                 try:
                     safe = _safe_record(str(record_id), row)

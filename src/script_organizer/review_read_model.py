@@ -233,7 +233,12 @@ def _media_endpoint(workspace_id: str, project_id: str, clip_id: str) -> str:
     return f"/api/v1/projects/{project}/media/{clip}"
 
 
-def _safe_angle(workspace_id: str, project_id: str, member: dict[str, Any]) -> dict[str, Any]:
+def _safe_angle(
+    workspace_id: str,
+    project_id: str,
+    member: dict[str, Any],
+    media_state: str | None = None,
+) -> dict[str, Any]:
     raw_name = str(member.get("name", "") or "")
     source = str(member.get("source_media_path", "") or member.get("media_path", "") or "")
     name = raw_name or Path(source).name or str(member.get("clip_id", "") or "未命名素材")
@@ -244,7 +249,9 @@ def _safe_angle(workspace_id: str, project_id: str, member: dict[str, Any]) -> d
     #   missing  = 设备绑定过但本次解析失败（盘离线/文件移动），与"从未绑定"分开；
     #   unknown  = 本机从未登记绑定，服务端无从判断；
     #   decode   = 只能由本机播放时报错产生（playbackFailure 探测），服务端不假装知道。
-    if available is True:
+    if media_state in {"verified", "missing", "unknown"}:
+        state = media_state
+    elif available is True:
         state = "verified"
     elif available is False:
         state = "missing"
@@ -338,7 +345,11 @@ def _group_issues(
         issues.append({"code": "needs_review", "severity": "warning", "label": "剧本归集需要人工确认"})
     elif status == "unresolved":
         issues.append({"code": "unresolved", "severity": "warning", "label": "归集证据不足"})
-    if any(angle.get("playback", {}).get("available") is False for angle in angles):
+    if any(
+        angle.get("playback", {}).get("state") == "missing"
+        or angle.get("playback", {}).get("available") is False
+        for angle in angles
+    ):
         issues.append({"code": "missing_media", "severity": "error", "label": "网关主机缺少可播放媒体"})
     if automation_stale:
         issues.append({"code": "automation_stale", "severity": "warning", "label": "自动决策落后于当前分析"})
@@ -350,7 +361,11 @@ def _people_loader(project: Any) -> Callable[[str], dict[str, list[dict[str, Any
     if not workspace_id:
         return lambda _group_id: {"face": [], "speaker": []}
     try:
-        library = IdentityLibrary(WorkspaceDatabase(workspace_id), project.project_id)
+        library = IdentityLibrary(
+            WorkspaceDatabase(workspace_id, read_only=True),
+            project.project_id,
+            install_guard=False,
+        )
     except Exception:
         return lambda _group_id: {"face": [], "speaker": []}
 
@@ -404,6 +419,28 @@ def build_review_read_model(
     groups.sort(key=lambda item: (_float(item.get("start"), 0.0), str(item.get("group_id", ""))))
     group_matches = _as_dict(matches.get("groups"))
     people = people_for_group or _people_loader(project)
+
+    # DeviceMediaStore is attached by the device-media runtime. It supplies a
+    # last explicit scan/confirmation state without turning this read model into
+    # a full-project hash operation. Unit-only project fakes keep the legacy
+    # local_exists fallback below.
+    media_store = getattr(project, "_device_media_store", None)
+    media_workspace = str(getattr(project, "_device_media_workspace_id", "") or workspace)
+    media_snapshot: dict[str, Any] | None = None
+    media_state_reader = getattr(media_store, "state_from_snapshot", None)
+    if media_store is not None and callable(media_state_reader) and media_workspace:
+        try:
+            media_snapshot = media_store.project_snapshot(media_workspace, project_id)
+        except Exception:
+            media_snapshot = None
+
+    def media_state(member: dict[str, Any]) -> str | None:
+        if media_snapshot is None or not callable(media_state_reader):
+            return None
+        try:
+            return str(media_state_reader(media_snapshot, member) or "") or None
+        except Exception:
+            return None
 
     gap_codes: dict[str, list[dict[str, Any]]] = {}
     script_gaps: list[dict[str, Any]] = []
@@ -460,7 +497,7 @@ def build_review_read_model(
         automatic = _safe_automation(automation_groups.get(group_id))
         effective_mapping = _effective_mapping(review, _as_dict(automation_groups.get(group_id)), group, segments)
         angles = [
-            _safe_angle(workspace, project_id, member)
+            _safe_angle(workspace, project_id, member, media_state(member))
             for member in _as_list(group.get("members"))
             if isinstance(member, dict)
         ]

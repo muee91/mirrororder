@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sqlite3
+from urllib.parse import quote
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -63,18 +64,27 @@ class WorkspaceDatabase:
     synced between editors.
     """
 
-    def __init__(self, workspace_id: str, path: Path | None = None):
+    def __init__(self, workspace_id: str, path: Path | None = None, *, read_only: bool = False):
         self.workspace_id = str(workspace_id or "").strip()
         if not self.workspace_id:
             raise ValueError("workspace_id 不能为空")
         self.path = Path(path) if path is not None else workspace_database_path(self.workspace_id)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.read_only = bool(read_only)
+        if not self.read_only:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
-        self._initialize()
+        if not self.read_only:
+            self._initialize()
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path, timeout=30.0)
+        if self.read_only and not self.path.is_file():
+            raise FileNotFoundError(self.path)
+        if self.read_only:
+            uri = f"file:{quote(str(self.path), safe='/')}?mode=ro"
+            connection = sqlite3.connect(uri, uri=True, timeout=30.0)
+        else:
+            connection = sqlite3.connect(self.path, timeout=30.0)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")

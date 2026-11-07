@@ -35,12 +35,13 @@ class IdentityLibrary:
     _guard_lock = RLock()
     _guarded_databases: set[tuple[Path, int]] = set()
 
-    def __init__(self, database: WorkspaceDatabase, project_id: str):
+    def __init__(self, database: WorkspaceDatabase, project_id: str, *, install_guard: bool = True):
         self.database = database
         self.project_id = str(project_id or "").strip()
         if not self.project_id:
             raise ValueError("project_id 不能为空")
-        self._install_confirmation_guard()
+        if install_guard:
+            self._install_confirmation_guard()
 
     def _install_confirmation_guard(self) -> None:
         """Prevent automatic cluster upserts from clobbering human labels."""

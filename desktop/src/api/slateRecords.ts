@@ -1,11 +1,6 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 import type { SlateBoard, SlateRecord } from "./production";
-
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
 
 function projectRoute(projectId: string): string {
   const value = projectId.trim();
@@ -14,7 +9,7 @@ function projectRoute(projectId: string): string {
 }
 
 async function request(baseUrl: string, projectId: string, body: Record<string, unknown>): Promise<SlateBoard> {
-  const response = await transportFetch(`${baseUrl.replace(/\/+$/, "")}${projectRoute(projectId)}`, {
+  const response = await fetchWithTimeout(`${baseUrl.replace(/\/+$/, "")}${projectRoute(projectId)}`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(body),

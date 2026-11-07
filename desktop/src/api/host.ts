@@ -290,6 +290,7 @@ const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
 // summaries on a cold packaged runtime. Keep this bounded, but do not let the
 // startup path cancel a valid response and then amplify the work with retries.
 const REQUEST_TIMEOUT_MS = 20_000;
+const HOST_LIFECYCLE_TIMEOUT_MS = 20_000;
 
 function normalizeBaseUrl(value: string): string {
   const normalized = value.trim().replace(/\/+$/, "");
@@ -364,6 +365,23 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
     throw new HostConnectionError(`无法连接镜序 Host：${message}`, { cause: error });
   } finally {
     if (timeout !== undefined) globalThis.clearTimeout(timeout);
+  }
+}
+
+async function invokeWithTimeout<T>(command: string, args: Record<string, unknown> | undefined, action: string): Promise<T> {
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  try {
+    const deadline = new Promise<never>((_, reject) => {
+      timer = globalThis.setTimeout(() => {
+        reject(new HostConnectionError(`${action}超过 ${HOST_LIFECYCLE_TIMEOUT_MS / 1000} 秒未响应`));
+      }, HOST_LIFECYCLE_TIMEOUT_MS);
+    });
+    return await Promise.race([invoke<T>(command, args), deadline]);
+  } catch (error) {
+    if (error instanceof HostConnectionError) throw error;
+    throw new HostConnectionError(`${action}失败：${String(error)}`, { cause: error });
+  } finally {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
   }
 }
 
@@ -634,11 +652,12 @@ export class HostConnection {
       throw new HostConnectionError("Host 端口必须是 1–65535 的整数");
     }
     try {
-      return await invoke<HostLaunchResult>("start_python_host", {
+      return await invokeWithTimeout<HostLaunchResult>("start_python_host", {
         workspacePath: path,
         port,
-      });
+      }, "启动 Python Host");
     } catch (error) {
+      if (error instanceof HostConnectionError) throw error;
       throw new HostConnectionError(`启动 Python Host 失败：${String(error)}`, { cause: error });
     }
   }
@@ -646,7 +665,7 @@ export class HostConnection {
   async managedStatus(): Promise<HostProcessStatus> {
     requireTauriRuntime("检查");
     try {
-      return await invoke<HostProcessStatus>("host_process_status");
+      return await invokeWithTimeout<HostProcessStatus>("host_process_status", undefined, "读取 Python Host 状态");
     } catch (error) {
       throw new HostConnectionError(`读取 Python Host 状态失败：${String(error)}`, { cause: error });
     }
@@ -655,7 +674,7 @@ export class HostConnection {
   async stopLocal(): Promise<void> {
     requireTauriRuntime("停止");
     try {
-      await invoke("stop_python_host");
+      await invokeWithTimeout<void>("stop_python_host", undefined, "停止 Python Host");
     } catch (error) {
       throw new HostConnectionError(`停止 Python Host 失败：${String(error)}`, { cause: error });
     }

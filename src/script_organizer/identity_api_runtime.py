@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import mimetypes
 import urllib.parse
@@ -14,11 +15,35 @@ _INSTALLED = False
 _IDENTITY_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
-def _library(project: Any) -> IdentityLibrary:
+def _library(project: Any, *, read_only: bool = False) -> IdentityLibrary:
     workspace_id = str(getattr(project, "workspace_id", "") or "").strip()
     if not workspace_id:
         raise ValueError("identity library 需要稳定 workspace_id")
-    return IdentityLibrary(WorkspaceDatabase(workspace_id), str(project.project_id))
+    return IdentityLibrary(
+        WorkspaceDatabase(workspace_id, read_only=read_only),
+        str(project.project_id),
+        install_guard=not read_only,
+    )
+
+
+def _read_library(project: Any) -> IdentityLibrary:
+    """Open the read model without breaking narrow test/integration adapters.
+
+    The production factory accepts ``read_only``.  A few embedding callers
+    provide a legacy one-argument factory, so detect that shape explicitly
+    instead of turning a compatibility TypeError into a silent writable read.
+    """
+    factory = _library
+    try:
+        parameters = inspect.signature(factory).parameters.values()
+        supports_flag = any(
+            parameter.name == "read_only"
+            or parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters
+        )
+    except (TypeError, ValueError):
+        supports_flag = True
+    return factory(project, read_only=True) if supports_flag else factory(project)
 
 
 def _decorate_rows(project: Any, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -61,7 +86,7 @@ def _decorate_rows(project: Any, rows: list[dict[str, Any]]) -> list[dict[str, A
 
 def _portrait_asset(project: Any, identity_id: str) -> tuple[Path, str]:
     """Resolve one stored face crop with a single DB lookup and no client-supplied path."""
-    library = _library(project)
+    library = _read_library(project)
     with library.database.connection() as connection:
         row = connection.execute(
             """
@@ -172,7 +197,7 @@ def install_identity_api_runtime() -> None:
                 ):
                     self._local_only()
                     project = service.project(parts[3])
-                    suggestions = _library(project).merge_suggestions()
+                    suggestions = _read_library(project).merge_suggestions()
                     self._send_json(
                         {
                             "contract": "identity_merge_suggestions.v1",
@@ -201,7 +226,7 @@ def install_identity_api_runtime() -> None:
                     query = urllib.parse.parse_qs(parsed.query)
                     kind = str((query.get("kind") or [""])[0] or "").strip()
                     try:
-                        rows = _decorate_rows(project, _library(project).list(kind))
+                        rows = _decorate_rows(project, _read_library(project).list(kind))
                     except ValueError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
                     self._send_json(

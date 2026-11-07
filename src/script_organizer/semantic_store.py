@@ -54,11 +54,32 @@ class SemanticStore:
     never stores device-local media paths.
     """
 
-    def __init__(self, database: WorkspaceDatabase):
+    def __init__(self, database: WorkspaceDatabase, *, read_only: bool = False):
         self.database = database
+        self.read_only = bool(read_only)
+        self.available = True
         self._fts_token = False
         self._fts_trigram = False
-        self._initialize()
+        if self.read_only:
+            self._discover_schema()
+        else:
+            self._initialize()
+
+    def _discover_schema(self) -> None:
+        try:
+            with self.database.connection() as connection:
+                tables = {
+                    str(row[0])
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual table')"
+                    ).fetchall()
+                }
+        except (OSError, sqlite3.Error):
+            self.available = False
+            return
+        self.available = "semantic_documents" in tables
+        self._fts_token = "semantic_documents_fts" in tables
+        self._fts_trigram = "semantic_documents_trigram" in tables
 
     def _initialize(self) -> None:
         with self.database.connection() as connection:
@@ -161,6 +182,8 @@ class SemanticStore:
         *,
         group_ids: Sequence[str] | None = None,
     ) -> dict[str, int]:
+        if self.read_only:
+            raise RuntimeError("只读语义索引不能写入")
         project_id = str(project_id or "")
         source = str(source or "")
         if not project_id or not source:
@@ -274,6 +297,8 @@ class SemanticStore:
         sources: Sequence[str] | None = None,
         embedding_model: str | None = None,
     ) -> list[dict[str, Any]]:
+        if not self.available:
+            return []
         clauses = ["project_id=?"]
         parameters: list[Any] = [project_id]
         selected_sources = [str(value) for value in (sources or []) if str(value)]
@@ -301,7 +326,7 @@ class SemanticStore:
 
     def keyword_search(self, project_id: str, query: str, *, limit: int = 80) -> list[dict[str, Any]]:
         needle = str(query or "").strip()
-        if not needle:
+        if not needle or not self.available:
             return []
         limit = max(1, min(300, int(limit)))
         document_ids: list[str] = []
@@ -355,6 +380,17 @@ class SemanticStore:
         return [by_id[document_id] for document_id in document_ids if document_id in by_id]
 
     def summary(self, project_id: str) -> dict[str, Any]:
+        if not self.available:
+            return {
+                "contract": SEMANTIC_STORE_CONTRACT,
+                "documents": 0,
+                "vectors": 0,
+                "sources": {},
+                "fts": False,
+                "trigram": False,
+                "device_local": True,
+                "rebuildable": True,
+            }
         with self.database.connection() as connection:
             rows = connection.execute(
                 "SELECT source, COUNT(*) AS count, SUM(CASE WHEN embedding_dim > 0 THEN 1 ELSE 0 END) AS vectors FROM semantic_documents WHERE project_id=? GROUP BY source",

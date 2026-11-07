@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from script_organizer import media_identity, media_inventory_task_runtime, tasks_v2
-from script_organizer.media_identity import DeviceMediaStore
+from script_organizer.media_identity import DeviceMediaStore, media_id_for_path, provisional_media_id
 from script_organizer.media_role_store import MediaRoleStore
 
 
@@ -126,13 +126,81 @@ def test_inventory_rows_join_index_clips_through_provisional_filename_after_medi
 
     assert payload["scan_required"] is False
     rows = {row["media_id"]: row for row in payload["items"]}
-    # 快照行（M_）经 provisional 文件名二次查找连上索引 clip；索引自身行（MP_）照常存在。
+    # 快照行（M_）经 provisional 文件名二次查找连上索引 clip；同一物理
+    # 媒体只保留这一行，不能再把 MP_ 索引投影成第二个素材对象。
     moved_row = rows["M_realhash0000000000000000"]
     assert moved_row["clip_id"] == "C_moved"
     assert moved_row["duration_seconds"] == 42.5
     assert moved_row["inferred_camera"] == "A"
     indexed_media_id = provisional_media_id(moved_path)
-    assert rows[indexed_media_id]["clip_id"] == "C_moved"
+    assert indexed_media_id not in rows
+    assert payload["summary"]["files"] == 1
+    assert payload["summary"]["indexed"] == 1
+
+
+def test_inventory_migration_keeps_verified_canonical_binding_state(tmp_path: Path, monkeypatch) -> None:
+    """A canonical M_ snapshot must not inherit the legacy MP_ state key."""
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_path = media_root / "A001C001.MP4"
+    media_path.write_bytes(b"stable media")
+    project = _project(tmp_path)
+    project.index = {
+        "clips": [
+            {
+                "media_id": provisional_media_id(str(media_path)),
+                "clip_id": "C_migrated",
+                "duration": 12.0,
+                "name": media_path.name,
+            }
+        ],
+        "groups": [],
+    }
+    device = DeviceMediaStore()
+    device.scan(
+        project.workspace_id,
+        project.project_id,
+        {"clips": [{"media_id": media_id_for_path(media_path), "media_path": str(media_path)}], "groups": []},
+        [str(media_root)],
+    )
+    media_inventory_task_runtime._write_inventory_snapshot(
+        device,
+        project.workspace_id,
+        project.project_id,
+        [str(media_root)],
+        media_rows=[(media_id_for_path(media_path), str(media_path))],
+    )
+
+    payload = media_inventory_task_runtime.inventory_payload(
+        project,
+        device,
+        MediaRoleStore(project.config.output_dir),
+    )
+    row = next(item for item in payload["items"] if item["media_id"] == media_id_for_path(media_path))
+    assert row["state"] == "verified"
+
+
+def test_media_state_from_snapshot_uses_last_scan_without_hashing_on_read(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    media = tmp_path / "media"
+    media.mkdir()
+    path = media / "A001.mov"
+    path.write_bytes(b"media")
+    media_id = media_id_for_path(path)
+    device = DeviceMediaStore()
+    device.scan(
+        "ws_demo",
+        "demo",
+        {"clips": [{"media_id": media_id, "media_path": str(path), "clip_id": "C_state"}]},
+        [str(media)],
+    )
+    snapshot = device.project_snapshot("ws_demo", "demo")
+    item = {"media_id": media_id, "media_path": str(path)}
+    assert device.state_from_snapshot(snapshot, item) == "verified"
+    path.unlink()
+    assert device.state_from_snapshot(snapshot, item) == "missing"
+    assert device.state_from_snapshot(snapshot, {"media_id": "M_unknown"}) == "unknown"
 
 
 def test_inventory_projection_never_enumerates_or_hashes_media_on_read(tmp_path: Path, monkeypatch) -> None:
@@ -208,6 +276,7 @@ def test_inventory_exposes_canonical_clip_identity_without_exposing_media_path(t
             "folder_label": "",
             "inferred_camera": "A",
             "duration_seconds": None,
+            "state": "unknown",
             "indexed": True,
             "label": {},
         }

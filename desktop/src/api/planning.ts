@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError, invalidateReviewModelCache } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export type EditorialState = "unreviewed" | "keep" | "best" | "reject";
 
@@ -295,12 +294,6 @@ export interface AssemblyTimeline {
   semantics: Record<string, boolean>;
 }
 
-const REQUEST_TIMEOUT_MS = 20_000;
-
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 async function decodeError(response: Response): Promise<string> {
   try {
     const payload = await response.json() as { error?: string };
@@ -331,21 +324,17 @@ function planningQuery(filter?: { episode?: number | null; sceneId?: string | nu
 }
 
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
   try {
-    const response = await transportFetch(`${baseUrl}${path}`, { ...init, method: init?.method ?? "GET", headers, signal: controller.signal });
+    const response = await fetchWithTimeout(`${baseUrl}${path}`, { ...init, method: init?.method ?? "GET", headers });
     if (!response.ok) throw new HostConnectionError(await decodeError(response), { status: response.status });
     return await response.json() as T;
   } catch (error) {
     if (error instanceof HostConnectionError) throw error;
     const message = error instanceof Error ? error.message : String(error);
     throw new HostConnectionError(`Production planning 请求失败：${message}`, { cause: error });
-  } finally {
-    globalThis.clearTimeout(timeout);
   }
 }
 

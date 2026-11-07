@@ -3,20 +3,22 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import time
 from fractions import Fraction
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .fcpxml_reader import stable_clip_id
 from .media_identity import media_identity
 from .models import Clip
+from .resource_scheduler import ResourceCancelled
 
 
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mxf", ".mts", ".avi", ".mkv"}
 _CONVENTIONAL_CAMERAS = ("A", "B", "C")
 
 
-def _probe(path: Path) -> tuple[float, float | None]:
+def _probe(path: Path, cancelled: Callable[[], bool] | None = None) -> tuple[float, float | None]:
     """Read duration and capture time without importing a media framework."""
     command = [
         "ffprobe",
@@ -28,9 +30,30 @@ def _probe(path: Path) -> tuple[float, float | None]:
         "json",
         str(path),
     ]
+    if cancelled and cancelled():
+        raise ResourceCancelled("媒体探测已取消")
+    process: subprocess.Popen[str] | None = None
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=12, check=True)
-        payload = json.loads(result.stdout)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.monotonic() + 12.0
+        while True:
+            if cancelled and cancelled():
+                process.kill()
+                process.communicate()
+                raise ResourceCancelled("媒体探测已取消")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                process.kill()
+                process.communicate()
+                return 1.0, None
+            try:
+                stdout, _stderr = process.communicate(timeout=min(0.25, remaining))
+                if process.returncode != 0:
+                    return 1.0, None
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        payload = json.loads(stdout or "")
         format_row = payload.get("format", {}) if isinstance(payload, dict) else {}
         duration = max(0.01, float(format_row.get("duration", 0) or 0))
         creation_time = None
@@ -107,6 +130,7 @@ def read_media_directory(
     root: str | Path | Iterable[str | Path],
     camera_patterns: dict[str, str] | None = None,
     timeline_mode: str = "sequential",
+    cancelled: Callable[[], bool] | None = None,
 ) -> list[Clip]:
     """Build clips from ordinary video media without pretending unsynced files overlap."""
     if isinstance(root, (str, Path)):
@@ -114,19 +138,23 @@ def read_media_directory(
     else:
         directories = [Path(value) for value in root]
     patterns = camera_patterns or {}
-    files = sorted(
-        {
-            path
-            for directory in directories
-            if directory.is_dir()
-            for path in directory.rglob("*")
-            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES and not path.name.startswith("._")
-        },
-        key=lambda path: str(path).casefold(),
-    )
+    files_set: set[Path] = set()
+    for directory in directories:
+        if cancelled and cancelled():
+            raise ResourceCancelled("媒体目录扫描已取消")
+        if not directory.is_dir():
+            continue
+        for path in directory.rglob("*"):
+            if cancelled and cancelled():
+                raise ResourceCancelled("媒体目录扫描已取消")
+            if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES and not path.name.startswith("._"):
+                files_set.add(path)
+    files = sorted(files_set, key=lambda path: str(path).casefold())
     rows = []
     for occurrence, path in enumerate(files):
-        duration, captured_at = _probe(path)
+        if cancelled and cancelled():
+            raise ResourceCancelled("媒体探测已取消")
+        duration, captured_at = _probe(path, cancelled)
         stat_time = path.stat().st_mtime
         rows.append((path, duration, captured_at if captured_at is not None else stat_time, occurrence))
     if timeline_mode == "sequential":

@@ -46,6 +46,65 @@ def _workspace(tmp_path: Path) -> WorkspaceConfig:
     return WorkspaceConfig.from_file(tmp_path / "workspace.toml")
 
 
+def test_project_service_prefers_committed_analysis_snapshot(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+    config = ProjectConfig(
+        tmp_path / "project.toml",
+        "snapshot-demo",
+        None,
+        tmp_path / "script.txt",
+        output,
+        tmp_path / "transcripts",
+        input_kind="media-directory",
+        media_root=tmp_path / "media",
+    )
+    config.script.write_text("demo", encoding="utf-8")
+    (output / "material_index.json").write_text(json.dumps({"groups": [{"group_id": "legacy"}]}), encoding="utf-8")
+    (output / "script.json").write_text(json.dumps({"segments": [{"segment_id": "mixed"}]}), encoding="utf-8")
+    (output / "matches.json").write_text(json.dumps({"groups": {"mixed": {}}}), encoding="utf-8")
+    (output / "analysis_snapshot.json").write_text(
+        json.dumps({
+            "version": 1,
+            "index": {"groups": [{"group_id": "committed"}], "clips": []},
+            "script": {"segments": [{"segment_id": "committed"}]},
+            "matches": {"groups": {"committed": {}}},
+        }),
+        encoding="utf-8",
+    )
+
+    service = web_server.ProjectService("demo", config)
+
+    assert set(service.groups) == {"committed"}
+    assert set(service.segments) == {"committed"}
+
+
+def test_project_service_tracks_legacy_files_when_snapshot_is_invalid(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    output.mkdir()
+    config = ProjectConfig(
+        tmp_path / "project.toml",
+        "snapshot-invalid",
+        None,
+        tmp_path / "script.txt",
+        output,
+        tmp_path / "transcripts",
+        input_kind="media-directory",
+        media_root=tmp_path / "media",
+    )
+    config.script.write_text("demo", encoding="utf-8")
+    (output / "material_index.json").write_text(json.dumps({"groups": [{"group_id": "first"}], "clips": []}), encoding="utf-8")
+    (output / "script.json").write_text(json.dumps({"segments": []}), encoding="utf-8")
+    (output / "matches.json").write_text(json.dumps({"groups": {}}), encoding="utf-8")
+    (output / "analysis_snapshot.json").write_text("{broken", encoding="utf-8")
+
+    service = web_server.ProjectService("demo", config)
+    (output / "material_index.json").write_text(json.dumps({"groups": [{"group_id": "second"}], "clips": []}), encoding="utf-8")
+
+    assert service.reload_if_changed() is True
+    assert set(service.groups) == {"second"}
+
+
 def _project_files(tmp_path: Path, name: str = "Demo") -> tuple[Path, Path, Path]:
     media = tmp_path / "A001.mp4"
     media.write_bytes(b"video")
@@ -620,6 +679,56 @@ def test_proposal_apply_settles_each_proposal_independently(tmp_path):
     assert stored[fresh_proposal["proposal_id"]]["status"] == "applied"
     assert stored[stale_proposal["proposal_id"]]["status"] == "expired"
     assert review.load()["placements"][group["group_id"]]["actor"] == "审核人"
+
+
+def test_proposal_apply_rejects_conflicting_same_group_batch(tmp_path):
+    workspace = _workspace(tmp_path)
+    config_path = _register_demo(workspace, tmp_path)
+    config = ProjectConfig.from_file(config_path)
+    index = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
+    script = json.loads((config.output_dir / "script.json").read_text(encoding="utf-8"))
+    group = index["groups"][0]
+    segment = next(row for row in script["segments"] if row.get("type") != "scene_heading")
+    proposals = ProposalStore(config.output_dir)
+    review = ReviewStore(config.output_dir / "review.json")
+    agent = {"token_id": "a", "name": "agent"}
+
+    def create(note: str, episode: int):
+        return proposals.create(
+            {
+                "group_id": group["group_id"],
+                "episode_ids": [episode],
+                "script_segment_ids": [segment["segment_id"]],
+                "evidence": [{"clip_id": group["members"][0]["clip_id"], "start": 0, "end": 1, "summary": note}],
+                "base_analysis_revision": "a1",
+                "base_review_revision": 0,
+                "note": note,
+            },
+            agent,
+            {group["group_id"]: group},
+            {segment["segment_id"]: segment},
+            "a1",
+            0,
+        )
+
+    first = create("第一版", 1)
+    second = create("第二版", 2)
+    result = proposals.apply(
+        [first["proposal_id"], second["proposal_id"]],
+        "审核人",
+        {group["group_id"]: group},
+        {segment["segment_id"]: segment},
+        "a1",
+        review,
+    )
+
+    assert result["applied_count"] == 0
+    assert result["failed_count"] == 2
+    assert {row["status"] for row in result["results"]} == {"conflict"}
+    assert group["group_id"] not in review.load().get("placements", {})
+    stored = {row["proposal_id"]: row for row in proposals.list()}
+    assert stored[first["proposal_id"]]["status"] == "conflict"
+    assert stored[second["proposal_id"]]["status"] == "conflict"
 
 
 def test_task_targets_only_affected_groups_and_is_idempotent(tmp_path, monkeypatch):

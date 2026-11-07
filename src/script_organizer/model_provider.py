@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import urllib.error
 import urllib.request
@@ -107,6 +108,8 @@ class ModelProvider:
         try:
             confidence = float(result.get("confidence", 0) or 0)
         except (TypeError, ValueError):
+            confidence = 0.0
+        if not math.isfinite(confidence):
             confidence = 0.0
         return {
             "candidate_id": str(result.get("candidate_id", "") or "")[:160],

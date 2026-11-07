@@ -42,11 +42,16 @@ def _run_analysis(
     config,
     affected_group_ids: set[str] | None = None,
     progress=None,
+    cancelled=None,
 ):
     """Call the current analyzer while keeping older test/tool doubles usable."""
-    if "progress" in inspect.signature(analyze).parameters:
-        return analyze(config, affected_group_ids, progress=progress)
-    return analyze(config, affected_group_ids)
+    parameters = inspect.signature(analyze).parameters
+    kwargs = {}
+    if "progress" in parameters and progress is not None:
+        kwargs["progress"] = progress
+    if "cancelled" in parameters and cancelled is not None:
+        kwargs["cancelled"] = cancelled
+    return analyze(config, affected_group_ids, **kwargs)
 
 
 class TaskManager(_impl.TaskManager):
@@ -395,7 +400,11 @@ class TaskManager(_impl.TaskManager):
             elif task_type == "incremental_analyze":
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
                 with self._resource(config, task, self._asr_resource(config), "analysis", "MLX/ASR"):
-                    result = _run_analysis(config, affected or None)["index"]["stats"]
+                    result = _run_analysis(
+                        config,
+                        affected or None,
+                        cancelled=lambda: self._cancel_requested(config, task_id),
+                    )["index"]["stats"]
                 result["affected_group_ids"] = sorted(affected)
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                     result["automation"] = _impl.resolve_project(config)["summary"]
@@ -417,7 +426,11 @@ class TaskManager(_impl.TaskManager):
                 if result.get("transcribed") and _impl._analysis_inputs_available(config):
                     affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
                     with self._resource(config, task, self._asr_resource(config), "analysis", "MLX/ASR"):
-                        result["analysis"] = _run_analysis(config, affected or None)["index"]["stats"]
+                        result["analysis"] = _run_analysis(
+                            config,
+                            affected or None,
+                            cancelled=lambda: self._cancel_requested(config, task_id),
+                        )["index"]["stats"]
                     with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                         result["automation"] = _impl.resolve_project(config)["summary"]
                     local_media = self._refresh_media_bindings(config, project_id)
@@ -487,7 +500,11 @@ class TaskManager(_impl.TaskManager):
                 progress={"done": 0, "total": 3},
                 message="开始 ASR 与剧本匹配；正在建立素材索引、读取缓存并匹配剧本",
             )
-            analysis = _run_analysis(config, progress=report)
+            analysis = _run_analysis(
+                config,
+                progress=report,
+                cancelled=lambda: self._cancel_requested(config, task_id),
+            )
         self._update(config, task_id, progress={"done": 1, "total": 3}, message="ASR 与剧本匹配完成")
         result["analysis"] = analysis["index"]["stats"]
         if self._cancel_requested(config, task_id):

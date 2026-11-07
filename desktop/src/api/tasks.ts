@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export interface ProjectTaskRecord {
   task_id: string;
@@ -23,7 +22,6 @@ export interface ProjectTaskRecord {
   completed_at?: string | null;
 }
 
-const REQUEST_TIMEOUT_MS = 20_000;
 const CANCELLABLE = new Set(["queued", "running"]);
 const RETRYABLE = new Set(["failed", "cancelled", "interrupted"]);
 
@@ -39,22 +37,15 @@ function projectPath(projectId: string): string {
   return `/api/v1/projects/${encodeURIComponent(value)}`;
 }
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
   try {
-    const response = await transportFetch(`${baseUrl}${path}`, {
+    const response = await fetchWithTimeout(`${baseUrl}${path}`, {
       ...init,
       method: init?.method ?? "GET",
       headers,
-      signal: controller.signal,
     });
     if (!response.ok) {
       let message = `${response.status} ${response.statusText}`.trim();
@@ -70,8 +61,6 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
   } catch (error) {
     if (error instanceof HostConnectionError) throw error;
     throw new HostConnectionError(`后台任务请求失败：${error instanceof Error ? error.message : String(error)}`, { cause: error });
-  } finally {
-    globalThis.clearTimeout(timeout);
   }
 }
 

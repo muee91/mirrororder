@@ -10,9 +10,10 @@ from typing import Any, Callable
 from .asr_runtime import ASRRuntime, script_asr_prompt
 from .config import ProjectConfig
 from .fcpxml_reader import build_multicam_groups, read_fcpxml
-from .material_index import analyze as _analyze_core
+from .material_index import ANALYSIS_SNAPSHOT_FILENAME, analyze as _analyze_core
 from .media_reader import read_media_directory
 from .review_store import ReviewStore
+from .resource_scheduler import ResourceCancelled
 from .source_descriptor import redact_device_media_paths, shared_source_descriptor
 from .transcript import TranscriptStore
 
@@ -43,7 +44,15 @@ def _write_json_atomic(path: Path, payload: object) -> None:
             os.unlink(temporary)
 
 
-def _clips_for(config: ProjectConfig):
+def _read_json(path: Path, fallback: object) -> object:
+    try:
+        with path.open(encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return fallback
+
+
+def _clips_for(config: ProjectConfig, cancelled: Callable[[], bool] | None = None):
     if config.is_fcpxml:
         if not config.fcpxml:
             raise ValueError("FCPXML 分析视图缺少 fcpxml")
@@ -52,7 +61,12 @@ def _clips_for(config: ProjectConfig):
         if not config.media_root:
             raise ValueError("媒体目录项目缺少 media_root")
         roots = config.media_roots or (config.media_root,)
-        return read_media_directory(roots, config.camera_patterns, config.media_timeline_mode)
+        return read_media_directory(
+            roots,
+            config.camera_patterns,
+            config.media_timeline_mode,
+            cancelled=cancelled,
+        )
     raise ValueError(f"不支持的 input.kind: {config.input_kind}")
 
 
@@ -82,10 +96,11 @@ def _prefill_transcripts(
     analysis_config: ProjectConfig,
     runtime: ASRRuntime,
     progress: Callable[[int, int, str], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     if not runtime.enabled:
         return {"transcribed": 0, "backend": runtime.public()}, []
-    clips = _clips_for(analysis_config)
+    clips = _clips_for(analysis_config, cancelled)
     groups = build_multicam_groups(clips, source_config.minimum_overlap_seconds, source_config.split_bridge_ratio)
     store = TranscriptStore(source_config.transcript_dir)
     prompt = script_asr_prompt(source_config.script)
@@ -98,6 +113,8 @@ def _prefill_transcripts(
     if progress:
         progress(0, total_groups, "正在检查 ASR 缓存")
     for group_index, group in enumerate(groups, start=1):
+        if cancelled and cancelled():
+            raise ResourceCancelled("ASR 预填充已取消")
         members = sorted(
             group.members,
             key=lambda member: (priority.get(member.camera, 999), -float(member.duration), member.name),
@@ -118,6 +135,8 @@ def _prefill_transcripts(
                 )
             runtime.transcribe(clip_by_id[preferred.clip_id], store, prompt)
             count += 1
+        except ResourceCancelled:
+            raise
         except Exception as error:
             errors.append(f"{preferred.name}: {error}")
         if progress and (
@@ -135,6 +154,7 @@ def _escalate_ambiguous(
     runtime: ASRRuntime,
     result: dict[str, Any],
     progress: Callable[[int, int, str], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> tuple[int, list[str]]:
     if not (
         runtime.enabled
@@ -143,7 +163,7 @@ def _escalate_ambiguous(
         and source_config.asr_max_escalated_groups > 0
     ):
         return 0, []
-    clips = _clips_for(analysis_config)
+    clips = _clips_for(analysis_config, cancelled)
     groups = build_multicam_groups(clips, source_config.minimum_overlap_seconds, source_config.split_bridge_ratio)
     group_by_id = {group.group_id: group for group in groups}
     clip_by_id = {clip.clip_id: clip for clip in clips}
@@ -162,6 +182,8 @@ def _escalate_ambiguous(
         progress(0, total_groups, "正在检查低置信度候选")
 
     for group_id, row in iterable:
+        if cancelled and cancelled():
+            raise ResourceCancelled("分析任务已取消")
         inspected_groups += 1
         if attempted_groups >= source_config.asr_max_escalated_groups:
             break
@@ -183,9 +205,13 @@ def _escalate_ambiguous(
             continue
         attempted_groups += 1
         for member in pending[: source_config.asr_max_extra_cameras]:
+            if cancelled and cancelled():
+                raise ResourceCancelled("分析任务已取消")
             try:
                 runtime.transcribe(clip_by_id[member.clip_id], store, prompt)
                 changed += 1
+            except ResourceCancelled:
+                raise
             except Exception as error:
                 errors.append(f"{member.name}: {error}")
         if progress and (
@@ -228,7 +254,17 @@ def _restore_source_identity(
         if not isinstance(existing, list):
             existing = []
         errors["asr_backend_error"] = list(dict.fromkeys(existing + asr_errors))[:40]
-    _write_json_atomic(source_config.output_dir / "material_index.json", index)
+    output_dir = source_config.output_dir
+    _write_json_atomic(output_dir / "material_index.json", index)
+    # Keep the committed read model aligned with the final source-identity
+    # projection.  This function runs after material_index.analyze publishes
+    # the snapshot, so leaving the snapshot untouched would make ProjectService
+    # serve stale source metadata.
+    snapshot_path = output_dir / ANALYSIS_SNAPSHOT_FILENAME
+    snapshot = _read_json(snapshot_path, {})
+    if isinstance(snapshot, dict) and isinstance(snapshot.get("script"), dict) and isinstance(snapshot.get("matches"), dict):
+        snapshot["index"] = index
+        _write_json_atomic(snapshot_path, snapshot)
     return result
 
 
@@ -236,6 +272,7 @@ def analyze(
     config: ProjectConfig,
     affected_group_ids: set[str] | None = None,
     progress: Callable[[str, int, int, str], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Product analysis entrypoint.
 
@@ -256,12 +293,16 @@ def analyze(
         analysis_config,
         runtime,
         lambda done, total, message: report("asr", done, total, message),
+        cancelled,
     )
+    if cancelled and cancelled():
+        raise ResourceCancelled("分析任务已取消")
 
     result = _analyze_core(
         analysis_config,
         affected_group_ids,
         lambda done, total, message: report("matching", done, total, message),
+        cancelled=cancelled,
     )
     escalated, escalation_errors = _escalate_ambiguous(
         config,
@@ -269,8 +310,11 @@ def analyze(
         runtime,
         result,
         lambda done, total, message: report("rescue", done, total, message),
+        cancelled,
     )
     errors.extend(escalation_errors)
+    if cancelled and cancelled():
+        raise ResourceCancelled("分析任务已取消")
     if escalated:
         # Re-run after new camera transcripts. Existing analysis caches make this
         # cheap while keeping the matching algorithm deterministic.
@@ -278,5 +322,6 @@ def analyze(
             analysis_config,
             None,
             lambda done, total, message: report("matching", done, total, message),
+            cancelled=cancelled,
         )
     return _restore_source_identity(config, analysis_config, result, runtime, errors)

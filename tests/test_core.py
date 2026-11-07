@@ -5,6 +5,8 @@ import hashlib
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from script_organizer.config import ProjectConfig
 from script_organizer.alignment import align_block, split_shooting_blocks
 from script_organizer.fcpxml_reader import build_multicam_groups, group_id_for, parse_time, read_fcpxml
@@ -14,6 +16,12 @@ from script_organizer.models import Clip, ScriptSegment
 from script_organizer.review_store import ReviewStore, effective_group_state
 from script_organizer.script_parser import parse_script
 from script_organizer.transcript import TranscriptStore, media_fingerprint, slice_transcript
+
+
+def test_transcript_read_store_does_not_create_cache_directory(tmp_path):
+    directory = tmp_path / "cache" / "transcripts"
+    TranscriptStore(directory, create=False)
+    assert not directory.exists()
 
 
 def test_fcpxml_rational_time_and_stable_group(tmp_path):
@@ -459,9 +467,10 @@ def test_candidate_id_is_deterministic(tmp_path):
     assert c.to_dict()["candidate_id"] == c.to_dict()["candidate_id"]
 
 
-def test_review_invalid_state_is_normalized(tmp_path):
+def test_review_invalid_state_is_rejected_without_mutation(tmp_path):
     store = ReviewStore(tmp_path / "review.json")
-    store.update_group("g", "not-a-real-state")
+    with pytest.raises(ValueError, match="审核状态"):
+        store.update_group("g", "not-a-real-state")
     assert store.load()["groups"] == {}
 
 

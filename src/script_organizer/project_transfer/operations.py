@@ -43,6 +43,7 @@ _DEVICE_PATH_VALUE_PREFIX = re.compile(
     r"^(?:file://(?:localhost)?/+)?(?:/Users/|/Volumes/|/home/|[A-Za-z]:[\\/])"
 )
 _MEDIA_INDEX_RELATIVE = "output/material_index.json"
+_ANALYSIS_SNAPSHOT_RELATIVE = "output/analysis_snapshot.json"
 _DOCUMENT_SUFFIXES = {".fcpxml", ".xml"}
 _SWEEP_SUFFIXES = {".json", ".jsonl"}
 _BINARY_ARTIFACT_SUFFIXES = {
@@ -436,6 +437,21 @@ def _build_export_projection(
             rewrites[_MEDIA_INDEX_RELATIVE] = (
                 json.dumps(index, ensure_ascii=False, indent=2) + "\n"
             ).encode("utf-8")
+    snapshot_item = by_relative.get(_ANALYSIS_SNAPSHOT_RELATIVE)
+    if snapshot_item is not None:
+        try:
+            snapshot = json.loads(snapshot_item.source.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise ProjectTransferError(f"无法读取分析快照：{error}") from error
+        if isinstance(snapshot, dict):
+            snapshot_index = snapshot.get("index")
+            if isinstance(snapshot_index, dict):
+                redact_device_media_paths(snapshot_index)
+            swept, replaced = _sweep_device_path_values(snapshot)
+            if replaced or isinstance(snapshot_index, dict):
+                rewrites[_ANALYSIS_SNAPSHOT_RELATIVE] = (
+                    json.dumps(swept, ensure_ascii=False, indent=2) + "\n"
+                ).encode("utf-8")
     document_digests: dict[str, str] = {}
     for item in files:
         relative = item.relative.as_posix()

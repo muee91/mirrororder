@@ -91,6 +91,34 @@ def test_audit_store_is_rebuildable_revisioned_evidence(tmp_path: Path) -> None:
     assert store.load()["groups"]["G1"]["judge"]["verdict"] == "disagree"
 
 
+def test_audit_inputs_prefer_committed_analysis_snapshot(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    output = config.output_dir
+    legacy_index = {"revision": "legacy", "groups": []}
+    legacy_script = {"revision": "legacy", "segments": []}
+    legacy_matches = {"revision": "legacy", "groups": {}}
+    for name, payload in (
+        ("material_index.json", legacy_index),
+        ("script.json", legacy_script),
+        ("matches.json", legacy_matches),
+    ):
+        (output / name).write_text(json.dumps(payload), encoding="utf-8")
+    committed = {
+        "index": {"revision": "committed", "groups": []},
+        "script": {"revision": "committed", "segments": []},
+        "matches": {"revision": "committed", "groups": {}},
+    }
+    (output / "analysis_snapshot.json").write_text(json.dumps(committed), encoding="utf-8")
+    database = WorkspaceDatabase("ws", tmp_path / "workspace.sqlite3")
+    engine = AuditEngine("ws", "project", config, database=database)
+
+    index, script, matches, _review, _automation = engine._inputs()
+
+    assert index["revision"] == "committed"
+    assert script["revision"] == "committed"
+    assert matches["revision"] == "committed"
+
+
 def test_script_dialogue_can_suggest_unconfirmed_speaker_role_but_not_face(tmp_path: Path) -> None:
     config = _config(tmp_path)
     material = _material()

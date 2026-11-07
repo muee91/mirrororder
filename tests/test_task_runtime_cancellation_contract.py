@@ -122,6 +122,31 @@ def test_queued_cancel_cannot_be_promoted_back_to_running(tmp_path: Path) -> Non
     assert saved["started_at"] == ""
 
 
+def test_running_cancel_cannot_be_published_as_completed(tmp_path: Path) -> None:
+    config = SimpleNamespace(output_dir=tmp_path)
+    row = task_payload("task-terminal", "running")
+    row["cancel_requested"] = False
+    row["stage"] = "analysis"
+    write_task(tmp_path, row)
+    manager = TaskManager(lambda _project_id: config)
+
+    manager.cancel("project-1", "task-terminal")
+    manager._update(
+        config,
+        "task-terminal",
+        status="completed",
+        stage="completed",
+        result={"published": True},
+        message="任务完成",
+    )
+
+    saved = manager.list("project-1")[0]
+    assert saved["status"] == "cancelled"
+    assert saved["stage"] == "cancelled"
+    assert saved["message"] == "任务已取消"
+    assert saved["result"] == {}
+
+
 def test_queued_device_cancel_cannot_be_promoted_back_to_running(tmp_path: Path) -> None:
     path = tmp_path / "device-tasks.json"
     row = {
@@ -156,6 +181,39 @@ def test_queued_device_cancel_cannot_be_promoted_back_to_running(tmp_path: Path)
     assert saved["status"] == "cancelled"
     assert saved["stage"] == "cancelled"
     assert saved["started_at"] == ""
+
+
+def test_running_device_cancel_cannot_publish_result(tmp_path: Path) -> None:
+    path = tmp_path / "device-tasks.json"
+    row = {
+        "task_id": "device-terminal",
+        "scope": "device",
+        "project_id": "",
+        "type": "identity_runtime_prepare",
+        "targets": {"kind": "face"},
+        "status": "running",
+        "stage": "identity_prepare",
+        "runner_id": "device-test",
+        "cancel_requested": False,
+        "result": {},
+        "logs": [],
+    }
+    path.write_text(json.dumps({"version": 1, "tasks": [row]}, ensure_ascii=False), encoding="utf-8")
+    manager = DeviceTaskManager(path)
+
+    manager.cancel("device-terminal")
+    manager._update(
+        "device-terminal",
+        status="completed",
+        stage="completed",
+        result={"ready": True},
+        message="设备运行时准备完成",
+    )
+
+    saved = manager.list()[0]
+    assert saved["status"] == "cancelled"
+    assert saved["stage"] == "cancelled"
+    assert saved["result"] == {}
 
 
 def test_cancelled_task_message_is_not_reported_as_completed() -> None:

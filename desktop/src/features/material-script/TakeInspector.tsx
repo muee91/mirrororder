@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
+import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { AuditEvidencePanel } from "./AuditEvidencePanel";
 import { CandidateEvidence } from "./CandidateEvidence";
@@ -123,9 +124,11 @@ export function TakeInspector({
         ))}
       </div>
 
-      {angle?.playback.available === false ? (
+      {angle?.playback.state === "missing" || angle?.playback.available === false ? (
         <div className="player-empty">当前设备未解析到这条媒体。</div>
-      ) : angle && playbackUrl && !playbackFailed ? (
+      ) : angle?.playback.state === "unknown" || (!angle?.playback.state && angle?.playback.available === undefined) ? (
+        <div className="player-empty">当前设备尚未确认这条媒体，请先完成素材扫描或绑定。</div>
+      ) : angle && playbackUrl && canPreviewReviewPlayback(angle.playback) && !playbackFailed ? (
           <video
           className="take-player"
           controls

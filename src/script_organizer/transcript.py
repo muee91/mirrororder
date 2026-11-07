@@ -92,9 +92,10 @@ def slice_transcript(transcript: Transcript, start: float, end: float | None) ->
 
 
 class TranscriptStore:
-    def __init__(self, directory: str | Path):
+    def __init__(self, directory: str | Path, *, create: bool = True):
         self.directory = Path(directory)
-        self.directory.mkdir(parents=True, exist_ok=True)
+        if create:
+            self.directory.mkdir(parents=True, exist_ok=True)
 
     def paths_for(self, clip: Clip) -> list[Path]:
         portable = transcript_fingerprint(clip)

@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export interface ProjectLocalLocation {
   contract: "project_local_location.v1" | string;
@@ -47,15 +46,11 @@ export interface ProjectTransferSubmission {
   task: ProjectTransferTask;
 }
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
-  const response = await transportFetch(`${baseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     ...init,
     headers,
     method: init?.method ?? "GET",

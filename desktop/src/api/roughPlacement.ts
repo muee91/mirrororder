@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export interface RoughPlacementPlan {
   take_start: number;
@@ -23,10 +22,6 @@ export interface RoughPlacementPayload {
   review_revision?: number;
 }
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 export class RoughPlacementClient {
   readonly baseUrl: string;
 
@@ -42,7 +37,7 @@ export class RoughPlacementClient {
     if (!project) throw new HostConnectionError("粗归集需要 project_id");
     if (!value) throw new HostConnectionError("粗归集内容不能为空");
     if (options.confirm && !options.actor?.trim()) throw new HostConnectionError("确认粗归集需要操作者昵称");
-    const response = await transportFetch(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/rough-placement`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/rough-placement`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({

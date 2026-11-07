@@ -8,6 +8,7 @@ import type {
 } from "../../api/timeline";
 import { sequenceFps } from "./editorPlayback";
 import { multicamSourceIds } from "./timelineSync";
+import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
 
 export interface TimelineSourceOption {
   source: TimelineSource;
@@ -37,7 +38,7 @@ export function buildTimelineSourceOptions(
   const reviewAngles = new Map<string, { groupId: string; camera: string; sourceStart: number; sourceEnd: number | null; duration: number }>();
   for (const take of review.take_groups) {
     for (const angle of take.angles) {
-      if (angle.playback.available === false) continue;
+      if (!canPreviewReviewPlayback(angle.playback)) continue;
       reviewAngles.set(angle.clip_id, {
         groupId: take.group_id,
         camera: angle.camera,

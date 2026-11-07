@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import math
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +14,30 @@ def _path(value: str | None, base: Path, default: Path) -> Path:
     expanded = os.path.expandvars(os.path.expanduser(str(value)))
     candidate = Path(expanded)
     return candidate if candidate.is_absolute() else (base / candidate).resolve()
+
+
+def _finite_float(raw: object, default: float, name: str, *, minimum: float | None = None, maximum: float | None = None) -> float:
+    try:
+        value = float(default if raw is None else raw)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{name}必须是数字") from error
+    if not math.isfinite(value):
+        raise ValueError(f"{name}必须是有限数字")
+    if minimum is not None and value < minimum:
+        raise ValueError(f"{name}不能小于 {minimum}")
+    if maximum is not None and value > maximum:
+        raise ValueError(f"{name}不能大于 {maximum}")
+    return value
+
+
+def _bounded_int(raw: object, default: int, name: str, *, minimum: int, maximum: int) -> int:
+    try:
+        value = int(default if raw is None else raw)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{name}必须是整数") from error
+    if value < minimum or value > maximum:
+        raise ValueError(f"{name}必须在 {minimum} 到 {maximum} 之间")
+    return value
 
 
 @dataclass(frozen=True)
@@ -111,15 +136,15 @@ class ProjectConfig:
             asr_escalate_ambiguous=bool(asr.get("escalate_ambiguous", True)),
             asr_max_extra_cameras=max(0, int(asr.get("max_extra_cameras", 1))),
             asr_max_escalated_groups=max(0, int(asr.get("max_escalated_groups", 24))),
-            minimum_overlap_seconds=float(multicam.get("minimum_overlap_seconds", 0.5)),
-            split_bridge_ratio=float(multicam.get("split_bridge_ratio", 1.8)),
-            shooting_block_gap_minutes=float(multicam.get("shooting_block_gap_minutes", 20.0)),
-            high_confidence=float(matching.get("high_confidence", 0.82)),
-            possible_confidence=float(matching.get("possible_confidence", 0.65)),
-            minimum_margin=float(matching.get("minimum_margin", 0.08)),
-            max_candidates=int(matching.get("max_candidates", 5)),
-            max_transcript_windows=int(matching.get("max_transcript_windows", 120)),
-            max_window_candidates=int(matching.get("max_window_candidates", 80)),
+            minimum_overlap_seconds=_finite_float(multicam.get("minimum_overlap_seconds"), 0.5, "minimum_overlap_seconds", minimum=0.0),
+            split_bridge_ratio=_finite_float(multicam.get("split_bridge_ratio"), 1.8, "split_bridge_ratio", minimum=0.0),
+            shooting_block_gap_minutes=_finite_float(multicam.get("shooting_block_gap_minutes"), 20.0, "shooting_block_gap_minutes", minimum=0.0),
+            high_confidence=_finite_float(matching.get("high_confidence"), 0.82, "high_confidence", minimum=0.0, maximum=1.0),
+            possible_confidence=_finite_float(matching.get("possible_confidence"), 0.65, "possible_confidence", minimum=0.0, maximum=1.0),
+            minimum_margin=_finite_float(matching.get("minimum_margin"), 0.08, "minimum_margin", minimum=0.0, maximum=1.0),
+            max_candidates=_bounded_int(matching.get("max_candidates"), 5, "max_candidates", minimum=1, maximum=1000),
+            max_transcript_windows=_bounded_int(matching.get("max_transcript_windows"), 120, "max_transcript_windows", minimum=1, maximum=10000),
+            max_window_candidates=_bounded_int(matching.get("max_window_candidates"), 80, "max_window_candidates", minimum=1, maximum=10000),
             enable_known_text_alignment=bool(alignment.get("known_text_alignment", False)),
             stable_ts_model=str(alignment.get("stable_ts_model", "base")),
             compat_overrides=_path(compat.get("overrides"), base, base / "legacy_overrides.json") if compat.get("overrides") else None,

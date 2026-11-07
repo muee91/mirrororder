@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReviewAngle } from "../../api/host";
+import type { PlaybackState, ReviewAngle } from "../../api/host";
 import type { SlateAttachment } from "../../api/production";
+import { canPreviewReviewPlayback } from "./mediaPlaybackProjection";
 import { cameraPresentation } from "./cameraPresentation";
 import "./mirrororder-media-card.css";
 import "./camera-presentation.css";
@@ -14,12 +15,21 @@ export interface MirrorOrderMediaCardModel {
   shotType?: string;
   sourceRole?: string;
   available?: boolean;
+  availabilityState?: PlaybackState;
   playbackUrl?: string;
   sourceStart?: number;
   duplicateCount?: number;
 }
 
 export function mediaCardFromAngle(angle: ReviewAngle, attachment?: SlateAttachment | null): MirrorOrderMediaCardModel {
+  const state = angle.playback.state;
+  const available = state === "verified"
+    ? true
+    : state === "missing" || angle.playback.available === false
+      ? false
+      : state === "unknown"
+        ? undefined
+        : angle.playback.available;
   return {
     id: angle.clip_id,
     mediaId: angle.media_id,
@@ -28,8 +38,9 @@ export function mediaCardFromAngle(angle: ReviewAngle, attachment?: SlateAttachm
     duration: angle.duration,
     shotType: attachment?.shot_type || angle.shot_type || "unknown",
     sourceRole: attachment?.source_role || angle.coverage_role || "",
-    available: angle.playback.available !== false,
-    playbackUrl: angle.playback.url,
+    available,
+    availabilityState: state,
+    playbackUrl: canPreviewReviewPlayback(angle.playback) ? angle.playback.url : undefined,
     sourceStart: angle.playback.source_start ?? angle.source_start ?? 0,
   };
 }
@@ -125,7 +136,9 @@ export function MirrorOrderMediaCard({
     return () => observer.disconnect();
   }, [compact]);
 
-  const previewEnabled = Boolean((showPreview || (compact && compactPreviewActive)) && model.playbackUrl && model.available !== false);
+  const unavailable = model.availabilityState === "missing" || model.available === false;
+  const unknown = model.availabilityState === "unknown";
+  const previewEnabled = Boolean((showPreview || (compact && compactPreviewActive)) && model.playbackUrl && !unavailable && !unknown);
   const label = useMemo(() => [camera.label, model.name, shotLabel(model.shotType)].filter(Boolean).join(" · "), [camera.label, model.name, model.shotType]);
 
   useEffect(() => {
@@ -161,7 +174,7 @@ export function MirrorOrderMediaCard({
     };
   }, [model.sourceStart, previewEnabled]);
 
-  const supportText = model.available === false ? "设备缺失" : (!compact ? sourceRoleLabel(model.sourceRole) : "");
+  const supportText = unavailable ? "设备缺失" : unknown ? "状态未知" : (!compact ? sourceRoleLabel(model.sourceRole) : "");
 
   const content = (
     <>
@@ -172,7 +185,7 @@ export function MirrorOrderMediaCard({
             <video ref={videoRef} className={previewReady ? "is-ready" : ""} src={model.playbackUrl} preload="metadata" muted playsInline tabIndex={-1} />
           </>
         ) : (
-          <span className={model.available === false ? "is-missing" : ""}>{model.available === false ? "▧" : camera.label}</span>
+          <span className={unavailable ? "is-missing" : unknown ? "is-unknown" : ""}>{unavailable ? "▧" : unknown ? "?" : camera.label}</span>
         )}
         <span className="mo-media-camera-badge" data-camera-tone={camera.tone}>{camera.label}</span>
       </div>
@@ -186,7 +199,7 @@ export function MirrorOrderMediaCard({
           <span>{seconds(model.duration) || "时长—"}</span>
           <span className={`mo-media-preference-label ${preferred ? "is-preferred" : ""}`}>{preferred ? "首选" : ""}</span>
         </div>
-        <span className={`mo-media-support ${model.available === false ? "is-missing" : ""}`} title={supportText}>{supportText}</span>
+        <span className={`mo-media-support ${unavailable ? "is-missing" : unknown ? "is-unknown" : ""}`} title={supportText}>{supportText}</span>
       </div>
       <span className={`mo-media-selected-slot ${selected ? "is-visible" : ""}`} aria-hidden={!selected} aria-label={selected ? "已选择" : undefined}>✓</span>
     </>
@@ -195,7 +208,7 @@ export function MirrorOrderMediaCard({
   return (
     <div
       ref={cardRef}
-      className={`mo-media-card ${compact ? "is-compact" : "is-inspector"} ${selected ? "is-selected" : ""} ${model.available === false ? "is-missing" : ""}`}
+      className={`mo-media-card ${compact ? "is-compact" : "is-inspector"} ${selected ? "is-selected" : ""} ${unavailable ? "is-missing" : unknown ? "is-unknown" : ""}`}
       data-camera-tone={camera.tone}
       aria-label={label}
     >

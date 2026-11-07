@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 
 export type ModelRole = "text" | "vision" | "embedding";
 export type ModelRoutingMode = "local" | "external" | "hybrid" | "fallback";
@@ -69,15 +68,11 @@ export interface ModelConnectionWrite {
 
 const DEVICE_MODEL_PATH = "/api/v1/assistant/models";
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
-  const response = await transportFetch(`${baseUrl}${path}`, { ...init, headers });
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, { ...init, headers });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`.trim();
     try {

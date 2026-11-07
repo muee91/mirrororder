@@ -281,3 +281,22 @@ def test_review_v1_adapter_keeps_team_web_path_free_and_enriches_native_drag_onl
     assert "install_production_runtime()" in cli
     assert 'CONTRACT_VERSION = "review.v1"' in runtime
     assert 'parts[4] == "review-model"' in runtime
+
+
+def test_review_projection_consumes_device_media_state_without_member_path_flags(tmp_path: Path) -> None:
+    project = FakeProject(tmp_path)
+    project.index["groups"][0]["members"][0].pop("local_exists", None)
+    state = {"value": "verified"}
+    project._device_media_workspace_id = project.workspace_id
+    project._device_media_store = SimpleNamespace(
+        project_snapshot=lambda _workspace, _project: {},
+        state_from_snapshot=lambda _snapshot, _item: state["value"],
+    )
+
+    model = build_review_read_model(project, automation={})
+    assert model["take_groups"][0]["angles"][0]["playback"]["state"] == "verified"
+
+    state["value"] = "missing"
+    model = build_review_read_model(project, automation={})
+    assert model["take_groups"][0]["angles"][0]["playback"]["state"] == "missing"
+    assert any(issue["code"] == "missing_media" for issue in model["take_groups"][0]["issues"])

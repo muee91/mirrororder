@@ -1,6 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HostConnectionError } from "./host";
+import { fetchWithTimeout } from "./requestWithTimeout";
 import type { TimelineAuthority, TimelineSnapshot } from "./timeline";
 
 export interface DeliveryExportReport {
@@ -92,10 +91,6 @@ export interface PremiereDeliveryPayload {
   report: PremiereDeliveryReport;
 }
 
-async function transportFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return isTauri() ? tauriFetch(input, init) : globalThis.fetch(input, init);
-}
-
 function baseProjectRoute(projectId: string): string {
   const value = projectId.trim();
   if (!value) throw new HostConnectionError("Delivery export 需要 project_id");
@@ -122,7 +117,7 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const response = await transportFetch(`${baseUrl}${path}`, {
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),

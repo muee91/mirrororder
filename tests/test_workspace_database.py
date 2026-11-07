@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from script_organizer.semantic_store import SemanticStore
 from script_organizer.workspace_db import WorkspaceDatabase, workspace_database_path
 
 
@@ -40,6 +41,26 @@ def test_workspace_database_is_device_local_and_isolated(monkeypatch, tmp_path: 
     assert left.path.parent.parent.name == "workspaces"
     assert left.health()["quick_check"] == "ok"
     assert left.health()["schema_version"] == 1
+
+
+def test_read_only_database_does_not_create_or_initialize_storage(tmp_path: Path) -> None:
+    missing = tmp_path / "missing" / "workspace.sqlite3"
+    database = WorkspaceDatabase("ws_read", missing, read_only=True)
+    assert not missing.exists()
+    assert not missing.parent.exists()
+    assert SemanticStore(database, read_only=True).summary("demo")["documents"] == 0
+
+
+def test_read_only_semantic_store_does_not_write_existing_database(tmp_path: Path) -> None:
+    path = tmp_path / "workspace.sqlite3"
+    writable = WorkspaceDatabase("ws_read", path)
+    SemanticStore(writable).summary("demo")
+    before = path.stat().st_mtime_ns
+
+    readonly = WorkspaceDatabase("ws_read", path, read_only=True)
+    store = SemanticStore(readonly, read_only=True)
+    assert store.summary("demo")["documents"] == 0
+    assert path.stat().st_mtime_ns == before
 
 
 def test_workspace_database_tracks_takes_frames_and_semantics(tmp_path: Path) -> None:
