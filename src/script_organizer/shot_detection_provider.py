@@ -13,6 +13,7 @@ import threading
 from typing import Any, Callable
 
 from .evidence_contract import EvidenceProvenance, EvidenceSidecar, EvidenceSpan, EvidenceItem
+from .media_identity import full_file_sha256
 from .resource_scheduler import ResourceCancelled
 
 @dataclass(frozen=True)
@@ -211,6 +212,7 @@ def detect_index_shots(
                 asset_id=asset_id,
                 content_hash=str(clip.get("media_id", "") or "legacy_unknown"),
                 display_name=Path(str(clip.get("name", "") or media_path)).name or asset_id,
+                full_file_sha256=full_file_sha256(media_path) or None,
                 duration_seconds=duration,
                 items=items,
             )

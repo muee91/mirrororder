@@ -1,3 +1,5 @@
+import hashlib
+
 import pytest
 
 from script_organizer.resource_scheduler import ResourceCancelled
@@ -58,6 +60,30 @@ def test_detect_index_shots_bounds_spans_and_records_clip_duration() -> None:
         (0.0, 2.0),
         (2.0, 5.0),
     ]
+
+
+def test_detect_index_shots_records_full_file_sha256_separately_from_media_id(tmp_path) -> None:
+    media_path = tmp_path / "clip.mov"
+    media_path.write_bytes(b"full-file evidence")
+    provider = _FakeProvider([])
+
+    sidecars, diagnostics = detect_index_shots(
+        {
+            "clips": [
+                {
+                    "clip_id": "C1",
+                    "media_id": "M1",
+                    "source_media_path": str(media_path),
+                    "name": "clip.mov",
+                }
+            ]
+        },
+        provider,
+    )
+
+    assert diagnostics == []
+    assert sidecars[0].content_hash == "M1"
+    assert sidecars[0].full_file_sha256 == hashlib.sha256(media_path.read_bytes()).hexdigest()
 
 
 def test_detect_index_shots_propagates_cancellation_before_provider() -> None:

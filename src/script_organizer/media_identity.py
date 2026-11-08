@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover - Windows fallback
 
 MEDIA_SUFFIXES = {".mp4", ".mov", ".m4v", ".mxf", ".mts", ".avi", ".mkv", ".wav", ".aif", ".aiff", ".m4a"}
 _SAMPLE_BYTES = 1024 * 1024
+_HASH_CHUNK_BYTES = 1024 * 1024
 
 
 class MediaScanCancelled(RuntimeError):
@@ -88,6 +89,18 @@ def media_id_for_path(path: str | Path) -> str:
 
 def media_identity(path: str | Path) -> str:
     return media_id_for_path(path) or provisional_media_id(str(path))
+
+
+def full_file_sha256(path: str | Path) -> str:
+    """Return a full-file SHA-256 without changing the media_id algorithm."""
+    try:
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as handle:
+            for chunk in iter(lambda: handle.read(_HASH_CHUNK_BYTES), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return ""
 
 
 def binding_key(item: dict[str, Any]) -> str:

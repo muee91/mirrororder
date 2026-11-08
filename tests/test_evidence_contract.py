@@ -12,6 +12,7 @@ def test_evidence_sidecar_round_trips_provider_evidence_without_authority() -> N
         asset_id="M_abc",
         content_hash="sha256:abc",
         display_name="A001.mov",
+        full_file_sha256="a" * 64,
         take_id="take-1",
         multicam_group_id="mc-1",
         items=(
@@ -28,6 +29,14 @@ def test_evidence_sidecar_round_trips_provider_evidence_without_authority() -> N
     assert restored == original
     assert restored.schema == CONTRACT
     assert restored.items[0].provenance.provider == "whisper.cpp"
+
+
+def test_legacy_evidence_sidecar_defaults_full_file_sha256_to_none() -> None:
+    restored = EvidenceSidecar.from_dict(
+        {"schema": CONTRACT, "asset_id": "M_abc", "content_hash": "M_abc", "display_name": "A001.mov"}
+    )
+    assert restored.full_file_sha256 is None
+    assert restored.content_hash == "M_abc"
 
 
 def test_evidence_sidecar_rejects_device_paths() -> None:
