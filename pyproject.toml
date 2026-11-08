@@ -28,6 +28,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional shot-boundary detector. The core remains usable without OpenCV.
+shot-detection = ["scenedetect[opencv]>=0.7"]
+# Standard timeline interchange layer for future delivery adapters.
+timeline = ["opentimelineio>=0.17"]
 # CapCut / 剪映 draft container codec only (vendored engine scripts).
 capcut = ["pycryptodome>=3.17"]
 # Local embedding + vision runtime. Same intent as requirements-local-intelligence.txt,
