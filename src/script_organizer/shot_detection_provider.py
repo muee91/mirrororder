@@ -32,8 +32,8 @@ class ShotDetectionProvider:
 class PySceneDetectProvider(ShotDetectionProvider):
     name = "pyscenedetect"
 
-    def __init__(self, *, threshold: float = 27.0) -> None:
-        self.threshold = float(threshold)
+    def __init__(self, *, adaptive_threshold: float = 3.0) -> None:
+        self.adaptive_threshold = float(adaptive_threshold)
 
     def available(self) -> bool:
         try:
@@ -44,11 +44,11 @@ class PySceneDetectProvider(ShotDetectionProvider):
 
     def detect(self, media_path: str | Path) -> list[ShotBoundary]:
         try:
-            from scenedetect import ContentDetector, open_video, scene_manager
+            from scenedetect import AdaptiveDetector, open_video, scene_manager
         except ImportError as error:
             raise RuntimeError("PySceneDetect 未安装") from error
         manager = scene_manager.SceneManager()
-        manager.add_detector(ContentDetector(threshold=self.threshold))
+        manager.add_detector(AdaptiveDetector(adaptive_threshold=self.adaptive_threshold))
         manager.detect_scenes(open_video(str(media_path)))
         result: list[ShotBoundary] = []
         for start, end in manager.get_scene_list():
