@@ -1,6 +1,14 @@
 # Engineering Status
 
-更新时间：2026-10-27
+更新时间：2026-11-08
+
+## 当前产品方向（2026-11-08）
+
+- 镜序正式收窄为**短剧多机位剪辑前决策台**，交付物是可信的剪辑前决策底稿，不是完整 NLE。
+- 当前远端 `main`：`ce61c78`；最近远端 CI 已通过（Python 619 passed / 3 skipped，Linux/macOS Desktop jobs 通过）。
+- 已落地：evidence sidecar contract、路径安全校验、可选 PySceneDetect provider、OpenTimelineIO interop boundary、可选 provider 能力诊断、场记状态统一投影与筛选、跨集同名场景隔离、正式 `M_` 归档指纹复核。
+- 仍未完成：provider 接入显式分析任务、真实素材五步主链复验、受控 multicam 符号链接迁移、Ubuntu/Mac 模型运行时开箱验证。
+- 新的技术选择必须遵守：Provider 只能产生 evidence/proposal，不能写 Review placement、Editorial Decision 或 Rust Timeline authority。
 
 ## 当前基线
 
