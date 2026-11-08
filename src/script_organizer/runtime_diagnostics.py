@@ -73,6 +73,8 @@ def environment_payload(workspaces: list[Path] | None = None) -> dict[str, Any]:
         _module_status("mlx_whisper", False),
         _module_status("cv2", False),
         _module_status("sherpa_onnx", False),
+        _module_status("scenedetect", False),
+        _module_status("opentimelineio", False),
     ]
     command_map = {item["name"]: item for item in commands}
     module_map = {item["name"]: item for item in modules}
@@ -106,6 +108,10 @@ def environment_payload(workspaces: list[Path] | None = None) -> dict[str, Any]:
                 and module_map["sherpa_onnx"]["available"]
                 and command_map["ffmpeg"]["available"]
             ),
+        },
+        "optional_providers": {
+            "shot_detection": bool(module_map["scenedetect"]["available"]),
+            "timeline_interop": bool(module_map["opentimelineio"]["available"]),
         },
         "host": socket.gethostname(),
         "platform": sys.platform,
