@@ -8,9 +8,11 @@ into an authoritative mapping or edit decision.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import re
 from typing import Any
 
 CONTRACT = "mirrororder.evidence.v1"
+_DEVICE_PATH = re.compile(r"(?:^|[\\/])(Users|Volumes|home)(?:[\\/])|^[A-Za-z]:[\\\\/]")
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,10 @@ class EvidenceSidecar:
     def from_dict(cls, payload: dict[str, Any]) -> "EvidenceSidecar":
         if str(payload.get("schema", CONTRACT)) != CONTRACT:
             raise ValueError("不支持的 evidence sidecar contract")
+        asset_id = str(payload.get("asset_id", ""))
+        content_hash = str(payload.get("content_hash", ""))
+        if not asset_id or not content_hash:
+            raise ValueError("evidence sidecar 缺少 asset_id 或 content_hash")
         items: list[EvidenceItem] = []
         for raw in payload.get("items", []):
             span = raw.get("span")
@@ -73,9 +79,9 @@ class EvidenceSidecar:
                     provenance=EvidenceProvenance(**provenance),
                 )
             )
-        return cls(
-            asset_id=str(payload.get("asset_id", "")),
-            content_hash=str(payload.get("content_hash", "")),
+        result = cls(
+            asset_id=asset_id,
+            content_hash=content_hash,
             display_name=str(payload.get("display_name", "")),
             duration_seconds=payload.get("duration_seconds"),
             source_timecode=payload.get("source_timecode"),
@@ -85,3 +91,7 @@ class EvidenceSidecar:
             schema=CONTRACT,
             version=int(payload.get("version", 1) or 1),
         )
+        for value in (result.display_name, result.source_timecode or ""):
+            if _DEVICE_PATH.search(value):
+                raise ValueError("evidence sidecar 不得包含设备绝对路径")
+        return result

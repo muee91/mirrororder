@@ -28,3 +28,18 @@ def test_evidence_sidecar_round_trips_provider_evidence_without_authority() -> N
     assert restored == original
     assert restored.schema == CONTRACT
     assert restored.items[0].provenance.provider == "whisper.cpp"
+
+
+def test_evidence_sidecar_rejects_device_paths() -> None:
+    payload = {
+        "schema": CONTRACT,
+        "asset_id": "M_abc",
+        "content_hash": "sha256:abc",
+        "display_name": "/Volumes/Media/A001.mov",
+    }
+    try:
+        EvidenceSidecar.from_dict(payload)
+    except ValueError as error:
+        assert "绝对路径" in str(error)
+    else:
+        raise AssertionError("device path should be rejected")
