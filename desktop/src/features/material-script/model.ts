@@ -2,6 +2,16 @@ import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import { reviewTakeAttention } from "../review/reviewAttention";
 
 export type TakeStatusFilter = "all" | "attention" | "candidate" | "pending" | "placed" | "rejected";
+export type ProductionStatusFilter = "slate_missing" | "slate_partial" | "slate_ng" | "slate_usable";
+
+export function takeHasIssue(take: ReviewTakeGroup, code: string): boolean {
+  return take.issues.some((issue) => issue.code === code);
+}
+
+export function takeMatchesProductionStatus(take: ReviewTakeGroup, status: ProductionStatusFilter): boolean {
+  const code = status === "slate_missing" ? "missing_slate" : status;
+  return takeHasIssue(take, code) || (status === "slate_usable" && !takeHasIssue(take, "missing_slate") && !takeHasIssue(take, "slate_partial") && !takeHasIssue(take, "slate_ng"));
+}
 
 export interface VirtualRange {
   start: number;

@@ -217,6 +217,36 @@ def test_web_mapping_order_is_episode_first_then_authority_confidence_then_xml()
     assert 0 <= episode < authority < script_order < xml_order
 
 
+def test_review_model_surfaces_slate_status_and_missing_slate_as_issues(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    model = build_review_read_model(
+        project,
+        automation=AutomationStore(project.config.output_dir).load(),
+        people_for_group=lambda _group_id: {"face": [], "speaker": []},
+    )
+    take = model["take_groups"][0]
+    assert take["script_supervisor"] == {}
+    assert {issue["code"] for issue in take["issues"]} >= {"missing_slate"}
+
+    ScriptSupervisorStore(project.config.output_dir).apply(
+        {
+            "group_id": "G1",
+            "expected_revision": 0,
+            "actor": "场记甲",
+            "entry": {"episode": 1, "scene": "1-1", "status": "ng"},
+        }
+    )
+    project.reload_if_changed()
+    model = build_review_read_model(
+        project,
+        automation=AutomationStore(project.config.output_dir).load(),
+        people_for_group=lambda _group_id: {"face": [], "speaker": []},
+    )
+    take = model["take_groups"][0]
+    assert take["script_supervisor"]["status"] == "ng"
+    assert {issue["code"] for issue in take["issues"]} >= {"slate_ng"}
+
+
 def test_default_first_episode_remains_a_performance_policy_with_explicit_all_option() -> None:
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "default_episode: 'first'" in app

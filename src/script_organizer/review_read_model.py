@@ -8,6 +8,7 @@ from urllib.parse import quote
 from .automation_store import AutomationStore, COMPLETED_STATUSES
 from .identity_library import IdentityLibrary
 from .review_store import effective_group_entry, effective_group_state, is_group_excluded
+from .script_supervisor_store import ScriptSupervisorStore
 from .workspace_db import WorkspaceDatabase
 
 CONTRACT_VERSION = "review.v1"
@@ -338,6 +339,7 @@ def _group_issues(
     angles: list[dict[str, Any]],
     *,
     automation_stale: bool,
+    supervisor: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     status = str(automatic.get("status", "") or "")
@@ -351,6 +353,16 @@ def _group_issues(
         for angle in angles
     ):
         issues.append({"code": "missing_media", "severity": "error", "label": "网关主机缺少可播放媒体"})
+    slate = _as_dict(supervisor)
+    slate_status = str(slate.get("status", "unmarked") or "unmarked")
+    if not slate:
+        issues.append({"code": "missing_slate", "severity": "warning", "label": "尚无场记记录"})
+    elif slate_status == "unmarked":
+        issues.append({"code": "missing_slate", "severity": "warning", "label": "场记尚未标记可用性"})
+    elif slate_status == "partial":
+        issues.append({"code": "slate_partial", "severity": "warning", "label": "场记标记为部分可用"})
+    elif slate_status == "ng":
+        issues.append({"code": "slate_ng", "severity": "error", "label": "场记标记为 NG"})
     if automation_stale:
         issues.append({"code": "automation_stale", "severity": "warning", "label": "自动决策落后于当前分析"})
     return issues
@@ -411,6 +423,8 @@ def build_review_read_model(
     matches = _as_dict(project.matches)
     review = project.review.load()
     automation_payload = automation if isinstance(automation, dict) else AutomationStore(project.config.output_dir).load()
+    supervisor_payload = ScriptSupervisorStore(project.config.output_dir).load()
+    supervisor_entries = _as_dict(supervisor_payload.get("entries"))
     automation_groups = _as_dict(automation_payload.get("groups"))
     segments_list = [item for item in _as_list(script.get("segments")) if isinstance(item, dict)]
     segments_list.sort(key=lambda item: (_int(item.get("episode"), 0), _int(item.get("order"), 0), str(item.get("segment_id", ""))))
@@ -496,6 +510,7 @@ def build_review_read_model(
         ]
         automatic = _safe_automation(automation_groups.get(group_id))
         effective_mapping = _effective_mapping(review, _as_dict(automation_groups.get(group_id)), group, segments)
+        supervisor = _as_dict(supervisor_entries.get(group_id))
         angles = [
             _safe_angle(workspace, project_id, member, media_state(member))
             for member in _as_list(group.get("members"))
@@ -562,6 +577,7 @@ def build_review_read_model(
                     "script_segment_ids": context_segment_ids,
                 },
                 "automatic_state": automatic,
+                "script_supervisor": supervisor,
                 "editorial_state": {
                     "legacy_manual": _legacy_manual_state(review, group),
                     # placement 轴的独立排除事实；不写 legacy 创意 state。
@@ -570,7 +586,12 @@ def build_review_read_model(
                     "editorial_decision": None,
                 },
                 "effective_mapping": effective_mapping,
-                "issues": _group_issues(automatic, angles, automation_stale=automation_stale),
+                "issues": _group_issues(
+                    automatic,
+                    angles,
+                    automation_stale=automation_stale,
+                    supervisor=supervisor,
+                ),
             }
         )
 

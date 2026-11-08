@@ -277,6 +277,19 @@ def test_filtered_graph_scopes_episode_only_and_unplaced_rows(tmp_path: Path) ->
     assert global_graph["unplaced_group_ids"] == ["G2", "G5"]
 
 
+def test_repeated_scene_ids_across_episodes_keep_take_coverage_separate(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    script_path = project.config.output_dir / "script.json"
+    script = json.loads(script_path.read_text(encoding="utf-8"))
+    for segment in script["segments"]:
+        if segment["episode"] == 2:
+            segment["scene_id"] = "SC1"
+    script_path.write_text(json.dumps(script, ensure_ascii=False), encoding="utf-8")
+    graph = build_coverage_graph(project)
+    rows = [scene for scene in graph["scenes"] if scene["scene_id"] == "SC1"]
+    assert [(row["episode"], [take["group_id"] for take in row["take_groups"]]) for row in rows] == [(1, ["G1"]), (2, ["G3"])]
+
+
 def test_coverage_never_leaks_host_paths_or_infers_missing_shot_types(tmp_path: Path) -> None:
     project = _project(tmp_path)
     graph = build_coverage_graph(project)

@@ -22,6 +22,7 @@ from ..project_package import (
     load_project_package_manifest,
 )
 from ..source_descriptor import redact_device_media_paths
+from ..media_identity import media_id_for_path
 
 MIRROR_PACKAGE_ARCHIVE_EXTENSION = ".mirrorpkg"
 MIRROR_PACKAGE_ARCHIVE_FORMAT = "mirrororder-project-archive"
@@ -653,6 +654,10 @@ def collect_project_archive(
         if candidate.is_symlink() or not candidate.is_file():
             raise ProjectTransferError(f"收集媒体不可读取：{identity}")
         path = candidate.resolve()
+        if re.fullmatch(r"M_[0-9a-f]{24}", identity):
+            actual = media_id_for_path(path)
+            if actual != identity:
+                raise ProjectTransferError(f"收集媒体身份与文件内容不一致：{identity}")
         seen_media.add(identity)
         stat = path.stat()
         size = stat.st_size

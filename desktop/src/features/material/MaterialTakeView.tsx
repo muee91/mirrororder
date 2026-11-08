@@ -10,11 +10,11 @@ import {
 import { TakeInspector } from "../material-script/TakeInspector";
 import { mappingLabel, takeDisplayLabel } from "../material-script/TakeCard";
 import { VirtualTakeList, episodeLabel } from "../material-script/VirtualTakeList";
-import { takeEpisodeIds } from "../material-script/model";
+import { takeEpisodeIds, takeMatchesProductionStatus, type ProductionStatusFilter } from "../material-script/model";
 import { useReviewModelSnapshot } from "../material-script/useReviewModelSnapshot";
 import "../material-script/material-script.css";
 
-type MaterialTakeFilter = "all" | "unmapped" | "candidate" | "mapped" | "offline";
+type MaterialTakeFilter = "all" | "unmapped" | "candidate" | "mapped" | "offline" | ProductionStatusFilter;
 
 type SlateFact = {
   episode: number | null;
@@ -43,6 +43,10 @@ const FILTERS: Array<{ value: MaterialTakeFilter; label: string }> = [
   { value: "candidate", label: "有候选" },
   { value: "mapped", label: "已归集" },
   { value: "offline", label: "素材离线" },
+  { value: "slate_missing", label: "缺场记" },
+  { value: "slate_partial", label: "部分可用" },
+  { value: "slate_ng", label: "场记 NG" },
+  { value: "slate_usable", label: "场记可用" },
 ];
 
 const SLATE_STATUS_LABELS: Record<SlateStatus, string> = {
@@ -189,13 +193,16 @@ export function MaterialTakeView({
   );
 
   const counts = useMemo(() => {
-    const next = { all: 0, unmapped: 0, candidate: 0, mapped: 0, offline: 0 };
+    const next: Record<MaterialTakeFilter, number> = { all: 0, unmapped: 0, candidate: 0, mapped: 0, offline: 0, slate_missing: 0, slate_partial: 0, slate_ng: 0, slate_usable: 0 };
     for (const take of model?.take_groups ?? []) {
       next.all += 1;
       if (!isMapped(take)) next.unmapped += 1;
       if (hasCandidate(take)) next.candidate += 1;
       if (isMapped(take)) next.mapped += 1;
       if (hasOfflineMedia(take)) next.offline += 1;
+      for (const status of ["slate_missing", "slate_partial", "slate_ng", "slate_usable"] as ProductionStatusFilter[]) {
+        if (takeMatchesProductionStatus(take, status)) next[status] += 1;
+      }
     }
     return next;
   }, [model]);
@@ -208,6 +215,7 @@ export function MaterialTakeView({
       if (filter === "candidate" && !hasCandidate(take)) return false;
       if (filter === "mapped" && !isMapped(take)) return false;
       if (filter === "offline" && !hasOfflineMedia(take)) return false;
+      if (["slate_missing", "slate_partial", "slate_ng", "slate_usable"].includes(filter) && !takeMatchesProductionStatus(take, filter as ProductionStatusFilter)) return false;
       if (episodeFilter !== null) {
         const episodes = new Set(takeEpisodeIds(take));
         if (fact?.episode) episodes.add(fact.episode);

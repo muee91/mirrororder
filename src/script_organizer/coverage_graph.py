@@ -83,6 +83,7 @@ def coverage_revision(project: Any) -> str:
 
 
 def _scene_index(script: dict[str, Any]) -> tuple[OrderedDict[str, dict[str, Any]], dict[str, str]]:
+    """Index scenes by episode and scene id without collapsing repeated ids."""
     scenes: OrderedDict[str, dict[str, Any]] = OrderedDict()
     segment_scene: dict[str, str] = {}
     segments = [item for item in _as_list(script.get("segments")) if isinstance(item, dict)]
@@ -99,8 +100,9 @@ def _scene_index(script: dict[str, Any]) -> tuple[OrderedDict[str, dict[str, Any
             continue
         episode = _int(segment.get("episode"), 0)
         scene_id = str(segment.get("scene_id", "") or f"episode-{episode}-ungrouped")
+        scene_key = f"{episode}:{scene_id}"
         scene = scenes.setdefault(
-            scene_id,
+            scene_key,
             {
                 "scene_id": scene_id,
                 "episode": episode,
@@ -115,7 +117,7 @@ def _scene_index(script: dict[str, Any]) -> tuple[OrderedDict[str, dict[str, Any
             heading = str(segment.get("raw_text", "") or segment.get("text", "") or "").strip()
             if heading:
                 scene["heading"] = heading[:500]
-        segment_scene[segment_id] = scene_id
+        segment_scene[segment_id] = scene_key
     return scenes, segment_scene
 
 
@@ -280,7 +282,7 @@ def build_coverage_graph(
     selected_scene_ids = {
         key
         for key, value in scenes.items()
-        if (not requested_scene or key == requested_scene)
+        if (not requested_scene or str(value.get("scene_id", "")) == requested_scene)
         and (not requested_episode or _int(value.get("episode"), 0) == requested_episode)
     }
     selected_episodes = {
@@ -495,7 +497,7 @@ def build_coverage_graph(
         orders = [_int(value) for value in _as_list(scene.get("script_orders")) if _int(value) > 0]
         scene_rows.append(
             {
-                "scene_id": current_scene_id,
+                "scene_id": str(scene.get("scene_id", "") or current_scene_id),
                 "episode": _int(scene.get("episode"), 0),
                 "heading": str(scene.get("heading", "") or ""),
                 "script_segment_ids": [str(value) for value in _as_list(scene.get("segment_ids")) if str(value)],
