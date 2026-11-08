@@ -16,6 +16,8 @@ from .review_store import ReviewStore
 from .resource_scheduler import ResourceCancelled
 from .source_descriptor import redact_device_media_paths, shared_source_descriptor
 from .transcript import TranscriptStore
+from .evidence_sidecar import write_sidecar_manifest
+from .shot_detection_provider import PySceneDetectProvider, detect_index_shots
 
 
 def generated_sync_fcpxml(config: ProjectConfig) -> Path:
@@ -268,6 +270,18 @@ def _restore_source_identity(
     return result
 
 
+def _maybe_write_shot_evidence(config: ProjectConfig, result: dict[str, Any]) -> None:
+    """Run optional shot detection only during an explicit analysis task."""
+    if os.environ.get("MIRRORORDER_SHOT_DETECTOR", "").strip().lower() != "pyscenedetect":
+        return
+    provider = PySceneDetectProvider()
+    index = result.get("index") if isinstance(result, dict) else None
+    if not isinstance(index, dict):
+        return
+    sidecars, diagnostics = detect_index_shots(index, provider)
+    write_sidecar_manifest(config.output_dir, sidecars, diagnostics=diagnostics, revision=str(index.get("analysis_revision", "") or ""))
+
+
 def analyze(
     config: ProjectConfig,
     affected_group_ids: set[str] | None = None,
@@ -324,4 +338,5 @@ def analyze(
             lambda done, total, message: report("matching", done, total, message),
             cancelled=cancelled,
         )
+    _maybe_write_shot_evidence(config, result)
     return _restore_source_identity(config, analysis_config, result, runtime, errors)

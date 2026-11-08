@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .evidence_contract import EvidenceProvenance, EvidenceSidecar, EvidenceSpan, EvidenceItem
 
 @dataclass(frozen=True)
 class ShotBoundary:
@@ -64,3 +65,39 @@ class PySceneDetectProvider(ShotDetectionProvider):
 
 def provider_status(provider: ShotDetectionProvider) -> dict[str, Any]:
     return {"provider": provider.name, "available": provider.available()}
+
+
+def detect_index_shots(index: dict[str, Any], provider: ShotDetectionProvider) -> tuple[list[EvidenceSidecar], list[dict[str, Any]]]:
+    """Create path-free shot evidence for index clips when explicitly enabled."""
+    sidecars: list[EvidenceSidecar] = []
+    diagnostics: list[dict[str, Any]] = []
+    for clip in index.get("clips", []):
+        if not isinstance(clip, dict):
+            continue
+        media_path = str(clip.get("source_media_path", "") or clip.get("media_path", ""))
+        asset_id = str(clip.get("media_id", "") or clip.get("source_asset_id", "") or clip.get("clip_id", ""))
+        if not media_path or not asset_id:
+            continue
+        try:
+            boundaries = provider.detect(media_path)
+        except Exception as error:
+            diagnostics.append({"asset_id": asset_id, "status": "failed", "provider": provider.name, "message": str(error)[:300]})
+            continue
+        items = tuple(
+            EvidenceItem(
+                kind="shot_boundary",
+                value=f"shot-{index}",
+                span=EvidenceSpan(boundary.start_seconds, boundary.end_seconds),
+                provenance=EvidenceProvenance(provider.name),
+            )
+            for index, boundary in enumerate(boundaries)
+        )
+        sidecars.append(
+            EvidenceSidecar(
+                asset_id=asset_id,
+                content_hash=str(clip.get("media_id", "") or "legacy_unknown"),
+                display_name=Path(str(clip.get("name", "") or media_path)).name or asset_id,
+                items=items,
+            )
+        )
+    return sidecars, diagnostics
