@@ -5,15 +5,15 @@
 ## 当前产品方向（2026-11-08）
 
 - 镜序正式收窄为**短剧多机位剪辑前决策台**，交付物是可信的剪辑前决策底稿，不是完整 NLE。
-- 当前远端 `main`：`ce61c78`；最近远端 CI 已通过（Python 619 passed / 3 skipped，Linux/macOS Desktop jobs 通过）。
+- 当前远端 `main`：`bb8cd93`（`bb8cd930e882e1f029400713ae916ee6442b3a3e`）；CI run [42469404236](https://github.com/muee91/mirrororder/actions/runs/42469404236) 已通过（Python、Linux/macOS Desktop jobs 全部通过）。
 - 已落地：evidence sidecar contract、路径安全校验、可选 PySceneDetect provider、OpenTimelineIO interop boundary、可选 provider 能力诊断、场记状态统一投影与筛选、跨集同名场景隔离、正式 `M_` 归档指纹复核。
-- 仍未完成：provider 接入显式分析任务、真实素材五步主链复验、受控 multicam 符号链接迁移、Ubuntu/Mac 模型运行时开箱验证。
+- 仍未完成：真实素材五步主链复验、受控 multicam 符号链接迁移、Ubuntu/Mac 模型运行时开箱验证。
 - 新的技术选择必须遵守：Provider 只能产生 evidence/proposal，不能写 Review placement、Editorial Decision 或 Rust Timeline authority。
 
 ## 当前基线
 
-- 仓库只维护 `main`；当前基线 HEAD `dcc7202`，与本地 `origin/main` 引用一致。本轮媒体状态/素材库修复仍在工作树，尚未提交或推送。
-- 本轮远端 CI：**NOT RUN**，不沿用旧提交的 CI 结论。
+- 仓库只维护 `main`；当前远端基线 HEAD `bb8cd93`，与 GitHub `origin/main` 一致。
+- 本轮远端 CI：**PASS**（run 42469404236，Python / Linux Desktop / macOS Desktop jobs 全部通过）。
 - Desktop 仍处于 Product Recovery 之后的**可交付化阶段**：代码结构恢复已收口，缺口在发布工程、授权与真实可用性证据（顺序见 `BACKLOG.md` Phase 0/1/2）。
 - 一级工作区固定：`素材 / 剧本 / 时间线 / 审阅`；原则仍是**共享对象，不共享工作流**。
 

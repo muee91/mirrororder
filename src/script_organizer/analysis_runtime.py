@@ -270,7 +270,11 @@ def _restore_source_identity(
     return result
 
 
-def _maybe_write_shot_evidence(config: ProjectConfig, result: dict[str, Any]) -> None:
+def _maybe_write_shot_evidence(
+    config: ProjectConfig,
+    result: dict[str, Any],
+    cancelled: Callable[[], bool] | None = None,
+) -> None:
     """Run optional shot detection only during an explicit analysis task."""
     if os.environ.get("MIRRORORDER_SHOT_DETECTOR", "").strip().lower() != "pyscenedetect":
         return
@@ -278,7 +282,7 @@ def _maybe_write_shot_evidence(config: ProjectConfig, result: dict[str, Any]) ->
     index = result.get("index") if isinstance(result, dict) else None
     if not isinstance(index, dict):
         return
-    sidecars, diagnostics = detect_index_shots(index, provider)
+    sidecars, diagnostics = detect_index_shots(index, provider, cancelled=cancelled)
     write_sidecar_manifest(config.output_dir, sidecars, diagnostics=diagnostics, revision=str(index.get("analysis_revision", "") or ""))
 
 
@@ -338,5 +342,5 @@ def analyze(
             lambda done, total, message: report("matching", done, total, message),
             cancelled=cancelled,
         )
-    _maybe_write_shot_evidence(config, result)
+    _maybe_write_shot_evidence(config, result, cancelled=cancelled)
     return _restore_source_identity(config, analysis_config, result, runtime, errors)
