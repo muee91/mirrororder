@@ -37,6 +37,13 @@ export async function verifyReviewQueueNavigation(page, { timeout = 10000 } = {}
   return { rendered_rows: queued, total: initial.total, positions };
 }
 
+// Chromium reports an HTTP 404 from a video source as MEDIA_ERR_SRC_NOT_SUPPORTED
+// (code 4) on Linux. Keep that browser detail out of the UX contract: the Review
+// surface already uses “素材无法读取” for any media playback failure.
+export function formatPlaybackFailure(errorCode) {
+  return Number(errorCode) === 4 ? "素材无法读取" : `媒体解码错误 ${errorCode}`;
+}
+
 export async function verifyReviewPlayback(page, { timeout = 15000 } = {}) {
   // Sample the load outcome atomically: resolving the wait and then re-reading
   // the DOM in a second round trip races a React remount after a media error
@@ -48,7 +55,7 @@ export async function verifyReviewPlayback(page, { timeout = 15000 } = {}) {
       const failure = document.querySelector(".review-viewer-pane .player-empty");
       const video = document.querySelector(".review-viewer-pane video.take-player");
       if (failure) return { failure: failure.textContent?.trim() || "", duration: video?.duration };
-      if (video?.error) return { failure: `媒体解码错误 ${video.error.code}`, duration: video.duration };
+      if (video?.error) return { error_code: video.error.code, duration: video.duration };
       if (video && video.readyState >= 1) return { failure: "", duration: video.duration };
       return false;
     }, undefined, { timeout });
@@ -57,6 +64,7 @@ export async function verifyReviewPlayback(page, { timeout = 15000 } = {}) {
     throw new Error("审阅媒体加载超时，未取得 metadata");
   }
   if (!state || typeof state !== "object") throw new Error("审阅媒体加载超时，未取得 metadata");
+  if (state.error_code !== undefined) state.failure = formatPlaybackFailure(state.error_code);
   if (state.failure) throw new Error(`审阅媒体不可播放：${state.failure}`);
   if (!Number.isFinite(state.duration) || state.duration <= 0) throw new Error("审阅媒体 duration 无效");
 

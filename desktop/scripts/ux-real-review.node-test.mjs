@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { chromium } from "playwright";
 import { createServer } from "vite";
-import { verifyReviewPlayback, verifyReviewQueueNavigation } from "./ux-real-review.mjs";
+import { formatPlaybackFailure, verifyReviewPlayback, verifyReviewQueueNavigation } from "./ux-real-review.mjs";
 
 const desktopRoot = fileURLToPath(new URL("..", import.meta.url));
 // Other Vite checks can run against this root simultaneously. Their optimizer
@@ -17,6 +17,11 @@ const fixtureRoot = resolve(desktopRoot, "../tests/fixtures/desktop-review");
 const model = JSON.parse(readFileSync(resolve(fixtureRoot, "review-model.json"), "utf8"));
 let server;
 let browser;
+
+test("normalizes Linux Chromium source error 4 without hiding playback failure", () => {
+  assert.equal(formatPlaybackFailure(4), "素材无法读取");
+  assert.equal(formatPlaybackFailure(3), "媒体解码错误 3");
+});
 
 before(async () => {
   server = await createServer({
