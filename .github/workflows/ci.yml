@@ -89,7 +89,7 @@ jobs:
       - name: Test Tauri Host
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
       - name: Check Tauri Host
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+        run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml
 
   desktop-macos:
     runs-on: macos-latest
@@ -116,4 +116,4 @@ jobs:
       - name: Test Tauri Host
         run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
       - name: Check Tauri Host
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+        run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml

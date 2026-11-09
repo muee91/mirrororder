@@ -126,6 +126,40 @@ def test_rust_timebase_matches_python_for_namespace_decimal_and_duplicates(tmp_p
     "filename, content, expected",
     [
         (
+            "predefined-and-numeric-entities.fcpxml",
+            '<fcpxml><resources><format id="r1" frameDuration="1/25s"/></resources>'
+            '<library><event><project><sequence format="r1"/>text &amp; &#65; &#x41; '
+            '&lt; &gt; &apos; &quot;</project></event></library></fcpxml>',
+            {
+                "status": "confirmed",
+                "source": "fcpxml_sequence",
+                "format_id": "r1",
+                "frame_duration": "1/25s",
+                "numerator": 25,
+                "denominator": 1,
+            },
+        ),
+        (
+            "undefined-named-entity.fcpxml",
+            '<fcpxml><resources><format id="r1" frameDuration="1/25s"/></resources>'
+            '<library><event><project><sequence format="r1"/>text &undefined;'
+            '</project></event></library></fcpxml>',
+            {"status": "unknown", "source": "fcpxml_sequence", "reason": "parse_failed"},
+        ),
+    ],
+)
+def test_rust_timebase_matches_python_for_xml_entity_references(
+    tmp_path: Path, filename: str, content: str, expected: dict
+) -> None:
+    path = _write(tmp_path / filename, content)
+    assert fcpxml_project_timebase(path) == expected
+    assert _rust_result(path) == expected
+
+
+@pytest.mark.parametrize(
+    "filename, content, expected",
+    [
+        (
             "missing-sequence-format.fcpxml",
             '<fcpxml><library><event><project><sequence format="unknown"/></project></event></library></fcpxml>',
             {

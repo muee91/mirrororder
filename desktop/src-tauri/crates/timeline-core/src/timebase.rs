@@ -454,8 +454,11 @@ fn validate_utf8_source(value: &[u8]) -> Result<&[u8], ()> {
 }
 
 fn valid_character_reference(value: &[u8]) -> bool {
+    // ElementTree resolves only XML's five predefined entities unless a DTD
+    // declares additional entities. The timebase boundary intentionally does
+    // not process DTD declarations, so reject every other named reference.
     if value.first() != Some(&b'#') {
-        return true;
+        return matches!(value, b"amp" | b"lt" | b"gt" | b"apos" | b"quot");
     }
     let (digits, radix) = if value.get(1) == Some(&b'x') || value.get(1) == Some(&b'X') {
         (&value[2..], 16)
@@ -558,6 +561,17 @@ mod tests {
         utf8[0] = 0xff;
         utf8[1] = 0xfe;
         assert!(parse_fcpxml(&utf8).is_err());
+    }
+
+    #[test]
+    fn entity_references_match_elementtree_rules() {
+        let valid = parse(
+            r#"<fcpxml><resources><format id="r1" frameDuration="1/25s"/></resources><library><event><project><sequence format="r1"/>text &amp; &#65; &#x41; &lt; &gt; &apos; &quot;</project></event></library></fcpxml>"#,
+        );
+        assert_eq!(valid["status"], "confirmed");
+
+        let invalid = br#"<fcpxml><resources><format id="r1" frameDuration="1/25s"/></resources><library><event><project><sequence format="r1"/>text &undefined;</project></event></library></fcpxml>"#;
+        assert!(parse_fcpxml(invalid).is_err());
     }
 
     #[test]
