@@ -61,6 +61,41 @@ export function multicamSourceIds(group: TimelineMulticamGroup): string[] {
   return typed.length ? typed : group.angle_source_ids;
 }
 
+// Premiere preserves every registered angle in its multicam source sequence,
+// so delivery needs the same relative clip range to fit all of them.
+export function multicamClipRangeIssue(
+  group: TimelineMulticamGroup,
+  clip: Pick<TimelineClip, "source_id" | "source_in" | "duration">,
+): { sourceId: string; reason: "missing_sync" | "range_exceeded" } | null {
+  const ranges = new Map<string, TimelineSyncRange>();
+  for (const angle of group.angles ?? []) {
+    if (angle.sync_start_frame === null || angle.sync_end_frame === null) {
+      return { sourceId: angle.source_id, reason: "missing_sync" };
+    }
+    const range = normalizeRange({
+      source_id: angle.source_id,
+      start_frame: angle.sync_start_frame,
+      end_frame: angle.sync_end_frame,
+    });
+    if (!range) return { sourceId: angle.source_id, reason: "missing_sync" };
+    ranges.set(range.source_id, range);
+  }
+  const base = ranges.get(clip.source_id);
+  if (!base) return { sourceId: clip.source_id, reason: "missing_sync" };
+  const localStart = clip.source_in - base.start_frame;
+  const localEnd = localStart + clip.duration;
+  if (!validFrame(clip.source_in) || !Number.isSafeInteger(clip.duration) || clip.duration <= 0
+    || !validFrame(localStart) || !Number.isSafeInteger(localEnd)) {
+    return { sourceId: clip.source_id, reason: "range_exceeded" };
+  }
+  for (const range of ranges.values()) {
+    if (localEnd > range.end_frame - range.start_frame) {
+      return { sourceId: range.source_id, reason: "range_exceeded" };
+    }
+  }
+  return null;
+}
+
 function typedSyncRanges(group: TimelineMulticamGroup | null): Map<string, TimelineSyncRange> | null {
   if (!group?.angles?.length) return null;
   const ranges: TimelineSyncRange[] = [];

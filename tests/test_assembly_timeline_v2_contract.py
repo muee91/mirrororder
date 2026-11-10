@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from script_organizer.assembly_timeline import (
     ASSEMBLY_CONTRACT,
     _block_id,
@@ -45,6 +47,33 @@ def test_assembly_v2_preserves_editorial_decision_range_and_angle_authority() ->
     assert entry["usable_range"]["status"] == "manual"
     assert entry["usable_range"]["start"] == 2.0
     assert entry["usable_range"]["end"] == 6.0
+
+
+@pytest.mark.parametrize("remaining_angles", [0, 1, 2])
+def test_missing_manual_preference_never_promotes_a_remaining_angle(remaining_angles: int) -> None:
+    segment = _best_segment("S1")
+    candidate = segment["candidates"][0]
+    candidate["script_supervisor"]["preferred_clip_id"] = "removed-clip"
+    candidate["angles"] = candidate["angles"][:remaining_angles]
+
+    entry = _segment_entry(segment)
+
+    assert entry["angle"]["status"] == ("pending" if remaining_angles else "missing")
+    assert entry["angle"]["clip_id"] == ""
+    assert entry["script_supervisor"]["preferred_clip_id"] == "removed-clip"
+    assert len(entry["angle"]["candidates"]) == remaining_angles
+
+
+def test_single_angle_without_manual_preference_remains_resolved() -> None:
+    segment = _best_segment("S1")
+    candidate = segment["candidates"][0]
+    candidate["script_supervisor"]["preferred_clip_id"] = ""
+    candidate["angles"] = candidate["angles"][:1]
+
+    entry = _segment_entry(segment)
+
+    assert entry["angle"]["status"] == "single_angle"
+    assert entry["angle"]["clip_id"] == "CA"
 
 
 def test_consecutive_script_segments_using_same_take_merge_into_one_assembly_block() -> None:

@@ -109,7 +109,23 @@ describe("timeline delivery preflight", () => {
 
   it("blocks legacy multicam groups that were not normalized to typed sync", () => {
     const next = snapshot();
+    next.project.sequences[0].tracks[0].clips[0].multicam_group_id = "g1";
     next.project.multicam_groups = [{ group_id: "g1", angle_source_ids: ["source:a", "source:b"] }];
+    expect(blockerCodes(next)).toContain("multicam_typed_sync_missing");
+  });
+
+  it("does not require sync for an unused group in the editable source pool", () => {
+    const next = snapshot();
+    next.project.multicam_groups = [{ group_id: "unused", angle_source_ids: ["source:a", "source:b"], angles: [] }];
+    expect(blockerCodes(next)).toEqual([]);
+    expect(next.project.multicam_groups).toHaveLength(1);
+  });
+
+  it.each(["disabled", "audio"])("retains sync blockers for a group referenced by a %s clip", (kind) => {
+    const next = snapshot();
+    next.project.multicam_groups = [{ group_id: "g1", angle_source_ids: ["source:a", "source:b"], angles: [] }];
+    const clip = { ...next.project.sequences[0].tracks[0].clips[0], clip_id: "other", multicam_group_id: "g1", enabled: false, timeline_start: 100 };
+    next.project.sequences[0].tracks[kind === "audio" ? 1 : 0].clips.push(clip);
     expect(blockerCodes(next)).toContain("multicam_typed_sync_missing");
   });
 
@@ -161,6 +177,20 @@ describe("timeline delivery preflight", () => {
     const next = snapshot();
     next.validation = [{ code: "bad_clip", path: "sequences[0]", message: "invalid clip" }];
     expect(blockerCodes(next)).toContain("timeline_validation");
+  });
+
+  it.each(["source:a", "source:b"])("blocks a selected multicam if registered angle %s cannot cover the clip", (shortSource) => {
+    const next = snapshot();
+    const clip = next.project.sequences[0].tracks[0].clips[0];
+    clip.multicam_group_id = "g1";
+    clip.selected_angle_source_id = "source:b";
+    const group = typedGroup();
+    const angle = group.angles.find((item) => item.source_id === shortSource)!;
+    angle.sync_end_frame = angle.sync_start_frame + 150;
+    next.project.multicam_groups = [group];
+    expect(buildTimelineDeliveryPreflight(next).blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "multicam_sync_range_exceeded", message: expect.stringContaining(shortSource) }),
+    ]));
   });
 
   it("compares current and delivered authority exactly", () => {

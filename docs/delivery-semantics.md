@@ -219,3 +219,12 @@ multicam_structure_modified = false
 - 不让 parent Final Decision 静默继承给分析后拆分的 child Take。
 - 不因为新增 Delivery 层修改原始 FCPXML。
 - 不让不同 NLE adapter 各自定义一套 Best / Keep / Reject 权威顺序。
+
+## 10. 当前 Timeline 交付的资源范围
+
+Rust Timeline 的独立交付路径使用 `timeline_delivery_request.v1` → `nle_sequence_ir.v1` → FCPXML / Premiere adapter；它与上述 legacy selection manifest 路径分开，仍不修改源 FCPXML。
+
+- NLE IR 只投影活动序列实际引用的资源，不复制整个候选素材池。
+- 引用收集包含所有轨道和 disabled 片段的 base / selected source，以及所引用多机位组的全部 angle / audio source。
+- 未引用 Take 的缺失同步不阻断当前序列；一旦人工加入该 Take，完整同步与范围校验仍然生效，不能退化为普通单机位来绕过检查。
+- 投影不改写 Rust Timeline，也不移除可用于换镜次的 source / group 池。

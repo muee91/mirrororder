@@ -79,7 +79,9 @@ def _angle_choice(candidate: dict[str, Any]) -> dict[str, Any]:
                 **_angle_summary(match),
                 "candidates": summaries,
             }
-    if len(angles) == 1:
+    # A stale manual preference must remain unresolved, even if inventory now
+    # contains only one other angle. Availability is not editorial authority.
+    if len(angles) == 1 and not preferred:
         return {
             "status": "single_angle",
             **_angle_summary(angles[0]),

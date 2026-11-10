@@ -5,6 +5,7 @@ import type {
   TimelineSnapshot,
   TimelineTrack,
 } from "../../api/timeline";
+import { multicamClipRangeIssue } from "../editor/timelineSync";
 
 export interface DeliveryPreflightIssue {
   code: string;
@@ -159,12 +160,16 @@ export function buildTimelineDeliveryPreflight(snapshot: TimelineSnapshot): Time
     }
   }
 
-  const groups = new Map<string, string[]>();
+  const groups = new Map<string, TimelineMulticamGroup>();
   const duplicateGroups = new Set<string>();
+  // The source pool is available for future edits, not part of this delivery.
+  // Include disabled clips and all track kinds when resolving actual references.
+  const referencedGroupIds = new Set(sequence.tracks.flatMap((track) => track.clips.map((clip) => clip.multicam_group_id)));
   for (const group of snapshot.project.multicam_groups) {
+    if (!referencedGroupIds.has(group.group_id)) continue;
     if (!group.group_id || groups.has(group.group_id)) duplicateGroups.add(group.group_id || "<empty>");
     const sourceIds = multicamSourceIds(group);
-    if (group.group_id && !groups.has(group.group_id)) groups.set(group.group_id, sourceIds);
+    if (group.group_id && !groups.has(group.group_id)) groups.set(group.group_id, group);
     if (!sourceIds.length) {
       blockers.push(issue("multicam_group_empty", `多机位组 ${group.group_id || "<empty>"} 没有 angle source。`));
       continue;
@@ -183,10 +188,18 @@ export function buildTimelineDeliveryPreflight(snapshot: TimelineSnapshot): Time
       blockers.push(issue("base_source_missing", `视频片段 ${clip.clip_id} 引用了不存在的 base source ${clip.source_id}。`));
     }
     if (clip.multicam_group_id) {
-      const angleSourceIds = groups.get(clip.multicam_group_id);
-      if (!angleSourceIds) {
+      const group = groups.get(clip.multicam_group_id);
+      if (!group) {
         blockers.push(issue("multicam_group_missing", `视频片段 ${clip.clip_id} 引用了不存在的多机位组 ${clip.multicam_group_id}。`));
         continue;
+      }
+      const angleSourceIds = multicamSourceIds(group);
+      if (!typedSyncIssue(group)) {
+        const rangeIssue = multicamClipRangeIssue(group, clip);
+        if (rangeIssue) blockers.push(issue(
+          rangeIssue.reason === "missing_sync" ? "multicam_base_sync_missing" : "multicam_sync_range_exceeded",
+          `片段 ${clip.clip_id} 的机位 ${rangeIssue.sourceId} 缺少覆盖整段的同步范围；交付需要所有注册机位覆盖同一相对区间。`,
+        ));
       }
       if (!clip.selected_angle_source_id) {
         pendingMulticamCount += 1;

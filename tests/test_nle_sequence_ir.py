@@ -166,3 +166,40 @@ def test_projection_does_not_mutate_timeline_snapshot() -> None:
     before = copy.deepcopy(value)
     build_nle_sequence_ir(value)
     assert value == before
+
+
+def test_unused_unsynchronized_groups_do_not_block_or_enter_sequence_delivery() -> None:
+    value = timeline()
+    value["sources"].append({"source_id": "unused-source", "clip_id": "unused", "media_id": "unused", "name": "Unused.mov", "duration_frames": 300})
+    value["multicam_groups"].append({"group_id": "unused", "angle_source_ids": ["source:a", "unused-source"], "angles": []})
+    inactive = copy.deepcopy(value["sequences"][0])
+    inactive["sequence_id"] = "other-sequence"
+    inactive["tracks"][0]["clips"][0]["multicam_group_id"] = "unused"
+    value["sequences"].append(inactive)
+    before = copy.deepcopy(value)
+
+    result = build_nle_sequence_ir(value)
+
+    assert [group["group_id"] for group in result["multicam_groups"]] == ["take-1"]
+    assert [source["source_id"] for source in result["sources"]] == ["source:a", "source:b", "source:boom"]
+    assert result["semantics"]["active_sequence_resources_only"] is True
+    assert value == before
+
+
+@pytest.mark.parametrize("reference_kind", ["disabled", "audio"])
+def test_resource_scope_includes_disabled_and_audio_group_references(reference_kind: str) -> None:
+    value = timeline()
+    value["multicam_groups"].append({"group_id": "unready", "angle_source_ids": ["source:a", "source:b"], "angles": []})
+    clip = value["sequences"][0]["tracks"][0 if reference_kind == "disabled" else 1]["clips"][0]
+    clip["multicam_group_id"] = "unready"
+    with pytest.raises(UnsafeNLESequenceIR, match="unready lacks typed angles"):
+        build_nle_sequence_ir(value)
+
+
+def test_resource_scope_keeps_unselected_angles_and_group_audio_without_a_track_reference() -> None:
+    value = timeline()
+    value["sequences"][0]["tracks"][1]["clips"] = []
+    for clip in value["sequences"][0]["tracks"][0]["clips"]:
+        clip["selected_angle_source_id"] = "source:a"
+    result = build_nle_sequence_ir(value)
+    assert [source["source_id"] for source in result["sources"]] == ["source:a", "source:b", "source:boom"]

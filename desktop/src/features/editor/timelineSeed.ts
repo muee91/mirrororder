@@ -1,6 +1,7 @@
 import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import type { AssemblyBlock, AssemblyTimeline } from "../../api/production";
 import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
+import { multicamClipRangeIssue } from "./timelineSync";
 import type {
   FrameRate,
   TimelineCommand,
@@ -61,6 +62,7 @@ function baseAngleForBlock(take: ReviewTakeGroup, block: AssemblyBlock) {
   if (authoritativeClipId) {
     return playable.find((angle) => angle.clip_id === authoritativeClipId) ?? null;
   }
+  if (block.angle?.status === "manual_preferred" || block.angle?.status === "single_angle") return null;
   return playable[0] ?? null;
 }
 
@@ -90,7 +92,10 @@ function ensureSources(
   const playable = availableAngles(take);
   const angleSourceIds: string[] = [];
   const typedAngles: TimelineMulticamAngle[] = [];
-  let completeTypedSync = true;
+  // Typed sync currently models a shared Take origin. Do not claim that angles
+  // with different (or unknown) timeline origins are aligned by source offset.
+  let completeTypedSync = Number.isFinite(take.start)
+    && playable.every((angle) => Number.isFinite(angle.timeline_start) && angle.timeline_start === take.start);
   for (const angle of playable) {
     const id = sourceId(angle.clip_id);
     angleSourceIds.push(id);
@@ -199,7 +204,27 @@ export function buildAssemblyTimelineProposal(
           status: block.assembly_status,
           reason: block.angle?.clip_id
             ? `Assembly 指定的基础 angle ${block.angle.clip_id} 当前不可播放`
-            : "Assembly Take 没有可播放 angle",
+            : block.angle?.status === "manual_preferred" || block.angle?.status === "single_angle"
+              ? "Assembly 已确定的机位缺少 source identity，不能自动改选"
+              : "Assembly Take 没有可播放 angle",
+        });
+        continue;
+      }
+
+      if (!Number.isFinite(take.start) || !Number.isFinite(baseAngle.timeline_start) || baseAngle.timeline_start !== take.start) {
+        skipped.push({ blockId: block.block_id, segmentId, status: block.assembly_status, reason: "Assembly 基础机位与 Take 起点不一致或未知，不能推断源范围" });
+        continue;
+      }
+
+      const multicamGroup = multicam.get(take.group_id);
+      // Local availability must not turn an unresolved editorial choice into a
+      // single-source clip that bypasses the multicam playback/delivery gates.
+      if (!multicamGroup && block.angle?.status !== "manual_preferred" && block.angle?.status !== "single_angle") {
+        skipped.push({
+          blockId: block.block_id,
+          segmentId,
+          status: block.assembly_status,
+          reason: "Assembly 机位仍待定；本机仅有一个可播放 angle，不能自动作为单机位采用",
         });
         continue;
       }
@@ -215,11 +240,23 @@ export function buildAssemblyTimelineProposal(
         continue;
       }
 
-      const durationSeconds = range.end - range.start;
-      const durationFrames = Math.max(1, secondsToFrames(durationSeconds, rate));
       const sourceInFrames = secondsToFrames(Number(baseAngle.source_start) + range.start, rate);
+      const sourceOutFrames = secondsToFrames(Number(baseAngle.source_start) + range.end, rate);
+      const durationFrames = sourceOutFrames - sourceInFrames;
+      if (!Number.isSafeInteger(sourceInFrames) || !Number.isSafeInteger(durationFrames) || durationFrames <= 0) {
+        skipped.push({ blockId: block.block_id, segmentId, status: block.assembly_status, reason: "Assembly 范围无法在当前时间基表示为有效整帧，不能自动扩展范围" });
+        continue;
+      }
       const clipId = `timeline:${block.block_id}`;
-      const playableAngleCount = availableAngles(take).length;
+      // This remains a proposal until the user confirms it. Carry only the
+      // explicit Assembly preference, never the inventory's first angle or a
+      // merely populated clip_id. Incomplete synchronization stays fail closed.
+      const selectedAngleSourceId = multicamGroup
+        && block.angle?.status === "manual_preferred"
+        && hasCompleteTypedSync(multicamGroup)
+        && !multicamClipRangeIssue(multicamGroup, { source_id: sourceId(baseAngle.clip_id), source_in: sourceInFrames, duration: durationFrames })
+        ? sourceId(baseAngle.clip_id)
+        : null;
       const metadata: Record<string, string> = {
         proposal_source: assembly.contract,
         proposal_revision: assembly.revision,
@@ -229,6 +266,7 @@ export function buildAssemblyTimelineProposal(
         group_id: block.group_id,
         source_clip_id: baseAngle.clip_id,
         decision_source: block.decision_source,
+        angle_selection_status: block.angle?.status ?? "unknown",
         trim_basis: range.trimBasis,
         frame_rate: `${rate.numerator}/${rate.denominator}`,
       };
@@ -244,8 +282,8 @@ export function buildAssemblyTimelineProposal(
           source_in: sourceInFrames,
           duration: durationFrames,
           enabled: true,
-          multicam_group_id: playableAngleCount > 1 ? take.group_id : null,
-          selected_angle_source_id: null,
+          multicam_group_id: multicamGroup?.group_id ?? null,
+          selected_angle_source_id: selectedAngleSourceId,
           metadata,
         },
       });
@@ -275,10 +313,16 @@ export function buildAssemblyTimelineProposal(
     (command) => command.type === "insert" && Boolean(command.clip.multicam_group_id) && !command.clip.selected_angle_source_id,
   ).length;
   if (pendingMulticamAngles) {
-    warnings.push(`${pendingMulticamAngles} 个多机位 Best 已进入 Timeline，但机位保持待选；请在 Timeline Inspector 明确选择机位后再交付。`);
+    warnings.push(`${pendingMulticamAngles} 个多机位 Best 的机位保持待选；请核对同步范围，并在 Timeline Inspector 明确选择机位后再交付。`);
+  }
+  const preferredMulticamAngles = commands.filter(
+    (command) => command.type === "insert" && Boolean(command.clip.selected_angle_source_id),
+  ).length;
+  if (preferredMulticamAngles) {
+    warnings.push(`${preferredMulticamAngles} 个多机位片段沿用场记人工首选机位；确认初始顺片后生效。`);
   }
   if ([...multicam.values()].some((group) => !hasCompleteTypedSync(group))) {
-    warnings.push("部分多机位 Take 缺少完整 typed sync range；片段仍可进入 Timeline，但机位预览/切换会 fail closed。 ");
+    warnings.push("部分多机位 Take 缺少完整同步范围，或机位起点不一致；片段仍可进入 Timeline，但机位预览/切换会 fail closed。 ");
   }
   warnings.push(`Source pool 已从 Review inventory 注册 ${sources.size} 个可播放 angle；它只提供媒体证据，不参与 Best/范围决策。`);
   warnings.push(`时间基 ${rate.numerator}/${rate.denominator} fps；Assembly 秒级范围会在提交前量化到整数帧。`);

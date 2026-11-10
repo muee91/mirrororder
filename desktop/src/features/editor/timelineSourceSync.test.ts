@@ -8,10 +8,11 @@ function review(): ReviewModelPayload {
     project: { project_id: "p1" },
     take_groups: [{
       group_id: "g1",
+      start: 0,
       duration: 10,
       angles: [
-        { clip_id: "a", media_id: "ma", camera: "A", name: "A.mov", source_start: 5, source_end: 15, duration: 10, playback: { available: true } },
-        { clip_id: "b", media_id: "mb", camera: "B", name: "B.mov", source_start: 20, source_end: 30, duration: 10, playback: { available: true } },
+        { clip_id: "a", media_id: "ma", camera: "A", name: "A.mov", timeline_start: 0, source_start: 5, source_end: 15, duration: 10, playback: { available: true } },
+        { clip_id: "b", media_id: "mb", camera: "B", name: "B.mov", timeline_start: 0, source_start: 20, source_end: 30, duration: 10, playback: { available: true } },
       ],
     }],
   } as unknown as ReviewModelPayload;

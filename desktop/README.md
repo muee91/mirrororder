@@ -121,6 +121,8 @@ python3 -m pytest -q
 
 A gate is only PASS if it actually ran successfully on the tested commit. During Product Recovery, finish a coherent functional slice before running the necessary targeted validation; do not repeatedly dispatch CI for intermediate cosmetic edits.
 
+`npm test` includes a synthetic Assembly proposal → Python FCPXML/Premiere export regression. It requires Python 3 (`python3`, or `python` on Windows); set `MIRRORORDER_PYTHON` to use a specific interpreter. It writes only temporary synthetic assets and does not require an installed NLE.
+
 ### 真实 Host 的画布与播放闸门
 
 从仓库根目录显式启动 Host（服务身份必须是 `mirrororder-host`）：

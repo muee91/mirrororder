@@ -97,12 +97,43 @@ def _frame_rate(sequence: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def _sources(timeline: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+def _sequence_resource_ids(timeline: dict[str, Any], sequence: dict[str, Any]) -> tuple[set[str], set[str]]:
+    """Select delivery resources without changing the durable editorial pool.
+
+    Disabled clips and every track kind remain part of the sequence. A referenced
+    multicam requires all angles and its audio source, not just the selected view.
+    """
+    source_ids: set[str] = set()
+    group_ids: set[str] = set()
+    for raw_track in _list(sequence.get("tracks"), "sequence.tracks"):
+        track = _object(raw_track, "sequence track")
+        for raw_clip in _list(track.get("clips", []), "track clips"):
+            clip = _object(raw_clip, "sequence clip")
+            source_ids.add(_string(clip.get("source_id"), "clip source_id", required=True))
+            if clip.get("selected_angle_source_id") is not None:
+                source_ids.add(_string(clip["selected_angle_source_id"], "clip selected_angle_source_id", required=True))
+            if clip.get("multicam_group_id") is not None:
+                group_ids.add(_string(clip["multicam_group_id"], "clip multicam_group_id", required=True))
+    for raw_group in _list(timeline.get("multicam_groups", []), "timeline.multicam_groups"):
+        group = _object(raw_group, "timeline multicam group")
+        if _string(group.get("group_id"), "multicam group_id") not in group_ids:
+            continue
+        for raw_angle in _list(group.get("angles", []), "multicam angles"):
+            angle = _object(raw_angle, "multicam angle")
+            source_ids.add(_string(angle.get("source_id"), "multicam angle source_id", required=True))
+        if group.get("audio_source_id") is not None:
+            source_ids.add(_string(group["audio_source_id"], "multicam audio_source_id", required=True))
+    return source_ids, group_ids
+
+
+def _sources(timeline: dict[str, Any], referenced_ids: set[str]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     projected: list[dict[str, Any]] = []
     index: dict[str, dict[str, Any]] = {}
     for position, item in enumerate(_list(timeline.get("sources"), "timeline.sources")):
         source = _object(item, f"timeline.sources[{position}]")
         source_id = _string(source.get("source_id"), f"timeline.sources[{position}].source_id", required=True)
+        if source_id not in referenced_ids:
+            continue
         if source_id in index:
             raise UnsafeNLESequenceIR(f"duplicate Timeline source_id: {source_id}")
         name = _string(source.get("name"), f"source {source_id} name")
@@ -126,12 +157,15 @@ def _sources(timeline: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, 
 def _multicam_groups(
     timeline: dict[str, Any],
     sources: dict[str, dict[str, Any]],
+    referenced_ids: set[str],
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     projected: list[dict[str, Any]] = []
     index: dict[str, dict[str, Any]] = {}
     for position, item in enumerate(_list(timeline.get("multicam_groups", []), "timeline.multicam_groups")):
         group = _object(item, f"timeline.multicam_groups[{position}]")
         group_id = _string(group.get("group_id"), f"timeline.multicam_groups[{position}].group_id", required=True)
+        if group_id not in referenced_ids:
+            continue
         if group_id in index:
             raise UnsafeNLESequenceIR(f"duplicate Timeline multicam group_id: {group_id}")
         raw_angles = _list(group.get("angles", []), f"multicam {group_id} angles")
@@ -357,8 +391,9 @@ def build_nle_sequence_ir(timeline: dict[str, Any]) -> dict[str, Any]:
     project_id = _string(timeline.get("project_id"), "timeline.project_id", required=True)
     sequence = _active_sequence(timeline)
     sequence_id = _string(sequence.get("sequence_id"), "sequence.sequence_id", required=True)
-    sources, source_index = _sources(timeline)
-    multicam_groups, multicam_index = _multicam_groups(timeline, source_index)
+    source_ids, group_ids = _sequence_resource_ids(timeline, sequence)
+    sources, source_index = _sources(timeline, source_ids)
+    multicam_groups, multicam_index = _multicam_groups(timeline, source_index, group_ids)
     tracks, clip_track = _tracks(sequence, source_index, multicam_index)
     markers = _markers(sequence)
     transitions = _transitions(sequence, clip_track)
@@ -377,6 +412,7 @@ def build_nle_sequence_ir(timeline: dict[str, Any]) -> dict[str, Any]:
         "transitions": transitions,
         "semantics": {
             "timeline_is_authority": True,
+            "active_sequence_resources_only": True,
             "multicam_structure_preserved": True,
             "unresolved_multicam_angle_preserved": True,
             "disabled_clips_preserved": True,
