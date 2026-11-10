@@ -132,3 +132,47 @@ test("a play promise waiting forever for media data has a bounded timeout", asyn
   });
   await assert.rejects(verifyReviewPlayback(page, { timeout: 800 }), /启动播放超时/);
 });
+
+test("decision conflict recovery requires a read retry and refreshes the real review queue", async t => {
+  const page = await openReview(t);
+  const panel = page.locator(".review-decision-panel");
+  await panel.locator(".editorial-decision-actions button:not([disabled])").first().waitFor();
+  const groupId = model.take_groups[0].group_id;
+  const finalDecision = {
+    target: { kind: "group", group_id: groupId, segment_id: "" },
+    state: "keep", actor: "另一位剪辑师", updated_at: "",
+  };
+  let writes = 0;
+  let recoveryReads = 0;
+  await page.route("**/editorial-decision", route => {
+    writes += 1;
+    return route.fulfill({ status: 409, json: { error: "团队意见已更新" } });
+  });
+  await page.route("**/editorial", route => {
+    recoveryReads += 1;
+    if (recoveryReads === 1) return route.fulfill({ status: 503, json: { error: "暂时无法读取团队状态" } });
+    return route.fulfill({ json: { revision: 2, opinions: {}, decisions: { [`group|${groupId}`]: finalDecision } } });
+  });
+  await page.route("**/review-model", route => route.fulfill({
+    json: {
+      ...model,
+      take_groups: model.take_groups.slice(0, 3).map(take => take.group_id === groupId ? {
+        ...take,
+        editorial_state: { ...take.editorial_state, editorial_decision: { group: finalDecision, assignments: [] } },
+      } : take),
+    },
+  }));
+
+  await panel.getByRole("textbox", { name: "决定人" }).fill("当前剪辑师");
+  await panel.getByRole("button", { name: "Best", exact: true }).click();
+  await panel.getByRole("alert").filter({ hasText: "最新状态读取失败" }).waitFor();
+  assert.equal(await panel.getByRole("button", { name: "Best", exact: true }).isDisabled(), true);
+  assert.equal(await panel.getByText("当前 Take 尚未形成最终决定。", { exact: true }).count(), 0);
+
+  await panel.getByRole("button", { name: "重新读取状态", exact: true }).click();
+  await panel.locator("button.is-selected.state-keep").waitFor();
+  await page.waitForFunction(() => document.querySelector(".review-queue-summary")?.textContent.includes("1 已决定"));
+  assert.equal(await panel.getByRole("button", { name: "Best", exact: true }).isDisabled(), false);
+  assert.equal(writes, 1, "conflicting Best must not be replayed after the read retry");
+  assert.equal(recoveryReads, 2);
+});

@@ -181,11 +181,16 @@ def _segment_plan(
             item["group_id"],
         )
     )
-    best = [item for item in candidates if item["delivery_state"] == "best"]
-    best_ng = [item for item in best if item["supervisor_blocked"]]
     eligible = [
         item for item in candidates
         if item["delivery_state"] != "reject" and not item["supervisor_blocked"] and not item["excluded"]
+    ]
+    best = [item for item in eligible if item["delivery_state"] == "best"]
+    # NG conflicts still require human confirmation, but excluded Takes are
+    # outside planning and must neither become primary nor block another Best.
+    best_ng = [
+        item for item in candidates
+        if item["delivery_state"] == "best" and item["supervisor_blocked"] and not item["excluded"]
     ]
     explicit_human = [item for item in eligible if item["creative_authority"]]
     issues: list[dict[str, Any]] = []
@@ -270,7 +275,7 @@ def _segment_plan(
         "summary": {
             "candidates": len(candidates),
             "eligible": len(eligible),
-            "explicit_best": len(best),
+            "explicit_best": len(best) + len(best_ng),
             "supervisor_ng": sum(1 for item in candidates if item["supervisor_blocked"]),
             "supervisor_partial": sum(1 for item in candidates if item["supervisor_partial"]),
             "human_authority_candidates": len(explicit_human),

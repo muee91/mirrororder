@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { HostConnectionError, errorMessage } from "../../api/host";
 import {
   EditorialClient,
@@ -77,12 +77,35 @@ interface Props {
   onDecisionChange?: () => void | Promise<void>;
 }
 
-export function ReviewDecisionPanel({ baseUrl, projectId, groupId, onDecisionChange }: Props) {
+export function ReviewDecisionPanel(props: Props) {
+  const current = useRef<Props | null>(props);
+  useLayoutEffect(() => {
+    current.current = props;
+    return () => { current.current = null; };
+  }, [props]);
+
+  async function refreshCurrentProject(): Promise<void> {
+    const latest = current.current;
+    if (latest?.baseUrl !== props.baseUrl || latest.projectId !== props.projectId) return;
+    await latest.onDecisionChange?.();
+  }
+
+  // A new target must never render or write with the previous target's snapshot,
+  // even during the render before its loading effect runs.
+  return <ReviewDecisionSession key={JSON.stringify([props.baseUrl, props.projectId, props.groupId])} {...props} onDecisionChange={refreshCurrentProject} />;
+}
+
+function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }: Props) {
   const client = useMemo(() => new EditorialClient(baseUrl), [baseUrl]);
   const [payload, setPayload] = useState<EditorialStorePayload | null>(null);
   const [actor, setActor] = useState(storedActor);
   const [message, setMessage] = useState("正在读取团队意见与最终决定…");
   const [busy, setBusy] = useState(false);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const active = useRef(true);
+  const requestVersion = useRef(0);
+  const writeInFlight = useRef(false);
+  const needsQueueRefresh = useRef(false);
 
   // 顶栏设置操作者后这里要跟上：否则决定按钮保持禁用，
   // 用户只能靠刷新页面才能让"已设置操作者"生效。
@@ -96,18 +119,42 @@ export function ReviewDecisionPanel({ baseUrl, projectId, groupId, onDecisionCha
     };
   }, []);
 
-  async function reload(quiet = false): Promise<void> {
-    if (!quiet) setMessage("正在读取团队意见与最终决定…");
+  async function reload(afterConflict = false): Promise<void> {
+    const version = ++requestVersion.current;
+    setPayload(null);
+    setLoadState("loading");
+    setMessage(afterConflict ? "团队状态已变化，正在读取最新意见与决定…" : "正在读取团队意见与最终决定…");
     try {
       const next = await client.status(projectId);
+      if (!active.current || version !== requestVersion.current) return;
       setPayload(next);
-      if (!quiet) setMessage(`Editorial r${next.revision}`);
+      setLoadState("ready");
+      setMessage(afterConflict
+        ? "已读取最新团队状态；请根据最新意见重新确认，原操作未重试。"
+        : `Editorial r${next.revision}`);
+      if (needsQueueRefresh.current) {
+        needsQueueRefresh.current = false;
+        try {
+          await onDecisionChange?.();
+        } catch {
+          // The authoritative read succeeded even if the queue refresh failed.
+        }
+      }
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (!active.current || version !== requestVersion.current) return;
+      setLoadState("error");
+      setMessage(`${afterConflict ? "团队状态已变化，但最新状态读取失败" : "团队意见与最终决定读取失败"}：${errorMessage(error)}。重新读取后才能作决定。`);
     }
   }
 
-  useEffect(() => { void reload(false); }, [client, projectId, groupId]);
+  useEffect(() => {
+    active.current = true;
+    void reload();
+    return () => {
+      active.current = false;
+      requestVersion.current += 1;
+    };
+  }, [client, projectId, groupId]);
 
   const opinions = groupOpinions(payload, groupId);
   const decision = groupDecision(payload, groupId);
@@ -115,11 +162,13 @@ export function ReviewDecisionPanel({ baseUrl, projectId, groupId, onDecisionCha
   const assignmentFeedback = assignmentFeedbackCount(payload, groupId);
 
   async function decide(state: EditorialState): Promise<void> {
-    if (!payload || busy) return;
+    if (!payload || loadState !== "ready" || writeInFlight.current) return;
     if (!actor.trim()) {
       setMessage("最终决定需要操作者昵称。");
       return;
     }
+    writeInFlight.current = true;
+    const version = ++requestVersion.current;
     setBusy(true);
     saveActor(actor);
     setMessage(state === "unreviewed" ? "正在清除当前 Take 最终决定…" : `正在写入当前 Take 最终 ${STATE_LABELS[state]}…`);
@@ -131,24 +180,34 @@ export function ReviewDecisionPanel({ baseUrl, projectId, groupId, onDecisionCha
         actor,
         expectedRevision: payload.revision,
       });
-      setPayload(response.editorial);
-      setMessage(state === "unreviewed"
-        ? `当前 Take 最终决定已清除 · r${response.editorial.revision}`
-        : `当前 Take 最终：${STATE_LABELS[state]} · r${response.editorial.revision}`);
+      if (active.current && version === requestVersion.current) {
+        setPayload(response.editorial);
+        setMessage(state === "unreviewed"
+          ? `当前 Take 最终决定已清除 · r${response.editorial.revision}`
+          : `当前 Take 最终：${STATE_LABELS[state]} · r${response.editorial.revision}`);
+      }
       try {
+        // Refresh counts after a completed write even if the user moved to the
+        // next Take. The outer boundary only permits the originating project.
         await onDecisionChange?.();
       } catch {
         // Decision already succeeded. Parent refresh failure must not rewrite that outcome.
       }
     } catch (error) {
+      if (!active.current || version !== requestVersion.current) return;
+      needsQueueRefresh.current = true;
       if (error instanceof HostConnectionError && error.status === 409) {
-        await reload(true).catch(() => undefined);
-        setMessage("团队状态已变化，已刷新到最新 revision；请根据最新意见重新确认。");
+        await reload(true);
       } else {
-        setMessage(errorMessage(error));
+        // A lost response does not prove the write failed. Require a fresh read
+        // instead of allowing a blind replay or presenting stale authority.
+        setPayload(null);
+        setLoadState("error");
+        setMessage(`无法确认本次决定是否保存：${errorMessage(error)}。请重新读取状态后再决定。`);
       }
     } finally {
-      setBusy(false);
+      writeInFlight.current = false;
+      if (active.current) setBusy(false);
     }
   }
 
@@ -156,12 +215,14 @@ export function ReviewDecisionPanel({ baseUrl, projectId, groupId, onDecisionCha
     <section className="editorial-decision-section review-decision-panel" aria-label="当前 Take 最终决定">
       <div className="take-evidence-heading">
         <div><p className="eyebrow">审阅 · 最终决定</p><strong>Take 最终决定</strong></div>
-        <span>{message}</span>
+        <span role={loadState === "error" ? "alert" : "status"}>{message}</span>
       </div>
+
+      {loadState === "error" ? <button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>重新读取状态</button> : null}
 
       <div className="team-opinion-summary">
         <span className="evidence-label">团队个人意见</span>
-        {opinions.length ? (
+        {!payload ? <p className="evidence-muted">{loadState === "loading" ? "正在读取当前 Take 的团队状态…" : "尚未读取到可信的团队状态。"}</p> : opinions.length ? (
           <div className="opinion-counts">
             {Object.entries(counts).filter(([, count]) => count > 0).map(([state, count]) => <span key={state}>{STATE_LABELS[state] || state} {count}</span>)}
           </div>
@@ -186,7 +247,7 @@ export function ReviewDecisionPanel({ baseUrl, projectId, groupId, onDecisionCha
         {decision ? <button type="button" className="secondary" disabled={busy || !payload} onClick={() => void decide("unreviewed")}>清除</button> : null}
       </div>
 
-      {decision ? <p className="editorial-current-decision">当前最终 <strong>{STATE_LABELS[decision.state] || decision.state}</strong> · {decision.actor || "未知决定人"}{decision.updated_at ? ` · ${decision.updated_at}` : ""}</p> : <p className="evidence-muted">当前 Take 尚未形成最终决定。</p>}
+      {payload ? decision ? <p className="editorial-current-decision">当前最终 <strong>{STATE_LABELS[decision.state] || decision.state}</strong> · {decision.actor || "未知决定人"}{decision.updated_at ? ` · ${decision.updated_at}` : ""}</p> : <p className="evidence-muted">当前 Take 尚未形成最终决定。</p> : null}
 
       {assignmentFeedback ? (
         <p className="review-assignment-feedback-note">另有 {assignmentFeedback} 个剧本段级团队反馈。审阅页不展开剧本段级裁决；需要结合位置上下文时回到“剧本”处理。</p>

@@ -271,7 +271,10 @@ Viewer Inspector 的最终编辑决定能力遵循同一协作 authority：
 - 显示现有最终决定；
 - 可显式提交 Best / Keep / Reject / 清除；
 - 使用 `expected_revision` 防止 stale overwrite；
-- revision 冲突后必须基于最新团队状态重新确认。
+- 切换 Take、项目或 Host 时立即停止使用旧快照；旧读取或写入回包不得覆盖当前对象。成功写入或冲突/未知结果的确认回读会同步队列，但只允许刷新仍在打开的原项目；
+- 写入进行中不接受重复提交。离开当前 Take 不代表取消已发出的决定，重新进入时以 Host 状态为准；
+- revision 冲突后必须成功读取最新团队状态，再由用户重新确认。读取失败时阻止决定，并提供只读重试入口；
+- 网络错误等无法确认写入结果时，先重新读取权威状态，不自动重放决定；加载或读取失败不能显示为“尚未决定”。
 
 最终决定会进入 `delivery.v1` selection manifest，但 Desktop 不会因此直接修改原始 FCPXML 或 multicam 结构。
 

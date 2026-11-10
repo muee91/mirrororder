@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from script_organizer.assembly_timeline import build_assembly_timeline
 from script_organizer.audit_engine import _analysis_revision, _mapping_for_group
 from script_organizer.audit_store import AuditStore
 from script_organizer.automation_store import AutomationStore
@@ -10,6 +13,7 @@ from script_organizer.config import ProjectConfig
 from script_organizer.editorial_store import EditorialStore
 from script_organizer.rough_cut_plan import build_rough_cut_plan
 from script_organizer.review_store import ReviewStore
+from script_organizer.script_supervisor_store import ScriptSupervisorStore
 
 
 class FakeProject:
@@ -145,6 +149,18 @@ def _set_final(project: FakeProject, group_id: str, state: str) -> None:
     )
 
 
+def _set_excluded(project: FakeProject, group_id: str) -> None:
+    store = ReviewStore(project.config.output_dir / "review.json")
+    store.apply_action(
+        {
+            "action": "set_group_exclusion",
+            "group_id": group_id,
+            "actor": "editor",
+            "expected_revision": store.load()["revision"],
+        }
+    )
+
+
 def test_automatic_mapping_is_candidate_not_creative_best(tmp_path: Path) -> None:
     project = _project(tmp_path)
     plan = build_rough_cut_plan(project)
@@ -187,6 +203,127 @@ def test_multiple_explicit_best_is_a_conflict_not_an_arbitrary_pick(tmp_path: Pa
     assert segment["primary_group_id"] == ""
     assert {row["group_id"] for row in segment["candidates"] if row["delivery_state"] == "best"} == {"G1", "G2"}
     assert any(issue["code"] == "multiple_explicit_best" for issue in segment["issues"])
+
+
+@pytest.mark.parametrize("inherited", [False, True], ids=["direct", "parent"])
+@pytest.mark.parametrize(
+    ("other_state", "expected_status", "expected_primary"),
+    [
+        (None, "no_eligible_take", ""),
+        ("keep", "needs_editorial_choice", ""),
+        ("best", "explicit_best", "G2"),
+    ],
+    ids=["excluded-best-only", "with-eligible-keep", "with-eligible-best"],
+)
+def test_excluded_best_never_selects_or_blocks_eligible_candidates(
+    tmp_path: Path,
+    inherited: bool,
+    other_state: str | None,
+    expected_status: str,
+    expected_primary: str,
+) -> None:
+    project = _project(tmp_path, two_groups=other_state is not None)
+    if inherited:
+        project.index["groups"][0]["parent_group_id"] = "G_parent"
+        (project.config.output_dir / "material_index.json").write_text(
+            json.dumps(project.index), encoding="utf-8"
+        )
+    _set_final(project, "G1", "best")
+    if other_state is not None:
+        _set_final(project, "G2", other_state)
+    _set_excluded(project, "G_parent" if inherited else "G1")
+    review = ReviewStore(project.config.output_dir / "review.json")
+    editorial = EditorialStore(project.config.output_dir)
+    review_before, editorial_before = review.load(), editorial.load()
+
+    plan = build_rough_cut_plan(project)
+    segment = _segment(plan)
+    excluded = next(row for row in segment["candidates"] if row["group_id"] == "G1")
+    assert excluded["excluded"] is True
+    assert excluded["delivery_state"] == "best"
+    assert segment["selection_status"] == expected_status
+    assert segment["primary_group_id"] == expected_primary
+    assert segment["summary"]["eligible"] == int(other_state is not None)
+    assert segment["summary"]["explicit_best"] == int(other_state == "best")
+    assert all(row["group_id"] != "G1" for pool in segment["role_pools"].values() for row in pool)
+    assert plan["readiness"] == (
+        "ready" if expected_primary else "blocked" if other_state is None else "needs_review"
+    )
+
+    blocks = build_assembly_timeline(project)["scenes"][0]["blocks"]
+    assert len(blocks) == 1
+    assert blocks[0]["kind"] == ("source" if expected_primary else "unresolved")
+    assert blocks[0]["group_id"] == expected_primary
+    assert review.load() == review_before
+    assert editorial.load() == editorial_before
+
+
+def test_all_excluded_bests_are_unavailable_not_a_multiple_best_conflict(tmp_path: Path) -> None:
+    project = _project(tmp_path, two_groups=True)
+    for group_id in ("G1", "G2"):
+        _set_final(project, group_id, "best")
+        _set_excluded(project, group_id)
+
+    segment = _segment(build_rough_cut_plan(project))
+    assert segment["selection_status"] == "no_eligible_take"
+    assert segment["primary_group_id"] == ""
+    assert segment["summary"]["eligible"] == 0
+    assert segment["summary"]["explicit_best"] == 0
+    assert segment["role_pools"] == {}
+    assert {row["delivery_state"] for row in segment["candidates"]} == {"best"}
+    assert build_assembly_timeline(project)["scenes"][0]["blocks"][0]["kind"] == "unresolved"
+
+
+@pytest.mark.parametrize("excluded", [False, True], ids=["active", "excluded"])
+@pytest.mark.parametrize("other_best", [False, True], ids=["alone", "with-eligible-best"])
+def test_supervisor_ng_best_conflict_only_applies_to_non_excluded_takes(
+    tmp_path: Path, excluded: bool, other_best: bool
+) -> None:
+    project = _project(tmp_path, two_groups=other_best)
+    _set_final(project, "G1", "best")
+    if other_best:
+        _set_final(project, "G2", "best")
+    ScriptSupervisorStore(project.config.output_dir).apply(
+        {"group_id": "G1", "expected_revision": 0, "actor": "supervisor", "entry": {"status": "ng"}}
+    )
+    if excluded:
+        _set_excluded(project, "G1")
+
+    segment = _segment(build_rough_cut_plan(project))
+    expected_status = (
+        "conflict_supervisor_vs_best" if not excluded else "explicit_best" if other_best else "no_eligible_take"
+    )
+    assert segment["selection_status"] == expected_status
+    assert segment["primary_group_id"] == ("G2" if excluded and other_best else "")
+    assert segment["summary"]["explicit_best"] == int(not excluded) + int(other_best)
+    conflicts = [issue for issue in segment["issues"] if issue["code"] == "supervisor_ng_vs_best"]
+    assert bool(conflicts) is not excluded
+    if conflicts:
+        assert conflicts[0]["group_ids"] == ["G1"]
+
+
+def test_clearing_exclusion_restores_best_without_rewriting_editorial_decision(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _set_final(project, "G1", "best")
+    _set_excluded(project, "G1")
+    editorial = EditorialStore(project.config.output_dir).load()
+    excluded_plan = build_rough_cut_plan(project)
+    assert _segment(excluded_plan)["primary_group_id"] == ""
+
+    store = ReviewStore(project.config.output_dir / "review.json")
+    store.apply_action(
+        {
+            "action": "clear_group_exclusion",
+            "group_id": "G1",
+            "actor": "editor",
+            "expected_revision": store.load()["revision"],
+        }
+    )
+    plan = build_rough_cut_plan(project)
+    assert plan["revision"] != excluded_plan["revision"]
+    assert _segment(plan)["selection_status"] == "explicit_best"
+    assert _segment(plan)["primary_group_id"] == "G1"
+    assert EditorialStore(project.config.output_dir).load() == editorial
 
 
 def test_rejected_groups_are_not_eligible(tmp_path: Path) -> None:
