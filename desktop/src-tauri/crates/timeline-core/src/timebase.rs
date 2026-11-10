@@ -6,6 +6,10 @@
 //! implementation and orchestration until a later, separately reviewed cutover.
 //! The v1 boundary is intentionally strict: it accepts UTF-8 FCPXML only and
 //! fails closed on malformed XML rather than becoming a second XML authority.
+//! DTD internal declarations are unsupported: ignoring their entities or
+//! default attributes could silently change the sequence metadata we resolve.
+//! Special-node names are limited to ASCII; Unicode element content and
+//! metadata remain supported without duplicating Expat's Unicode name tables.
 
 use quick_xml::events::Event;
 use quick_xml::name::ResolveResult;
@@ -238,7 +242,7 @@ fn pow10(exponent: u32) -> Option<i128> {
 
 fn parse_fcpxml(bytes: &[u8]) -> Result<Value, ()> {
     let bytes = validate_utf8_source(bytes)?;
-    if contains_invalid_xml_control(bytes) {
+    if contains_invalid_xml_character(bytes) {
         return Err(());
     }
     let mut reader = NsReader::from_reader(bytes);
@@ -253,9 +257,11 @@ fn parse_fcpxml(bytes: &[u8]) -> Result<Value, ()> {
     let mut root_seen = false;
     let mut document_closed = false;
     let mut declaration_seen = false;
+    let mut doctype_seen = false;
     let mut prolog_open = true;
 
     loop {
+        let event_start = reader.buffer_position() as usize;
         let (namespace, event) = match reader.read_resolved_event_into(&mut buffer) {
             Ok(event) => event,
             Err(_) => return Err(()),
@@ -356,11 +362,9 @@ fn parse_fcpxml(bytes: &[u8]) -> Result<Value, ()> {
                     return Err(());
                 }
             }
-            Event::CData(text) => {
+            Event::CData(_) => {
+                // CDATA is element content, even when empty or whitespace-only.
                 if stack.is_empty() {
-                    prolog_open = false;
-                }
-                if stack.is_empty() && !is_xml_whitespace(text.as_ref()) {
                     return Err(());
                 }
             }
@@ -377,29 +381,41 @@ fn parse_fcpxml(bytes: &[u8]) -> Result<Value, ()> {
                     return Err(());
                 }
                 declaration_seen = true;
-                if let Some(encoding) = declaration.encoding() {
-                    let encoding = encoding.map_err(|_| ())?;
-                    if !encoding.eq_ignore_ascii_case(b"utf-8") {
-                        return Err(());
-                    }
-                }
+                validate_declaration(declaration.as_ref())?;
             }
             Event::Comment(_) => {
                 if stack.is_empty() {
                     prolog_open = false;
                 }
             }
-            Event::PI(_) if root_seen => return Err(()),
-            Event::PI(_) => {
+            Event::PI(instruction) => {
+                // ElementTree ignores valid PIs before, inside and after the
+                // root. Their content is opaque, not an XML attribute list.
+                let target = std::str::from_utf8(instruction.target()).map_err(|_| ())?;
+                if target.eq_ignore_ascii_case("xml") || !valid_supported_ncname(target) {
+                    return Err(());
+                }
                 if stack.is_empty() {
                     prolog_open = false;
                 }
             }
-            Event::DocType(_) if root_seen => return Err(()),
-            Event::DocType(_) => {
-                if stack.is_empty() {
-                    prolog_open = false;
+            Event::DocType(doctype) => {
+                if root_seen || doctype_seen {
+                    return Err(());
                 }
+                // quick-xml tokenizes even lowercase DOCTYPE and does not
+                // validate its payload. Check the original spelling too.
+                let source = bytes.get(event_start..).ok_or(())?;
+                if !source.starts_with(b"<!DOCTYPE")
+                    || !source
+                        .get(9)
+                        .is_some_and(|byte| is_xml_whitespace(&[*byte]))
+                {
+                    return Err(());
+                }
+                validate_doctype(doctype.as_ref())?;
+                doctype_seen = true;
+                prolog_open = false;
             }
             Event::Eof => break,
         }
@@ -438,10 +454,151 @@ fn is_xml_whitespace(value: &[u8]) -> bool {
         .all(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
 }
 
-fn contains_invalid_xml_control(value: &[u8]) -> bool {
-    value
+fn skip_xml_whitespace(value: &mut &[u8]) -> bool {
+    let before = value.len();
+    *value = value.trim_ascii_start();
+    // Other ASCII whitespace is already rejected by contains_invalid_xml_character.
+    value.len() != before
+}
+
+fn take_quoted_value<'a>(value: &mut &'a [u8]) -> Result<&'a [u8], ()> {
+    let quote = *value.first().ok_or(())?;
+    if !matches!(quote, b'\'' | b'"') {
+        return Err(());
+    }
+    let end = value[1..]
         .iter()
-        .any(|byte| matches!(byte, 0x00..=0x08 | 0x0b..=0x0c | 0x0e..=0x1f))
+        .position(|byte| *byte == quote)
+        .ok_or(())?
+        + 1;
+    let content = &value[1..end];
+    *value = &value[end + 1..];
+    Ok(content)
+}
+
+fn validate_declaration(value: &[u8]) -> Result<(), ()> {
+    let mut remaining = value.strip_prefix(b"xml").ok_or(())?;
+    let mut next_attribute = 0;
+    loop {
+        let separated = skip_xml_whitespace(&mut remaining);
+        if remaining.is_empty() {
+            return (next_attribute != 0).then_some(()).ok_or(());
+        }
+        if !separated {
+            return Err(());
+        }
+        let name_end = remaining
+            .iter()
+            .position(|byte| !byte.is_ascii_alphabetic())
+            .ok_or(())?;
+        let name = &remaining[..name_end];
+        remaining = &remaining[name_end..];
+        skip_xml_whitespace(&mut remaining);
+        remaining = remaining.strip_prefix(b"=").ok_or(())?;
+        skip_xml_whitespace(&mut remaining);
+        let content = take_quoted_value(&mut remaining)?;
+        next_attribute = match name {
+            b"version" if next_attribute == 0 => {
+                // Match Expat's declaration token rules. Version does not
+                // change the XML 1.0 character rules used by this adapter.
+                if content.is_empty()
+                    || !content.iter().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                    })
+                {
+                    return Err(());
+                }
+                1
+            }
+            b"encoding" if next_attribute == 1 => {
+                if !content.eq_ignore_ascii_case(b"utf-8") {
+                    return Err(());
+                }
+                2
+            }
+            b"standalone" if matches!(next_attribute, 1 | 2) => {
+                if !matches!(content, b"yes" | b"no") {
+                    return Err(());
+                }
+                3
+            }
+            _ => return Err(()),
+        };
+    }
+}
+
+fn validate_doctype(value: &[u8]) -> Result<(), ()> {
+    let name_end = value
+        .iter()
+        .position(|byte| is_xml_whitespace(&[*byte]) || *byte == b'[')
+        .unwrap_or(value.len());
+    let name = std::str::from_utf8(&value[..name_end]).map_err(|_| ())?;
+    if name.split(':').count() > 2 || !name.split(':').all(valid_supported_ncname) {
+        return Err(());
+    }
+    let mut remaining = &value[name_end..];
+    let separated = skip_xml_whitespace(&mut remaining);
+    if !remaining.is_empty() && remaining[0] != b'[' {
+        if !separated {
+            return Err(());
+        }
+        let public = remaining.starts_with(b"PUBLIC");
+        remaining = remaining
+            .strip_prefix(if public { b"PUBLIC" } else { b"SYSTEM" })
+            .ok_or(())?;
+        if !skip_xml_whitespace(&mut remaining) {
+            return Err(());
+        }
+        if public {
+            let public_id = take_quoted_value(&mut remaining)?;
+            if !public_id.iter().all(|byte| {
+                byte.is_ascii_alphanumeric() || b" \r\n-'()+,./:=?;!*#@$_%".contains(byte)
+            }) || !skip_xml_whitespace(&mut remaining)
+            {
+                return Err(());
+            }
+        }
+        // External identifiers are syntax only. Never fetch or read a DTD.
+        take_quoted_value(&mut remaining)?;
+        skip_xml_whitespace(&mut remaining);
+    }
+    if let Some(subset) = remaining.strip_prefix(b"[") {
+        remaining = subset;
+        skip_xml_whitespace(&mut remaining);
+        // Non-empty internal subsets can alter attributes/entities. Reject
+        // rather than accepting a document with different Python semantics.
+        remaining = remaining.strip_prefix(b"]").ok_or(())?;
+        skip_xml_whitespace(&mut remaining);
+    }
+    remaining.is_empty().then_some(()).ok_or(())
+}
+
+fn valid_supported_ncname(value: &str) -> bool {
+    // XML fifth-edition Unicode names are broader than ElementTree/Expat's
+    // accepted set. Keep this metadata-only boundary conservative instead of
+    // claiming parity with a different XML grammar or copying Unicode tables.
+    let mut bytes = value.bytes();
+    bytes
+        .next()
+        .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
+fn contains_invalid_xml_character(value: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(value) else {
+        return true;
+    };
+    // Tokenizers do not necessarily inspect opaque PI/comment/CDATA payloads.
+    // Validate every literal scalar, including the forbidden U+FFFE/U+FFFF.
+    text.chars()
+        .any(|character| !valid_xml_character(character as u32))
+}
+
+fn valid_xml_character(codepoint: u32) -> bool {
+    matches!(
+        codepoint,
+        0x9 | 0xa | 0xd | 0x20..=0xd7ff | 0xe000..=0xfffd | 0x10000..=0x10ffff
+    )
 }
 
 fn validate_utf8_source(value: &[u8]) -> Result<&[u8], ()> {
@@ -471,10 +628,7 @@ fn valid_character_reference(value: &[u8]) -> bool {
     let Ok(codepoint) = u32::from_str_radix(digits, radix) else {
         return false;
     };
-    matches!(
-        codepoint,
-        0x9 | 0xa | 0xd | 0x20..=0xd7ff | 0xe000..=0xfffd | 0x10000..=0x10ffff
-    )
+    valid_xml_character(codepoint)
 }
 
 fn attributes<'a>(
@@ -545,10 +699,86 @@ mod tests {
     }
 
     #[test]
-    fn strict_utf8_boundary_rejects_processing_instructions_mid_document() {
-        assert!(parse_fcpxml(b"<fcpxml><?pi?></fcpxml>").is_err());
-        assert!(parse_fcpxml(b"<fcpxml/><?pi?>").is_err());
+    fn processing_instructions_are_ignored_at_every_document_position() {
+        assert!(parse_fcpxml(b"<?pi?><fcpxml><?pi data &not-an-entity;?></fcpxml><?pi?>").is_ok());
         assert!(parse_fcpxml(b"<fcpxml/><?xml version=\"1.0\"?>").is_err());
+        for xml in [
+            "<??><fcpxml/>",
+            "<?XML?><fcpxml/>",
+            "<fcpxml><?9bad?></fcpxml>",
+        ] {
+            assert!(parse_fcpxml(xml.as_bytes()).is_err(), "{xml}");
+        }
+    }
+
+    #[test]
+    fn cdata_is_only_allowed_inside_the_document_element() {
+        assert!(parse_fcpxml(b"<fcpxml><![CDATA[<text>&literal;</text>]]></fcpxml>").is_ok());
+        for xml in [
+            "<![CDATA[]]><fcpxml/>",
+            "<![CDATA[ ]]><fcpxml/>",
+            "<fcpxml/><![CDATA[ ]]>",
+        ] {
+            assert!(parse_fcpxml(xml.as_bytes()).is_err(), "{xml}");
+        }
+    }
+
+    #[test]
+    fn illegal_unicode_is_rejected_even_in_opaque_xml_payloads() {
+        for character in ['\u{fffe}', '\u{ffff}'] {
+            for xml in [
+                format!("<fcpxml><?editor {character}?></fcpxml>"),
+                format!("<fcpxml><![CDATA[{character}]]></fcpxml>"),
+                format!("<fcpxml><!-- {character} --></fcpxml>"),
+                format!("<fcpxml note='{character}'/>"),
+            ] {
+                assert!(parse_fcpxml(xml.as_bytes()).is_err(), "{xml:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn declaration_requires_ordered_unique_pseudo_attributes() {
+        assert!(
+            parse_fcpxml(b"<?xml version='1.0' encoding='UTF-8' standalone='yes'?><fcpxml/>")
+                .is_ok()
+        );
+        for declaration in [
+            "<?xml?>",
+            "<?xml encoding='UTF-8'?>",
+            "<?xml version='1.0' extra='yes'?>",
+            "<?xml version='1.0' version='1.0'?>",
+            "<?xml version='1.0'encoding='UTF-8'?>",
+            "<?xml version='1.0' standalone='true'?>",
+            "<?xml version='1.0' standalone='yes' encoding='UTF-8'?>",
+        ] {
+            let xml = format!("{declaration}<fcpxml/>");
+            assert!(parse_fcpxml(xml.as_bytes()).is_err(), "{xml}");
+        }
+    }
+
+    #[test]
+    fn doctype_is_validated_once_and_never_expands_internal_declarations() {
+        for declaration in [
+            "<!DOCTYPE fcpxml>",
+            "<!DOCTYPE fcpxml SYSTEM 'unused.dtd'>",
+            "<!DOCTYPE fcpxml PUBLIC '-//Example//DTD FCPXML//EN' 'unused.dtd' []>",
+        ] {
+            let xml = format!("{declaration}<fcpxml/>");
+            assert!(parse_fcpxml(xml.as_bytes()).is_ok(), "{xml}");
+        }
+        for xml in [
+            "<!DOCTYPE fcpxml><!DOCTYPE fcpxml><fcpxml/>",
+            "<!doctype fcpxml><fcpxml/>",
+            "<!DOCTYPEfcpxml><fcpxml/>",
+            "<!DOCTYPE fcpxml garbage><fcpxml/>",
+            "<!DOCTYPE fcpxml PUBLIC 'id'><fcpxml/>",
+            "<!DOCTYPE fcpxml [<!ENTITY custom 'value'>]><fcpxml/>",
+            "<fcpxml><!DOCTYPE fcpxml></fcpxml>",
+            "<fcpxml/><!DOCTYPE fcpxml>",
+        ] {
+            assert!(parse_fcpxml(xml.as_bytes()).is_err(), "{xml}");
+        }
     }
 
     #[test]

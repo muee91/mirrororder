@@ -48,19 +48,19 @@ run("Vite production build", npm, ["run", "build"], desktopRoot);
 run(
   "Rust Timeline Core tests",
   cargo,
-  ["test", "--manifest-path", "src-tauri/crates/timeline-core/Cargo.toml"],
+  ["test", "--locked", "--manifest-path", "src-tauri/crates/timeline-core/Cargo.toml"],
   desktopRoot,
 );
 run(
   "Tauri host Rust tests",
   cargo,
-  ["test", "--manifest-path", "src-tauri/Cargo.toml"],
+  ["test", "--locked", "--manifest-path", "src-tauri/Cargo.toml"],
   desktopRoot,
 );
 run(
   "Tauri host cargo check",
   cargo,
-  ["check", "--manifest-path", "src-tauri/Cargo.toml"],
+  ["check", "--locked", "--manifest-path", "src-tauri/Cargo.toml"],
   desktopRoot,
 );
 run("Python compileall", python, ["-m", "compileall", "-q", "src/script_organizer"], repoRoot);

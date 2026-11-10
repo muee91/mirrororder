@@ -44,25 +44,25 @@ def main() -> None:
     run(
         "Rust Timeline Core tests",
         CARGO,
-        ["test", "--manifest-path", "src-tauri/crates/timeline-core/Cargo.toml", "--lib"],
+        ["test", "--locked", "--manifest-path", "src-tauri/crates/timeline-core/Cargo.toml", "--lib"],
         DESKTOP,
     )
     run(
         "Rust Timeline bridge contracts",
         CARGO,
-        ["test", "--manifest-path", "src-tauri/Cargo.toml", "timeline::tests::"],
+        ["test", "--locked", "--manifest-path", "src-tauri/Cargo.toml", "timeline::tests::"],
         DESKTOP,
     )
     run(
         "Rust Timeline persistence contracts",
         CARGO,
-        ["test", "--manifest-path", "src-tauri/Cargo.toml", "persistence::tests::"],
+        ["test", "--locked", "--manifest-path", "src-tauri/Cargo.toml", "persistence::tests::"],
         DESKTOP,
     )
     run(
         "Tauri host cargo check",
         CARGO,
-        ["check", "--manifest-path", "src-tauri/Cargo.toml"],
+        ["check", "--locked", "--manifest-path", "src-tauri/Cargo.toml"],
         DESKTOP,
     )
     run("Python-only source gate", sys.executable, ["scripts/check_python.py"], ROOT)

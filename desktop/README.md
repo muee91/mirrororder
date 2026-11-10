@@ -104,10 +104,14 @@ npm run typecheck
 npm test
 npm run test:ux-real
 npm run build
-cargo test --manifest-path src-tauri/crates/timeline-core/Cargo.toml
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo check --manifest-path src-tauri/Cargo.toml
+cargo test --locked --manifest-path src-tauri/crates/timeline-core/Cargo.toml
+cargo test --locked --manifest-path src-tauri/Cargo.toml
+cargo check --locked --manifest-path src-tauri/Cargo.toml
 ```
+
+Rust validation uses `--locked` so stale or missing Cargo lockfiles fail instead of silently changing dependency resolution.
+
+The experimental `timebase.v1` Rust adapter accepts UTF-8 FCPXML and validates XML declarations, processing instructions, CDATA placement and DOCTYPE syntax. Special-node names are limited to ASCII, while Unicode content and metadata remain supported. It never loads external DTDs and rejects non-empty internal DTD subsets, whose entities or default attributes could alter sequence metadata. Python remains the production timebase authority; these parity tests do not imply a production cutover or full XML/DTD support.
 
 Python tests remain at repository root:
 
