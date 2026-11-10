@@ -55,6 +55,11 @@ function taskProgress(task: ProjectTaskRecord): { done: number; total: number } 
   return typeof done === "number" && typeof total === "number" && total > 0 ? { done, total } : null;
 }
 
+function isInventorySnapshotPublishFailure(task: Pick<ProjectTaskRecord, "error" | "message">): boolean {
+  const text = `${task.error || ""} ${task.message || ""}`;
+  return text.includes("快照发布失败") || text.includes("inventory 快照发布失败");
+}
+
 export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
   const client = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const tasks = useMemo(() => new ProjectTaskClient(baseUrl), [baseUrl]);
@@ -129,7 +134,11 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
         } else if (current.status === "cancelled") {
           setMessage("素材扫描已取消；原有本机素材连接保持不变。");
         } else if (current.status === "failed" || current.error) {
-          setMessage(`素材扫描失败：${current.error || current.message || "未知错误"}；原有本机素材连接保持不变。`);
+          if (isInventorySnapshotPublishFailure(current)) {
+            setMessage("素材扫描失败：绑定已提交，但索引快照发布失败；连接结果暂不可用，请重新扫描。");
+          } else {
+            setMessage(`素材扫描失败：${current.error || current.message || "未知错误"}；请重新扫描或检查素材位置。`);
+          }
         }
       } catch (error) {
         if (disposed) return;
@@ -207,7 +216,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
         } : null);
       setScanTask(submitted);
       if (intent === "reconnect") {
-        setMessage("正在重新连接已移动素材；旧绑定会保留到新位置扫描成功，失败或取消不会破坏原有连接。");
+        setMessage("正在重新连接已移动素材；新位置扫描成功后会替换旧位置。取消通常保留原有连接；若索引快照发布失败，绑定已提交，需要重新扫描恢复连接结果。");
       } else if (intent === "add") {
         setMessage("正在扫描新增搜索位置；原有搜索位置和连接会继续保留。");
       } else {
@@ -237,7 +246,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       setScanTask(next);
       setMessage(next.status === "cancelled"
         ? "素材扫描已取消；原有本机素材连接保持不变。"
-        : "已请求取消素材扫描；扫描器会在安全中断点停止，原有连接不会提前清除。");
+        : "已请求取消素材扫描；扫描器会在安全中断点停止，成功取消时通常保留原有连接。若扫描已提交绑定但索引快照发布失败，请重新扫描。");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -249,8 +258,8 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
     const values = await chooseDirectories(summary?.missing ? "选择素材移动后的新位置" : "设置本机素材位置");
     if (!values.length) return;
     const explanation = summary?.roots.length
-      ? `将当前设备的素材搜索位置替换为所选 ${values.length} 个目录并立即扫描。\n\n旧位置和绑定会保留到新扫描成功后才替换。扫描失败或取消不会破坏当前连接。\n\n这不会新建或更改项目中的媒体身份，也不会修改共享项目；已校验素材会按内容身份重新连接。旧项目只有文件名线索的素材仍会要求你逐项确认。`
-      : `将所选 ${values.length} 个目录设为当前设备的素材搜索位置并立即扫描。\n\n这不会新建或更改项目中的媒体身份，也不会修改共享项目。`;
+      ? `将当前设备的素材搜索位置替换为所选 ${values.length} 个目录并立即扫描。\n\n旧位置和绑定通常会保留到新扫描成功后才替换。取消通常不会破坏当前连接；如果出现“索引快照发布失败”，绑定已提交但连接结果需要重新扫描恢复，应用不会自动回滚设备绑定。\n\n这不会新建或更改项目中的媒体身份，也不会修改共享项目；已校验素材会按内容身份重新连接。旧项目只有文件名线索的素材仍会要求你逐项确认。`
+      : `将所选 ${values.length} 个目录设为当前设备的素材搜索位置并立即扫描。\n\n如果出现“索引快照发布失败”，绑定已提交但连接结果需要重新扫描恢复，应用不会自动回滚设备绑定。\n\n这不会新建或更改项目中的媒体身份，也不会修改共享项目。`;
     if (typeof globalThis.confirm === "function" && !globalThis.confirm(explanation)) return;
     await submitScan(values, true, "reconnect");
   }
@@ -388,7 +397,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
 
           <details className="media-binding-help">
             <summary>重连规则</summary>
-            <p>正式媒体身份会通过内容校验自动恢复，因此换盘或移动目录不会产生一份新的项目素材。重新连接采用“扫描成功再替换”策略，失败或取消不会先清空旧绑定。旧项目只有文件名线索时只会生成候选，不会静默绑定；需要逐项确认。所有本机路径和确认只保存在当前设备，不修改共享项目或人工审核结果。</p>
+            <p>正式媒体身份会通过内容校验自动恢复，因此换盘或移动目录不会产生一份新的项目素材。重新连接采用“扫描成功再替换”策略，取消通常不会先清空旧绑定；如果索引快照发布失败，绑定已提交但连接结果需要重新扫描恢复，应用不会自动回滚设备绑定。旧项目只有文件名线索时只会生成候选，不会静默绑定；需要逐项确认。所有本机路径和确认只保存在当前设备，不修改共享项目或人工审核结果。</p>
             {summary?.state_path ? (
               <button type="button" className="secondary media-state-path" disabled={!isTauri()} onClick={() => void reveal(summary.state_path)}>定位设备绑定文件</button>
             ) : null}

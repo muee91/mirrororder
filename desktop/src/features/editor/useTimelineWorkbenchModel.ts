@@ -49,15 +49,47 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
     setRateNumerator(""); setRateDenominator("");
     setReplaceProposalArmed(false); setMessage("正在读取初始顺片与已保存剪辑…");
 
-    Promise.all([host.reviewModel(projectId), production.assemblyTimeline(projectId)]).then(([nextReview, nextPlan]) => {
+    // Review context and the assembly proposal are independent read models.
+    // A failure in one must not hide the other (or an already persisted local
+    // Timeline).  Promise.all used to make a transient assembly error blank
+    // the Review context as well, leaving the editor with no actionable clue.
+    void Promise.allSettled([host.reviewModel(projectId), production.assemblyTimeline(projectId)]).then(([reviewResult, planResult]) => {
       if (cancelled) return;
-      setReview(nextReview); setPlan(nextPlan);
-      const timebase = nextPlan.timebase;
-      if (timebase?.status === "confirmed" && Number.isSafeInteger(timebase.numerator) && Number.isSafeInteger(timebase.denominator) && Number(timebase.numerator) > 0 && Number(timebase.denominator) > 0) {
-        setRateNumerator(String(timebase.numerator)); setRateDenominator(String(timebase.denominator));
-        setMessage(`初始顺片已读取 · ${statusLabel(nextPlan.readiness)} · 时间基 ${timebase.numerator}/${timebase.denominator}`);
-      } else setMessage("初始顺片已读取 · 当前来源没有可证明的时间基，请确认项目帧率。");
-    }).catch((error) => { if (!cancelled) setMessage(errorMessage(error)); });
+      const failures: string[] = [];
+
+      if (reviewResult.status === "fulfilled") {
+        setReview(reviewResult.value);
+      } else {
+        failures.push(`审阅上下文读取失败：${errorMessage(reviewResult.reason)}`);
+      }
+
+      if (planResult.status === "fulfilled") {
+        const nextPlan = planResult.value;
+        setPlan(nextPlan);
+        const timebase = nextPlan.timebase;
+        if (timebase?.status === "confirmed" && Number.isSafeInteger(timebase.numerator) && Number.isSafeInteger(timebase.denominator) && Number(timebase.numerator) > 0 && Number(timebase.denominator) > 0) {
+          setRateNumerator(String(timebase.numerator)); setRateDenominator(String(timebase.denominator));
+        }
+      } else {
+        failures.push(`初始顺片读取失败：${errorMessage(planResult.reason)}`);
+      }
+
+      if (failures.length) {
+        setMessage(failures.join("；"));
+      } else {
+        // No failure can reach this branch, but keep the discriminant
+        // explicit so this remains safe if another read is added later.
+        if (planResult.status === "fulfilled") {
+          const nextPlan = planResult.value;
+          const timebase = nextPlan.timebase;
+          if (timebase?.status === "confirmed" && Number.isSafeInteger(timebase.numerator) && Number.isSafeInteger(timebase.denominator) && Number(timebase.numerator) > 0 && Number(timebase.denominator) > 0) {
+            setMessage(`初始顺片已读取 · ${statusLabel(nextPlan.readiness)} · 时间基 ${timebase.numerator}/${timebase.denominator}`);
+          } else {
+            setMessage("初始顺片已读取 · 当前来源没有可证明的时间基，请确认项目帧率。");
+          }
+        }
+      }
+    });
 
     void production.scriptSupervisor(projectId).then((board) => { if (!cancelled) setSlate(board); }).catch(() => { if (!cancelled) setSlate(null); });
     void production.assistant(projectId).then((status) => { if (!cancelled) setAssistantStatus(status); }).catch(() => { if (!cancelled) setAssistantStatus(null); });

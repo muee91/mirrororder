@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewTakeGroup, errorMessage } from "../../api/host";
 import { takeDisplayLabel } from "../material-script/TakeCard";
 import { classifyPlaybackFailure, type PlaybackFailure } from "./playbackFailure";
@@ -230,14 +230,20 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [playbackFailedMediaId, setPlaybackFailedMediaId] = useState("");
   const [playbackFailureDetail, setPlaybackFailureDetail] = useState<PlaybackFailure | null>(null);
   const [playbackRetry, setPlaybackRetry] = useState(0);
+  // Inventory, roles, and the optional Review fallback are independent
+  // requests. A project switch or a second refresh can otherwise let an
+  // older response overwrite the current media browser with stale rows.
+  const reloadToken = useRef(0);
 
   async function reload(preferredId = selectedId): Promise<void> {
+    const token = ++reloadToken.current;
     setBusy(true);
     try {
       // Inventory is the playback authority. Review is only a compatibility
       // fallback for older Host snapshots and supplies a known source start.
       const reviewPromise = host.reviewModel(projectId).catch(() => null);
       const [nextInventory, nextRoles, review] = await Promise.all([client.inventory(projectId), client.roles(projectId), reviewPromise]);
+      if (token !== reloadToken.current) return;
       setInventory(nextInventory);
       setRoles(nextRoles);
       setPlaybackProjectionLoaded(Boolean(review));
@@ -259,13 +265,16 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
         setMessage(`${nextInventory.summary.files} 素材 · ${nextInventory.summary.indexed} 已入索引 · ${nextInventory.summary.auxiliary} 辅助素材${updated ? ` · 清单 ${updated}` : ""}`);
       }
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (token === reloadToken.current) setMessage(errorMessage(error));
     } finally {
-      setBusy(false);
+      if (token === reloadToken.current) setBusy(false);
     }
   }
 
-  useEffect(() => { void reload(""); }, [client, host, projectId]);
+  useEffect(() => {
+    void reload("");
+    return () => { reloadToken.current += 1; };
+  }, [client, host, projectId]);
 
   const cameraFilters = useMemo(() => {
     const grouped = new Map<string, CameraFilterItem>();

@@ -322,6 +322,47 @@ def test_scan_fingerprint_capture_builds_snapshot_without_second_media_hash(tmp_
     assert snapshot["truncated"] is False
 
 
+def test_snapshot_write_failure_invalidates_previous_projection(tmp_path: Path, monkeypatch) -> None:
+    """A failed publish must not leave an older snapshot looking current."""
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    project = _project(tmp_path)
+    device = DeviceMediaStore()
+    roots = [str(tmp_path)]
+    media = tmp_path / "A001.mov"
+    media.write_bytes(b"media")
+
+    media_inventory_task_runtime._write_inventory_snapshot(
+        device,
+        project.workspace_id,
+        project.project_id,
+        roots,
+        media_files=[media],
+    )
+    snapshot_path = media_inventory_task_runtime._snapshot_path(
+        device, project.workspace_id, project.project_id
+    )
+    assert snapshot_path.is_file()
+
+    def fail(*_args, **_kwargs):
+        raise OSError("snapshot storage unavailable")
+
+    monkeypatch.setattr(media_inventory_task_runtime, "_atomic_json", fail)
+    try:
+        media_inventory_task_runtime._write_inventory_snapshot_or_invalidate(
+            device,
+            project.workspace_id,
+            project.project_id,
+            roots,
+            media_files=[media],
+        )
+    except media_inventory_task_runtime.InventorySnapshotPublishError as error:
+        assert "inventory 快照发布失败" in str(error)
+    else:  # pragma: no cover - defensive assertion for the injected failure
+        raise AssertionError("snapshot write unexpectedly succeeded")
+
+    assert not snapshot_path.exists()
+
+
 def test_explicit_rescans_get_unique_requests_and_project_tasks_stay_path_free(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
     media_root = (tmp_path / "media").resolve()

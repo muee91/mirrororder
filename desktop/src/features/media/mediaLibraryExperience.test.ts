@@ -28,6 +28,16 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("playbackForItem(host, projectId, item, playbackByMedia[item.media_id])");
   });
 
+  it("does not let an older refresh overwrite a newer project or inventory snapshot", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const reloadToken = useRef(0)");
+    expect(workbench).toContain("const token = ++reloadToken.current");
+    expect(workbench).toContain("if (token !== reloadToken.current) return;");
+    expect(workbench).toContain("if (token === reloadToken.current) setMessage(errorMessage(error));");
+    expect(workbench).toContain("if (token === reloadToken.current) setBusy(false);");
+    expect(workbench).toContain("return () => { reloadToken.current += 1; }");
+  });
+
   it("keeps inspector playback explicit while thumbnail hover preview remains best-effort", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("controls");

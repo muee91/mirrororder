@@ -245,7 +245,13 @@ export function ReviewWorkspace({
                   baseUrl={baseUrl}
                   projectId={project.project_id}
                   groupId={selectedTake.group_id}
-                  onDecisionChange={() => refresh().then(() => undefined)}
+                  onDecisionChange={async () => {
+                    await refresh().catch(() => {
+                      // The decision write already succeeded. The panel owns
+                      // the write result; a read-back failure must not create
+                      // an unhandled rejection or roll the UI back to stale data.
+                    });
+                  }}
                 />
                 {selectedAttention?.hasAttention ? (
                   <section className="take-attention-summary" aria-label={`${takeDisplayLabel(selectedTake)} 需关注`}>

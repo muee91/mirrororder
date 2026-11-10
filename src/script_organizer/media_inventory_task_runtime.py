@@ -21,6 +21,10 @@ _TASK_TYPE = "media_inventory_scan"
 _MAX_INVENTORY_FILES = 12000
 
 
+class InventorySnapshotPublishError(RuntimeError):
+    """The device state committed but its read-model snapshot did not publish."""
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -140,6 +144,43 @@ def _write_inventory_snapshot(
     }
     _atomic_json(_snapshot_path(device, workspace_id, project_id), payload)
     return payload
+
+
+def _write_inventory_snapshot_or_invalidate(
+    device: DeviceMediaStore,
+    workspace_id: str,
+    project_id: str,
+    roots: Iterable[str],
+    *,
+    media_rows: Iterable[tuple[str, str]] | None = None,
+    media_files: Iterable[Path] | None = None,
+) -> dict[str, Any]:
+    """Publish a snapshot or remove the previous one on write failure.
+
+    DeviceMediaStore commits bindings/roots before the inventory projection is
+    written. Keeping an older snapshot after a failed write would make the
+    read model report stale media as current. Removing it makes the failure
+    fail-closed: ``inventory_payload`` reports ``scan_required`` until a
+    durable snapshot is successfully rebuilt.
+    """
+    path = _snapshot_path(device, workspace_id, project_id)
+    try:
+        return _write_inventory_snapshot(
+            device,
+            workspace_id,
+            project_id,
+            roots,
+            media_rows=media_rows,
+            media_files=media_files,
+        )
+    except Exception as error:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise InventorySnapshotPublishError(
+            "素材绑定已提交，但 inventory 快照发布失败；请重新扫描"
+        ) from error
 
 
 def _read_inventory_snapshot(
@@ -472,7 +513,7 @@ def install_media_inventory_task_runtime() -> None:
         if media_rows is not None:
             media_rows.extend(captured_rows)
         state = store.project_snapshot(workspace_id, project_id)
-        _write_inventory_snapshot(
+        _write_inventory_snapshot_or_invalidate(
             store,
             workspace_id,
             project_id,
@@ -504,7 +545,7 @@ def install_media_inventory_task_runtime() -> None:
         if media_files is not None:
             media_files.extend(captured_files)
         state = store.project_snapshot(workspace_id, project_id)
-        _write_inventory_snapshot(
+        _write_inventory_snapshot_or_invalidate(
             store,
             workspace_id,
             project_id,
@@ -599,6 +640,15 @@ def install_media_inventory_task_runtime() -> None:
             manager._update(config, task_id, status="cancelled", stage="cancelled", message="素材扫描已取消；原有本机素材绑定保持不变")
         except ResourceCancelled:
             manager._update(config, task_id, status="cancelled", stage="cancelled", message="等待素材扫描资源时已取消")
+        except InventorySnapshotPublishError as error:
+            manager._update(
+                config,
+                task_id,
+                status="failed",
+                stage="failed",
+                error=str(error),
+                message="素材绑定已提交，但索引快照发布失败；请重新扫描",
+            )
         except Exception as error:
             manager._update(config, task_id, status="failed", stage="failed", error=str(error), message="素材扫描失败；原有本机素材绑定保持不变")
         finally:

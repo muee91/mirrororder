@@ -388,6 +388,7 @@ async function invokeWithTimeout<T>(command: string, args: Record<string, unknow
 const REVIEW_MODEL_TTL_MS = 1_200;
 
 const reviewModelCache = new Map<string, { expiresAt: number; promise: Promise<ReviewModelPayload> }>();
+const reviewModelRefreshInFlight = new Map<string, Promise<ReviewModelPayload>>();
 
 function reviewModelCacheKey(baseUrl: string, projectId: string): string {
   return `${baseUrl}\u0000${projectId}`;
@@ -402,16 +403,25 @@ function reviewModelCacheKey(baseUrl: string, projectId: string): string {
 export function invalidateReviewModelCache(baseUrl?: string, projectId?: string): void {
   if (baseUrl === undefined) {
     reviewModelCache.clear();
+    reviewModelRefreshInFlight.clear();
     return;
   }
   const prefix = `${normalizeReviewModelBaseUrl(baseUrl)}\u0000`;
   if (projectId === undefined) {
     for (const key of [...reviewModelCache.keys()]) {
-      if (key.startsWith(prefix)) reviewModelCache.delete(key);
+      if (key.startsWith(prefix)) {
+        reviewModelCache.delete(key);
+        reviewModelRefreshInFlight.delete(key);
+      }
+    }
+    for (const key of [...reviewModelRefreshInFlight.keys()]) {
+      if (key.startsWith(prefix)) reviewModelRefreshInFlight.delete(key);
     }
     return;
   }
-  reviewModelCache.delete(`${prefix}${projectId}`);
+  const key = `${prefix}${projectId}`;
+  reviewModelCache.delete(key);
+  reviewModelRefreshInFlight.delete(key);
 }
 
 function normalizeReviewModelBaseUrl(baseUrl: string): string {
@@ -492,20 +502,43 @@ export class HostConnection {
     invalidateReviewModelCache(this.baseUrl, projectId);
   }
 
-  async reviewModel(projectId: string): Promise<ReviewModelPayload> {
+  async reviewModel(projectId: string, options?: { force?: boolean }): Promise<ReviewModelPayload> {
     const project = normalizedProjectId(projectId, "读取 review-model ");
     const key = reviewModelCacheKey(this.baseUrl, project);
+    if (options?.force) {
+      const activeRefresh = reviewModelRefreshInFlight.get(key);
+      if (activeRefresh) return cloneReviewModelPayload(await activeRefresh);
+      // A user-triggered refresh must bypass the short read cache even when a
+      // previous workspace mounted moments ago. Invalidation is scoped to this
+      // host/project, so another project's in-flight read remains shareable.
+      this.invalidateReviewModel(project);
+    }
     const cached = reviewModelCache.get(key);
     if (cached && cached.expiresAt > Date.now()) {
       return cloneReviewModelPayload(await cached.promise);
     }
     const promise = this.fetchReviewModel(project);
     reviewModelCache.set(key, { promise, expiresAt: Date.now() + REVIEW_MODEL_TTL_MS });
+    if (options?.force) {
+      reviewModelRefreshInFlight.set(key, promise);
+      void promise.then(
+        () => {
+          if (reviewModelRefreshInFlight.get(key) === promise) reviewModelRefreshInFlight.delete(key);
+        },
+        () => {
+          if (reviewModelRefreshInFlight.get(key) === promise) reviewModelRefreshInFlight.delete(key);
+        },
+      );
+    }
     promise.catch(() => {
       // A rejected request must not stay cached: the next caller has to retry.
       if (reviewModelCache.get(key)?.promise === promise) reviewModelCache.delete(key);
     });
     return cloneReviewModelPayload(await promise);
+  }
+
+  refreshReviewModel(projectId: string): Promise<ReviewModelPayload> {
+    return this.reviewModel(projectId, { force: true });
   }
 
   private async fetchReviewModel(project: string): Promise<ReviewModelPayload> {

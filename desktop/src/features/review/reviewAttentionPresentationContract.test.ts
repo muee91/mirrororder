@@ -8,6 +8,7 @@ function read(relative: string): string {
 const attention = read("./reviewAttention.ts");
 const review = read("./ReviewWorkspace.tsx");
 const decision = read("./ReviewDecisionPanel.tsx");
+const snapshot = read("../material-script/useReviewModelSnapshot.ts");
 const inspector = read("../material-script/TakeInspector.tsx");
 const home = read("../projects/ProjectHome.tsx");
 
@@ -42,5 +43,12 @@ describe("review attention and decision presentation contract", () => {
     expect(inspector).not.toContain("EditorialDecisionPanel");
     expect(inspector).not.toContain("showEditorial");
     expect(attention).toContain("最终决定后收到新意见");
+  });
+
+  it("refreshes Review from the authority without allowing stale or rejected reads to escape", () => {
+    expect(snapshot).toContain("connection.refreshReviewModel(projectId)");
+    expect(snapshot).toContain("const loadToken = useRef(0)");
+    expect(snapshot).toContain("if (token !== loadToken.current) return");
+    expect(review).toContain("await refresh().catch(() => {");
   });
 });

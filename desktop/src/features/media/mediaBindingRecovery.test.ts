@@ -26,8 +26,11 @@ describe("Desktop media reconnect recovery", () => {
     expect(source).toContain("项目记住媒体身份；这里仅告诉当前 Mac 去哪里找到对应文件。");
     expect(source).toContain("这不会新建或更改项目中的媒体身份");
     expect(source).toContain("不会修改共享项目");
-    expect(source).toContain("旧位置和绑定会保留到新扫描成功后才替换");
-    expect(source).toContain("失败或取消不会破坏当前连接");
+    expect(source).toContain("旧位置和绑定通常会保留到新扫描成功后才替换");
+    expect(source).toContain("索引快照发布失败");
+    expect(source).toContain("绑定已提交但连接结果需要重新扫描恢复");
+    expect(source).toContain("应用不会自动回滚设备绑定");
+    expect(source).not.toContain("失败或取消不会破坏当前连接");
     expect(source).toContain("已校验素材会按内容身份重新连接");
     expect(source).toContain("旧项目只有文件名线索的素材仍会要求你逐项确认");
     expect(source).toContain("confirmProvisionalMediaBinding");
@@ -44,6 +47,9 @@ describe("Desktop media reconnect recovery", () => {
     expect(source).toContain("完成后连接结果会自动刷新");
     expect(source).toContain("当前已有素材扫描正在进行");
     expect(source).toContain("error.status === 409");
+    expect(source).toContain("isInventorySnapshotPublishFailure");
+    expect(source).toContain("绑定已提交，但索引快照发布失败；连接结果暂不可用，请重新扫描");
+    expect(source).not.toContain("${current.error || current.message || \"未知错误\"}；原有本机素材连接保持不变。");
     expect(source).not.toContain("扫描完成后点“刷新结果”");
   });
 

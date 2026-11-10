@@ -165,6 +165,38 @@ describe("HostConnection", () => {
     expect(browserFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("forces a fresh review-model read when a workspace explicitly refreshes", async () => {
+    const payload = {
+      contract_version: "review.v1",
+      project: { project_id: "p_force", name: "Episode 1", input_kind: "fcpxml", stats: {}, local_media: {}, issues: [] },
+      revisions: { analysis: "a1", automation_analysis: "a1", automation_updated_at: "", review: 3 },
+      capabilities: {},
+      summary: { automation: {}, script_gaps: 0, take_groups: 1, episodes: 1 },
+      episodes: [],
+      take_groups: [],
+      script_gaps: [],
+      review_state: {},
+    };
+    let reads = 0;
+    const browserFetch = vi.fn(async () => {
+      reads += 1;
+      return jsonResponse({ ...payload, summary: { ...payload.summary, take_groups: reads } });
+    });
+    vi.stubGlobal("fetch", browserFetch);
+
+    const host = new HostConnection();
+    await expect(host.reviewModel("p_force")).resolves.toMatchObject({ summary: { take_groups: 1 } });
+    await expect(host.reviewModel("p_force")).resolves.toMatchObject({ summary: { take_groups: 1 } });
+    const [fresh, shared] = await Promise.all([
+      host.refreshReviewModel("p_force"),
+      host.refreshReviewModel("p_force"),
+    ]);
+    expect(fresh.summary.take_groups).toBe(2);
+    expect(shared.summary.take_groups).toBe(2);
+
+    expect(browserFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("drops the cached review model when a human placement write is attempted", async () => {
     const payload = {
       contract_version: "review.v1",
