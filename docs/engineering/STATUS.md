@@ -1,21 +1,29 @@
 # Engineering Status
 
-更新时间：2026-11-08
+更新时间：2026-11-10
 
-## 当前产品方向（2026-11-08）
+## 当前产品方向（2026-11-10）
 
 - 镜序正式收窄为**短剧多机位剪辑前决策台**，交付物是可信的剪辑前决策底稿，不是完整 NLE。
-- 当前远端 `main`：`bb8cd93`（`bb8cd930e882e1f029400713ae916ee6442b3a3e`）；CI run [42469404236](https://github.com/muee91/mirrororder/actions/runs/42469404236) 已通过（Python、Linux/macOS Desktop jobs 全部通过）。
-- 已落地：evidence sidecar contract、路径安全校验、可选 PySceneDetect provider、OpenTimelineIO interop boundary、可选 provider 能力诊断、场记状态统一投影与筛选、跨集同名场景隔离、正式 `M_` 归档指纹复核。
+- 当前远端 `main`：`ed5f16d3`（`ed5f16d3b913bbc101e3a9ac857d334af8f1b1c2`）；此前记录的 CI run [42469404236](https://github.com/muee91/mirrororder/actions/runs/42469404236) 对应旧基线，本批未触发或复核新基线 CI。
+- 已落地：evidence sidecar contract、路径安全校验、可选 PySceneDetect provider、OpenTimelineIO interop boundary、可选 provider 能力诊断、场记状态统一投影与筛选、跨集同名场景隔离、正式 `M_` 归档指纹复核；媒体审阅/时间线恢复的缓存、并发刷新与失败隔离；素材扫描快照发布失败时的 fail-closed 语义；媒体探测失败显式状态和可选帧率/时码/旋转元数据。
 - 仍未完成：真实素材五步主链复验、受控 multicam 符号链接迁移、Ubuntu/Mac 模型运行时开箱验证。
 - 新的技术选择必须遵守：Provider 只能产生 evidence/proposal，不能写 Review placement、Editorial Decision 或 Rust Timeline authority。
 
 ## 当前基线
 
-- 仓库只维护 `main`；当前远端基线 HEAD `bb8cd93`，与 GitHub `origin/main` 一致。
-- 本轮远端 CI：**PASS**（run 42469404236，Python / Linux Desktop / macOS Desktop jobs 全部通过）。
+- 仓库只维护 `main`；当前远端基线 HEAD `ed5f16d3`，与 GitHub `origin/main` 一致（2026-11-10 核对）。
+- 当前基线 CI：**NOT RUN / 未复核**；不能把旧基线 run 42469404236 当作 `ed5f16d3` 的证据。本批未触发 CI。
 - Desktop 仍处于 Product Recovery 之后的**可交付化阶段**：代码结构恢复已收口，缺口在发布工程、授权与真实可用性证据（顺序见 `BACKLOG.md` Phase 0/1/2）。
 - 一级工作区固定：`素材 / 剧本 / 时间线 / 审阅`；原则仍是**共享对象，不共享工作流**。
+
+## 2026-11-10 媒体审阅、时间线恢复与探测元数据边界（目标基线已落地，自动 gate 未在本批重跑）
+
+- **审阅读模型恢复**：Host 侧 review-model 使用跨工作区短 TTL 缓存，并合并同一项目的强制刷新；切换项目或连续刷新时用 load token 丢弃过期响应，避免旧请求覆盖当前画面。
+- **时间线读路径隔离**：Review context 与 assembly proposal 改用 `Promise.allSettled` 独立加载；一侧失败时保留另一侧及已保存 Timeline，并显示可行动的分项错误，而不是清空整个编辑器。
+- **素材扫描失败闭环**：设备绑定提交与 inventory 快照发布分离；快照写失败会删除旧快照并报告“绑定已提交、请重新扫描”，读模型进入 `scan_required`，避免继续展示陈旧连接结果。取消通常保留旧绑定，失败边界已在素材恢复面说明。
+- **媒体探测语义**：ffprobe 失败不再伪造 1 秒时长；clip 记录 `probe_failed`、错误信息及可选 `fps`、`timecode`、`rotation`，无效媒体不会生成假的时间线跨度。新增 metadata/probe failure 定向测试覆盖。
+- **下一步**：在真实素材可用后重跑五步主链（看片、人工决定、组接、外部 NLE 导入），再补完整自动 gate 与真实 codec/A/V 同步证据；签名、公证和模型随包仍未完成。
 
 ## 2026-10-27 媒体状态与素材库读路径修复（工作树，已实跑验证）
 
@@ -163,7 +171,7 @@
 - **一处测试实质改善**：`test_automation_creative_boundary.py` 从源码 grep 重写为真实调用 `resolve_project`/`ReviewStore`/`EditorialStore` 的行为断言。
 - **第一份用户文档** `docs/user-guide.md`：抽查其界面承诺（`Shift+F10`/`ContextMenu`、工作区重新定位、状态中心）均在源码中存在。
 
-仍不完整（不要当成已解决）：
+仍不完整（截至 2026-10-25 的历史快照；当前基线后续状态以本文顶部为准，不要把历史快照当作当前结论）：
 
 - 显式 `--host 0.0.0.0` 时**读接口与素材 range 下载仍无鉴权**（实测可取回 workspace 数据）。
 - `release_gates` 的强制逻辑未变：`check-baseline.mjs:33-35` 仍只断言字符串等于 `"required"`；18 个门中 9 个 macOS/Windows 原生门零实现。

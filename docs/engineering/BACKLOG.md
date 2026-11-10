@@ -65,11 +65,11 @@ CI green 不能替代这一条；这一条也不能替代 CI green。
 
 ## Phase 0 · 止血与授权（1 个工作日，阻塞后面一切）
 
-- [ ] **推送并打 tag**：`main` 领先 `origin/main` 31 个提交（含符号链接拒收、registry 写串行化、journal 撕裂修复、局域网鉴权收口）。远端 CI 最后一次运行属于 `23bd253`（09-06），当前 HEAD 没有任何 CI 证据。
-- [ ] **LICENSE 落地（owner 已决策：开源；许可证选 Apache-2.0，2026-10-26 确认）**：LICENSE/NOTICE 与 `pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地。剩余：补齐 `vendor/multicam-audio-sync/` 移植溯源（自述移植自 AudioAlign / syncdrop / Zelqivo-Video-Program，无 upstream 版本与许可记录）、`pycryptodome` 解密剪映 draft 容器的用途注记、构建生成 THIRD_PARTY 清单。
+- [ ] **推送并打 tag**：当前远端 `main` 已推进到 `ed5f16d3`（2026-11-10）；本批仅同步基线文档，未触发 CI 或创建 tag。签名、公证与可分发发布仍未完成。
+- [ ] **LICENSE / 第三方清单**（owner 已决策：开源；许可证选 Apache-2.0，2026-10-26 确认）：LICENSE/NOTICE 与 `pyproject.toml` 核心依赖声明已于 `5f8ed25` 落地。剩余：补齐 `vendor/multicam-audio-sync/` 移植溯源（自述移植自 AudioAlign / syncdrop / Zelqivo-Video-Program，无 upstream 版本与许可记录）、`pycryptodome` 解密剪映 draft 容器的用途注记、构建生成 THIRD_PARTY 清单。
 - [ ] **vendored 移植溯源**：`multicam-audio-sync` 的算法自述移植自 AudioAlign / syncdrop / Zelqivo-Video-Program 三个上游仓库，无 upstream 版本与许可记录；`pycryptodome` 用于解密剪映加密 draft 容器的用途需法务判断。
-- [ ] **Python 依赖声明**：`pyproject.toml` 无 `dependencies`，全仓无根 `requirements.txt`，但 core 实际使用 numpy（12 文件）/ pandas（8）/ scipy（6）。目标是干净 checkout 能装出可运行环境。
-- [ ] **Cargo.lock 入库**：两个 lock 目前只被 `.git/info/exclude`（本地文件，不随仓库分发）排除，CI 与任何新 clone 都会重新解析 `tauri = "2"` 的任意 2.x。同批把 `crates/timeline-core/target/`、`gen/` 的忽略规则落进 `desktop/.gitignore`。
+- [x] **Python 依赖声明**（2026-10-26 已完成）：`pyproject.toml` 已声明 numpy / pandas / scipy 核心依赖及可选 ASR、视觉、镜头检测、时间线、开发依赖；仍需决定可选模型与运行时是否随包。
+- [x] **Cargo.lock 入库**（2026-11-08 已完成）：`desktop/src-tauri/Cargo.lock` 与 `desktop/src-tauri/crates/timeline-core/Cargo.lock` 已纳入仓库，并由 parity CI 使用锁定解析；portable runtime 与发布 gate 仍待完成。
 
 ## Phase 1 · 可分发（发布工程）
 
@@ -111,8 +111,8 @@ PySceneDetect → 波形收缩 的次序，每项都要带一条"打包后开箱
 
 - [ ] **五步主链真机验收**（在本机 `projects/` 下的在制真实项目上跑，项目数据不入库）：项目恢复与切换、大量 Take 搜索/滚动、A/B/C 多机位、场记→素材→剧本→审阅→Timeline 连续上下文、placement revision conflict、Viewer/media binding、Timeline insert/overwrite/replace/undo/redo/persistence、FCPXML/Premiere XML 导出、1280 与宽屏、light/dark、外部拖放。
 - [x] **真实 Host surface gate 与合成回归**：`ux-real.mjs` 已有断言、稳定退出码与归档，修正 compact Take 行选择器并验证实际换 Take；项目参数从 Host 读取真实摘要。播放是独立必需项，缺媒体仍退出 1。合成 ReviewWorkspace/WebM 行为回归已配置进 CI，真实数据不进入源码或 CI；原生应用与完整五步主链仍由上一条验收拥有。当前 owner 暂无真实素材，等素材恢复后继续，不能以合成回归替代。
-- [ ] **消灭主链上的重复重拉**：review-model 无共享缓存，`GoldenSlateWorkbench.tsx:324,347`、`ScriptWorkspace.tsx:124`、`ReviewWorkspace.tsx:74`、`MaterialTakeView` 各自 mount 即全量拉；`ProjectHome.tsx:64-72` 打开项目页对每个项目并发拉完整 payload；`ProjectWorkbench.tsx:227` 的 canvasKey 含 operatorRevision，改操作者即整画布 remount。
-- [ ] **补齐失败态**：`EditorMonitors.tsx:224,232` 双 monitor 无播放失败态（看片到一半黑屏不提示）；全局只有一条 7 秒消失的顶部 message，409 placement 冲突信息容易被错过。
+- [ ] **消灭主链上的重复重拉**：review-model 已有 module-scoped TTL cache、强制刷新去重与 stale-response token guard（2026-11-10）；仍需量测大项目冷缓存、ProjectHome 多项目并发及其余 surface 的真实读路径开销，再决定是否继续拆分 read model。
+- [x] **补齐失败态**（2026-10-27 已完成 UI 状态层）：EditorMonitors、Take Inspector、Golden Slate 与素材库右栏均使用共享播放失败分类和重试/恢复入口；仍需真实素材 codec、声音与 A/V 同步验收，不能以 UI gate 代替。
 - [ ] **时间线区可维护性**：~~6 处 `{[key: string]: any}` 整体解构~~（2026-10-26 已清零：面板 props 全部由 hook 返回类型的 `Pick` 推导，内层 any 一并去除）；剩余缺口是 editor 域 aria 仅 5 处、无键盘导航——这是唯一有写权限的核心区。
 - [ ] **Timeline 规模上限实测**：每次 mutation/undo 返回全量 snapshot、单次编辑 3 份 project clone、`undo_stack: Vec<TimelineProject>` 保留每次编辑前整份 project。短剧 clip 量级下的内存与卡顿需要实测数字，不是猜测。
 
