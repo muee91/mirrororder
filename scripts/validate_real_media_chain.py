@@ -78,7 +78,7 @@ def _probe(path: Path) -> dict[str, Any]:
             "-show_entries",
             "format=duration:format_tags=creation_time",
             "-show_entries",
-            "stream=index,codec_type,r_frame_rate,sample_rate,width,height:stream_tags=rotate,timecode",
+            "stream=index,codec_type,codec_name,r_frame_rate,sample_rate,width,height:stream_tags=rotate,timecode",
             "-of",
             "json",
             str(path),
@@ -104,12 +104,36 @@ def _assert_declared_metadata(spec: dict[str, Any], probe: dict[str, Any]) -> No
             f"frame rate mismatch for {spec['file']}: expected {expected_rate}, "
             f"got {video.get('r_frame_rate')}"
         )
+    expected_video_codec = str(spec.get("video_codec", "libx264"))
+    expected_video_codec = {"libx264": "h264", "libvpx-vp9": "vp9"}.get(expected_video_codec, expected_video_codec)
+    if str(video.get("codec_name", "")) != expected_video_codec:
+        raise AssertionError(
+            f"video codec mismatch for {spec['file']}: expected {expected_video_codec}, "
+            f"got {video.get('codec_name')}"
+        )
+    try:
+        duration = float((probe.get("format") or {}).get("duration", 0) or 0)
+        expected_duration = float(spec["duration"])
+    except (TypeError, ValueError):
+        raise AssertionError(f"duration metadata missing for {spec['file']}") from None
+    if abs(duration - expected_duration) > 0.15:
+        raise AssertionError(
+            f"duration mismatch for {spec['file']}: expected {expected_duration}, got {duration}"
+        )
     audio = spec.get("audio") if isinstance(spec.get("audio"), dict) else None
     audio_stream = next((row for row in streams if row.get("codec_type") == "audio"), None)
     if bool(audio) != bool(audio_stream):
         raise AssertionError(f"audio presence mismatch for {spec['file']}")
     if audio and str(audio_stream.get("sample_rate", "")) != str(audio["sample_rate"]):
         raise AssertionError(f"audio sample rate mismatch for {spec['file']}")
+    if audio:
+        expected_audio_codec = str(audio.get("codec", "aac"))
+        expected_audio_codec = expected_audio_codec.removeprefix("lib")
+        if str(audio_stream.get("codec_name", "")) != expected_audio_codec:
+            raise AssertionError(
+                f"audio codec mismatch for {spec['file']}: expected {expected_audio_codec}, "
+                f"got {audio_stream.get('codec_name')}"
+            )
     if spec.get("timecode") and str(spec["timecode"]) not in json.dumps(probe, ensure_ascii=False):
         raise AssertionError(f"timecode metadata missing for {spec['file']}")
     if spec.get("rotate"):
@@ -154,11 +178,20 @@ def _materialize_media(specs: list[dict[str, Any]], media_root: Path) -> dict[st
         command.extend(["-t", str(spec["duration"]), "-map", "0:v:0"])
         if audio:
             command.extend(["-map", "1:a:0"])
-        command.extend(["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", rate])
+        video_codec = str(spec.get("video_codec", "libx264"))
+        command.extend(["-c:v", video_codec])
+        if video_codec == "libx264":
+            command.extend(["-preset", "ultrafast"])
+        command.extend(["-pix_fmt", "yuv420p", "-r", rate])
         if audio:
             command.extend(["-c:a", str(audio.get("codec", "aac")), "-ar", str(audio["sample_rate"])])
         if spec.get("timecode"):
-            command.extend(["-timecode", str(spec["timecode"])])
+            if spec.get("rotate"):
+                # Matroska keeps rotation and an explicit stream TIMECODE tag
+                # together; the global -timecode muxer option drops the latter.
+                command.extend(["-metadata:s:v:0", f"timecode={spec['timecode']}"])
+            else:
+                command.extend(["-timecode", str(spec["timecode"])])
         # Matroska retains this tag as ROTATE=90 while MOV/MP4 may normalize it
         # into side data. It is intentionally just metadata evidence here.
         if spec.get("rotate"):
@@ -618,6 +651,15 @@ def validate(output: Path) -> dict[str, Any]:
         raise AssertionError(f"assembly did not preserve slate facts: {assembly_block}")
 
     manifest = build_selection_manifest(config)
+    manifest_rows = {
+        (segment["script_segment"], row["group_id"]): row
+        for segment in manifest["segments"]
+        for row in segment.get("groups", [])
+    }
+    if manifest_rows[("E1_SC1_S1", "G_E1_SC1_T1")]["state"] != "best":
+        raise AssertionError("final Editorial Decision did not promote the selected Take")
+    if manifest_rows[("E1_SC1_S1", "G_E1_SC1_T2")]["state"] != "keep":
+        raise AssertionError("reviewer opinion or NG slate incorrectly became Best delivery authority")
     classic_report = export(config)
     request = _timeline_request(config, clips)
     fcpx_report = export_timeline_delivery(config, request, expected_project_id=project.project_id)

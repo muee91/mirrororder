@@ -3,7 +3,9 @@
 `chain.json` describes a reproducible synthetic production fixture. It reuses the
 logical script, Take, placement, slate, audit, and editorial facts from the
 golden mini-drama scenario and adds seven generated camera files with explicit
-frame rates, timecode, audio sample rates, and one rotation tag.
+frame rates, short and long Takes (up to 45 seconds), H.264/MPEG-4/VP9 video,
+AAC/PCM/AC-3/Opus audio, no-audio media, 44.1/48 kHz sample rates, and a
+rotation+timecode combination.
 
 The files are generated into a temporary output directory by
 `scripts/validate_real_media_chain.py`; no media bytes are checked into Git.

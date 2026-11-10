@@ -68,26 +68,32 @@
         "codec": "aac",
         "sample_rate": 48000
       },
-      "rotate": 90
+      "rotate": 90,
+      "timecode": "02:10:00:00"
     },
     {
       "clip_id": "C_E2_SC1_T1_A",
-      "file": "A/E2_SC1_T1_A.mov",
+      "file": "A/E2_SC1_T1_A.avi",
       "camera": "A",
       "duration": 6.0,
       "frame_rate": "24",
+      "video_codec": "mpeg4",
       "audio": {
-        "codec": "aac",
+        "codec": "ac3",
         "sample_rate": 48000
       }
     },
     {
       "clip_id": "C_UNPLACED",
-      "file": "A/UNPLACED.mp4",
+      "file": "A/UNPLACED.mkv",
       "camera": "A",
-      "duration": 4.0,
+      "duration": 45.0,
       "frame_rate": "24",
-      "audio": null
+      "video_codec": "libvpx-vp9",
+      "audio": {
+        "codec": "libopus",
+        "sample_rate": 48000
+      }
     }
   ]
 }
