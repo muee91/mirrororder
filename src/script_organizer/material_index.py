@@ -908,6 +908,7 @@ def analyze(
     missing_transcript_groups = [group.group_id for group in groups if not any(member.clip_id in transcripts for member in group.members)]
     unusable_transcript_groups = list(missing_transcript_groups)
     missing_media = [clip.clip_id for clip in clips if not clip.exists]
+    probe_failed = [clip.clip_id for clip in clips if clip.probe_status == "probe_failed"]
     script_issues = [] if script_segments else ["没有解析出剧本段落"]
     matched_group_ids = {
         group_id for group_id, candidates in matches.items() if any(candidate.confidence != "context_only" for candidate in candidates)
@@ -924,6 +925,7 @@ def analyze(
     script_gaps = _script_gap_metadata(script_segments, matches, review)
     errors = {
         "missing_media": missing_media,
+        "probe_failed": probe_failed,
         "missing_transcripts": missing_transcript_groups,
         "unusable_transcripts": unusable_transcript_groups,
         "script_issues": script_issues,
@@ -949,6 +951,7 @@ def analyze(
             "multicam_groups": sum(group.kind == "multicam" for group in groups),
             "single_camera_groups": sum(group.kind == "single-camera" for group in groups),
             "missing_media": len(missing_media),
+            "probe_failed": len(probe_failed),
             "missing_transcripts": len(missing_transcript_groups),
             "unusable_transcripts": len(unusable_transcript_groups),
             "cached_transcript_clips": len(transcripts),

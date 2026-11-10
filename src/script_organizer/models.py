@@ -20,6 +20,15 @@ class Clip:
     source_start: Fraction = Fraction(0)
     source_end: Fraction | None = None
     media_id: str = ""
+    # Media-directory probes are intentionally optional so FCPXML and older
+    # callers can continue constructing Clips positionally.  ``unprobed`` is
+    # distinct from ``ok`` and ``probe_failed``: a path can exist without
+    # being a decodable media asset.
+    probe_status: str = "unprobed"
+    probe_error: str = ""
+    fps: float | None = None
+    timecode: str = ""
+    rotation: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)

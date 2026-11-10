@@ -44,10 +44,16 @@ def _clip_for_member(member: dict[str, Any], media_path: str) -> Clip:
         timeline_start=Fraction(str(member.get("timeline_start", 0) or 0)),
         timeline_end=Fraction(str(member.get("timeline_end", 0) or 0)),
         duration=duration,
-        exists=bool(media_path and Path(media_path).is_file()),
+        exists=bool(member.get("exists", bool(media_path and Path(media_path).is_file())))
+        and bool(media_path and Path(media_path).is_file()),
         source_start=source_start,
         source_end=source_end,
         media_id=str(member.get("media_id", "") or ""),
+        probe_status=str(member.get("probe_status", "unprobed") or "unprobed"),
+        probe_error=str(member.get("probe_error", "") or ""),
+        fps=float(member["fps"]) if member.get("fps") is not None else None,
+        timecode=str(member.get("timecode", "") or ""),
+        rotation=int(member["rotation"]) if member.get("rotation") is not None else None,
     )
 
 

@@ -125,11 +125,19 @@ def _clip_from_index(item: dict[str, Any], media_path: str) -> Clip:
         timeline_start=timeline_start,
         timeline_end=timeline_end,
         duration=duration,
-        exists=bool(media_path and Path(media_path).is_file()),
+        # Preserve the probe result from material_index.  Checking only the
+        # path would turn a present-but-undecodable clip back into exists=True.
+        exists=bool(item.get("exists", bool(media_path and Path(media_path).is_file())))
+        and bool(media_path and Path(media_path).is_file()),
         source_asset_id=str(item.get("source_asset_id", "") or ""),
         source_start=source_start,
         source_end=source_end,
         media_id=str(item.get("media_id", "") or ""),
+        probe_status=str(item.get("probe_status", "unprobed") or "unprobed"),
+        probe_error=str(item.get("probe_error", "") or ""),
+        fps=float(item["fps"]) if item.get("fps") is not None else None,
+        timecode=str(item.get("timecode", "") or ""),
+        rotation=int(item["rotation"]) if item.get("rotation") is not None else None,
     )
 
 
