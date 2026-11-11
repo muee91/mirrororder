@@ -23,7 +23,9 @@ jobs:
 
   desktop-linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Keep dependency mirrors from consuming the entire job budget while
+    # leaving enough time for the Rust/Tauri checks on a cold runner.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,8 +41,15 @@ jobs:
         run: python -m pip install --upgrade pip pytest
       - name: Install Tauri Linux dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          set -euo pipefail
+          apt_options=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=60
+            -o Acquire::https::Timeout=60
+          )
+          timeout --foreground 8m sudo apt-get "${apt_options[@]}" update
+          timeout --foreground 12m sudo env DEBIAN_FRONTEND=noninteractive apt-get "${apt_options[@]}" install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Install Desktop dependencies
         working-directory: desktop
         run: npm ci --no-audit --no-fund
@@ -79,7 +88,7 @@ jobs:
         working-directory: desktop
         run: npm run build
       - name: Test Timeline Core
-        run: cargo test --locked --manifest-path desktop/src-tauri/crates/timeline-core/Cargo.toml
+        run: cargo test --manifest-path desktop/src-tauri/crates/timeline-core/Cargo.toml
       - name: Test Rust/Python timebase parity
         env:
           MIRRORORDER_TIMEBASE_BIN: desktop/src-tauri/crates/timeline-core/target/debug/mirrororder-timebase
@@ -87,7 +96,7 @@ jobs:
           cargo build --locked --bin mirrororder-timebase --manifest-path desktop/src-tauri/crates/timeline-core/Cargo.toml
           python -m pytest -q tests/test_timebase_rust_parity.py
       - name: Test Tauri Host
-        run: cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
       - name: Check Tauri Host
         run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml
 
@@ -112,8 +121,8 @@ jobs:
         working-directory: desktop
         run: npm run build
       - name: Test Timeline Core
-        run: cargo test --locked --manifest-path desktop/src-tauri/crates/timeline-core/Cargo.toml
+        run: cargo test --manifest-path desktop/src-tauri/crates/timeline-core/Cargo.toml
       - name: Test Tauri Host
-        run: cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
       - name: Check Tauri Host
         run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml
