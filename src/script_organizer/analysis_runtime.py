@@ -10,8 +10,13 @@ from typing import Any, Callable
 from .asr_runtime import ASRRuntime, script_asr_prompt
 from .config import ProjectConfig
 from .fcpxml_reader import build_multicam_groups, read_fcpxml
-from .material_index import ANALYSIS_SNAPSHOT_FILENAME, analyze as _analyze_core
+from .material_index import (
+    ANALYSIS_SNAPSHOT_FILENAME,
+    _reconcile_previous_clip_identity,
+    analyze as _analyze_core,
+)
 from .media_reader import read_media_directory
+from .media_identity import resolve_fcpxml_clips
 from .review_store import ReviewStore
 from .resource_scheduler import ResourceCancelled
 from .source_descriptor import redact_device_media_paths, shared_source_descriptor
@@ -54,11 +59,28 @@ def _read_json(path: Path, fallback: object) -> object:
         return fallback
 
 
-def _clips_for(config: ProjectConfig, cancelled: Callable[[], bool] | None = None):
+def _clips_for(
+    config: ProjectConfig,
+    cancelled: Callable[[], bool] | None = None,
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    previous_index: dict[str, Any] | None = None,
+    device_store: Any | None = None,
+    strict_device_context: bool = False,
+):
     if config.is_fcpxml:
         if not config.fcpxml:
             raise ValueError("FCPXML 分析视图缺少 fcpxml")
-        return read_fcpxml(config.fcpxml)
+        clips = read_fcpxml(config.fcpxml)
+        clips = _reconcile_previous_clip_identity(clips, previous_index or {})
+        return resolve_fcpxml_clips(
+            clips,
+            workspace_id,
+            project_id,
+            store=device_store,
+            strict=strict_device_context,
+        )
     if config.is_media_directory:
         if not config.media_root:
             raise ValueError("媒体目录项目缺少 media_root")
@@ -99,10 +121,24 @@ def _prefill_transcripts(
     runtime: ASRRuntime,
     progress: Callable[[int, int, str], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    previous_index: dict[str, Any] | None = None,
+    device_store: Any | None = None,
+    strict_device_context: bool = False,
 ) -> tuple[dict[str, Any], list[str]]:
     if not runtime.enabled:
         return {"transcribed": 0, "backend": runtime.public()}, []
-    clips = _clips_for(analysis_config, cancelled)
+    clips = _clips_for(
+        analysis_config,
+        cancelled,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        previous_index=previous_index,
+        device_store=device_store,
+        strict_device_context=strict_device_context,
+    )
     groups = build_multicam_groups(clips, source_config.minimum_overlap_seconds, source_config.split_bridge_ratio)
     store = TranscriptStore(source_config.transcript_dir)
     prompt = script_asr_prompt(source_config.script)
@@ -157,6 +193,12 @@ def _escalate_ambiguous(
     result: dict[str, Any],
     progress: Callable[[int, int, str], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    previous_index: dict[str, Any] | None = None,
+    device_store: Any | None = None,
+    strict_device_context: bool = False,
 ) -> tuple[int, list[str]]:
     if not (
         runtime.enabled
@@ -165,7 +207,15 @@ def _escalate_ambiguous(
         and source_config.asr_max_escalated_groups > 0
     ):
         return 0, []
-    clips = _clips_for(analysis_config, cancelled)
+    clips = _clips_for(
+        analysis_config,
+        cancelled,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        previous_index=previous_index,
+        device_store=device_store,
+        strict_device_context=strict_device_context,
+    )
     groups = build_multicam_groups(clips, source_config.minimum_overlap_seconds, source_config.split_bridge_ratio)
     group_by_id = {group.group_id: group for group in groups}
     clip_by_id = {clip.clip_id: clip for clip in clips}
@@ -235,6 +285,8 @@ def _restore_source_identity(
     result: dict[str, Any],
     runtime: ASRRuntime,
     asr_errors: list[str],
+    *,
+    redact_media: bool = False,
 ) -> dict[str, Any]:
     index = result.get("index", {})
     if not isinstance(index, dict):
@@ -247,8 +299,6 @@ def _restore_source_identity(
         else "",
         "analysis_input_kind": analysis_config.input_kind,
     }
-    if source_config.is_media_directory:
-        redact_device_media_paths(index)
     index.setdefault("stats", {})["asr_runtime"] = runtime.public()
     if asr_errors:
         errors = index.setdefault("errors", {})
@@ -256,8 +306,17 @@ def _restore_source_identity(
         if not isinstance(existing, list):
             existing = []
         errors["asr_backend_error"] = list(dict.fromkeys(existing + asr_errors))[:40]
+    if source_config.is_media_directory and not redact_media:
+        # Preserve the historical direct-call contract: callers without a
+        # device task context receive the same redacted read model that is
+        # written to disk.  Task-scoped calls may retain paths in memory for
+        # ASR/known-text work, while still publishing the redacted copy.
+        redact_device_media_paths(index)
+    publish_index = json.loads(json.dumps(index, ensure_ascii=False))
+    if redact_media or source_config.is_fcpxml:
+        redact_device_media_paths(publish_index)
     output_dir = source_config.output_dir
-    _write_json_atomic(output_dir / "material_index.json", index)
+    _write_json_atomic(output_dir / "material_index.json", publish_index)
     # Keep the committed read model aligned with the final source-identity
     # projection.  This function runs after material_index.analyze publishes
     # the snapshot, so leaving the snapshot untouched would make ProjectService
@@ -265,7 +324,7 @@ def _restore_source_identity(
     snapshot_path = output_dir / ANALYSIS_SNAPSHOT_FILENAME
     snapshot = _read_json(snapshot_path, {})
     if isinstance(snapshot, dict) and isinstance(snapshot.get("script"), dict) and isinstance(snapshot.get("matches"), dict):
-        snapshot["index"] = index
+        snapshot["index"] = publish_index
         _write_json_atomic(snapshot_path, snapshot)
     return result
 
@@ -291,6 +350,11 @@ def analyze(
     affected_group_ids: set[str] | None = None,
     progress: Callable[[str, int, int, str], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    device_store: Any | None = None,
+    strict_device_context: bool = False,
 ) -> dict[str, Any]:
     """Product analysis entrypoint.
 
@@ -306,12 +370,24 @@ def analyze(
         if progress:
             progress(phase, done, total, message)
 
+    previous_index = _read_json(config.output_dir / "material_index.json", {})
+    if not isinstance(previous_index, dict):
+        previous_index = {}
+    # A task always passes both IDs.  Reject a partially supplied context and
+    # clear FCPXML paths rather than falling back to locators from shared XML.
+    context_partial = bool(workspace_id) != bool(project_id)
+    strict_media = strict_device_context or context_partial or bool(workspace_id and project_id)
     _prefill, errors = _prefill_transcripts(
         config,
         analysis_config,
         runtime,
         lambda done, total, message: report("asr", done, total, message),
         cancelled,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        previous_index=previous_index,
+        device_store=device_store,
+        strict_device_context=strict_media,
     )
     if cancelled and cancelled():
         raise ResourceCancelled("分析任务已取消")
@@ -321,6 +397,10 @@ def analyze(
         affected_group_ids,
         lambda done, total, message: report("matching", done, total, message),
         cancelled=cancelled,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        device_store=device_store,
+        strict_device_context=strict_media,
     )
     escalated, escalation_errors = _escalate_ambiguous(
         config,
@@ -329,6 +409,11 @@ def analyze(
         result,
         lambda done, total, message: report("rescue", done, total, message),
         cancelled,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        previous_index=previous_index,
+        device_store=device_store,
+        strict_device_context=strict_media,
     )
     errors.extend(escalation_errors)
     if cancelled and cancelled():
@@ -341,6 +426,17 @@ def analyze(
             None,
             lambda done, total, message: report("matching", done, total, message),
             cancelled=cancelled,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            device_store=device_store,
+            strict_device_context=strict_media,
         )
     _maybe_write_shot_evidence(config, result, cancelled=cancelled)
-    return _restore_source_identity(config, analysis_config, result, runtime, errors)
+    return _restore_source_identity(
+        config,
+        analysis_config,
+        result,
+        runtime,
+        errors,
+        redact_media=bool(workspace_id or project_id),
+    )

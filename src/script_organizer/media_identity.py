@@ -137,6 +137,61 @@ def iter_project_media(index: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(rows.values(), key=lambda row: (str(row.get("name", "")).casefold(), str(row.get("media_id", ""))))
 
 
+def resolve_fcpxml_clips(
+    clips: Iterable[Any],
+    workspace_id: str | None,
+    project_id: str | None,
+    *,
+    store: "DeviceMediaStore | None" = None,
+    strict: bool = False,
+) -> list[Any]:
+    """Resolve FCPXML clips through this device's media bindings.
+
+    FCPXML keeps the locator that was present when it was exported.  That
+    locator is useful only as a content-verified fallback: a drive can be
+    remounted at a new path and a stale locator may also point at a replacement
+    file.  ``DeviceMediaStore`` therefore gets first refusal, followed by the
+    original locator with an ``M_`` content-id check.
+
+    A task that has only one half of its workspace/project context is unsafe to
+    run.  In that case (and in explicit ``strict`` mode with no context) paths
+    are cleared rather than leaking or accidentally reading a shared FCPXML's
+    host-local locator.  The no-context, non-strict mode remains for the legacy
+    direct ``read_fcpxml``/``material_index`` API used by local tooling; task
+    entry points always provide both identifiers.
+    """
+    from dataclasses import replace
+
+    values = list(clips)
+    has_workspace = bool(str(workspace_id or "").strip())
+    has_project = bool(str(project_id or "").strip())
+    partial = has_workspace != has_project
+    if not (has_workspace and has_project):
+        if not (partial or strict):
+            return values
+        return [replace(clip, media_path="", exists=False) for clip in values]
+
+    # Resolution is a read path.  Do not create a device-state file merely
+    # because an analysis request supplied context (and especially not from a
+    # read-only host or a shared-artifact worker).
+    resolver = store or DeviceMediaStore(create=False)
+    snapshot = resolver.project_snapshot(str(workspace_id), str(project_id))
+    resolved: list[Any] = []
+    for clip in values:
+        # Clip.to_dict intentionally exposes only the fields required by the
+        # resolver.  Keep the original XML path in the in-memory object; it is
+        # removed before any shared artifact is published.
+        item = {
+            "media_id": str(getattr(clip, "media_id", "") or ""),
+            "source_media_path": str(getattr(clip, "media_path", "") or ""),
+            "media_path": str(getattr(clip, "media_path", "") or ""),
+            "name": str(getattr(clip, "name", "") or ""),
+        }
+        path = resolver.resolve_from_snapshot(snapshot, item)
+        resolved.append(replace(clip, media_path=path, exists=bool(path)))
+    return resolved
+
+
 class DeviceMediaStore:
     """Per-device media roots and bindings stored outside the shared workspace."""
 

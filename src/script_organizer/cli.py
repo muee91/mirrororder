@@ -260,7 +260,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "analyze":
         config = _project(workspace, args.project_id)
-        result = analyze(config)
+        result = analyze(
+            config,
+            workspace_id=workspace.workspace_id,
+            project_id=args.project_id,
+        )
         if config.is_media_directory:
             store = DeviceMediaStore()
             snapshot = store.project_snapshot(workspace.workspace_id, args.project_id)

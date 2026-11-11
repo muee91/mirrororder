@@ -308,6 +308,8 @@ class TaskManager:
                     config,
                     affected or None,
                     cancelled=lambda: self._cancel_requested(config, task_id),
+                    workspace_id=self.workspace_id,
+                    project_id=project_id,
                 )["index"]["stats"]
                 result["affected_group_ids"] = sorted(affected)
                 result["automation"] = resolve_project(config)["summary"]
@@ -328,6 +330,8 @@ class TaskManager:
                         config,
                         affected or None,
                         cancelled=lambda: self._cancel_requested(config, task_id),
+                        workspace_id=self.workspace_id,
+                        project_id=project_id,
                     )["index"]["stats"]
                     result["automation"] = resolve_project(config)["summary"]
                 elif result.get("transcribed"):
@@ -367,6 +371,8 @@ class TaskManager:
         analysis = analyze(
             config,
             cancelled=lambda: self._cancel_requested(config, task["task_id"]),
+            workspace_id=self.workspace_id,
+            project_id=project_id,
         )
         result["analysis"] = analysis["index"]["stats"]
         if self._cancel_requested(config, task["task_id"]):
@@ -400,8 +406,11 @@ class TaskManager:
         missing_local: list[str] = []
         for clip_id in requested:
             item = by_id[clip_id]
-            source_path = str(item.get("source_media_path") or item.get("media_path") or "")
-            media_path = source_path if source_path and Path(source_path).is_file() else device_store.resolve_from_snapshot(snapshot, item)
+            # DeviceMediaStore is the authority for both moved FCPXML assets
+            # and the first/original locator.  Its resolver verifies the M_
+            # content hash, so a stale shared-artifact path cannot be used as a
+            # silent ASR fallback when it now points at replacement bytes.
+            media_path = device_store.resolve_from_snapshot(snapshot, item)
             if not media_path:
                 missing_local.append(clip_id)
                 continue

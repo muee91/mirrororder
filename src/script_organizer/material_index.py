@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import tempfile
+from copy import deepcopy
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
@@ -26,6 +27,7 @@ from .known_text_alignment import align_known_text
 from .review_store import ReviewStore
 from .script_parser import ScriptDocument, parse_script
 from .source_descriptor import redact_device_media_paths, shared_source_descriptor
+from .media_identity import resolve_fcpxml_clips
 from .transcript import TranscriptStore, transcribe_with_faster_whisper
 from .resource_scheduler import ResourceCancelled
 
@@ -599,9 +601,13 @@ def _reconcile_previous_clip_identity(
             continue
         previous = rows[index]
         media_id = clip.media_id
-        if not media_id:
+        if not media_id or media_id.startswith("MP_"):
             candidate = str(previous.get("media_id", "") or "")
             if candidate.startswith("M_"):
+                # A missing/moved locator is reported by the parser as a
+                # provisional filename identity.  Keep the first verified
+                # content identity so DeviceMediaStore can reconnect it after
+                # a disk move.  A fresh M_ hash remains authoritative.
                 media_id = candidate
         clip_id = str(previous.get("clip_id", "") or "") or clip.clip_id
         if media_id == clip.media_id and clip_id == clip.clip_id:
@@ -616,6 +622,11 @@ def analyze(
     affected_group_ids: set[str] | None = None,
     progress: Callable[[int, int, str], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    device_store: Any | None = None,
+    strict_device_context: bool = False,
 ) -> dict[str, Any]:
     config.ensure_output()
     previous_index = _read_json(config.output_dir / "material_index.json", {})
@@ -627,6 +638,13 @@ def analyze(
         if config.fcpxml is None:
             raise ValueError("FCPXML 项目缺少 input.fcpxml")
         clips = _reconcile_previous_clip_identity(read_fcpxml(config.fcpxml), previous_index)
+        clips = resolve_fcpxml_clips(
+            clips,
+            workspace_id,
+            project_id,
+            store=device_store,
+            strict=strict_device_context,
+        )
     elif config.is_media_directory:
         if config.media_root is None:
             raise ValueError("媒体目录项目缺少 media.root")
@@ -974,8 +992,12 @@ def analyze(
             "asr_escalation_skipped_reviewed_groups": asr_escalation_skipped_reviewed_groups,
         },
     }
-    if config.is_media_directory:
-        redact_device_media_paths(index_payload)
+    publish_index = deepcopy(index_payload)
+    # Any task-scoped analysis is device-local even when the source is an
+    # FCPXML.  Keep the in-memory result useful to ASR/known-text alignment,
+    # while writing only a path-free projection to shared artifacts.
+    if config.is_media_directory or config.is_fcpxml or workspace_id or project_id:
+        redact_device_media_paths(publish_index)
     matches_payload = {
         "version": 2,
         "groups": {
@@ -1015,8 +1037,8 @@ def analyze(
             "affected_group_ids": sorted(affected_group_ids) if affected_group_ids is not None else [],
         },
     }
-    _write_json(config.output_dir / "material_index.json", index_payload)
+    _write_json(config.output_dir / "material_index.json", publish_index)
     _write_json(config.output_dir / "script.json", script_payload)
     _write_json(config.output_dir / "matches.json", matches_payload)
-    _publish_analysis_snapshot(config.output_dir, index_payload, script_payload, matches_payload)
+    _publish_analysis_snapshot(config.output_dir, publish_index, script_payload, matches_payload)
     return {"index": index_payload, "script": script_payload, "matches": matches_payload}

@@ -41,7 +41,10 @@ def shared_source_descriptor(config: ProjectConfig) -> dict[str, Any]:
         # Media-directory roots are device-local resolver state. Never serialize
         # them into material_index.json, even while this Host is analyzing.
         "media_root": "",
-        "media_binding": "device-local" if config.is_media_directory else "not-required",
+        # FCPXML asset locators are device paths too.  Only the document and
+        # script references are shared; source media is always re-resolved by
+        # the current device's binding store.
+        "media_binding": "device-local" if config.is_media_directory or config.is_fcpxml else "not-required",
     }
 
 

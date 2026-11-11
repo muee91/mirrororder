@@ -88,6 +88,30 @@ def _json_bytes(payload: object) -> bytes:
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
+def _fcpxml_locator_for_clip(project: Any, clip: dict[str, Any]) -> str:
+    """Recover an FCPXML locator only at the local playback boundary.
+
+    Analysis artifacts are intentionally path-free.  Serving a media range is
+    a device-local operation, so it may inspect the original FCPXML and then
+    ask DeviceMediaStore to content-verify the locator or a moved binding.
+    """
+    config = getattr(project, "config", None)
+    fcpxml = getattr(config, "fcpxml", None)
+    asset_id = str(clip.get("source_asset_id", "") or "")
+    if not fcpxml or not asset_id:
+        return ""
+    try:
+        from .fcpxml_reader import read_fcpxml
+
+        for candidate in read_fcpxml(fcpxml):
+            if candidate.source_asset_id == asset_id:
+                return str(candidate.media_path or "")
+    except Exception:
+        # Playback should fail closed when the source XML cannot be read.
+        return ""
+    return ""
+
+
 DEFAULT_FRONTEND_SETTINGS: dict[str, Any] = {
     "version": 1,
     "theme": "system",
@@ -253,7 +277,22 @@ class ProjectService:
         content identity before opening a file. The default keeps the
         historical FCPXML/local-project behavior.
         """
-        return str(clip.get("media_path", "") or "")
+        store = DeviceMediaStore(create=False)
+        workspace_id = str(getattr(self, "workspace_id", "") or "")
+        snapshot = store.project_snapshot(workspace_id, self.project_id) if workspace_id else {}
+        # Try the persisted binding before touching the XML locator. This is
+        # what makes a moved disk win even when the shared clip has no source
+        # path at all.
+        resolved = store.resolve_from_snapshot(snapshot, dict(clip))
+        if resolved:
+            return resolved
+        source = str(clip.get("media_path", "") or "") or _fcpxml_locator_for_clip(self, clip)
+        if not source:
+            return ""
+        lookup = dict(clip)
+        lookup["media_path"] = source
+        lookup["source_media_path"] = source
+        return store.resolve_from_snapshot(snapshot, lookup)
 
     def state(self) -> dict[str, Any]:
         self.reload_if_changed()

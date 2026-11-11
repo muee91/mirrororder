@@ -43,6 +43,9 @@ def _run_analysis(
     affected_group_ids: set[str] | None = None,
     progress=None,
     cancelled=None,
+    *,
+    workspace_id: str = "",
+    project_id: str = "",
 ):
     """Call the current analyzer while keeping older test/tool doubles usable."""
     parameters = inspect.signature(analyze).parameters
@@ -51,6 +54,10 @@ def _run_analysis(
         kwargs["progress"] = progress
     if "cancelled" in parameters and cancelled is not None:
         kwargs["cancelled"] = cancelled
+    if "workspace_id" in parameters and workspace_id:
+        kwargs["workspace_id"] = workspace_id
+    if "project_id" in parameters and project_id:
+        kwargs["project_id"] = project_id
     return analyze(config, affected_group_ids, **kwargs)
 
 
@@ -404,6 +411,8 @@ class TaskManager(_impl.TaskManager):
                         config,
                         affected or None,
                         cancelled=lambda: self._cancel_requested(config, task_id),
+                        workspace_id=self.workspace_id,
+                        project_id=project_id,
                     )["index"]["stats"]
                 result["affected_group_ids"] = sorted(affected)
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
@@ -430,6 +439,8 @@ class TaskManager(_impl.TaskManager):
                             config,
                             affected or None,
                             cancelled=lambda: self._cancel_requested(config, task_id),
+                            workspace_id=self.workspace_id,
+                            project_id=project_id,
                         )["index"]["stats"]
                     with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                         result["automation"] = _impl.resolve_project(config)["summary"]
@@ -504,6 +515,8 @@ class TaskManager(_impl.TaskManager):
                 config,
                 progress=report,
                 cancelled=lambda: self._cancel_requested(config, task_id),
+                workspace_id=self.workspace_id,
+                project_id=project_id,
             )
         self._update(config, task_id, progress={"done": 1, "total": 3}, message="ASR 与剧本匹配完成")
         result["analysis"] = analysis["index"]["stats"]

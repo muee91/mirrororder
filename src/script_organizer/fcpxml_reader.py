@@ -6,11 +6,12 @@ import statistics
 import urllib.parse
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
-from .media_identity import media_identity
+from .media_identity import media_identity, resolve_fcpxml_clips
 from .models import Clip, GroupMember, MulticamGroup
 
 
@@ -102,7 +103,47 @@ def stable_clip_id(media_path: str, source_asset_id: str, occurrence: int = 0) -
     return "C_" + hashlib.sha1(seed).hexdigest()[:16]
 
 
-def read_fcpxml(path: str | Path) -> list[Clip]:
+def _restore_previous_identity(clips: list[Clip], previous_index: dict | None) -> list[Clip]:
+    """Carry verified identities across locator-less/moved FCPXML parses."""
+    rows = previous_index.get("clips", []) if isinstance(previous_index, dict) else []
+    if not isinstance(rows, list) or not rows:
+        return clips
+    by_asset: dict[str, list[dict]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        asset_id = str(row.get("source_asset_id", "") or "")
+        if asset_id:
+            by_asset.setdefault(asset_id, []).append(row)
+    counters: defaultdict[str, int] = defaultdict(int)
+    result: list[Clip] = []
+    for clip in clips:
+        candidates = by_asset.get(clip.source_asset_id, [])
+        index = counters[clip.source_asset_id]
+        counters[clip.source_asset_id] += 1
+        if index >= len(candidates):
+            result.append(clip)
+            continue
+        previous = candidates[index]
+        media_id = clip.media_id
+        if not media_id or media_id.startswith("MP_"):
+            candidate = str(previous.get("media_id", "") or "")
+            if candidate.startswith("M_"):
+                media_id = candidate
+        clip_id = str(previous.get("clip_id", "") or "") or clip.clip_id
+        result.append(replace(clip, clip_id=clip_id, media_id=media_id))
+    return result
+
+
+def read_fcpxml(
+    path: str | Path,
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    previous_index: dict | None = None,
+    device_store: Any | None = None,
+    strict_device_context: bool = False,
+) -> list[Clip]:
     document_path = Path(path).expanduser().resolve()
     document_dir = document_path.parent
     root = ET.parse(document_path).getroot()
@@ -272,7 +313,14 @@ def read_fcpxml(path: str | Path) -> list[Clip]:
                 walk_story(element, start, depth + 1, camera, clip_window)
 
     walk_story(spine, Fraction(0), 0, "?")
-    return clips
+    clips = _restore_previous_identity(clips, previous_index)
+    return resolve_fcpxml_clips(
+        clips,
+        workspace_id,
+        project_id,
+        store=device_store,
+        strict=strict_device_context,
+    )
 
 
 def _member(clip: Clip) -> GroupMember:

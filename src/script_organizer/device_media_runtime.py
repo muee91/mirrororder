@@ -62,6 +62,10 @@ def _resolve_project_media_path(project: Any, clip: dict[str, Any]) -> str:
     if not isinstance(store, DeviceMediaStore) or not workspace_id:
         return str(clip.get("media_path", "") or "")
     source_path = str(clip.get("source_media_path", "") or clip.get("media_path", "") or "")
+    if not source_path:
+        from .web_server import _fcpxml_locator_for_clip
+
+        source_path = _fcpxml_locator_for_clip(project, clip)
     lookup = dict(clip)
     lookup["media_path"] = source_path
     snapshot = store.project_snapshot(workspace_id, str(project.project_id))
