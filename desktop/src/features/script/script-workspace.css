@@ -203,3 +203,32 @@
     min-width: 220px;
   }
 }
+
+/* Segment-level editorial decisions use the shared decision primitives while
+   keeping the Script drawer responsible for assignment context. */
+.script-assignment-decision .take-evidence-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.script-assignment-decision .take-evidence-heading strong {
+  color: var(--mo-text-primary, #cbd4dd);
+  font-size: var(--mo-font-sm, 11px);
+}
+
+.script-assignment-decision .take-evidence-heading > span {
+  color: var(--mo-text-muted, #74818d);
+  font-size: var(--mo-font-xs, 10px);
+  text-align: right;
+}
+
+.script-assignment-decision .evidence-muted,
+.script-assignment-decision .evidence-authority-note {
+  margin: 8px 0 0;
+  color: var(--mo-text-muted, #7c8995);
+  font-size: var(--mo-font-xs, 10px);
+  line-height: 1.45;
+}

@@ -6,6 +6,7 @@ import type {
   ReviewTakeGroup,
 } from "../../api/host";
 import { RoughPlacementClient, type RoughPlacementPayload } from "../../api/roughPlacement";
+import { ScriptAssignmentDecision } from "./ScriptAssignmentDecision";
 import { ScriptEpisodeView, dragGroupId, scriptDomId } from "../material-script/ScriptEpisodeView";
 import type { ScriptProjectionMode } from "../material-script/ScriptBlock";
 import { mappingLabel, takeDisplayLabel } from "../material-script/TakeCard";
@@ -639,6 +640,16 @@ export function ScriptWorkspace({
                         <span className={selectedBlock.issues.length ? "needs-attention" : ""}><strong>{selectedBlock.issues.length}</strong>问题</span>
                       </div>
                     </div>
+                    {selectedTake && selectedTakeMappedHere ? (
+                      <ScriptAssignmentDecision
+                        baseUrl={baseUrl}
+                        projectId={project.project_id}
+                        groupId={selectedTake.group_id}
+                        segmentId={selectedBlock.segment_id}
+                        actor={actor}
+                        onDecisionChange={refresh}
+                      />
+                    ) : null}
                     <div className="workspace-context-tabs">
                       <button type="button" className={candidateScope === "context" ? "is-active" : ""} onClick={() => setCandidateScope("context")}>相关素材</button>
                       <button type="button" className={candidateScope === "all" ? "is-active" : ""} onClick={() => setCandidateScope("all")}>全部 Take</button>
