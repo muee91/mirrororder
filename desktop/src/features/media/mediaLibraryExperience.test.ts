@@ -96,6 +96,12 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("批量${actionLabel}时素材库已被其他操作更新");
   });
 
+  it("resets a camera filter when a bulk update removes its last matching bucket", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("if (cameraFilter !== \"all\" && !cameraFilters.some(({ key }) => key === cameraFilter))");
+    expect(workbench).toContain('setCameraFilter("all")');
+  });
+
   it("keeps the media browser on the shared typography and theme authority", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     const styles = source("./media-library.css");

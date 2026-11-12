@@ -292,6 +292,12 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     return [...grouped.values()].sort((left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, "zh-CN", { numeric: true }));
   }, [inventory, roles]);
 
+  useEffect(() => {
+    if (cameraFilter !== "all" && !cameraFilters.some(({ key }) => key === cameraFilter)) {
+      setCameraFilter("all");
+    }
+  }, [cameraFilter, cameraFilters]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("zh-CN");
     return (inventory?.items ?? []).filter((item) => {
