@@ -84,6 +84,8 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('aria-label="批量设置机位"');
     expect(workbench).toContain("全选当前结果");
     expect(workbench).toContain("取消全选当前结果");
+    expect(workbench).toContain("清空已选");
+    expect(workbench).toContain("selectedOutsideFilter");
     expect(workbench).toContain("aria-pressed={allVisibleSelected}");
   });
 
