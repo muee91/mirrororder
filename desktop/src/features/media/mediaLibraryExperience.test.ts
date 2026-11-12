@@ -88,6 +88,9 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("清除已选机位");
     expect(workbench).toContain("async function saveBulkCamera(cameraOverride = bulkCamera.trim().toUpperCase()");
     expect(workbench).toContain("selectedOutsideFilter");
+    expect(workbench).toContain("bulkSelectionLimit = 200");
+    expect(workbench).toContain("bulkSelectionOverLimit");
+    expect(workbench).toContain("超过单次上限");
     expect(workbench).toContain("aria-pressed={allVisibleSelected}");
     expect(workbench).toContain("批量${actionLabel}时素材库已被其他操作更新");
   });
