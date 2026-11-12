@@ -400,8 +400,12 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       await reload(selectedItem?.media_id);
       setMessage(`已批量${actionLabel} ${count} 条素材的机位 · r${next.revision}`);
     } catch (error) {
-      if (error instanceof HostConnectionError && error.status === 409) await reload(selectedItem?.media_id).catch(() => undefined);
-      setMessage(errorMessage(error));
+      if (error instanceof HostConnectionError && error.status === 409) {
+        await reload(selectedItem?.media_id).catch(() => undefined);
+        setMessage(`批量${actionLabel}时素材库已被其他操作更新，已刷新到最新状态；请重新确认。`);
+      } else {
+        setMessage(errorMessage(error));
+      }
     } finally { setBusy(false); }
   }
 

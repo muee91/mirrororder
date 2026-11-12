@@ -89,6 +89,7 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("async function saveBulkCamera(cameraOverride = bulkCamera.trim().toUpperCase()");
     expect(workbench).toContain("selectedOutsideFilter");
     expect(workbench).toContain("aria-pressed={allVisibleSelected}");
+    expect(workbench).toContain("批量${actionLabel}时素材库已被其他操作更新");
   });
 
   it("keeps the media browser on the shared typography and theme authority", () => {
