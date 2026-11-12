@@ -29,6 +29,9 @@ type Filter = "all" | "auxiliary" | "unindexed" | "labeled";
 type ViewMode = "list" | "grid";
 type PlaybackEntry = { clipId: string; url: string; sourceStart: number };
 type CameraFilterItem = { key: string; label: string; tone: CameraTone; sortOrder: number; count: number };
+type BulkResult = { actionLabel: string; count: number; camera: string; revision: number };
+
+const BULK_RESULT_STORAGE_KEY = "mirrororder.desktop-v2.media-bulk-result";
 
 const ROLE_LABELS: Record<string, string> = {
   sync_camera: "同步机位",
@@ -49,6 +52,24 @@ function storedActor(): string {
 
 function saveActor(actor: string): void {
   try { globalThis.localStorage?.setItem("mirrororder.desktop-v2.review-actor", actor.trim()); } catch { /* local convenience */ }
+}
+
+function storedBulkResult(projectId: string): BulkResult | null {
+  if (!projectId.trim()) return null;
+  try {
+    const raw = globalThis.localStorage?.getItem(`${BULK_RESULT_STORAGE_KEY}:${projectId}`);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<BulkResult>;
+    if (typeof value.actionLabel !== "string" || typeof value.count !== "number" || !Number.isFinite(value.count) || value.count < 1 || typeof value.camera !== "string" || typeof value.revision !== "number" || !Number.isFinite(value.revision)) return null;
+    return { actionLabel: value.actionLabel, count: value.count, camera: value.camera, revision: value.revision };
+  } catch {
+    return null;
+  }
+}
+
+function saveBulkResult(projectId: string, result: BulkResult): void {
+  if (!projectId.trim()) return;
+  try { globalThis.localStorage?.setItem(`${BULK_RESULT_STORAGE_KEY}:${projectId}`, JSON.stringify(result)); } catch { /* local recovery convenience */ }
 }
 
 function roleFor(item: MediaInventoryItem, store: MediaRoleStore | null): MediaRole {
@@ -221,7 +242,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [selectedId, setSelectedId] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCamera, setBulkCamera] = useState("");
-  const [bulkResult, setBulkResult] = useState<{ actionLabel: string; count: number; camera: string; revision: number } | null>(null);
+  const [bulkResult, setBulkResult] = useState<BulkResult | null>(() => storedBulkResult(projectId));
   const [draft, setDraft] = useState<MediaRole>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -276,6 +297,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   }
 
   useEffect(() => {
+    setBulkResult(storedBulkResult(projectId));
     void reload("");
     return () => { reloadToken.current += 1; };
   }, [client, host, projectId]);
@@ -408,7 +430,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       setRoles(next);
       setSelectedIds(new Set());
       await reload(selectedItem?.media_id);
-      setBulkResult({ actionLabel, count, camera: cameraOverride.trim().toUpperCase() || "跟随识别", revision: next.revision });
+      const result: BulkResult = { actionLabel, count, camera: cameraOverride.trim().toUpperCase() || "跟随识别", revision: next.revision };
+      setBulkResult(result);
+      saveBulkResult(projectId, result);
       setMessage(`已批量${actionLabel} ${count} 条素材的机位 · r${next.revision}`);
     } catch (error) {
       if (error instanceof HostConnectionError && error.status === 409) {

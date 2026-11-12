@@ -96,7 +96,16 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("批量${actionLabel}时素材库已被其他操作更新");
     expect(workbench).toContain("最近批量结果");
     expect(workbench).toContain("aria-live=\"polite\"");
-    expect(workbench).toContain("setBulkResult({ actionLabel, count");
+    expect(workbench).toContain("setBulkResult(result)");
+  });
+
+  it("persists the last bulk result per project for reload and project-switch recovery", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("BULK_RESULT_STORAGE_KEY");
+    expect(workbench).toContain("storedBulkResult(projectId)");
+    expect(workbench).toContain("saveBulkResult(projectId, result)");
+    expect(workbench).toContain("setBulkResult(storedBulkResult(projectId))");
+    expect(workbench).toContain("Number.isFinite(value.count)");
   });
 
   it("resets a camera filter when a bulk update removes its last matching bucket", () => {
