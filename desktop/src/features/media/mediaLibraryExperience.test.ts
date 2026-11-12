@@ -94,6 +94,9 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("超过单次上限");
     expect(workbench).toContain("aria-pressed={allVisibleSelected}");
     expect(workbench).toContain("批量${actionLabel}时素材库已被其他操作更新");
+    expect(workbench).toContain("最近批量结果");
+    expect(workbench).toContain("aria-live=\"polite\"");
+    expect(workbench).toContain("setBulkResult({ actionLabel, count");
   });
 
   it("resets a camera filter when a bulk update removes its last matching bucket", () => {
