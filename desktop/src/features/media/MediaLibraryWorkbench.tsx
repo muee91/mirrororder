@@ -395,7 +395,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       const next = await client.saveMany(projectId, {
         expectedRevision: roles.revision,
         actor,
-        changes: [...selectedIds].map((mediaId) => ({ mediaId, entry: { ...defaultDraft(inventory?.items.find((item) => item.media_id === mediaId)!, roles), camera_override: bulkCamera.trim().toUpperCase() } })),
+        changes: [...selectedIds].map((mediaId) => ({ mediaId, entry: { ...defaultDraft(inventory?.items.find((item) => item.media_id === mediaId)!, roles), camera_override: cameraOverride.trim().toUpperCase() } })),
       });
       setRoles(next);
       setSelectedIds(new Set());

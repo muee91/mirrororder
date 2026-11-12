@@ -86,7 +86,8 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("取消全选当前结果");
     expect(workbench).toContain("清空已选");
     expect(workbench).toContain("清除已选机位");
-    expect(workbench).toContain("async function saveBulkCamera(cameraOverride = bulkCamera.trim().toUpperCase()");
+    expect(workbench).toContain("async function saveBulkCamera(cameraOverride = bulkCamera.trim().toUpperCase()")
+    expect(workbench).toContain("camera_override: cameraOverride.trim().toUpperCase()");
     expect(workbench).toContain("selectedOutsideFilter");
     expect(workbench).toContain("bulkSelectionLimit = 200");
     expect(workbench).toContain("bulkSelectionOverLimit");
