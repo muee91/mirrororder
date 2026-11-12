@@ -142,6 +142,19 @@ export function ScriptWorkspace({
   const [roughPreview, setRoughPreview] = useState<RoughPlacementPayload | null>(null);
   const appliedFocusKey = useRef("");
 
+  // The top-level operator control is shared by every workspace. Keep the
+  // Script placement and assignment-decision writes in sync when that control
+  // changes without requiring a workspace remount or manual refresh.
+  useEffect(() => {
+    const sync = () => setActor(storedActor());
+    globalThis.addEventListener("mirrororder:operator-change", sync);
+    globalThis.addEventListener("storage", sync);
+    return () => {
+      globalThis.removeEventListener("mirrororder:operator-change", sync);
+      globalThis.removeEventListener("storage", sync);
+    };
+  }, []);
+
   const selectedTake = selectedGroupId
     ? model?.take_groups.find((take) => take.group_id === selectedGroupId) ?? null
     : null;

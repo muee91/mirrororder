@@ -10,4 +10,9 @@ describe("script episode navigation", () => {
     expect(source).toContain('aria-label="剧本集数"');
     expect(source).not.toMatch(/episodes\.slice\(0,\s*32\)/);
   });
+  it("keeps script writes aligned with the shared current-operator control", () => {
+    expect(source).toContain('globalThis.addEventListener("mirrororder:operator-change", sync)');
+    expect(source).toContain('globalThis.addEventListener("storage", sync)');
+    expect(source).toContain('globalThis.removeEventListener("mirrororder:operator-change", sync)');
+  });
 });
