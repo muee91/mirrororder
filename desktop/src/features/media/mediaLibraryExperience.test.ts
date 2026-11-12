@@ -77,6 +77,16 @@ describe("media library experience contract", () => {
     expect(styles).toContain("display: flex !important");
   });
 
+  it("supports selecting the current filtered result set for batch camera work", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const visibleIds = useMemo(() => visible.map((item) => item.media_id), [visible])");
+    expect(workbench).toContain("function toggleVisibleSelection(): void");
+    expect(workbench).toContain('aria-label="批量设置机位"');
+    expect(workbench).toContain("全选当前结果");
+    expect(workbench).toContain("取消全选当前结果");
+    expect(workbench).toContain("aria-pressed={allVisibleSelected}");
+  });
+
   it("keeps the media browser on the shared typography and theme authority", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     const styles = source("./media-library.css");
