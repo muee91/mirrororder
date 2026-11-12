@@ -130,6 +130,10 @@
   border-radius: 5px;
   background: var(--mo-surface-app, #0e1318);
 }
+.media-library-row-wrap { display: flex; align-items: stretch; gap: 8px; }
+.media-library-row-wrap > input { width: 18px; accent-color: var(--mo-accent, #8aa8ff); align-self: center; }
+.media-library-bulk { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.media-library-bulk input { width: 120px; }
 .media-library-row {
   position: relative;
   width: 100%;

@@ -124,4 +124,19 @@ export class MediaRoleClient {
       }),
     });
   }
+
+  saveMany(
+    projectId: string,
+    write: { expectedRevision: number; actor: string; changes: Array<{ mediaId: string; entry: MediaRole }> },
+  ): Promise<MediaRoleStore> {
+    const actor = write.actor.trim();
+    if (!actor) throw new HostConnectionError("素材角色写入需要操作者昵称");
+    if (!Number.isInteger(write.expectedRevision) || write.expectedRevision < 0) throw new HostConnectionError("素材角色写入需要有效 expected_revision");
+    const changes = write.changes.map(({ mediaId, entry }) => ({ media_id: mediaId.trim(), entry }));
+    if (!changes.length) throw new HostConnectionError("素材角色写入至少需要一条素材");
+    return request<MediaRoleStore>(this.baseUrl, route(projectId, "media-roles"), {
+      method: "POST",
+      body: JSON.stringify({ expected_revision: write.expectedRevision, actor: actor.slice(0, 80), changes }),
+    });
+  }
 }

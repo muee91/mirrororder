@@ -219,6 +219,8 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [takeLabelByClip, setTakeLabelByClip] = useState<Record<string, string>>({});
   const [playbackProjectionLoaded, setPlaybackProjectionLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCamera, setBulkCamera] = useState("");
   const [draft, setDraft] = useState<MediaRole>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -253,6 +255,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
         ? preferredId
         : nextInventory.items[0]?.media_id ?? "";
       setSelectedId(nextSelected);
+      setSelectedIds((current) => new Set([...current].filter((id) => nextInventory.items.some((item) => item.media_id === id))));
       const item = nextInventory.items.find((row) => row.media_id === nextSelected);
       setDraft(item ? defaultDraft(item, nextRoles) : {});
       setPlaybackFailedMediaId("");
@@ -368,6 +371,27 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     }
   }
 
+  async function saveBulkCamera(): Promise<void> {
+    if (!roles || !actor.trim() || !bulkCamera.trim() || !selectedIds.size) return;
+    const count = selectedIds.size;
+    setBusy(true);
+    setMessage(`正在批量设置 ${selectedIds.size} 条素材的机位…`);
+    try {
+      const next = await client.saveMany(projectId, {
+        expectedRevision: roles.revision,
+        actor,
+        changes: [...selectedIds].map((mediaId) => ({ mediaId, entry: { ...defaultDraft(inventory?.items.find((item) => item.media_id === mediaId)!, roles), camera_override: bulkCamera.trim().toUpperCase() } })),
+      });
+      setRoles(next);
+      setSelectedIds(new Set());
+      await reload(selectedItem?.media_id);
+      setMessage(`已批量设置 ${count} 条素材 · r${next.revision}`);
+    } catch (error) {
+      if (error instanceof HostConnectionError && error.status === 409) await reload(selectedItem?.media_id).catch(() => undefined);
+      setMessage(errorMessage(error));
+    } finally { setBusy(false); }
+  }
+
   function changeSourceRole(value: MediaSourceRole): void {
     patch({ source_role: value, sync_policy: value === "sync_camera" ? "auto" : "exclude" });
   }
@@ -401,6 +425,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>缩略图</button>
         </div>
         <label className="media-library-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="保存时必填" /></label>
+        <div className="media-library-bulk" aria-label="批量设置机位"><span>{selectedIds.size} 条已选</span><input value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" disabled={busy || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button></div>
       </div>
 
       <div className="media-library-camera-strip" aria-label="按机位筛选">
@@ -416,15 +441,10 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       <div className="media-library-layout">
         <div className={`media-library-list is-${viewMode}`} role="list" aria-label={viewMode === "grid" ? "素材缩略图" : "素材列表"}>
           {visible.map((item) => (
-            <MediaLibraryRow
-              key={item.media_id}
-              item={item}
-              selected={selectedId === item.media_id}
-              roles={roles}
-              preview={playbackForItem(host, projectId, item, playbackByMedia[item.media_id])}
-              takeLabel={takeLabelByClip[item.media_id] ?? (item.clip_id?.trim() ? takeLabelByClip[item.clip_id.trim()] : undefined)}
-              onSelect={() => select(item)}
-            />
+            <div className="media-library-row-wrap" key={item.media_id}>
+              <input aria-label={`选择 ${item.display_name}`} type="checkbox" checked={selectedIds.has(item.media_id)} onChange={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(item.media_id)) next.delete(item.media_id); else next.add(item.media_id); return next; })} />
+              <MediaLibraryRow item={item} selected={selectedId === item.media_id} roles={roles} preview={playbackForItem(host, projectId, item, playbackByMedia[item.media_id])} takeLabel={takeLabelByClip[item.media_id] ?? (item.clip_id?.trim() ? takeLabelByClip[item.clip_id.trim()] : undefined)} onSelect={() => select(item)} />
+            </div>
           ))}
           {filtered.length > visible.length ? <p className="production-note">当前显示前 {visible.length} 条；继续缩小搜索范围以定位其它素材。</p> : null}
           {!visible.length ? <p className="empty-copy">当前筛选下没有素材。</p> : null}
