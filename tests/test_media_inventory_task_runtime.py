@@ -65,6 +65,23 @@ def test_probe_dimensions_survives_missing_ffprobe(tmp_path: Path, monkeypatch) 
     assert media_inventory_task_runtime._probe_dimensions("/nonexistent/x.mp4") == {}
 
 
+def test_probe_dimensions_ignores_malformed_stream_metadata(monkeypatch) -> None:
+    """Malformed ffprobe metadata must not abort the whole inventory scan."""
+    import subprocess as real_subprocess
+
+    class MalformedProbe:
+        stdout = '{"streams": [null]}'
+
+    monkeypatch.setattr(
+        media_inventory_task_runtime.subprocess,
+        "run",
+        lambda *_args, **_kwargs: MalformedProbe(),
+    )
+    monkeypatch.setattr(media_inventory_task_runtime.subprocess, "SubprocessError", real_subprocess.SubprocessError)
+
+    assert media_inventory_task_runtime._probe_dimensions("broken.mov") == {}
+
+
 def _raise_file_not_found(*_args, **_kwargs):
     raise FileNotFoundError("ffprobe missing")
 

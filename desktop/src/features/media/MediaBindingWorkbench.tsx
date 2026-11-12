@@ -35,6 +35,12 @@ function newestActiveScan(tasks: ProjectTaskRecord[]): ProjectTaskRecord | null 
   return tasks.filter(activeMediaScan).sort((left, right) => taskTime(right) - taskTime(left))[0] ?? null;
 }
 
+function newestMediaScan(tasks: ProjectTaskRecord[]): ProjectTaskRecord | null {
+  return tasks
+    .filter((task) => task.type === "media_inventory_scan")
+    .sort((left, right) => taskTime(right) - taskTime(left))[0] ?? null;
+}
+
 function scanStage(task: ProjectTaskRecord): string {
   if (task.cancel_requested) return "正在取消";
   const labels: Record<string, string> = {
@@ -60,6 +66,13 @@ function isInventorySnapshotPublishFailure(task: Pick<ProjectTaskRecord, "error"
   return text.includes("快照发布失败") || text.includes("inventory 快照发布失败");
 }
 
+function scanFailureMessage(task: Pick<ProjectTaskRecord, "error" | "message">): string {
+  if (isInventorySnapshotPublishFailure(task)) {
+    return "素材扫描失败：绑定已提交，但索引快照发布失败；连接结果暂不可用，请重新扫描。";
+  }
+  return `素材扫描失败：${task.error || task.message || "未知错误"}；请重新扫描或检查素材位置。`;
+}
+
 export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
   const client = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const tasks = useMemo(() => new ProjectTaskClient(baseUrl), [baseUrl]);
@@ -67,6 +80,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
   const [summary, setSummary] = useState<MediaBindingSummary | null>(null);
   const [rootsText, setRootsText] = useState("");
   const [scanTask, setScanTask] = useState<ProjectTaskRecord | null>(null);
+  const [scanError, setScanError] = useState<ProjectTaskRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("正在读取本机素材连接…");
 
@@ -92,8 +106,15 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       setSummary(payload.summary);
       setRootsText(payload.summary.roots.join("\n"));
       const active = newestActiveScan(taskRows);
+      const latest = newestMediaScan(taskRows);
+      const latestFailure = latest && (latest.status === "failed" || Boolean(latest.error)) ? latest : null;
       setScanTask(active);
-      setMessage(active ? `${scanStage(active)}；完成后连接结果会自动刷新。` : describeSummary(payload.summary));
+      setScanError(latestFailure);
+      setMessage(active
+        ? `${scanStage(active)}；完成后连接结果会自动刷新。`
+        : latestFailure
+          ? scanFailureMessage(latestFailure)
+          : describeSummary(payload.summary));
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -134,11 +155,8 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
         } else if (current.status === "cancelled") {
           setMessage("素材扫描已取消；原有本机素材连接保持不变。");
         } else if (current.status === "failed" || current.error) {
-          if (isInventorySnapshotPublishFailure(current)) {
-            setMessage("素材扫描失败：绑定已提交，但索引快照发布失败；连接结果暂不可用，请重新扫描。");
-          } else {
-            setMessage(`素材扫描失败：${current.error || current.message || "未知错误"}；请重新扫描或检查素材位置。`);
-          }
+          setScanError(current);
+          setMessage(scanFailureMessage(current));
         }
       } catch (error) {
         if (disposed) return;
@@ -191,6 +209,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       return;
     }
     setBusy(true);
+    setScanError(null);
     setRootsText(normalized.join("\n"));
     setMessage(intent === "reconnect"
       ? "正在提交素材重新连接任务…"
@@ -336,6 +355,14 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
             {scanProgress ? <progress value={scanProgress.done} max={scanProgress.total} /> : null}
           </div>
           <button type="button" className="secondary" disabled={busy || !canCancelTask(scanTask) || Boolean(scanTask.cancel_requested)} onClick={() => void cancelScan()}>{scanTask.cancel_requested ? "正在取消" : "取消扫描"}</button>
+        </section>
+      ) : null}
+
+      {scanError ? (
+        <section className="media-binding-scan-error" role="alert" aria-label="素材扫描错误">
+          <strong>最近一次素材扫描未完成</strong>
+          <span>{scanFailureMessage(scanError)}</span>
+          <span>当前页面仍可继续查看和处理已有媒体身份；修复素材位置后可重新扫描。</span>
         </section>
       ) : null}
 

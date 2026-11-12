@@ -10,6 +10,10 @@
 .media-binding-scan-state progress { width: min(460px, 100%); height: 5px; margin-top: 3px; }
 .media-binding-scan-state > button { min-height: 31px; white-space: nowrap; }
 
+.media-binding-scan-error { display: grid; gap: 4px; margin: 0 0 14px; border: 1px solid #75463f; border-radius: 9px; padding: 11px 13px; background: #201513; }
+.media-binding-scan-error strong { color: #f0c4bc; font-size: 11px; }
+.media-binding-scan-error span { color: #c99a91; font-size: 10px; line-height: 1.5; }
+
 .media-binding-recovery-state { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; margin-bottom: 18px; border: 1px solid #2e3841; border-radius: 9px; padding: 13px 14px; background: #11171c; }
 .media-binding-recovery-state.is-missing { border-color: #654843; background: #181313; }
 .media-binding-recovery-state.is-ready { border-color: #315345; background: #101814; }
@@ -40,6 +44,9 @@ html[data-mirrororder-theme="light"] .media-binding-scan-state { border-color: #
 html[data-mirrororder-theme="light"] .media-binding-scan-state strong { color: #26313a; }
 html[data-mirrororder-theme="light"] .media-binding-scan-state span,
 html[data-mirrororder-theme="light"] .media-binding-result-limit { color: #687580; }
+html[data-mirrororder-theme="light"] .media-binding-scan-error { border-color: #e4c5bf; background: #fff7f5; }
+html[data-mirrororder-theme="light"] .media-binding-scan-error strong { color: #8d4135; }
+html[data-mirrororder-theme="light"] .media-binding-scan-error span { color: #a55348; }
 html[data-mirrororder-theme="light"] .media-binding-recovery-state { border-color: #d8e0e6; background: #f7f9fb; }
 html[data-mirrororder-theme="light"] .media-binding-recovery-state.is-missing { border-color: #e4c5bf; background: #fff7f5; }
 html[data-mirrororder-theme="light"] .media-binding-recovery-state.is-ready { border-color: #c5dccc; background: #f6fbf8; }

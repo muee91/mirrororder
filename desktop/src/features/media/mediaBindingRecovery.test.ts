@@ -53,6 +53,18 @@ describe("Desktop media reconnect recovery", () => {
     expect(source).not.toContain("扫描完成后点“刷新结果”");
   });
 
+  it("keeps the latest terminal scan failure visible after remount without blocking recovery", () => {
+    const source = read("./MediaBindingWorkbench.tsx");
+
+    expect(source).toContain("function newestMediaScan(tasks: ProjectTaskRecord[]): ProjectTaskRecord | null");
+    expect(source).toContain("const latestFailure = latest && (latest.status === \"failed\" || Boolean(latest.error)) ? latest : null;");
+    expect(source).toContain("setScanError(latestFailure)");
+    expect(source).toContain("className=\"media-binding-scan-error\"");
+    expect(source).toContain('role="alert"');
+    expect(source).toContain("当前页面仍可继续查看和处理已有媒体身份");
+    expect(source).toContain("setScanError(null)");
+  });
+
   it("does not silently truncate large result sets", () => {
     const source = read("./MediaBindingWorkbench.tsx");
 
@@ -68,6 +80,7 @@ describe("Desktop media reconnect recovery", () => {
     expect(main).toContain('import "./features/media/media-binding-recovery.css"');
     expect(main.indexOf('import "./features/media/media-binding-recovery.css"')).toBeGreaterThan(main.indexOf('import "./desktop-theme-frozen-surfaces.css"'));
     expect(css).toContain(".media-binding-scan-state");
+    expect(css).toContain(".media-binding-scan-error");
     expect(css).toContain('html[data-mirrororder-theme="light"] .media-binding-recovery-state');
     expect(css).toContain('html[data-mirrororder-theme="dark"] .media-binding-recovery-state');
   });

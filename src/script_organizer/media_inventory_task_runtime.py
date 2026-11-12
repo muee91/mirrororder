@@ -92,10 +92,15 @@ def _probe_dimensions(path_text: str) -> dict[str, int]:
             timeout=12,
             check=True,
         )
-        streams = json.loads(result.stdout).get("streams", [])
-        width = int(streams[0].get("width") or 0) if streams else 0
-        height = int(streams[0].get("height") or 0) if streams else 0
-    except (OSError, ValueError, json.JSONDecodeError, subprocess.SubprocessError):
+        payload = json.loads(result.stdout)
+        if not isinstance(payload, dict):
+            return {}
+        streams = payload.get("streams", [])
+        if not isinstance(streams, list) or not streams or not isinstance(streams[0], dict):
+            return {}
+        width = int(streams[0].get("width") or 0)
+        height = int(streams[0].get("height") or 0)
+    except (OSError, TypeError, ValueError, OverflowError, json.JSONDecodeError, subprocess.SubprocessError):
         return {}
     return {"width": width, "height": height} if width > 0 and height > 0 else {}
 
