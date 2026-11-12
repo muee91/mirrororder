@@ -29,7 +29,7 @@ type Filter = "all" | "auxiliary" | "unindexed" | "labeled";
 type ViewMode = "list" | "grid";
 type PlaybackEntry = { clipId: string; url: string; sourceStart: number };
 type CameraFilterItem = { key: string; label: string; tone: CameraTone; sortOrder: number; count: number };
-type BulkResult = { actionLabel: string; count: number; camera: string; revision: number };
+type BulkResult = { actionLabel: string; count: number; camera: string; revision: number; mediaIds: string[] };
 
 const BULK_RESULT_STORAGE_KEY = "mirrororder.desktop-v2.media-bulk-result";
 
@@ -61,7 +61,8 @@ function storedBulkResult(projectId: string): BulkResult | null {
     if (!raw) return null;
     const value = JSON.parse(raw) as Partial<BulkResult>;
     if (typeof value.actionLabel !== "string" || typeof value.count !== "number" || !Number.isFinite(value.count) || value.count < 1 || typeof value.camera !== "string" || typeof value.revision !== "number" || !Number.isFinite(value.revision)) return null;
-    return { actionLabel: value.actionLabel, count: value.count, camera: value.camera, revision: value.revision };
+    const mediaIds = Array.isArray(value.mediaIds) ? value.mediaIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim())) : [];
+    return { actionLabel: value.actionLabel, count: value.count, camera: value.camera, revision: value.revision, mediaIds };
   } catch {
     return null;
   }
@@ -430,7 +431,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       setRoles(next);
       setSelectedIds(new Set());
       await reload(selectedItem?.media_id);
-      const result: BulkResult = { actionLabel, count, camera: cameraOverride.trim().toUpperCase() || "跟随识别", revision: next.revision };
+      const result: BulkResult = { actionLabel, count, camera: cameraOverride.trim().toUpperCase() || "跟随识别", revision: next.revision, mediaIds: [...selectedIds] };
       setBulkResult(result);
       saveBulkResult(projectId, result);
       setMessage(`已批量${actionLabel} ${count} 条素材的机位 · r${next.revision}`);
@@ -442,6 +443,14 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
         setMessage(errorMessage(error));
       }
     } finally { setBusy(false); }
+  }
+
+  function restoreLastBulkSelection(): void {
+    if (!bulkResult?.mediaIds.length || !inventory) return;
+    const available = new Set(inventory.items.map((item) => item.media_id));
+    const restored = bulkResult.mediaIds.filter((mediaId) => available.has(mediaId));
+    setSelectedIds(new Set(restored));
+    setMessage(restored.length ? `已重新选中最近批量处理的 ${restored.length} 条素材` : "最近批量处理的素材已不在当前清单");
   }
 
   function changeSourceRole(value: MediaSourceRole): void {
@@ -477,7 +486,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>缩略图</button>
         </div>
         <label className="media-library-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="保存时必填" /></label>
-        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-clear-selection" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button><span>{selectedIds.size} 条已选{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}</span><input value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}</output> : null}</div>
+        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-clear-selection" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button><span>{selectedIds.size} 条已选{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}</span><input value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}</div>
       </div>
 
       <div className="media-library-camera-strip" aria-label="按机位筛选">
