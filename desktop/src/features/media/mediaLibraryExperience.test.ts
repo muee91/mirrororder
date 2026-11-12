@@ -97,6 +97,9 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("最近批量结果");
     expect(workbench).toContain("aria-live=\"polite\"");
     expect(workbench).toContain("setBulkResult(result)");
+    expect(workbench).toContain("mediaIds: [...selectedIds]");
+    expect(workbench).toContain("restoreLastBulkSelection");
+    expect(workbench).toContain("重新选中");
   });
 
   it("persists the last bulk result per project for reload and project-switch recovery", () => {
