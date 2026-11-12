@@ -99,6 +99,9 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("setBulkResult(result)");
     expect(workbench).toContain("mediaIds: [...selectedIds]");
     expect(workbench).toContain("restoreLastBulkSelection");
+    expect(workbench).toContain("const unavailable = bulkResult.mediaIds.length - restored.length");
+    expect(workbench).toContain("当前清单不可用");
+    expect(workbench).toContain("未改变选择");
     expect(workbench).toContain("重新选中");
   });
 

@@ -449,8 +449,15 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     if (!bulkResult?.mediaIds.length || !inventory) return;
     const available = new Set(inventory.items.map((item) => item.media_id));
     const restored = bulkResult.mediaIds.filter((mediaId) => available.has(mediaId));
+    const unavailable = bulkResult.mediaIds.length - restored.length;
     setSelectedIds(new Set(restored));
-    setMessage(restored.length ? `已重新选中最近批量处理的 ${restored.length} 条素材` : "最近批量处理的素材已不在当前清单");
+    if (restored.length && unavailable) {
+      setMessage(`已重新选中最近批量处理的 ${restored.length} 条素材 · ${unavailable} 条当前清单不可用`);
+    } else if (restored.length) {
+      setMessage(`已重新选中最近批量处理的 ${restored.length} 条素材`);
+    } else {
+      setMessage(`最近批量处理的 ${bulkResult.mediaIds.length} 条素材均不在当前清单，未改变选择`);
+    }
   }
 
   function changeSourceRole(value: MediaSourceRole): void {
