@@ -140,6 +140,14 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("重新选中");
   });
 
+  it("surfaces sync-camera rows that still need a camera assignment", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain('"needsCamera"');
+    expect(workbench).toContain("待补机位");
+    expect(workbench).toContain('effectiveCamera(role.camera_override, item.inferred_camera).label.trim() !== "?"');
+    expect(workbench).toContain("isAuxiliary(role)");
+  });
+
   it("supports inverting selection within the current filtered results", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("function invertVisibleSelection(): void");

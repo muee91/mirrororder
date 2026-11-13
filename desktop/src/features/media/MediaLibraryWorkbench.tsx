@@ -25,7 +25,7 @@ interface Props {
   onOpenMediaBinding?: () => void;
 }
 
-type Filter = "all" | "auxiliary" | "unindexed" | "labeled";
+type Filter = "all" | "auxiliary" | "unindexed" | "labeled" | "needsCamera";
 type ViewMode = "list" | "grid";
 type PlaybackEntry = { clipId: string; url: string; sourceStart: number };
 type CameraFilterItem = { key: string; label: string; tone: CameraTone; sortOrder: number; count: number };
@@ -410,6 +410,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       if (cameraFilter !== "all" && cameraFilterKey(role.camera_override, item.inferred_camera) !== cameraFilter) return false;
       if (sceneFilter !== "all" && role.scene_id?.trim() !== sceneFilter) return false;
       if (filter === "auxiliary" && !isAuxiliary(role)) return false;
+      if (filter === "needsCamera" && (isAuxiliary(role) || effectiveCamera(role.camera_override, item.inferred_camera).label.trim() !== "?")) return false;
       if (filter === "unindexed" && item.indexed) return false;
       if (filter === "labeled" && Object.keys(role).length === 0) return false;
       if (!needle) return true;
@@ -621,7 +622,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       <div className="media-library-toolbar">
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
         <div className="media-library-filters" aria-label="素材状态筛选">
-          {([["all", "全部"], ["auxiliary", "辅助素材"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{filterLabel}</button>)}
+          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{filterLabel}</button>)}
         </div>
         <div className="media-library-view-toggle" aria-label="素材显示密度">
           <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>列表</button>
