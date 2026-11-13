@@ -582,8 +582,20 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       event.preventDefault();
       selectVisibleSelection();
     }
+    function invertVisibleOnShortcut(event: KeyboardEvent): void {
+      if (event.key.toLowerCase() !== "i" || (!event.metaKey && !event.ctrlKey) || event.altKey || !event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      if (!visibleIds.length) return;
+      event.preventDefault();
+      invertVisibleSelection();
+    }
     window.addEventListener("keydown", selectAllVisibleOnShortcut);
-    return () => window.removeEventListener("keydown", selectAllVisibleOnShortcut);
+    window.addEventListener("keydown", invertVisibleOnShortcut);
+    return () => {
+      window.removeEventListener("keydown", selectAllVisibleOnShortcut);
+      window.removeEventListener("keydown", invertVisibleOnShortcut);
+    };
   }, [selectedIds, visibleIds]);
 
   function invertVisibleSelection(): void {

@@ -184,6 +184,15 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("受批量上限限制");
   });
 
+  it("supports Cmd/Ctrl+Shift+I for filtered selection inversion without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function invertVisibleOnShortcut(event: KeyboardEvent): void");
+    expect(workbench).toContain('event.key.toLowerCase() !== "i"');
+    expect(workbench).toContain("event.shiftKey");
+    expect(workbench).toContain("invertVisibleSelection()");
+    expect(workbench).toContain("window.removeEventListener(\"keydown\", invertVisibleOnShortcut)");
+  });
+
   it("caps select-all to the bulk camera write limit", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const remaining = Math.max(0, bulkSelectionLimit - next.size)");
