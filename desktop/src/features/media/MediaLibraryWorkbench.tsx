@@ -416,8 +416,18 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       event.preventDefault();
       searchInputRef.current?.focus();
     }
+    function clearSelection(event: KeyboardEvent): void {
+      if (event.key !== "Escape" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || !selectedIds.size) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      setSelectedIds(new Set());
+    }
     window.addEventListener("keydown", focusSearch);
-    return () => window.removeEventListener("keydown", focusSearch);
+    window.addEventListener("keydown", clearSelection);
+    return () => {
+      window.removeEventListener("keydown", focusSearch);
+      window.removeEventListener("keydown", clearSelection);
+    };
   }, []);
 
   const sceneReadiness = useMemo(

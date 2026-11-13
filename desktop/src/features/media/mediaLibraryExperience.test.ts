@@ -112,6 +112,15 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("aria-keyshortcuts=\"/\"");
   });
 
+  it("clears the current batch selection with Escape without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function clearSelection(event: KeyboardEvent): void");
+    expect(workbench).toContain('if (event.key !== "Escape" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || !selectedIds.size) return');
+    expect(workbench).toContain("setSelectedIds(new Set())");
+    expect(workbench).toContain('window.addEventListener("keydown", clearSelection)');
+    expect(workbench).toContain('window.removeEventListener("keydown", clearSelection)');
+  });
+
   it("supports selecting the current filtered result set for batch camera work", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const visibleIds = useMemo(() => visible.map((item) => item.media_id), [visible])");
