@@ -105,6 +105,13 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("重新选中");
   });
 
+  it("caps select-all to the bulk camera write limit", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const remaining = Math.max(0, bulkSelectionLimit - next.size)");
+    expect(workbench).toContain("slice(0, remaining)");
+    expect(workbench).toContain("单次最多 {bulkSelectionLimit} 条");
+  });
+
   it("blocks bulk camera writes when a refresh leaves selected media unavailable", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const selectedUnavailableCount = [...selectedIds].filter((mediaId) => !inventoryIds.has(mediaId)).length");
