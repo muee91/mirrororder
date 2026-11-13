@@ -110,6 +110,7 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("const remaining = Math.max(0, bulkSelectionLimit - next.size)");
     expect(workbench).toContain("slice(0, remaining)");
     expect(workbench).toContain("单次最多 {bulkSelectionLimit} 条");
+    expect(workbench).toContain("当前筛选结果超过批量上限");
   });
 
   it("blocks bulk camera writes when a refresh leaves selected media unavailable", () => {

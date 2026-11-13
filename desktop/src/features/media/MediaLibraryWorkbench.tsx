@@ -361,6 +361,11 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   }, [selectedPlaybackFailed]);
 
   function toggleVisibleSelection(): void {
+    const availableToAdd = visibleIds.filter((mediaId) => !selectedIds.has(mediaId));
+    const remaining = Math.max(0, bulkSelectionLimit - selectedIds.size);
+    if (!allVisibleSelected && availableToAdd.length > remaining) {
+      setMessage(`当前筛选结果超过批量上限，已先选中 ${remaining} 条；单次最多 ${bulkSelectionLimit} 条`);
+    }
     setSelectedIds((current) => {
       const next = new Set(current);
       if (allVisibleSelected) {
