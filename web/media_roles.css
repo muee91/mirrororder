@@ -6,7 +6,7 @@ html:not(.native-production) .media-role-editor {
 
 .media-role-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto minmax(180px, auto);
   gap: 10px;
   align-items: center;
   padding: 0 0 12px;
@@ -16,6 +16,17 @@ html:not(.native-production) .media-role-editor {
 .media-role-search {
   width: 100%;
   min-width: 0;
+}
+
+.media-role-result-count {
+  color: var(--muted, #737373);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.media-role-clear {
+  min-height: 30px;
+  white-space: nowrap;
 }
 
 .media-role-filters {
@@ -223,6 +234,20 @@ html:not(.native-production) .media-role-editor {
 .auxiliary-media-note {
   color: var(--muted, #737373);
   font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .media-role-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .media-role-search {
+    grid-column: 1 / -1;
+  }
+
+  .media-role-filters {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 1050px) {

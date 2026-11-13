@@ -178,6 +178,8 @@
       </div>
       <div class="media-role-toolbar">
         <input class="media-role-search" type="search" data-media-role-search value="${esc(query)}" placeholder="搜索文件、机位、场景或备注">
+        <span class="media-role-result-count" aria-live="polite">${filter !== 'all' || query.trim() ? `筛选后 ${items.length} 条` : `共 ${items.length} 条`}</span>
+        ${filter !== 'all' || query.trim() ? '<button type="button" class="media-role-clear" data-media-role-clear aria-label="清除素材筛选">清除筛选</button>' : ''}
         <div class="media-role-filters">
           ${[['all', '全部'], ['auxiliary', '只看辅助'], ['unindexed', '未入索引'], ['labeled', '已标记']].map(([value, label]) => `<button type="button" data-media-role-filter="${value}" class="${filter === value ? 'active' : ''}">${label}</button>`).join('')}
         </div>
@@ -277,6 +279,7 @@
       return;
     }
     const filterButton = event.target.closest('[data-media-role-filter]');
+    const clearButton = event.target.closest('[data-media-role-clear]');
     const moreButton = event.target.closest('[data-media-role-more]');
     if (moreButton && active) {
       event.preventDefault();
@@ -287,7 +290,17 @@
     if (filterButton && active) {
       event.preventDefault();
       filter = String(filterButton.dataset.mediaRoleFilter || 'all');
+      visibleLimit = 500;
       render();
+      return;
+    }
+    if (clearButton && active) {
+      event.preventDefault();
+      query = '';
+      filter = 'all';
+      visibleLimit = 500;
+      render();
+      requestAnimationFrame(() => document.querySelector('[data-media-role-search]')?.focus());
       return;
     }
     const save = event.target.closest('[data-save-media-role]');
@@ -300,6 +313,7 @@
   document.addEventListener('input', (event) => {
     if (!active || !event.target.matches('[data-media-role-search]')) return;
     query = event.target.value || '';
+    visibleLimit = 500;
     render();
     requestAnimationFrame(() => {
       const search = document.querySelector('[data-media-role-search]');
