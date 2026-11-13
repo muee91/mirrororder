@@ -77,6 +77,14 @@ describe("media library experience contract", () => {
     expect(styles).toContain("display: flex !important");
   });
 
+  it("offers a keyboard shortcut to focus the media search without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const searchInputRef = useRef<HTMLInputElement>(null)");
+    expect(workbench).toContain("if (event.key !== \"/\" || event.metaKey || event.ctrlKey || event.altKey) return");
+    expect(workbench).toContain("searchInputRef.current?.focus()");
+    expect(workbench).toContain("aria-keyshortcuts=\"/\"");
+  });
+
   it("supports selecting the current filtered result set for batch camera work", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const visibleIds = useMemo(() => visible.map((item) => item.media_id), [visible])");

@@ -246,6 +246,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(() => storedBulkResult(projectId));
   const [draft, setDraft] = useState<MediaRole>({});
   const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [cameraFilter, setCameraFilter] = useState("all");
@@ -302,6 +303,18 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     void reload("");
     return () => { reloadToken.current += 1; };
   }, [client, host, projectId]);
+
+  useEffect(() => {
+    function focusSearch(event: KeyboardEvent): void {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    }
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, []);
 
   const cameraFilters = useMemo(() => {
     const grouped = new Map<string, CameraFilterItem>();
@@ -505,7 +518,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       </div>
 
       <div className="media-library-toolbar">
-        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件、机位、场景或备注" />
+        <input ref={searchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
         <div className="media-library-filters" aria-label="素材状态筛选">
           {([["all", "全部"], ["auxiliary", "辅助素材"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{filterLabel}</button>)}
         </div>
