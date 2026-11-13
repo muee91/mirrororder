@@ -303,6 +303,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [cameraFilter, setCameraFilter] = useState("all");
   const [sceneFilter, setSceneFilter] = useState("all");
+  const [showAllScenes, setShowAllScenes] = useState(false);
   const [actor, setActor] = useState(storedActor);
   const [message, setMessage] = useState("正在读取本机素材清单与共享素材角色…");
   const [busy, setBusy] = useState(false);
@@ -353,6 +354,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
   useEffect(() => {
     setBulkResult(storedBulkResult(projectId));
+    setShowAllScenes(false);
     void reload("");
     return () => { reloadToken.current += 1; };
   }, [client, host, projectId]);
@@ -627,12 +629,12 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
             {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
             <div className="media-library-scene-readiness-list" aria-label="按场景聚焦素材">
               <button type="button" className={sceneFilter === "all" ? "is-active" : ""} onClick={() => setSceneFilter("all")}>全部场景</button>
-              {sceneReadiness.slice(0, 8).map((scene) => (
+              {(showAllScenes ? sceneReadiness : sceneReadiness.slice(0, 8)).map((scene) => (
                 <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} onClick={() => setSceneFilter(scene.sceneId)}>
                   场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
                 </button>
               ))}
-              {sceneReadiness.length > 8 ? <span>另有 {sceneReadiness.length - 8} 场…</span> : null}
+              {sceneReadiness.length > 8 ? <button type="button" className="media-library-scene-more" onClick={() => setShowAllScenes((current) => !current)}>{showAllScenes ? "收起场景" : `展开全部 ${sceneReadiness.length} 场`}</button> : null}
             </div>
           </>
         ) : <span>先给同步机位素材补充场景归属，系统会提示是否具备至少两个机位。</span>}

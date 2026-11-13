@@ -72,6 +72,9 @@ describe("media library experience contract", () => {
     expect(workbench).toContain(">全部场景</button>");
     expect(workbench).toContain('aria-label="场景机位准备度"');
     expect(workbench).toContain("至少两个机位");
+    expect(workbench).toContain("showAllScenes");
+    expect(workbench).toContain("展开全部 ${sceneReadiness.length} 场");
+    expect(workbench).toContain("收起场景");
     expect(workbench).not.toContain("编辑决定");
     expect(styles).toContain(".media-library-scene-readiness");
   });
