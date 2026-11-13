@@ -111,11 +111,14 @@ export interface SceneCameraReadiness {
   ready: boolean;
 }
 
-export function sceneReadinessReport(scenes: SceneCameraReadiness[]): string {
-  const ready = scenes.filter((scene) => scene.ready).length;
-  const lines = [`场景机位准备度：${ready}/${scenes.length} 场已具备多机位`];
-  for (const scene of scenes) {
-    lines.push(`场 ${scene.sceneId} · ${scene.ready ? "已具备多机位" : "待补机位"} · ${scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · ${scene.mediaCount} 条`);
+export function mediaInventoryReport(items: MediaInventoryItem[], store: MediaRoleStore | null): string {
+  const lines = [`素材清单：${items.length} 条`];
+  for (const item of items) {
+    const role = roleFor(item, store);
+    const camera = effectiveCamera(role.camera_override, item.inferred_camera).label;
+    const scene = role.scene_id?.trim() ? `场 ${role.scene_id.trim()}` : "未分场";
+    const status = item.indexed ? "已入索引" : "待恢复";
+    lines.push(`${item.display_name} · ${camera} · ${scene} · ${ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"} · ${status}`);
   }
   return lines.join("\n");
 }
@@ -372,16 +375,6 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const readySceneCount = sceneReadiness.filter((scene) => scene.ready).length;
   const pendingSceneCount = sceneReadiness.length - readySceneCount;
 
-  async function copySceneReadiness(): Promise<void> {
-    if (!sceneReadiness.length) return;
-    try {
-      await navigator.clipboard.writeText(sceneReadinessReport(sceneReadiness));
-      setMessage("已复制场景机位准备度摘要");
-    } catch {
-      setMessage("当前环境不允许复制，请手动选择摘要");
-    }
-  }
-
   const cameraFilters = useMemo(() => {
     const grouped = new Map<string, CameraFilterItem>();
     for (const item of inventory?.items ?? []) {
@@ -419,6 +412,17 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
   const visibleLimit = viewMode === "grid" ? 160 : 500;
   const visible = filtered.slice(0, visibleLimit);
+
+  async function copyVisibleInventory(): Promise<void> {
+    if (!visible.length) return;
+    try {
+      await navigator.clipboard.writeText(mediaInventoryReport(visible, roles));
+      setMessage(`已复制 ${visible.length} 条当前素材清单`);
+    } catch {
+      setMessage("当前环境不允许复制，请手动选择清单");
+    }
+  }
+
   const visibleIds = useMemo(() => visible.map((item) => item.media_id), [visible]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((mediaId) => selectedIds.has(mediaId));
   const selectedVisibleCount = visibleIds.filter((mediaId) => selectedIds.has(mediaId)).length;
@@ -593,7 +597,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>缩略图</button>
         </div>
         <label className="media-library-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="保存时必填" /></label>
-        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-clear-selection" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>{bulkSelectionHasUnavailable ? <button type="button" className="secondary media-library-clear-unavailable" disabled={busy} onClick={clearUnavailableSelection}>移除不可用选择</button> : null}<span>{selectedIds.size} 条已选 · 单次最多 {bulkSelectionLimit} 条{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}{bulkSelectionHasUnavailable ? ` · ${selectedUnavailableCount} 条已不在当前清单，请刷新后重新选择` : ""}</span><input value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}</div>
+        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-copy-inventory" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-clear-selection" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>{bulkSelectionHasUnavailable ? <button type="button" className="secondary media-library-clear-unavailable" disabled={busy} onClick={clearUnavailableSelection}>移除不可用选择</button> : null}<span>{selectedIds.size} 条已选 · 单次最多 {bulkSelectionLimit} 条{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}{bulkSelectionHasUnavailable ? ` · ${selectedUnavailableCount} 条已不在当前清单，请刷新后重新选择` : ""}</span><input value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}</div>
       </div>
 
       <div className="media-library-scene-readiness" aria-label="场景机位准备度">
@@ -602,7 +606,6 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <>
             <span className="is-ready">{readySceneCount} 场已具备多机位</span>
             {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
-            <button type="button" className="secondary media-library-scene-readiness-copy" onClick={() => void copySceneReadiness()}>复制摘要</button>
             <div className="media-library-scene-readiness-list">
               {sceneReadiness.slice(0, 8).map((scene) => (
                 <span key={scene.sceneId} className={scene.ready ? "is-ready" : "is-pending"}>

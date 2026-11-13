@@ -52,14 +52,18 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("已入索引，但缺少可播放的 clip identity");
   });
 
+  it("copies the current visible inventory as a pre-edit handoff", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("export function mediaInventoryReport(");
+    expect(workbench).toContain("navigator.clipboard.writeText(mediaInventoryReport(visible, roles))");
+    expect(workbench).toContain(">复制当前清单</button>");
+  });
+
   it("surfaces scene-level multicam readiness without treating it as editorial authority", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     const styles = source("./media-library.css");
     expect(workbench).toContain("export function sceneCameraReadiness(");
     expect(workbench).toContain("const readySceneCount = sceneReadiness.filter((scene) => scene.ready).length");
-    expect(workbench).toContain("export function sceneReadinessReport(");
-    expect(workbench).toContain("navigator.clipboard.writeText(sceneReadinessReport(sceneReadiness))");
-    expect(workbench).toContain(">复制摘要</button>");
     expect(workbench).toContain('aria-label="场景机位准备度"');
     expect(workbench).toContain("至少两个机位");
     expect(workbench).not.toContain("编辑决定");
