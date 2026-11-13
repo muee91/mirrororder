@@ -64,6 +64,10 @@ describe("media library experience contract", () => {
     const styles = source("./media-library.css");
     expect(workbench).toContain("export function sceneCameraReadiness(");
     expect(workbench).toContain("const readySceneCount = sceneReadiness.filter((scene) => scene.ready).length");
+    expect(workbench).toContain('aria-label="按场景聚焦素材"');
+    expect(workbench).toContain('const [sceneFilter, setSceneFilter] = useState("all")');
+    expect(workbench).toContain("role.scene_id?.trim() !== sceneFilter");
+    expect(workbench).toContain(">全部场景</button>");
     expect(workbench).toContain('aria-label="场景机位准备度"');
     expect(workbench).toContain("至少两个机位");
     expect(workbench).not.toContain("编辑决定");

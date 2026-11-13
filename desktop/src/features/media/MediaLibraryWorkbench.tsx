@@ -302,6 +302,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [filter, setFilter] = useState<Filter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [cameraFilter, setCameraFilter] = useState("all");
+  const [sceneFilter, setSceneFilter] = useState("all");
   const [actor, setActor] = useState(storedActor);
   const [message, setMessage] = useState("正在读取本机素材清单与共享素材角色…");
   const [busy, setBusy] = useState(false);
@@ -394,11 +395,18 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     }
   }, [cameraFilter, cameraFilters]);
 
+  useEffect(() => {
+    if (sceneFilter !== "all" && !sceneReadiness.some((scene) => scene.sceneId === sceneFilter)) {
+      setSceneFilter("all");
+    }
+  }, [sceneFilter, sceneReadiness]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("zh-CN");
     return (inventory?.items ?? []).filter((item) => {
       const role = roleFor(item, roles);
       if (cameraFilter !== "all" && cameraFilterKey(role.camera_override, item.inferred_camera) !== cameraFilter) return false;
+      if (sceneFilter !== "all" && role.scene_id?.trim() !== sceneFilter) return false;
       if (filter === "auxiliary" && !isAuxiliary(role)) return false;
       if (filter === "unindexed" && item.indexed) return false;
       if (filter === "labeled" && Object.keys(role).length === 0) return false;
@@ -408,7 +416,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
         .toLocaleLowerCase("zh-CN")
         .includes(needle);
     });
-  }, [cameraFilter, filter, inventory, query, roles]);
+  }, [cameraFilter, filter, inventory, query, roles, sceneFilter]);
 
   const visibleLimit = viewMode === "grid" ? 160 : 500;
   const visible = filtered.slice(0, visibleLimit);
@@ -606,11 +614,12 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <>
             <span className="is-ready">{readySceneCount} 场已具备多机位</span>
             {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
-            <div className="media-library-scene-readiness-list">
+            <div className="media-library-scene-readiness-list" aria-label="按场景聚焦素材">
+              <button type="button" className={sceneFilter === "all" ? "is-active" : ""} onClick={() => setSceneFilter("all")}>全部场景</button>
               {sceneReadiness.slice(0, 8).map((scene) => (
-                <span key={scene.sceneId} className={scene.ready ? "is-ready" : "is-pending"}>
+                <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} onClick={() => setSceneFilter(scene.sceneId)}>
                   场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
-                </span>
+                </button>
               ))}
               {sceneReadiness.length > 8 ? <span>另有 {sceneReadiness.length - 8} 场…</span> : null}
             </div>

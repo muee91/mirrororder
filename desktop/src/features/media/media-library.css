@@ -71,6 +71,7 @@
 .media-library-view-toggle button:focus-visible,
 .media-library-camera-strip button:focus-visible,
 .media-library-row:focus-visible,
+.media-library-scene-readiness-list button:focus-visible,
 .media-role-camera-quick button:focus-visible,
 .media-role-savebar button:focus-visible {
   outline: 2px solid var(--mo-accent, #5a9ef4);
@@ -94,6 +95,10 @@
 .media-library-scene-readiness .is-ready { color: var(--mo-success, #75c69a); }
 .media-library-scene-readiness .is-pending { color: var(--mo-warning, #d6b765); }
 .media-library-scene-readiness-list { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 4px 8px; }
+.media-library-scene-readiness-list button { border: 0; border-bottom: 1px solid transparent; padding: 0 0 1px; color: var(--mo-text-muted, #75828e); background: transparent; font: inherit; text-align: left; }
+.media-library-scene-readiness-list button:hover, .media-library-scene-readiness-list button.is-active { border-bottom-color: currentColor; color: var(--mo-text-primary, #d7dee5); }
+.media-library-scene-readiness-list button.is-ready { color: var(--mo-success, #75c69a); }
+.media-library-scene-readiness-list button.is-pending { color: var(--mo-warning, #d6b765); }
 
 .media-library-camera-strip {
   min-height: 40px;
