@@ -140,6 +140,15 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("重新选中");
   });
 
+  it("supports inverting selection within the current filtered results", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function invertVisibleSelection(): void");
+    expect(workbench).toContain("const visibleSet = new Set(visibleIds)");
+    expect(workbench).toContain("反选当前结果");
+    expect(workbench).toContain("media-library-invert-selection");
+    expect(workbench).toContain("受批量上限限制");
+  });
+
   it("caps select-all to the bulk camera write limit", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const remaining = Math.max(0, bulkSelectionLimit - next.size)");
