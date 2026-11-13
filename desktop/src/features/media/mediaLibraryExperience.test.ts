@@ -198,6 +198,16 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('cameraFilter: "all"');
   });
 
+  it("persists selected media ids per project and caps recovered selection", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const MEDIA_SELECTION_STORAGE_KEY");
+    expect(workbench).toContain("storedMediaSelection(projectId)");
+    expect(workbench).toContain("saveMediaSelection(projectId, selectedIds)");
+    expect(workbench).toContain("setSelectedIds(storedMediaSelection(projectId))");
+    expect(workbench).toContain("slice(0, 200)");
+    expect(workbench).toContain("new Set([...current].filter((id) => nextInventory.items.some((item) => item.media_id === id)))");
+  });
+
   it("persists the media browser view state per project for long-running pre-edit work", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("type MediaViewState = { query: string; filter: Filter; cameraFilter: string; sceneFilter: string; viewMode: ViewMode; showAllScenes: boolean }");

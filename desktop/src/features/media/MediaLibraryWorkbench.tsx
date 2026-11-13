@@ -34,6 +34,7 @@ type MediaViewState = { query: string; filter: Filter; cameraFilter: string; sce
 
 const BULK_RESULT_STORAGE_KEY = "mirrororder.desktop-v2.media-bulk-result";
 const MEDIA_VIEW_STATE_STORAGE_KEY = "mirrororder.desktop-v2.media-view-state";
+const MEDIA_SELECTION_STORAGE_KEY = "mirrororder.desktop-v2.media-selection";
 
 const ROLE_LABELS: Record<string, string> = {
   sync_camera: "同步机位",
@@ -100,6 +101,24 @@ function storedMediaViewState(projectId: string): MediaViewState {
 function saveMediaViewState(projectId: string, state: MediaViewState): void {
   if (!projectId.trim()) return;
   try { globalThis.localStorage?.setItem(`${MEDIA_VIEW_STATE_STORAGE_KEY}:${projectId}`, JSON.stringify(state)); } catch { /* local convenience */ }
+}
+
+function storedMediaSelection(projectId: string): Set<string> {
+  if (!projectId.trim()) return new Set();
+  try {
+    const raw = globalThis.localStorage?.getItem(`${MEDIA_SELECTION_STORAGE_KEY}:${projectId}`);
+    if (!raw) return new Set();
+    const value = JSON.parse(raw);
+    if (!Array.isArray(value)) return new Set();
+    return new Set(value.filter((id): id is string => typeof id === "string" && Boolean(id.trim())).slice(0, 200));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveMediaSelection(projectId: string, selectedIds: Set<string>): void {
+  if (!projectId.trim()) return;
+  try { globalThis.localStorage?.setItem(`${MEDIA_SELECTION_STORAGE_KEY}:${projectId}`, JSON.stringify([...selectedIds].slice(0, 200))); } catch { /* local convenience */ }
 }
 
 function roleFor(item: MediaInventoryItem, store: MediaRoleStore | null): MediaRole {
@@ -322,7 +341,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [takeLabelByClip, setTakeLabelByClip] = useState<Record<string, string>>({});
   const [playbackProjectionLoaded, setPlaybackProjectionLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => storedMediaSelection(projectId));
   const [bulkCamera, setBulkCamera] = useState("");
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(() => storedBulkResult(projectId));
   const [draft, setDraft] = useState<MediaRole>({});
@@ -380,11 +399,14 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   useEffect(() => {
     setBulkResult(storedBulkResult(projectId));
     setViewState(storedMediaViewState(projectId));
+    setSelectedIds(storedMediaSelection(projectId));
     void reload("");
     return () => { reloadToken.current += 1; };
   }, [client, host, projectId]);
 
   useEffect(() => { saveMediaViewState(projectId, viewState); }, [projectId, viewState]);
+
+  useEffect(() => { saveMediaSelection(projectId, selectedIds); }, [projectId, selectedIds]);
 
   useEffect(() => {
     function focusSearch(event: KeyboardEvent): void {
