@@ -11,6 +11,7 @@
   let filter = 'all';
   let sortMode = 'default';
   let visibleLimit = 500;
+  const expandedMediaIds = new Set();
 
   const sourceRoleLabels = {
     sync_camera: '同步机位',
@@ -148,7 +149,7 @@
       row.note ? String(row.note).replace(/\s+/g, ' ').slice(0, 70) : '',
     ].filter(Boolean).join(' · ');
     return `
-      <details class="media-role-row" data-media-id="${esc(item.media_id)}">
+      <details class="media-role-row" data-media-id="${esc(item.media_id)}"${expandedMediaIds.has(item.media_id) ? ' open' : ''}>
         <summary>
           <span class="media-role-camera">${esc(camera)}</span>
           <span class="media-role-main">
@@ -331,6 +332,14 @@
     }
   }, true);
 
+  document.addEventListener('toggle', (event) => {
+    if (!active || !event.target.matches('.media-role-row[data-media-id]')) return;
+    const mediaId = String(event.target.dataset.mediaId || '');
+    if (!mediaId) return;
+    if (event.target.open) expandedMediaIds.add(mediaId);
+    else expandedMediaIds.delete(mediaId);
+  }, true);
+
   document.addEventListener('input', (event) => {
     if (!active || !event.target.matches('[data-media-role-search]')) return;
     query = event.target.value || '';
@@ -374,6 +383,7 @@
     filter = 'all';
     sortMode = 'default';
     visibleLimit = 500;
+    expandedMediaIds.clear();
     const result = await baseSwitchProject(...args);
     if (active) await refresh(true);
     return result;

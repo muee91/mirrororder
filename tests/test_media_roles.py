@@ -218,6 +218,9 @@ def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     assert "data-media-role-clear" in ui
     assert "aria-live=\"polite\"" in ui
     assert "visibleLimit = 500" in ui
+    assert "expandedMediaIds" in ui
+    assert "document.addEventListener('toggle'" in ui
+    assert "expandedMediaIds.clear()" in ui
     assert "航拍" in ui and "空镜" in ui and "GoPro" in ui
     assert '<script src="/media_role_ui.js"></script>' in index
     assert '<link rel="stylesheet" href="/media_roles.css">' in index
