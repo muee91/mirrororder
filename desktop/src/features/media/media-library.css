@@ -78,6 +78,23 @@
 }
 .media-library-actor { display: grid; gap: 3px; color: var(--mo-text-muted, #75828e); font-size: 10px; }
 
+.media-library-scene-readiness {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  margin-bottom: 8px;
+  border-block: 1px solid var(--mo-border-subtle, #252e36);
+  padding: 6px 8px;
+  color: var(--mo-text-muted, #75828e);
+  background: var(--mo-surface-pane, #0f1419);
+  font-size: 10px;
+}
+.media-library-scene-readiness-title { color: var(--mo-text-secondary, #9aa6b1); font-weight: 700; }
+.media-library-scene-readiness .is-ready { color: var(--mo-success, #75c69a); }
+.media-library-scene-readiness .is-pending { color: var(--mo-warning, #d6b765); }
+.media-library-scene-readiness-list { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 4px 8px; }
+
 .media-library-camera-strip {
   min-height: 40px;
   display: flex;

@@ -52,6 +52,17 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("已入索引，但缺少可播放的 clip identity");
   });
 
+  it("surfaces scene-level multicam readiness without treating it as editorial authority", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    const styles = source("./media-library.css");
+    expect(workbench).toContain("export function sceneCameraReadiness(");
+    expect(workbench).toContain("const readySceneCount = sceneReadiness.filter((scene) => scene.ready).length");
+    expect(workbench).toContain('aria-label="场景机位准备度"');
+    expect(workbench).toContain("至少两个机位");
+    expect(workbench).not.toContain("编辑决定");
+    expect(styles).toContain(".media-library-scene-readiness");
+  });
+
   it("presents camera as a separate axis from source role", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("media-library-camera-strip");

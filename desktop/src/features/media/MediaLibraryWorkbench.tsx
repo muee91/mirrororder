@@ -103,6 +103,46 @@ export function resolutionLabel(width: number | null | undefined, height: number
   return p ? `${p} ${width}×${height}` : `${width}×${height}`;
 }
 
+export interface SceneCameraReadiness {
+  sceneId: string;
+  mediaCount: number;
+  cameraCount: number;
+  cameras: string[];
+  ready: boolean;
+}
+
+/** Summarize scene-level multicam readiness from human scene assignments.
+ * Unknown cameras and auxiliary footage are intentionally excluded: this is
+ * a pre-edit signal, not an editorial decision or coverage authority.
+ */
+export function sceneCameraReadiness(
+  items: MediaInventoryItem[],
+  store: MediaRoleStore | null,
+): SceneCameraReadiness[] {
+  const groups = new Map<string, { media: number; cameras: Set<string> }>();
+  for (const item of items) {
+    const role = roleFor(item, store);
+    if (role.source_role && role.source_role !== "sync_camera") continue;
+    if (role.sync_policy === "exclude") continue;
+    const sceneId = role.scene_id?.trim();
+    if (!sceneId) continue;
+    const group = groups.get(sceneId) ?? { media: 0, cameras: new Set<string>() };
+    group.media += 1;
+    const camera = effectiveCamera(role.camera_override, item.inferred_camera).label.trim();
+    if (camera && camera !== "?") group.cameras.add(camera);
+    groups.set(sceneId, group);
+  }
+  return [...groups.entries()]
+    .map(([sceneId, group]) => ({
+      sceneId,
+      mediaCount: group.media,
+      cameraCount: group.cameras.size,
+      cameras: [...group.cameras].sort((left, right) => left.localeCompare(right, "zh-CN", { numeric: true })),
+      ready: group.cameras.size >= 2,
+    }))
+    .sort((left, right) => left.sceneId.localeCompare(right.sceneId, "zh-CN", { numeric: true }));
+}
+
 function durationLabel(seconds: number | null | undefined): string {
   if (!Number.isFinite(seconds) || Number(seconds) <= 0) return "";
   const total = Math.round(Number(seconds));
@@ -316,6 +356,13 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     return () => window.removeEventListener("keydown", focusSearch);
   }, []);
 
+  const sceneReadiness = useMemo(
+    () => sceneCameraReadiness(inventory?.items ?? [], roles),
+    [inventory, roles],
+  );
+  const readySceneCount = sceneReadiness.filter((scene) => scene.ready).length;
+  const pendingSceneCount = sceneReadiness.length - readySceneCount;
+
   const cameraFilters = useMemo(() => {
     const grouped = new Map<string, CameraFilterItem>();
     for (const item of inventory?.items ?? []) {
@@ -528,6 +575,24 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
         </div>
         <label className="media-library-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="保存时必填" /></label>
         <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-clear-selection" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>{bulkSelectionHasUnavailable ? <button type="button" className="secondary media-library-clear-unavailable" disabled={busy} onClick={clearUnavailableSelection}>移除不可用选择</button> : null}<span>{selectedIds.size} 条已选 · 单次最多 {bulkSelectionLimit} 条{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}{bulkSelectionHasUnavailable ? ` · ${selectedUnavailableCount} 条已不在当前清单，请刷新后重新选择` : ""}</span><input value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}</div>
+      </div>
+
+      <div className="media-library-scene-readiness" aria-label="场景机位准备度">
+        <span className="media-library-scene-readiness-title">场景机位准备度</span>
+        {sceneReadiness.length ? (
+          <>
+            <span className="is-ready">{readySceneCount} 场已具备多机位</span>
+            {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
+            <div className="media-library-scene-readiness-list">
+              {sceneReadiness.slice(0, 8).map((scene) => (
+                <span key={scene.sceneId} className={scene.ready ? "is-ready" : "is-pending"}>
+                  场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
+                </span>
+              ))}
+              {sceneReadiness.length > 8 ? <span>另有 {sceneReadiness.length - 8} 场…</span> : null}
+            </div>
+          </>
+        ) : <span>先给同步机位素材补充场景归属，系统会提示是否具备至少两个机位。</span>}
       </div>
 
       <div className="media-library-camera-strip" aria-label="按机位筛选">
