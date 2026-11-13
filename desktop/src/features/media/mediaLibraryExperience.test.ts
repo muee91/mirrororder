@@ -57,6 +57,8 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("export function mediaInventoryReport(");
     expect(workbench).toContain("navigator.clipboard.writeText(mediaInventoryReport(visible, roles))");
     expect(workbench).toContain(">复制当前清单</button>");
+    expect(workbench).toContain("navigator.clipboard.writeText(mediaInventoryReport(selected, roles))");
+    expect(workbench).toContain(">复制已选清单</button>");
   });
 
   it("surfaces scene-level multicam readiness without treating it as editorial authority", () => {
