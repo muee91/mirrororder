@@ -109,8 +109,11 @@ describe("media library experience contract", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const selectedUnavailableCount = [...selectedIds].filter((mediaId) => !inventoryIds.has(mediaId)).length");
     expect(workbench).toContain("bulkSelectionHasUnavailable");
-    expect(workbench).toContain("已不在当前清单，请刷新后重新选择");
+    expect(workbench).toContain("已不在当前清单");
     expect(workbench).toContain("if (selectedItems.length !== selectedIds.size) return");
+    expect(workbench).toContain("function clearUnavailableSelection(): void");
+    expect(workbench).toContain("移除不可用选择");
+    expect(workbench).toContain("clearUnavailableSelection");
   });
 
   it("persists the last bulk result per project for reload and project-switch recovery", () => {
