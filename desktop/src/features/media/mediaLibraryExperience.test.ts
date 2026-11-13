@@ -105,6 +105,14 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("重新选中");
   });
 
+  it("blocks bulk camera writes when a refresh leaves selected media unavailable", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const selectedUnavailableCount = [...selectedIds].filter((mediaId) => !inventoryIds.has(mediaId)).length");
+    expect(workbench).toContain("bulkSelectionHasUnavailable");
+    expect(workbench).toContain("已不在当前清单，请刷新后重新选择");
+    expect(workbench).toContain("if (selectedItems.length !== selectedIds.size) return");
+  });
+
   it("persists the last bulk result per project for reload and project-switch recovery", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("BULK_RESULT_STORAGE_KEY");
