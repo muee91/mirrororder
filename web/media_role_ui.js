@@ -9,6 +9,7 @@
   let roles = null;
   let query = '';
   let filter = 'all';
+  let visibleLimit = 500;
 
   const sourceRoleLabels = {
     sync_camera: '同步机位',
@@ -162,7 +163,7 @@
     }
     const summary = asObject(inventory.summary);
     const items = filteredItems();
-    const visible = items.slice(0, 500);
+    const visible = items.slice(0, visibleLimit);
     const scenes = sceneIds();
     panel.innerHTML = `
       <div class="production-section-head">
@@ -185,7 +186,7 @@
       <div class="media-role-list">
         ${visible.length ? visible.map(itemMarkup).join('') : '<div class="media-role-empty">当前筛选下没有素材。</div>'}
       </div>
-      ${items.length > visible.length ? `<div class="production-note">当前显示前 ${visible.length} 条。继续缩小搜索范围以定位其它素材。</div>` : ''}
+      ${items.length > visible.length ? `<div class="media-role-pagination"><div class="production-note">当前显示前 ${visible.length} 条，共 ${items.length} 条。可继续缩小搜索范围，或加载下一批。</div><button type="button" class="media-role-load-more" data-media-role-more>加载下一批（最多再显示 500 条）</button></div>` : ''}
       <div class="production-note">这些标记不会写入 review.json / editorial.json，也不会直接修改 FCPXML。辅助素材只进入场景 Coverage 与粗剪素材池；创意 Best 仍由编辑决定。</div>
     `;
   }
@@ -276,6 +277,13 @@
       return;
     }
     const filterButton = event.target.closest('[data-media-role-filter]');
+    const moreButton = event.target.closest('[data-media-role-more]');
+    if (moreButton && active) {
+      event.preventDefault();
+      visibleLimit += 500;
+      render();
+      return;
+    }
     if (filterButton && active) {
       event.preventDefault();
       filter = String(filterButton.dataset.mediaRoleFilter || 'all');
@@ -323,6 +331,7 @@
     roles = null;
     query = '';
     filter = 'all';
+    visibleLimit = 500;
     const result = await baseSwitchProject(...args);
     if (active) await refresh(true);
     return result;
