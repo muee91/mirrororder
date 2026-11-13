@@ -9,6 +9,7 @@
   let roles = null;
   let query = '';
   let filter = 'all';
+  let sortMode = 'default';
   let visibleLimit = 500;
 
   const sourceRoleLabels = {
@@ -78,6 +79,24 @@
         row.note,
       ].join(' ').toLocaleLowerCase('zh-CN');
       return haystack.includes(needle);
+    });
+  }
+
+  function sortedItems() {
+    const items = filteredItems().slice();
+    if (sortMode === 'default') return items;
+    const valueFor = (item) => {
+      const row = roleFor(item);
+      if (sortMode === 'camera') return effectiveCamera(item, row);
+      if (sortMode === 'scene') return String(row.scene_id || '\uffff');
+      if (sortMode === 'status') return item.indexed ? '1' : '0';
+      if (sortMode === 'role') return roleTitle(row);
+      return '';
+    };
+    return items.sort((a, b) => {
+      const primary = valueFor(a).localeCompare(valueFor(b), 'zh-CN', {numeric: true});
+      if (primary) return primary;
+      return String(a.display_name || a.media_id).localeCompare(String(b.display_name || b.media_id), 'zh-CN', {numeric: true});
     });
   }
 
@@ -162,7 +181,7 @@
       return;
     }
     const summary = asObject(inventory.summary);
-    const items = filteredItems();
+    const items = sortedItems();
     const visible = items.slice(0, visibleLimit);
     const scenes = sceneIds();
     panel.innerHTML = `
@@ -179,6 +198,7 @@
       <div class="media-role-toolbar">
         <input class="media-role-search" type="search" data-media-role-search value="${esc(query)}" placeholder="搜索文件、机位、场景或备注">
         <span class="media-role-result-count" aria-live="polite">${filter !== 'all' || query.trim() ? `筛选后 ${items.length} 条` : `共 ${items.length} 条`}</span>
+        <label class="media-role-sort"><span>排序</span><select data-media-role-sort aria-label="素材排序"><option value="default" ${sortMode === 'default' ? 'selected' : ''}>默认顺序</option><option value="camera" ${sortMode === 'camera' ? 'selected' : ''}>机位</option><option value="scene" ${sortMode === 'scene' ? 'selected' : ''}>场景</option><option value="status" ${sortMode === 'status' ? 'selected' : ''}>索引状态</option><option value="role" ${sortMode === 'role' ? 'selected' : ''}>素材角色</option></select></label>
         ${filter !== 'all' || query.trim() ? '<button type="button" class="media-role-clear" data-media-role-clear aria-label="清除素材筛选">清除筛选</button>' : ''}
         <div class="media-role-filters">
           ${[['all', '全部'], ['auxiliary', '只看辅助'], ['unindexed', '未入索引'], ['labeled', '已标记']].map(([value, label]) => `<button type="button" data-media-role-filter="${value}" class="${filter === value ? 'active' : ''}">${label}</button>`).join('')}
@@ -298,6 +318,7 @@
       event.preventDefault();
       query = '';
       filter = 'all';
+      sortMode = 'default';
       visibleLimit = 500;
       render();
       requestAnimationFrame(() => document.querySelector('[data-media-role-search]')?.focus());
@@ -325,7 +346,13 @@
   });
 
   document.addEventListener('change', (event) => {
-    if (!active || !event.target.matches('[data-field="source_role"]')) return;
+    if (!active) return;
+    if (event.target.matches('[data-media-role-sort]')) {
+      sortMode = event.target.value || 'default';
+      render();
+      return;
+    }
+    if (!event.target.matches('[data-field="source_role"]')) return;
     const editor = event.target.closest('[data-media-role-editor]');
     const sync = editor?.querySelector('[data-field="sync_policy"]');
     if (!sync) return;
@@ -345,6 +372,7 @@
     roles = null;
     query = '';
     filter = 'all';
+    sortMode = 'default';
     visibleLimit = 500;
     const result = await baseSwitchProject(...args);
     if (active) await refresh(true);
