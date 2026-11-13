@@ -148,6 +148,13 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("isAuxiliary(role)");
   });
 
+  it("shows counts for each status filter in the current search context", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const statusFilterCounts = useMemo");
+    expect(workbench).toContain("statusFilterCounts[value]");
+    expect(workbench).toContain("<small>{statusFilterCounts[value]}</small>");
+  });
+
   it("supports inverting selection within the current filtered results", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("function invertVisibleSelection(): void");

@@ -421,6 +421,24 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     });
   }, [cameraFilter, filter, inventory, query, roles, sceneFilter]);
 
+  const statusFilterCounts = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("zh-CN");
+    const counts = { all: 0, auxiliary: 0, needsCamera: 0, unindexed: 0, labeled: 0 };
+    for (const item of inventory?.items ?? []) {
+      const role = roleFor(item, roles);
+      if (cameraFilter !== "all" && cameraFilterKey(role.camera_override, item.inferred_camera) !== cameraFilter) continue;
+      if (sceneFilter !== "all" && role.scene_id?.trim() !== sceneFilter) continue;
+      if (needle && ![item.display_name, item.folder_label, item.inferred_camera, role.camera_override, role.source_role, role.role_label, role.scene_id, role.note]
+        .join(" ").toLocaleLowerCase("zh-CN").includes(needle)) continue;
+      counts.all += 1;
+      if (isAuxiliary(role)) counts.auxiliary += 1;
+      if (!isAuxiliary(role) && effectiveCamera(role.camera_override, item.inferred_camera).label.trim() === "?") counts.needsCamera += 1;
+      if (!item.indexed) counts.unindexed += 1;
+      if (Object.keys(role).length > 0) counts.labeled += 1;
+    }
+    return counts;
+  }, [cameraFilter, inventory, query, roles, sceneFilter]);
+
   const visibleLimit = viewMode === "grid" ? 160 : 500;
   const visible = filtered.slice(0, visibleLimit);
 
@@ -622,7 +640,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       <div className="media-library-toolbar">
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
         <div className="media-library-filters" aria-label="素材状态筛选">
-          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{filterLabel}</button>)}
+          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
         </div>
         <div className="media-library-view-toggle" aria-label="素材显示密度">
           <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>列表</button>
