@@ -69,6 +69,8 @@
       if (filter === 'auxiliary' && !isAuxiliary(row)) return false;
       if (filter === 'unindexed' && item.indexed) return false;
       if (filter === 'labeled' && !Object.keys(row).length) return false;
+      if (filter === 'scene_assigned' && !String(row.scene_id || '').trim()) return false;
+      if (filter === 'scene_unassigned' && String(row.scene_id || '').trim()) return false;
       if (!needle) return true;
       const haystack = [
         item.display_name,
@@ -202,7 +204,7 @@
         <label class="media-role-sort"><span>排序</span><select data-media-role-sort aria-label="素材排序"><option value="default" ${sortMode === 'default' ? 'selected' : ''}>默认顺序</option><option value="camera" ${sortMode === 'camera' ? 'selected' : ''}>机位</option><option value="scene" ${sortMode === 'scene' ? 'selected' : ''}>场景</option><option value="status" ${sortMode === 'status' ? 'selected' : ''}>索引状态</option><option value="role" ${sortMode === 'role' ? 'selected' : ''}>素材角色</option></select></label>
         ${filter !== 'all' || query.trim() ? '<button type="button" class="media-role-clear" data-media-role-clear aria-label="清除素材筛选">清除筛选</button>' : ''}
         <div class="media-role-filters">
-          ${[['all', '全部'], ['auxiliary', '只看辅助'], ['unindexed', '未入索引'], ['labeled', '已标记']].map(([value, label]) => `<button type="button" data-media-role-filter="${value}" class="${filter === value ? 'active' : ''}">${label}</button>`).join('')}
+          ${[['all', '全部'], ['auxiliary', '只看辅助'], ['unindexed', '未入索引'], ['labeled', '已标记'], ['scene_assigned', '有场景归属'], ['scene_unassigned', '待补场景']].map(([value, label]) => `<button type="button" data-media-role-filter="${value}" class="${filter === value ? 'active' : ''}">${label}</button>`).join('')}
         </div>
       </div>
       <datalist id="media-role-scenes">${scenes.map((sceneId) => `<option value="${esc(sceneId)}"></option>`).join('')}</datalist>

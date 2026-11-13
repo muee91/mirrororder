@@ -218,6 +218,7 @@ def test_runtime_ui_and_sync_boundaries_are_explicit() -> None:
     assert "data-media-role-clear" in ui
     assert "aria-live=\"polite\"" in ui
     assert "visibleLimit = 500" in ui
+    assert "scene_assigned" in ui and "scene_unassigned" in ui
     assert "expandedMediaIds" in ui
     assert "document.addEventListener('toggle'" in ui
     assert "expandedMediaIds.clear()" in ui
