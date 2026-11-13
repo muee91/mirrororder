@@ -30,8 +30,10 @@ type ViewMode = "list" | "grid";
 type PlaybackEntry = { clipId: string; url: string; sourceStart: number };
 type CameraFilterItem = { key: string; label: string; tone: CameraTone; sortOrder: number; count: number };
 type BulkResult = { actionLabel: string; count: number; camera: string; revision: number; mediaIds: string[] };
+type MediaViewState = { query: string; filter: Filter; cameraFilter: string; sceneFilter: string; viewMode: ViewMode; showAllScenes: boolean };
 
 const BULK_RESULT_STORAGE_KEY = "mirrororder.desktop-v2.media-bulk-result";
+const MEDIA_VIEW_STATE_STORAGE_KEY = "mirrororder.desktop-v2.media-view-state";
 
 const ROLE_LABELS: Record<string, string> = {
   sync_camera: "同步机位",
@@ -71,6 +73,33 @@ function storedBulkResult(projectId: string): BulkResult | null {
 function saveBulkResult(projectId: string, result: BulkResult): void {
   if (!projectId.trim()) return;
   try { globalThis.localStorage?.setItem(`${BULK_RESULT_STORAGE_KEY}:${projectId}`, JSON.stringify(result)); } catch { /* local recovery convenience */ }
+}
+
+function storedMediaViewState(projectId: string): MediaViewState {
+  const fallback: MediaViewState = { query: "", filter: "all", cameraFilter: "all", sceneFilter: "all", viewMode: "list", showAllScenes: false };
+  if (!projectId.trim()) return fallback;
+  try {
+    const raw = globalThis.localStorage?.getItem(`${MEDIA_VIEW_STATE_STORAGE_KEY}:${projectId}`);
+    if (!raw) return fallback;
+    const value = JSON.parse(raw) as Partial<MediaViewState>;
+    const filters: Filter[] = ["all", "auxiliary", "unindexed", "labeled", "needsCamera"];
+    const modes: ViewMode[] = ["list", "grid"];
+    return {
+      query: typeof value.query === "string" ? value.query : fallback.query,
+      filter: filters.includes(value.filter as Filter) ? value.filter as Filter : fallback.filter,
+      cameraFilter: typeof value.cameraFilter === "string" && value.cameraFilter ? value.cameraFilter : fallback.cameraFilter,
+      sceneFilter: typeof value.sceneFilter === "string" && value.sceneFilter ? value.sceneFilter : fallback.sceneFilter,
+      viewMode: modes.includes(value.viewMode as ViewMode) ? value.viewMode as ViewMode : fallback.viewMode,
+      showAllScenes: value.showAllScenes === true,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveMediaViewState(projectId: string, state: MediaViewState): void {
+  if (!projectId.trim()) return;
+  try { globalThis.localStorage?.setItem(`${MEDIA_VIEW_STATE_STORAGE_KEY}:${projectId}`, JSON.stringify(state)); } catch { /* local convenience */ }
 }
 
 function roleFor(item: MediaInventoryItem, store: MediaRoleStore | null): MediaRole {
@@ -297,13 +326,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const [bulkCamera, setBulkCamera] = useState("");
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(() => storedBulkResult(projectId));
   const [draft, setDraft] = useState<MediaRole>({});
-  const [query, setQuery] = useState("");
+  const [viewState, setViewState] = useState<MediaViewState>(() => storedMediaViewState(projectId));
+  const { query, filter, cameraFilter, sceneFilter, viewMode, showAllScenes } = viewState;
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [cameraFilter, setCameraFilter] = useState("all");
-  const [sceneFilter, setSceneFilter] = useState("all");
-  const [showAllScenes, setShowAllScenes] = useState(false);
   const [actor, setActor] = useState(storedActor);
   const [message, setMessage] = useState("正在读取本机素材清单与共享素材角色…");
   const [busy, setBusy] = useState(false);
@@ -354,10 +379,12 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
   useEffect(() => {
     setBulkResult(storedBulkResult(projectId));
-    setShowAllScenes(false);
+    setViewState(storedMediaViewState(projectId));
     void reload("");
     return () => { reloadToken.current += 1; };
   }, [client, host, projectId]);
+
+  useEffect(() => { saveMediaViewState(projectId, viewState); }, [projectId, viewState]);
 
   useEffect(() => {
     function focusSearch(event: KeyboardEvent): void {
@@ -380,11 +407,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const hasActiveFilters = Boolean(query.trim() || filter !== "all" || cameraFilter !== "all" || sceneFilter !== "all");
 
   function resetMediaFilters(): void {
-    setQuery("");
-    setFilter("all");
-    setCameraFilter("all");
-    setSceneFilter("all");
-    setShowAllScenes(false);
+    setViewState((current) => ({ ...current, query: "", filter: "all", cameraFilter: "all", sceneFilter: "all", showAllScenes: false }));
     searchInputRef.current?.focus();
   }
 
@@ -403,13 +426,13 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
   useEffect(() => {
     if (cameraFilter !== "all" && !cameraFilters.some(({ key }) => key === cameraFilter)) {
-      setCameraFilter("all");
+      setViewState((current) => ({ ...current, cameraFilter: "all" }));
     }
   }, [cameraFilter, cameraFilters]);
 
   useEffect(() => {
     if (sceneFilter !== "all" && !sceneReadiness.some((scene) => scene.sceneId === sceneFilter)) {
-      setSceneFilter("all");
+      setViewState((current) => ({ ...current, sceneFilter: "all" }));
     }
   }, [sceneFilter, sceneReadiness]);
 
@@ -648,14 +671,14 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       </div>
 
       <div className="media-library-toolbar">
-        <input ref={searchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
+        <input ref={searchInputRef} type="search" value={query} onChange={(event) => setViewState((current) => ({ ...current, query: event.target.value }))} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
         <div className="media-library-filters" aria-label="素材状态筛选">
-          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
+          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setViewState((current) => ({ ...current, filter }))}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
           <button type="button" className="secondary media-library-reset-filters" onClick={resetMediaFilters} disabled={!hasActiveFilters}>清除筛选</button>
         </div>
         <div className="media-library-view-toggle" aria-label="素材显示密度">
-          <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>列表</button>
-          <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>缩略图</button>
+          <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewState((current) => ({ ...current, viewMode: "list" }))}>列表</button>
+          <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewState((current) => ({ ...current, viewMode: "grid" }))}>缩略图</button>
         </div>
         <label className="media-library-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="保存时必填" /></label>
         <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-copy-inventory" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button><button type="button" className="secondary media-library-copy-selected" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-invert-selection" disabled={!visibleIds.length} onClick={invertVisibleSelection}>反选当前结果</button><button type="button" className="secondary media-library-clear-selection" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>{bulkSelectionHasUnavailable ? <button type="button" className="secondary media-library-clear-unavailable" disabled={busy} onClick={clearUnavailableSelection}>移除不可用选择</button> : null}<span>{selectedIds.size} 条已选 · 单次最多 {bulkSelectionLimit} 条{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}{bulkSelectionHasUnavailable ? ` · ${selectedUnavailableCount} 条已不在当前清单，请刷新后重新选择` : ""}</span><input value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}</div>
@@ -668,13 +691,13 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
             <span className="is-ready">{readySceneCount} 场已具备多机位</span>
             {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
             <div className="media-library-scene-readiness-list" aria-label="按场景聚焦素材">
-              <button type="button" className={sceneFilter === "all" ? "is-active" : ""} onClick={() => setSceneFilter("all")}>全部场景</button>
+              <button type="button" className={sceneFilter === "all" ? "is-active" : ""} onClick={() => setViewState((current) => ({ ...current, sceneFilter: "all" }))}>全部场景</button>
               {(showAllScenes ? sceneReadiness : sceneReadiness.slice(0, 8)).map((scene) => (
-                <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} onClick={() => setSceneFilter(scene.sceneId)}>
+                <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} onClick={() => setViewState((current) => ({ ...current, sceneFilter: scene.sceneId }))}>
                   场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
                 </button>
               ))}
-              {sceneReadiness.length > 8 ? <button type="button" className="media-library-scene-more" onClick={() => setShowAllScenes((current) => !current)}>{showAllScenes ? "收起场景" : `展开全部 ${sceneReadiness.length} 场`}</button> : null}
+              {sceneReadiness.length > 8 ? <button type="button" className="media-library-scene-more" onClick={() => setViewState((current) => ({ ...current, showAllScenes: !current.showAllScenes }))}>{showAllScenes ? "收起场景" : `展开全部 ${sceneReadiness.length} 场`}</button> : null}
             </div>
           </>
         ) : <span>先给同步机位素材补充场景归属，系统会提示是否具备至少两个机位。</span>}
@@ -682,9 +705,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
       <div className="media-library-camera-strip" aria-label="按机位筛选">
         <span className="media-library-camera-strip-label">机位</span>
-        <button type="button" className={cameraFilter === "all" ? "is-active" : ""} onClick={() => setCameraFilter("all")}><strong>全部</strong><small>{inventory?.summary.files ?? 0}</small></button>
+        <button type="button" className={cameraFilter === "all" ? "is-active" : ""} onClick={() => setViewState((current) => ({ ...current, cameraFilter: "all" }))}><strong>全部</strong><small>{inventory?.summary.files ?? 0}</small></button>
         {cameraFilters.map((camera) => (
-          <button type="button" key={camera.key} className={cameraFilter === camera.key ? "is-active" : ""} data-camera-tone={camera.tone} onClick={() => setCameraFilter(camera.key)}>
+          <button type="button" key={camera.key} className={cameraFilter === camera.key ? "is-active" : ""} data-camera-tone={camera.tone} onClick={() => setViewState((current) => ({ ...current, cameraFilter: camera.key }))}>
             <strong>{camera.label}</strong><small>{camera.count}</small>
           </button>
         ))}

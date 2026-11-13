@@ -67,7 +67,7 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("export function sceneCameraReadiness(");
     expect(workbench).toContain("const readySceneCount = sceneReadiness.filter((scene) => scene.ready).length");
     expect(workbench).toContain('aria-label="按场景聚焦素材"');
-    expect(workbench).toContain('const [sceneFilter, setSceneFilter] = useState("all")');
+    expect(workbench).toContain('sceneFilter: string');
     expect(workbench).toContain("role.scene_id?.trim() !== sceneFilter");
     expect(workbench).toContain(">全部场景</button>");
     expect(workbench).toContain('aria-label="场景机位准备度"');
@@ -195,7 +195,19 @@ describe("media library experience contract", () => {
   it("resets a camera filter when a bulk update removes its last matching bucket", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("if (cameraFilter !== \"all\" && !cameraFilters.some(({ key }) => key === cameraFilter))");
-    expect(workbench).toContain('setCameraFilter("all")');
+    expect(workbench).toContain('cameraFilter: "all"');
+  });
+
+  it("persists the media browser view state per project for long-running pre-edit work", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("type MediaViewState = { query: string; filter: Filter; cameraFilter: string; sceneFilter: string; viewMode: ViewMode; showAllScenes: boolean }");
+    expect(workbench).toContain("MEDIA_VIEW_STATE_STORAGE_KEY");
+    expect(workbench).toContain("storedMediaViewState(projectId)");
+    expect(workbench).toContain("saveMediaViewState(projectId, viewState)");
+    expect(workbench).toContain("setViewState(storedMediaViewState(projectId))");
+    expect(workbench).toContain("viewMode: modes.includes(value.viewMode as ViewMode)");
+    expect(workbench).toContain("filter: filters.includes(value.filter as Filter)");
+    expect(workbench).toContain("query: \"\", filter: \"all\", cameraFilter: \"all\", sceneFilter: \"all\", viewMode: \"list\", showAllScenes: false");
   });
 
   it("keeps the media browser on the shared typography and theme authority", () => {
