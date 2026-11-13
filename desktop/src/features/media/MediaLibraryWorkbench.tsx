@@ -111,6 +111,15 @@ export interface SceneCameraReadiness {
   ready: boolean;
 }
 
+export function sceneReadinessReport(scenes: SceneCameraReadiness[]): string {
+  const ready = scenes.filter((scene) => scene.ready).length;
+  const lines = [`场景机位准备度：${ready}/${scenes.length} 场已具备多机位`];
+  for (const scene of scenes) {
+    lines.push(`场 ${scene.sceneId} · ${scene.ready ? "已具备多机位" : "待补机位"} · ${scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · ${scene.mediaCount} 条`);
+  }
+  return lines.join("\n");
+}
+
 /** Summarize scene-level multicam readiness from human scene assignments.
  * Unknown cameras and auxiliary footage are intentionally excluded: this is
  * a pre-edit signal, not an editorial decision or coverage authority.
@@ -363,6 +372,16 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const readySceneCount = sceneReadiness.filter((scene) => scene.ready).length;
   const pendingSceneCount = sceneReadiness.length - readySceneCount;
 
+  async function copySceneReadiness(): Promise<void> {
+    if (!sceneReadiness.length) return;
+    try {
+      await navigator.clipboard.writeText(sceneReadinessReport(sceneReadiness));
+      setMessage("已复制场景机位准备度摘要");
+    } catch {
+      setMessage("当前环境不允许复制，请手动选择摘要");
+    }
+  }
+
   const cameraFilters = useMemo(() => {
     const grouped = new Map<string, CameraFilterItem>();
     for (const item of inventory?.items ?? []) {
@@ -583,6 +602,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <>
             <span className="is-ready">{readySceneCount} 场已具备多机位</span>
             {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
+            <button type="button" className="secondary media-library-scene-readiness-copy" onClick={() => void copySceneReadiness()}>复制摘要</button>
             <div className="media-library-scene-readiness-list">
               {sceneReadiness.slice(0, 8).map((scene) => (
                 <span key={scene.sceneId} className={scene.ready ? "is-ready" : "is-pending"}>
