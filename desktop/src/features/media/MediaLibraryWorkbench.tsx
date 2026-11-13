@@ -548,23 +548,43 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     if (!selectedPlaybackFailed) setPlaybackFailureDetail(null);
   }, [selectedPlaybackFailed]);
 
-  function toggleVisibleSelection(): void {
+  function selectVisibleSelection(): void {
     const availableToAdd = visibleIds.filter((mediaId) => !selectedIds.has(mediaId));
     const remaining = Math.max(0, bulkSelectionLimit - selectedIds.size);
-    if (!allVisibleSelected && availableToAdd.length > remaining) {
+    if (availableToAdd.length > remaining) {
       setMessage(`当前筛选结果超过批量上限，已先选中 ${remaining} 条；单次最多 ${bulkSelectionLimit} 条`);
     }
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (allVisibleSelected) {
-        visibleIds.forEach((mediaId) => next.delete(mediaId));
-      } else {
-        const remaining = Math.max(0, bulkSelectionLimit - next.size);
-        visibleIds.filter((mediaId) => !next.has(mediaId)).slice(0, remaining).forEach((mediaId) => next.add(mediaId));
-      }
+      const remaining = Math.max(0, bulkSelectionLimit - next.size);
+      visibleIds.filter((mediaId) => !next.has(mediaId)).slice(0, remaining).forEach((mediaId) => next.add(mediaId));
       return next;
     });
   }
+
+  function toggleVisibleSelection(): void {
+    if (!allVisibleSelected) {
+      selectVisibleSelection();
+      return;
+    }
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      visibleIds.forEach((mediaId) => next.delete(mediaId));
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    function selectAllVisibleOnShortcut(event: KeyboardEvent): void {
+      if (event.key.toLowerCase() !== "a" || (!event.metaKey && !event.ctrlKey) || event.altKey || event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      event.preventDefault();
+      selectVisibleSelection();
+    }
+    window.addEventListener("keydown", selectAllVisibleOnShortcut);
+    return () => window.removeEventListener("keydown", selectAllVisibleOnShortcut);
+  }, [selectedIds, visibleIds]);
 
   function invertVisibleSelection(): void {
     const visibleSet = new Set(visibleIds);

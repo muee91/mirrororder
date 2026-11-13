@@ -121,6 +121,17 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('window.removeEventListener("keydown", clearSelection)');
   });
 
+  it("selects the current filtered result set with Cmd/Ctrl+A without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function selectVisibleSelection(): void");
+    expect(workbench).toContain('event.key.toLowerCase() !== "a"');
+    expect(workbench).toContain("(!event.metaKey && !event.ctrlKey)");
+    expect(workbench).toContain("selectAllVisibleOnShortcut");
+    expect(workbench).toContain("event.preventDefault()");
+    expect(workbench).toContain("selectVisibleSelection()");
+    expect(workbench).toContain("[selectedIds, visibleIds]");
+  });
+
   it("supports selecting the current filtered result set for batch camera work", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const visibleIds = useMemo(() => visible.map((item) => item.media_id), [visible])");
