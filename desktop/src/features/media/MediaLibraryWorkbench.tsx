@@ -377,6 +377,16 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   );
   const readySceneCount = sceneReadiness.filter((scene) => scene.ready).length;
   const pendingSceneCount = sceneReadiness.length - readySceneCount;
+  const hasActiveFilters = Boolean(query.trim() || filter !== "all" || cameraFilter !== "all" || sceneFilter !== "all");
+
+  function resetMediaFilters(): void {
+    setQuery("");
+    setFilter("all");
+    setCameraFilter("all");
+    setSceneFilter("all");
+    setShowAllScenes(false);
+    searchInputRef.current?.focus();
+  }
 
   const cameraFilters = useMemo(() => {
     const grouped = new Map<string, CameraFilterItem>();
@@ -641,6 +651,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
         <div className="media-library-filters" aria-label="素材状态筛选">
           {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setFilter(value)}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
+          <button type="button" className="secondary media-library-reset-filters" onClick={resetMediaFilters} disabled={!hasActiveFilters}>清除筛选</button>
         </div>
         <div className="media-library-view-toggle" aria-label="素材显示密度">
           <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>列表</button>
