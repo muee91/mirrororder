@@ -104,6 +104,15 @@ describe("media library experience contract", () => {
     expect(styles).toContain("display: flex !important");
   });
 
+  it("marks active media, scene, and camera filters for assistive technology", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("aria-pressed={filter === value}");
+    expect(workbench).toContain("aria-pressed={sceneFilter === \"all\"}");
+    expect(workbench).toContain("aria-pressed={sceneFilter === scene.sceneId}");
+    expect(workbench).toContain("aria-pressed={cameraFilter === \"all\"}");
+    expect(workbench).toContain("aria-pressed={cameraFilter === camera.key}");
+  });
+
   it("announces loading and selection state to assistive technology", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain('<section className="media-library-workbench" aria-busy={busy}>');

@@ -785,7 +785,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       <div className="media-library-toolbar">
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setViewState((current) => ({ ...current, query: event.target.value }))} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
         <div className="media-library-filters" aria-label="素材状态筛选">
-          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setViewState((current) => ({ ...current, filter }))}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
+          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} aria-pressed={filter === value} key={value} onClick={() => setViewState((current) => ({ ...current, filter }))}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
           <button type="button" className="secondary media-library-reset-filters" onClick={resetMediaFilters} disabled={!hasActiveFilters}>清除筛选</button>
         </div>
         <div className="media-library-view-toggle" aria-label="素材显示密度" aria-keyshortcuts="Meta+Shift+G Control+Shift+G">
@@ -803,9 +803,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
             <span className="is-ready">{readySceneCount} 场已具备多机位</span>
             {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
             <div className="media-library-scene-readiness-list" aria-label="按场景聚焦素材">
-              <button type="button" className={sceneFilter === "all" ? "is-active" : ""} onClick={() => setViewState((current) => ({ ...current, sceneFilter: "all" }))}>全部场景</button>
+              <button type="button" className={sceneFilter === "all" ? "is-active" : ""} aria-pressed={sceneFilter === "all"} onClick={() => setViewState((current) => ({ ...current, sceneFilter: "all" }))}>全部场景</button>
               {(showAllScenes ? sceneReadiness : sceneReadiness.slice(0, 8)).map((scene) => (
-                <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} onClick={() => setViewState((current) => ({ ...current, sceneFilter: scene.sceneId }))}>
+                <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} aria-pressed={sceneFilter === scene.sceneId} onClick={() => setViewState((current) => ({ ...current, sceneFilter: scene.sceneId }))}>
                   场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
                 </button>
               ))}
@@ -817,9 +817,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
       <div className="media-library-camera-strip" aria-label="按机位筛选">
         <span className="media-library-camera-strip-label">机位</span>
-        <button type="button" className={cameraFilter === "all" ? "is-active" : ""} onClick={() => setViewState((current) => ({ ...current, cameraFilter: "all" }))}><strong>全部</strong><small>{inventory?.summary.files ?? 0}</small></button>
+        <button type="button" className={cameraFilter === "all" ? "is-active" : ""} aria-pressed={cameraFilter === "all"} onClick={() => setViewState((current) => ({ ...current, cameraFilter: "all" }))}><strong>全部</strong><small>{inventory?.summary.files ?? 0}</small></button>
         {cameraFilters.map((camera) => (
-          <button type="button" key={camera.key} className={cameraFilter === camera.key ? "is-active" : ""} data-camera-tone={camera.tone} onClick={() => setViewState((current) => ({ ...current, cameraFilter: camera.key }))}>
+          <button type="button" key={camera.key} className={cameraFilter === camera.key ? "is-active" : ""} aria-pressed={cameraFilter === camera.key} data-camera-tone={camera.tone} onClick={() => setViewState((current) => ({ ...current, cameraFilter: camera.key }))}>
             <strong>{camera.label}</strong><small>{camera.count}</small>
           </button>
         ))}
