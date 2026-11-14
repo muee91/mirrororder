@@ -118,6 +118,13 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("className=\"media-library-scene-more\" aria-expanded={showAllScenes}");
   });
 
+  it("labels bulk media actions for assistive technology", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain('aria-label="批量设置已选素材机位"');
+    expect(workbench).toContain('aria-label="清除已选素材机位"');
+    expect(workbench).toContain('aria-label="移除清单中已不可用的素材选择"');
+  });
+
   it("announces loading and selection state to assistive technology", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain('<section className="media-library-workbench" aria-busy={busy}>');
