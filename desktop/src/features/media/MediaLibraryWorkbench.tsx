@@ -430,13 +430,22 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       setViewState((current) => ({ ...current, query: "", filter: "all", cameraFilter: "all", sceneFilter: "all", showAllScenes: false }));
       searchInputRef.current?.focus();
     }
+    function toggleViewModeOnShortcut(event: KeyboardEvent): void {
+      if (event.key.toLowerCase() !== "g" || (!event.metaKey && !event.ctrlKey) || event.altKey || !event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      event.preventDefault();
+      setViewState((current) => ({ ...current, viewMode: current.viewMode === "list" ? "grid" : "list" }));
+    }
     window.addEventListener("keydown", focusSearch);
     window.addEventListener("keydown", clearSelection);
     window.addEventListener("keydown", resetFiltersOnShortcut);
+    window.addEventListener("keydown", toggleViewModeOnShortcut);
     return () => {
       window.removeEventListener("keydown", focusSearch);
       window.removeEventListener("keydown", clearSelection);
       window.removeEventListener("keydown", resetFiltersOnShortcut);
+      window.removeEventListener("keydown", toggleViewModeOnShortcut);
     };
   }, []);
 
@@ -750,7 +759,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} key={value} onClick={() => setViewState((current) => ({ ...current, filter }))}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
           <button type="button" className="secondary media-library-reset-filters" onClick={resetMediaFilters} disabled={!hasActiveFilters}>清除筛选</button>
         </div>
-        <div className="media-library-view-toggle" aria-label="素材显示密度">
+        <div className="media-library-view-toggle" aria-label="素材显示密度" aria-keyshortcuts="Meta+Shift+G Control+Shift+G">
           <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewState((current) => ({ ...current, viewMode: "list" }))}>列表</button>
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewState((current) => ({ ...current, viewMode: "grid" }))}>缩略图</button>
         </div>

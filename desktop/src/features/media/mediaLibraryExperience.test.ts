@@ -132,6 +132,16 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('window.removeEventListener("keydown", resetFiltersOnShortcut)');
   });
 
+  it("toggles list and thumbnail density with Cmd/Ctrl+Shift+G without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function toggleViewModeOnShortcut(event: KeyboardEvent): void");
+    expect(workbench).toContain('event.key.toLowerCase() !== "g"');
+    expect(workbench).toContain('viewMode: current.viewMode === "list" ? "grid" : "list"');
+    expect(workbench).toContain('aria-keyshortcuts="Meta+Shift+G Control+Shift+G"');
+    expect(workbench).toContain('window.addEventListener("keydown", toggleViewModeOnShortcut)');
+    expect(workbench).toContain('window.removeEventListener("keydown", toggleViewModeOnShortcut)');
+  });
+
   it("selects the current filtered result set with Cmd/Ctrl+A without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("function selectVisibleSelection(): void");
