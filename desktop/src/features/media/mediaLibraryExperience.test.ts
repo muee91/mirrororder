@@ -113,6 +113,12 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("aria-pressed={cameraFilter === camera.key}");
   });
 
+  it("exposes each visible media row as a list item", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain('className={`media-library-list is-${viewMode}`} role="list"');
+    expect(workbench).toContain('className="media-library-row-wrap" key={item.media_id} role="listitem"');
+  });
+
   it("exposes scene list expansion state to assistive technology", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("className=\"media-library-scene-more\" aria-expanded={showAllScenes}");

@@ -838,7 +838,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       <div className="media-library-layout">
         <div className={`media-library-list is-${viewMode}`} role="list" aria-label={viewMode === "grid" ? "素材缩略图" : "素材列表"}>
           {visible.map((item) => (
-            <div className="media-library-row-wrap" key={item.media_id}>
+            <div className="media-library-row-wrap" key={item.media_id} role="listitem">
               <input aria-label={`选择 ${item.display_name}`} type="checkbox" checked={selectedIds.has(item.media_id)} onChange={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(item.media_id)) next.delete(item.media_id); else next.add(item.media_id); return next; })} />
               <MediaLibraryRow item={item} selected={selectedId === item.media_id} roles={roles} preview={playbackForItem(host, projectId, item, playbackByMedia[item.media_id])} takeLabel={takeLabelByClip[item.media_id] ?? (item.clip_id?.trim() ? takeLabelByClip[item.clip_id.trim()] : undefined)} onSelect={() => select(item)} />
             </div>
