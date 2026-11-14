@@ -294,6 +294,15 @@ function MediaLibraryRow({
   const camera = effectiveCamera(role.camera_override, item.inferred_camera);
   const manualCamera = Boolean(role.camera_override?.trim());
   const healthState = mediaHealthState({ indexed: item.indexed, state: item.state, playable: Boolean(preview) });
+  const roleLabel = ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位";
+  const rowLabel = [
+    item.display_name,
+    `机位 ${camera.label}${manualCamera ? "（人工）" : "（识别）"}`,
+    roleLabel,
+    role.scene_id ? `场 ${role.scene_id}` : "未分场",
+    takeLabel,
+    item.indexed ? "已入索引" : "待恢复",
+  ].filter(Boolean).join(" · ");
   return (
     <button
       ref={rowRef}
@@ -301,6 +310,7 @@ function MediaLibraryRow({
       className={`media-library-row ${selected ? "is-selected" : ""}`}
       onClick={onSelect}
       aria-pressed={selected}
+      aria-label={rowLabel}
     >
       <span className="media-library-thumb" data-camera-tone={camera.tone} aria-hidden="true">
         {preview && nearViewport ? (
@@ -326,7 +336,7 @@ function MediaLibraryRow({
       </span>
       <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
       <span className="media-library-name"><strong>{item.display_name}</strong><small>{[item.folder_label || "素材", resolutionLabel(item.width, item.height), durationLabel(item.duration_seconds)].filter(Boolean).join(" · ")}</small></span>
-      <span className="media-library-role"><strong>{ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"}</strong><small>{[role.scene_id ? `场 ${role.scene_id}` : "", takeLabel].filter(Boolean).join(" · ") || (auxiliary ? "不参与主机位同步" : "")}</small></span>
+      <span className="media-library-role"><strong>{roleLabel}</strong><small>{[role.scene_id ? `场 ${role.scene_id}` : "", takeLabel].filter(Boolean).join(" · ") || (auxiliary ? "不参与主机位同步" : "")}</small></span>
       <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><MediaHealthIndicator state={healthState} /></span>
     </button>
   );

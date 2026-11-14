@@ -173,6 +173,13 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("aria-label={`按机位筛选：${camera.label}`}");
   });
 
+  it("gives each media row a complete accessible summary", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const rowLabel = [");
+    expect(workbench).toContain("`机位 ${camera.label}${manualCamera ? \"（人工）\" : \"（识别）\"}`");
+    expect(workbench).toContain("aria-label={rowLabel}");
+  });
+
   it("offers a keyboard shortcut to focus the media search without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const searchInputRef = useRef<HTMLInputElement>(null)");
