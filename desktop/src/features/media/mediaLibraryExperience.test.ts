@@ -61,16 +61,6 @@ describe("media library experience contract", () => {
     expect(workbench).toContain(">复制已选清单</button>");
   });
 
-  it("copies the current filtered inventory with Cmd/Ctrl+Shift+C without hijacking text inputs", () => {
-    const workbench = source("./MediaLibraryWorkbench.tsx");
-    expect(workbench).toContain("function copyVisibleOnShortcut(event: KeyboardEvent): void");
-    expect(workbench).toContain('event.key.toLowerCase() !== "c"');
-    expect(workbench).toContain("(!event.metaKey && !event.ctrlKey)");
-    expect(workbench).toContain("copyVisibleInventory()");
-    expect(workbench).toContain('aria-keyshortcuts="Meta+Shift+C Control+Shift+C"');
-    expect(workbench).toContain('window.removeEventListener("keydown", copyVisibleOnShortcut)');
-  });
-
   it("surfaces scene-level multicam readiness without treating it as editorial authority", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     const styles = source("./media-library.css");
@@ -217,4 +207,14 @@ describe("media library experience contract", () => {
 
   it("supports Cmd/Ctrl+Shift+I for filtered selection inversion without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
-    expect(workbench).toContain("function invertVisibleOnSho
+    expect(workbench).toContain("function invertVisibleOnShortcut(event: KeyboardEvent): void");
+    expect(workbench).toContain('event.key.toLowerCase() !== "i"');
+    expect(workbench).toContain("event.shiftKey");
+    expect(workbench).toContain("invertVisibleSelection()");
+    expect(workbench).toContain("window.removeEventListener(\"keydown\", invertVisibleOnShortcut)");
+  });
+
+  it("supports Cmd/Ctrl+Shift+C for copying the current filtered inventory without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function copyVisibleOnShortcut(event: KeyboardEvent): void");
+    expect(workbench).toContain('event.key.toLow

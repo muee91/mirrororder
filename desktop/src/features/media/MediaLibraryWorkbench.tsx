@@ -547,19 +547,6 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     }
   }
 
-  useEffect(() => {
-    function copyVisibleOnShortcut(event: KeyboardEvent): void {
-      if (event.key.toLowerCase() !== "c" || (!event.metaKey && !event.ctrlKey) || event.altKey || !event.shiftKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
-      if (!visible.length) return;
-      event.preventDefault();
-      void copyVisibleInventory();
-    }
-    window.addEventListener("keydown", copyVisibleOnShortcut);
-    return () => window.removeEventListener("keydown", copyVisibleOnShortcut);
-  }, [roles, visible]);
-
   const visibleIds = useMemo(() => visible.map((item) => item.media_id), [visible]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((mediaId) => selectedIds.has(mediaId));
   const selectedVisibleCount = visibleIds.filter((mediaId) => selectedIds.has(mediaId)).length;
@@ -607,6 +594,14 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   }
 
   useEffect(() => {
+    function copyVisibleOnShortcut(event: KeyboardEvent): void {
+      if (event.key.toLowerCase() !== "c" || (!event.metaKey && !event.ctrlKey) || event.altKey || !event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      if (!visible.length) return;
+      event.preventDefault();
+      void copyVisibleInventory();
+    }
     function selectAllVisibleOnShortcut(event: KeyboardEvent): void {
       if (event.key.toLowerCase() !== "a" || (!event.metaKey && !event.ctrlKey) || event.altKey || event.shiftKey) return;
       const target = event.target as HTMLElement | null;
@@ -622,9 +617,11 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       event.preventDefault();
       invertVisibleSelection();
     }
+    window.addEventListener("keydown", copyVisibleOnShortcut);
     window.addEventListener("keydown", selectAllVisibleOnShortcut);
     window.addEventListener("keydown", invertVisibleOnShortcut);
     return () => {
+      window.removeEventListener("keydown", copyVisibleOnShortcut);
       window.removeEventListener("keydown", selectAllVisibleOnShortcut);
       window.removeEventListener("keydown", invertVisibleOnShortcut);
     };
@@ -777,4 +774,4 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewState((current) => ({ ...current, viewMode: "grid" }))}>缩略图</button>
         </div>
         <label className="media-library-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="保存时必填" /></label>
-        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-copy-inventory" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button><button type="button" className="secondary media-library-copy-selected" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-invert-selection" disabled={!visibleIds.length} onClick={invertVisibleSelection}>�
+        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-copy-inventory" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button><button type="button" className="secondary media-library-copy-selected" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-invert-selection" disabled={!visibleIds.length} onClick={invertVisibleSelection}>反选当前结�
