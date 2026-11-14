@@ -422,11 +422,21 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
       setSelectedIds(new Set());
     }
+    function resetFiltersOnShortcut(event: KeyboardEvent): void {
+      if (event.key.toLowerCase() !== "f" || (!event.metaKey && !event.ctrlKey) || event.altKey || !event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      event.preventDefault();
+      setViewState((current) => ({ ...current, query: "", filter: "all", cameraFilter: "all", sceneFilter: "all", showAllScenes: false }));
+      searchInputRef.current?.focus();
+    }
     window.addEventListener("keydown", focusSearch);
     window.addEventListener("keydown", clearSelection);
+    window.addEventListener("keydown", resetFiltersOnShortcut);
     return () => {
       window.removeEventListener("keydown", focusSearch);
       window.removeEventListener("keydown", clearSelection);
+      window.removeEventListener("keydown", resetFiltersOnShortcut);
     };
   }, []);
 

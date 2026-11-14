@@ -121,6 +121,17 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('window.removeEventListener("keydown", clearSelection)');
   });
 
+  it("resets all media filters with Cmd/Ctrl+Shift+F without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function resetFiltersOnShortcut(event: KeyboardEvent): void");
+    expect(workbench).toContain('event.key.toLowerCase() !== "f"');
+    expect(workbench).toContain("(!event.metaKey && !event.ctrlKey)");
+    expect(workbench).toContain("event.shiftKey");
+    expect(workbench).toContain('query: "", filter: "all", cameraFilter: "all", sceneFilter: "all", showAllScenes: false');
+    expect(workbench).toContain("resetFiltersOnShortcut");
+    expect(workbench).toContain('window.removeEventListener("keydown", resetFiltersOnShortcut)');
+  });
+
   it("selects the current filtered result set with Cmd/Ctrl+A without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("function selectVisibleSelection(): void");
