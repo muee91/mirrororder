@@ -163,6 +163,16 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('aria-label="批量设置机位名称"');
   });
 
+  it("labels status, scene, camera, and view-mode controls for assistive technology", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("aria-label={`按状态筛选：${filterLabel}`}");
+    expect(workbench).toContain('aria-label="切换到列表视图"');
+    expect(workbench).toContain('aria-label="按场景筛选：全部场景"');
+    expect(workbench).toContain("aria-label={`按场景筛选：${scene.sceneId}`}");
+    expect(workbench).toContain('aria-label="按机位筛选：全部机位"');
+    expect(workbench).toContain("aria-label={`按机位筛选：${camera.label}`}");
+  });
+
   it("offers a keyboard shortcut to focus the media search without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const searchInputRef = useRef<HTMLInputElement>(null)");
