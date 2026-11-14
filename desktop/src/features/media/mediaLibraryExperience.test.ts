@@ -224,6 +224,15 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("window.removeEventListener(\"keydown\", copySelectedOnShortcut)");
   });
 
+  it("supports Cmd/Ctrl+Shift+R for refreshing the inventory without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function refreshOnShortcut(event: KeyboardEvent): void");
+    expect(workbench).toContain('event.key.toLowerCase() !== "r"');
+    expect(workbench).toContain("void reload()");
+    expect(workbench).toContain("aria-keyshortcuts=\"Meta+Shift+R Control+Shift+R\"");
+    expect(workbench).toContain("window.removeEventListener(\"keydown\", refreshOnShortcut)");
+  });
+
   it("supports Cmd/Ctrl+Shift+C for copying the current filtered inventory without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("function copyVisibleOnShortcut(event: KeyboardEvent): void");
