@@ -125,6 +125,15 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('aria-label="移除清单中已不可用的素材选择"');
   });
 
+  it("labels inventory bulk toolbar actions for assistive technology", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain('aria-label="复制当前筛选素材清单"');
+    expect(workbench).toContain('aria-label="复制已选素材清单"');
+    expect(workbench).toContain('aria-label="刷新素材清单"');
+    expect(workbench).toContain('aria-label={allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}');
+    expect(workbench).toContain('aria-label="反选当前筛选结果"');
+  });
+
   it("announces loading and selection state to assistive technology", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain('<section className="media-library-workbench" aria-busy={busy}>');
