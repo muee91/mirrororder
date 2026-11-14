@@ -150,7 +150,7 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("selectAllVisibleOnShortcut");
     expect(workbench).toContain("event.preventDefault()");
     expect(workbench).toContain("selectVisibleSelection()");
-    expect(workbench).toContain("[selectedIds, visibleIds]");
+    expect(workbench).toContain("[selectedIds, visibleIds, roles, visible]");
   });
 
   it("supports selecting the current filtered result set for batch camera work", () => {
@@ -212,6 +212,16 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("event.shiftKey");
     expect(workbench).toContain("invertVisibleSelection()");
     expect(workbench).toContain("window.removeEventListener(\"keydown\", invertVisibleOnShortcut)");
+  });
+
+  it("supports Cmd/Ctrl+Shift+S for copying the selected inventory without hijacking text inputs", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("function copySelectedOnShortcut(event: KeyboardEvent): void");
+    expect(workbench).toContain('event.key.toLowerCase() !== "s"');
+    expect(workbench).toContain("copySelectedInventory()");
+    expect(workbench).toContain("event.shiftKey");
+    expect(workbench).toContain("aria-keyshortcuts=\"Meta+Shift+S Control+Shift+S\"");
+    expect(workbench).toContain("window.removeEventListener(\"keydown\", copySelectedOnShortcut)");
   });
 
   it("supports Cmd/Ctrl+Shift+C for copying the current filtered inventory without hijacking text inputs", () => {
