@@ -1,6 +1,13 @@
 # Engineering Backlog
 
-更新时间：2026-10-26。本文只拥有**当前执行顺序**；当前事实见 `STATUS.md`，长期硬约束见 `INVARIANTS.md`。
+更新时间：2026-11-14。本文只拥有**当前执行顺序**；当前事实见 `STATUS.md`，长期硬约束见 `INVARIANTS.md`。
+
+## 状态快照（2026-11-14）
+
+- 当前 `main`：`4a12016f79f01d001785f58405f3449c583b0015`（第 53 项）；CI #107 / run `43624179126` 已成功。
+- 开发结构/代码基线近完成；严格真实五步主链仍为 **0/5**，不能用 CI 或合成 UX 替代。
+- 首要阻塞：Mac（Muee91）+ 可达 Host + 真实项目 + 外置 SSD。云端当前没有真实项目/素材盘，且缺 macOS 原生播放、A/V 同步与外部 NLE 证据。
+- 下一验收顺序：A/B 读取与多机位 → C placement/revision conflict → D 原生播放/A-V/人工决定 → E Timeline 冷启动恢复/FCPXML 或 Premiere 实际导入。保持 Sites 看板维护暂停。
 
 ## 总目标的变化
 

@@ -1,19 +1,20 @@
 # Engineering Status
 
-更新时间：2026-11-10
+更新时间：2026-11-14
 
 ## 当前产品方向（2026-11-10）
 
 - 镜序正式收窄为**短剧多机位剪辑前决策台**，交付物是可信的剪辑前决策底稿，不是完整 NLE。
-- 当前远端 `main`：`ed5f16d3`（`ed5f16d3b913bbc101e3a9ac857d334af8f1b1c2`）；此前记录的 CI run [42469404236](https://github.com/muee91/mirrororder/actions/runs/42469404236) 对应旧基线，本批未触发或复核新基线 CI。
+- 当前远端 `main`：`4a12016f79f01d001785f58405f3449c583b0015`（第 53 项，素材列表行补充 `role="listitem"`）；对应 CI #107 / run `43624179126` 已成功。
 - 已落地：evidence sidecar contract、路径安全校验、可选 PySceneDetect provider、OpenTimelineIO interop boundary、可选 provider 能力诊断、场记状态统一投影与筛选、跨集同名场景隔离、正式 `M_` 归档指纹复核；媒体审阅/时间线恢复的缓存、并发刷新与失败隔离；素材扫描快照发布失败时的 fail-closed 语义；媒体探测失败显式状态和可选帧率/时码/旋转元数据。
-- 仍未完成：真实素材五步主链复验、受控 multicam 符号链接迁移、Ubuntu/Mac 模型运行时开箱验证。
+- 仍未完成：真实素材五步主链复验（严格口径当前 0/5）、受控 multicam 符号链接迁移、Ubuntu/Mac 模型运行时开箱验证。
 - 新的技术选择必须遵守：Provider 只能产生 evidence/proposal，不能写 Review placement、Editorial Decision 或 Rust Timeline authority。
 
 ## 当前基线
 
-- 仓库只维护 `main`；当前远端基线 HEAD `ed5f16d3`，与 GitHub `origin/main` 一致（2026-11-10 核对）。
-- 当前基线 CI：**NOT RUN / 未复核**；不能把旧基线 run 42469404236 当作 `ed5f16d3` 的证据。本批未触发 CI。
+- 仓库只维护 `main`；当前远端基线 HEAD `4a12016f79f01d001785f58405f3449c583b0015`（第 53 项，2026-11-14 核对），与 GitHub `origin/main` 一致。
+- 当前基线 CI：CI #107 / run `43624179126` 已成功。CI 绿色仅证明自动 gate，不能替代下面的真实五步主链。
+- 严格真实可用性口径：最低产品验收当前为 **0/5 完整验收**。云端环境没有真实项目、真实素材盘或可替代 macOS 原生播放器/NLE；云端 Host/Chromium 不足以完成该证据。首个前置是 Muee91/Mac 接通外置 SSD 并启动可达 Host，再按 A/B → C → D → E 顺序留证。
 - Desktop 仍处于 Product Recovery 之后的**可交付化阶段**：代码结构恢复已收口，缺口在发布工程、授权与真实可用性证据（顺序见 `BACKLOG.md` Phase 0/1/2）。
 - 一级工作区固定：`素材 / 剧本 / 时间线 / 审阅`；原则仍是**共享对象，不共享工作流**。
 
