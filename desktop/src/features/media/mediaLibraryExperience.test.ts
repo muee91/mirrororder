@@ -217,4 +217,75 @@ describe("media library experience contract", () => {
   it("supports Cmd/Ctrl+Shift+C for copying the current filtered inventory without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("function copyVisibleOnShortcut(event: KeyboardEvent): void");
-    expect(workbench).toContain('event.key.toLow
+    expect(workbench).toContain('event.key.toLowerCase() !== "c"');
+    expect(workbench).toContain("copyVisibleInventory()");
+    expect(workbench).toContain("event.shiftKey");
+    expect(workbench).toContain("aria-keyshortcuts=\"Meta+Shift+C Control+Shift+C\"");
+    expect(workbench).toContain("window.removeEventListener(\"keydown\", copyVisibleOnShortcut)");
+  });
+
+  it("caps select-all to the bulk camera write limit", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const remaining = Math.max(0, bulkSelectionLimit - next.size)");
+    expect(workbench).toContain("slice(0, remaining)");
+    expect(workbench).toContain("单次最多 {bulkSelectionLimit} 条");
+    expect(workbench).toContain("当前筛选结果超过批量上限");
+  });
+
+  it("blocks bulk camera writes when a refresh leaves selected media unavailable", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const selectedUnavailableCount = [...selectedIds].filter((mediaId) => !inventoryIds.has(mediaId)).length");
+    expect(workbench).toContain("bulkSelectionHasUnavailable");
+    expect(workbench).toContain("已不在当前清单");
+    expect(workbench).toContain("if (selectedItems.length !== selectedIds.size) return");
+    expect(workbench).toContain("function clearUnavailableSelection(): void");
+    expect(workbench).toContain("移除不可用选择");
+    expect(workbench).toContain("clearUnavailableSelection");
+  });
+
+  it("persists the last bulk result per project for reload and project-switch recovery", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("BULK_RESULT_STORAGE_KEY");
+    expect(workbench).toContain("storedBulkResult(projectId)");
+    expect(workbench).toContain("saveBulkResult(projectId, result)");
+    expect(workbench).toContain("setBulkResult(storedBulkResult(projectId))");
+    expect(workbench).toContain("Number.isFinite(value.count)");
+  });
+
+  it("resets a camera filter when a bulk update removes its last matching bucket", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("if (cameraFilter !== \"all\" && !cameraFilters.some(({ key }) => key === cameraFilter))");
+    expect(workbench).toContain('cameraFilter: "all"');
+  });
+
+  it("persists selected media ids per project and caps recovered selection", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("const MEDIA_SELECTION_STORAGE_KEY");
+    expect(workbench).toContain("storedMediaSelection(projectId)");
+    expect(workbench).toContain("saveMediaSelection(projectId, selectedIds)");
+    expect(workbench).toContain("setSelectedIds(storedMediaSelection(projectId))");
+    expect(workbench).toContain("slice(0, 200)");
+    expect(workbench).toContain("new Set([...current].filter((id) => nextInventory.items.some((item) => item.media_id === id)))");
+  });
+
+  it("persists the media browser view state per project for long-running pre-edit work", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("type MediaViewState = { query: string; filter: Filter; cameraFilter: string; sceneFilter: string; viewMode: ViewMode; showAllScenes: boolean }");
+    expect(workbench).toContain("MEDIA_VIEW_STATE_STORAGE_KEY");
+    expect(workbench).toContain("storedMediaViewState(projectId)");
+    expect(workbench).toContain("saveMediaViewState(projectId, viewState)");
+    expect(workbench).toContain("setViewState(storedMediaViewState(projectId))");
+    expect(workbench).toContain("viewMode: modes.includes(value.viewMode as ViewMode)");
+    expect(workbench).toContain("filter: filters.includes(value.filter as Filter)");
+    expect(workbench).toContain("query: \"\", filter: \"all\", cameraFilter: \"all\", sceneFilter: \"all\", viewMode: \"list\", showAllScenes: false");
+  });
+
+  it("keeps the media browser on the shared typography and theme authority", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    const styles = source("./media-library.css");
+    expect(workbench).not.toContain("media-library-experience.css");
+    expect(styles).toContain("var(--mo-");
+    expect(styles).not.toContain("prefers-color-scheme");
+    expect(styles).not.toMatch(/font-size:\s*(?:7|8|9)px/);
+  });
+});

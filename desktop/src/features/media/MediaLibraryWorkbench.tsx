@@ -774,4 +774,119 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewState((current) => ({ ...current, viewMode: "grid" }))}>缩略图</button>
         </div>
         <label className="media-library-actor"><span>操作者</span><input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="保存时必填" /></label>
-        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-copy-inventory" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button><button type="button" className="secondary media-library-copy-selected" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-invert-selection" disabled={!visibleIds.length} onClick={invertVisibleSelection}>反选当前结�
+        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-copy-inventory" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button><button type="button" className="secondary media-library-copy-selected" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button><button type="button" className="secondary media-library-select-visible" aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-invert-selection" disabled={!visibleIds.length} onClick={invertVisibleSelection}>反选当前结果</button><button type="button" className="secondary media-library-clear-selection" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>{bulkSelectionHasUnavailable ? <button type="button" className="secondary media-library-clear-unavailable" disabled={busy} onClick={clearUnavailableSelection}>移除不可用选择</button> : null}<span>{selectedIds.size} 条已选 · 单次最多 {bulkSelectionLimit} 条{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}{bulkSelectionHasUnavailable ? ` · ${selectedUnavailableCount} 条已不在当前清单，请刷新后重新选择` : ""}</span><input value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}</div>
+      </div>
+
+      <div className="media-library-scene-readiness" aria-label="场景机位准备度">
+        <span className="media-library-scene-readiness-title">场景机位准备度</span>
+        {sceneReadiness.length ? (
+          <>
+            <span className="is-ready">{readySceneCount} 场已具备多机位</span>
+            {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
+            <div className="media-library-scene-readiness-list" aria-label="按场景聚焦素材">
+              <button type="button" className={sceneFilter === "all" ? "is-active" : ""} onClick={() => setViewState((current) => ({ ...current, sceneFilter: "all" }))}>全部场景</button>
+              {(showAllScenes ? sceneReadiness : sceneReadiness.slice(0, 8)).map((scene) => (
+                <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} onClick={() => setViewState((current) => ({ ...current, sceneFilter: scene.sceneId }))}>
+                  场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
+                </button>
+              ))}
+              {sceneReadiness.length > 8 ? <button type="button" className="media-library-scene-more" onClick={() => setViewState((current) => ({ ...current, showAllScenes: !current.showAllScenes }))}>{showAllScenes ? "收起场景" : `展开全部 ${sceneReadiness.length} 场`}</button> : null}
+            </div>
+          </>
+        ) : <span>先给同步机位素材补充场景归属，系统会提示是否具备至少两个机位。</span>}
+      </div>
+
+      <div className="media-library-camera-strip" aria-label="按机位筛选">
+        <span className="media-library-camera-strip-label">机位</span>
+        <button type="button" className={cameraFilter === "all" ? "is-active" : ""} onClick={() => setViewState((current) => ({ ...current, cameraFilter: "all" }))}><strong>全部</strong><small>{inventory?.summary.files ?? 0}</small></button>
+        {cameraFilters.map((camera) => (
+          <button type="button" key={camera.key} className={cameraFilter === camera.key ? "is-active" : ""} data-camera-tone={camera.tone} onClick={() => setViewState((current) => ({ ...current, cameraFilter: camera.key }))}>
+            <strong>{camera.label}</strong><small>{camera.count}</small>
+          </button>
+        ))}
+      </div>
+
+      <div className="media-library-layout">
+        <div className={`media-library-list is-${viewMode}`} role="list" aria-label={viewMode === "grid" ? "素材缩略图" : "素材列表"}>
+          {visible.map((item) => (
+            <div className="media-library-row-wrap" key={item.media_id}>
+              <input aria-label={`选择 ${item.display_name}`} type="checkbox" checked={selectedIds.has(item.media_id)} onChange={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(item.media_id)) next.delete(item.media_id); else next.add(item.media_id); return next; })} />
+              <MediaLibraryRow item={item} selected={selectedId === item.media_id} roles={roles} preview={playbackForItem(host, projectId, item, playbackByMedia[item.media_id])} takeLabel={takeLabelByClip[item.media_id] ?? (item.clip_id?.trim() ? takeLabelByClip[item.clip_id.trim()] : undefined)} onSelect={() => select(item)} />
+            </div>
+          ))}
+          {filtered.length > visible.length ? <p className="production-note">当前显示前 {visible.length} 条；继续缩小搜索范围以定位其它素材。</p> : null}
+          {!visible.length ? <p className="empty-copy">当前筛选下没有素材。</p> : null}
+        </div>
+
+        <aside className="media-role-inspector" aria-label="当前素材 Inspector">
+          {selectedItem && selectedCamera ? (
+            <>
+              <section className="media-library-monitor">
+                <header>
+                  <span className="media-library-monitor-camera" data-camera-tone={selectedCamera.tone}>{selectedCamera.label}</span>
+                  <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{[resolutionLabel(selectedItem.width, selectedItem.height), durationLabel(selectedItem.duration_seconds), selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"].filter(Boolean).join(" · ")}</small></span>
+                  <MediaHealthIndicator state={mediaHealthState({ indexed: selectedItem.indexed, state: selectedItem.state, playable: Boolean(selectedPlayback), playbackFailed: selectedPlaybackFailed })} />
+                </header>
+                <div className="media-library-player">
+                  {selectedPlayback && !selectedPlaybackFailed ? (
+                    <video
+                      key={`${selectedPlayback.clipId}-${playbackRetry}`}
+                      src={selectedPlayback.url}
+                      controls
+                      preload="metadata"
+                      playsInline
+                      onError={() => { setPlaybackFailedMediaId(selectedItem.media_id); void classifyPlaybackFailure(selectedPlayback.url).then(setPlaybackFailureDetail); }}
+                      onLoadedMetadata={(event) => {
+                        const start = selectedPlayback.sourceStart;
+                        if (start > 0) {
+                          try { event.currentTarget.currentTime = start; } catch { /* media metadata may still be settling */ }
+                        }
+                      }}
+                    />
+                  ) : selectedPlaybackFailed ? (
+                    <div className="media-library-player-state is-error"><strong>这条原片当前无法在 App 内播放</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
+                  ) : selectedItem.state === "missing" ? (
+                    <div className="media-library-player-state"><strong>本机当前找不到这条素材</strong><span>设备绑定曾经确认过它，但文件已移动或素材盘暂时离线。重新连接素材后再加载。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
+                  ) : selectedItem.state === "unknown" ? (
+                    <div className="media-library-player-state"><strong>这条素材尚未在本机确认</strong><span>它有项目索引，但当前设备没有可验证的绑定。先扫描并确认素材位置，再开始播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
+                  ) : !selectedItem.indexed ? (
+                    <div className="media-library-player-state"><strong>这条素材尚未进入项目索引</strong><span>未入索引素材不会绕过本机素材身份校验直接按路径播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
+                  ) : (
+                    <div className="media-library-player-state"><strong>已入索引，但缺少可播放的 clip identity</strong><span>{playbackProjectionLoaded ? "当前数据来自较旧的索引结构；Review fallback 也没有这条素材。刷新或重新整理项目后再试。" : "当前 Host 没有返回 opaque clip_id。刷新或重新整理项目后再试；素材清单和人工机位仍可继续编辑。"}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload(selectedItem.media_id)}>重新读取</button></div>
+                  )}
+                </div>
+              </section>
+
+              <section className="media-role-camera-editor">
+                <div className="media-role-section-heading"><div><p className="eyebrow">机位</p><h3>当前 {selectedCamera.label}</h3></div><span>{selectedHasOverride ? "人工覆盖" : "自动识别"}</span></div>
+                <div className="media-role-camera-quick">
+                  {["A", "B", "C"].map((camera) => {
+                    const presentation = effectiveCamera(camera, "");
+                    return <button type="button" key={camera} data-camera-tone={presentation.tone} className={draft.camera_override?.trim().toUpperCase() === camera ? "is-active" : ""} onClick={() => patch({ camera_override: camera })}>{presentation.label}</button>;
+                  })}
+                  <button type="button" className={!draft.camera_override?.trim() ? "is-active is-auto" : "is-auto"} onClick={() => patch({ camera_override: "" })}>跟随识别</button>
+                </div>
+                <label className="production-field"><span>自定义机位</span><input value={draft.camera_override || ""} onChange={(event) => patch({ camera_override: event.target.value })} placeholder={`自动识别：${effectiveCamera("", selectedItem.inferred_camera).label}`} /></label>
+              </section>
+
+              <section className="media-role-fields">
+                <div className="media-role-section-heading"><div><p className="eyebrow">用途</p><h3>素材角色与同步</h3></div><span>独立于机位</span></div>
+                <label className="production-field"><span>素材角色</span><select value={draft.source_role || "sync_camera"} onChange={(event) => changeSourceRole(event.target.value)}><option value="sync_camera">同步机位</option><option value="aerial">航拍</option><option value="broll">空镜 / B-roll</option><option value="gopro">GoPro</option><option value="insert">细节 / Insert</option><option value="custom">自定义</option></select></label>
+                <label className="production-field"><span>同步策略</span><select value={draft.sync_policy || "auto"} onChange={(event) => patch({ sync_policy: event.target.value })}><option value="auto">参与同步</option><option value="exclude">不参与同步</option></select></label>
+                <label className="production-field"><span>场景归属</span><input value={draft.scene_id || ""} onChange={(event) => patch({ scene_id: event.target.value })} placeholder="例如 12-3" /></label>
+                <label className="production-field"><span>自定义标签</span><input value={draft.role_label || ""} onChange={(event) => patch({ role_label: event.target.value })} placeholder="例如 城市建立镜头" /></label>
+                <label className="production-field"><span>备注</span><textarea rows={4} value={draft.note || ""} onChange={(event) => patch({ note: event.target.value })} placeholder="场记或剪辑用途，例如：饭店外景建立镜头" /></label>
+              </section>
+
+              <div className="media-role-savebar"><span>{actor.trim() ? `由 ${actor.trim()} 保存人工制作事实` : "填写操作者后才能保存人工修改"}</span><button type="button" disabled={busy || !actor.trim()} onClick={() => void save()}>保存修改</button></div>
+            </>
+          ) : <p className="empty-copy">选择一条素材即可监看并整理机位。</p>}
+        </aside>
+      </div>
+
+      {onOpenMediaBinding ? (
+        <div className="media-binding-disclosure"><button type="button" className="secondary" onClick={onOpenMediaBinding}>素材离线或换盘？打开素材恢复</button></div>
+      ) : null}
+    </section>
+  );
+}
