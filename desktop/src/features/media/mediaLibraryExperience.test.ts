@@ -134,6 +134,15 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('aria-label="反选当前筛选结果"');
   });
 
+  it("labels recovery, camera, save, and restore actions for assistive technology", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("aria-label=\"重新选中最近批量结果\"");
+    expect(workbench).toContain("aria-label=\"重新加载当前素材播放\"");
+    expect(workbench).toContain("aria-label={`设置机位 ${presentation.label}`}");
+    expect(workbench).toContain("aria-label=\"跟随自动识别机位\"");
+    expect(workbench).toContain("aria-label=\"保存素材角色修改\"");
+  });
+
   it("announces loading and selection state to assistive technology", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain('<section className="media-library-workbench" aria-busy={busy}>');
