@@ -863,15 +863,15 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                       }}
                     />
                   ) : selectedPlaybackFailed ? (
-                    <div className="media-library-player-state is-error"><strong>这条原片当前无法在 App 内播放</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
+                    <div className="media-library-player-state is-error" aria-live="polite"><strong>这条原片当前无法在 App 内播放</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
                   ) : selectedItem.state === "missing" ? (
-                    <div className="media-library-player-state"><strong>本机当前找不到这条素材</strong><span>设备绑定曾经确认过它，但文件已移动或素材盘暂时离线。重新连接素材后再加载。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
+                    <div className="media-library-player-state" aria-live="polite"><strong>本机当前找不到这条素材</strong><span>设备绑定曾经确认过它，但文件已移动或素材盘暂时离线。重新连接素材后再加载。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : selectedItem.state === "unknown" ? (
-                    <div className="media-library-player-state"><strong>这条素材尚未在本机确认</strong><span>它有项目索引，但当前设备没有可验证的绑定。先扫描并确认素材位置，再开始播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
+                    <div className="media-library-player-state" aria-live="polite"><strong>这条素材尚未在本机确认</strong><span>它有项目索引，但当前设备没有可验证的绑定。先扫描并确认素材位置，再开始播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : !selectedItem.indexed ? (
-                    <div className="media-library-player-state"><strong>这条素材尚未进入项目索引</strong><span>未入索引素材不会绕过本机素材身份校验直接按路径播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
+                    <div className="media-library-player-state" aria-live="polite"><strong>这条素材尚未进入项目索引</strong><span>未入索引素材不会绕过本机素材身份校验直接按路径播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : (
-                    <div className="media-library-player-state"><strong>已入索引，但缺少可播放的 clip identity</strong><span>{playbackProjectionLoaded ? "当前数据来自较旧的索引结构；Review fallback 也没有这条素材。刷新或重新整理项目后再试。" : "当前 Host 没有返回 opaque clip_id。刷新或重新整理项目后再试；素材清单和人工机位仍可继续编辑。"}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload(selectedItem.media_id)}>重新读取</button></div>
+                    <div className="media-library-player-state" aria-live="polite"><strong>已入索引，但缺少可播放的 clip identity</strong><span>{playbackProjectionLoaded ? "当前数据来自较旧的索引结构；Review fallback 也没有这条素材。刷新或重新整理项目后再试。" : "当前 Host 没有返回 opaque clip_id。刷新或重新整理项目后再试；素材清单和人工机位仍可继续编辑。"}</span><button type="button" className="secondary" disabled={busy} onClick={() => void reload(selectedItem.media_id)}>重新读取</button></div>
                   )}
                 </div>
               </section>

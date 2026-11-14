@@ -120,6 +120,12 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('<span aria-live="polite">{selectedIds.size} 条已选');
   });
 
+  it("announces playback recovery states to assistive technology", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain('className="media-library-player-state is-error" aria-live="polite"');
+    expect(workbench).toContain('className="media-library-player-state" aria-live="polite"');
+  });
+
   it("offers a keyboard shortcut to focus the media search without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const searchInputRef = useRef<HTMLInputElement>(null)");
