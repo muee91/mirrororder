@@ -131,6 +131,13 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('className="media-library-player-state" aria-live="polite"');
   });
 
+  it("labels bulk media controls for assistive technology", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain('aria-label="清除所有素材筛选"');
+    expect(workbench).toContain('aria-label="清空已选素材"');
+    expect(workbench).toContain('aria-label="批量设置机位名称"');
+  });
+
   it("offers a keyboard shortcut to focus the media search without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const searchInputRef = useRef<HTMLInputElement>(null)");
