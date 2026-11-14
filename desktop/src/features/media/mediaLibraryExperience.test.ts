@@ -104,6 +104,13 @@ describe("media library experience contract", () => {
     expect(styles).toContain("display: flex !important");
   });
 
+  it("announces loading and selection state to assistive technology", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain('<section className="media-library-workbench" aria-busy={busy}>');
+    expect(workbench).toContain('<span className="production-state" aria-live="polite">{message}</span>');
+    expect(workbench).toContain('<span aria-live="polite">{selectedIds.size} 条已选');
+  });
+
   it("offers a keyboard shortcut to focus the media search without hijacking text inputs", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("const searchInputRef = useRef<HTMLInputElement>(null)");
