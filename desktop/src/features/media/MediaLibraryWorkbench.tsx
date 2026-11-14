@@ -809,7 +809,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                   场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
                 </button>
               ))}
-              {sceneReadiness.length > 8 ? <button type="button" className="media-library-scene-more" onClick={() => setViewState((current) => ({ ...current, showAllScenes: !current.showAllScenes }))}>{showAllScenes ? "收起场景" : `展开全部 ${sceneReadiness.length} 场`}</button> : null}
+              {sceneReadiness.length > 8 ? <button type="button" className="media-library-scene-more" aria-expanded={showAllScenes} onClick={() => setViewState((current) => ({ ...current, showAllScenes: !current.showAllScenes }))}>{showAllScenes ? "收起场景" : `展开全部 ${sceneReadiness.length} 场`}</button> : null}
             </div>
           </>
         ) : <span>先给同步机位素材补充场景归属，系统会提示是否具备至少两个机位。</span>}
