@@ -42,7 +42,8 @@ def _paragraphs(path: Path) -> list[str]:
     with zipfile.ZipFile(path) as archive:
         document = ET.fromstring(archive.read("word/document.xml"))
     result = []
-    for paragraph in document.findall(f".//{{{W_NS}}}body/{{{W_NS}}}p"):
+    # Include paragraphs nested in tables/text boxes as well as the main body.
+    for paragraph in document.findall(f".//{{{W_NS}}}p"):
         text = "".join(node.text or "" for node in paragraph.findall(f".//{{{W_NS}}}t"))
         text = re.sub(r"\s+", " ", text).strip()
         if text:
@@ -50,16 +51,36 @@ def _paragraphs(path: Path) -> list[str]:
     return result
 
 
+def _chinese_number(text: str) -> int | None:
+    digits = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if text.isdigit():
+        return int(text)
+    if not text or any(char not in digits and char not in {"十", "百"} for char in text):
+        return None
+    total = 0
+    section = 0
+    number = 0
+    for char in text:
+        if char in digits:
+            number = digits[char]
+        elif char == "十":
+            section += (number or 1) * 10
+            number = 0
+        elif char == "百":
+            section += (number or 1) * 100
+            number = 0
+    return section + number + total
+
+
 def _episode(text: str) -> int | None:
-    match = re.match(r"^第\s*(\d+)\s*集\s*$", text)
-    if match:
-        return int(match.group(1))
-    match = re.match(r"^(\d+)\s*集\s*$", text)
-    return int(match.group(1)) if match else None
+    match = re.match(r"^(?:第\s*)?([0-9零〇一二两三四五六七八九十百]+)\s*(?:集|话|回)\s*$", text, re.IGNORECASE)
+    if not match:
+        match = re.match(r"^EP\s*([0-9]+)\s*$", text, re.IGNORECASE)
+    return _chinese_number(match.group(1)) if match else None
 
 
 def _scene(text: str) -> str | None:
-    match = re.match(r"^(\d+\s*[-—]\s*\d+)(?:\s|$)", text)
+    match = re.match(r"^(?:第\s*)?(\d+\s*[-—]\s*\d+)\s*(?:场)?(?=$|\s|[、，,.:：。]|[\u4e00-\u9fff])", text)
     if match:
         return re.sub(r"\s+", "", match.group(1)).replace("—", "-")
     match = re.match(r"^(?:场|第\s*)\s*([0-9一二三四五六七八九十百]+)\s*场", text)

@@ -69,6 +69,29 @@ def test_script_parser_does_not_drop_unknown_scene(tmp_path):
     assert parse_script(path).segments[0].scene_id == "UNKNOWN"
 
 
+def test_script_parser_accepts_common_chinese_episode_and_scene_variants(tmp_path):
+    path = tmp_path / "script.txt"
+    path.write_text("第一集\n第1-1场、早餐店\n李梦：你好\n第二话\n1-2. 门口\n△转身。", encoding="utf-8")
+    document = parse_script(path)
+    assert [segment.episode for segment in document.segments] == [1, 1, 2, 2]
+    assert [segment.scene_id for segment in document.segments] == ["1-1", "1-1", "1-2", "1-2"]
+
+
+def test_script_parser_reads_docx_table_paragraphs(tmp_path):
+    path = tmp_path / "script.docx"
+    body = (
+        '<w:p><w:r><w:t>第1集</w:t></w:r></w:p>'
+        '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>1-1、室内</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+        '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>人物：台词</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    )
+    xml = f'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>'
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("word/document.xml", xml)
+    document = parse_script(path)
+    assert len(document.segments) == 2
+    assert document.segments[-1].scene_id == "1-1"
+
+
 def test_dialogue_variant_matches_without_time_ratio(tmp_path):
     media = tmp_path / "A.mov"; media.write_bytes(b"x")
     clip = Clip("c1", "A", "A", str(media), 0, 10, 10, True)
