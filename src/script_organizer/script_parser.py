@@ -73,9 +73,17 @@ def _chinese_number(text: str) -> int | None:
 
 
 def _episode(text: str) -> int | None:
-    match = re.match(r"^(?:第\s*)?([0-9零〇一二两三四五六七八九十百]+)\s*(?:集|话|回)\s*$", text, re.IGNORECASE)
+    # Screenplays commonly append the episode title to the marker, for example
+    # ``第一集：欠债五十万`` or ``第 2 集 - 回村报喜``.  Keep the separator
+    # explicit so a dialogue line such as ``第一集人物...`` is not treated as
+    # an episode heading by accident.
+    match = re.match(
+        r"^(?:第\s*)?([0-9零〇一二两三四五六七八九十百]+)\s*(?:集|话|回)(?:(?:\s*[:：\-—.、]\s*|\s+).*)?$",
+        text,
+        re.IGNORECASE,
+    )
     if not match:
-        match = re.match(r"^EP\s*([0-9]+)\s*$", text, re.IGNORECASE)
+        match = re.match(r"^EP\s*([0-9]+)(?:(?:\s*[:：\-—.、]\s*|\s+).*)?$", text, re.IGNORECASE)
     return _chinese_number(match.group(1)) if match else None
 
 

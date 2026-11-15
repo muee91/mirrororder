@@ -77,6 +77,19 @@ def test_script_parser_accepts_common_chinese_episode_and_scene_variants(tmp_pat
     assert [segment.scene_id for segment in document.segments] == ["1-1", "1-1", "1-2", "1-2"]
 
 
+def test_script_parser_accepts_episode_titles_after_markers(tmp_path):
+    path = tmp_path / "script.txt"
+    path.write_text(
+        "第一集：欠债五十万\n1-1 夜/内/仓库\n林远：你好\n"
+        "第 2 集 - 回村报喜\n2-1 日/外/村口\n△林远下车。\n"
+        "EP3: 退亲\n3-1 日/内/老屋\n苏倩：我们谈谈。\n",
+        encoding="utf-8",
+    )
+    document = parse_script(path)
+    assert [segment.episode for segment in document.segments] == [1, 1, 2, 2, 3, 3]
+    assert [segment.scene_id for segment in document.segments] == ["1-1", "1-1", "2-1", "2-1", "3-1", "3-1"]
+
+
 def test_script_parser_reads_docx_table_paragraphs(tmp_path):
     path = tmp_path / "script.docx"
     body = (
