@@ -46,14 +46,15 @@ after(async () => {
 
 async function openReview(t, { empty = false, missingMedia = false, takeCount = 3, projectId = "project" } = {}) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const projectName = projectId === "synthetic-alternate" ? "Synthetic Alternate Project" : model.project.name;
   t.after(() => page.close());
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     if (!path.startsWith("/api/")) return route.continue();
     if (path.endsWith("/review-model")) {
-      return route.fulfill({ json: { ...model, project: { ...model.project, project_id: projectId }, take_groups: empty ? [] : model.take_groups.slice(0, takeCount) } });
+      return route.fulfill({ json: { ...model, project: { ...model.project, project_id: projectId, name: projectName }, take_groups: empty ? [] : model.take_groups.slice(0, takeCount) } });
     }
-    if (path.endsWith("/workspace")) return route.fulfill({ json: { projects: [{ ...model.project, project_id: projectId }] } });
+    if (path.endsWith("/workspace")) return route.fulfill({ json: { projects: [{ ...model.project, project_id: projectId, name: projectName }] } });
     if (path.includes("/media/")) {
       return missingMedia
         ? route.fulfill({ status: 404, json: { error: "media missing" } })
@@ -78,7 +79,10 @@ test("real ReviewWorkspace compact rows are counted and selection advances twice
 test("fixture obtains the requested project summary instead of hardcoding project", async t => {
   const page = await openReview(t, { projectId: "synthetic-alternate" });
   assert.equal((await verifyReviewQueueNavigation(page)).total, 3);
-  assert.equal(await page.locator(".professional-project-identity strong").innerText(), model.project.name);
+  assert.equal(
+    await page.locator(".professional-project-workbench").getAttribute("aria-label"),
+    "项目工作台：Synthetic Alternate Project",
+  );
 });
 
 test("an actually empty queue fails the required assertion", async t => {

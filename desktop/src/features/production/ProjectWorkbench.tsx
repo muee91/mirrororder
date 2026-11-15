@@ -226,7 +226,10 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const primaryNavigation = useMemo(() => Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>, []);
 
   return (
-    <section className={`project-production-workbench professional-project-workbench ${assistantVisible ? "has-assistant-drawer" : ""}`}>
+    <section
+      className={`project-production-workbench professional-project-workbench ${assistantVisible ? "has-assistant-drawer" : ""}`}
+      aria-label={`项目工作台：${project.name || project.project_id}`}
+    >
       <header className="professional-project-toolbar">
         <nav className="professional-area-nav" aria-label="制作区域">
           {primaryNavigation.map(([key, definition]) => (
