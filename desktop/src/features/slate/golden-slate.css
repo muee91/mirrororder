@@ -144,6 +144,13 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
   .golden-slate-actions button.secondary:nth-of-type(2) { display: none; }
 }
 
+@media (max-width: 900px) {
+  .golden-slate-workbench.has-inspector .golden-slate-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(340px, 1fr) auto; overflow: auto; }
+  .golden-slate-workbench.has-inspector .golden-slate-inspector { max-height: none; border-top: 1px solid #2a323a; border-left: 0; }
+  .golden-slate-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .golden-slate-actions .compact-action { display: inline-flex; }
+}
+
 @media (prefers-color-scheme: light) {
   .golden-slate-workbench { color: #27323b; background: #f7f8fa; }
   .golden-slate-toolbar, .golden-slate-inspector, .golden-inspector-head, .golden-slate-section > header { background: #fff; }
@@ -151,6 +158,7 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
   .golden-slate-toolbar, .golden-slate-quick, .golden-slate-inspector, .golden-inspector-head, .golden-slate-review-tools, .golden-slate-section { border-color: #d7dee4; }
   .golden-slate-title > strong, .golden-inspector-head strong { color: #26313a; }
   .golden-slate-title > span { color: #687580; }
+  .golden-slate-save-state { color: #687580; }
   .golden-slate-actions input, .golden-take-picker > header input, .golden-io-row input, .golden-inspector-field textarea, .golden-angle-fields input, .golden-angle-fields select { border-color: #cfd7de; color: #26313a; background: #fff; }
   .golden-slate-table th { border-color: #d7dee4; color: #65727d; background: #e9edf1; }
   .golden-slate-table td { border-color: #e0e5e9; background: #fff; }
