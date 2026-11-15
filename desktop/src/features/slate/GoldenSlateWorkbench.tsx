@@ -11,6 +11,7 @@ import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
 import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
 import { SlateRow, SlateTableHead, type SlateCameraColumn } from "./SlateRow";
 import { SlateWorkbench } from "./SlateWorkbench";
+import { CurrentOperatorControl, readCurrentOperator } from "../../components/CurrentOperatorControl";
 import "../media/camera-presentation.css";
 import "./golden-slate.css";
 import "./golden-slate-media-experience.css";
@@ -28,7 +29,6 @@ interface Props {
 type Draft = SlateRecord & { dirty: boolean; derived: boolean; derivedSource: string; xmlOrder: number };
 type SceneLink = { episode: number; sceneId: string };
 
-const ACTOR_KEY = "mirrororder.productionActor";
 // 值是 supervisor 存储/解析层的英文枚举；下拉展示中文景别。
 const SHOT_LABELS: Record<string, string> = {
   unknown: "未知",
@@ -44,11 +44,14 @@ const SHOT_LABELS: Record<string, string> = {
 const SHOT_OPTIONS = Object.keys(SHOT_LABELS);
 
 function storedActor(): string {
-  try { return globalThis.localStorage?.getItem(ACTOR_KEY)?.trim() ?? ""; } catch { return ""; }
+  return readCurrentOperator();
 }
 
 function saveActor(actor: string): void {
-  try { globalThis.localStorage?.setItem(ACTOR_KEY, actor.trim()); } catch { /* device-local convenience only */ }
+  // CurrentOperatorControl owns the shared localStorage keys and broadcasts
+  // changes to every workbench. Keep this helper as a no-op compatibility
+  // seam for the inline save paths below.
+  void actor;
 }
 
 function newRecordId(): string {
@@ -829,7 +832,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
         </div>
         <div className="golden-slate-mode"><span className="slate-mode-icon">▦</span><strong>场记</strong></div>
         <div className="golden-slate-actions">
-          <input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="操作者" aria-label="场记操作者" />
+          <CurrentOperatorControl onChange={setActor} />
           {onOpenMaterialScript ? <button type="button" className="secondary" onClick={onOpenMaterialScript}>素材 / 剧本</button> : null}
           {onOpenReview ? <button type="button" className="secondary" onClick={onOpenReview}>团队审阅</button> : null}
           {onOpenIdentity ? <button type="button" className="secondary compact-action" onClick={onOpenIdentity}>人物</button> : null}
