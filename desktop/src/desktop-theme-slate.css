@@ -120,6 +120,5 @@ html[data-mirrororder-theme="dark"] .golden-slate-review-tools { background: #0e
 .golden-inspector-actions .danger-subtle { flex: 0 0 auto; min-width: 94px; }
 
 /* Toolbar utilities are real text controls, not placeholder glyphs. */
-.golden-slate-mode .slate-mode-icon { display: none; }
 .golden-slate-actions .icon-action[title*="Inspector"],
-.golden-slate-actions .icon-action[title="刷新项目"] { min-width: 42px; padding-inline: 8px; font-size: 10px; font-weight: 650; line-height: 1; }
+.golden-slate-actions .icon-action[title="刷新场记"] { min-width: 66px; padding-inline: 8px; font-size: 10px; font-weight: 650; line-height: 1; }

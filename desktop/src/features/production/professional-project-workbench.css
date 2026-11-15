@@ -3,41 +3,19 @@
   min-height: 0;
   display: grid;
   /* ProjectWorkbench has exactly two direct layout rows: project toolbar + canvas. */
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
   background: var(--mo-surface-app, #0b0f13);
 }
 
 .professional-project-toolbar {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(132px, 188px) minmax(248px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--mo-border-subtle, #202830);
   padding: 5px 10px;
   background: var(--mo-surface-pane, #10151a);
-}
-
-.professional-project-identity {
-  min-width: 0;
-  display: grid;
-  gap: 1px;
-}
-
-.professional-project-identity > span {
-  color: var(--mo-text-muted, #778590);
-  font-size: 10px;
-  line-height: 1.2;
-}
-
-.professional-project-identity > strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--mo-text-primary, #e2e8ed);
-  font-size: 13px;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .professional-area-nav {
@@ -137,13 +115,9 @@
   display: none !important;
 }
 
-/* Local workbench headers can keep object-specific actions, but not duplicate project navigation. */
+/* Local workbench headers keep object-specific actions; global project context stays above. */
 .professional-project-workbench .golden-slate-toolbar {
   padding-inline: 10px;
-}
-
-.professional-project-workbench .golden-slate-title > strong {
-  display: none;
 }
 
 .professional-project-workbench .golden-slate-title > span {
@@ -152,7 +126,7 @@
 
 @media (max-width: 1220px) {
   .professional-project-toolbar {
-    grid-template-columns: minmax(122px, 166px) minmax(224px, 300px) minmax(0, 1fr);
+    grid-template-columns: minmax(250px, 330px) minmax(0, 1fr);
     gap: 8px;
   }
 
@@ -177,7 +151,7 @@
   }
 
   .professional-project-workbench {
-    grid-template-rows: 82px minmax(0, 1fr);
+    grid-template-rows: 76px minmax(0, 1fr);
   }
 
   .professional-project-tools {

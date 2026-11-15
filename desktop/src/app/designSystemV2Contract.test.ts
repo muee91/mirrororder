@@ -82,8 +82,8 @@ describe("MirrorOrder Design System v2 contract", () => {
   it("keeps project chrome compact and aligned with the current toolbar-plus-canvas authority", () => {
     const project = read("../features/production/professional-project-workbench.css");
 
-    expect(project).toContain("grid-template-rows: 48px minmax(0, 1fr)");
-    expect(project).not.toContain("grid-template-rows: 48px 32px");
+    expect(project).toContain("grid-template-rows: 44px minmax(0, 1fr)");
+    expect(project).not.toContain("grid-template-rows: 44px 32px");
     expect(project).toContain(".professional-area-nav button.is-active:hover");
     expect(project).not.toContain(".professional-secondary-pages");
     // The dead second context-bar layer is gone; ProjectWorkbench keeps the only chrome authority.

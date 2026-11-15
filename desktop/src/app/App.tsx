@@ -529,7 +529,7 @@ export function App() {
                 <span className={`app-topbar-status-dot ${runningProjects ? "is-active" : ""}`} />
                 {runningProjects ? `${runningProjects} 个项目处理中` : "后台正常"}
               </button>
-              <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id)}>刷新</button>
+              <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id)}>刷新工作区</button>
               <details className="app-workspace-menu">
                 <summary className="app-workspace-chip">
                   <span className={`status-dot status-${state}`} aria-hidden="true" />

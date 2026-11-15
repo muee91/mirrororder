@@ -47,8 +47,7 @@ describe("Swift golden product fidelity", () => {
     const css = source("./golden-slate.css");
     for (const label of ["A 机", "B 机", "C 机", "辅助 / 特殊"]) expect(row).toContain(label);
     for (const label of [
-      "加入 Take / 镜头",
-      "团队审阅",
+      "从 Take 加入",
       "同场下一条",
       "同上",
       "空白",
@@ -70,19 +69,20 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("已把 T${take.take_index} 填入当前场记");
     expect(slate).toContain("row.record_id === selected.record_id || row.source_group_id !== take.group_id");
     expect(slate).toContain("take_number: take.take_index || null");
-    expect(slate).toContain("onToggleAssistant");
-    expect(slate).toContain('aria-label={assistantOpen ? "关闭小镜" : "打开小镜"}');
-    expect(slate).toContain(">✦</button>");
+    expect(slate).not.toContain("onToggleAssistant");
+    expect(slate).not.toContain("<CurrentOperatorControl");
+    expect(slate).not.toContain("团队审阅");
+    expect(slate).toContain('aria-label="刷新场记"');
     expect(slate).not.toContain("quick-mic");
     expect(css).not.toContain(".quick-mic");
-    expect(css).toContain("grid-template-columns: minmax(220px,1fr) auto 1px auto auto auto");
+    expect(css).toContain("grid-template-columns: auto minmax(180px,1fr) auto 1px auto auto auto");
     expect(slate).toContain("shortcutActionsRef");
     expect(slate).toContain('globalThis.addEventListener("keydown", keydown)');
     expect(slate).toContain('if (event.key === "Escape" && takePickerOpen)');
     expect(slate).toContain("}, [takePickerOpen]);");
     expect(slate).not.toContain("track.clips =");
-    expect(css).toContain("height: 52px");
-    expect(css).toContain("height: 38px");
+    expect(css).toContain("height: 48px");
+    expect(css).toContain("height: 36px");
     expect(css).toContain("@media (max-width: 1320px)");
     expect(css).toContain("@media (max-width: 1208px)");
     expect(css).toContain("grid-template-columns: minmax(620px,1fr) 285px");

@@ -63,19 +63,12 @@ export function MaterialWorkspace({
             </button>
           ))}
         </nav>
-        <div className="material-domain-context">
-          {view === "repair" ? (
-            <>
-              <span>素材库工具</span>
-              <button type="button" className="secondary" onClick={() => onViewChange("library")}>返回素材库</button>
-            </>
-          ) : (
-            <>
-              <span>素材 / {activeDefinition.label}</span>
-              <small>{activeDefinition.hint}</small>
-            </>
-          )}
-        </div>
+        {view === "repair" ? (
+          <div className="material-domain-context">
+            <span>素材库工具</span>
+            <button type="button" className="secondary" onClick={() => onViewChange("library")}>返回素材库</button>
+          </div>
+        ) : null}
       </header>
 
       <div className="material-view-canvas">
@@ -84,9 +77,6 @@ export function MaterialWorkspace({
             <GoldenSlateWorkbench
               baseUrl={baseUrl}
               projectId={project.project_id}
-              onOpenMaterialScript={() => onViewChange("takes")}
-              onOpenIdentity={() => onViewChange("people")}
-              onOpenReview={() => onOpenReview?.()}
             />
             <SlatePlaybackShortcuts />
           </>

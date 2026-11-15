@@ -228,10 +228,6 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   return (
     <section className={`project-production-workbench professional-project-workbench ${assistantVisible ? "has-assistant-drawer" : ""}`}>
       <header className="professional-project-toolbar">
-        <div className="professional-project-identity">
-          <span>当前项目</span>
-          <strong title={project.name || project.project_id}>{project.name || project.project_id}</strong>
-        </div>
         <nav className="professional-area-nav" aria-label="制作区域">
           {primaryNavigation.map(([key, definition]) => (
             <button

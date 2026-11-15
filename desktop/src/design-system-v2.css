@@ -250,7 +250,7 @@ input, textarea, select {
   border-color: var(--mo-border-subtle);
   background: var(--mo-surface-pane);
 }
-.golden-slate-toolbar { height: 50px; }
+.golden-slate-toolbar { height: 48px; }
 .golden-slate-title > strong { color: var(--mo-text-primary); font-size: 13px; }
 .golden-slate-title > span,
 .golden-slate-section > header small,

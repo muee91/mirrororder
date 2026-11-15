@@ -11,7 +11,7 @@ import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
 import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
 import { SlateRow, SlateTableHead, type SlateCameraColumn } from "./SlateRow";
 import { SlateWorkbench } from "./SlateWorkbench";
-import { CurrentOperatorControl, readCurrentOperator } from "../../components/CurrentOperatorControl";
+import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import "../media/camera-presentation.css";
 import "./golden-slate.css";
 import "./golden-slate-media-experience.css";
@@ -19,11 +19,6 @@ import "./golden-slate-media-experience.css";
 interface Props {
   baseUrl: string;
   projectId: string;
-  assistantOpen?: boolean;
-  onToggleAssistant?: () => void;
-  onOpenMaterialScript?: () => void;
-  onOpenIdentity?: () => void;
-  onOpenReview?: () => void;
 }
 
 type Draft = SlateRecord & { dirty: boolean; derived: boolean; derivedSource: string; xmlOrder: number };
@@ -42,17 +37,6 @@ const SHOT_LABELS: Record<string, string> = {
   insert: "插入镜头",
 };
 const SHOT_OPTIONS = Object.keys(SHOT_LABELS);
-
-function storedActor(): string {
-  return readCurrentOperator();
-}
-
-function saveActor(actor: string): void {
-  // CurrentOperatorControl owns the shared localStorage keys and broadcasts
-  // changes to every workbench. Keep this helper as a no-op compatibility
-  // seam for the inline save paths below.
-  void actor;
-}
 
 function newRecordId(): string {
   const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -296,7 +280,7 @@ function primaryAttachment(draft: Draft, camera: SlateCameraColumn): { item: Sla
 
 
 
-export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false, onToggleAssistant, onOpenMaterialScript, onOpenIdentity, onOpenReview }: Props) {
+export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
   const records = useMemo(() => new SlateRecordClient(baseUrl), [baseUrl]);
@@ -306,7 +290,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState("");
   const [selectedClipId, setSelectedClipId] = useState("");
-  const [actor, setActor] = useState(storedActor);
+  const [actor, setActor] = useState(readCurrentOperator);
   const [quickText, setQuickText] = useState("");
   const [message, setMessage] = useState("正在读取多机位电子场记…");
   const [busy, setBusy] = useState(false);
@@ -318,6 +302,19 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
   const [playbackRetry, setPlaybackRetry] = useState(0);
   const [playbackFailureDetail, setPlaybackFailureDetail] = useState<PlaybackFailure | null>(null);
   const playerRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const syncOperator = (event: Event) => {
+      const next = event instanceof CustomEvent && typeof event.detail === "string" ? event.detail : readCurrentOperator();
+      setActor(next);
+    };
+    globalThis.addEventListener("mirrororder:operator-change", syncOperator);
+    globalThis.addEventListener("storage", syncOperator);
+    return () => {
+      globalThis.removeEventListener("mirrororder:operator-change", syncOperator);
+      globalThis.removeEventListener("storage", syncOperator);
+    };
+  }, []);
 
   async function reload(preferredRecordId?: string): Promise<void> {
     setMessage("正在读取多机位电子场记…");
@@ -598,7 +595,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
 
   async function saveDraft(draft: Draft, revision: number): Promise<SlateBoard> {
     if (!actor.trim()) throw new HostConnectionError("保存场记前需要操作者昵称");
-    saveActor(actor);
     return await records.upsert(projectId, {
       recordId: draft.record_id,
       expectedRevision: revision,
@@ -827,19 +823,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
     <section className={`golden-slate-workbench ${inspectorOpen ? "has-inspector" : ""} ${dropActive ? "is-file-drop-active" : ""}`}>
       <header className="golden-slate-toolbar">
         <div className="golden-slate-title">
-          <strong>{review?.project.name || "项目"}</strong>
+          <strong>场记表</strong>
           <span>{message}</span>
         </div>
-        <div className="golden-slate-mode"><span className="slate-mode-icon">▦</span><strong>场记</strong></div>
         <div className="golden-slate-actions">
-          <CurrentOperatorControl onChange={setActor} />
-          {onOpenMaterialScript ? <button type="button" className="secondary" onClick={onOpenMaterialScript}>素材 / 剧本</button> : null}
-          {onOpenReview ? <button type="button" className="secondary" onClick={onOpenReview}>团队审阅</button> : null}
-          {onOpenIdentity ? <button type="button" className="secondary compact-action" onClick={onOpenIdentity}>人物</button> : null}
-          {onToggleAssistant ? <button type="button" className={`icon-action ${assistantOpen ? "is-active" : ""}`} onClick={() => onToggleAssistant()} aria-label={assistantOpen ? "关闭小镜" : "打开小镜"} aria-pressed={assistantOpen} title={assistantOpen ? "关闭小镜" : "打开小镜"}>✦</button> : null}
-          <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>加入 Take / 镜头</button>
+          {drafts.length ? <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>从 Take 加入</button> : null}
           <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>检视</button>
-          <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新项目" title="刷新项目">刷新</button>
+          <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="刷新场记">刷新场记</button>
           <span
             className="golden-slate-save-state"
             data-state={busy ? "saving" : dirtyCount ? "dirty" : board ? "saved" : "idle"}

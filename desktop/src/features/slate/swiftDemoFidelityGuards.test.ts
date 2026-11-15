@@ -40,7 +40,7 @@ describe("Swift Demo fidelity guards", () => {
     expect(experience).toContain(".assistant-context-drawer");
     expect(slate).not.toContain("quick-mic");
     expect(slateCss).not.toContain(".quick-mic");
-    expect(slateCss).toContain("grid-template-columns: minmax(220px,1fr) auto 1px auto auto auto");
+    expect(slateCss).toContain("grid-template-columns: auto minmax(180px,1fr) auto 1px auto auto auto");
   });
 
   it("keeps Material and Script readable at the Swift usability floor without reviving shared-workbench styling", () => {
@@ -51,7 +51,7 @@ describe("Swift Demo fidelity guards", () => {
       expect(css).not.toMatch(/font-size:\s*(?:7|8|9)px/);
     }
     expect(materialCss).toContain(".material-domain-bar");
-    expect(materialCss).toContain("min-height: 52px");
+    expect(materialCss).toContain("min-height: 44px");
     expect(materialCss).toContain("font-size: var(--mo-font-xs, 10px)");
     expect(materialCss).toContain("font-size: var(--mo-font-sm, 11px)");
     expect(scriptCss).toContain(".script-command-bar");

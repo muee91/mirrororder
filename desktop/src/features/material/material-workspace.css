@@ -13,9 +13,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 52px;
+  min-height: 44px;
   border-bottom: 1px solid var(--mo-border-subtle, #202830);
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .material-view-nav {
@@ -29,6 +29,7 @@
   display: grid;
   flex: 0 0 auto;
   min-width: 86px;
+  min-height: 34px;
   gap: 1px;
   border-color: transparent;
   padding: 6px 9px;
