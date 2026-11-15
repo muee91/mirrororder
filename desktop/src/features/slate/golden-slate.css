@@ -6,6 +6,10 @@
 .golden-slate-mode { display: flex; align-items: center; gap: 6px; color: #84b8f7; font-size: 11px; font-weight: 650; }
 .slate-mode-icon { font-size: 13px; }
 .golden-slate-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.golden-slate-save-state { min-width: 54px; color: #7f8d98; font-size: 10px; text-align: right; white-space: nowrap; }
+.golden-slate-save-state[data-state="dirty"] { color: #f0bb70; }
+.golden-slate-save-state[data-state="saving"] { color: #8ec9e8; }
+.golden-slate-save-state[data-state="saved"] { color: #8ab89a; }
 .golden-slate-actions input { width: 96px; height: 30px; border: 1px solid #303944; border-radius: 6px; padding: 0 7px; color: #dce3e8; background: #0c1115; font-size: 10px; }
 .golden-slate-actions button { min-height: 30px; padding: 5px 8px; font-size: 10px; }
 .golden-slate-actions .icon-action { min-width: 30px; border-color: transparent; padding: 0; color: #82909b; background: transparent; font-size: 14px; }
