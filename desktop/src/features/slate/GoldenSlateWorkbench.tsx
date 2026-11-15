@@ -840,6 +840,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, assistantOpen = false
           <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>加入 Take / 镜头</button>
           <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>检视</button>
           <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新项目" title="刷新项目">刷新</button>
+          <span
+            className="golden-slate-save-state"
+            data-state={busy ? "saving" : dirtyCount ? "dirty" : board ? "saved" : "idle"}
+            aria-live="polite"
+          >
+            {busy ? "保存中…" : dirtyCount ? `未保存 ${dirtyCount}` : board ? "已保存" : "等待加载"}
+          </span>
           <button type="button" disabled={busy || dirtyCount === 0 || !actor.trim()} onClick={() => void saveAll()}>保存{dirtyCount ? ` ${dirtyCount}` : ""}</button>
         </div>
       </header>
