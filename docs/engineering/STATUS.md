@@ -1,24 +1,24 @@
 # Engineering Status
 
-更新时间：2026-11-14
+更新时间：2026-11-16
 
 ## 当前产品方向（2026-11-10）
 
 - 镜序正式收窄为**短剧多机位剪辑前决策台**，交付物是可信的剪辑前决策底稿，不是完整 NLE。
-- 当前远端 `main`：`4a12016f79f01d001785f58405f3449c583b0015`（第 53 项，素材列表行补充 `role="listitem"`）；对应 CI #107 / run `43624179126` 已成功。
+- 当前远端 `main`：`9e7999a24b8d94ab0768ea336e7c9b3875fea3be`（2026-11-15 UX 修复）；对应 CI #117 / run `43766248892` 已成功。
 - 已落地：evidence sidecar contract、路径安全校验、可选 PySceneDetect provider、OpenTimelineIO interop boundary、可选 provider 能力诊断、场记状态统一投影与筛选、跨集同名场景隔离、正式 `M_` 归档指纹复核；媒体审阅/时间线恢复的缓存、并发刷新与失败隔离；素材扫描快照发布失败时的 fail-closed 语义；媒体探测失败显式状态和可选帧率/时码/旋转元数据。
 - 仍未完成：真实素材五步主链复验（严格口径当前 0/5）、受控 multicam 符号链接迁移、Ubuntu/Mac 模型运行时开箱验证。
 - 新的技术选择必须遵守：Provider 只能产生 evidence/proposal，不能写 Review placement、Editorial Decision 或 Rust Timeline authority。
 
 ## 当前基线
 
-- 仓库只维护 `main`；当前远端基线 HEAD `4a12016f79f01d001785f58405f3449c583b0015`（第 53 项，2026-11-14 核对），与 GitHub `origin/main` 一致。
-- 当前基线 CI：CI #107 / run `43624179126` 已成功。CI 绿色仅证明自动 gate，不能替代下面的真实五步主链。
+- 仓库只维护 `main`；当前远端基线 HEAD `9e7999a24b8d94ab0768ea336e7c9b3875fea3be`（2026-11-15 核对），与 GitHub `origin/main` 一致。
+- 当前基线 CI：CI #117 / run `43766248892` 已成功（Python、Linux、macOS；含 Linux layout runtime 与 synthetic UX gate）。CI 绿色仅证明自动 gate，不能替代下面的真实五步主链。
 - 严格真实可用性口径：最低产品验收当前为 **0/5 完整验收**。云端环境没有真实项目、真实素材盘或可替代 macOS 原生播放器/NLE；云端 Host/Chromium 不足以完成该证据。首个前置是 Muee91/Mac 接通外置 SSD 并启动可达 Host，再按 A/B → C → D → E 顺序留证。
 - Desktop 仍处于 Product Recovery 之后的**可交付化阶段**：代码结构恢复已收口，缺口在发布工程、授权与真实可用性证据（顺序见 `BACKLOG.md` Phase 0/1/2）。
 - 一级工作区固定：`素材 / 剧本 / 时间线 / 审阅`；原则仍是**共享对象，不共享工作流**。
 
-## 2026-11-10 媒体审阅、时间线恢复与探测元数据边界（目标基线已落地，自动 gate 未在本批重跑）
+## 2026-11-10 媒体审阅、时间线恢复与探测元数据边界（目标基线已落地）
 
 - **审阅读模型恢复**：Host 侧 review-model 使用跨工作区短 TTL 缓存，并合并同一项目的强制刷新；切换项目或连续刷新时用 load token 丢弃过期响应，避免旧请求覆盖当前画面。
 - **时间线读路径隔离**：Review context 与 assembly proposal 改用 `Promise.allSettled` 独立加载；一侧失败时保留另一侧及已保存 Timeline，并显示可行动的分项错误，而不是清空整个编辑器。

@@ -1,10 +1,10 @@
 # Engineering Backlog
 
-更新时间：2026-11-14。本文只拥有**当前执行顺序**；当前事实见 `STATUS.md`，长期硬约束见 `INVARIANTS.md`。
+更新时间：2026-11-16。本文只拥有**当前执行顺序**；当前事实见 `STATUS.md`，长期硬约束见 `INVARIANTS.md`。
 
-## 状态快照（2026-11-14）
+## 状态快照（2026-11-16）
 
-- 当前 `main`：`4a12016f79f01d001785f58405f3449c583b0015`（第 53 项）；CI #107 / run `43624179126` 已成功。
+- 当前 `main`：`9e7999a24b8d94ab0768ea336e7c9b3875fea3be`（2026-11-15 UX 修复）；CI #117 / run `43766248892` 已成功。
 - 开发结构/代码基线近完成；严格真实五步主链仍为 **0/5**，不能用 CI 或合成 UX 替代。
 - 首要阻塞：Mac（Muee91）+ 可达 Host + 真实项目 + 外置 SSD。云端当前没有真实项目/素材盘，且缺 macOS 原生播放、A/V 同步与外部 NLE 证据。
 - 下一验收顺序：A/B 读取与多机位 → C placement/revision conflict → D 原生播放/A-V/人工决定 → E Timeline 冷启动恢复/FCPXML 或 Premiere 实际导入。保持 Sites 看板维护暂停。
@@ -117,7 +117,7 @@ PySceneDetect → 波形收缩 的次序，每项都要带一条"打包后开箱
 
 
 - [ ] **五步主链真机验收**（在本机 `projects/` 下的在制真实项目上跑，项目数据不入库）：项目恢复与切换、大量 Take 搜索/滚动、A/B/C 多机位、场记→素材→剧本→审阅→Timeline 连续上下文、placement revision conflict、Viewer/media binding、Timeline insert/overwrite/replace/undo/redo/persistence、FCPXML/Premiere XML 导出、1280 与宽屏、light/dark、外部拖放。
-- [x] **真实 Host surface gate 与合成回归**：`ux-real.mjs` 已有断言、稳定退出码与归档，修正 compact Take 行选择器并验证实际换 Take；项目参数从 Host 读取真实摘要。播放是独立必需项，缺媒体仍退出 1。合成 ReviewWorkspace/WebM 行为回归已配置进 CI，真实数据不进入源码或 CI；原生应用与完整五步主链仍由上一条验收拥有。当前 owner 暂无真实素材，等素材恢复后继续，不能以合成回归替代。
+- [x] **真实 Host surface gate 与合成回归**：`ux-real.mjs` 已有断言、稳定退出码与归档，修正 compact Take 行选择器并验证实际换 Take；项目参数从 Host 读取真实摘要。播放是独立必需项，缺媒体仍退出 1。合成 ReviewWorkspace/WebM 行为回归已配置进 CI，真实数据不进入源码或 CI；原生应用与完整五步主链仍由上一条验收拥有。当前仍等待 Muee91/Mac 接通外置 SSD 并启动可达 Host；真实剧本/素材链路尚未复验，不能以合成回归替代。
 - [ ] **消灭主链上的重复重拉**：review-model 已有 module-scoped TTL cache、强制刷新去重与 stale-response token guard（2026-11-10）；仍需量测大项目冷缓存、ProjectHome 多项目并发及其余 surface 的真实读路径开销，再决定是否继续拆分 read model。
 - [x] **补齐失败态**（2026-10-27 已完成 UI 状态层）：EditorMonitors、Take Inspector、Golden Slate 与素材库右栏均使用共享播放失败分类和重试/恢复入口；仍需真实素材 codec、声音与 A/V 同步验收，不能以 UI gate 代替。
 - [ ] **时间线区可维护性**：~~6 处 `{[key: string]: any}` 整体解构~~（2026-10-26 已清零：面板 props 全部由 hook 返回类型的 `Pick` 推导，内层 any 一并去除）；剩余缺口是 editor 域 aria 仅 5 处、无键盘导航——这是唯一有写权限的核心区。
