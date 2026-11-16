@@ -138,10 +138,22 @@
 .timeline-clip span { color: var(--mo-text-secondary, #83919e); font-size: 10px; }
 .timeline-marker-list { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 0 76px; color: var(--mo-text-secondary, #808d99); font-size: 10px; }
 .timeline-marker-list span {
-  border-left: 2px solid var(--mo-warning, #d6b765);
+  position: relative;
+  border-left: 0;
   border-radius: 2px;
-  padding: 2px 6px;
+  padding: 3px 7px 3px 17px;
   background: var(--mo-surface-soft, #171e25);
+}
+.timeline-marker-list span::before {
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mo-warning, #d6b765);
+  content: "";
+  transform: translateY(-50%);
 }
 
 .timeline-inspector {

@@ -84,7 +84,6 @@
 .review-decision-stack .review-decision-panel {
   margin-top: 0;
   border: 1px solid var(--mo-border-default, #303a44);
-  border-left: 2px solid var(--mo-accent, #6fa7e8);
   border-radius: var(--mo-radius-pane, 5px);
   padding: 10px;
   background: var(--mo-surface-pane, #0d1115);
