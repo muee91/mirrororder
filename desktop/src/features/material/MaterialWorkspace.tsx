@@ -63,12 +63,7 @@ export function MaterialWorkspace({
             </button>
           ))}
         </nav>
-        {view === "repair" ? (
-          <div className="material-domain-context">
-            <span>素材库工具</span>
-            <button type="button" className="secondary" onClick={() => onViewChange("library")}>返回素材库</button>
-          </div>
-        ) : null}
+        {view === "repair" ? <div className="material-domain-context"><span>素材库工具</span></div> : null}
       </header>
 
       <div className="material-view-canvas">

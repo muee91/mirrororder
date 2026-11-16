@@ -483,8 +483,8 @@ export function App() {
   const runningProjects = Object.values(projectActivities).filter((activity) => activity.state === "active").length;
   const currentTitle = surface === "home"
     ? "首页"
-    : surface === "projects"
-      ? "项目"
+      : surface === "projects"
+        ? "项目库"
       : surface === "status"
         ? "状态中心"
         : surface === "settings"
