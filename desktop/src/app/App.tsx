@@ -383,6 +383,17 @@ export function App() {
     }
   }
 
+  async function multicamSyncProject(project: ProjectSummary): Promise<void> {
+    if (!snapshot) return;
+    try {
+      const task = await new DesktopClient(snapshot.baseUrl).multicamSync(project.project_id);
+      await refreshActivities();
+      setMessage(`已提交 ${project.name || project.project_id} 的多机位同步任务${task.task_id ? ` · ${task.task_id}` : ""}；这一步只生成同步交付，状态在状态中心查看。`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
   async function deleteProject(project: ProjectSummary): Promise<void> {
     if (!snapshot) return;
     const title = project.name || project.project_id;
@@ -511,6 +522,7 @@ export function App() {
             onOpenTeamProject={openTeamProject}
             onCopyShareLink={(project) => copyProjectShareLink(project)}
             onRevealProject={(project) => revealProject(project)}
+            onMulticamSyncProject={(project) => multicamSyncProject(project)}
             onPrepareProject={(project) => prepareProject(project)}
             onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
             onDeleteProject={(project) => deleteProject(project)}
@@ -578,6 +590,7 @@ export function App() {
                 onOpenTeamProject={openTeamProject}
                 onCopyShareLink={(project) => copyProjectShareLink(project)}
                 onRevealProject={(project) => revealProject(project)}
+                onMulticamSyncProject={(project) => multicamSyncProject(project)}
                 onPrepareProject={(project) => prepareProject(project)}
                 onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
                 onDeleteProject={(project) => deleteProject(project)}

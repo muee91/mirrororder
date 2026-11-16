@@ -86,6 +86,19 @@ describe("DesktopClient", () => {
     });
   });
 
+  it("submits an explicit multicam sync task", async () => {
+    const browserFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toMatch(/\/api\/v1\/projects\/p1\/tasks$/);
+      expect(init?.method).toBe("POST");
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({ type: "multicam_sync", targets: {}, actor: "desktop-v2" });
+      expect(body.idempotency_key).toMatch(/^desktop-v2:multicam_sync:p1:\d+$/);
+      return jsonResponse({ task_id: "task_sync", type: "multicam_sync", status: "queued" }, 202);
+    });
+    vi.stubGlobal("fetch", browserFetch);
+    await expect(new DesktopClient("http://127.0.0.1:8765").multicamSync("p1")).resolves.toMatchObject({ task_id: "task_sync", type: "multicam_sync" });
+  });
+
   it("rejects empty media scans before transport", async () => {
     const browserFetch = vi.fn(); vi.stubGlobal("fetch", browserFetch);
     expect(() => new DesktopClient("http://127.0.0.1:8765").scanMediaBinding("p1", [" "])).toThrow("至少需要一个目录");

@@ -198,6 +198,19 @@ export class DesktopClient {
   projectTasks(projectId: string): Promise<ProjectTaskStatus[]> {
     return requestJson<{ tasks: ProjectTaskStatus[] }>(this.baseUrl, `${projectPath(projectId)}/tasks`).then((payload) => payload.tasks);
   }
+  multicamSync(projectId: string): Promise<ProjectTask> {
+    const value = projectId.trim();
+    if (!value) throw new HostConnectionError("多机位同步需要 project_id");
+    return requestJson(this.baseUrl, `${projectPath(value)}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({
+        type: "multicam_sync",
+        targets: {},
+        actor: "desktop-v2",
+        idempotency_key: `desktop-v2:multicam_sync:${value}:${Date.now()}`,
+      }),
+    });
+  }
   prepareProject(projectId: string): Promise<ProjectTask> {
     return requestJson(this.baseUrl, `${projectPath(projectId)}/tasks`, { method: "POST", body: JSON.stringify({ type: "prepare_project", targets: {}, actor: "desktop-v2", idempotency_key: `desktop-v2:prepare:${projectId}` }) });
   }

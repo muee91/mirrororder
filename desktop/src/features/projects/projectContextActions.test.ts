@@ -16,6 +16,7 @@ describe("project actions", () => {
     expect(library).toContain("团队审阅");
     expect(library).toContain("复制局域网协作链接");
     expect(library).toContain("本机素材 / 换素材盘");
+    expect(library).toContain("多机位同步");
     expect(library).toContain("重新整理项目");
     expect(library).toContain("永久删除项目…");
     expect(library).toContain("event.shiftKey");
@@ -30,12 +31,14 @@ describe("project actions", () => {
     expect(home).toContain("团队审阅");
     expect(home).toContain("复制局域网协作链接");
     expect(home).toContain("本机素材 / 换素材盘");
+    expect(home).toContain("多机位同步");
     expect(home).toContain("重新整理项目");
     expect(home).toContain("永久删除项目…");
     expect(home).toContain("onOpenTeamProject");
     expect(home).toContain("onCopyShareLink");
     expect(home).toContain("onRevealProject");
     expect(home).toContain("onPrepareProject");
+    expect(home).toContain("onMulticamSyncProject");
     expect(home).toContain("onOpenMediaBinding");
     expect(home).toContain("onDeleteProject");
     expect(home).toContain('from "../../app/projectTransferActions"');
@@ -50,6 +53,7 @@ describe("project actions", () => {
     expect(app).toContain("new ProjectActionClient(snapshot.baseUrl).localLocation");
     expect(app).toContain("platform.reveal(location.project_dir)");
     expect(app).toContain("new DesktopClient(snapshot.baseUrl).prepareProject");
+    expect(app).toContain("new DesktopClient(snapshot.baseUrl).multicamSync");
     expect(app).toContain("new DesktopClient(snapshot.baseUrl).deleteProject");
     expect(app).toContain("teamGateway.status()");
     expect(app).toContain("teamWorkbenchUrl(status, snapshot.workspace.workspace_id, project.project_id)");
