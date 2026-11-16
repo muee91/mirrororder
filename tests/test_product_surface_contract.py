@@ -109,7 +109,7 @@ def test_project_resume_defaults_new_state_and_canonicalizes_retired_pages() -> 
     assert 'const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"' in resume
     assert 'useState<AppSurface>("home")' in app
     assert 'setSelectedProject(rememberedProject)' in app
-    assert 'setSurface("home")' in app
+    assert 'setSurface("projects")' in app
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert "rememberProjectPage(project.project_id, page)" in workbench
     assert "VALID_PROJECT_PAGES.has(value)" in resume

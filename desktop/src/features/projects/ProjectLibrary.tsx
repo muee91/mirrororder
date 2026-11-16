@@ -17,7 +17,6 @@ interface Props {
   activeProjectPage?: ProductionPage | null;
   revealLabel?: string;
   onSelectProject: (project: ProjectSummary) => void;
-  onOpenHome?: () => void;
   onOpenProjects?: () => void;
   onOpenStatusCenter?: () => void;
   onOpenSettings?: () => void;
@@ -38,11 +37,10 @@ interface ProjectMenuState {
   y: number;
 }
 
-type IconName = "home" | "projects" | "status" | "settings";
+type IconName = "projects" | "status" | "settings";
 
 function NavIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, string> = {
-    home: "M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z",
     projects: "M3 6.5h7l2 2H21v10.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z",
     status: "M12 3a9 9 0 1 0 9 9M12 7v5l3 2",
     settings: "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0-5 1.2 2.3 2.6.4.5 2.6 2 1.7-1.2 2.3 1.2 2.3-2 1.7-.5 2.6-2.6.4L12 20.5l-1.2-2.3-2.6-.4-.5-2.6-2-1.7 1.2-2.3-1.2-2.3 2-1.7.5-2.6 2.6-.4Z",
@@ -57,7 +55,6 @@ export function ProjectLibrary({
   primaryActive = null,
   revealLabel = "Finder / Explorer",
   onSelectProject,
-  onOpenHome,
   onOpenProjects,
   onOpenStatusCenter,
   onOpenSettings,
@@ -97,7 +94,7 @@ export function ProjectLibrary({
 
   function openMenu(project: ProjectSummary, x: number, y: number): void {
     const width = 204;
-    const height = 352;
+    const height = 410;
     const viewportWidth = globalThis.innerWidth || 1280;
     const viewportHeight = globalThis.innerHeight || 800;
     setMenu({
@@ -114,14 +111,13 @@ export function ProjectLibrary({
 
   return (
     <div className="project-library project-library-redesign professional-global-sidebar">
-      <button type="button" className="project-library-brand project-library-brand-button" onClick={onOpenHome} aria-label="返回首页">
+      <button type="button" className="project-library-brand project-library-brand-button" onClick={onOpenProjects} aria-label="打开项目库">
         <img className="mirror-mark" src={mirrororderLogo} alt="" aria-hidden="true" />
         <span className="project-library-brand-copy"><strong>镜序</strong><span>MirrorOrder</span></span>
       </button>
 
       <nav className="project-primary-nav" aria-label="主导航">
-        <button type="button" className={primaryActive === "home" ? "is-active" : ""} onClick={onOpenHome}><NavIcon name="home" /><span>首页</span></button>
-        <button type="button" className={primaryActive === "projects" ? "is-active" : ""} onClick={onOpenProjects}><NavIcon name="projects" /><span>项目</span><small>{workspace.projects.length}</small></button>
+        <button type="button" className={primaryActive === "projects" ? "is-active" : ""} onClick={onOpenProjects}><NavIcon name="projects" /><span>项目库</span><small>{workspace.projects.length}</small></button>
       </nav>
 
       {selectedProject ? (
@@ -192,15 +188,21 @@ export function ProjectLibrary({
 
       {menu ? (
         <div className="project-context-menu" role="menu" aria-label={`${menu.project.name || menu.project.project_id} 项目操作`} style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
-          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small><small>同步 = 交付 · 整理 = 分析</small></div>
+          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small><small>连接 → 同步 → 整理</small></div>
+          <div className="project-context-group-label">开始制作</div>
           <button type="button" role="menuitem" onClick={() => run(() => onSelectProject(menu.project))}>打开项目</button>
-          <button type="button" role="menuitem" disabled={!onOpenTeamProject} onClick={() => run(() => onOpenTeamProject?.(menu.project))}>团队审阅</button>
-          <button type="button" role="menuitem" disabled={!onCopyShareLink} onClick={() => run(() => onCopyShareLink?.(menu.project))}>复制局域网协作链接</button>
-          <button type="button" role="menuitem" disabled={!onRevealProject} onClick={() => run(() => onRevealProject?.(menu.project))}>{revealLabel}</button>
-          <button type="button" role="menuitem" disabled={!onOpenMediaBinding} onClick={() => run(() => onOpenMediaBinding?.(menu.project))}>本机素材 / 换素材盘</button>
+          <button type="button" role="menuitem" title="本机素材 / 换素材盘" disabled={!onOpenMediaBinding} onClick={() => run(() => onOpenMediaBinding?.(menu.project))}>连接素材</button>
           <button type="button" role="menuitem" disabled={!onMulticamSyncProject} onClick={() => run(() => onMulticamSyncProject?.(menu.project))}>多机位同步</button>
-          <button type="button" role="menuitem" disabled={!onPrepareProject} onClick={() => run(() => onPrepareProject?.(menu.project))}>重新整理项目</button>
-          <button type="button" role="menuitem" className="project-context-danger" disabled={!onDeleteProject} onClick={() => run(() => onDeleteProject?.(menu.project))}>永久删除项目…</button>
+          <button type="button" role="menuitem" title="重新整理项目" disabled={!onPrepareProject} onClick={() => run(() => onPrepareProject?.(menu.project))}>完整整理项目</button>
+          <details className="project-context-advanced">
+            <summary>高级操作</summary>
+            <div className="project-context-advanced-list">
+              <button type="button" role="menuitem" disabled={!onOpenTeamProject} onClick={() => run(() => onOpenTeamProject?.(menu.project))}>团队审阅</button>
+              <button type="button" role="menuitem" disabled={!onCopyShareLink} onClick={() => run(() => onCopyShareLink?.(menu.project))}>复制局域网协作链接</button>
+              <button type="button" role="menuitem" disabled={!onRevealProject} onClick={() => run(() => onRevealProject?.(menu.project))}>{revealLabel}</button>
+              <button type="button" role="menuitem" className="project-context-danger" disabled={!onDeleteProject} onClick={() => run(() => onDeleteProject?.(menu.project))}>永久删除项目…</button>
+            </div>
+          </details>
         </div>
       ) : null}
     </div>

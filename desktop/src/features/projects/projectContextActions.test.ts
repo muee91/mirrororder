@@ -17,6 +17,9 @@ describe("project actions", () => {
     expect(library).toContain("复制局域网协作链接");
     expect(library).toContain("本机素材 / 换素材盘");
     expect(library).toContain("多机位同步");
+    expect(library).toContain("连接素材");
+    expect(library).toContain("完整整理项目");
+    expect(library).toContain("高级操作");
     expect(library).toContain("重新整理项目");
     expect(library).toContain("永久删除项目…");
     expect(library).toContain("event.shiftKey");
@@ -32,6 +35,9 @@ describe("project actions", () => {
     expect(home).toContain("复制局域网协作链接");
     expect(home).toContain("本机素材 / 换素材盘");
     expect(home).toContain("多机位同步");
+    expect(home).toContain("连接素材");
+    expect(home).toContain("完整整理项目");
+    expect(home).toContain("高级操作");
     expect(home).toContain("重新整理项目");
     expect(home).toContain("永久删除项目…");
     expect(home).toContain("onOpenTeamProject");

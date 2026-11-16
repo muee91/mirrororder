@@ -158,7 +158,7 @@ describe("Swift golden product fidelity", () => {
     expect(app).toContain("<WorkspaceHome");
     expect(app).toContain("<ProjectHome");
     expect(app).toContain('type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings"');
-    expect(app).toContain('setSurface("home")');
+    expect(app).toContain('setSurface("projects")');
     expect(app).toContain("teamWorkbenchUrl");
     expect(app).toContain("deleteProject(project: ProjectSummary)");
     expect(app).toContain("useProjectActivities");

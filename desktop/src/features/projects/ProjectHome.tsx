@@ -96,7 +96,7 @@ export function ProjectHome({
 
   function openMenu(project: ProjectSummary, x: number, y: number): void {
     const width = 190;
-    const height = 446;
+    const height = 500;
     const viewportWidth = globalThis.innerWidth || 1280;
     const viewportHeight = globalThis.innerHeight || 800;
     setMenu({
@@ -218,17 +218,23 @@ export function ProjectHome({
 
       {menu ? (
         <div className="project-context-menu" role="menu" aria-label={`${menu.project.name || menu.project.project_id} 项目操作`} style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
-          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small><small>同步 = 交付 · 整理 = 分析</small></div>
+          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small><small>连接 → 同步 → 整理</small></div>
+          <div className="project-context-group-label">开始制作</div>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenProject(menu.project))}>打开项目</button>
-          <button type="button" role="menuitem" onClick={() => run(() => onOpenTeamProject(menu.project))}>团队审阅</button>
-          <button type="button" role="menuitem" onClick={() => run(() => onCopyShareLink(menu.project))}>复制局域网协作链接</button>
-          <button type="button" role="menuitem" onClick={() => run(() => onRevealProject(menu.project))}>在 {revealLabel} 中显示</button>
-          <button type="button" role="menuitem" onClick={() => run(() => onOpenMediaBinding(menu.project))}>本机素材 / 换素材盘</button>
+          <button type="button" role="menuitem" title="本机素材 / 换素材盘" onClick={() => run(() => onOpenMediaBinding(menu.project))}>连接素材</button>
           <button type="button" role="menuitem" onClick={() => run(() => onMulticamSyncProject(menu.project))}>多机位同步</button>
-          <button type="button" role="menuitem" onClick={() => run(() => onPrepareProject(menu.project))}>重新整理项目</button>
-          <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => saveProjectAs(menu.project))}>另存项目…</button>
-          <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => collectProject(menu.project))}>收集项目…</button>
-          <button type="button" role="menuitem" className="project-context-danger" onClick={() => run(() => onDeleteProject(menu.project))}>永久删除项目…</button>
+          <button type="button" role="menuitem" title="重新整理项目" onClick={() => run(() => onPrepareProject(menu.project))}>完整整理项目</button>
+          <details className="project-context-advanced">
+            <summary>高级操作</summary>
+            <div className="project-context-advanced-list">
+              <button type="button" role="menuitem" onClick={() => run(() => onOpenTeamProject(menu.project))}>团队审阅</button>
+              <button type="button" role="menuitem" onClick={() => run(() => onCopyShareLink(menu.project))}>复制局域网协作链接</button>
+              <button type="button" role="menuitem" onClick={() => run(() => onRevealProject(menu.project))}>在 {revealLabel} 中显示</button>
+              <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => saveProjectAs(menu.project))}>另存项目…</button>
+              <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => collectProject(menu.project))}>收集项目…</button>
+              <button type="button" role="menuitem" className="project-context-danger" onClick={() => run(() => onDeleteProject(menu.project))}>永久删除项目…</button>
+            </div>
+          </details>
         </div>
       ) : null}
     </section>

@@ -414,11 +414,6 @@ export function App() {
     }
   }
 
-  function openHome(): void {
-    setPageRequest(null);
-    setSurface("home");
-  }
-
   function openProjects(): void {
     setPageRequest(null);
     setSurface("projects");
@@ -514,7 +509,6 @@ export function App() {
             activeProjectPage={activeProjectPage}
             revealLabel={revealLabel}
             onSelectProject={selectProject}
-            onOpenHome={openHome}
             onOpenProjects={openProjects}
             onOpenStatusCenter={() => setSurface("status")}
             onOpenSettings={() => setSurface("settings")}

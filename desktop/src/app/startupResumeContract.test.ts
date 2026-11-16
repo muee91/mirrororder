@@ -95,7 +95,7 @@ describe("startup and production resume product contract", () => {
 
     expect(app).toContain("const rememberedProject = projectById(next, launchResume.projectId)");
     expect(app).toContain("setSelectedProject(rememberedProject)");
-    expect(app).toContain('setSurface("home")');
+    expect(app).toContain('setSurface(rememberedProject ? "production" : "projects")');
     expect(workbench).toContain("safeProductionPage(readProjectPage(project.project_id))");
     expect(workbench).toContain("rememberProjectPage(project.project_id, page)");
     expect(resume).toContain('const DEFAULT_PROJECT_PAGE: ProductionPage = "slate"');

@@ -15,11 +15,22 @@
 .project-context-heading { display: grid; gap: 2px; border-bottom: 1px solid #273039; margin-bottom: 4px; padding: 7px 8px 8px; }
 .project-context-heading strong { overflow: hidden; color: #e2e8ed; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .project-context-heading small { overflow: hidden; color: #677581; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.project-context-group-label { padding: 5px 8px 3px; color: #6f7c87; font-size: 10px; font-weight: 650; letter-spacing: .04em; }
 .project-context-menu > button { width: 100%; border: 0; border-radius: 6px; padding: 7px 8px; color: #aeb8c1; background: transparent; font-size: 10px; font-weight: 550; text-align: left; }
 .project-context-menu > button:hover:not(:disabled), .project-context-menu > button:focus-visible { color: #eef2f5; background: #202830; outline: none; }
 .project-context-menu > button:disabled { color: #596671; background: transparent; }
+.project-context-advanced { margin-top: 4px; border-top: 1px solid #273039; padding-top: 4px; }
+.project-context-advanced > summary { cursor: pointer; list-style: none; padding: 7px 8px; color: #7b8994; font-size: 10px; font-weight: 600; }
+.project-context-advanced > summary::-webkit-details-marker { display: none; }
+.project-context-advanced > summary::after { content: "＋"; float: right; color: #5e6b76; }
+.project-context-advanced[open] > summary::after { content: "−"; }
+.project-context-advanced-list { display: grid; gap: 1px; }
+.project-context-advanced-list > button { width: 100%; border: 0; border-radius: 6px; padding: 7px 8px; color: #8f9ba5; background: transparent; font-size: 10px; font-weight: 550; text-align: left; }
+.project-context-advanced-list > button:hover:not(:disabled), .project-context-advanced-list > button:focus-visible { color: #eef2f5; background: #202830; outline: none; }
+.project-context-advanced-list > button:disabled { color: #596671; background: transparent; }
 .project-context-menu > button.project-context-danger { margin-top: 4px; border-top: 1px solid #2b3239; border-radius: 0 0 6px 6px; padding-top: 9px; color: #ce8585; }
 .project-context-menu > button.project-context-danger:hover:not(:disabled), .project-context-menu > button.project-context-danger:focus-visible { color: #f0aaaa; background: rgba(137,55,55,.16); }
+.project-context-advanced-list > button.project-context-danger { margin-top: 4px; border-top: 1px solid #2b3239; border-radius: 0 0 6px 6px; padding-top: 9px; color: #ce8585; }
 
 .project-activity-spinner { display: inline-block; width: 13px; height: 13px; flex: 0 0 auto; border: 1.5px solid rgba(113,164,224,.28); border-top-color: #75aeea; border-radius: 50%; animation: project-activity-spin .8s linear infinite; }
 @keyframes project-activity-spin { to { transform: rotate(360deg); } }
@@ -33,10 +44,16 @@
   .project-context-heading { border-color: #e1e6eb; }
   .project-context-heading strong { color: #27313a; }
   .project-context-heading small { color: #74808b; }
+  .project-context-group-label { color: #687580; }
   .project-context-menu > button { color: #53616d; }
   .project-context-menu > button:hover:not(:disabled), .project-context-menu > button:focus-visible { color: #1f2a33; background: #eef2f5; }
   .project-context-menu > button:disabled { color: #a4adb5; }
+  .project-context-advanced { border-color: #e1e6eb; }
+  .project-context-advanced > summary { color: #687580; }
+  .project-context-advanced-list > button { color: #65727e; }
+  .project-context-advanced-list > button:hover:not(:disabled), .project-context-advanced-list > button:focus-visible { color: #1f2a33; background: #eef2f5; }
   .project-context-menu > button.project-context-danger { border-color: #e5d7d7; color: #ae4f4f; }
   .project-context-menu > button.project-context-danger:hover:not(:disabled), .project-context-menu > button.project-context-danger:focus-visible { color: #8f3030; background: #fff0f0; }
   .project-activity-spinner { border-color: rgba(52,113,174,.20); border-top-color: #3979ba; }
+  .project-context-advanced-list > button.project-context-danger { border-color: #e5d7d7; color: #ae4f4f; }
 }

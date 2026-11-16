@@ -246,9 +246,14 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
         </nav>
         <div className="professional-project-tools">
           <SemanticSearchPalette baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} />
-          <CurrentOperatorControl onChange={() => setOperatorRevision((value) => value + 1)} />
-          <button type="button" className={`professional-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)} aria-pressed={assistantOpen}>小镜</button>
-          {onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>团队审阅</button> : null}
+          <details className="professional-tools-menu">
+            <summary>工具</summary>
+            <div className="professional-tools-popover">
+              <CurrentOperatorControl onChange={() => setOperatorRevision((value) => value + 1)} />
+              <button type="button" className={`professional-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)} aria-pressed={assistantOpen}>小镜</button>
+              {onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>团队审阅</button> : null}
+            </div>
+          </details>
         </div>
       </header>
 
