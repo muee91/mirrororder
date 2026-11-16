@@ -7,6 +7,7 @@ import { useTimelineWorkbenchModel } from "./useTimelineWorkbenchModel";
 import { useTimelineAuthorityActions } from "./useTimelineAuthorityActions";
 import { useTimelineSourceActions } from "./useTimelineSourceActions";
 import "./editor-productization.css";
+import "./timeline.css";
 
 interface Props {
   baseUrl: string;

@@ -65,6 +65,11 @@ describe("project production workspace contract", () => {
     expect(existsSync(path("./secondary-tools-theme.css"))).toBe(false);
   });
 
+  it("keeps TimelineWorkbenchView backed by its own timeline layout stylesheet", () => {
+    const workbench = read("../editor/TimelineWorkbench.tsx");
+    expect(workbench).toContain('import "./timeline.css";');
+  });
+
   it("keeps the official Vite-bundled logo authoritative in the sidebar", () => {
     const library = read("../projects/ProjectLibrary.tsx");
     expect(library).toContain('import mirrororderLogo from "../../assets/mirrororder-logo.svg"');

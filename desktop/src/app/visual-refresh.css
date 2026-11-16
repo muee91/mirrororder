@@ -545,7 +545,16 @@ textarea::placeholder { color: var(--mo-text-muted); }
 .track-lane { border-color: var(--mo-border-default); border-radius: 9px; background: var(--mo-surface-app); }
 .timeline-clip { border-color: var(--mo-border-strong); border-radius: 8px; background: var(--mo-surface-selected); }
 .timeline-clip.is-selected { border-color: var(--mo-accent); box-shadow: inset 3px 0 0 var(--mo-accent), 0 4px 12px rgba(0, 0, 0, .14); }
-.timeline-empty { border: 0; border-radius: var(--mo-radius-pane); background: var(--mo-surface-pane); box-shadow: var(--mo-shadow-panel); }
+.timeline-empty {
+  min-height: 124px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--mo-radius-pane);
+  padding: 24px 28px;
+  background: var(--mo-surface-pane);
+  box-shadow: var(--mo-shadow-panel);
+  text-align: center;
+}
 .review-viewer-pane,
 .review-queue,
 .review-decision-stack .review-decision-panel { border-color: var(--mo-border-subtle); background: var(--mo-surface-raised); }
