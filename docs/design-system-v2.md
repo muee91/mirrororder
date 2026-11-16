@@ -1,6 +1,6 @@
 # MirrorOrder Design System v2 — Professional UI / UX System
 
-> 当前实现位于 `desktop/src/design-system-v2.css` 与 `web/design-system-v2.css`。
+> 当前实现位于 `desktop/src/design-system-v2.css`、`desktop/src/app/visual-refresh.css` 与 `web/design-system-v2.css`。
 >
 > Product authority remains `docs/ux-principles.md` and `docs/app-information-architecture.md`.
 >
@@ -37,6 +37,12 @@ MirrorOrder 是专业影视后期 Production 软件，不是 AI Dashboard、模�
 - 危险操作不得作为列表/卡片永久主按钮。
 - 同一 Product Surface 内，同一 production object 只能有一个 canonical renderer。
 - canonical renderer 的核心 anatomy、固定尺寸、slot 顺序、selection geometry 不得被 page/theme/redesign stylesheet 覆盖。
+
+### 2.1 Desktop visual direction
+
+Desktop 采用“剪辑室控制台”视觉方向：深色主题以墨蓝/炭黑为基础，浅色主题使用暖纸色作为对应变体；蓝紫色只承担当前选择、焦点和主要动作，绿色、琥珀色和红色只承担状态语义。
+
+视觉层级固定为 App Surface → Sidebar / Chrome → Primary Pane → Raised Control / Inspector。主要工作区不再用连续的白色卡片堆叠，而是通过面板深浅、细边界、留白和单一阴影建立层级。`visual-refresh.css` 只负责这组 semantic tokens、shell、toolbar、empty state 和 pane layout，不接管 canonical production object 的 anatomy。
 
 ## 3. Product shell and navigation
 
