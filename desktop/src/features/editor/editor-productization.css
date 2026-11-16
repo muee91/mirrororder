@@ -62,7 +62,8 @@
 .timeline-workspace-shell { position: relative; min-width: 0; min-height: 0; }
 .timeline-heading-actions { display: grid; justify-items: end; gap: 8px; max-width: min(520px, 46vw); }
 .timeline-heading-actions .production-state { text-align: right; }
-.timeline-focus-context { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px; border: 1px solid var(--mo-border-default, #303944); border-left: 2px solid var(--mo-accent, #5a9ef4); border-radius: 5px; padding: 8px 10px; background: var(--mo-surface-soft, #11171c); }
+.timeline-focus-context { position: relative; display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px; border: 1px solid var(--mo-border-default, #303944); border-radius: 5px; padding: 8px 10px 8px 24px; background: var(--mo-surface-soft, #11171c); }
+.timeline-focus-context::before { position: absolute; top: 50%; left: 10px; width: 6px; height: 6px; border-radius: 50%; background: var(--mo-accent, #5a9ef4); content: ""; transform: translateY(-50%); }
 .timeline-focus-context > span,
 .timeline-focus-context > small { color: var(--mo-text-muted, #75828e); font-size: 10px; }
 .timeline-focus-context > strong { color: var(--mo-text-primary, #e1e7ec); font-size: 11px; }
