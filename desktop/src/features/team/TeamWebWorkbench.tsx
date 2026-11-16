@@ -144,7 +144,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
       <header className="team-web-heading">
         <div>
           <p className="eyebrow">团队协作</p>
-          <h2>团队审阅</h2>
+          <h2>共享审阅</h2>
           <p>团队成员只看片并提交个人意见；最终 Best / Keep / Reject 仍由本机审阅决定。</p>
         </div>
         <div className="team-web-state">

@@ -107,14 +107,6 @@
   min-height: 0;
 }
 
-/* Current Operator is owned by the project toolbar. Legacy per-page actor inputs stay hidden while their write paths consume the same compatibility storage keys. */
-.professional-project-workbench .golden-slate-actions > input,
-.professional-project-workbench .golden-ms-actor,
-.professional-project-workbench .media-library-actor,
-.professional-project-workbench .review-actor-field {
-  display: none !important;
-}
-
 /* Local workbench headers keep object-specific actions; global project context stays above. */
 .professional-project-workbench .golden-slate-toolbar {
   padding-inline: 10px;

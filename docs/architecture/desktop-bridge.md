@@ -19,6 +19,7 @@ Python MirrorOrder Core + Rust Timeline Core
 - React 负责交互，不拥有业务权威。
 - Python Core 负责项目、Review、Slate、Identity、Assistant、媒体身份和 FCPXML delivery 语义。
 - Rust Timeline Core 负责 authoritative local timeline edit state。
+- Production Host / Team Gateway 由 Desktop 统一管理：启动时只回收同一工作区、同一配置留下的旧镜序服务；任意其它监听者仍 fail closed。Tauri 将父进程标识传给 Python 服务，父进程异常消失时服务自终止，避免应用替换或崩溃留下固定端口孤儿进程。
 
 ## 2. Team Web 独立
 

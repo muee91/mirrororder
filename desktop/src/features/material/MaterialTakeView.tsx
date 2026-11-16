@@ -369,6 +369,7 @@ export function MaterialTakeView({
                   onSelectClip={setSelectedClipId}
                   onPlaybackResult={handlePlaybackResult}
                   writeSaving={false}
+                  hideHeader
                 />
               </>
             ) : <div className="workspace-context-empty">当前没有可查看的 Take。</div>}

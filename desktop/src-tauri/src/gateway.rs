@@ -114,6 +114,151 @@ fn ensure_port_available(port: u16, local_only: bool) -> Result<(), String> {
         .map_err(|error| format!("Gateway 端口 {port} 已被占用（{error}）"))
 }
 
+#[cfg(unix)]
+fn listening_pids(port: u16) -> Vec<u32> {
+    let selector = format!("-iTCP:{port}");
+    let Ok(output) = Command::new("lsof")
+        .args(["-nP", selector.as_str(), "-sTCP:LISTEN", "-t"])
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .collect()
+}
+
+#[cfg(not(unix))]
+fn listening_pids(_port: u16) -> Vec<u32> {
+    Vec::new()
+}
+
+#[cfg(unix)]
+fn process_command_line(pid: u32) -> Option<String> {
+    let pid_arg = pid.to_string();
+    let output = Command::new("ps")
+        .args(["-p", pid_arg.as_str(), "-o", "command="])
+        .output()
+        .ok()?;
+    let command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!command.is_empty()).then_some(command)
+}
+
+#[cfg(not(unix))]
+fn process_command_line(_pid: u32) -> Option<String> {
+    None
+}
+
+fn command_mentions_workspace(command: &str, workspace_path: &PathBuf) -> bool {
+    let direct = workspace_path.to_string_lossy();
+    if command.contains(direct.as_ref()) {
+        return true;
+    }
+    let config_path = if workspace_path.is_dir() {
+        workspace_path.join("workspace.toml")
+    } else {
+        workspace_path.clone()
+    };
+    command.contains(&config_path.to_string_lossy().to_string())
+}
+
+fn is_same_workspace_gateway_command(command: &str, config: &GatewayConfig) -> bool {
+    let args: Vec<&str> = command.split_whitespace().collect();
+    let has_gateway_module = args.windows(2).any(|window| window == ["-m", "script_organizer.cli"]);
+    let has_gateway_command = args.iter().any(|arg| *arg == "gateway");
+    let port_value = config.port.to_string();
+    let has_port = args
+        .windows(2)
+        .any(|window| window[0] == "--port" && window[1] == port_value);
+    let mode_matches = if config.local_only {
+        args.iter().any(|arg| *arg == "--local-only")
+    } else {
+        args.windows(2)
+            .any(|window| window[0] == "--host" && window[1] == "0.0.0.0")
+    };
+    has_gateway_module
+        && has_gateway_command
+        && has_port
+        && mode_matches
+        && config
+            .workspace_paths
+            .iter()
+            .all(|path| command_mentions_workspace(command, path))
+}
+
+#[cfg(unix)]
+fn process_is_alive(pid: u32) -> bool {
+    let pid_arg = pid.to_string();
+    Command::new("kill")
+        .args(["-0", pid_arg.as_str()])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn process_is_alive(_pid: u32) -> bool {
+    false
+}
+
+#[cfg(unix)]
+fn terminate_stale_gateway(pid: u32) -> Result<(), String> {
+    if pid == std::process::id() {
+        return Err("拒绝回收当前 Desktop 进程".to_string());
+    }
+    let pid_arg = pid.to_string();
+    let status = Command::new("kill")
+        .args(["-TERM", pid_arg.as_str()])
+        .status()
+        .map_err(|error| format!("回收遗留 Team Web Gateway 失败：{error}"))?;
+    if !status.success() && process_is_alive(pid) {
+        return Err(format!("回收遗留 Team Web Gateway 失败：进程 {pid} 拒绝退出"));
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while process_is_alive(pid) && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(50));
+    }
+    if process_is_alive(pid) {
+        let _ = Command::new("kill").args(["-KILL", pid_arg.as_str()]).status();
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn terminate_stale_gateway(_pid: u32) -> Result<(), String> {
+    Err("当前平台不支持安全回收遗留 Team Web Gateway".to_string())
+}
+
+fn reclaim_stale_gateway(config: &GatewayConfig) -> Result<(), String> {
+    if ensure_port_available(config.port, config.local_only).is_ok() {
+        return Ok(());
+    }
+
+    let mut reclaimed = false;
+    for pid in listening_pids(config.port) {
+        let Some(command) = process_command_line(pid) else {
+            continue;
+        };
+        if is_same_workspace_gateway_command(&command, config) {
+            reclaimed = true;
+            terminate_stale_gateway(pid)?;
+        }
+    }
+    if !reclaimed {
+        return ensure_port_available(config.port, config.local_only);
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        match ensure_port_available(config.port, config.local_only) {
+            Ok(()) => return Ok(()),
+            Err(_error) if Instant::now() < deadline => thread::sleep(Duration::from_millis(50)),
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 fn health(port: u16) -> Result<(), String> {
     probe_service(port, GATEWAY_SERVICE, Duration::from_millis(400))
 }
@@ -321,7 +466,9 @@ pub fn start_team_gateway(
         stop_managed_gateway(stale)?;
     }
 
-    ensure_port_available(config.port, config.local_only)?;
+    // Recover a same-workspace Gateway left behind by an app-bundle replacement,
+    // while leaving arbitrary listeners and other workspace configurations alone.
+    reclaim_stale_gateway(&config)?;
     let runtime = resolve_python_runtime(&app)?;
     let mut command = Command::new(&runtime.python_executable);
     command
@@ -350,6 +497,7 @@ pub fn start_team_gateway(
         command.arg("--pairing-code").arg(&config.pairing_code);
     }
     command
+        .env("MIRRORORDER_PARENT_PID", std::process::id().to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
@@ -449,8 +597,8 @@ pub fn shutdown(manager: &GatewayManager) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        shutdown, validate_port, verified_lan_url, verified_lan_url_for, GatewayConfig,
-        GatewayManager, ManagedGateway,
+        is_same_workspace_gateway_command, shutdown, validate_port, verified_lan_url,
+        verified_lan_url_for, GatewayConfig, GatewayManager, ManagedGateway,
     };
     use std::{
         io::Write,
@@ -491,6 +639,27 @@ mod tests {
             None
         );
         server.join().unwrap();
+    }
+
+    #[test]
+    fn identifies_only_the_same_gateway_configuration_for_reclamation() {
+        let config = GatewayConfig {
+            workspace_paths: vec![PathBuf::from("/tmp/workspace.toml")],
+            port: 8766,
+            local_only: true,
+            trusted_lan: false,
+            pairing_code: "secret-code".to_string(),
+        };
+        let command = "/Applications/镜序.app/Contents/Resources/mirrororder-python/bin/python3 -m script_organizer.cli gateway /tmp/workspace.toml --port 8766 --local-only --pairing-code secret-code";
+        assert!(is_same_workspace_gateway_command(command, &config));
+        assert!(!is_same_workspace_gateway_command(
+            &command.replace("/tmp/workspace.toml", "/tmp/other.toml"),
+            &config,
+        ));
+        assert!(!is_same_workspace_gateway_command(
+            &command.replace("--local-only", "--host 0.0.0.0"),
+            &config,
+        ));
     }
 
     #[cfg(unix)]

@@ -235,11 +235,6 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
         ) : null}
       </div>
 
-      <label className="editorial-actor-field">
-        <span>决定人</span>
-        <input value={actor} onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} placeholder="写入最终决定时必填" />
-      </label>
-
       <div className="editorial-decision-actions">
         {(["best", "keep", "reject"] as EditorialState[]).map((state) => (
           <button type="button" className={decision?.state === state ? `is-selected state-${state}` : ""} disabled={busy || !payload} onClick={() => void decide(state)} key={state}>{STATE_LABELS[state]}</button>

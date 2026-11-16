@@ -109,8 +109,7 @@ export function AssistantWorkbench({ baseUrl, projectId, onFocusTake }: Props) {
     <section className="phase3-workbench">
       <header className="production-heading">
         <div>
-          <p className="eyebrow">当前项目</p>
-          <h2>小镜</h2>
+          <p className="eyebrow">项目事项</p>
         </div>
         <div className="assistant-heading-actions">
           <span className="production-state">{message}</span>

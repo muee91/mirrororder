@@ -842,7 +842,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
       </header>
 
       <section className="golden-slate-quick">
-        <input value={quickText} onChange={(event) => setQuickText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void applyQuickEntry(); } }} placeholder="快速录入：EP3 12场 B近 可用 / 同场下一条 C中" />
+        <input value={quickText} onChange={(event) => setQuickText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void applyQuickEntry(); } }} placeholder="EP3 12场 B近 可用 / 同场下一条 C中" />
         <button type="button" className="quick-fill" disabled={!selected || busy || !quickText.trim()} onClick={() => void applyQuickEntry()}>填入</button>
         <span className="quick-divider" />
         <button type="button" className="secondary" onClick={nextSameScene}>同场下一条</button>

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -42,6 +44,36 @@ def _project_index(workspace: WorkspaceConfig, project_id: str) -> dict:
         return payload if isinstance(payload, dict) else {}
     except (OSError, ValueError):
         return {}
+
+
+def _start_desktop_parent_watchdog() -> None:
+    """Stop a packaged service when the Desktop parent disappears.
+
+    A macOS app bundle can be replaced while its process is still alive. The
+    child Python server would otherwise be reparented to launchd and keep the
+    fixed localhost port occupied forever. The environment variable is only
+    set by the Tauri-managed services; direct CLI launches remain unchanged.
+    """
+    raw_parent = os.environ.get("MIRRORORDER_PARENT_PID", "").strip()
+    try:
+        expected_parent = int(raw_parent)
+    except ValueError:
+        return
+    if expected_parent <= 0:
+        return
+
+    def watch() -> None:
+        while True:
+            time.sleep(0.5)
+            if os.getppid() == expected_parent:
+                continue
+            try:
+                os.kill(os.getpid(), signal.SIGTERM)
+            except OSError:
+                pass
+            return
+
+    threading.Thread(target=watch, name="mirrororder-desktop-parent-watch", daemon=True).start()
 
 
 def _submit_and_wait(workspace: WorkspaceConfig, project_id: str, task_type: str) -> int:
@@ -163,6 +195,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "gateway":
         workspaces = [ensure_workspace_id(_workspace(value).config_path) for value in args.workspace]
+        _start_desktop_parent_watchdog()
         install_production_runtime()
         previous_sigterm = signal.getsignal(signal.SIGTERM)
 
@@ -186,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     workspace = ensure_workspace_id(_workspace(args.workspace).config_path)
 
     if args.command in {"serve", "run"}:
+        _start_desktop_parent_watchdog()
         install_production_runtime()
         previous_sigterm = signal.getsignal(signal.SIGTERM)
 

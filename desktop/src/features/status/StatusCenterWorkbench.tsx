@@ -551,7 +551,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
   return (
     <section className="status-center-workbench">
       <header className="production-heading status-center-heading">
-        <div><p className="eyebrow">后台工作</p><h2>状态中心</h2></div>
+        <div><p className="eyebrow">后台工作</p><h2>任务状态</h2></div>
         <div className="assistant-heading-actions">
           <span className="production-state">{message}</span>
           <button type="button" className="secondary" disabled={!dismissibleCount} onClick={clearSettledRecords}>删除已结束</button>

@@ -24,7 +24,7 @@ describe("editor Chinese product language", () => {
     expect(timeline).toContain("初始顺片");
     expect(timeline).toContain("换镜次");
     expect(timeline).toContain("智能建议");
-    expect(timeline).toContain("素材监看");
+    expect(timeline).toContain("Source 素材选择");
     expect(monitors).toContain("素材监看");
     expect(monitors).toContain("节目监看");
     expect(monitors).toContain("音频波形");

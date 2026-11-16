@@ -139,7 +139,7 @@ export function ProjectHome({
     <section className="project-home-canvas">
       <header className="project-home-heading">
         <div className="project-home-heading-copy">
-          <div><h1>项目</h1><span className="project-home-count">{workspace.projects.length}</span></div>
+          <div><h1>项目库</h1><span className="project-home-count">{workspace.projects.length}</span></div>
           <span aria-live="polite">{actionMessage || "管理工作区内的制作项目"}</span>
         </div>
         <div className="project-home-actions">

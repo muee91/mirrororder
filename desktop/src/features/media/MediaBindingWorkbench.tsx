@@ -388,7 +388,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
             </div>
             <div className="media-binding-recovery-actions">
               <button type="button" disabled={busy || scanActive || !isTauri()} onClick={() => void reconnectMovedMedia()}>{roots.length || total ? "重新连接已移动素材…" : "设置素材位置…"}</button>
-              <button type="button" className="secondary" disabled={busy || scanActive || !isTauri()} onClick={() => void addSearchLocations()}>添加搜索位置…</button>
+              {roots.length || total ? <button type="button" className="secondary" disabled={busy || scanActive || !isTauri()} onClick={() => void addSearchLocations()}>添加搜索位置…</button> : null}
             </div>
           </div>
 

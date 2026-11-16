@@ -21,7 +21,7 @@ export function TimelineSourcePanel(props: SourcePanelProps) {
   return (
     <>
       <details className="timeline-source-view production-panel editorial-source-tools" open={toolsOpen} onToggle={(event) => setToolsOpen(event.currentTarget.open)}>
-        <summary><span><strong>素材监看</strong><small>{focusIntent?.groupId ? `当前 ${focusLabel || "Take"} 已带入 Source 上下文` : "核对将要组接或已组接的素材"}</small></span><em>{sourceOptions.length} 个可播放素材</em></summary>
+        <summary><span><strong>Source 素材选择</strong><small>{focusIntent?.groupId ? `当前 ${focusLabel || "Take"} 已带入 Source 上下文` : "选择将要组接或已组接的素材"}</small></span><em>{sourceOptions.length} 个可播放素材</em></summary>
         <div className="editorial-source-body">
           {sourceOption ? (
             <div className="timeline-source-fields">

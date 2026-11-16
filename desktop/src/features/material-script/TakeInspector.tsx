@@ -29,6 +29,7 @@ export function TakeInspector({
   onPlaybackResult,
   writeSaving,
   afterPlayback = null,
+  hideHeader = false,
 }: {
   connection: HostConnection;
   projectId: string;
@@ -40,6 +41,7 @@ export function TakeInspector({
   onPlaybackResult?: (clipId: string, failed: boolean) => void;
   writeSaving: boolean;
   afterPlayback?: ReactNode;
+  hideHeader?: boolean;
 }) {
   const angle = take?.angles.find((item) => item.clip_id === selectedClipId) ?? take?.angles[0] ?? null;
   const playbackUrl = useMemo(
@@ -88,16 +90,20 @@ export function TakeInspector({
 
   return (
     <aside className="take-inspector">
-      <div className="inspector-heading">
-        <div>
-          <p className="eyebrow">当前 Take</p>
-          <h3>{displayLabel}</h3>
-        </div>
-        <span className={`mapping-source source-${take.effective_mapping.source}`}>
-          {mappingSourceLabel(take.effective_mapping.source)}
-        </span>
-      </div>
-      <p className="inspector-mapping">{mappingLabel(take)}</p>
+      {!hideHeader ? (
+        <>
+          <div className="inspector-heading">
+            <div>
+              <p className="eyebrow">当前 Take</p>
+              <h3>{displayLabel}</h3>
+            </div>
+            <span className={`mapping-source source-${take.effective_mapping.source}`}>
+              {mappingSourceLabel(take.effective_mapping.source)}
+            </span>
+          </div>
+          <p className="inspector-mapping">{mappingLabel(take)}</p>
+        </>
+      ) : null}
 
       {/* 继承自父组的人工 placement 清除是空操作（authority 在父组），
           因此对 inherited 只提供"定位剧本"，不渲染清除按钮。 */}

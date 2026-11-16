@@ -317,11 +317,6 @@
     grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
   }
 
-  .review-actor-field {
-    flex-basis: auto;
-    width: min(100%, 300px);
-  }
-
   .review-primary-canvas {
     grid-template-columns: minmax(260px, 330px) minmax(0, 1fr);
   }

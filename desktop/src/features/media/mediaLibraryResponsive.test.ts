@@ -6,11 +6,11 @@ function source(relative: string): string {
 }
 
 describe("Media Library responsive operator workflow", () => {
-  it("uses the shared operator control so Slate and Media Library stay in sync", () => {
+  it("reads the shared operator state without mounting a second editor", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
-    expect(workbench).toContain("CurrentOperatorControl");
     expect(workbench).toContain("readCurrentOperator");
-    expect(workbench).toContain("<CurrentOperatorControl onChange={setActor} />");
+    expect(workbench).toContain('mirrororder:operator-change');
+    expect(workbench).not.toContain("<CurrentOperatorControl");
   });
 
   it("wraps bulk operations and gives status text a full row on narrow screens", () => {

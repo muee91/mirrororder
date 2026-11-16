@@ -17,9 +17,6 @@
 .status-filter button.is-active, .episode-filter button.is-active, .episode-strip button.is-active { color: var(--mo-text-primary, #eef2f6); background: var(--mo-surface-selected, #182535); }
 .episode-filter { padding: 5px 0 8px; }
 .episode-filter button.is-drop-target, .episode-strip button.is-drop-target { border-style: dashed; border-color: var(--mo-accent, #8799aa); box-shadow: 0 0 0 1px var(--mo-accent-soft, rgba(111,167,232,.14)); }
-.review-actor-field { display: grid; flex: 0 0 210px; gap: 5px; color: var(--mo-text-muted, #74808d); font-size: var(--mo-font-xs, 10px); }
-.review-actor-field input { width: 100%; border: 1px solid var(--mo-border-default, #303844); border-radius: var(--mo-radius-control, 5px); padding: 7px 9px; color: var(--mo-text-primary, #eef2f6); background: var(--mo-surface-control, #0d1014); }
-.compact-actor { flex-basis: 170px; }
 .write-status { min-height: 27px; padding: 5px 1px 8px; color: var(--mo-text-muted, #778491); font-size: var(--mo-font-sm, 11px); }
 .write-saving { color: var(--mo-warning, #d2bd83); }
 .write-error { color: var(--mo-danger, #ef9b9b); }
@@ -83,5 +80,4 @@
   .material-layout { grid-template-columns: minmax(0, 1fr); }
   .take-inspector { position: static; grid-row: 1; border-bottom: 1px solid var(--mo-border-subtle, #202830); }
   .material-controls, .script-toolbar { align-items: stretch; flex-direction: column; }
-  .review-actor-field { flex-basis: auto; width: min(100%, 300px); }
 }

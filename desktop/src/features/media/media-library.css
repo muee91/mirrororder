@@ -31,8 +31,7 @@
   align-items: end;
   margin-bottom: 8px;
 }
-.media-library-toolbar > input,
-.media-library-actor input {
+.media-library-toolbar > input {
   width: 100%;
   min-height: 32px;
   border: 1px solid var(--mo-border-default, #303a44);
@@ -42,7 +41,6 @@
   background: var(--mo-surface-soft, #11171c);
 }
 .media-library-toolbar > input:focus-visible,
-.media-library-actor input:focus-visible,
 .media-role-inspector input:focus-visible,
 .media-role-inspector select:focus-visible,
 .media-role-inspector textarea:focus-visible {
@@ -77,8 +75,6 @@
   outline: 2px solid var(--mo-accent, #5a9ef4);
   outline-offset: 1px;
 }
-.media-library-actor { display: grid; gap: 3px; color: var(--mo-text-muted, #75828e); font-size: 10px; }
-
 .media-library-scene-readiness {
   display: flex;
   flex-wrap: wrap;
@@ -342,7 +338,6 @@
 
 @media (max-width: 1180px) {
   .media-library-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; }
-  .media-library-actor { grid-column: 1 / -1; grid-template-columns: auto minmax(160px, 220px); align-items: center; justify-content: end; }
   .media-library-layout { grid-template-columns: minmax(0, 1fr) 350px; }
   .media-library-list.is-list .media-library-row { grid-template-columns: 48px minmax(150px, 1fr) minmax(110px, .55fr) 86px; }
 }
@@ -354,7 +349,6 @@
   .media-library-bulk > output { flex: 1 1 100%; }
   .media-library-filters,
   .media-library-view-toggle { overflow-x: auto; }
-  .media-library-actor { grid-column: auto; grid-template-columns: auto minmax(0, 1fr); justify-content: stretch; }
   .media-library-layout { grid-template-columns: 1fr; grid-template-rows: minmax(250px, .75fr) minmax(420px, 1.25fr); overflow: auto; }
   .media-role-inspector { position: static; display: flex !important; max-height: none; border-top: 1px solid var(--mo-border-default, #28313a); }
 }

@@ -91,4 +91,24 @@ describe("Desktop UI polish contract", () => {
     expect(slateTheme).not.toContain('content: "检视";');
     expect(slateTheme).not.toContain('content: "刷新";');
   });
+
+  it("keeps operator editing in the global toolbar", () => {
+    const project = read("../features/production/ProjectWorkbench.tsx");
+    const library = read("../features/media/MediaLibraryWorkbench.tsx");
+    const script = read("../features/script/ScriptWorkspace.tsx");
+    const decision = read("../features/review/ReviewDecisionPanel.tsx");
+
+    expect(project).toContain("<CurrentOperatorControl");
+    expect(library).not.toContain("<CurrentOperatorControl");
+    expect(script).not.toContain("review-actor-field");
+    expect(decision).not.toContain("editorial-actor-field");
+  });
+
+  it("gives source selection and the actual monitor distinct names", () => {
+    const source = read("../features/editor/TimelineSourcePanel.tsx");
+    const monitors = read("../features/editor/EditorMonitors.tsx");
+
+    expect(source).toContain("Source 素材选择");
+    expect(monitors).toContain("素材监看");
+  });
 });

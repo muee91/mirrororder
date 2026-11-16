@@ -11,7 +11,7 @@ import {
   type MediaSourceRole,
 } from "../../api/mediaRoles";
 import { MediaHealthIndicator } from "../../components/StatusIndicators";
-import { CurrentOperatorControl, readCurrentOperator } from "../../components/CurrentOperatorControl";
+import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
 import { mediaHealthState } from "./mediaHealthState";
 import { useNearViewportGate } from "./nearViewport";
@@ -366,6 +366,16 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   // requests. A project switch or a second refresh can otherwise let an
   // older response overwrite the current media browser with stale rows.
   const reloadToken = useRef(0);
+
+  useEffect(() => {
+    const syncOperator = () => setActor(readCurrentOperator());
+    globalThis.addEventListener("mirrororder:operator-change", syncOperator);
+    globalThis.addEventListener("storage", syncOperator);
+    return () => {
+      globalThis.removeEventListener("mirrororder:operator-change", syncOperator);
+      globalThis.removeEventListener("storage", syncOperator);
+    };
+  }, []);
 
   async function reload(preferredId = selectedId): Promise<void> {
     const token = ++reloadToken.current;
@@ -774,8 +784,8 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   return (
     <section className="media-library-workbench" aria-busy={busy}>
       <header className="production-heading">
-        <div><p className="eyebrow">素材</p><h2>素材库</h2></div>
-        <div className="assistant-heading-actions"><span className="production-state" aria-live="polite">{message}</span><button type="button" className="secondary" aria-label="刷新素材清单" disabled={busy} onClick={() => void reload()}>刷新</button></div>
+        <div><p className="eyebrow">素材库</p><h2>素材清单</h2></div>
+        <div className="assistant-heading-actions"><span className="production-state" aria-live="polite">{message}</span></div>
       </header>
 
       <div
@@ -800,7 +810,6 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-label="切换到列表视图" aria-pressed={viewMode === "list"} onClick={() => setViewState((current) => ({ ...current, viewMode: "list" }))}>列表</button>
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-label="切换到缩略图视图" aria-pressed={viewMode === "grid"} onClick={() => setViewState((current) => ({ ...current, viewMode: "grid" }))}>缩略图</button>
         </div>
-        <CurrentOperatorControl onChange={setActor} />
         <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-copy-inventory" aria-label="复制当前筛选素材清单" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button><button type="button" className="secondary media-library-copy-selected" aria-label="复制已选素材清单" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button><button type="button" className="secondary media-library-refresh" aria-label="刷新素材清单" aria-keyshortcuts="Meta+Shift+R Control+Shift+R" disabled={busy} onClick={() => void reload()}>刷新素材</button><button type="button" className="secondary media-library-select-visible" aria-label={allVisibleSelected ? "取消全选当前结果" : "全选当前结果"} aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-invert-selection" aria-label="反选当前筛选结果" disabled={!visibleIds.length} onClick={invertVisibleSelection}>反选当前结果</button><button type="button" className="secondary media-library-clear-selection" aria-label="清空已选素材" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>{bulkSelectionHasUnavailable ? <button type="button" className="secondary media-library-clear-unavailable" aria-label="移除清单中已不可用的素材选择" disabled={busy} onClick={clearUnavailableSelection}>移除不可用选择</button> : null}<span aria-live="polite">{selectedIds.size} 条已选 · 单次最多 {bulkSelectionLimit} 条{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}{bulkSelectionHasUnavailable ? ` · ${selectedUnavailableCount} 条已不在当前清单，请刷新后重新选择` : ""}</span><input aria-label="批量设置机位名称" value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" aria-label="批量设置已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" aria-label="清除已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" aria-label="重新选中最近批量结果" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}</div>
       </div>
 

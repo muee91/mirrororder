@@ -224,7 +224,6 @@ export function ReviewWorkspace({
                 <button type="button" className="secondary" disabled={selectedIndex < 0 || selectedIndex >= filteredTakes.length - 1} onClick={() => selectRelative(1)}>下一个</button>
               </div>
               <div className="review-cross-actions" aria-label="继续处理当前 Take">
-                <span className={`review-final-state state-${finalState(selectedTake)}`}>最终 {FINAL_LABELS[finalState(selectedTake)]}</span>
                 <button type="button" className="secondary" onClick={() => onOpenMaterial?.(selectedTake.group_id, selectedClipId)}>在素材中打开</button>
                 <button type="button" className="secondary" onClick={() => onOpenScript?.(selectedTake.group_id, selectedClipId)}>在剧本中打开</button>
                 <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId)}>到时间线</button>

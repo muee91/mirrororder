@@ -67,6 +67,180 @@ fn ensure_loopback_port_available(port: u16) -> Result<(), String> {
         })
 }
 
+#[cfg(unix)]
+fn listening_pids(port: u16) -> Vec<u32> {
+    let selector = format!("-iTCP:{port}");
+    let Ok(output) = Command::new("lsof")
+        .args(["-nP", selector.as_str(), "-sTCP:LISTEN", "-t"])
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .collect()
+}
+
+#[cfg(not(unix))]
+fn listening_pids(_port: u16) -> Vec<u32> {
+    Vec::new()
+}
+
+#[cfg(unix)]
+fn process_command_line(pid: u32) -> Option<String> {
+    let pid_arg = pid.to_string();
+    let output = Command::new("ps")
+        .args(["-p", pid_arg.as_str(), "-o", "command="])
+        .output()
+        .ok()?;
+    let command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!command.is_empty()).then_some(command)
+}
+
+#[cfg(not(unix))]
+fn process_command_line(_pid: u32) -> Option<String> {
+    None
+}
+
+fn command_mentions_workspace(command: &str, workspace_path: &PathBuf) -> bool {
+    let direct = workspace_path.to_string_lossy();
+    if command.contains(direct.as_ref()) {
+        return true;
+    }
+    let config_path = if workspace_path.is_dir() {
+        workspace_path.join("workspace.toml")
+    } else {
+        workspace_path.clone()
+    };
+    command.contains(&config_path.to_string_lossy().to_string())
+}
+
+fn is_same_workspace_host_command(command: &str, port: u16, workspace_path: &PathBuf) -> bool {
+    let args: Vec<&str> = command.split_whitespace().collect();
+    let has_host_module = args.windows(2).any(|window| window == ["-m", "script_organizer.cli"]);
+    let has_serve_command = args.iter().any(|arg| *arg == "serve" || *arg == "run");
+    let has_local_only = args.iter().any(|arg| *arg == "--local-only");
+    let port_value = port.to_string();
+    let has_port = args
+        .windows(2)
+        .any(|window| window[0] == "--port" && window[1] == port_value);
+    has_host_module
+        && has_serve_command
+        && has_local_only
+        && has_port
+        && command_mentions_workspace(command, workspace_path)
+}
+
+#[cfg(unix)]
+fn process_is_alive(pid: u32) -> bool {
+    let pid_arg = pid.to_string();
+    Command::new("kill")
+        .args(["-0", pid_arg.as_str()])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn process_is_alive(_pid: u32) -> bool {
+    false
+}
+
+#[cfg(unix)]
+fn terminate_process(pid: u32, label: &str) -> Result<(), String> {
+    if pid == std::process::id() {
+        return Err("拒绝回收当前 Desktop 进程".to_string());
+    }
+    let pid_arg = pid.to_string();
+    let status = Command::new("kill")
+        .args(["-TERM", pid_arg.as_str()])
+        .status()
+        .map_err(|error| format!("回收{label}失败：{error}"))?;
+    if !status.success() && process_is_alive(pid) {
+        return Err(format!("回收{label}失败：进程 {pid} 拒绝退出"));
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while process_is_alive(pid) && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(50));
+    }
+    if process_is_alive(pid) {
+        let _ = Command::new("kill").args(["-KILL", pid_arg.as_str()]).status();
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn terminate_process(_pid: u32, label: &str) -> Result<(), String> {
+    Err(format!("当前平台不支持安全回收{label}"))
+}
+
+fn reclaim_stale_host(port: u16, workspace_path: &PathBuf) -> Result<bool, String> {
+    if ensure_loopback_port_available(port).is_ok() {
+        return Ok(false);
+    }
+
+    let mut reclaimed = false;
+    for pid in listening_pids(port) {
+        let Some(command) = process_command_line(pid) else {
+            continue;
+        };
+        if is_same_workspace_host_command(&command, port, workspace_path) {
+            reclaimed = true;
+            terminate_process(pid, "遗留 Python Host")?;
+        }
+    }
+    if !reclaimed {
+        ensure_loopback_port_available(port)?;
+        return Ok(false);
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        match ensure_loopback_port_available(port) {
+            Ok(()) => return Ok(true),
+            Err(_error) if Instant::now() < deadline => thread::sleep(Duration::from_millis(50)),
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn same_desktop_process_pids() -> Vec<u32> {
+    let Ok(executable) = std::env::current_exe() else {
+        return Vec::new();
+    };
+    let executable = executable.to_string_lossy();
+    let Ok(output) = Command::new("ps")
+        .args(["-axo", "pid=,command="])
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.trim_start().splitn(2, char::is_whitespace);
+            let pid = fields.next()?.parse::<u32>().ok()?;
+            let command = fields.next()?.trim();
+            (pid != std::process::id() && command.starts_with(executable.as_ref())).then_some(pid)
+        })
+        .collect()
+}
+
+#[cfg(not(unix))]
+fn same_desktop_process_pids() -> Vec<u32> {
+    Vec::new()
+}
+
+fn reclaim_previous_desktop_process() -> Result<(), String> {
+    for pid in same_desktop_process_pids() {
+        terminate_process(pid, "旧版镜序 Desktop")?;
+    }
+    Ok(())
+}
+
 fn health(port: u16) -> Result<(), String> {
     probe_service(port, HOST_SERVICE, Duration::from_millis(400))
 }
@@ -177,7 +351,18 @@ pub fn start_python_host(
         stop_managed_host(stale)?;
     }
 
-    ensure_loopback_port_available(port)?;
+    // An app bundle can be replaced while the previous Desktop process is
+    // still alive. Its Python child then survives the file replacement and
+    // would otherwise strand the fixed Host port. Reclaim only a local
+    // MirrorOrder Host serving this exact workspace; arbitrary listeners and
+    // other workspaces remain protected by the normal port error.
+    let reclaimed_stale_host = reclaim_stale_host(port, &workspace_path)?;
+    if reclaimed_stale_host {
+        // The stale Host may still be owned by an older Desktop process whose
+        // bundle was replaced in place. Stop that parent too; its Gateway, if
+        // any, will observe the parent loss through the same watchdog.
+        reclaim_previous_desktop_process()?;
+    }
     let runtime = resolve_python_runtime(&app)?;
     let mut command = Command::new(&runtime.python_executable);
     command
@@ -193,6 +378,7 @@ pub fn start_python_host(
         .arg("--local-only")
         .arg("--port")
         .arg(port.to_string())
+        .env("MIRRORORDER_PARENT_PID", std::process::id().to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
@@ -279,7 +465,10 @@ pub fn shutdown(manager: &HostManager) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_loopback_port_available, shutdown, validate_port, HostManager, ManagedHost};
+    use super::{
+        ensure_loopback_port_available, is_same_workspace_host_command, shutdown, validate_port,
+        HostManager, ManagedHost,
+    };
     use std::{
         net::TcpListener,
         path::PathBuf,
@@ -310,6 +499,26 @@ mod tests {
             thread::sleep(Duration::from_millis(5));
         }
         assert!(released);
+    }
+
+    #[test]
+    fn identifies_only_the_same_local_host_workspace_for_reclamation() {
+        let workspace = PathBuf::from("/Users/muee/Code workspace/短剧素材核对平台GPT版");
+        let command = format!(
+            "/Applications/镜序.app/Contents/Resources/mirrororder-python/bin/python3 -m script_organizer.cli serve '{}' --local-only --port 8765",
+            workspace.display()
+        );
+        assert!(is_same_workspace_host_command(&command, 8765, &workspace));
+        assert!(!is_same_workspace_host_command(
+            &command.replace(workspace.to_string_lossy().as_ref(), "/tmp/other-workspace"),
+            8765,
+            &workspace,
+        ));
+        assert!(!is_same_workspace_host_command(
+            &command.replace("--local-only", "--host 0.0.0.0"),
+            8765,
+            &workspace,
+        ));
     }
 
     #[cfg(unix)]

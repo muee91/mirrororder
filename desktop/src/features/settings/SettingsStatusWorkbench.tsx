@@ -137,7 +137,7 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
   return (
     <section className="phase3-workbench settings-status-workbench">
       <header className="production-heading settings-heading">
-        <div><p className="eyebrow">MirrorOrder Desktop</p><h2>设置</h2></div>
+        <div><p className="eyebrow">MirrorOrder Desktop</p><h2>设备设置</h2></div>
         <div className="assistant-heading-actions">
           {error ? <span className="production-state is-error" role="alert">{error}</span> : null}
           <button

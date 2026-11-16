@@ -503,10 +503,6 @@ export function ScriptWorkspace({
         <div className="workspace-toolbar-actions">
           <button type="button" className="secondary" disabled={!selectedBlock} onClick={() => selectedBlock && openBlockContext(selectedBlock)}>匹配素材</button>
           <button type="button" className="secondary" onClick={() => { setDrawerView("batch"); setRoughPreview(null); setDrawerOpen(true); }}>批量归集</button>
-          <label className="review-actor-field compact-actor">
-            <span>审核昵称</span>
-            <input value={actor} placeholder="写入时必填" onChange={(event) => setActor(event.target.value)} onBlur={() => actor.trim() && saveActor(actor)} />
-          </label>
         </div>
       </header>
 
