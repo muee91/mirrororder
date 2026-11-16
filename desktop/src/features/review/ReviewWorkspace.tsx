@@ -201,70 +201,78 @@ export function ReviewWorkspace({
         </div>
       </header>
 
-      <main className="review-primary-canvas">
-        <aside className="review-queue" aria-label="看片队列">
-          {filteredTakes.length ? (
-            <VirtualTakeList
-              variant="compact"
-              takes={filteredTakes}
-              selectedGroupId={selectedGroupId}
-              onSelect={selectTake}
-              allowDrag={false}
-              detailForTake={queueDetail}
-            />
-          ) : <div className="phase-placeholder compact-placeholder">当前筛选没有 Take。</div>}
-        </aside>
+      <main className={`review-primary-canvas${filteredTakes.length ? "" : " is-empty"}`}>
+        {filteredTakes.length ? (
+          <>
+            <aside className="review-queue" aria-label="看片队列">
+              <VirtualTakeList
+                variant="compact"
+                takes={filteredTakes}
+                selectedGroupId={selectedGroupId}
+                onSelect={selectTake}
+                allowDrag={false}
+                detailForTake={queueDetail}
+              />
+            </aside>
 
-        <section className="review-viewer-pane" aria-label="看片与人工决定">
-          {selectedTake ? (
-            <div className="review-viewer-toolbar">
-              <div className="review-transport-actions" aria-label="看片队列导航">
-                <button type="button" className="secondary" disabled={selectedIndex <= 0} onClick={() => selectRelative(-1)}>上一个</button>
-                <span>{selectedIndex >= 0 ? selectedIndex + 1 : 0} / {filteredTakes.length}</span>
-                <button type="button" className="secondary" disabled={selectedIndex < 0 || selectedIndex >= filteredTakes.length - 1} onClick={() => selectRelative(1)}>下一个</button>
-              </div>
-              <div className="review-cross-actions" aria-label="继续处理当前 Take">
-                <button type="button" className="secondary" onClick={() => onOpenMaterial?.(selectedTake.group_id, selectedClipId)}>在素材中打开</button>
-                <button type="button" className="secondary" onClick={() => onOpenScript?.(selectedTake.group_id, selectedClipId)}>在剧本中打开</button>
-                <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId)}>到时间线</button>
-              </div>
-            </div>
-          ) : null}
+            <section className="review-viewer-pane" aria-label="看片与人工决定">
+              {selectedTake ? (
+                <div className="review-viewer-toolbar">
+                  <div className="review-transport-actions" aria-label="看片队列导航">
+                    <button type="button" className="secondary" disabled={selectedIndex <= 0} onClick={() => selectRelative(-1)}>上一个</button>
+                    <span>{selectedIndex >= 0 ? selectedIndex + 1 : 0} / {filteredTakes.length}</span>
+                    <button type="button" className="secondary" disabled={selectedIndex < 0 || selectedIndex >= filteredTakes.length - 1} onClick={() => selectRelative(1)}>下一个</button>
+                  </div>
+                  <div className="review-cross-actions" aria-label="继续处理当前 Take">
+                    <button type="button" className="secondary" onClick={() => onOpenMaterial?.(selectedTake.group_id, selectedClipId)}>在素材中打开</button>
+                    <button type="button" className="secondary" onClick={() => onOpenScript?.(selectedTake.group_id, selectedClipId)}>在剧本中打开</button>
+                    <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId)}>到时间线</button>
+                  </div>
+                </div>
+              ) : null}
 
-          <TakeInspector
-            connection={connection}
-            projectId={project.project_id}
-            take={selectedTake}
-            selectedClipId={selectedClipId}
-            onSelectClip={setSelectedClipId}
-            writeSaving={false}
-            afterPlayback={selectedTake ? (
-              <div className="review-decision-stack">
-                <ReviewDecisionPanel
-                  baseUrl={baseUrl}
-                  projectId={project.project_id}
-                  groupId={selectedTake.group_id}
-                  onDecisionChange={async () => {
-                    await refresh().catch(() => {
-                      // The decision write already succeeded. The panel owns
-                      // the write result; a read-back failure must not create
-                      // an unhandled rejection or roll the UI back to stale data.
-                    });
-                  }}
-                />
-                {selectedAttention?.hasAttention ? (
-                  <section className="take-attention-summary" aria-label={`${takeDisplayLabel(selectedTake)} 需关注`}>
-                    <div className="take-attention-heading"><strong>需关注</strong><span>{selectedAttention.labels.length} 项</span></div>
-                    <div className="take-attention-labels">
-                      {selectedAttention.labels.slice(0, 4).map((label) => <span key={label}>{label}</span>)}
-                    </div>
-                    {selectedAttention.context ? <p>{selectedAttention.context}</p> : null}
-                  </section>
+              <TakeInspector
+                connection={connection}
+                projectId={project.project_id}
+                take={selectedTake}
+                selectedClipId={selectedClipId}
+                onSelectClip={setSelectedClipId}
+                writeSaving={false}
+                afterPlayback={selectedTake ? (
+                  <div className="review-decision-stack">
+                    <ReviewDecisionPanel
+                      baseUrl={baseUrl}
+                      projectId={project.project_id}
+                      groupId={selectedTake.group_id}
+                      onDecisionChange={async () => {
+                        await refresh().catch(() => {
+                          // The decision write already succeeded. The panel owns
+                          // the write result; a read-back failure must not create
+                          // an unhandled rejection or roll the UI back to stale data.
+                        });
+                      }}
+                    />
+                    {selectedAttention?.hasAttention ? (
+                      <section className="take-attention-summary" aria-label={`${takeDisplayLabel(selectedTake)} 需关注`}>
+                        <div className="take-attention-heading"><strong>需关注</strong><span>{selectedAttention.labels.length} 项</span></div>
+                        <div className="take-attention-labels">
+                          {selectedAttention.labels.slice(0, 4).map((label) => <span key={label}>{label}</span>)}
+                        </div>
+                        {selectedAttention.context ? <p>{selectedAttention.context}</p> : null}
+                      </section>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
-            ) : null}
-          />
-        </section>
+              />
+            </section>
+          </>
+        ) : (
+          <div className="review-empty-state" role="status">
+            <strong>{model.take_groups.length ? "当前筛选没有 Take" : "当前项目没有 Take"}</strong>
+            <p>{model.take_groups.length ? "换一个筛选条件即可继续看片。" : "完成素材分析并建立 Take 后，这里会出现看片队列。"}</p>
+            {model.take_groups.length && filter !== "all" ? <button type="button" className="secondary" onClick={() => setFilter("all")}>显示全部</button> : null}
+          </div>
+        )}
       </main>
     </section>
   );

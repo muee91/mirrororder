@@ -278,6 +278,38 @@
   padding-top: 10px;
 }
 
+.review-primary-canvas.is-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: 24px;
+}
+
+.review-empty-state {
+  width: min(520px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  border: 1px dashed var(--mo-border-default, #303944);
+  border-radius: var(--mo-radius-pane, 5px);
+  padding: 34px 24px;
+  color: var(--mo-text-muted, #76828e);
+  background: var(--mo-surface-pane, #0f1419);
+  text-align: center;
+}
+
+.review-empty-state strong {
+  color: var(--mo-text-primary, #d7dee5);
+  font-size: 15px;
+}
+
+.review-empty-state p {
+  max-width: 420px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .review-queue {
   min-width: 0;
   min-height: 0;

@@ -166,13 +166,9 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
           </div>
         </section>
 
-        <section className="settings-preference-section" aria-labelledby="settings-local-title">
-          <header className="settings-section-heading">
-            <div><p className="eyebrow">本机智能</p><h3 id="settings-local-title">本地 AI 与身份识别</h3></div>
-            <span>启用一次 · 当前设备自动恢复</span>
-          </header>
+        <div className="settings-local-section" aria-label="本地 AI 与身份识别">
           <LocalRuntimePanel baseUrl={baseUrl} />
-        </section>
+        </div>
 
         <section className="settings-preference-section" aria-labelledby="settings-assistant-title">
           <header className="settings-section-heading">

@@ -33,7 +33,7 @@ export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
         <TimelineSourcePanel {...props} />
         <div className="editorial-lower-grid"><TimelineInspectorPanel {...props} /><TimelineSuggestionsPanel {...props} /></div>
         {snapshot.validation.length ? <div className="timeline-validation production-panel">{snapshot.validation.map((issue) => <p key={`${issue.code}-${issue.path}`}><strong>{issue.code}</strong> · {issue.path} · {issue.message}</p>)}</div> : null}
-      </> : <div className="production-panel timeline-empty"><strong>尚未建立本机时间线</strong><p>上方“初始顺片”根据人工选片建立唯一的本机时间线。建立后即可核对片段与多机位，并交付 / 导出到外部 NLE 继续精剪。</p></div>}
+      </> : <div className="timeline-empty"><strong>建立初始顺片后显示时间线</strong><p>先在上方确认时间基并建立本机剪辑。</p></div>}
     </section>
   );
 }

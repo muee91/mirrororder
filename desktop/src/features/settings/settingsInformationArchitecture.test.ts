@@ -9,7 +9,7 @@ function read(relative: string): string {
 describe("Desktop settings information architecture", () => {
   it("groups user-facing preferences by responsibility instead of rendering an engineering dashboard", () => {
     const settings = read("./SettingsStatusWorkbench.tsx");
-    for (const label of ["通用", "本机智能", "小镜", "团队审阅", "高级诊断"]) {
+    for (const label of ["通用", "本地 AI 与身份识别", "小镜", "团队审阅", "高级诊断"]) {
       expect(settings).toContain(label);
     }
     expect(settings).toContain("<DesktopAppearanceControl />");
@@ -18,6 +18,7 @@ describe("Desktop settings information architecture", () => {
     expect(settings).toContain("<CollaborationPanel baseUrl={baseUrl} />");
     expect(settings).toContain('className="team-web-advanced"');
     expect(settings).toContain("自动刷新频率");
+    expect(settings).toContain('className="settings-local-section"');
   });
 
   it("keeps model and runtime activation device scoped instead of project gated", () => {
