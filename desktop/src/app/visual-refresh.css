@@ -299,6 +299,9 @@ textarea::placeholder { color: var(--mo-text-muted); }
 }
 
 /* Production header and primary navigation */
+.professional-project-workbench {
+  grid-template-rows: 66px minmax(0, 1fr);
+}
 .professional-project-toolbar {
   grid-template-columns: minmax(360px, 1fr) auto;
   min-height: 66px;
@@ -347,6 +350,45 @@ textarea::placeholder { color: var(--mo-text-muted); }
 .professional-assistant-toggle.is-active,
 .professional-assistant-toggle.is-active:hover,
 .professional-team-review:hover { color: var(--mo-text-primary); background: var(--mo-surface-selected); }
+
+/* Search owns its legacy light media-query fallback; Desktop appearance must win. */
+html[data-mirrororder-theme="light"] .professional-project-tools .project-search-trigger {
+  border-color: var(--mo-border-default);
+  color: var(--mo-text-secondary);
+  background: var(--mo-surface-raised);
+}
+html[data-mirrororder-theme="light"] .professional-project-tools .project-search-trigger kbd {
+  border-color: var(--mo-border-default);
+  color: var(--mo-text-secondary);
+  background: var(--mo-surface-control);
+}
+html[data-mirrororder-theme="light"] .semantic-search-backdrop { background: rgba(24, 31, 38, .28); }
+html[data-mirrororder-theme="light"] .semantic-search-palette {
+  border-color: var(--mo-border-default);
+  background: var(--mo-surface-elevated);
+  box-shadow: var(--mo-shadow-float);
+}
+html[data-mirrororder-theme="light"] .semantic-search-form,
+html[data-mirrororder-theme="light"] .semantic-search-results,
+html[data-mirrororder-theme="light"] .semantic-search-footer { border-color: var(--mo-border-subtle); }
+html[data-mirrororder-theme="light"] .semantic-search-form input {
+  border-color: var(--mo-border-default);
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-control);
+}
+html[data-mirrororder-theme="light"] .semantic-search-filters button {
+  border-color: var(--mo-border-default);
+  color: var(--mo-text-secondary);
+  background: var(--mo-surface-raised);
+}
+html[data-mirrororder-theme="light"] .semantic-search-filters button.is-active {
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-selected);
+}
+html[data-mirrororder-theme="light"] .semantic-search-result { border-color: var(--mo-border-subtle); color: var(--mo-text-secondary); }
+html[data-mirrororder-theme="light"] .semantic-search-result:hover:not(:disabled) { background: var(--mo-surface-hover); }
+html[data-mirrororder-theme="light"] .semantic-result-source { color: var(--mo-text-secondary); background: var(--mo-surface-raised); }
+html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(--mo-text-primary); }
 
 .project-production-workbench,
 .project-workbench-main.owns-chrome,
