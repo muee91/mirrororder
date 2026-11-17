@@ -20,7 +20,7 @@
 
 ### 03 / 剪辑辅助
 
-`看片审阅` 保存人工判断；`选片组接` 仍由 Rust Timeline Core 维护唯一编辑 authority，不与同步母版共用编辑器。Team Web 是独立协作 surface，不得访问生产设备路径、原始媒体或 Final Editorial Decision 写入权限。
+`看片审阅` 保存人工判断；`选片组接` 仍由 Rust Timeline Core 维护唯一编辑 authority，不与同步母版共用编辑器。团队审阅是独立协作 surface。Team Web 是独立协作 surface，不得访问生产设备路径、原始媒体或 Final Editorial Decision 写入权限。
 
 ## 共同路由与兼容
 
