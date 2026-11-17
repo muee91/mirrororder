@@ -167,7 +167,14 @@ test("decision conflict recovery requires a read retry and refreshes the real re
     },
   }));
 
-  await panel.getByRole("textbox", { name: "决定人" }).fill("当前剪辑师");
+  // The editor identity now lives in the shared operator control, not in a
+  // duplicate per-Take textbox. Set the same device-local identity and notify
+  // the current ReviewDecisionPanel before exercising the real write path.
+  await page.evaluate(() => {
+    window.localStorage.setItem("mirrororder.productionActor", "当前剪辑师");
+    window.localStorage.setItem("mirrororder.desktop-v2.review-actor", "当前剪辑师");
+    window.dispatchEvent(new CustomEvent("mirrororder:operator-change", { detail: "当前剪辑师" }));
+  });
   await panel.getByRole("button", { name: "Best", exact: true }).click();
   await panel.getByRole("alert").filter({ hasText: "最新状态读取失败" }).waitFor();
   assert.equal(await panel.getByRole("button", { name: "Best", exact: true }).isDisabled(), true);
