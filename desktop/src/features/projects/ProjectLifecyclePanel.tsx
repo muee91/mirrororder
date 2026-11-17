@@ -166,8 +166,15 @@ export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged, onStatusMes
       const created = await client.createProject(payload());
       if (prepareAfterCreate) {
         try {
-          await client.prepareProject(created.project_id);
-          setMessage("项目已创建，后台整理已开始。");
+          if (inputKind === "media-directory") {
+            // Sync is the first deliverable. The old prepare_project also ran
+            // ASR and script matching, making a finished sync look "stuck".
+            await client.multicamSync(created.project_id);
+            setMessage("项目已创建，已启动音视频同步；剧本和模型分析可稍后继续。");
+          } else {
+            await client.prepareProject(created.project_id);
+            setMessage("项目已创建，后台整理已开始。");
+          }
         } catch (error) {
           setMessage(`项目已创建，但后台整理没有启动：${errorMessage(error)}`);
         }
@@ -247,7 +254,7 @@ export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged, onStatusMes
 
               <label className="lifecycle-checkbox">
                 <input type="checkbox" checked={prepareAfterCreate} onChange={(event) => setPrepareAfterCreate(event.target.checked)} />
-                <span><strong>创建后自动整理</strong><small>后台整理素材、转写并匹配剧本；进度在状态中心查看。</small></span>
+                <span><strong>{inputKind === "media-directory" ? "创建后自动同步" : "创建后自动整理"}</strong><small>{inputKind === "media-directory" ? "先交付同步工程。转写、场记与剧本关联不会阻塞剪辑师开工。" : "后台整理素材、转写并匹配剧本；进度在状态中心查看。"}</small></span>
               </label>
 
               {preflight && !preflight.ready ? (
@@ -261,7 +268,7 @@ export function ProjectLifecyclePanel({ baseUrl, onWorkspaceChanged, onStatusMes
               <p className="project-lifecycle-message" aria-live="polite">{message}</p>
               <div className="lifecycle-actions">
                 <button type="button" className="secondary" disabled={busy} onClick={() => setOpen(false)}>取消</button>
-                <button type="button" disabled={busy || !canCreate} onClick={() => void create()}>{prepareAfterCreate ? "创建并整理" : "创建项目"}</button>
+                <button type="button" disabled={busy || !canCreate} onClick={() => void create()}>{prepareAfterCreate ? (inputKind === "media-directory" ? "创建并同步" : "创建并整理") : "创建项目"}</button>
               </div>
             </div>
           </section>
