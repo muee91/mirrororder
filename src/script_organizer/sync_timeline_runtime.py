@@ -65,6 +65,8 @@ def _safe_task(task: dict[str, Any] | None) -> dict[str, Any] | None:
         "created_at": _text(task.get("created_at")),
         "started_at": _text(task.get("started_at")),
         "completed_at": _text(task.get("completed_at")),
+        "updated_at": _text(task.get("updated_at")),
+        "error": _text(task.get("error")),
     }
 
 
