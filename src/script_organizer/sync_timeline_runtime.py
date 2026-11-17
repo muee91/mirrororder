@@ -261,4 +261,67 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
     }
 
 
-__all__ = ["CONTRACT_VERSION", "build_sync_timeline"]
+SYNC_DELIVERY_CONTRACT = "sync_delivery_artifacts.v1"
+
+
+def build_sync_delivery_artifacts(project: Any, tasks: Iterable[object]) -> dict[str, Any]:
+    """Local-only *read* of files the sync worker already generated.
+
+    Do not generate new material from a GET, and do not expose device paths
+    through the agent-facing sync-timeline read model. Even a compromised
+    sync_report.json cannot point the UI at arbitrary files: the candidate must
+    match a known filename within this project's local media export folder.
+    """
+    config = project.config
+    output = Path(config.output_dir)
+    report = _read_json(output / "sync" / "sync_report.json")
+    task = _latest_sync_task(tasks)
+    index_ready = _media_index_ready(config)
+    synced_file = output / "sync" / "synchronized.fcpxml"
+    phase, ready, _message = _status_for(task, report, synced_file, index_ready)
+    ready = bool(getattr(config, "is_media_directory", False)) and ready and phase == "completed"
+
+    roots = tuple(getattr(config, "media_roots", ()) or ())
+    if not roots and getattr(config, "media_root", None):
+        roots = (config.media_root,)
+    export_dir = Path(roots[0]).resolve() / "交付" if roots else None
+
+    def safe_file(field: str, expected_name: str) -> str:
+        if not ready or export_dir is None:
+            return ""
+        raw = _text(report.get(field))
+        if not raw:
+            return ""
+        candidate = Path(raw).resolve()
+        if candidate.name != expected_name or candidate.parent != export_dir or not candidate.is_file():
+            return ""
+        return str(candidate)
+
+    kinds = (
+        ("davinci", "DaVinci Resolve", "fcpxml", "synchronized.fcpxml", "FCPXML"),
+        ("premiere", "Premiere Pro", "premiere_xml", "synchronized_premiere.xml", "FCP7 XML"),
+        ("final-cut", "Final Cut Pro", "fcpxml", "synchronized.fcpxml", "FCPXML"),
+        ("jianying", "剪映专业版", "capcut_fcpxml", "synchronized_capcut.fcpxml", "FCPXML"),
+    )
+    files = []
+    for target, label, key, filename, format_name in kinds:
+        local_path = safe_file(key, filename)
+        files.append({
+            "target": target,
+            "label": label,
+            "format": format_name,
+            "filename": filename,
+            "available": bool(local_path),
+            "local_path": local_path,
+        })
+    return {
+        "contract": SYNC_DELIVERY_CONTRACT,
+        "project_id": _text(getattr(project, "project_id", "")),
+        "ready": ready,
+        "paths_scope": "localhost_response_only",
+        "artifacts": files,
+        "validation": "generated_files_only_nle_round_trip_not_verified",
+    }
+
+
+__all__ = ["CONTRACT_VERSION", "build_sync_timeline", "build_sync_delivery_artifacts"]
