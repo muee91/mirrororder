@@ -4,7 +4,7 @@
 
 镜序是后期制作工具，不是 AI 控制台。界面的首要目标是让用户快速理解当前制作对象、进度、异常和下一步操作；技术实现只在需要诊断时出现。
 
-产品定义与 App 信息架构见 `docs/app-information-architecture.md`，Desktop 跨层边界见 `docs/architecture/desktop-bridge.md`，Review/Editorial 协作语义见 `docs/review-read-model.md`，电子场记见 `docs/electronic-script-supervisor.md`。如果旧 README、历史“工作台”文案或兼容层代码与这些当前产品文档冲突，以当前 authority 为准。
+唯一当前产品目标见 `docs/product/REBUILD_2026-11-17.md`。既有代码/导航映射见 `docs/app-information-architecture.md`，跨层边界见 `docs/architecture/desktop-bridge.md`，Review 与场记的数据权限分别见 `docs/review-read-model.md` 和 `docs/electronic-script-supervisor.md`。若旧版 UI 布局与同步优先产品路线冲突，以最新产品定义为准；不得自动改写技术领域的人工 authority。
 
 ## Product surfaces
 
