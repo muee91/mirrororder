@@ -169,6 +169,7 @@ def _run(
     timeout: int = 60 * 60 * 6,
     config_path: Path | None = None,
     cancel_requested: Callable[[], bool] | None = None,
+    idle_heartbeat_interval: float = 15.0,
 ) -> str:
     command = [sys.executable, str(script_dir / script), *args]
     environment = os.environ.copy()
@@ -202,6 +203,7 @@ def _run(
     deadline = monotonic() + max(0.1, float(timeout))
     next_cancel_check = 0.0
     reader_done = False
+    next_heartbeat = monotonic() + max(0.1, idle_heartbeat_interval)
     try:
         while True:
             now = monotonic()
@@ -226,6 +228,13 @@ def _run(
                 lines.append(item)
                 if log:
                     log(item[-500:])
+                next_heartbeat = monotonic() + max(0.1, idle_heartbeat_interval)
+            elif not reader_done and monotonic() >= next_heartbeat and process.poll() is None:
+                # A quiet subprocess can be alive for many minutes. This is an
+                # explicit *liveness* event, not a made-up media progress tick.
+                if log:
+                    log(f"{script} 子进程仍在运行，暂无新输出（心跳，不代表处理进度）")
+                next_heartbeat = monotonic() + max(0.1, idle_heartbeat_interval)
             if process.poll() is not None and reader_done:
                 break
         return_code = process.wait(timeout=1)

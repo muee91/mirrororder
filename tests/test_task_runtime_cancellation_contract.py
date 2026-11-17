@@ -90,6 +90,20 @@ def test_multicam_cancel_targets_only_the_spawned_process_tree() -> None:
     assert 'killall' not in engine
 
 
+
+def test_silent_vendor_worker_reports_liveness_without_inventing_progress(tmp_path: Path) -> None:
+    script = tmp_path / "quiet_stage.py"
+    script.write_text("import time\ntime.sleep(0.4)\n", encoding="utf-8")
+    reports: list[str] = []
+
+    output = _run(
+        tmp_path, script.name, [], log=reports.append,
+        timeout=3, idle_heartbeat_interval=0.12,
+    )
+    assert output == ""
+    assert any("子进程仍在运行" in message and "心跳，不代表处理进度" in message for message in reports)
+
+
 def test_verbose_vendor_output_does_not_reread_durable_state_for_every_line(tmp_path: Path) -> None:
     script = tmp_path / "verbose.py"
     script.write_text("for n in range(10000): print(n)\n", encoding="utf-8")
