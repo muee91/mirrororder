@@ -49,7 +49,7 @@ Desktop 项目内一级工作区固定为：
 - **共享对象，不共享工作流。** canonical renderer / primitive 可以跨工作区复用；workspace orchestration、主动作和写权限必须分别拥有 owner。
 - 一个能力只有一个主要“家”；其它工作区只能通过 read-only context、快捷入口或携带 selection 的 deep-link 打开它。
 - 跨工作区跳转必须尽量保留当前 project / Take / ScriptBlock / Timeline item 上下文，不能要求用户重新找对象。
-- 历史 Swift V1 不是实现 authority，但核心五步工作流可作为最低可用性回归基线：找到 Take → 理解拍摄事实/归属 → 修正剧本 placement → 看片决定 → 带入 Timeline。
+- 历史 Swift V1 不是实现 authority，但旧五步工作流仅作历史可用性回归；当前 P0 必须先实现同步、音画核对、导出多轨/多机位工程并在外部 NLE 验收。
 
 ### MUST NOT
 

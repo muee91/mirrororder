@@ -4,19 +4,9 @@
 
 ## Start here
 
-Before changing Production UI, start from the repository documentation index, then read the current authorities:
+当前产品与开发优先级：[`../docs/product/REBUILD_2026-11-17.md`](../docs/product/REBUILD_2026-11-17.md)。真实状态见 `../docs/engineering/STATUS.md`，待办见 `../docs/engineering/BACKLOG.md`。不再以旧五步 Product Recovery 或旧 IA 当作下一轮 UI 实现目标。
 
-- `../docs/README.md`
-- `../docs/app-information-architecture.md`
-- `../docs/engineering/STATUS.md`
-- `../docs/engineering/BACKLOG.md`
-- `../docs/engineering/INVARIANTS.md`
-- `../docs/ux-principles.md`
-- `../docs/design-system-v2.md`
-- `../docs/architecture/desktop-bridge.md`
-- `../docs/architecture/repository-layout.md`
-
-Current P0 is **Desktop Product Recovery**. Do not add product surfaces before the real five-step workflow is usable.
+P0 是**同步音视频、核对异常、分发剪辑工程**；剧本/场记/搜索/AI 可后台继续。已有多域代码应复用，不新建第二套业务/Timeline authority。
 
 ## Architecture
 
@@ -40,26 +30,11 @@ src-tauri/resources/      generated/packaged resource targets
 
 Do not move product business authority into Tauri adapters or React state. Generated runtime/media-tool contents are build outputs, not hand-maintained source.
 
-## Product workspaces
+## Existing workspaces
 
-Desktop 项目内只有四个一级工作区：
+目前 `素材 / 剧本 / 时间线 / 审阅` 是内部代码责任划分，不是必须让剪辑师依次完成的步骤。新媒体目录项目先显示「同步与交付」，同步期间仍可检查素材；同步完成后再以场记/剧本检索提供长期素材访问。
 
-```text
-素材 / 剧本 / 时间线 / 审阅
-```
-
-- **素材**：Media / Take / Person / Slate。场记、素材库、Take、人物是同一 Material workspace 的 view/task；本机素材 relink 是 contextual tool。
-- **剧本**：Script / ScriptBlock 是 Primary Canvas；Coverage 是同一 Script 上下文的 projection；Review placement / mapping 修正以这里为主家。
-- **时间线**：唯一 authoritative local editor；Rough Cut / Assembly / AI editing 只能提供 proposal/preview，人工确认后转换为 Timeline commands；Delivery/export 是后续 flow。
-- **审阅**：Viewer + 当前 Take + 必要剧本上下文 + 人工 Editorial Decision；“需关注”只是 filter/queue。不要在这里复制场记、relink、人物治理、完整 placement editor 或 Timeline edit。
-
-核心实现原则：
-
-> **共享对象，不共享工作流。**
-
-允许复用 canonical `TakeCard / TakeListRow / MediaCard / ScriptBlock / SlateRow / PersonRow / Viewer primitives`。不允许通过一个 `surface/mode` Workbench 把多个一级 workspace 的 loader、toolbar、selection、drawer 和写权限重新合并。
-
-跨 workspace 跳转应保留当前 Take / media / ScriptBlock / Timeline source 等 selection intent，但 selection context 不成为业务 truth。
+同步母版与创意组接不能混在同一时间线。已有 Media/Take/Slate 等 canonical 组件可以复用，权限和人工事实不能绕过业务 Core。
 
 ## Global surfaces
 
@@ -177,14 +152,4 @@ local intelligence features until that decision is made explicit.
 
 ## Current usability acceptance
 
-P0 is not closed until a real project can smoothly complete:
-
-```text
-找到 Take
-→ 理解拍摄事实 / 机位 / 当前归属
-→ 修正剧本 placement
-→ 看片并作人工决定
-→ 带入 Timeline 继续剪
-```
-
-Swift V1 is only a minimum usability regression baseline, not a visual or technical implementation target.
+真实素材要完成导入、同步、视频/独立音频核对、多轨母版导出、目标 NLE 实际导入及可切机位验证。旧五步测试可作为回归参考，但不能阻塞最初同步工程交付。

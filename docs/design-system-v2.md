@@ -1,8 +1,10 @@
 # MirrorOrder Design System v2 — Professional UI / UX System
 
+> **执行注意：此文档约束已有组件状态和视觉实现，不能覆盖 `docs/product/REBUILD_2026-11-17.md` 的同步优先用户工作流。旧四域布局可重制。**
+
 > 当前实现位于 `desktop/src/design-system-v2.css` 与 `web/design-system-v2.css`。
 >
-> Product authority remains `docs/ux-principles.md` and `docs/app-information-architecture.md`.
+> Product authority is `docs/product/REBUILD_2026-11-17.md`; existing UI mapping is documented in `docs/app-information-architecture.md`.
 >
 > 本文是 MirrorOrder UI / UX 的执行级设计 authority：定义组件语义、视觉层级、机位识别、状态系统、布局不变量、响应式行为和迁移验收标准。它不是“主题皮肤”，也不是要求所有页面共享一个模板。
 

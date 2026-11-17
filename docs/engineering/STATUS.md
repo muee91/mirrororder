@@ -1,224 +1,24 @@
-# Engineering Status
+# 镜序当前工程状态
 
-更新时间：2026-11-17
+> 核对：2026-11-17。**只有可追溯的当前事实**，旧修复轮次/过期 SHA 请查 Git history。产品定义：[`../product/REBUILD_2026-11-17.md`](../product/REBUILD_2026-11-17.md)。
 
-## 当前视频机位恢复（2026-11-17）
+## Git 与自动验证
+- `main`：`88e585e1c5d44ad7698888a54683ab04a03596c3`，尚未合并重制。
+- Draft PR [#3](https://github.com/muee91/mirrororder/pull/3) 位于 `rebuild/sync-first-workflow-20261117`。
+- 重制分支 CI #132（对应整理之前的 commit）：Python 成功、macOS 成功、Linux Desktop 测试失败，**不是全绿**。后续文档修改须以新 SHA 重新检查。
 
-- 本轮修复基于 `main` 的 `83463cd`。机位规则支持 A–Z 强目录/文件标记，自定义规则与人工覆盖优先；系统目录不作为机位证据，未分类视频保持 `?`。同步索引不再混入 JPG/DNG 或独立录音，旧识别结果必须通过 `camera_detection.v2` 重新同步。
-- 实盘同步完成并发布媒体索引：A/B/C/D/E/F 分别为 `723 / 781 / 739 / 740 / 40 / 39` 条，另有 `2` 条未分类视频；时间线 API 与 macOS 原生页面均显示六个实际机位及独立未分类轨。生成的 FCPXML 默认选 A，剪映草稿结构校验通过。此次未完成逐帧音画核对或外部 NLE 实际导入，不改变五步主链的严格验收口径。
-- 当前同步检查页是自绘只读概览，尚无连续时间线播放、播放头或时间尺缩放，原生页面仍有尺标拥挤问题；概览片段存在最小显示宽度，不能用像素宽度验收帧级同步。同步任务已生成 FCPXML、Premiere 多轨 XML 和剪映/CapCut 草稿，但同步页尚无统一的同步源工程导出入口；Premiere XML 也不是原生 `.prproj` 或已建立的原生多机位源序列。
-- 显式素材扫描完成：发现 `3358` 个音视频文件，`3064 / 3064` 条视频已绑定，缺失 `0`；D/E/F 样本媒体读取返回 HTTP 206。独立录音为 `294` 个 WAV，本轮由 owner 明确延后，不计入视频机位或已完成同步的音轨。
-- 同步音频缓存改用 occurrence + 内容身份键并原子发布；新增机位、插入文件和中断抽取不会复用其它片段或半成品音频。第一方生成的 ordinal FCPXML asset id 发生内容冲突时，不继承其它已验证媒体的 clip identity；portable / 外部 NLE identity 连续性测试保留。
-- 高输出校验的 durable cancel 读取限频至 250 ms，素材扫描逐文件循环的读取限频至 100 ms；不再按日志行或文件数量反复解析整份历史任务记录。盘点期间持续报告素材数量、素材组和当前机位。
-- macOS 模型通过独立 supervisor 绑定 Host 生命周期。真实 App 退出后 Desktop / Host / supervisor / 模型四个进程均已退出；进程级回归覆盖 Host 强制结束、正常 stop 和模型忽略 SIGTERM。Windows 仍需独立生命周期验收。
-- 已构建并替换本机 Release App，包校验通过；旧 DMG 与旧 debug App bundle 已清理。快速 gate 通过（88 个 Vitest 文件 / 472 项、Rust 与 Python contract）；最新全量 Python 为 `837 passed / 1 failed`，保留的失败是既有 `test_timebase_rust_parity[empty-version]`，全量 gate 不标为通过。
+## 已存在的代码能力（不是交付证明）
+- 第一方多机位同步引擎、机位规则、任务与媒体身份索引、设备本机媒体绑定。
+- FCPXML、Premiere XML 和部分剪映兼容输出代码；存在代码不代表四款 NLE 原生多机位可用。
+- Slate、剧本映射、Review、Identity、ASR / 模型和检索模块。
+- Draft PR #3 接通进度检查点、最近任务活动和同步失败信息，并让媒体目录项目先进入同步入口。
+- 2026-11-17 实盘证据：视频 3,064 条；A/B/C/D/E/F 为 723/781/739/740/40/39 条，另有 2 条未分类；294 条独立 WAV **尚未完成同步验收**。
 
-## 当前产品方向（2026-11-10）
+## 尚未验证 / 不得写成 PASS
+- 同步时间线仍是只读概览；缺联动预览、播放头、缩放、漂移核对、人工修正。
+- 视频和独立 WAV 的逐帧音画对齐、复杂错时码与跨 Take 同台词纠错。
+- 同步母版与原生多机位素材两种交付在 Resolve / Premiere / Final Cut Pro / 国内剪映（Windows/macOS）的真实导入。
+- 新剧直接创建、完成同步、分发工程、剪辑过程中检索素材的完整生产闭环。
+- 本地/第三方模型长期运行、团队跨机映射与工程交接的完整实测。
 
-- 镜序正式收窄为**短剧多机位剪辑前决策台**，交付物是可信的剪辑前决策底稿，不是完整 NLE。
-- 当前远端 `main`：`9e7999a24b8d94ab0768ea336e7c9b3875fea3be`（2026-11-15 UX 修复）；对应 CI #117 / run `43766248892` 已成功。
-- 已落地：evidence sidecar contract、路径安全校验、可选 PySceneDetect provider、OpenTimelineIO interop boundary、可选 provider 能力诊断、场记状态统一投影与筛选、跨集同名场景隔离、正式 `M_` 归档指纹复核；媒体审阅/时间线恢复的缓存、并发刷新与失败隔离；素材扫描快照发布失败时的 fail-closed 语义；媒体探测失败显式状态和可选帧率/时码/旋转元数据。
-- 仍未完成：真实素材五步主链复验（严格口径当前 0/5）、受控 multicam 符号链接迁移、Ubuntu/Mac 模型运行时开箱验证。
-- 新的技术选择必须遵守：Provider 只能产生 evidence/proposal，不能写 Review placement、Editorial Decision 或 Rust Timeline authority。
-
-## 当前基线
-
-- 仓库只维护 `main`；当前远端基线 HEAD `9e7999a24b8d94ab0768ea336e7c9b3875fea3be`（2026-11-15 核对），与 GitHub `origin/main` 一致。
-- 当前基线 CI：CI #117 / run `43766248892` 已成功（Python、Linux、macOS；含 Linux layout runtime 与 synthetic UX gate）。CI 绿色仅证明自动 gate，不能替代下面的真实五步主链。
-- 严格真实可用性口径：最低产品验收当前为 **0/5 完整验收**。云端环境没有真实项目、真实素材盘或可替代 macOS 原生播放器/NLE；云端 Host/Chromium 不足以完成该证据。首个前置是 Muee91/Mac 接通外置 SSD 并启动可达 Host，再按 A/B → C → D → E 顺序留证。
-- Desktop 仍处于 Product Recovery 之后的**可交付化阶段**：代码结构恢复已收口，缺口在发布工程、授权与真实可用性证据（顺序见 `BACKLOG.md` Phase 0/1/2）。
-- 一级工作区固定：`素材 / 剧本 / 时间线 / 审阅`；原则仍是**共享对象，不共享工作流**。
-
-## 2026-11-10 媒体审阅、时间线恢复与探测元数据边界（目标基线已落地）
-
-- **审阅读模型恢复**：Host 侧 review-model 使用跨工作区短 TTL 缓存，并合并同一项目的强制刷新；切换项目或连续刷新时用 load token 丢弃过期响应，避免旧请求覆盖当前画面。
-- **时间线读路径隔离**：Review context 与 assembly proposal 改用 `Promise.allSettled` 独立加载；一侧失败时保留另一侧及已保存 Timeline，并显示可行动的分项错误，而不是清空整个编辑器。
-- **素材扫描失败闭环**：设备绑定提交与 inventory 快照发布分离；快照写失败会删除旧快照并报告“绑定已提交、请重新扫描”，读模型进入 `scan_required`，避免继续展示陈旧连接结果。取消通常保留旧绑定，失败边界已在素材恢复面说明。
-- **媒体探测语义**：ffprobe 失败不再伪造 1 秒时长；clip 记录 `probe_failed`、错误信息及可选 `fps`、`timecode`、`rotation`，无效媒体不会生成假的时间线跨度。新增 metadata/probe failure 定向测试覆盖。
-- **下一步**：在真实素材可用后重跑五步主链（看片、人工决定、组接、外部 NLE 导入），再补完整自动 gate 与真实 codec/A/V 同步证据；签名、公证和模型随包仍未完成。
-
-## 2026-10-27 媒体状态与素材库读路径修复（工作树，已实跑验证）
-
-- **服务端状态接通**：设备媒体 store 以最近一次显式扫描/临时身份确认快照投影 `verified / missing / unknown`，Review read model 消费该状态；普通 GET 只做绑定路径存在性检查，不重新哈希全项目。单条播放仍在 `resolve_from_snapshot` 边界做内容身份校验。
-- **素材库去重**：迁移项目的扫描快照 `M_` 行与旧索引 `MP_` 行在文件名 provisional 身份唯一时合并为一个 canonical 素材行；身份不唯一时保持分离，不做猜测连接。beef 当前 Host 实测 `1502` 行 / `1502` 已入索引，之前的 `3004` 重复投影消失。
-- **前端状态统一**：素材库、Take 卡、Take Inspector、场记 Inspector、Timeline source、canonical `MirrorOrderMediaCard` 共用同一播放资格判定；`missing/unknown` 不再生成或挂载预览 URL，unknown 有独立中性状态样式与文案，missing 指向素材恢复入口。
-- **当前 Host 证据**：自管端口 `8797` 的 ping 身份为 `{"status":"ok","service":"mirrororder-host"}`；真实 beef `review-model` 为 `610` Take / `1533` angle，全部 `missing`（当前终端 `/Volumes` 未挂载 PSSD），`media-inventory` 为 `1502` 行、`1502` `missing`。隔离副本 Host 8801 用一条存在文件和一条不存在文件验证出 `1 verified / 1 missing / 1531 unknown`，inventory 同样保持 `1502` 行；未修改真实项目 JSON。
-- **自动验证**：定向 Python `26` 项通过；`check_python.py` `66` 项通过；`check_fast.py` exit 0（Vitest `79` 文件 / `381` 项、Rust、cargo check）；本轮最终 `check_full.py` exit 0，包含 Python `602` 项、Vitest `79/381`、Timeline Core `15`、Host `33`、前端 build 与 cargo check；`npm run test:ux-real` `9/9`。
-- **真实 UX gate**：`MIRRORORDER_UX_PROJECT_ID=beef npm run check:ux-real` exit 1；shell、剧本 `53` 块、搜索空态、审阅队列 `610` Take 连续切换、素材 `2092` 对象、时间线 `10` 元素均 PASS，唯一 FAIL 为媒体播放（素材未解析）。证据目录：`desktop/artifacts/ux-real/2026-10-27T06-44-23-701Z/`（git-ignored）。
-
-## 2026-10-26 组接 + 导出收缩轮（owner 拍板后执行，已实跑验证）
-
-- **时间线工作区收缩为「组接 + 导出」**：移除帧级精修 UI——Source 面板的入/出点标记与插入/覆盖视频音频动作、Inspector 的「精修与技术操作」块（切分/入出点 ±1f/停用/波纹删除/移动）、Stage 工具条的撤销/重做/保存/标记。保留初始顺片、只读轨道预览（选择 + 播放头）、Source/节目双监看 + JKL + 波形（owner 裁决：监看为组接核对所需，保留）、换镜次与多机位决定（经 command bridge 写 Rust Timeline Core）、交付抽屉升为标题栏主按钮。随删死代码：`timelineAudioEditing.ts`、`buildManualSourceCommand`/`insertCutsExistingClip`、markIn/markOut、undo/redo/checkpoint/split 客户端函数、model 中 sourceIn/sourceDuration/moveStart/插入阻塞推导，及对应孤儿 CSS；`api/timeline.ts` 与 Rust/Python 编辑命令未动（未来模块化剪辑的接口面）。`editorLocalizationContract` 新增"精修不回到时间线工作区"的反向断言。
-- **死 v1 并行导出路径删除**：`timeline_delivery.py` / `timeline_delivery_sync.py` / `timeline_audio_delivery.py`（约 986 行）+ 3 个 v1 专属测试。事实修正：v1 入口确无生产调用方，但其私有 helper 被活链路 `nle_delivery` 引用——已原样提取为 `nle_delivery/delivery_support.py`，活链路四个测试改为从包导入。
-- **文档同步**：五步主链第 5 步改为「组接并导出到外部 NLE 继续剪」（README / IA / BACKLOG）；`app-information-architecture.md` §3.3 时间线改写为组接+导出定位（镜序不承担帧级精剪，交付为主终点动作）。
-- 本轮验证（全部实跑）：`check_python` exit 0；`check_fast` exit 0（含 Rust 持久化契约 + cargo check）；`tsc --noEmit` exit 0；Vitest 75 文件 / 371 项全过（较上轮 -2 文件 -8 项，均为被删 v1/手动编辑行为的专属测试）；`test:ux-real` 9/9。
-- LICENSE（Apache-2.0）与 NOTICE、`pyproject.toml` 真实依赖声明已于 `5f8ed25` 落地，本轮仅确认。
-
-## 2026-10-26 打包验证轮（本地 release 构建全绿，已实跑验证）
-
-- **产物**：`镜序.app`（448MB）+ `镜序_0.1.0_aarch64.dmg`（129MB），本地未签名。App 内嵌 Python Host 起服成功（`--local-only --port 8765`，ping/项目列表实测），桌面进程与 shell 均正常。
-- **runtime staging 补齐**：从 debug 树复用 portable Python（3.11/3.12/3.14 三棵，Phase 1 已知的冗余问题仍在），并用 Homebrew ffmpeg 9.0.2 组装了**自包含 media-tools 树**（27 个 dylib 全部改写为 `@executable_path/../lib` 相对路径 + 重签名，零 build-machine 引用）。
-- **三处打包脚本修复（真实缺陷）**：① stage-runtime 的 4 个 Python 探针（repo import / staged relocation ×2 / gate 内 bundled probe）全部缺 `-B`，导入 numpy/pandas/script_organizer 时把 561 个 `__pycache__` 写进打包资源——正是"打包内容黑名单"闸门设计要抓的东西，本轮 gate 如实拦截并推动修复；② gate 自身探针同样缺 `-B`（gate 一跑就污染被验对象，导致"越验越脏"的假象）；③ Homebrew dylib 只读权限（444）使 tauri build script 报 Permission denied，stager 对 staged tools 统一 chmod 644。修复后：app 内 pyc 0，gate 绿。
-- **如实边界**：签名/公证仍 NOT RUN（需要 owner 证书）；`MIRRORORDER_PORTABLE_PYTHON_ROOT` 等环境变量需在构建命令手工提供（release.yml 脚手架未接）；portable python 三棵树冗余未清。
-
-## 2026-10-26 分辨率扫描期采样（走查清单最后一块数据面，已实跑验证）
-
-- **扫描任务 ffprobe 采样**：`_write_inventory_snapshot` 在扫描任务触碰媒体文件（本就在做哈希）时对每个文件做一次 12s 超时的 `ffprobe stream=width,height`，成功则快照行携带 `width/height`（快照 version 2），失败/无 ffprobe 静默留空——读路径仍零字节读取。单测覆盖采样成功透传与 ffprobe 缺失两条路径。
-- **前端消费**：素材库行名称行与右栏监看标题显示分辨率（≥1920 显示 4K、≥1440 2K、≥1080 1080p、其余原尺寸）；未采样行为空，不冒充。
-- 验证：inventory pytest 9 项全过；`check_python` exit 0；tsc exit 0；Vitest 379 项全过。beef 需重扫描一次（另一台电脑上执行）才能获得分辨率字段——扫描期采样的固有边界。
-
-## 2026-10-26 字号下限专项清偿（157 处 8/9px → 10px，已实跑验证 + 截图验收）
-
-- **全量批改**：19 个 CSS 文件里 47 处 8px + 110 处 9px 全部提升到 10px（历史存量下限），现零残留；design-system-v2 的「10px 为历史存量、不再新增」规则自此全站成立。
-- **验收**：layout-runtime desktop + compact OK（无换行破坏/位置漂移）；Vitest 379 全过；ux-real 合成 9/9；beef 真实项目闸门 6/7 PASS（播放项仍因 SSD 在另一台电脑）+ 截图人工复核（剧本/审阅两屏，分层计数 需关注607≠全部610 已生效可见，布局无挤压）。
-
-## 2026-10-26 四态媒体状态模型·服务端权威字段（owner 拍板先忽略 SSD 后执行，已实跑验证）
-
-- **review-model 每个 angle 的 `playback` 新增 `state`**：`verified`（本机绑定经内容身份校验解析成功，服务端权威声明"可取到字节"）/ `missing`（设备绑定过、本次解析失败——盘离线或文件移动）/ `unknown`（本机从未登记绑定）。`decode` 只由本机播放失败产生（前端 `playbackFailure` 探测），服务端不假装知道——四态口径与 `design-system-v2.md` §6.1 词汇表一一对应。
-- **前端消费**：`ReviewPlayback` 类型升级；机位槽位三态与 Take 汇总/筛选的离线判定改为 `state === "missing"` 优先（`available === false` 保留兼容旧 Host 快照）。五工作区自此共用一套服务端权威状态 + 本机运行时补充的_decode_ 层。
-- 语义边界如实记录：`verified` 只证明绑定路径通过内容校验（可取到字节），不等于本 WebView 可解码；`unknown` 不显示"可用"也不显示"离线"。
-- 验证：review/read-model 相关 pytest 通过；tsc exit 0；Vitest 379 项全过；Host 实测 fixture 项目 angle `state: unknown`（fixture 无设备绑定，语义正确）。
-
-## 2026-10-26 真实项目 P0 闸门首跑（beef，6/7 必需步骤通过）
-
-- `check:ux-real` 首次对真实项目 beef 运行（610 Take 真实规模）：shell 挂载、剧本主画布（53 块）、搜索空态、审阅队列连续换 Take（12 行渲染 / positions 1→2→3）、素材画布（2092 对象）、时间线画布 6 项 PASS；唯一 FAIL 是看片播放——**运行中途外置 SSD 从总线掉落**（先前同会话 `/media/{clip_id}` 实测 206 真实字节；FAIL 后 `diskutil` 已无该物理设备，绑定与确认状态完好，纯物理断连）。段详情抽屉 8s 超时已归因并修复（非慢）：真因是操作者首次引导弹层在干净 profile 上自动展开、恰好盖住闸门要点按的「匹配素材」——fixture 早已设置操作者所以从未触发。修复两处：弹层补外点/Escape 收起并记忆已引导（不能把用户困在弹层里）；闸门 addInitScript 预置操作者与引导标记（模拟回访用户环境）。重跑 beef：抽屉 92ms PASS，其余同前。
-- 证据归档 `desktop/artifacts/ux-real/2026-10-26T06-11-06-512Z/`（git-ignored）。盘稳定连接后重跑同一命令即为完整 PASS 证据；这也意味着 BACKLOG「五步主链真机验收」的真实看片环节已具备执行条件。
-
-## 2026-10-26 beef 索引重注记（owner 项目实测，已实跑验证）
-
-**盘恢复后对齐（同日完成，真实出片）**：素材盘实际是目录树上移了一层（`/Volumes/PSSD 2TB/8.13 牛肉/` → `/Volumes/PSSD 2TB/天价牛肉/8.13 牛肉/`）。走产品内建流程完成重连：`media-scan --replace` 两个新根（两拍摄日 786+716=1502 文件，文件名唯一匹配生成 1502 个 provisional 候选）→ 经 `confirm_provisional` 同 API 逐条确认（1502/1502，0 失败；device-local 确认，不提升为共享身份、不改项目 JSON）。**实测：1533/1533 review angle 可用，`GET /media/{clip_id}` 返回 206 + video/mp4 真实字节；media-status 1502/1502 local_exists、0 待确认。**此前所有“素材离线/播放失败”的真因是盘迁移导致绑定失效，现已按产品语义恢复。素材库行 join 已解锁（同日）：`inventory_payload` 在直接 ID 未命中时按 provisional 文件名 ID 二次查找（与扫描候选同一启发式，纯字符串哈希、读路径零字节读取），迁移项目行级 clip_id/时长/Take 连接恢复；beef 实测 3004/3004 行带 clip_id+时长、3004/3004 连上 Take。索引 media_path 仍是 FCPXML 旧路径（exists=false），re-link 写路径（绑定回写索引）留作后续以恢复 exists/ASR/Waveform 语义。
-
-
-- **执行**：备份 `projects/beef/output` 四个 JSON 后，以确定性核心 `material_index.analyze` 重跑 beef（FCPXML 项目；不走完整 analysis_runtime 以避免 ASR/identity 模型副作用）。1502 条 clip 全部获得 `media_id`；素材盘离线故为 `MP_` 路径稳定 ID（`media_identity` 的规定退化，不是错误）。
-- **连续性验证**：clip_id 序列 1502/1502 逐条一致、group_id 序列 610/610 一致、review-model 610 Take 完好——`_reconcile_previous_clip_identity` 的既有保障实测成立。
-- **行侧连接仍未解锁（按身份纪律，不做假连接）**：扫描快照行是盘在线时的字节哈希 `M_` ID，与本次 `MP_` 不同空间。盘恢复后任一显式动作即可对齐：在线重分析（索引变回 `M_` 匹配快照）或重扫描（快照变 `MP_` 匹配索引）。不在读路径上用路径字符串伪造内容身份连接。
-- 备份保留在 `/tmp/beef-output-backup-20261026/`（本机临时目录，不入库）。
-
-## 2026-10-26 素材库行决策字段（切片 5 服务端前置项落地，已实跑验证）
-
-- **`media_inventory.v1` items 新增 `duration_seconds`**：直接投影 material_index 行已有的扫描期秒数（含 groups members 合并、非法/非正值归一为 null），读路径仍不碰媒体（新增单测 + 既有“读路径不枚举不哈希”红线测试保持通过）。
-- **前端接线**：行名称块显示时长（60s 以上 mm:ss）、右栏监看标题带时长；新增 Take 关联小字——review angle 按 media_id/clip_id 双键注册、行侧双键回退连接（与 playbackIndex 同思路）。
-- **真实载荷验证**（fixture 项目 project，Host 实测）：1502/1502 行投影出时长（如 28.8s）、抽样 400/400 行成功连接 Take 标签。
-- **如实边界**：beef 真实项目的 material_index 与 review angle 均无 media_id 注记（旧索引形态），行与 angle 分属两个 ID 空间，时长与 Take 关联在该项目上暂不可投影——需 identity 运行时重注记或重扫描后生效；这正是走查时素材库预览全撞墙的同一根因。分辨率字段需扫描期 ffprobe 采样，未在本切片实现。
-- 验证：`check_python` exit 0（inventory 单测 6 项）；tsc exit 0；Vitest 77 文件 / 379 项全过。
-
-## 2026-10-26 媒体词汇收敛与机位槽位三态（切片 1 收尾 + 修复顺序④⑤，已实跑验证）
-
-- **失败文案全面收敛**：场记（GoldenSlate）与素材库右栏的播放失败详情改用共享 `playbackFailure` 分类器（缺失/解码/连接），与 Take 详情、时间线双监看同一词汇；标题保留各面锚点（ux-real 门与安全契约断言不变，契约同步到新 onError 形态）。至此五个面的媒体失败提示共享一套原因与指引。
-- **机位槽位三态**：Take 列表行与完整卡片的机位槽位区分 `无素材`（该机位未拍摄）/ `素材离线`（有素材但服务端判定不可用，警示色 + “离” 标记）/ 可用（含部分离线标注）。走查中“空白占位分不清没拍还是出问题”的问题消除。`takeSlotAvailability` 导出共享。
-- **状态词汇表与字号下限入 authority**（`design-system-v2.md` §5/§6.1）：需关注三层（阻断/证据过期/待关注）与媒体四口径（无素材/素材离线/本机播放失败×三因/声明可用未验证）成为唯一用词，禁止再造同义分叉；`10px` 降为历史存量、新代码与被触碰表面 11px 起、辅助灰字对比度 AA。
-- **量化债**：低于 10px 存量下限的字号仍有 157 处（8/9px，分布 20 个 CSS 文件）——盲扫有挤爆紧凑组件风险，按“随表面触碰迁移到 11px”执行，另设带截图验收的专项清偿。素材库列表行决策字段（时长/分辨率/场景/Take 关联）受 `MediaInventoryItem` 投影限制（仅 6 字段），补字段需服务端扩展投影，记为服务端前置项。
-- 验证：tsc exit 0；Vitest 77 文件 / 379 项全过；`test:ux-real` 9/9；`test:layout-runtime` desktop + compact OK。
-
-## 2026-10-26 媒体失败态补齐（恢复切片 1 的 UI 侧，已实跑验证）
-
-- **共享失败分类器 `media/playbackFailure.ts`**：`video.error` 分不清 HTTP 404（素材缺失）与解码失败（Chromium 都报 code 4），报错后用一次 1 字节 Range 探测把失败分为 缺失 / 解码失败 / 连接失败 三种可行动原因（仅在 video 报错后调用，不进正常读路径）。行为单测 3 组覆盖 206/404/403/410/500/网络异常。
-- **EditorMonitors 双监看失败态（此前完全无提示黑屏）**：素材/节目监看的 `<video>` 报错后显示失败卡——分类标题、行动指引、当前素材名、重试、以及「到素材·恢复」入口（`onOpenRepair` 经 TimelineWorkbench/View/SourcePanel 从 ProjectWorkbench 的 `navigate("media-binding")` 接入）。素材切换即复位失败态，重新挂载后不残留旧失败。
-- **Take 详情（含审阅 Viewer）接分类详情**：失败卡标题保持「素材无法读取」（ux-real 门的 404 断言锚点），详情行改为分类结果——404 给出挂载指引、可达但解码失败给出编码指引、Host 不可达给出服务指引。
-- 遗留（并入切片 1 后续）：场记（GoldenSlate）与素材库右栏的失败文案收敛到共享词汇；「未知/已验证可用/缺失/解码失败」四态在五工作区的完整统一投影。
-- 验证：tsc exit 0；Vitest 77 文件 / 379 项全过（新增分类器 3 项）；`test:ux-real` 9/9；`test:layout-runtime` desktop + compact OK。
-
-## 2026-10-26 UI 计数口径统一（修复顺序②，已实跑验证）
-
-- **审阅「需关注」分层**：`reviewTakeAttention` 投影新增 `tier`（blocking=error 级 / stale=证据过期 / watch=其余），审阅头部条件显示 阻断/证据过期 计数、筛选按钮 aria 读出三层分布。fixture 数据（668 Take 全部 warning、668 条「自动决策落后」= 项目级过期）此前让 全部=未决定=需关注 三计数相同；分层后该状态可解释为「证据过期 668」。
-- **Take 汇总双层口径**：服务端 `available=false`（改名「素材离线」，与筛选 chip 同词）与本机运行时加载失败（Take 详情 video onError 上抛 → 新增「本机播放失败 N」计数）分开呈现；实测 fixture `available=false` 为 0 而详情 404 报错，两层不再互相冒充。
-- **素材库过期清单标注**：`scan_required` 时汇总条降透明度并加「上次清单 · 当前需要重新扫描」整行标签，数字不再以当前状态呈现（修复「尚未扫描 vs 1502 可索引」同屏矛盾）。
-- 验证：tsc exit 0；Vitest 76 文件 / 376 项全过（新增 reviewAttentionTier 行为测试 4 项 + 契约分层断言）；`test:ux-real` 9/9。
-- **操作者首次引导**：未设置且未引导过时，`CurrentOperatorControl` 首次挂载自动弹出一次，可“暂不设置”（记忆在 device-local）；未设置 chip 文案改为行动性的「设置操作者」并在弹层说明后果。验证同轮：tsc / Vitest 376 / ux-real 9/9。
-- **已知 CI 抖动模式（记录，不改门）**：run 40231676152 的 ux-real 门报「媒体解码错误 4」——无头 Chromium 在 CI 负载下偶发无法解码合成 WebM；本地 9/9 无法复现，重跑同 job 即绿。与 2026-10-26 早前修掉的采样竞态（原子化已修）是两种不同失败：本例是环境解码，不弱化门的红线，仅记录观察频率。
-
-## 2026-10-26 结构收敛轮（已实跑验证）
-
-本轮目标：全栈子功能核查 + 收敛无序扩张，不新增产品面、不做 package migration。
-
-已落地并验证的收敛：
-
-- **时间线面板链类型断裂清零**：`TimelineWorkbenchView / StagePanel / SourcePanel / InspectorPanel / SuggestionsPanel / InitialAssembly` 的 6 处 `props: { [key: string]: any }` 全部改为从三个 hook 的真实返回类型（`timelineWorkbenchProps.ts` 组合的 `Pick`）推导；顺带删除面板内可推导的 `(item: any)/(clip: any)/(track: any)/(angle: any)/(suggestion: any)/(issue: any)`，并为 Stage/Source/Inspector 补上 `snapshot/sequence` 空值守卫——此前 any 掩盖了“仅在非空时挂载”这一契约。`grep "\[key: string\]: any" desktop/src` 现为 0 命中。
-- **errorMessage 17 处重复收敛**：16 份逐字相同的本地实现 + Delivery 的子集实现统一为 `api/host.ts` 的单一导出（与 `HostConnectionError` 同址）；editor 域 `timelineWorkbenchSupport.errorMessage` 因行为不同（解析 `{message, issues[]}` 载荷）保留不动。
-- **页面 canonicalize 单一 owner**：`ProjectWorkbench.safeProductionPage` 不再复制旧页面映射，改委托 `resumeState.canonicalProductionPage`；`App.tsx` 页面标题表删除 6 条永不可达的旧键（attention/overview/coverage/rough-cut/assembly/delivery）。`swiftGoldenParity` 的源码文本断言同步改为断言“委托存在 + 映射仍在 resumeState”，行为红线由 `resumeState.editorMigration.test.ts` 继续以真实调用覆盖。
-- **删除一处无引用脚本**：`desktop/scripts/ux-probe.mjs`（dev-only 一次性探针，不在任何 npm script）。
-- **拒绝两笔误删**：`web/automation.js` 是被 3 个契约测试锁定的注入桥（有意不进 bootstrap），不是死代码。`timeline_delivery_sync.py`/`timeline_audio_delivery.py` 初判为“已建未接线能力”**有误**（2026-10-26 深挖修正）：它们与 `timeline_delivery.py` v1（同样零引用，552 行）同属被 `nle_delivery` IR 路径取代的死并行导出实现；**独立音轨与多机位同步导出在活链路已完整实现**（IR 每角度 sync 帧 → FCPXML connected audio / mcAngled、Premiere typed range 换算，Rust 模型携带并校验同步帧）。裁决记录见 BACKLOG。
-- **无调用方端点复核**：`POST /api/v1/agent-tokens` 有 `_local_only()` 保护且与 CLI `agent-token-create` 对等，保留；`workspace-database`、`intelligence-settings` 仅测试使用，维持现状并记录。
-
-本轮验证（全部实跑）：
-
-- `python3 scripts/check_python.py` exit 0；`python3 scripts/check_fast.py` exit 0；`python3 scripts/check_full.py` exit 0（含 614 Python / 379 Vitest / tsc / build / cargo；终态复跑再次 exit 0）。
-- 改动后复跑：`npx tsc --noEmit` exit 0；`npx vitest run` 77 文件 / 379 项全过；`npm run build` 成功；`test:layout-runtime` 桌面 + compact 视口 OK；`check:ui-authority` OK；`check:baseline` OK；`test:ux-real` 9/9（连续 5 次）。
-- 三个源码文本契约（`swiftGoldenParity.test.ts`、`test_product_surface_contract.py`、`test_production_review_boundary.py`）中锁定 workbench 内联归并映射的断言，已同步改为断言“workbench 委托 `canonicalProductionPage` + 映射仍在 resumeState”；归并行为本身由 `resumeState.editorMigration.test.ts` 以真实调用继续覆盖。
-- **抖动已修**：`test:ux-real` 的「media 404 remains a playback failure」曾约 5 次运行失败 1 次——`verifyReviewPlayback` 在等待命中后二次取值，与 React 在媒体错误后的 remount 竞态，404 被读成“duration 无效”。已改为 `waitForFunction` 命中轮次内原子采样载荷；修复后连续 5 次运行 9/9。
-- 用户角度读路径抽查：Host（`mirrororder-host`）loopback 启动，21 个只读探针全 200（项目/剧本/groups/review/review-model/editorial/script-supervisor/media-binding/media-inventory/coverage/assembly-timeline/assistant/tasks/device-tasks/desktop-status/desktop-local-runtime/desktop-collaboration/settings/semantic-search 等）。实测单项目载荷：`review-model` 4.3 MB、`groups` 1.0 MB、`media-binding` 508 KB、`tasks` 406 KB——为 BACKLOG“重复重拉”债提供了量化基线。未做任何写入。
-
-## 审阅主链恢复（当前事实）
-
-- **历史“队列为空”已归因于闸门选择器误报**：canonical compact row 是 `article.mo-take-list-row[data-ui-authority="take-compact"]`，旧闸门未识别。当前 workspace 的真实 beef 项目有 `610` 个 Take，默认筛选为“全部”，队列可连续切换 `1→2→3`；并非 Review read model 没有 Take。
-- `check:ux-real` 使用 `MIRRORORDER_UX_PROJECT_ID` 选择项目，fixture 从 Host 读取项目摘要；媒体 metadata 与播放时间推进是单独的**必需**项，缺媒体不能被队列通过掩盖。2026-10-27 beef 运行中队列/导航 PASS，媒体播放 FAIL，退出码为 1，失败原因是本终端未解析到素材。
-- 人工 placement、Final Editorial Decision、Rust Timeline 写入/重启恢复、外部 NLE 实际导入和打包应用验收仍为 **NOT RUN**；本轮没有改写真实项目 authority、项目 JSON 或共享 artifact。
-- `npm run test:ux-real`：9 项真实 ReviewWorkspace 行为测试通过，使用最小合成 Take/WebM，覆盖空队列、无效 Next、媒体 404、metadata 后播放停滞和播放启动超时；旧选择器已实测让正向用例失败。CI 已配置运行这组回归，远端执行结果仍是 NOT RUN。
-- 本轮独立验证：`python3 scripts/check_full.py` exit 0，包含 602 项 Python、79 文件 / 381 项 Vitest、15 项 Timeline Core、33 项 Host，以及 TypeScript、前端 build、cargo check；`check_python.py` `66` 项与 `check_fast.py` 均再次通过。打包签名、公证、真实媒体、NLE 与原生五步验收仍为 **NOT RUN**。
-- 审阅 Node 回归与 layout 并行运行曾因共享 Vite 预构建缓存而挂载超时，已受控复现 `504 Outdated Optimize Dep`；回归脚本隔离临时 cacheDir 后，两组再次并行均 exit 0，审阅 9/9 通过。全量 source gate 是缓存隔离前执行，修正后验证限于这两组。
-
-## 子功能审计（当前事实）
-
-- 真实 React App + 本机 Host 下检查两个项目，覆盖 45 项子能力及 22 个界面步骤；35 个 GET 探针和 6 个交付读取均 HTTP 200，只证明读取成功。未执行真实项目的创意决定、重绑、删除或导出写入，也未主动调用外部 AI 发送项目内容。
-- **媒体就绪状态已收口**：服务端四态由设备快照投影，素材列表、Take、场记、审阅和 Timeline source 不再把 URL 存在视作可播放；`missing/unknown` 不挂载预览，单条播放仍做内容身份校验。真实 beef 当前仍是 `1502/1502` missing，故 native playback 证据仍未完成。
-- **播放失败恢复已具备应用级状态**：EditorMonitors、Take Inspector、Golden Slate 与素材库右栏均有失败分类、重试或素材恢复入口；本轮只验证了状态投影和 UI gate，真实 codec/A/V 同步仍 NOT RUN。
-- **摘要与状态存在口径冲突**：项目侧栏与卡片“需关注”分别为 68/668、46/607；历史中断任务缺少 completed_at 时，耗时仍以当前时间增长；团队入口的“不能改剧本归集”与受限 reviewer placement contract/实现不一致。
-- **读路径隐含重工作已收口一处**：`GET media-binding` 现在只消费最近扫描/确认快照和 `is_file()`，不再全项目重算内容指纹；播放边界仍对单条素材做身份校验。大项目冷缓存 I/O 与 durable scan 取消传播仍需真实量测。
-- 两项目 assembly 均 `needs_review`、timebase 为空。原生 Timeline UI、真实音画/同步/ASR、外部 AI 质量、双机与 NLE 实际导入均 **NOT RUN**；不能把浏览器 native 限制当作已确认的产品缺陷，也不能把 source gate 通过当作主链完成。
-
-以下修复轮记录不替代上述当前验证范围。
-
-## 2026-10-25 修复轮（已复核，非自述）
-
-审计后落地的 6 个提交（`a44327b..8e26b0a`）逐条独立验证，结论如下。
-
-真实修复：
-
-- **局域网无鉴权写人工 authority 已收口**：`cli.py` 的 `serve`/`gateway` `--host` 默认改 `127.0.0.1`，启动脚本同步收紧。实测默认参数启动后 `lsof` 只有 `127.0.0.1` 监听、局域网 IP 连接被拒；`_require_review_access` 从空函数变为非回环来源 403，网关子类改为配对 session + `reviewer` 角色；新增 `tests/test_web_security_boundary.py` 为行为测试（含 IPv4-mapped 回环判定、配对 429 节流、64 bit 配对码）。
-- **CSP** 从 `null` 改为默认拒绝（`object-src 'none'`、`base-uri 'self'`、`form-action 'self'`）。
-- **npm 供应链**：`desktop/package-lock.json` 入库，201 个 package 缺 integrity 数为 0；CI 改 `npm ci`；可选依赖钉版本。
-- **CSS canonical 所有权**：六个全局层中针对 `.mo-media-card / .take-card / .take-list-row / .script-block / .slate-row` 的选择器命中数实测为 0，对象自有样式表建立。
-- **假视口门**：`check-layout-runtime.mjs` 改为真实越界断言（`innerWidth` 漂移检查、`documentWidth <= innerWidth`、9 个盒子 `getBoundingClientRect`）；compact 视口 1024→1180 的依据核对为真（`tauri.conf.json:19` 与 `styles.css:12` 均为 1180）。
-- **死代码与版本链**：`legacy.py`/`multicam.py`/`html_renderer.py` 删除；新增 AST 级版本族私有实现边界守卫。
-- **一处测试实质改善**：`test_automation_creative_boundary.py` 从源码 grep 重写为真实调用 `resolve_project`/`ReviewStore`/`EditorialStore` 的行为断言。
-- **第一份用户文档** `docs/user-guide.md`：抽查其界面承诺（`Shift+F10`/`ContextMenu`、工作区重新定位、状态中心）均在源码中存在。
-
-仍不完整（截至 2026-10-25 的历史快照；当前基线后续状态以本文顶部为准，不要把历史快照当作当前结论）：
-
-- 显式 `--host 0.0.0.0` 时**读接口与素材 range 下载仍无鉴权**（实测可取回 workspace 数据）。
-- `release_gates` 的强制逻辑未变：`check-baseline.mjs:33-35` 仍只断言字符串等于 `"required"`；18 个门中 9 个 macOS/Windows 原生门零实现。
-- `Cargo.lock` 仍未入库（排除依据还是本地 `.git/info/exclude`）；`pyproject.toml` 仍无 `dependencies`。
-- 无 LICENSE、无 CHANGELOG、无 updater、无 tag。
-- `stage-runtime.mjs` / `verify-macos-bundle.mjs` / `host.rs` 本轮未触及：打包内容黑名单、`.pyc` 写回 bundle、`base_executable` 指回构建机、三棵 Python 树冗余全部仍在。
-- Phase 2 的体验项未动：review-model 无共享缓存、项目页逐项全量拉取、`EditorMonitors` 无播放失败态、时间线区 3 处 `{[key: string]: any}`。
-
-## 自动 gate 状态（2026-10-25 本机实跑）
-
-| 命令 | 结果 |
-|---|---|
-| `python3 scripts/check_fast.py` | exit 0 |
-| `python3 scripts/check_full.py` | exit 0 |
-| `python3 -m pytest -q` | 614 passed（基线 587 + 新增 27），142.53s；其中单用例 `test_core.py:606` 占 134.33s |
-| `npx vitest run` | 77 files / 373 passed |
-| `npx tsc --noEmit` | exit 0 |
-| `vite build` | 成功；JS 598.73 kB、CSS 296 kB（Rollup 500 kB 提示为既有非阻塞告警） |
-| `cargo test`（timeline-core / host） | 15 passed / 33 passed |
-| `python3 scripts/check_python.py` | 78 passed（注意：它只跑 14 个 contract 文件，不是全量） |
-| `./script-organizer serve --help` | exit 0（README 记录的启动方式已可用） |
-
-执行环境为 macOS arm64 + Python 3.14 + Node 22/24；**CI 目标为 Python 3.11**，两者在未声明的可选依赖上走不同分支，本表绿灯不等价于 CI 绿灯。
-
-## NOT RUN（不得写成 PASS）
-
-- `tauri build` 的 macOS/Windows 产物、签名与公证；`.dmg` 完整性；Windows 全平台分支（从未编译）。
-- 在制真实项目（本机 `projects/` 下，不入库）五步主链真机验收；真实媒体播放、多机位同步精度、Final Cut / Premiere 导入。
-- 远端 CI 在当前 HEAD 上的运行；Team Gateway 双机配对与 30 秒真实冷却；CSP 真机效果；CSS 迁移的像素级对比。
-- 大规模 Take（数百到数千）下的前端性能与 Timeline 内存曲线。
-
-## 本轮仓库整理（同日）
-
-- 删除可再生产物：541 个 `__pycache__`、4 个 `.DS_Store`、create-dmg 中断残留的 478 MB `rw.*.dmg`、空壳目录 `.v2c`/`out`；按 owner 决定执行 `cargo clean`（`desktop/src-tauri/target` + `crates/timeline-core/target`），仓库体积 6.1 GB → 754 MB。冷重建代价实测为 `cargo check` 33.7 秒。
-- **保留**：`projects/`（真实项目数据，仍被 gitignore）、`.workspace/`（运行态与各轮修复的过程记录）、`desktop/src-tauri/resources/mirrororder-*`（480 MB 运行时暂存，`cargo clean` 不触及，重新打包仍可复用）。
-- `.gitignore` 补齐外部工具留下的未跟踪杂物（`.zwork/`、`.video_agent/`、`.v2c/`、`out/`）。
-- 一次性审计/验证报告不再进源码 Git：`docs/verification/` 已移除，历史记录移到 `.workspace/audits/2026-10-25/`；`docs/README.md` §6 与 `docs/architecture/repository-layout.md` 之间「是否允许 verification/」的相反规则已统一为前者。
-- 文档命令修正：`README.md` 与 `AGENTS.md` 的 gate 命令 `python` → `python3`（本机不存在 `python`，原命令实测 exit 127）；`desktop/README.md` 新增打包 runtime staging 所需变量与已知良好来源。
+只有实际完成的目标 commit/CI 和真实素材/NLE 操作才能更新为 PASS。下一步只看 [`BACKLOG.md`](./BACKLOG.md)。

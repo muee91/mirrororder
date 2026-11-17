@@ -1,99 +1,27 @@
 # 镜序（MirrorOrder）
 
-镜序是面向短剧与多机位后期整理的本地优先 Production 工具。
+镜序是可在不同短剧项目反复使用的多机位后期准备与检索工具。
 
-它的核心目标不是把所有能力堆进一个 App，而是把真实后期最费时间的一条链做短、做清楚、做可靠：
-
-```text
-混乱的原始素材 + 剧本 + 可选场记
-        ↓
-识别真实拍摄 Take 与多机位关系
-        ↓
-记录 / 修正拍摄事实
-        ↓
-把 Take 对到正确剧本位置
-        ↓
-看片并做人工判断
-        ↓
-形成可剪的 Timeline 结构
-        ↓
-进入 FCP / Premiere / Resolve 或完成交付
-```
-
-产品定义与信息架构以 [`docs/app-information-architecture.md`](docs/app-information-architecture.md) 为 authority；文档索引见 [`docs/README.md`](docs/README.md)。
-
-## 当前技术基线
-
-仓库当前只维护 `main` 作为开发与集成线。Desktop 位于 `desktop/`：
-
-- React / TypeScript：Production UI；
-- Tauri 2 / Rust：桌面生命周期与窄平台适配；
-- Rust Timeline Core：authoritative local timeline edit state；
-- Python MirrorOrder Core：Workspace/Project、Review、Slate、Identity、media identity/binding、Delivery/FCPXML 等业务 authority；
-- Team Web：独立轻量 Review / Collaboration surface。
-
-AI 权限链始终是：
+**先对齐音视频并分发多轨同步母版和可切机位的剪辑工程；再后台关联场记、剧本、实际对白、演员与镜头语义，供剪辑中随时检索。**
 
 ```text
-evidence → proposal → human confirmation → authority
+原始视频 + 独立录音
+→ 智能多机位同步 + 人工核对异常
+→ 多轨同步母版 / 各剪辑软件多机位工程
+→ 剪辑师开工，同时镜序后台分析与归集素材
+→ 按实际拍摄顺序、剧本顺序、演员、对白定位视频和录音
 ```
 
-React、AI、Team Web 都不能成为第二套 Review / Editorial / Timeline truth。
+当前产品唯一权威是 [`docs/product/REBUILD_2026-11-17.md`](docs/product/REBUILD_2026-11-17.md)。**旧五步 Product Recovery 不再决定开发优先级。** 已有 `素材 / 剧本 / 时间线 / 审阅` 四域只是代码组织方式，不是新项目的四个强制步骤。
 
-## 产品入口
+## 技术组成与验收
 
-```text
-MirrorOrder Desktop = Production
-Team Web            = Review / Collaboration
-```
+- React / TypeScript Desktop Production UI。
+- Tauri 2 / Rust 平台层 + Rust Timeline Core。
+- Python Core：媒体身份、同步、Slate、Review、Identity、ASR、NLE 交付。
+- Team Web 是独立协作表面。AI 只提供证据/候选，不得静默修改人工事实和已分发同步母版。
 
-Desktop 项目内只保留四个一级工作区：
-
-```text
-素材 / 剧本 / 时间线 / 审阅
-```
-
-它们分别回答：
-
-- **素材**：我拿到了什么？实际拍了什么？
-- **剧本**：这些 Take 对应故事哪里？哪里缺失或冲突？
-- **时间线**：当前可剪结构和成片结构是什么？
-- **审阅**：哪些内容需要我看片并作人工决定？
-
-场记 / 素材库 / Take / 人物属于素材域内的 view / task；Coverage 是剧本 projection；Rough Cut / Assembly / AI editing 是 Timeline proposal；“需关注”是审阅 filter。它们不建立新的一级工作台。
-
-原始素材目录项目首次进入优先打开 **同步与交付**，先完成多机位同步并给剪辑师提供工程；同步任务未完成时仍允许检查素材清单和本机素材。已有项目恢复之前的 Production 上下文，其它类型的新项目默认打开 **素材 → 场记**。状态中心、团队审阅和设置属于全局工具；`⌘K / Ctrl+K` 是项目搜索入口，小镜是 contextual drawer。
-
-## 核心语义边界
-
-```text
-拍摄现场发生了什么？   = Script Supervisor / Slate fact
-Take 对应剧本哪里？    = Review placement / mapping
-Take 最后剪不剪？      = Editorial Decision
-最终剪辑结构是什么？   = Rust Timeline authority
-```
-
-这些 authority 可以互相投影证据，但不能静默互相改写。
-
-Desktop UI 的长期实现原则是：
-
-> **共享对象，不共享工作流。**
-
-`TakeCard / TakeListRow`、`MediaCard`、`ScriptBlock` 等 canonical renderer 可以跨工作区复用；素材、剧本、时间线、审阅必须分别拥有自己的 orchestration、主动作和写权限。禁止再用一个大型 `surface/mode` Workbench 同时承担多个一级工作区。
-
-## 当前 Product Recovery 验收
-
-真实项目上以下五件事必须顺畅走通，才算恢复“能用”：
-
-1. 找到一个实际 Take；
-2. 看懂它的拍摄事实、机位和当前归属；
-3. 把它修正到正确剧本位置；
-4. 看片并完成需要的人工决定；
-5. 把需要的素材 / 决定组接并导出到外部 NLE 继续剪。
-
-历史 Swift V1 不是实现或视觉 authority，只作为最低可用性回归基线：新版核心任务不能比它更难理解、更绕或更容易丢失当前对象。
-
-当前恢复计划见 [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md)，当前事实与 CI 状态见 [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)。
+目标剪辑软件是 DaVinci Resolve、Premiere Pro、Final Cut Pro 和国内剪映专业版（Windows/macOS）。XML 可导入不代表原生多机位可切换；四软件均须实机验收。当前能力与缺口见 [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)。
 
 ## 快速开发
 
@@ -157,15 +85,15 @@ media_id = 与设备路径无关的物理媒体身份
 
 ## 关键文档
 
-- [`docs/app-information-architecture.md`](docs/app-information-architecture.md) — 产品定义 + 当前 IA authority。
-- [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md) — 当前 main / CI / Product Recovery 状态。
-- [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md) — 当前 P0 执行计划。
-- [`docs/engineering/INVARIANTS.md`](docs/engineering/INVARIANTS.md) — 长期工程硬约束。
-- [`docs/ux-principles.md`](docs/ux-principles.md) — UX 纪律。
-- [`docs/design-system-v2.md`](docs/design-system-v2.md) — 设计与 canonical object authority。
-- [`docs/README.md`](docs/README.md) — 其余领域/架构文档索引。
-- [`AGENTS.md`](AGENTS.md) — Agent 接手约束。
-- [`desktop/README.md`](desktop/README.md) — Desktop 工程入口。
+- [`docs/product/REBUILD_2026-11-17.md`](docs/product/REBUILD_2026-11-17.md)：唯一产品定义。
+- [`docs/engineering/STATUS.md`](docs/engineering/STATUS.md)：当前已验证状态。
+- [`docs/engineering/BACKLOG.md`](docs/engineering/BACKLOG.md)：唯一执行顺序。
+- [`docs/engineering/INVARIANTS.md`](docs/engineering/INVARIANTS.md)：硬约束。
+- [`docs/README.md`](docs/README.md)：领域/架构索引。
+- [`docs/architecture/repository-layout.md`](docs/architecture/repository-layout.md)：源码与本机数据。
+- [`docs/architecture/sync-model.md`](docs/architecture/sync-model.md)：跨机媒体身份与路径。
+- [`AGENTS.md`](AGENTS.md)：Agent 接手约束。
+- [`desktop/README.md`](desktop/README.md)：Desktop 工程入口。
 
 ## 许可
 
