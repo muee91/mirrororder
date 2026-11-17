@@ -20,6 +20,7 @@ Python MirrorOrder Core + Rust Timeline Core
 - Python Core 负责项目、Review、Slate、Identity、Assistant、媒体身份和 FCPXML delivery 语义。
 - Rust Timeline Core 负责 authoritative local timeline edit state。
 - Production Host / Team Gateway 由 Desktop 统一管理：启动时只回收同一工作区、同一配置留下的旧镜序服务；任意其它监听者仍 fail closed。Tauri 将父进程标识传给 Python 服务，父进程异常消失时服务自终止，避免应用替换或崩溃留下固定端口孤儿进程。
+- macOS / POSIX 的本地视觉模型通过 `local_models.supervisor` 启动；守护进程只拥有本次创建的模型进程，Host 正常停止或被强制结束时均回收模型，并阻止 Host 消失后的延迟启动。不能只依赖 Python `atexit`，因为 Host 被强制结束时不会执行它。Windows 启动路径保持独立，不能用本机 POSIX 验证代替 Windows 生命周期验收。
 
 ## 2. Team Web 独立
 

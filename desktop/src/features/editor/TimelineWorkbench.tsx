@@ -6,6 +6,7 @@ import { TimelineWorkbenchView } from "./TimelineWorkbenchView";
 import { useTimelineWorkbenchModel } from "./useTimelineWorkbenchModel";
 import { useTimelineAuthorityActions } from "./useTimelineAuthorityActions";
 import { useTimelineSourceActions } from "./useTimelineSourceActions";
+import type { MulticamSyncTimeline } from "../../api/syncTimeline";
 import "./editor-productization.css";
 import "./timeline.css";
 
@@ -16,6 +17,8 @@ interface Props {
   deliveryRequestNonce?: number;
   onSelectionChange?: (groupId: string | null, clipId: string | null, timelineClipId: string | null) => void;
   onOpenRepair?: (clipId: string) => void;
+  syncTimeline?: MulticamSyncTimeline;
+  onMulticamSync?: () => void;
 }
 
 export function TimelineWorkbench({
@@ -25,8 +28,10 @@ export function TimelineWorkbench({
   deliveryRequestNonce = 0,
   onSelectionChange,
   onOpenRepair,
+  syncTimeline,
+  onMulticamSync,
 }: Props) {
-  const model = useTimelineWorkbenchModel(baseUrl, projectId);
+  const model = useTimelineWorkbenchModel(baseUrl, projectId, syncTimeline?.ready ?? true);
   const timelineActions = useTimelineAuthorityActions(model);
   const sourceActions = useTimelineSourceActions(model, timelineActions.apply);
   const appliedFocusNonce = useRef(0);
@@ -97,6 +102,8 @@ export function TimelineWorkbench({
         {...model}
         {...timelineActions}
         {...sourceActions}
+        syncTimeline={syncTimeline}
+        onMulticamSync={onMulticamSync}
         focusIntent={focusIntent}
         focusLabel={focusLabel}
         onOpenDelivery={() => setDeliveryOpen(true)}

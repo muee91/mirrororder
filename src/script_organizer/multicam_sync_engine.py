@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from string import ascii_uppercase
 from threading import Thread
 from time import monotonic
 from typing import Any, Callable
@@ -199,13 +200,19 @@ def _run(
     reader = Thread(target=read_output, daemon=True, name=f"multicam-output-{process.pid}")
     reader.start()
     deadline = monotonic() + max(0.1, float(timeout))
+    next_cancel_check = 0.0
     reader_done = False
     try:
         while True:
-            if cancel_requested is not None and cancel_requested():
-                _terminate_process_tree(process)
-                raise ResourceCancelled(f"多机位同步已取消 · {script}")
-            remaining = deadline - monotonic()
+            now = monotonic()
+            if cancel_requested is not None and now >= next_cancel_check:
+                # The callback reads durable task state. A verbose validator
+                # must not turn each output line into a whole-file disk read.
+                next_cancel_check = now + 0.25
+                if cancel_requested():
+                    _terminate_process_tree(process)
+                    raise ResourceCancelled(f"多机位同步已取消 · {script}")
+            remaining = deadline - now
             if remaining <= 0:
                 _terminate_process_tree(process)
                 raise subprocess.TimeoutExpired(command, timeout)
@@ -251,6 +258,16 @@ def _days_from_index(work: Path) -> list[str]:
     if not days:
         raise RuntimeError("同步索引没有发现拍摄天/素材组")
     return days
+
+
+def _camera_counts_from_index(work: Path) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    with (work / "index.tsv").open(encoding="utf-8", newline="") as handle:
+        for row in csv.reader(handle, delimiter="\t"):
+            if len(row) >= 5:
+                label = row[2].strip() or "?"
+                counts[label] = counts.get(label, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (item[0] == "?", item[0])))
 
 
 def _has_media(path: Path) -> bool:
@@ -599,6 +616,10 @@ def run_multicam_sync(
     update_progress(2, 2)
     check_cancelled()
     days = _days_from_index(work)
+    camera_counts = _camera_counts_from_index(work)
+    emit("已识别机位：" + "、".join(f"{label} ({count})" for label, count in camera_counts.items() if label != "?"))
+    if camera_counts.get("?"):
+        emit(f"另有 {camera_counts['?']} 条视频未识别机位，单独显示在未分类轨道，不归入 A 机")
     total_steps = 2 + len(days) * 3 + 3
     update_progress(2, total_steps)
     positions = []
@@ -658,20 +679,20 @@ def run_multicam_sync(
 
     if (script_dir / "build_capcut_draft_31.py").is_file():
         try:
-            emit("生成剪映原生 3+1 多机位草稿")
+            emit("生成剪映原生多机位草稿")
             write_builder_config("synchronized.fcpxml")
             run_stage("build_capcut_draft_31.py", [])
             draft_path = xml_delivery / f"{config.name}_音频同步多机位_capcut_draft"
             if draft_path.is_dir():
                 capcut_draft = str(draft_path)
-                emit("校验剪映 3+1 草稿结构")
+                emit("校验剪映多机位草稿结构")
                 run_stage("validate_capcut_draft.py", [str(draft_path), "--mode=raw"])
                 capcut_draft_validation = "passed"
         except ResourceCancelled:
             raise
         except Exception as error:
             capcut_draft_validation = f"failed: {error}"
-            emit(f"剪映 3+1 草稿可选生成或校验失败：{error}")
+            emit(f"剪映多机位草稿可选生成或校验失败：{error}")
 
     if (script_dir / "build_pr_xml.py").is_file():
         try:
@@ -710,7 +731,11 @@ def run_multicam_sync(
         "media_reference_mode": "relative-to-xml",
         "source_kind": "media-directory",
         "camera_detection": {
-            "conventional": ["A", "B", "C", "A机", "B机", "C机"],
+            "contract_version": "camera_detection.v2",
+            "conventional": list(ascii_uppercase),
+            "camera_clip_counts": camera_counts,
+            "unknown_camera": "?",
+            "video_only": True,
             "configured_patterns": sorted(config.camera_patterns),
             "manual_camera_labels": camera_labels,
         },

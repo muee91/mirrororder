@@ -20,6 +20,38 @@ def _project(tmp_path: Path) -> SimpleNamespace:
     )
 
 
+def test_scan_cancellation_reads_history_at_bounded_rate_and_stays_responsive(monkeypatch) -> None:
+    clock = [0.0]
+    requests = []
+    cancelled = [False]
+    monkeypatch.setattr(media_inventory_task_runtime, "monotonic", lambda: clock[0], raising=False)
+
+    def read_durable_state():
+        requests.append(clock[0])
+        return cancelled[0]
+
+    check = media_inventory_task_runtime._scan_cancellation_reader(read_durable_state)
+    for _ in range(10000):
+        assert check() is False
+    assert len(requests) < 100
+    cancelled[0] = True
+    clock[0] = 0.11
+    assert check() is True
+
+
+def test_media_directory_scan_requires_sync_published_index(tmp_path: Path) -> None:
+    config = SimpleNamespace(is_media_directory=True, output_dir=tmp_path / "output")
+    config.output_dir.mkdir()
+
+    assert media_inventory_task_runtime._media_index_ready(config) is False
+
+    (config.output_dir / "material_index.json").write_text(
+        json.dumps({"clips": [{"clip_id": "clip-1", "media_id": "M_1"}], "groups": []}),
+        encoding="utf-8",
+    )
+    assert media_inventory_task_runtime._media_index_ready(config) is True
+
+
 def test_snapshot_rows_carry_probe_dimensions_and_projection_passes_them_through(tmp_path: Path, monkeypatch) -> None:
     """扫描期 ffprobe 采样进快照行；读路径只透传不重读。"""
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))

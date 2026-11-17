@@ -1,4 +1,4 @@
-use crate::runtime::{path_with_tools, python_path_with_source, resolve_python_runtime, RuntimeOrigin};
+use crate::runtime::{packaged_python_home, path_with_tools, python_path_with_source, resolve_python_runtime, RuntimeOrigin};
 use crate::service_health::{probe_service, probe_service_at};
 use serde::Serialize;
 use std::{
@@ -511,6 +511,9 @@ pub fn start_team_gateway(
             .map_err(|error| format!("无法解析 Desktop app-data 目录：{error}"))?;
         std::fs::create_dir_all(&data_dir)
             .map_err(|error| format!("无法创建 Desktop app-data 目录 {}：{error}", data_dir.display()))?;
+        if let Some(python_home) = packaged_python_home(&runtime) {
+            command.env("PYTHONHOME", python_home);
+        }
         command
             .env("MIRRORORDER_PACKAGED_RUNTIME", "1")
             .env("MIRRORORDER_DATA_DIR", &data_dir)

@@ -7,9 +7,9 @@
   {WORK}/tc.tsv            dir \t file \t tc \t creation
 day/cam 是显式列（由 project_config 的目录/文件名识别给出），下游无需猜。
 
-默认接受行业常见 A/B/C、A机/B机/C机、A1/B1/C1、CAM_A 等机位命名；
+默认接受 A–Z、A机/B机/D机、A1/B1/D1、CAM_D 等强机位命名；
 项目 camera_patterns 可覆盖不规范团队的命名。平铺目录中若文件名能明确识别
-A/B/C，会按文件名分机位而不是把全部素材默认成 A。
+A–Z，会按文件名分机位；无法识别的素材单独保留为 ?，不会默认成 A。
 
 镜序会把 media_roles.v1 中与同步有关的少量字段投影到本次任务的临时 config：
 `sync_policy=exclude` 的航拍/空镜/GoPro 等辅助素材不进入同步索引；
@@ -24,12 +24,9 @@ import sys
 import subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from project_config import get_config, infer_camera_label
+from project_config import VIDEO_EXTENSIONS, configured_camera_label, get_config, infer_camera_label
 
-EXT = (".mp4", ".mov", ".mxf", ".mts", ".m2ts", ".avi", ".mkv", ".mpg",
-       ".mpeg", ".3gp", ".wmv", ".flv", ".webm", ".mp3", ".wav", ".aac",
-       ".m4a", ".flac", ".wma", ".ogg", ".bmp", ".jpg", ".jpeg", ".png",
-       ".gif", ".tif", ".heic", ".cr3", ".arw", ".dng")
+EXT = VIDEO_EXTENSIONS
 _SAMPLE_BYTES = 1024 * 1024
 
 
@@ -143,18 +140,13 @@ def build():
 
                     override = str(role.get("camera_override", "") or "").strip().upper()
                     inferred = infer_camera_label(os.path.basename(p), cfg.camera_patterns)
-                    effective_cam = override or inferred or cam
+                    configured = configured_camera_label(os.path.relpath(p, cfg.BASE), cfg.camera_patterns)
+                    effective_cam = override or configured or (inferred if cdir == "." else cam) or "?"
                     if override:
                         n_overridden += 1
 
                     if cdir == "." and flat_multi_camera and not override:
-                        if not inferred:
-                            if p not in seen_paths:
-                                n_unclassified += 1
-                                print(f"  机位未识别，跳过同步索引: {os.path.relpath(p, cfg.BASE)}", flush=True)
-                                seen_paths.add(p)
-                            continue
-                        if inferred != cam:
+                        if effective_cam != cam:
                             continue
                     elif cdir == "." and flat_multi_camera and override != cam:
                         # The same flat folder is iterated once per detected camera.
@@ -165,6 +157,8 @@ def build():
                             continue
 
                     seen_paths.add(p)
+                    if effective_cam == "?":
+                        n_unclassified += 1
                     fname = os.path.basename(p)
                     rel = os.path.relpath(p, cfg.BASE)
                     rel_dir = os.path.dirname(rel)
@@ -173,11 +167,17 @@ def build():
                         nfail += 1
                         print(f"  探测失败: {rel}", flush=True)
                         continue
-                    seq = f"{day}_{effective_cam}_{n:05d}"
+                    # Audio caches must identify an occurrence and its content,
+                    # never its enumeration position. Adding a camera or an
+                    # earlier filename must not reuse another clip's audio.
+                    identity = "\0".join((str(day), effective_cam, rel, _media_id))
+                    seq = "v2_" + hashlib.sha1(identity.encode("utf-8")).hexdigest()[:32]
                     rows_index.append((seq, day, effective_cam, rel_dir, fname))
                     rows_dur.append((rel_dir, fname, info["dur"], info["size"] or 0))
                     rows_tc.append((rel_dir, fname, info["tc"], info["creation"] or ""))
                     n += 1
+                    if n % 100 == 0:
+                        print(f"已盘点 {n} 条视频 · 当前素材组 {day} · 机位 {effective_cam}", flush=True)
     if n == 0:
         raise RuntimeError(f"素材根目录下没有发现任何可归类同步媒体: {cfg.BASE}")
 

@@ -16,6 +16,7 @@ interface Props {
   activities?: Record<string, ProjectActivitySummary>;
   revealLabel?: string;
   onOpenProject: (project: ProjectSummary) => void;
+  onOpenProjectPage?: (project: ProjectSummary, page: "timeline") => void;
   onOpenTeamProject: (project: ProjectSummary) => void;
   onCopyShareLink: (project: ProjectSummary) => void | Promise<void>;
   onRevealProject: (project: ProjectSummary) => void | Promise<void>;
@@ -39,10 +40,12 @@ export function ProjectHome({
   activities = {},
   revealLabel = "Finder / Explorer",
   onOpenProject,
+  onOpenProjectPage,
   onOpenTeamProject,
   onCopyShareLink,
   onRevealProject,
-  onMulticamSyncProject,
+  // Kept in the contract for callers from the previous project menu. The
+  // action now belongs to the Timeline workspace and is opened there.
   onPrepareProject,
   onOpenMediaBinding,
   onDeleteProject,
@@ -222,7 +225,7 @@ export function ProjectHome({
           <div className="project-context-group-label">开始制作</div>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenProject(menu.project))}>打开项目</button>
           <button type="button" role="menuitem" title="本机素材 / 换素材盘" onClick={() => run(() => onOpenMediaBinding(menu.project))}>连接素材</button>
-          <button type="button" role="menuitem" onClick={() => run(() => onMulticamSyncProject(menu.project))}>多机位同步</button>
+          <button type="button" role="menuitem" title="多机位同步在时间线中执行" onClick={() => run(() => onOpenProjectPage?.(menu.project, "timeline"))}>打开时间线（多机位同步）</button>
           <button type="button" role="menuitem" title="重新整理项目" onClick={() => run(() => onPrepareProject(menu.project))}>完整整理项目</button>
           <details className="project-context-advanced">
             <summary>高级操作</summary>

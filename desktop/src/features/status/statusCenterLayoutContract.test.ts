@@ -13,14 +13,13 @@ describe("status center desktop operations contract", () => {
     expect(css).toContain("scrollbar-gutter: stable");
   });
 
-  it("uses current-issue, live-work and history regions without freezing obsolete rail geometry", () => {
+  it("uses a single readable information column for current work and history", () => {
     const css = readFileSync(fileURLToPath(new URL("./status-center.css", import.meta.url)), "utf8");
-    expect(css).toContain(".status-center-section.is-attention { order: 0; flex: 1 1 610px; }");
+    expect(css).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(css).toContain(".status-center-section.is-attention { order: 0; }");
     expect(css).toContain(".status-center-section.is-active {");
-    expect(css).toContain("position: sticky");
-    expect(css).toContain("flex: 0 1 320px");
-    expect(css).toContain(".status-center-section.is-recent { order: 2; flex: 1 0 100%; }");
-    expect(css).not.toContain("flex: 0 1 310px");
+    expect(css).toContain(".status-center-section.is-recent { order: 2; }");
+    expect(css).toContain("overflow-wrap: anywhere");
   });
 
   it("keeps terminal failures compact and removes stale failure progress", () => {

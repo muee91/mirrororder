@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成剪映 3+1 布局多机位草稿（3 条普通轨 A/B/C + 1 条多机位主轨）。
+"""生成剪映 N+1 布局多机位草稿（N 条实际机位轨 + 1 条多机位主轨）。
 
 结构基线来自剪映 close 保存成功的模板：
   `牛肉_音频同步多机位_capcut_draft_旧备份_043919`（04:43 剪映保存）。
@@ -8,7 +8,7 @@
 
 最终已验证结构（不要再改！）：
   主草稿（draft_info.json，顶层直接是 draft 对象，无包裹键）：
-    - 轨道序：track0 = 多机位主轨（1 整段），track1/2/3 = A/B/C 普通轨
+    - 轨道序：track0 = 多机位主轨（1 整段），track1…N = 实际机位普通轨
       （514/508/480 段）。主轨 flag=None，普通轨 flag=2。
     - 主轨多机位段：material_id=mc_video，source/target.duration=全场，
       refs=7（combination + 6 companions），**无 render_index/track_render_index**
@@ -280,7 +280,7 @@ def build():
     comp_idx += 1
     print(f"  多机位轨（主轨）: 1 段")
 
-    # ---- 3 条普通轨 A/B/C 放主轨之上（tracks[1/2/3]）----
+    # ---- 实际机位普通轨放主轨之上（tracks[1…N]）----
     for ai, cam in enumerate(CAM_LIST):
         cam_clips = sorted([c for c in clips if c[0] == cam],
                            key=lambda c: c[1])
@@ -337,7 +337,7 @@ def build():
     }
     main_videos.append(mc_v)
     main["materials"]["videos"] = main_videos
-    print(f"主草稿 videos: {len(main_videos)} (1502 真实 + 1 mc)")
+    print(f"主草稿 videos: {len(main_videos)} ({len(main_videos) - 1} 真实 + 1 mc)")
 
     # --- companions：每段一套（1503 套）---
     # schema 里 companion 数组各 trim 到 2 个占位；它们只是"一份能带 id 的字段
@@ -404,7 +404,7 @@ def build():
             segs.append(s)
         angle_tracks.append({
             "attribute": 0, "flag": 0, "id": angle_track_ids[ai],
-            "is_default_name": True, "name": "", "segments": segs,
+            "is_default_name": False, "name": cam, "segments": segs,
             "type": "video",
         })
         print(f"  内嵌角度{cam}: {len(segs)} 段")
@@ -597,7 +597,7 @@ def build():
             if f.startswith("._"):
                 os.remove(os.path.join(dp, f))
 
-    print(f"\n已生成 3+1 草稿: {DRAFT_PATH}")
+    print(f"\n已生成 {len(CAM_LIST)}+1 多机位草稿: {DRAFT_PATH}")
     print(f"  subdraft: {sub_id}")
     print(f"  combination: {comb_id}")
     print(f"  cur_camera_track_id: {cur_track_id}")

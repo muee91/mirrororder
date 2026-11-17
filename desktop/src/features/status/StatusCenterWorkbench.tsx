@@ -274,6 +274,11 @@ function compactError(value: string | null | undefined): string {
   return normalized.length > 220 ? `${normalized.slice(0, 217)}…` : normalized;
 }
 
+function isRuntimeNoise(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return normalized.includes("could not find platform dependent libraries") || normalized.includes("<exec_prefix>");
+}
+
 function taskPrimaryMessage(task: ProjectTaskRecord, historical = false): string {
   if (historical && isTaskSuperseded(task)) {
     return task.superseded_reason?.trim() || "该失败已被当前设置取代；仅保留用于追溯。";
@@ -286,6 +291,9 @@ function taskPrimaryMessage(task: ProjectTaskRecord, historical = false): string
     if (detail && generic) return detail;
     if (detail && !message.includes(detail)) return `${message}：${detail}`;
     return message || detail || "任务没有完成。可重新尝试，或打开相关位置检查输入与本机能力。";
+  }
+  if (active(task) && isRuntimeNoise(String(task.message || ""))) {
+    return "正在准备同步运行环境；完成后结果会显示在时间线中。若长时间没有进展，可取消后重试。";
   }
   if (task.status === "cancelled") return task.message || "任务已按请求停止。";
   if (completed(task)) return task.message || "任务已完成。";

@@ -23,8 +23,19 @@ def _binding_server(tmp_path: Path, monkeypatch):
     index = {"clips": [{"clip_id": file.stem, "media_path": str(tmp_path / "old" / file.name)} for file in files]}
     device = DeviceMediaStore()
     device.scan("ws_demo", "demo", index, [str(media)])
-    project = SimpleNamespace(project_id="demo", index=index, reload=lambda: None)
-    service = SimpleNamespace(workspace=SimpleNamespace(workspace_id="ws_demo"), project=lambda _id: project)
+    project_output = tmp_path / "project-output"
+    project_output.mkdir()
+    project = SimpleNamespace(
+        project_id="demo",
+        index=index,
+        config=SimpleNamespace(output_dir=project_output, is_media_directory=True),
+        reload=lambda: None,
+    )
+    service = SimpleNamespace(
+        workspace=SimpleNamespace(workspace_id="ws_demo"),
+        project=lambda _id: project,
+        tasks=SimpleNamespace(list=lambda _project_id: []),
+    )
 
     # Compose the actual scan and confirmation adapters without starting models
     # or changing process-global installers for the rest of the test suite.
@@ -90,6 +101,14 @@ def test_invalid_action_does_not_poison_next_keepalive_confirmation(tmp_path, mo
         })
         assert status == 200
         assert payload["summary"]["resolved"] == 1
+
+
+def test_media_scan_requires_multicam_index_before_submission(tmp_path, monkeypatch):
+    with _binding_server(tmp_path, monkeypatch) as (connection, _device, files):
+        status, payload = _post(connection, {"action": "scan", "roots": [str(files[0].parent)]})
+
+        assert status == 409
+        assert "多机位同步" in payload["error"]
 
 
 def test_media_binding_get_uses_snapshot_without_rehashing_every_file(tmp_path, monkeypatch):

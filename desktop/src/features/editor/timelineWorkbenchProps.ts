@@ -2,6 +2,7 @@ import type { ProductionNavigationIntent } from "../production/productionNavigat
 import type { TimelineAuthorityActions } from "./useTimelineAuthorityActions";
 import type { TimelineWorkbenchModel } from "./useTimelineWorkbenchModel";
 import type { TimelineSourceActions } from "./useTimelineSourceActions";
+import type { MulticamSyncTimeline } from "../../api/syncTimeline";
 
 export type TimelineWorkbenchProps = TimelineWorkbenchModel &
   TimelineAuthorityActions &
@@ -10,4 +11,6 @@ export type TimelineWorkbenchProps = TimelineWorkbenchModel &
     focusLabel: string;
     onOpenDelivery: () => void;
     onOpenRepair?: (clipId: string) => void;
+    syncTimeline?: MulticamSyncTimeline;
+    onMulticamSync?: () => void;
   };

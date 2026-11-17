@@ -160,13 +160,15 @@ def main():
         day_totals.append(acc)
         acc += sp
     seq_name = f"{PROJ_NAME}｜{len(DAY_DIRS)}天合并｜音频同步多机位"
+    camera_count = sum(camera != "?" for camera in CAM_LIST)
+    camera_label = f"{camera_count}机位" + (" + 未分类素材" if "?" in CAM_LIST else "")
     s3 = sequence_block("seq_both", seq_name, days, day_totals)
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE xmeml>\n'
         '<xmeml version="4">\n'
         '<project id="project_sync">\n'
-        f'  <name>{PROJ_NAME}｜{len(DAY_DIRS)}机位｜音频同步</name>\n'
+        f'  <name>{PROJ_NAME}｜{camera_label}｜音频同步</name>\n'
         '  <children>\n'
         + s3 + "\n"
         '  </children>\n'

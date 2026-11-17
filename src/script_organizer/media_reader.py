@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
+from string import ascii_uppercase
 from typing import Callable, Iterable
 
 from .fcpxml_reader import stable_clip_id
@@ -18,7 +19,7 @@ from .resource_scheduler import ResourceCancelled
 
 
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mxf", ".mts", ".avi", ".mkv"}
-_CONVENTIONAL_CAMERAS = ("A", "B", "C")
+_CONVENTIONAL_CAMERAS = tuple(ascii_uppercase)
 
 
 @dataclass(frozen=True)
@@ -167,11 +168,12 @@ def _probe(path: Path, cancelled: Callable[[], bool] | None = None) -> MediaProb
 
 
 def _camera_token(value: str) -> str:
-    """Return A/B/C for strong conventional camera tokens only.
+    """Return A–Z for strong conventional camera tokens only.
 
-    We intentionally do not treat arbitrary occurrences of the letters A/B/C as
+    We intentionally do not treat arbitrary occurrences of letters as
     camera metadata. Accepted industry-style tokens include A, A机, A1, A001,
-    CAM_A, CAMERA-B and equivalent B/C forms.
+    CAM_A, CAMERA-B and equivalent forms through Z. A trailing device suffix
+    such as DJI_0001_D is not evidence of a D camera.
     """
     text = str(value or "").strip()
     if not text:
@@ -182,19 +184,24 @@ def _camera_token(value: str) -> str:
             rf"^{camera}(?:机|CAM|CAMERA)?$",
             rf"^{camera}\d+$",
             rf"^(?:CAMERA|CAM)[_\-\s]*{camera}(?:\d+)?$",
-            rf"(?:^|[_\-\s]){camera}(?=\d|[_\-\s]|机|$)",
+            rf"(?:^|[_\-\s]){camera}(?=\d|[_\-\s]|机)",
         )
         if any(re.search(pattern, upper, re.IGNORECASE) for pattern in patterns):
             return camera
     return ""
 
 
-def infer_camera_label(path: str | Path, patterns: dict[str, str] | None = None) -> str:
+def infer_camera_label(
+    path: str | Path,
+    patterns: dict[str, str] | None = None,
+    *,
+    media_roots: Iterable[str | Path] = (),
+) -> str:
     """Infer a camera label with explicit config first, conventions second.
 
     Configured patterns are evaluated against the full path as well as filename,
     so a project can override unconventional folder/file naming. Without config,
-    A/B/C file tokens and A/B/C/A机/B机/C机 camera folders are treated as the
+    A–Z file tokens and A机/B机/…/Z机 camera folders are treated as the
     conventional default. The result remains editable elsewhere in Production.
     """
     candidate = Path(path)
@@ -208,21 +215,32 @@ def infer_camera_label(path: str | Path, patterns: dict[str, str] | None = None)
         except re.error:
             continue
 
-    # Parent folder is usually stronger evidence than filename. Check nearest
-    # folders first so /shoot/A机/A001.mov resolves A deterministically.
-    for part in reversed(candidate.parent.parts):
+    # Folder evidence must stay inside the imported media tree. In particular,
+    # macOS's /var/folders/.../T and a single-letter workspace/volume name are
+    # not camera metadata. Without a known root only the direct parent is safe.
+    parent_parts = (candidate.parent.name,)
+    root_depth = -1
+    for value in media_roots:
+        root = Path(value)
+        try:
+            relative = candidate.relative_to(root)
+        except ValueError:
+            continue
+        if len(root.parts) > root_depth:
+            parent_parts = (root.name, *relative.parent.parts)
+            root_depth = len(root.parts)
+    for part in reversed(parent_parts):
         detected = _camera_token(part)
         if detected:
             return detected
     detected = _camera_token(candidate.stem)
     if detected:
         return detected
-    match = re.search(r"(?:^|[_\-\s])([ABC])(?=\d|[_\-\s]|机|$)", candidate.name, re.IGNORECASE)
-    return match.group(1).upper() if match else "?"
+    return "?"
 
 
-def _camera(path: Path, patterns: dict[str, str]) -> str:
-    return infer_camera_label(path, patterns)
+def _camera(path: Path, patterns: dict[str, str], media_roots: Iterable[str | Path] = ()) -> str:
+    return infer_camera_label(path, patterns, media_roots=media_roots)
 
 
 def read_media_directory(
@@ -300,7 +318,7 @@ def read_media_directory(
             Clip(
                 clip_id=stable_clip_id(str(path), "media-directory", occurrence),
                 name=path.stem,
-                camera=_camera(path, patterns),
+                camera=_camera(path, patterns, directories),
                 media_path=str(path),
                 timeline_start=start,
                 timeline_end=start + duration_fraction,

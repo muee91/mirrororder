@@ -1,6 +1,6 @@
 # MirrorOrder Design System v2 — Professional UI / UX System
 
-> 当前实现位于 `desktop/src/design-system-v2.css`、`desktop/src/app/visual-refresh.css` 与 `web/design-system-v2.css`。
+> 当前实现位于 `desktop/src/design-system-v2.css` 与 `web/design-system-v2.css`。
 >
 > Product authority remains `docs/ux-principles.md` and `docs/app-information-architecture.md`.
 >
@@ -40,9 +40,9 @@ MirrorOrder 是专业影视后期 Production 软件，不是 AI Dashboard、模�
 
 ### 2.1 Desktop visual direction
 
-Desktop 采用“剪辑室控制台”视觉方向：深色主题以墨蓝/炭黑为基础，浅色主题使用暖纸色作为对应变体；蓝紫色只承担当前选择、焦点和主要动作，绿色、琥珀色和红色只承担状态语义。
+Desktop 采用“剪辑室控制台”视觉方向：深色主题以墨黑/炭黑为基础，浅色主题使用暖纸色作为对应变体；琥珀色承担当前选择、焦点和主要动作，绿色、琥珀色和红色承担状态语义，并通过标签、图标、形状或位置补充区分。
 
-视觉层级固定为 App Surface → Sidebar / Chrome → Primary Pane → Raised Control / Inspector。主要工作区不再用连续的白色卡片堆叠，而是通过面板深浅、细边界、留白和单一阴影建立层级。`visual-refresh.css` 只负责这组 semantic tokens、shell、toolbar、empty state 和 pane layout，不接管 canonical production object 的 anatomy。
+视觉层级固定为 App Surface → Sidebar / Chrome → Primary Pane → Raised Control / Inspector。主要工作区不再用连续的白色卡片堆叠，而是通过面板深浅、细边界、留白和单一阴影建立层级。`design-system-v2.css` 负责这组 semantic tokens、shell、toolbar、empty state 和 pane layout，不接管 canonical production object 的 anatomy。
 
 ## 3. Product shell and navigation
 
@@ -163,7 +163,7 @@ Toolbar 只保留当前工作对象的高频动作。
 
 Status 只使用：
 
-- accent blue — selection / active / in-progress
+- accent amber — selection / active / in-progress
 - green — complete / ready / usable
 - amber — attention / partial / warning
 - red — failure / danger / destructive
@@ -195,6 +195,8 @@ Status 只使用：
 ### 6.2 Camera identity colors
 
 Camera 属于 categorical identity，不属于 status。
+
+Slate / Take 的 A/B/C/AUX 稳定槽位是对象排版规则，不是机位识别上限。真实 D–Z 机位保留自身标签，不能塞进 AUX。同步检查时间线按实际机位逐轨展示；A–F 使用六种可区分的轨道色，其它字母使用稳定的分类色，未知素材独立显示 `? / 未分类机位`，不计入已识别机位数量。轨道色与项目色、任务状态色分离。
 
 固定第一类机位：
 

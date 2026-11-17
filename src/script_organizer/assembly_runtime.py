@@ -6,6 +6,7 @@ from typing import Any
 from .assembly_timeline import ASSEMBLY_CONTRACT, build_assembly_timeline
 from .coverage_graph import coverage_revision
 from .coverage_runtime import _filters
+from .sync_timeline_runtime import build_sync_timeline
 
 
 _INSTALLED = False
@@ -52,6 +53,15 @@ def install_assembly_runtime() -> None:
                 if (
                     len(parts) == 5
                     and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "sync-timeline"
+                ):
+                    self._local_only()
+                    project = service.project(parts[3])
+                    self._send_json(build_sync_timeline(project, service.tasks.list(parts[3])))
+                    return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
                     and parts[4] == "assembly-timeline"
                 ):
                     self._local_only()
@@ -66,6 +76,17 @@ def install_assembly_runtime() -> None:
 
             def _agent_get(self, parsed):
                 parts = web_server._parts(parsed.path)
+                if (
+                    len(parts) == 6
+                    and parts[:4] == ["api", "agent", "v1", "projects"]
+                    and parts[5] == "sync-timeline"
+                ):
+                    project_id = parts[4]
+                    agent = self._agent("read", project_id)
+                    project = service.project(project_id)
+                    service.tokens.audit(agent, "read:sync-timeline", project_id)
+                    self._send_json(build_sync_timeline(project, service.tasks.list(project_id)))
+                    return
                 if (
                     len(parts) == 6
                     and parts[:4] == ["api", "agent", "v1", "projects"]

@@ -10,7 +10,7 @@ import { buildTimelineSourceOptions } from "./timelineSourceEditing";
 import { clampSourceCursor } from "./timelineSourceMarks";
 import { activeSequence, errorMessage, findClip, positiveInteger, statusLabel } from "./timelineWorkbenchSupport";
 
-export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
+export function useTimelineWorkbenchModel(baseUrl: string, projectId: string, syncReady = true) {
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
   const timeline = useMemo(() => new TimelineClient(), []);
@@ -48,6 +48,11 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
     setSelectedClipId(""); setReplacementKey(""); setPlayhead(0); setSourceId(""); setSourcePosition(0);
     setRateNumerator(""); setRateDenominator("");
     setReplaceProposalArmed(false); setMessage("正在读取初始顺片与已保存剪辑…");
+
+    if (!syncReady) {
+      setMessage("完成多机位同步后，时间线检查和后续工作区才会解锁。");
+      return () => { cancelled = true; };
+    }
 
     // Review context and the assembly proposal are independent read models.
     // A failure in one must not hide the other (or an already persisted local
@@ -106,7 +111,7 @@ export function useTimelineWorkbenchModel(baseUrl: string, projectId: string) {
       if (!text.includes("还没有持久化 Timeline")) setMessage(`时间线恢复失败：${text}`);
     });
     return () => { cancelled = true; };
-  }, [host, production, projectId, timeline]);
+  }, [host, production, projectId, syncReady, timeline]);
 
   const frameRate = useMemo<FrameRate | null>(() => {
     const numerator = positiveInteger(rateNumerator), denominator = positiveInteger(rateDenominator);

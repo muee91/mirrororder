@@ -6,9 +6,11 @@ import os
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 from threading import RLock, Thread, local
+from time import monotonic
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -42,6 +44,7 @@ TASK_TYPES = {
     "identity_index",
 }
 PROCESS_RUNNER_ID = "host_" + uuid4().hex
+_MAX_TASK_LOGS = 2000
 # 每进程只做一次"重启恢复"：把其他 runner 的 queued/running 标记为
 # interrupted。若在每次 _load 都做，两个 Host 进程服务同一 workspace 时会
 # 互相把对方正在跑的任务反复打成 interrupted（GET 触发写风暴 + 重复提交）。
@@ -152,6 +155,24 @@ def _analysis_inputs_available(config: ProjectConfig) -> bool:
             or generated_sync_fcpxml(config).exists()
         )
     return False
+
+
+def _sync_analysis_config(config: ProjectConfig) -> ProjectConfig:
+    """Build the cheap post-sync analysis view used to publish media identities.
+
+    A direct ``multicam_sync`` action must leave a usable project index behind,
+    but it must not implicitly start ASR/model work.  The generated synchronized
+    FCPXML is already the authoritative media arrangement, so cache-only
+    analysis is enough to publish clip/group identities for later device scans.
+    """
+    if str(getattr(config, "asr_backend", "cache") or "cache").strip().lower() == "cache":
+        return config
+    try:
+        return replace(config, asr_backend="cache")
+    except TypeError:
+        # Small compatibility doubles used by older integrations are not
+        # dataclasses; they already have no model runtime to start.
+        return config
 
 
 class TaskManager:
@@ -281,6 +302,36 @@ class TaskManager:
     def _cancel_requested(self, config: ProjectConfig, task_id: str) -> bool:
         return bool(self._task(self._load(config), task_id).get("cancel_requested"))
 
+    def _task_message_reporter(self, config: ProjectConfig, task_id: str, interval: float = 0.5) -> Callable[[str], None]:
+        """Persist worker output at a bounded rate instead of fsyncing every line."""
+        state = {"last": 0.0}
+
+        def report(text: str) -> None:
+            message = str(text or "").strip()
+            if not message:
+                return
+            now = monotonic()
+            if state["last"] and now - state["last"] < interval:
+                return
+            state["last"] = now
+            self._update(config, task_id, message=message)
+
+        return report
+
+    def _post_sync_analysis(self, project_id: str, config: ProjectConfig, task: dict[str, Any]) -> dict[str, Any]:
+        """Publish the media index before a direct sync task becomes complete."""
+        if not _analysis_inputs_available(config):
+            raise ValueError("多机位同步已完成，但缺少剧本或同步产物，无法建立媒体身份索引")
+        task_id = str(task["task_id"])
+        self._update(config, task_id, stage="analysis", message="多机位同步完成，正在建立媒体身份索引")
+        analysis = analyze(
+            _sync_analysis_config(config),
+            cancelled=lambda: self._cancel_requested(config, task_id),
+            workspace_id=self.workspace_id,
+            project_id=project_id,
+        )
+        return analysis["index"]["stats"]
+
     def _run(self, project_id: str, task_id: str) -> None:
         config = self.project_loader(project_id)
         try:
@@ -298,9 +349,11 @@ class TaskManager:
                 self._update(config, task_id, stage="sync")
                 result = run_multicam_sync(
                     config,
-                    lambda text: self._update(config, task_id, message=text),
+                    self._task_message_reporter(config, task_id),
                     cancel_requested=lambda: self._cancel_requested(config, task_id),
                 )
+                if result.get("status") == "completed":
+                    result["analysis"] = self._post_sync_analysis(project_id, config, task)
             elif task["type"] == "incremental_analyze":
                 self._update(config, task_id, stage="analysis")
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
@@ -531,6 +584,8 @@ class TaskManager:
             if message:
                 task["message"] = str(message)[:500]
                 task.setdefault("logs", []).append(f"{_now()} {message}")
+                if len(task["logs"]) > _MAX_TASK_LOGS:
+                    del task["logs"][:-_MAX_TASK_LOGS]
             self._save(config, payload)
 
     @staticmethod

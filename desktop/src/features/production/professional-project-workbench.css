@@ -106,6 +106,17 @@
   font-size: 11px;
 }
 
+.professional-multicam-sync {
+  border-color: color-mix(in srgb, var(--mo-accent, #6fa7e8) 58%, var(--mo-border-default, #29333d));
+  color: var(--mo-text-primary, #e2e8ed);
+  background: var(--mo-accent-soft, rgba(95, 151, 215, .14));
+  font-weight: 680;
+}
+.professional-multicam-sync:hover:not(:disabled) {
+  border-color: var(--mo-accent, #6fa7e8);
+  background: color-mix(in srgb, var(--mo-accent, #6fa7e8) 22%, var(--mo-surface-selected, #182535));
+}
+
 .professional-assistant-toggle,
 .professional-team-review {
   color: var(--mo-text-secondary, #a6b1ba);

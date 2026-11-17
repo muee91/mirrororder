@@ -8,6 +8,7 @@ import tempfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 from typing import Any, Callable, Iterable
 from uuid import uuid4
 
@@ -19,6 +20,22 @@ from .resource_scheduler import ResourceCancelled
 _INSTALLED = False
 _TASK_TYPE = "media_inventory_scan"
 _MAX_INVENTORY_FILES = 12000
+
+
+def _scan_cancellation_reader(read_state: Callable[[], bool]) -> Callable[[], bool]:
+    """Bound task-history disk reads in per-file loops to a 100 ms cadence."""
+    next_read = 0.0
+    value = False
+
+    def cancelled() -> bool:
+        nonlocal next_read, value
+        now = monotonic()
+        if now >= next_read:
+            value = bool(read_state())
+            next_read = now + 0.1
+        return value
+
+    return cancelled
 
 
 class InventorySnapshotPublishError(RuntimeError):
@@ -335,7 +352,11 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
             "folder_label": path.parent.name[:120] if path_text else "",
             "inferred_camera": (
                 indexed_row.get("inferred_camera")
-                or infer_camera_label(path, project.config.camera_patterns)
+                or infer_camera_label(
+                    path,
+                    project.config.camera_patterns,
+                    media_roots=current_roots,
+                )
                 if path_text
                 else indexed_row.get("inferred_camera", "")
             ),
@@ -461,6 +482,14 @@ def _load_scan_request(device: DeviceMediaStore, request_id: str) -> dict[str, A
     if payload.get("request_id") != request_id:
         raise ValueError("素材扫描请求不存在或已失效")
     return payload
+
+
+def _media_index_ready(config: Any) -> bool:
+    """A media-directory scan is meaningful only after sync published an index."""
+    if not bool(getattr(config, "is_media_directory", False)):
+        return True
+    index = _read_json(Path(config.output_dir) / "material_index.json")
+    return bool(index.get("clips") or index.get("groups"))
 
 
 def _safe_task_result(summary: object, inventory: dict[str, Any]) -> dict[str, Any]:
@@ -601,13 +630,15 @@ def install_media_inventory_task_runtime() -> None:
             if not roots:
                 raise ValueError("素材扫描请求没有媒体目录")
             replace = bool(request.get("replace", False))
+            if not _media_index_ready(config):
+                raise ValueError("请先在时间线完成多机位同步；同步完成后镜序会建立媒体身份，再扫描本机素材")
 
             with manager._resource(config, task, "cpu", "media_inventory", "素材扫描"):
                 try:
                     index = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     index = {}
-                cancelled = lambda: manager._cancel_requested(config, task_id)
+                cancelled = _scan_cancellation_reader(lambda: manager._cancel_requested(config, task_id))
                 if isinstance(index, dict) and (index.get("clips") or index.get("groups")):
                     summary = store.scan(
                         workspace_id,
@@ -710,6 +741,11 @@ def install_media_inventory_task_runtime() -> None:
                         raise web_server.ApiError(
                             web_server.HTTPStatus.CONFLICT,
                             "当前项目已有本机素材扫描正在进行；请等待完成或先取消当前扫描，再提交新的素材位置。",
+                        )
+                    if not _media_index_ready(getattr(project, "config", None)):
+                        raise web_server.ApiError(
+                            web_server.HTTPStatus.CONFLICT,
+                            "请先在时间线完成多机位同步；同步完成后镜序会建立媒体身份，再扫描本机素材。",
                         )
                     roots = _normalize_roots(body.get("roots", []))
                     store = DeviceMediaStore()

@@ -76,7 +76,10 @@ def _safe_drop_item(project: Any, store: DeviceMediaStore, path_text: str) -> di
 
     indexed = _indexed_media(project).get(media_id, {})
     role = MediaRoleStore(project.config.output_dir).for_media(media_id)
-    camera = str(role.get("camera_override", "") or indexed.get("camera", "") or infer_camera_label(path, project.config.camera_patterns) or "")[:40]
+    roots = getattr(project.config, "media_roots", ()) or ()
+    if not roots and getattr(project.config, "media_root", None):
+        roots = (project.config.media_root,)
+    camera = str(role.get("camera_override", "") or indexed.get("camera", "") or infer_camera_label(path, project.config.camera_patterns, media_roots=roots) or "")[:40]
     display_name = Path(str(role.get("display_name", "") or indexed.get("display_name", "") or path.name)).name[:300]
     source_role = str(role.get("source_role", "sync_camera") or "sync_camera")[:40]
 

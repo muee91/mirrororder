@@ -15,6 +15,7 @@ import type {
   ProductionSelectionContext,
   ProductionWorkspace,
 } from "./productionNavigation";
+import { useMulticamSyncGate } from "./useMulticamSyncGate";
 import "./production.css";
 import "./assistant-drawer.css";
 import "./product-experience.css";
@@ -26,6 +27,7 @@ interface Props {
   project: ProjectSummary;
   pageRequest?: { page: ProductionPage; nonce: number } | null;
   onOpenTeamReview?: () => void;
+  onMulticamSync?: () => void;
   onPageChange?: (page: ProductionPage) => void;
 }
 
@@ -135,7 +137,7 @@ function normalizedContext(
   };
 }
 
-export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onPageChange }: Props) {
+export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onMulticamSync, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)));
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [selection, setSelection] = useState<ProductionSelectionContext>(() => ({ projectId: project.project_id }));
@@ -143,8 +145,11 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const [deliveryRequestNonce, setDeliveryRequestNonce] = useState(0);
   const [operatorRevision, setOperatorRevision] = useState(0);
   const navigationNonce = useRef(0);
+  const { syncTimeline, beginSyncTracking, refreshSyncTimeline } = useMulticamSyncGate(baseUrl, project.project_id, project.input_kind);
+  const syncBlocked = project.input_kind === "media-directory" && !syncTimeline.ready;
+  const visiblePage = syncBlocked ? "timeline" : page;
 
-  const area = areaForPage(page);
+  const area = areaForPage(visiblePage);
   const currentSelection = selection.projectId === project.project_id ? selection : { projectId: project.project_id };
   const currentIntent = navigationIntent?.projectId === project.project_id ? navigationIntent : null;
 
@@ -166,6 +171,10 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }
 
   function navigate(next: ProductionPage): void {
+    if (syncBlocked && next !== "timeline") {
+      setPage("timeline");
+      return;
+    }
     if (next === "delivery") {
       setDeliveryRequestNonce((value) => value + 1);
       setPage("timeline");
@@ -175,6 +184,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }
 
   function switchArea(next: ProductionArea): void {
+    if (syncBlocked && next !== "timeline") return;
     if (next === area) return;
     setNavigationIntent(nextIntent(next));
     navigate(AREAS[next].defaultPage);
@@ -218,6 +228,12 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }, [onPageChange, page, project.project_id]);
 
   useEffect(() => {
+    if (syncBlocked && page !== "timeline") {
+      setPage("timeline");
+    }
+  }, [page, syncBlocked]);
+
+  useEffect(() => {
     if (pageRequest) navigate(pageRequest.page);
   }, [pageRequest?.nonce]);
 
@@ -237,6 +253,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               type="button"
               className={area === key ? "is-active" : ""}
               aria-current={area === key ? "page" : undefined}
+              aria-disabled={syncBlocked && key !== "timeline" ? true : undefined}
+              title={syncBlocked && key !== "timeline" ? "完成多机位同步后解锁" : undefined}
               key={key}
               onClick={() => switchArea(key)}
             >
@@ -246,12 +264,12 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
         </nav>
         <div className="professional-project-tools">
           <SemanticSearchPalette baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} />
+          {onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>审阅</button> : null}
           <details className="professional-tools-menu">
             <summary>工具</summary>
             <div className="professional-tools-popover">
               <CurrentOperatorControl onChange={() => setOperatorRevision((value) => value + 1)} />
               <button type="button" className={`professional-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)} aria-pressed={assistantOpen}>小镜</button>
-              {onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>团队审阅</button> : null}
             </div>
           </details>
         </div>
@@ -277,7 +295,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             />
           ) : null}
 
-          {page === "script" ? (
+          {visiblePage === "script" ? (
             <ScriptWorkspace
               baseUrl={baseUrl}
               project={project}
@@ -291,10 +309,16 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             />
           ) : null}
 
-          {page === "timeline" ? (
+          {visiblePage === "timeline" ? (
             <TimelineWorkbench
               baseUrl={baseUrl}
               projectId={project.project_id}
+              syncTimeline={syncTimeline}
+              onMulticamSync={() => {
+                beginSyncTracking();
+                onMulticamSync?.();
+                globalThis.setTimeout(() => { void refreshSyncTimeline(); }, 500);
+              }}
               focusIntent={currentIntent?.workspace === "timeline" ? currentIntent : null}
               deliveryRequestNonce={deliveryRequestNonce}
               onSelectionChange={(groupId, clipId, timelineClipId) => updateSelection({ groupId, clipId, timelineClipId, scriptSegmentId: currentSelection.scriptSegmentId })}
@@ -302,7 +326,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             />
           ) : null}
 
-          {page === "watch" ? (
+          {visiblePage === "watch" ? (
             <ReviewWorkspace
               baseUrl={baseUrl}
               project={project}
@@ -319,7 +343,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
         {assistantVisible ? (
           <aside className="assistant-context-drawer" aria-label="小镜上下文助手">
             <div className="assistant-drawer-heading">
-              <div><p className="eyebrow">{AREAS[area].label} / {pageLabel(page)}</p><strong>小镜</strong></div>
+            <div><p className="eyebrow">{AREAS[area].label} / {pageLabel(visiblePage)}</p><strong>小镜</strong></div>
               <button type="button" className="secondary" onClick={() => setAssistantOpen(false)} aria-label="关闭小镜">关闭</button>
             </div>
             <AssistantWorkbench

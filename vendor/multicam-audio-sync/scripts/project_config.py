@@ -27,10 +27,14 @@ import glob
 import json
 import subprocess
 from fractions import Fraction
+from string import ascii_uppercase
 
 FRAME = 50000  # FCPXML 时间基准：每秒 50000 tick（FCP 固定，勿改）
-_CONVENTIONAL_CAMERAS = ("A", "B", "C")
-_MEDIA_PATTERNS = ("*.mp4", "*.MP4", "*.mov", "*.MOV", "*.mxf", "*.MXF", "*.mts", "*.MTS", "*.3gp", "*.MPG", "*.mpg")
+_CONVENTIONAL_CAMERAS = tuple(ascii_uppercase)
+VIDEO_EXTENSIONS = frozenset({
+    ".mp4", ".mov", ".m4v", ".mxf", ".mts", ".m2ts", ".avi", ".mkv",
+    ".mpg", ".mpeg", ".3gp", ".wmv", ".flv", ".webm",
+})
 
 
 def _run_ffprobe(path, args):
@@ -146,42 +150,54 @@ def detect_audio_rate(path):
     return 48000
 
 
+def configured_camera_label(value, patterns=None):
+    """Read explicit project rules without falling back to filename conventions."""
+    configured = patterns if isinstance(patterns, dict) else {}
+    for camera, pattern in configured.items():
+        try:
+            if re.search(str(pattern), str(value or ""), re.IGNORECASE):
+                return str(camera).upper()
+        except re.error:
+            continue
+    return ""
+
+
 def infer_camera_label(value, patterns=None):
     """Infer a camera label from an industry-style folder or filename token.
 
     Explicit project regex patterns win. Defaults intentionally recognize strong
-    A/B/C conventions only: A, A机, A1/A001, CAM_A/CAMERA-B and equivalent B/C.
+    A–Z conventions only: A, A机, A1/A001, CAM_A/CAMERA-B and equivalent D–Z.
+    A trailing device suffix such as DJI_0001_D is not a camera marker.
     Arbitrary letters inside ordinary words are not treated as camera metadata.
     """
     text = str(value or "").strip()
     if not text:
         return ""
-    configured = patterns if isinstance(patterns, dict) else {}
-    for camera, pattern in configured.items():
-        try:
-            if re.search(str(pattern), text, re.IGNORECASE):
-                return str(camera).upper()
-        except re.error:
-            continue
+    configured = configured_camera_label(text, patterns)
+    if configured:
+        return configured
     upper = text.upper()
     stem = os.path.splitext(os.path.basename(upper))[0]
     for camera in _CONVENTIONAL_CAMERAS:
-        if re.match(rf"^{camera}(?:机)?$", stem, re.IGNORECASE):
+        if re.match(rf"^{camera}(?:机|CAM|CAMERA)?$", stem, re.IGNORECASE):
             return camera
         if re.match(rf"^{camera}\d+$", stem, re.IGNORECASE):
             return camera
         if re.match(rf"^(?:CAMERA|CAM)[_\-\s]*{camera}(?:\d+)?$", stem, re.IGNORECASE):
             return camera
-        if re.search(rf"(?:^|[_\-\s]){camera}(?=\d|[_\-\s]|机|$)", stem, re.IGNORECASE):
+        if re.search(rf"(?:^|[_\-\s]){camera}(?=\d|[_\-\s]|机)", stem, re.IGNORECASE):
             return camera
     return ""
 
 
 def _media_files(folder):
-    result = []
-    for pattern in _MEDIA_PATTERNS:
-        result.extend(glob.glob(os.path.join(folder, pattern)))
-    return sorted(set(result))
+    return sorted(
+        os.path.join(folder, name)
+        for name in os.listdir(folder)
+        if not name.startswith(".")
+        and os.path.splitext(name)[1].lower() in VIDEO_EXTENSIONS
+        and os.path.isfile(os.path.join(folder, name))
+    )
 
 
 def _scan_days(base, camera_patterns=None):
@@ -226,11 +242,11 @@ def _scan_days(base, camera_patterns=None):
 def _detect_cam_dirs(day_dir, camera_patterns=None):
     """Scan one day folder, returning {camera: [directories]}.
 
-    Defaults accept A/B/C, A机/B机/C机, A1/B2/C3, CAM_A and CAMERA-B.
+    Defaults accept A–Z, A机/B机/…/Z机, A1/B2/D3, CAM_D and CAMERA-F.
     Project camera_patterns are evaluated first and may map unconventional team
     folder names to any configured camera label.
 
-    A flat folder with filenames carrying conventional/configured A/B/C tokens is
+    A flat folder with filenames carrying conventional/configured A–Z tokens is
     represented as multiple cameras sharing `.`. make_index.py filters those
     files per camera so they are not duplicated.
     """
@@ -240,7 +256,7 @@ def _detect_cam_dirs(day_dir, camera_patterns=None):
             continue
         name = os.path.basename(d)
         camera = infer_camera_label(name, camera_patterns)
-        if camera:
+        if camera and _media_files(d):
             camdirs.setdefault(camera, []).append(name)
     if camdirs:
         return camdirs
@@ -249,23 +265,20 @@ def _detect_cam_dirs(day_dir, camera_patterns=None):
     if media:
         cameras = []
         for path in media:
-            camera = infer_camera_label(os.path.basename(path), camera_patterns)
-            if camera and camera not in cameras:
+            camera = infer_camera_label(os.path.basename(path), camera_patterns) or "?"
+            if camera not in cameras:
                 cameras.append(camera)
         if cameras:
             return {camera: ["."] for camera in sorted(cameras)}
-        return {"A": ["."]}
+        return {"?": ["."]}
     raise RuntimeError(
-        f"无法识别相机子目录（期望 A/B/C、A机/B机/C机、A1/B1/C1、CAM_A，或项目 camera_patterns）: {day_dir}")
+        f"无法识别相机子目录（期望 A–Z、A机/D机/F机、A1/D1/F1、CAM_D，或项目 camera_patterns）: {day_dir}")
 
 
 def _first_video(day_dir, camdir):
     base = os.path.join(day_dir, camdir) if camdir != "." else day_dir
-    for pat in _MEDIA_PATTERNS:
-        hits = glob.glob(os.path.join(base, pat))
-        if hits:
-            return hits[0]
-    return None
+    media = _media_files(base)
+    return media[0] if media else None
 
 
 class Config:
@@ -333,7 +346,7 @@ class Config:
         for camera in self.camera_labels:
             if camera not in all_cams:
                 all_cams.append(camera)
-        self.cam_list = sorted(all_cams)
+        self.cam_list = sorted(all_cams, key=lambda camera: (camera == "?", camera))
 
         probe_path = None
         for day, dname in self.day_dirs:

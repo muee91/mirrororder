@@ -965,6 +965,12 @@ textarea {
   background: var(--mo-surface);
 }
 
+.mirrororder-redesign-shell .status-center-summary {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
 /* Startup follows the new product language */
 .startup-shell {
   background:

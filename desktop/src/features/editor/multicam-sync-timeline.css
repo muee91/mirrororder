@@ -1,0 +1,208 @@
+.multicam-sync-gate,
+.multicam-sync-inspection {
+  align-self: start;
+  border: 1px solid var(--mo-border-default, #2b3742);
+  border-radius: 10px;
+  background: var(--mo-surface-pane, #10161d);
+}
+
+.multicam-sync-gate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, .42fr);
+  gap: 24px;
+  align-items: center;
+  min-height: 260px;
+  padding: 28px;
+}
+
+.multicam-sync-gate-copy { max-width: 700px; }
+.multicam-sync-kicker {
+  margin: 0 0 8px;
+  color: var(--mo-text-muted, #8c9baa);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.multicam-sync-gate h3,
+.multicam-sync-inspection h3 {
+  margin: 0;
+  color: var(--mo-text-primary, #edf2f6);
+  font-size: 17px;
+  letter-spacing: -.02em;
+}
+.multicam-sync-gate-copy > p:not(.multicam-sync-kicker) {
+  max-width: 62ch;
+  margin: 10px 0 0;
+  color: var(--mo-text-secondary, #abb8c3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.multicam-sync-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 20px;
+  color: var(--mo-text-muted, #81909d);
+  font-size: 10px;
+}
+.multicam-sync-flow b { color: var(--mo-text-muted, #63717c); font-weight: 500; }
+.multicam-sync-flow strong {
+  color: var(--mo-text-primary, #eef3f6);
+  font-weight: 700;
+}
+.multicam-sync-gate-action {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+  border: 1px solid var(--mo-border-subtle, #27323d);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--mo-surface-raised, #151c24);
+}
+.multicam-sync-gate-action > span:not(.multicam-sync-status-dot) {
+  color: var(--mo-text-muted, #91a0ad);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.multicam-sync-gate-action button { margin-top: 4px; }
+.multicam-sync-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9b88db;
+}
+.multicam-sync-status-dot.is-running { background: #d88a4a; }
+.multicam-sync-status-dot.is-completed { background: #4cb6a5; }
+.multicam-sync-status-dot.is-cancelled,
+.multicam-sync-status-dot.is-interrupted,
+.multicam-sync-status-dot.is-failed,
+.multicam-sync-status-dot.is-invalid { background: #c87578; }
+
+.multicam-sync-inspection { overflow: hidden; }
+.multicam-sync-inspection-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 18px 12px;
+}
+.multicam-sync-inspection-heading p {
+  margin: 6px 0 0;
+  color: var(--mo-text-muted, #82909c);
+  font-size: 11px;
+}
+.multicam-sync-inspection-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  color: var(--mo-text-muted, #8997a3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.multicam-sync-inspection-meta button { flex: 0 0 auto; }
+.multicam-sync-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  border-top: 1px solid var(--mo-border-subtle, #27323d);
+  border-bottom: 1px solid var(--mo-border-subtle, #27323d);
+  padding: 8px 18px;
+  color: var(--mo-text-muted, #82909c);
+  font-size: 10px;
+}
+.multicam-sync-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.multicam-sync-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: #6b9bc9;
+}
+.multicam-sync-legend i { background: var(--camera-color, #81909d); }
+
+.multicam-sync-ruler,
+.multicam-sync-track {
+  display: grid;
+  grid-template-columns: 170px minmax(760px, 1fr);
+  gap: 12px;
+  min-width: 960px;
+}
+.multicam-sync-ruler {
+  padding: 10px 18px 0;
+  color: var(--mo-text-muted, #74828f);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.multicam-sync-ruler > div { position: relative; height: 16px; }
+.multicam-sync-ruler span span { position: absolute; transform: translateX(-50%); }
+.multicam-sync-ruler span:first-child { display: block; }
+.multicam-sync-ruler span span:first-child { transform: none; }
+.multicam-sync-ruler span span:last-child { transform: translateX(-100%); }
+
+.multicam-sync-track-list {
+  overflow-x: auto;
+  padding: 0 18px 18px;
+}
+.multicam-sync-track {
+  align-items: center;
+  min-height: 68px;
+  border-top: 1px solid var(--mo-border-subtle, #27323d);
+}
+.multicam-sync-track-label {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  min-height: 54px;
+}
+.multicam-sync-track-label strong {
+  color: var(--camera-color, #6b9bc9);
+  font-size: 13px;
+  font-weight: 720;
+}
+.multicam-sync-track-label span {
+  color: var(--mo-text-muted, #81909d);
+  font-size: 10px;
+}
+.multicam-sync-track-lane {
+  position: relative;
+  height: 46px;
+  overflow: hidden;
+  border: 1px solid var(--mo-border-subtle, #27323d);
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, transparent 0, transparent calc(25% - 1px), var(--mo-border-subtle, #27323d) 25%, transparent calc(25% + 1px), transparent calc(50% - 1px), var(--mo-border-subtle, #27323d) 50%, transparent calc(50% + 1px), transparent calc(75% - 1px), var(--mo-border-subtle, #27323d) 75%, transparent calc(75% + 1px)),
+    var(--mo-surface-app, #0b1015);
+}
+.multicam-sync-clip {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  display: block;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--camera-color, #6b9bc9) 78%, white 4%);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--camera-color, #6b9bc9) 56%, var(--mo-surface-raised, #151c24));
+}
+.multicam-sync-clip > span {
+  display: block;
+  overflow: hidden;
+  padding: 4px 5px;
+  color: #f5f8fa;
+  font-size: 9px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-mirrororder-theme="light"] .multicam-sync-gate,
+html[data-mirrororder-theme="light"] .multicam-sync-inspection { background: #fff; }
+html[data-mirrororder-theme="light"] .multicam-sync-gate-action { background: #f6f8fa; }
+html[data-mirrororder-theme="light"] .multicam-sync-track-lane { background-color: #f7f9fb; }
+
+@media (max-width: 860px) {
+  .multicam-sync-gate { grid-template-columns: 1fr; padding: 20px; }
+  .multicam-sync-inspection-heading { flex-direction: column; }
+  .multicam-sync-inspection-meta { justify-content: flex-start; }
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import statistics
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -62,17 +63,22 @@ def _descendants(element: ET.Element, name: str) -> Iterable[ET.Element]:
 
 def _camera_name(value: str, fallback: str = "?") -> str:
     raw = str(value or "").strip().upper()
-    if raw in {"A", "B", "C"}:
+    if re.fullmatch(r"[A-Z]", raw):
         return raw
-    for camera in ("A", "B", "C"):
-        if raw.startswith(camera) or raw.endswith(camera) or f"_{camera}" in raw or f"-{camera}" in raw:
-            return camera
+    for pattern in (
+        r"^(?:ANGLE|CAMERA|CAM)[_\-\s]*([A-Z])(?:\d+)?$",
+        r"^([A-Z])(?:机|[_\-\s]*(?:CAMERA|CAM))$",
+        r"^([A-Z])\d+",
+    ):
+        match = re.match(pattern, raw)
+        if match:
+            return match.group(1)
     return fallback
 
 
 def _camera_for(element: ET.Element, fallback: str = "?") -> str:
     lane = element.get("lane", "")
-    lane_camera = {"1": "A", "2": "B", "3": "C"}.get(lane)
+    lane_camera = chr(ord("A") + int(lane) - 1) if lane.isdigit() and 1 <= int(lane) <= 26 else None
     return lane_camera or _camera_name(lane, fallback)
 
 
@@ -103,6 +109,11 @@ def stable_clip_id(media_path: str, source_asset_id: str, occurrence: int = 0) -
     return "C_" + hashlib.sha1(seed).hexdigest()[:16]
 
 
+def is_generated_sync_asset_id(value: str) -> bool:
+    """Recognize the first-party sync exporter's ordinal ids, not NLE UUIDs."""
+    return re.fullmatch(r"day_.+_asset_\d+", value) is not None
+
+
 def _restore_previous_identity(clips: list[Clip], previous_index: dict | None) -> list[Clip]:
     """Carry verified identities across locator-less/moved FCPXML parses."""
     rows = previous_index.get("clips", []) if isinstance(previous_index, dict) else []
@@ -126,8 +137,14 @@ def _restore_previous_identity(clips: list[Clip], previous_index: dict | None) -
             continue
         previous = candidates[index]
         media_id = clip.media_id
+        previous_media_id = str(previous.get("media_id", "") or "")
+        if is_generated_sync_asset_id(clip.source_asset_id) and media_id.startswith("M_") and previous_media_id.startswith("M_") and media_id != previous_media_id:
+            # Rebuilt multicam documents may reuse an ordinal asset id for a
+            # different file. Verified content wins over document numbering.
+            result.append(clip)
+            continue
         if not media_id or media_id.startswith("MP_"):
-            candidate = str(previous.get("media_id", "") or "")
+            candidate = previous_media_id
             if candidate.startswith("M_"):
                 media_id = candidate
         clip_id = str(previous.get("clip_id", "") or "") or clip.clip_id
@@ -162,7 +179,8 @@ def read_fcpxml(
         angles: list[tuple[str, ET.Element]] = []
         for multicam in _children(media, "multicam"):
             for angle in _children(multicam, "mc-angle"):
-                camera = _camera_name(angle.get("name", "") or angle.get("angleID", ""))
+                label = angle.get("name", "").strip()
+                camera = _camera_name(label or angle.get("angleID", ""), label or "?")
                 angles.append((camera, angle))
         if media_id and angles:
             multicam_media[media_id] = angles

@@ -4,6 +4,7 @@
 用法：python3 extract_parallel.py [nproc]
 """
 import subprocess, os, sys
+import tempfile
 from multiprocessing import Pool
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -16,14 +17,23 @@ def extract_one(row):
     if os.path.exists(out) and os.path.getsize(out) > 0:
         return (id_, "cached")
     src = os.path.join(cfg.BASE, dir_, fname)
-    r = subprocess.run(["ffmpeg", "-v", "error", "-y",
-                        "-i", src,
-                        "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
-                        "-f", "f32le", out],
-                       capture_output=True)
-    if r.returncode != 0:
-        return (id_, f"FAIL {r.stderr.decode(errors='replace')[:200]}")
-    return (id_, "ok")
+    fd, temporary = tempfile.mkstemp(prefix=f"{id_}.", suffix=".part", dir=os.path.dirname(out))
+    os.close(fd)
+    try:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-y",
+                            "-i", src,
+                            "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
+                            "-f", "f32le", temporary],
+                           capture_output=True)
+        if r.returncode != 0:
+            return (id_, f"FAIL {r.stderr.decode(errors='replace')[:200]}")
+        if os.path.getsize(temporary) == 0:
+            return (id_, "FAIL empty audio")
+        os.replace(temporary, out)
+        return (id_, "ok")
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 _CFG = get_config()
 if __name__ == "__main__":

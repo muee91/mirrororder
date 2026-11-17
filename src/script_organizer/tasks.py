@@ -97,6 +97,21 @@ class TaskManager(_impl.TaskManager):
         except Exception:
             return {}
 
+    def _post_sync_analysis(self, project_id: str, config, task: dict[str, Any]) -> dict[str, Any]:
+        """Publish media identities after direct sync without starting ASR."""
+        if not _impl._analysis_inputs_available(config):
+            raise ValueError("多机位同步已完成，但缺少剧本或同步产物，无法建立媒体身份索引")
+        task_id = str(task["task_id"])
+        self._update(config, task_id, stage="analysis", message="多机位同步完成，正在建立媒体身份索引")
+        with self._resource(config, task, "cpu", "analysis", "媒体身份索引"):
+            analysis = _run_analysis(
+                _impl._sync_analysis_config(config),
+                cancelled=lambda: self._cancel_requested(config, task_id),
+                workspace_id=self.workspace_id,
+                project_id=project_id,
+            )
+        return analysis["index"]["stats"]
+
     @contextmanager
     def _resource(
         self,
@@ -396,7 +411,7 @@ class TaskManager(_impl.TaskManager):
                 with self._resource(config, task, "sync", "sync", "多机位同步"):
                     result = _impl.run_multicam_sync(
                         config,
-                        lambda text: self._update(config, task_id, message=text),
+                        self._task_message_reporter(config, task_id),
                         progress=lambda done, total: self._update(
                             config,
                             task_id,
@@ -404,6 +419,8 @@ class TaskManager(_impl.TaskManager):
                         ),
                         cancel_requested=lambda: self._cancel_requested(config, task_id),
                     )
+                if result.get("status") == "completed":
+                    result["analysis"] = self._post_sync_analysis(project_id, config, task)
             elif task_type == "incremental_analyze":
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
                 with self._resource(config, task, self._asr_resource(config), "analysis", "MLX/ASR"):

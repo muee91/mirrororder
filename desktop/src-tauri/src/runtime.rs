@@ -184,6 +184,18 @@ pub fn python_path_with_source(source_dir: &Path) -> Result<OsString, String> {
     env::join_paths(paths).map_err(|error| format!("无法构造 PYTHONPATH：{error}"))
 }
 
+/// Return the packaged Python root so child interpreters resolve their
+/// platform-dependent stdlib modules inside the relocated bundle.
+pub fn packaged_python_home(runtime: &PythonRuntimeLayout) -> Option<PathBuf> {
+    if runtime.origin != RuntimeOrigin::PackagedResource {
+        return None;
+    }
+    PathBuf::from(runtime.python_executable.clone())
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+}
+
 pub fn path_with_tools(tool_bin: Option<&Path>) -> Result<Option<OsString>, String> {
     let Some(tool_bin) = tool_bin else {
         return Ok(None);

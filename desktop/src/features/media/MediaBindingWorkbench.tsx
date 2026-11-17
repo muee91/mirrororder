@@ -50,6 +50,7 @@ function scanStage(task: ProjectTaskRecord): string {
     media_inventory: "正在扫描本机素材",
     completed: "扫描完成",
     cancelled: "已取消",
+    interrupted: "被中断",
     failed: "扫描失败",
   };
   return labels[task.stage || task.status] ?? (task.status === "queued" ? "等待开始" : "正在扫描本机素材");
@@ -66,7 +67,13 @@ function isInventorySnapshotPublishFailure(task: Pick<ProjectTaskRecord, "error"
   return text.includes("快照发布失败") || text.includes("inventory 快照发布失败");
 }
 
-function scanFailureMessage(task: Pick<ProjectTaskRecord, "error" | "message">): string {
+function scanFailureMessage(task: Pick<ProjectTaskRecord, "error" | "message" | "status">): string {
+  if (task.status === "interrupted") {
+    return "素材扫描因 Host 重启而中断；请先在时间线完成多机位同步，之后再重新扫描。";
+  }
+  if (task.status === "cancelled") {
+    return "素材扫描已取消；请先在时间线完成多机位同步，之后再重新扫描。";
+  }
   if (isInventorySnapshotPublishFailure(task)) {
     return "素材扫描失败：绑定已提交，但索引快照发布失败；连接结果暂不可用，请重新扫描。";
   }
@@ -86,7 +93,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
 
   function describeSummary(next: MediaBindingSummary): string {
     if (next.pending_analysis) {
-      return "项目还在等待首次素材分析；完成后会建立可在不同位置恢复的媒体身份。";
+      return "请先在时间线完成多机位同步；同步完成后镜序会建立媒体身份，才能扫描并连接本机素材。";
     }
     if (next.missing > 0) {
       return `已连接 ${next.resolved}/${next.total} 个媒体身份；${next.missing} 个素材需要重新连接。`;
@@ -107,7 +114,12 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
       setRootsText(payload.summary.roots.join("\n"));
       const active = newestActiveScan(taskRows);
       const latest = newestMediaScan(taskRows);
-      const latestFailure = latest && (latest.status === "failed" || Boolean(latest.error)) ? latest : null;
+      const latestFailure = latest && (
+        latest.status === "failed"
+        || latest.status === "interrupted"
+        || latest.status === "cancelled"
+        || Boolean(latest.error)
+      ) ? latest : null;
       setScanTask(active);
       setScanError(latestFailure);
       setMessage(active
@@ -274,6 +286,10 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
   }
 
   async function reconnectMovedMedia(): Promise<void> {
+    if (summary?.pending_analysis) {
+      setMessage("请先在时间线完成多机位同步；同步完成后才能扫描本机素材。");
+      return;
+    }
     const values = await chooseDirectories(summary?.missing ? "选择素材移动后的新位置" : "设置本机素材位置");
     if (!values.length) return;
     const explanation = summary?.roots.length
@@ -284,6 +300,10 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
   }
 
   async function addSearchLocations(): Promise<void> {
+    if (summary?.pending_analysis) {
+      setMessage("请先在时间线完成多机位同步；同步完成后才能扫描本机素材。");
+      return;
+    }
     const values = await chooseDirectories("添加素材搜索位置");
     if (!values.length) return;
     const merged = [...new Set([...splitRoots(rootsText), ...values])];
@@ -291,6 +311,10 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
   }
 
   async function scanManualRoots(): Promise<void> {
+    if (summary?.pending_analysis) {
+      setMessage("请先在时间线完成多机位同步；同步完成后才能扫描本机素材。");
+      return;
+    }
     await submitScan(splitRoots(rootsText), false, "manual");
   }
 
@@ -374,21 +398,21 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
               <strong>{missing > 0
                 ? `${missing} 个素材在当前设备未找到`
                 : pendingAnalysis
-                  ? "项目还没有完成首次素材分析"
+                  ? "先完成多机位同步，再扫描本机素材"
                   : total > 0
                     ? `${resolved}/${total} 个媒体身份已连接`
                     : "选择当前 Mac 上的素材目录"}</strong>
               <span>{missing > 0
                 ? "如果素材只是换盘、移动文件夹或更换硬盘，不需要重新导入项目。选择素材的新位置后，镜序会用已有媒体身份重新连接。"
                 : pendingAnalysis
-                  ? "首次分析完成后，镜序会建立稳定媒体身份；之后即使素材移动，也可以在这里重新连接。"
+                  ? "时间线里的多机位同步会先建立全部素材的排列和媒体身份；完成后再回到这里扫描，才能显示可连接的素材。"
                   : total > 0
                     ? "当前连接只保存在这台设备。移动素材后使用“重新连接已移动素材”，不会改动共享项目。"
                     : "设置位置只建立当前设备的搜索范围，不会把本机绝对路径写进共享项目。"}</span>
             </div>
             <div className="media-binding-recovery-actions">
-              <button type="button" disabled={busy || scanActive || !isTauri()} onClick={() => void reconnectMovedMedia()}>{roots.length || total ? "重新连接已移动素材…" : "设置素材位置…"}</button>
-              {roots.length || total ? <button type="button" className="secondary" disabled={busy || scanActive || !isTauri()} onClick={() => void addSearchLocations()}>添加搜索位置…</button> : null}
+              <button type="button" disabled={busy || scanActive || pendingAnalysis || !isTauri()} onClick={() => void reconnectMovedMedia()}>{pendingAnalysis ? "先完成多机位同步" : roots.length || total ? "重新连接已移动素材…" : "设置素材位置…"}</button>
+              {roots.length || total ? <button type="button" className="secondary" disabled={busy || scanActive || pendingAnalysis || !isTauri()} onClick={() => void addSearchLocations()}>{pendingAnalysis ? "同步后添加位置" : "添加搜索位置…"}</button> : null}
             </div>
           </div>
 
@@ -419,7 +443,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
                 placeholder="/Volumes/PROJECT/Media"
               />
             </label>
-            <button type="button" className="secondary" disabled={busy || scanActive || !roots.length} onClick={() => void scanManualRoots()}>按当前列表扫描</button>
+            <button type="button" className="secondary" disabled={busy || scanActive || pendingAnalysis || !roots.length} onClick={() => void scanManualRoots()}>{pendingAnalysis ? "同步后扫描" : "按当前列表扫描"}</button>
           </details>
 
           <details className="media-binding-help">
@@ -459,7 +483,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
             )) : (
               <div className="media-binding-empty">
                 <strong>{pendingAnalysis ? "等待首次整理" : "还没有媒体身份"}</strong>
-                <span>{pendingAnalysis ? "项目完成首次素材分析后，会在这里列出可重新连接的媒体身份。" : "选择“设置素材位置”或“添加搜索位置”，连接结果会显示在这里。"}</span>
+                <span>{pendingAnalysis ? "先在时间线完成多机位同步；同步完成后，这里会列出可重新连接的媒体身份。" : "选择“设置素材位置”或“添加搜索位置”，连接结果会显示在这里。"}</span>
               </div>
             )}
             {items.length > RESULT_LIMIT ? <p className="media-binding-result-limit">当前显示前 {RESULT_LIMIT} 个媒体身份，共 {items.length} 个。统计数字仍按全部素材计算。</p> : null}

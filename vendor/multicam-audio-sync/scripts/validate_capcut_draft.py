@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a generated Jianying/CapCut native 3+1 multicam draft (P0 回归保护).
+"""Validate a generated Jianying/CapCut native N+1 multicam draft (P0 回归保护).
 
 对 build_capcut_draft_31.py 生成的草稿做结构性不变量断言，全部通过打印
 统计并 exit 0，任一失败打印 FAIL 并 exit 1。兼顾：
@@ -152,7 +152,7 @@ def validate_main(main):
     return mc
 
 
-def validate_sub(top, sub_id):
+def validate_sub(top, sub_id, expected_angles=None):
     ok(isinstance(top, dict), "subdraft/draft_content.json 顶层是对象")
 
     materials = top.get("materials", {})
@@ -196,7 +196,12 @@ def validate_sub(top, sub_id):
                f"内嵌 draft.id = 文件夹名 sub_id（={inner.get('id')}/{sub_id}）")
         itracks = inner.get("tracks", [])
         if MODE == "raw":
-            ok(len(itracks) in (2, 3), f"内嵌 draft 角度轨为 2 或 3 条（={len(itracks)}）")
+            ok(len(itracks) >= 1, f"内嵌 draft 角度轨存在（={len(itracks)} 条）")
+            if expected_angles is not None:
+                ok(len(itracks) == expected_angles,
+                   f"内嵌角度轨数量与主稿机位一致（={len(itracks)}/{expected_angles}）")
+            ids = [track.get("id") for track in itracks]
+            ok(all(ids) and len(ids) == len(set(ids)), "内嵌角度轨 id 完整且唯一")
         else:
             ok(len(itracks) >= 1,
                f"内嵌 draft 角度轨存在（={len(itracks)} 条）")
@@ -339,7 +344,7 @@ def main():
     validate_main(main)
     if sub_id:
         top = load_json(os.path.join(sub_root, "draft_content.json"))
-        validate_sub(top, sub_id)
+        validate_sub(top, sub_id, max(0, len(main.get("tracks", [])) - 1))
         validate_layout(draft_path, sub_id)
     meta = load_json(os.path.join(draft_path, "draft_meta_info.json"))
     validate_meta(meta, main)

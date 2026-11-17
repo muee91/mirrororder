@@ -152,8 +152,8 @@ describe("status center recovery semantics", () => {
 
     expect(source).toContain('task.cancel_requested ? "正在取消"');
     expect(source.indexOf('className="status-center-section is-active"')).toBeLessThan(source.indexOf('className="status-center-section is-attention"'));
-    expect(recovery).toContain("position: sticky");
-    expect(recovery).toContain(".status-center-section.is-attention { order: 0; flex: 1 1 610px; }");
+    expect(recovery).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(recovery).toContain(".status-center-section.is-attention { order: 0; }");
     expect(recovery).toContain(".status-center-section.is-active {");
     expect(recovery).toContain("max-height: min(430px, 52vh)");
     expect(recovery).toContain("scrollbar-gutter: stable");

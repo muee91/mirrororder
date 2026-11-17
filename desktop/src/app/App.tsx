@@ -581,6 +581,7 @@ export function App() {
                 activities={projectActivities}
                 revealLabel={revealLabel}
                 onOpenProject={selectProject}
+                onOpenProjectPage={openProjectPage}
                 onOpenTeamProject={openTeamProject}
                 onCopyShareLink={(project) => copyProjectShareLink(project)}
                 onRevealProject={(project) => revealProject(project)}
@@ -609,6 +610,7 @@ export function App() {
                 project={selectedProject}
                 pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
                 onOpenTeamReview={() => openTeamProject(selectedProject)}
+                 onMulticamSync={() => void multicamSyncProject(selectedProject)}
                 onPageChange={setActiveProjectPage}
               />
             ) : (

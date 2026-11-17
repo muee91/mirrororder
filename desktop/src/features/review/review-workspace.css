@@ -91,8 +91,8 @@
 
 .review-assignment-feedback-note {
   margin: 9px 0 0;
-  border-left: 2px solid var(--mo-border-strong, #3a4651);
-  padding: 6px 8px;
+  border-top: 1px solid var(--mo-border-strong, #3a4651);
+  padding: 8px 0 0;
   color: var(--mo-text-muted, #778491);
   background: var(--mo-surface-raised, #151b21);
   font-size: var(--mo-font-xs, 10px);

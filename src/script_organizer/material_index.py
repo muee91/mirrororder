@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from .alignment import align_blocks
 from .config import ProjectConfig
-from .fcpxml_reader import build_multicam_groups, read_fcpxml
+from .fcpxml_reader import build_multicam_groups, is_generated_sync_asset_id, read_fcpxml
 from .media_reader import read_media_directory
 from .matcher import (
     build_line_index,
@@ -601,8 +601,14 @@ def _reconcile_previous_clip_identity(
             continue
         previous = rows[index]
         media_id = clip.media_id
+        previous_media_id = str(previous.get("media_id", "") or "")
+        if is_generated_sync_asset_id(clip.source_asset_id) and media_id.startswith("M_") and previous_media_id.startswith("M_") and media_id != previous_media_id:
+            # A fresh sync can reassign ordinal FCPXML asset ids. Do not carry
+            # another physical media's occurrence/review identity across it.
+            reconciled.append(clip)
+            continue
         if not media_id or media_id.startswith("MP_"):
-            candidate = str(previous.get("media_id", "") or "")
+            candidate = previous_media_id
             if candidate.startswith("M_"):
                 # A missing/moved locator is reported by the parser as a
                 # provisional filename identity.  Keep the first verified

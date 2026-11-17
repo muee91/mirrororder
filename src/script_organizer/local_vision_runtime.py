@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .local_models.supervisor import launch_command
+
 
 DEFAULT_LOCAL_VISION_MODEL = "Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M"
 
@@ -234,7 +236,7 @@ class LocalVisionRuntime:
             cls._log_handle = self.log_path.open("ab", buffering=0)
             try:
                 cls._process = subprocess.Popen(
-                    command,
+                    launch_command(command),
                     stdin=subprocess.DEVNULL,
                     stdout=cls._log_handle,
                     stderr=subprocess.STDOUT,

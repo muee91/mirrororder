@@ -56,12 +56,12 @@ export function ProjectLibrary({
   revealLabel = "Finder / Explorer",
   onSelectProject,
   onOpenProjects,
+  onOpenProjectPage,
   onOpenStatusCenter,
   onOpenSettings,
   onOpenTeamProject,
   onCopyShareLink,
   onRevealProject,
-  onMulticamSyncProject,
   onPrepareProject,
   onOpenMediaBinding,
   onDeleteProject,
@@ -192,7 +192,7 @@ export function ProjectLibrary({
           <div className="project-context-group-label">开始制作</div>
           <button type="button" role="menuitem" onClick={() => run(() => onSelectProject(menu.project))}>打开项目</button>
           <button type="button" role="menuitem" title="本机素材 / 换素材盘" disabled={!onOpenMediaBinding} onClick={() => run(() => onOpenMediaBinding?.(menu.project))}>连接素材</button>
-          <button type="button" role="menuitem" disabled={!onMulticamSyncProject} onClick={() => run(() => onMulticamSyncProject?.(menu.project))}>多机位同步</button>
+          <button type="button" role="menuitem" title="多机位同步在时间线中执行" disabled={!onOpenProjectPage} onClick={() => run(() => onOpenProjectPage?.(menu.project, "timeline"))}>打开时间线（多机位同步）</button>
           <button type="button" role="menuitem" title="重新整理项目" disabled={!onPrepareProject} onClick={() => run(() => onPrepareProject?.(menu.project))}>完整整理项目</button>
           <details className="project-context-advanced">
             <summary>高级操作</summary>

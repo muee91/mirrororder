@@ -10,6 +10,7 @@ import pytest
 from script_organizer.device_tasks import DeviceTaskManager
 from script_organizer.multicam_sync_engine import _run
 from script_organizer.resource_scheduler import ResourceCancelled
+from script_organizer import tasks as compat_tasks
 from script_organizer.tasks_v2 import PROCESS_RUNNER_ID, TaskManager
 
 
@@ -89,6 +90,24 @@ def test_multicam_cancel_targets_only_the_spawned_process_tree() -> None:
     assert 'killall' not in engine
 
 
+def test_verbose_vendor_output_does_not_reread_durable_state_for_every_line(tmp_path: Path) -> None:
+    script = tmp_path / "verbose.py"
+    script.write_text("for n in range(10000): print(n)\n", encoding="utf-8")
+    reads = []
+
+    def cancellation_state():
+        reads.append(time.monotonic())
+        return False
+
+    output = _run(tmp_path, script.name, [], timeout=10, cancel_requested=cancellation_state)
+
+    assert len(output.splitlines()) == 10000
+    assert output.endswith("9999")
+    # The production callback loads the durable task JSON. Output volume must
+    # not multiply disk reads; silent-worker cancellation remains covered above.
+    assert len(reads) < 1000
+
+
 def test_durable_task_update_persists_user_visible_message(tmp_path: Path) -> None:
     config = SimpleNamespace(output_dir=tmp_path)
     row = task_payload("task-message", "running")
@@ -103,6 +122,78 @@ def test_durable_task_update_persists_user_visible_message(tmp_path: Path) -> No
     saved = manager.list("project-1")[0]
     assert saved["message"] == "音频互相关同步 day1"
     assert saved["logs"][-1].endswith("音频互相关同步 day1")
+
+
+def test_multicam_sync_publishes_analysis_index_before_task_completes(tmp_path: Path, monkeypatch) -> None:
+    """A direct sync must not finish while the project still has no media index."""
+    config = SimpleNamespace(output_dir=tmp_path)
+    row = task_payload("task-sync-analysis", "queued")
+    write_task(tmp_path, row)
+    manager = TaskManager(lambda _project_id: config, workspace_id="ws_demo")
+    calls: list[str] = []
+
+    def fake_sync(*_args, **_kwargs):
+        calls.append("sync")
+        return {"status": "completed", "positions": ["positions_day1_compressed.tsv"]}
+
+    def fake_analyze(*_args, **_kwargs):
+        calls.append("analysis")
+        return {"index": {"stats": {"clips": 2, "groups": 1}}}
+
+    monkeypatch.setattr("script_organizer.tasks_v2.run_multicam_sync", fake_sync)
+    monkeypatch.setattr("script_organizer.tasks_v2._analysis_inputs_available", lambda _config: True)
+    monkeypatch.setattr("script_organizer.tasks_v2.analyze", fake_analyze)
+    manager._run("project-1", row["task_id"])
+
+    saved = manager.list("project-1")[0]
+    assert saved["status"] == "completed"
+    assert calls == ["sync", "analysis"]
+    assert saved["result"]["analysis"] == {"clips": 2, "groups": 1}
+
+
+def test_production_task_facade_runs_post_sync_analysis(tmp_path: Path, monkeypatch) -> None:
+    config = SimpleNamespace(output_dir=tmp_path)
+    row = task_payload("task-sync-analysis-facade", "queued")
+    write_task(tmp_path, row)
+    manager = compat_tasks.TaskManager(lambda _project_id: config, workspace_id="ws_demo")
+    calls: list[str] = []
+
+    monkeypatch.setattr(compat_tasks._impl, "run_multicam_sync", lambda *_args, **_kwargs: (calls.append("sync") or {"status": "completed"}))
+    monkeypatch.setattr(compat_tasks._impl, "_analysis_inputs_available", lambda _config: True)
+    monkeypatch.setattr(compat_tasks, "analyze", lambda *_args, **_kwargs: (calls.append("analysis") or {"index": {"stats": {"clips": 1}}}))
+    manager._run("project-1", row["task_id"])
+
+    saved = manager.list("project-1")[0]
+    assert saved["status"] == "completed"
+    assert calls == ["sync", "analysis"]
+    assert saved["result"]["analysis"] == {"clips": 1}
+
+
+def test_task_worker_output_is_rate_limited_before_durable_write(tmp_path: Path, monkeypatch) -> None:
+    config = SimpleNamespace(output_dir=tmp_path)
+    manager = TaskManager(lambda _project_id: config)
+    writes: list[str] = []
+    monkeypatch.setattr(manager, "_update", lambda _config, _task_id, **kwargs: writes.append(str(kwargs.get("message", ""))))
+
+    report = manager._task_message_reporter(config, "task-log", interval=60.0)
+    report("first")
+    report("second")
+
+    assert writes == ["first"]
+
+
+def test_task_log_history_is_bounded(tmp_path: Path) -> None:
+    config = SimpleNamespace(output_dir=tmp_path)
+    row = task_payload("task-log-bound", "running")
+    row["logs"] = [f"old-{index}" for index in range(2100)]
+    write_task(tmp_path, row)
+    manager = TaskManager(lambda _project_id: config)
+
+    manager._update(config, "task-log-bound", message="latest")
+
+    saved = manager.list("project-1")[0]
+    assert len(saved["logs"]) == 2000
+    assert saved["logs"][-1].endswith("latest")
 
 
 def test_queued_cancel_cannot_be_promoted_back_to_running(tmp_path: Path) -> None:

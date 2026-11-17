@@ -57,7 +57,8 @@ describe("Desktop media reconnect recovery", () => {
     const source = read("./MediaBindingWorkbench.tsx");
 
     expect(source).toContain("function newestMediaScan(tasks: ProjectTaskRecord[]): ProjectTaskRecord | null");
-    expect(source).toContain("const latestFailure = latest && (latest.status === \"failed\" || Boolean(latest.error)) ? latest : null;");
+    expect(source).toContain("latest.status === \"interrupted\"");
+    expect(source).toContain("latest.status === \"cancelled\"");
     expect(source).toContain("setScanError(latestFailure)");
     expect(source).toContain("className=\"media-binding-scan-error\"");
     expect(source).toContain('role="alert"');
