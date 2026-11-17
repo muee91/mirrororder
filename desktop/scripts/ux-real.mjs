@@ -138,7 +138,7 @@ await step("shell mount", async () => {
 });
 
 await step("剧本：ScriptBlock 主画布渲染", async () => {
-  await clickWorkspace(/^剧本$/);
+  await clickWorkspace(/^剧本关联/);
   await page.waitForSelector(".script-block", { timeout: 30000 });
   const count = await page.locator(".script-block").count();
   if (count < 1) throw new Error(`剧本画布只有 ${count} 个 ScriptBlock`);
@@ -170,7 +170,7 @@ await step("剧本：段详情抽屉可开可关", async () => {
 await shot("drawer");
 
 await step("审阅：队列非空并可连续换 Take", async () => {
-  await clickWorkspace(/^审阅$/);
+  await clickWorkspace(/^看片审阅/);
   return verifyReviewQueueNavigation(page);
 });
 await shot("review");
@@ -179,7 +179,7 @@ await step("审阅：媒体加载并实际播放", () => verifyReviewPlayback(pa
 await shot("review-playback");
 
 await step("素材：Take/场记画布渲染", async () => {
-  await clickWorkspace(/^素材$/);
+  await clickWorkspace(/^交互场记/);
   await page.waitForTimeout(2500);
   const cards = await page.locator(".take-card, .mo-take-list-row, .mo-media-card, .slate-row").count();
   if (cards < 1) throw new Error("素材画布没有渲染任何 canonical 对象");
@@ -188,7 +188,7 @@ await step("素材：Take/场记画布渲染", async () => {
 await shot("material");
 
 await step("时间线：编辑器画布就绪", async () => {
-  await clickWorkspace(/^时间线$/);
+  await clickWorkspace(/^选片组接/);
   await page.waitForTimeout(2500);
   const stage = await page.locator("[class*=timeline], [class*=editor-stage], .timeline-track").count();
   if (stage < 1) throw new Error("时间线画布没有渲染");

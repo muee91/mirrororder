@@ -47,8 +47,8 @@ async function shot(name) {
   console.log("saved", name);
 }
 
-for (const [label, name] of [["剧本", "03-script"], ["审阅", "05-review"], ["时间线", "04-timeline"]]) {
-  const tab = page.getByRole("button", { name: new RegExp(`^${label}$`) }).first();
+for (const [label, name] of [["剧本关联", "03-script"], ["看片审阅", "05-review"], ["选片组接", "04-timeline"]]) {
+  const tab = page.getByRole("button", { name: new RegExp(`^${label}`) }).first();
   await tab.click({ timeout: 6000 });
   await page.waitForTimeout(1500);
   await shot(name);

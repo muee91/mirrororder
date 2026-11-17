@@ -238,7 +238,7 @@
   .professional-project-identity { gap: 7px; }
   .professional-team-review { display: none; }
 }
-@media (max-width: 920px) {
+@media (max-width: 1220px) {
   .professional-project-workbench { grid-template-rows: 56px minmax(0, 1fr); }
   .project-production-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   .project-module-rail {

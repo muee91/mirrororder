@@ -120,6 +120,8 @@ async function collectMetrics(page) {
     return {
       workbench: rect(".professional-project-workbench"),
       toolbar: rect(".professional-project-toolbar"),
+      layout: rect(".project-production-layout"),
+      moduleNav: rect(".project-module-rail"),
       canvas: rect(".project-workbench-canvas"),
       main: rect(".project-workbench-main"),
       material: rect(".material-workspace"),
@@ -139,8 +141,18 @@ async function collectMetrics(page) {
 function assertLayout(name, viewport, metrics) {
   assert.equal(metrics.innerWidth, viewport.width, `${name}: browser viewport width drifted from the requested size`);
   assert.equal(metrics.gridRows.length, 2, `${name}: ProjectWorkbench must have exactly toolbar + canvas grid rows (${metrics.gridRows.join(" ")})`);
-  approxEqual(metrics.canvas.top, metrics.toolbar.bottom, 1.5, `${name}: canvas must begin immediately after toolbar`);
-  approxEqual(metrics.canvas.height, metrics.workbench.height - metrics.toolbar.height, 2, `${name}: canvas must consume the remaining workbench height`);
+  // The independent module rail sits beside the canvas on a wide viewport,
+  // and above it at compact widths. Both arrangements must fill the same
+  // project body without overlapping or stealing its usable height.
+  approxEqual(metrics.layout.top, metrics.toolbar.bottom, 1.5, `${name}: module layout must follow project header`);
+  approxEqual(metrics.layout.height, metrics.workbench.height - metrics.toolbar.height, 2,
+    `${name}: module layout must consume the workbench body`);
+  const verticalRail = Math.abs(metrics.moduleNav.right - metrics.canvas.left) <= 2
+    && Math.abs(metrics.moduleNav.top - metrics.canvas.top) <= 2;
+  const horizontalRail = Math.abs(metrics.moduleNav.bottom - metrics.canvas.top) <= 2
+    && Math.abs(metrics.moduleNav.left - metrics.canvas.left) <= 2;
+  assert.ok(verticalRail || horizontalRail,
+    `${name}: module rail must remain beside or immediately above the production canvas`);
   assert.ok(metrics.canvas.height > viewport.height * 0.65, `${name}: production canvas collapsed to ${metrics.canvas.height}px`);
   assert.equal(metrics.mainOverflow, "hidden", `${name}: guard must exercise the production clipping boundary`);
 
@@ -158,6 +170,8 @@ function assertLayout(name, viewport, metrics) {
   const boxes = [
     ["workbench", metrics.workbench],
     ["toolbar", metrics.toolbar],
+    ["layout", metrics.layout],
+    ["moduleNav", metrics.moduleNav],
     ["canvas", metrics.canvas],
     ["main", metrics.main],
     ["material", metrics.material],
