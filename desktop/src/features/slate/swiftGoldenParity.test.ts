@@ -24,7 +24,7 @@ describe("Swift golden product fidelity", () => {
     expect(resume).toContain('if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline";');
     expect(workbench).toContain("professional-project-toolbar");
     expect(workbench).toContain("readProjectPage");
-    expect(workbench).toContain('useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)))');
+    // Fresh media-directory projects must open with the sync task, while\n    // existing sessions still restore their last canonical workspace.\n    expect(workbench).toContain('project.input_kind === "media-directory" && !hasRememberedProjectPage(project.project_id)');\n    expect(workbench).toContain('? "timeline"');\n    expect(workbench).toContain("safeProductionPage(readProjectPage(project.project_id))");
     expect(workbench).toContain("owns-chrome");
     expect(workbench).toContain("const assistantVisible = assistantOpen;");
     expect(workbench).toContain("professional-assistant-toggle");
