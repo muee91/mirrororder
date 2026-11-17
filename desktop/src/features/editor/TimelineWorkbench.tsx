@@ -121,6 +121,7 @@ export function TimelineWorkbench({
         syncTimeline={syncTimeline}
         onMulticamSync={onMulticamSync}
         assemblyExpanded={assemblyExpanded}
+        assemblyOnly={initialAssemblyExpanded}
         onToggleAssembly={() => setAssemblyExpanded((value) => !value)}
         focusIntent={focusIntent}
         focusLabel={focusLabel}
