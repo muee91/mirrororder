@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
-import { canonicalProductionPage, readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
+import { canonicalProductionPage, hasRememberedProjectPage, readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
@@ -138,7 +138,9 @@ function normalizedContext(
 }
 
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onMulticamSync, onPageChange }: Props) {
-  const [page, setPage] = useState<ProductionPage>(() => safeProductionPage(readProjectPage(project.project_id)));
+  const [page, setPage] = useState<ProductionPage>(() => project.input_kind === "media-directory" && !hasRememberedProjectPage(project.project_id)
+    ? "timeline"
+    : safeProductionPage(readProjectPage(project.project_id)));
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [selection, setSelection] = useState<ProductionSelectionContext>(() => ({ projectId: project.project_id }));
   const [navigationIntent, setNavigationIntent] = useState<ProductionNavigationIntent | null>(null);
@@ -147,7 +149,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const navigationNonce = useRef(0);
   const { syncTimeline, beginSyncTracking, refreshSyncTimeline } = useMulticamSyncGate(baseUrl, project.project_id, project.input_kind);
   const syncBlocked = project.input_kind === "media-directory" && !syncTimeline.ready;
-  const visiblePage = syncBlocked ? "timeline" : page;
+  const visiblePage = syncBlocked && (page === "script" || page === "watch") ? "timeline" : page;
 
   const area = areaForPage(visiblePage);
   const currentSelection = selection.projectId === project.project_id ? selection : { projectId: project.project_id };
@@ -171,7 +173,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }
 
   function navigate(next: ProductionPage): void {
-    if (syncBlocked && next !== "timeline") {
+    if (syncBlocked && areaForPage(next) !== "material" && next !== "timeline" && next !== "delivery") {
       setPage("timeline");
       return;
     }
@@ -184,10 +186,10 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }
 
   function switchArea(next: ProductionArea): void {
-    if (syncBlocked && next !== "timeline") return;
+    if (syncBlocked && next !== "timeline" && next !== "material") return;
     if (next === area) return;
     setNavigationIntent(nextIntent(next));
-    navigate(AREAS[next].defaultPage);
+    navigate(syncBlocked && next === "material" ? "media-library" : AREAS[next].defaultPage);
   }
 
   function focusTake(
@@ -228,7 +230,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }, [onPageChange, page, project.project_id]);
 
   useEffect(() => {
-    if (syncBlocked && page !== "timeline") {
+    if (syncBlocked && (page === "script" || page === "watch")) {
       setPage("timeline");
     }
   }, [page, syncBlocked]);
@@ -247,14 +249,21 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
       aria-label={`项目工作台：${project.name || project.project_id}`}
     >
       <header className="professional-project-toolbar">
-        <nav className="professional-area-nav" aria-label="制作区域">
-          {primaryNavigation.map(([key, definition]) => (
+        <nav className={`professional-area-nav${syncBlocked ? " is-sync-first" : ""}`} aria-label="制作区域">
+          {syncBlocked ? (
+            <>
+              <button type="button" className={area === "timeline" ? "is-active" : ""}
+                aria-current={area === "timeline" ? "page" : undefined}
+                onClick={() => navigate("timeline")}>同步与交付</button>
+              <button type="button" className={area === "material" ? "is-active" : ""}
+                aria-current={area === "material" ? "page" : undefined}
+                onClick={() => navigate("media-library")}>检查素材</button>
+            </>
+          ) : primaryNavigation.map(([key, definition]) => (
             <button
               type="button"
               className={area === key ? "is-active" : ""}
               aria-current={area === key ? "page" : undefined}
-              aria-disabled={syncBlocked && key !== "timeline" ? true : undefined}
-              title={syncBlocked && key !== "timeline" ? "完成多机位同步后解锁" : undefined}
               key={key}
               onClick={() => switchArea(key)}
             >
