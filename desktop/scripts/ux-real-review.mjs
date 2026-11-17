@@ -1,5 +1,11 @@
 export async function verifyReviewQueueNavigation(page, { timeout = 10000 } = {}) {
-  await page.waitForSelector(".review-queue", { timeout });
+  // An empty queue intentionally has no .review-queue node. Detect both
+  // legitimate UI states before asserting the presence of playable Takes.
+  await page.waitForFunction(
+    () => Boolean(document.querySelector(".review-queue, .review-empty-state")),
+    undefined,
+    { timeout },
+  );
   const queued = await page.locator('.review-queue [data-ui-authority="take-compact"]').count();
   if (queued < 1) throw new Error("审阅队列为空，无法看片");
 
