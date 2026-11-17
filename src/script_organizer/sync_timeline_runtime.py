@@ -115,7 +115,33 @@ def _status_for(
     return ("required", False, "尚未完成多机位同步；请先从时间线开始。")
 
 
-def _read_tracks(work: Path, days: list[str]) -> tuple[list[dict[str, Any]], float, list[str]]:
+
+def _indexed_media_clips(index: dict[str, Any]) -> dict[str, str]:
+    """Map sync FCPXML asset IDs to *indexed* playback clip IDs.
+
+    The vendor positions file uses temporary v2_* identifiers, not Host
+    clip_id. Never send those identifiers to /media. The FCPXML builder assigns
+    day_{day}_asset_{row_number}, which survives into the material index as
+    source_asset_id. Different occurrences of the same asset may yield several
+    clip IDs; only one unambiguous content identity is safe to preview.
+    """
+    by_asset: dict[str, list[tuple[str, str]]] = {}
+    for item in _as_list(index.get("clips")):
+        if not isinstance(item, dict):
+            continue
+        asset = _text(item.get("source_asset_id"))
+        clip_id = _text(item.get("clip_id"))
+        media_id = _text(item.get("media_id"))
+        if asset.startswith("day_") and "_asset_" in asset and clip_id and media_id.startswith("M_"):
+            by_asset.setdefault(asset, []).append((media_id, clip_id))
+    result: dict[str, str] = {}
+    for asset, refs in by_asset.items():
+        if len({media_id for media_id, _clip_id in refs}) == 1:
+            result[asset] = min(clip_id for _media_id, clip_id in refs)
+    return result
+
+
+def _read_tracks(work: Path, days: list[str], media_clips: dict[str, str] | None = None) -> tuple[list[dict[str, Any]], float, list[str]]:
     rows_by_day: list[tuple[str, list[dict[str, str]]]] = []
     for day in days:
         path = work / f"positions_{day}_compressed.tsv"
@@ -133,22 +159,22 @@ def _read_tracks(work: Path, days: list[str]) -> tuple[list[dict[str, Any]], flo
     shift = 0.0
     max_end = 0.0
     for day, rows in rows_by_day:
-        valid_rows: list[tuple[dict[str, str], float, float]] = []
-        for row in rows:
+        valid_rows: list[tuple[int, dict[str, str], float, float]] = []
+        for row_number, row in enumerate(rows):
             camera = _text(row.get("cam")) or "?"
             position = _number(row.get("pos"))
             duration = _number(row.get("dur"))
             if duration <= 0:
                 continue
-            valid_rows.append((row, position, duration))
+            valid_rows.append((row_number, row, position, duration))
             if camera not in tracks:
                 tracks[camera] = []
                 track_order.append(camera)
         if not valid_rows:
             continue
-        day_start = min(position for _row, position, _duration in valid_rows)
-        day_end = max(position + duration for _row, position, duration in valid_rows)
-        for row, position, duration in valid_rows:
+        day_start = min(position for _index, _row, position, _duration in valid_rows)
+        day_end = max(position + duration for _index, _row, position, duration in valid_rows)
+        for row_number, row, position, duration in valid_rows:
             start = max(0.0, position - day_start + shift)
             tracks[_text(row.get("cam")) or "?"].append(
                 {
@@ -160,6 +186,7 @@ def _read_tracks(work: Path, days: list[str]) -> tuple[list[dict[str, Any]], flo
                     "duration": duration,
                     "timecode": _text(row.get("tc")),
                     "clip_number": _text(row.get("clipn")),
+                    "media_clip_id": (media_clips or {}).get(f"day_{day}_asset_{row_number}", ""),
                 }
             )
             max_end = max(max_end, start + duration)
@@ -202,13 +229,17 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
     report_path = config.output_dir / "sync" / "sync_report.json"
     sync_file = config.output_dir / "sync" / "synchronized.fcpxml"
     report = _read_json(report_path)
-    phase, ready, message = _status_for(latest_task, report, sync_file, _media_index_ready(config))
+    media_index = _read_json(Path(config.output_dir) / "material_index.json")
+    phase, ready, message = _status_for(latest_task, report, sync_file, bool(media_index.get("clips") or media_index.get("groups")))
     tracks: list[dict[str, Any]] = []
     duration_seconds = 0.0
     cameras: list[str] = []
     if ready:
         days = [str(item) for item in _as_list(report.get("days")) if str(item)]
-        tracks, duration_seconds, cameras = _read_tracks(config.output_dir / ".multicam-sync" / "work", days)
+        tracks, duration_seconds, cameras = _read_tracks(
+            config.output_dir / ".multicam-sync" / "work", days,
+            _indexed_media_clips(media_index),
+        )
         if not tracks:
             phase, ready, message = (
                 "invalid",
