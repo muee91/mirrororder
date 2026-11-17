@@ -213,6 +213,24 @@ def test_task_worker_output_is_rate_limited_before_durable_write(tmp_path: Path,
     assert writes == ["first"]
 
 
+
+def test_sync_stage_transitions_are_not_lost_to_verbose_log_throttle(tmp_path: Path, monkeypatch) -> None:
+    config = SimpleNamespace(output_dir=tmp_path)
+    manager = TaskManager(lambda _project_id: config)
+    writes: list[str] = []
+    monkeypatch.setattr(manager, "_update", lambda _config, _task_id, **kwargs: writes.append(str(kwargs.get("message", ""))))
+
+    report = manager._task_message_reporter(config, "task-log", interval=60.0)
+    report("普通日志")
+    report("另一行普通日志")
+    report("提取同步音频缓存")
+    report("第三行普通日志")
+    report("音频互相关同步 day1")
+
+    assert writes == ["普通日志", "提取同步音频缓存", "音频互相关同步 day1"]
+
+
+
 def test_task_log_history_is_bounded(tmp_path: Path) -> None:
     config = SimpleNamespace(output_dir=tmp_path)
     row = task_payload("task-log-bound", "running")
