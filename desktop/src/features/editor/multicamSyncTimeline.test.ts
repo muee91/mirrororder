@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { createElement } from "react";
+import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import type { MulticamSyncTimeline as SyncTimeline } from "../../api/syncTimeline";
 import { MulticamSyncTimeline } from "./MulticamSyncTimeline";
@@ -95,4 +96,31 @@ it("exposes a playable source only for a verified indexed clip identifier", () =
   }));
   expect(host.querySelector("video.multicam-sync-video")).toBeNull();
   expect(host.textContent).toContain("尚未建立无歧义的素材身份");
+});
+
+
+it("switches active camera at the same master time without creating a new edit timeline", async () => {
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const payload: SyncTimeline = {
+    contract_version: "multicam_sync_timeline.v1", project_id: "project", phase: "completed",
+    ready: true, message: "ready", task: null, cameras: ["A", "B"], clip_count: 2, duration_seconds: 12,
+    tracks: ["A", "B"].map((camera) => ({
+      track_id: `video:${camera}`, kind: "video" as const, camera, label: `${camera} 机位`, clip_count: 1,
+      clips: [{ clip_id: `vendor-${camera}`, day: "day1", camera, name: `${camera}.MOV`,
+        timeline_start: 0, duration: 10, timecode: "", clip_number: "" }],
+    })),
+  };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => { root.render(createElement(MulticamSyncTimeline, { syncTimeline: payload })); });
+  expect(host.querySelector(".multicam-sync-monitor-heading span")?.textContent).toContain("A 机位");
+  const b = [...host.querySelectorAll<HTMLButtonElement>(".multicam-sync-angle-switch button")]
+    .find((button) => button.textContent?.includes("B 机"));
+  expect(b).toBeDefined();
+  await act(async () => { b?.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  expect(host.querySelector(".multicam-sync-monitor-heading span")?.textContent).toContain("B 机位");
+  expect(host.querySelector(".multicam-sync-details")?.textContent).toContain("B.MOV");
+  await act(async () => { root.unmount(); });
+  host.remove();
 });

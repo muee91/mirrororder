@@ -46,7 +46,7 @@ def _latest_sync_task(tasks: Iterable[object]) -> dict[str, Any] | None:
     candidates = [
         task
         for task in tasks
-        if isinstance(task, dict) and _text(task.get("type")) == "multicam_sync"
+        if isinstance(task, dict) and _text(task.get("type")) in {"multicam_sync", "prepare_project"}
     ]
     if not candidates:
         return None
