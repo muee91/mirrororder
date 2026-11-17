@@ -91,6 +91,22 @@ def test_running_sync_exposes_worker_activity_and_stage_progress(tmp_path: Path)
 
 
 
+
+def test_legacy_prepare_project_sync_is_visible_instead_of_pretending_not_started(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    older = _task("completed", created_at="2026-11-17T08:00:00+00:00", task_id="old-sync")
+    preparing = _task("running", created_at="2026-11-17T09:00:00+00:00", task_id="prepare")
+    preparing["type"] = "prepare_project"
+    preparing["stage"] = "sync"
+    preparing["message"] = "提取同步音频缓存"
+    result = build_sync_timeline(project, [older, preparing])
+
+    assert result["ready"] is False
+    assert result["phase"] == "running"
+    assert result["task"]["task_id"] == "prepare"
+    assert result["task"]["message"] == "提取同步音频缓存"
+
+
 def test_completed_sync_projects_tracks_by_camera_and_concatenates_days(tmp_path: Path) -> None:
     project = _project(tmp_path)
     _write_sync_artifacts(project, days=("day1", "day2"))
