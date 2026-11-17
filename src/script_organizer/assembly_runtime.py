@@ -6,7 +6,7 @@ from typing import Any
 from .assembly_timeline import ASSEMBLY_CONTRACT, build_assembly_timeline
 from .coverage_graph import coverage_revision
 from .coverage_runtime import _filters
-from .sync_timeline_runtime import build_sync_timeline
+from .sync_timeline_runtime import build_sync_timeline, build_sync_delivery_artifacts
 
 
 _INSTALLED = False
@@ -58,6 +58,15 @@ def install_assembly_runtime() -> None:
                     self._local_only()
                     project = service.project(parts[3])
                     self._send_json(build_sync_timeline(project, service.tasks.list(parts[3])))
+                    return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "sync-delivery-artifacts"
+                ):
+                    self._local_only()
+                    project = service.project(parts[3])
+                    self._send_json(build_sync_delivery_artifacts(project, service.tasks.list(parts[3])))
                     return
                 if (
                     len(parts) == 5
