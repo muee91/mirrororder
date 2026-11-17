@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from script_organizer.sync_timeline_runtime import build_sync_timeline
+from script_organizer.sync_timeline_runtime import build_sync_timeline, build_sync_delivery_artifacts
 
 
 def _project(tmp_path: Path, *, media_directory: bool = True):
@@ -182,6 +182,61 @@ def test_old_camera_rules_require_resync_and_unknown_is_not_a_camera_count(tmp_p
     assert payload["cameras"] == list("ABCDEF")
     assert len(payload["tracks"]) == 7
     assert payload["tracks"][-1]["label"] == "未分类机位"
+
+
+
+def test_local_sync_artifact_manifest_lists_only_verified_export_files(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    media_root = tmp_path / "original_media"
+    export_dir = media_root / "交付"
+    export_dir.mkdir(parents=True)
+    project.config.media_roots = (media_root,)
+    _write_sync_artifacts(project)
+    files = {
+        "fcpxml": "synchronized.fcpxml",
+        "capcut_fcpxml": "synchronized_capcut.fcpxml",
+        "premiere_xml": "synchronized_premiere.xml",
+    }
+    for filename in files.values():
+        (export_dir / filename).write_text("<stub />", encoding="utf-8")
+    report_path = project.config.output_dir / "sync" / "sync_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report.update({key: str(export_dir / filename) for key, filename in files.items()})
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    task = _task("completed", created_at="2026-11-17T10:00:00+00:00", task_id="exported")
+
+    manifest = build_sync_delivery_artifacts(project, [task])
+    assert manifest["ready"] is True
+    assert manifest["paths_scope"] == "localhost_response_only"
+    assert [item["target"] for item in manifest["artifacts"]] == [
+        "davinci", "premiere", "final-cut", "jianying",
+    ]
+    assert all(item["available"] for item in manifest["artifacts"])
+    assert "nle_round_trip_not_verified" in manifest["validation"]
+
+
+def test_sync_artifact_manifest_does_not_expose_stale_or_foreign_paths(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    root = tmp_path / "root"
+    (root / "交付").mkdir(parents=True)
+    project.config.media_roots = (root,)
+    _write_sync_artifacts(project)
+    foreign = tmp_path / "secret.fcpxml"
+    foreign.write_text("private", encoding="utf-8")
+    report_path = project.config.output_dir / "sync" / "sync_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["fcpxml"] = str(foreign)
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    task = _task("completed", created_at="2026-11-17T10:00:00+00:00", task_id="done")
+    available = build_sync_delivery_artifacts(project, [task])
+    assert not any(item["local_path"] for item in available["artifacts"])
+    assert str(foreign) not in json.dumps(available)
+
+    cancelled = _task("cancelled", created_at="2026-11-17T11:00:00+00:00", task_id="new")
+    blocked = build_sync_delivery_artifacts(project, [task, cancelled])
+    assert blocked["ready"] is False
+    assert not any(item["available"] for item in blocked["artifacts"])
+
 
 
 def test_fcpxml_projects_do_not_require_multicam_sync(tmp_path: Path) -> None:
