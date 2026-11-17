@@ -6,6 +6,7 @@ interface Props {
   syncTimeline: SyncTimeline;
   baseUrl?: string;
   onMulticamSync?: () => void;
+  onInspect?: () => void;
 }
 
 const SYNC_STEPS = ["确认素材", "计算同步", "建立索引", "检查并交付"] as const;
@@ -31,7 +32,28 @@ function activityLabel(value: string | undefined): string {
   return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString("zh-CN");
 }
 
-function SyncGate({ syncTimeline, onMulticamSync }: Props) {
+export function SyncTaskWorkspace({ syncTimeline, onMulticamSync, onInspect }: Props) {
+  if (syncTimeline.ready) {
+    return (
+      <section className="multicam-sync-gate is-complete" aria-label="多机位同步任务">
+        <div className="multicam-sync-gate-header"><div>
+          <p className="multicam-sync-kicker">01 / 同步任务 · 已完成</p>
+          <h3>同步母版已建立，下一步检查音画</h3>
+          <p>已识别 {syncTimeline.clip_count} 个视频片段、{syncTimeline.cameras.length} 个机位。任务完成不代表逐帧音画或独立 WAV 已通过验收。</p>
+        </div><span className="multicam-sync-status is-completed" role="status">同步任务完成</span></div>
+        <div className="multicam-sync-gate-body"><div className="multicam-sync-live">
+          <p className="multicam-sync-label">最近任务记录</p>
+          <strong>{syncTimeline.task?.message || syncTimeline.message}</strong>
+          <div className="multicam-sync-activity">
+            {syncTimeline.task?.updated_at ? <span>最近活动：{activityLabel(syncTimeline.task.updated_at)}</span> : null}
+          </div>
+        </div><div className="multicam-sync-action">
+          <button type="button" onClick={onInspect} disabled={!onInspect}>进入同步核对</button>
+          <p>核对后在独立的「工程交付」模块查看已有导出文件。</p>
+        </div></div>
+      </section>
+    );
+  }
   const task = syncTimeline.task;
   const phase = syncTimeline.phase;
   const running = phase === "running";
@@ -103,6 +125,6 @@ function SyncGate({ syncTimeline, onMulticamSync }: Props) {
 export function MulticamSyncTimeline(props: Props) {
   const { syncTimeline } = props;
   if (syncTimeline.phase === "not-required") return null;
-  if (!syncTimeline.ready) return <SyncGate {...props} />;
+  if (!syncTimeline.ready) return <SyncTaskWorkspace {...props} />;
   return <SyncInspectionWorkbench {...props} />;
 }
