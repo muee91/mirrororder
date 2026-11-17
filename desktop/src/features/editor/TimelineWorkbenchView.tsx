@@ -9,14 +9,14 @@ import { MulticamSyncTimeline } from "./MulticamSyncTimeline";
 export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
   const {
     baseUrl, message, snapshot, sequence, focusIntent, focusLabel, onOpenDelivery,
-    syncTimeline, onMulticamSync, assemblyExpanded = false, onToggleAssembly,
+    syncTimeline, onMulticamSync, assemblyExpanded = false, assemblyOnly = false, onToggleAssembly,
   } = props;
-  const isSyncProject = Boolean(syncTimeline && syncTimeline.phase !== "not-required");
+  const isSyncProject = !assemblyOnly && Boolean(syncTimeline && syncTimeline.phase !== "not-required");
   const syncBlocked = Boolean(isSyncProject && !syncTimeline?.ready);
   // A synchronized master is an independent deliverable, not a mini timeline
   // above the unrelated creative assembly, source and program monitors.
   const showSync = isSyncProject && (!assemblyExpanded || syncBlocked);
-  const showEditorial = !isSyncProject || (!syncBlocked && assemblyExpanded);
+  const showEditorial = assemblyOnly || !isSyncProject || (!syncBlocked && assemblyExpanded);
 
   return (
     <section className="timeline-workbench editorial-workbench">
