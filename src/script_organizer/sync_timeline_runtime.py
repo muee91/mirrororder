@@ -150,6 +150,11 @@ def _read_tracks(work: Path, days: list[str], media_clips: dict[str, str] | None
         try:
             with path.open(encoding="utf-8", newline="") as handle:
                 rows = [dict(row) for row in csv.DictReader(handle, delimiter="\t")]
+            # The first-party FCPXML builder does sort_values(["cam", "pos"])
+            # before allocating day_{day}_asset_{row_number}.  Indexing the
+            # un-sorted TSV silently links a playable preview to the wrong
+            # physical file when bad camera TC changes the order.
+            rows.sort(key=lambda row: (_text(row.get("cam")) or "?", _number(row.get("pos"))))
         except (OSError, UnicodeError, csv.Error):
             continue
         rows_by_day.append((day, rows))
