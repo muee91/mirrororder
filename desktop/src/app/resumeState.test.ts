@@ -43,6 +43,14 @@ describe("production resume state", () => {
     expect(readProjectPage("project-a", storage)).toBe("timeline");
   });
 
+  it("persists the three new raw-media production pages independently", () => {
+    const storage = new MemoryStorage();
+    for (const page of ["sync-task", "sync-inspect", "sync-delivery"] as const) {
+      rememberProjectPage("raw-series", page, storage);
+      expect(readProjectPage("raw-series", storage)).toBe(page);
+    }
+  });
+
   it("remembers the device-local media binding canvas as a production page", () => {
     const storage = new MemoryStorage();
     rememberProjectPage("project-a", "media-binding", storage);
