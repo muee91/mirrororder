@@ -8,7 +8,7 @@
 
 - 只有实际执行并成功的 gate 才能写 `PASS`。
 - 失败要记录失败层级；未执行写 `NOT RUN`。
-- 修改前后以目标 `main` commit 为验证对象，不能继承旧证据。
+- 修改前后以当前变更分支的具体 commit 及目标 `main` 基线为验证对象，不能继承旧证据。
 - 产品可用性和自动测试是两类证据：CI green 不能替代真实工作流可用性验收。
 
 ### MUST NOT
@@ -111,10 +111,10 @@ Desktop 项目内一级工作区固定为：
 - 新 coherent engine/store/runtime/support 组优先进入明确 domain package。
 - compatibility facade 只能 re-export，不得在 import 时注册 route、安装 runtime、写磁盘、加载模型或修改全局 registry。
 - `runtime_stack.py` 保持显式 composition root；domain import 不得触发全栈安装。
-- Product Recovery 期间不进行与五步主链无关的大规模 package migration；需要迁移时以当时实际 caller / authority 重新确定边界，不继承旧迁移计划。
+- 当前同步优先重制期间不进行无关的大规模 package migration；需要迁移时以真实 caller / authority 重新确定边界，不继承旧迁移计划。
 
 ## Documentation
 
-- 当前产品定义只由 `docs/app-information-architecture.md` 拥有；README 只能摘要和链接。
+- 当前产品定义只由 `docs/product/REBUILD_2026-11-17.md` 拥有；`docs/app-information-architecture.md` 仅映射既有代码，README 只能摘要和链接。
 - 当前状态、计划、长期硬约束分别由 `STATUS.md`、`BACKLOG.md`、`INVARIANTS.md` 拥有。
 - 一次性阶段报告、verification、closeout、聊天 handoff 不作为当前 authority 文档保留；Git history / Actions 保存历史证据。
