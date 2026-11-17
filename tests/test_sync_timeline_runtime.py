@@ -146,6 +146,37 @@ def test_sync_preview_uses_indexed_media_clip_not_vendor_temporary_id(tmp_path: 
     assert by_camera["B"]["media_clip_id"] == "C_REAL_B"
 
 
+
+def test_sync_preview_media_identity_uses_fcpxml_sorted_order_not_tsv_order(tmp_path: Path) -> None:
+    """Bad TC can scramble TSV order; source_asset IDs come from sorted rows."""
+    project = _project(tmp_path)
+    _write_sync_artifacts(project)
+    positions = project.config.output_dir / ".multicam-sync" / "work" / "positions_day1_compressed.tsv"
+    positions.write_text(
+        "id\\tday\\tcam\\tfile\\tdur\\ttc\\tclipn\\tpos\\n"
+        "vendor_b\\tday1\\tB\\tB001.MP4\\t8\\t00:00:01:00\\t1\\t5\\n"
+        "vendor_a_late\\tday1\\tA\\tA002.MP4\\t8\\t00:00:20:00\\t2\\t20\\n"
+        "vendor_a_early\\tday1\\tA\\tA001.MP4\\t10\\t00:00:00:00\\t1\\t0\\n",
+        encoding="utf-8",
+    )
+    index = {"clips": [
+        {"source_asset_id": "day_day1_asset_0", "clip_id": "C_EARLY", "media_id": "M_early"},
+        {"source_asset_id": "day_day1_asset_1", "clip_id": "C_LATE", "media_id": "M_late"},
+        {"source_asset_id": "day_day1_asset_2", "clip_id": "C_B", "media_id": "M_b"},
+    ]}
+    (project.config.output_dir / "material_index.json").write_text(json.dumps(index), encoding="utf-8")
+    result = build_sync_timeline(project, [
+        _task("completed", created_at="2026-11-17T10:00:00+00:00", task_id="valid"),
+    ])
+    by_name = {clip["name"]: clip for track in result["tracks"] for clip in track["clips"]}
+    assert result["ready"] is True
+    assert by_name["A001.MP4"]["media_clip_id"] == "C_EARLY"
+    assert by_name["A002.MP4"]["media_clip_id"] == "C_LATE"
+    assert by_name["B001.MP4"]["media_clip_id"] == "C_B"
+    assert by_name["B001.MP4"]["clip_id"] == "vendor_b"
+
+
+
 def test_sync_preview_refuses_ambiguous_or_provisional_media_identity(tmp_path: Path) -> None:
     project = _project(tmp_path)
     _write_sync_artifacts(project)
