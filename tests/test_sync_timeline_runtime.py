@@ -153,10 +153,10 @@ def test_sync_preview_media_identity_uses_fcpxml_sorted_order_not_tsv_order(tmp_
     _write_sync_artifacts(project)
     positions = project.config.output_dir / ".multicam-sync" / "work" / "positions_day1_compressed.tsv"
     positions.write_text(
-        "id\\tday\\tcam\\tfile\\tdur\\ttc\\tclipn\\tpos\\n"
-        "vendor_b\\tday1\\tB\\tB001.MP4\\t8\\t00:00:01:00\\t1\\t5\\n"
-        "vendor_a_late\\tday1\\tA\\tA002.MP4\\t8\\t00:00:20:00\\t2\\t20\\n"
-        "vendor_a_early\\tday1\\tA\\tA001.MP4\\t10\\t00:00:00:00\\t1\\t0\\n",
+        "id\tday\tcam\tfile\tdur\ttc\tclipn\tpos\n"
+        "vendor_b\tday1\tB\tB001.MP4\t8\t00:00:01:00\t1\t5\n"
+        "vendor_a_late\tday1\tA\tA002.MP4\t8\t00:00:20:00\t2\t20\n"
+        "vendor_a_early\tday1\tA\tA001.MP4\t10\t00:00:00:00\t1\t0\n",
         encoding="utf-8",
     )
     index = {"clips": [
