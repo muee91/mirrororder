@@ -350,6 +350,9 @@ class TaskManager:
                 result = run_multicam_sync(
                     config,
                     self._task_message_reporter(config, task_id),
+                    progress=lambda done, total: self._update(
+                        config, task_id, progress={"done": done, "total": total}
+                    ),
                     cancel_requested=lambda: self._cancel_requested(config, task_id),
                 )
                 if result.get("status") == "completed":
@@ -414,6 +417,9 @@ class TaskManager:
             result["sync"] = run_multicam_sync(
                 config,
                 lambda text: self._update(config, task["task_id"], message=text),
+                progress=lambda done, total: self._update(
+                    config, task["task_id"], progress={"done": done, "total": total}
+                ),
                 cancel_requested=lambda: self._cancel_requested(config, task["task_id"]),
             )
             if self._cancel_requested(config, task["task_id"]):
@@ -586,6 +592,7 @@ class TaskManager:
                 task.setdefault("logs", []).append(f"{_now()} {message}")
                 if len(task["logs"]) > _MAX_TASK_LOGS:
                     del task["logs"][:-_MAX_TASK_LOGS]
+            task["updated_at"] = _now()
             self._save(config, payload)
 
     @staticmethod
