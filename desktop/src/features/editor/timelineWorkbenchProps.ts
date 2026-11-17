@@ -13,4 +13,6 @@ export type TimelineWorkbenchProps = TimelineWorkbenchModel &
     onOpenRepair?: (clipId: string) => void;
     syncTimeline?: MulticamSyncTimeline;
     onMulticamSync?: () => void;
+    assemblyExpanded?: boolean;
+    onToggleAssembly?: () => void;
   };
