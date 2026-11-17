@@ -38,24 +38,92 @@ function trackSummary(track: MulticamSyncTrack): string {
   return `${track.label} · ${track.clip_count} 个片段`;
 }
 
+const SYNC_STEPS = ["确认素材", "计算同步", "建立索引", "检查并交付"] as const;
+
+function stageLabel(phase: MulticamSyncTimeline["phase"], stage: string): string {
+  if (phase === "loading") return "正在读取任务状态";
+  if (phase === "unavailable") return "无法读取任务状态";
+  if (phase === "failed") return "同步任务失败";
+  if (phase === "cancelled") return "任务已取消";
+  if (phase === "interrupted") return "任务被中断";
+  if (phase === "invalid") return "上次同步结果不可用";
+  if (phase === "required") return "准备开始同步";
+  if (stage === "analysis") return "正在建立媒体身份索引";
+  if (stage === "queued") return "任务已排队";
+  if (stage === "starting") return "正在启动同步引擎";
+  if (stage === "sync") return "正在计算多机位同步";
+  return phase === "running" ? "同步任务正在执行" : "等待开始";
+}
+
+function activityLabel(value: string | undefined): string {
+  if (!value) return "尚未记录";
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString("zh-CN");
+}
+
 function SyncGate({ syncTimeline, onMulticamSync }: Props) {
-  const running = syncTimeline.phase === "running";
+  const task = syncTimeline.task;
+  const phase = syncTimeline.phase;
+  const running = phase === "running";
+  const loading = phase === "loading";
+  const unreadable = phase === "unavailable";
+  const problem = ["failed", "cancelled", "interrupted", "invalid"].includes(phase);
+  // The worker reports algorithm checkpoints, not the number of media files
+  // processed. Do not turn these counts into an invented overall percentage.
+  const done = task?.progress?.done;
+  const total = task?.progress?.total;
+  const hasCheckpoints = running && task?.stage === "sync"
+    && typeof done === "number" && Number.isFinite(done) && done >= 0
+    && typeof total === "number" && Number.isFinite(total) && total >= 5 && done <= total;
+  const stepIndex = task?.stage === "analysis" ? 2 : running ? 1 : 0;
+
   return (
-    <section className="multicam-sync-gate" aria-label="多机位同步前置步骤">
-      <div className="multicam-sync-gate-copy">
-        <p className="multicam-sync-kicker">时间线前置</p>
-        <h3>先完成多机位同步</h3>
-        <p>原始素材和剧本必须先建立统一的时间顺序。同步完成后，才能检查轨道，并解锁素材、剧本和审阅。</p>
-        <div className="multicam-sync-flow" aria-label="制作流程">
-          <span>导入素材 + 剧本</span><b>→</b><strong>多机位同步</strong><b>→</b><span>时间线检查</span><b>→</b><span>素材 / 剧本 / 审阅</span>
+    <section className="multicam-sync-gate" aria-label="多机位同步任务">
+      <header className="multicam-sync-gate-header">
+        <div>
+          <p className="multicam-sync-kicker">新项目 · 第一步</p>
+          <h3>同步音视频，先让剪辑师开工</h3>
+          <p>优先完成多机位同步与媒体身份整理。剧本、场记、演员和语义分析可以在交付同步工程后继续。</p>
         </div>
+        <span className={`multicam-sync-status is-${phase}`} role="status">
+          <span className={`multicam-sync-status-dot is-${phase}`} aria-hidden="true" />
+          {stageLabel(phase, task?.stage ?? "")}
+        </span>
+      </header>
+      <div className="multicam-sync-flow" aria-label="制作流程">
+        {SYNC_STEPS.map((label, index) => (
+          <span className={index === stepIndex ? "is-current" : index < stepIndex ? "is-done" : ""} key={label}>
+            <strong>{String(index + 1).padStart(2, "0")}</strong> {label}
+          </span>
+        ))}
       </div>
-      <div className="multicam-sync-gate-action">
-        <span className={`multicam-sync-status-dot is-${syncTimeline.phase}`} aria-hidden="true" />
-        <span>{syncTimeline.message}</span>
-        <button type="button" disabled={running || !onMulticamSync} onClick={onMulticamSync}>
-          {running ? "同步处理中" : syncTimeline.phase === "completed" ? "重新同步素材" : "开始多机位同步"}
-        </button>
+      <div className="multicam-sync-gate-body">
+        <div className="multicam-sync-live" aria-live="polite">
+          <p className="multicam-sync-label">当前任务</p>
+          <strong>{task?.message || syncTimeline.message}</strong>
+          {hasCheckpoints ? (
+            <div className="multicam-sync-progress">
+              <div><span>同步算法检查点，不代表全部文件已处理</span><strong>{done} / {total}</strong></div>
+              <progress value={done} max={total} aria-label="同步算法检查点进度" />
+            </div>
+          ) : running ? (
+            <p className="multicam-sync-no-progress">正在执行当前阶段。该步骤还没有可信的逐文件进度，不显示虚假的百分比。</p>
+          ) : null}
+          {problem && task?.error ? <p className="multicam-sync-error" role="alert">失败原因：{task.error}</p> : null}
+          {unreadable ? <p className="multicam-sync-error" role="alert">{syncTimeline.message}</p> : null}
+          <div className="multicam-sync-activity">
+            {task?.started_at ? <span>开始时间：{activityLabel(task.started_at)}</span> : null}
+            {task?.updated_at ? <span>最近任务记录：{activityLabel(task.updated_at)}</span> : null}
+            {task?.task_id ? <span title={task.task_id}>任务已记录，可在状态中心查看详情</span> : null}
+          </div>
+        </div>
+        <div className="multicam-sync-action">
+          <button type="button" disabled={running || loading || unreadable || !onMulticamSync} onClick={onMulticamSync}>
+            {running ? "同步正在运行" : loading ? "检查状态中" : unreadable ? "状态暂不可读" : problem ? "重新执行同步" : "开始多机位同步"}
+          </button>
+          <p>任务会继续在后台运行。需要查看日志、取消或排查失败，请打开左侧「状态中心」。</p>
+          <p>同步未完成时仍可查看「素材」里的媒体清单和本机素材状态；尚未确认的内容不会被伪装成同步成功。</p>
+        </div>
       </div>
     </section>
   );
