@@ -22,6 +22,8 @@ export interface MulticamSyncTaskSummary {
   created_at?: string;
   started_at?: string;
   completed_at?: string;
+  updated_at?: string;
+  error?: string;
 }
 
 export interface MulticamSyncClip {
