@@ -296,6 +296,7 @@ class TaskManager:
                 task["cancel_requested"] = True
                 task["message"] = "已请求取消；当前可中断阶段会停止"
                 task["logs"].append("已请求取消；当前可中断阶段会停止")
+            task["updated_at"] = _now()
             self._save(config, payload)
             return task
 
@@ -311,7 +312,20 @@ class TaskManager:
             if not message:
                 return
             now = monotonic()
-            if state["last"] and now - state["last"] < interval:
+            # Persist phase transitions even when the vendor finished the prior
+            # phase in under the normal log throttle interval. Otherwise the
+            # UI may claim "盘点素材" for an entire silent audio extraction.
+            phase_transition = message.startswith((
+                "盘点素材与时间码",
+                "提取同步音频缓存",
+                "音频互相关同步",
+                "压缩全机停机间隙",
+                "生成标准 FCPXML",
+                "校验 FCPXML",
+                "生成剪映",
+                "生成 Premiere",
+            ))
+            if state["last"] and now - state["last"] < interval and not phase_transition:
                 return
             state["last"] = now
             self._update(config, task_id, message=message)
