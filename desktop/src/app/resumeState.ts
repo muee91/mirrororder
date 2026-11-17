@@ -1,4 +1,7 @@
 export const PRODUCTION_PAGES = [
+  "sync-task",
+  "sync-inspect",
+  "sync-delivery",
   "media-library",
   "media-binding",
   "takes",
