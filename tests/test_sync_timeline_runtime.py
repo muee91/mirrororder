@@ -110,6 +110,43 @@ def test_completed_sync_projects_tracks_by_camera_and_concatenates_days(tmp_path
     assert payload["duration_seconds"] > 10
 
 
+
+def test_sync_preview_uses_indexed_media_clip_not_vendor_temporary_id(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write_sync_artifacts(project)
+    index_path = project.config.output_dir / "material_index.json"
+    index_path.write_text(json.dumps({"clips": [
+        {"source_asset_id": "day_day1_asset_0", "clip_id": "C_REAL_A", "media_id": "M_content_a"},
+        {"source_asset_id": "day_day1_asset_0", "clip_id": "C_REAL_A_SECOND", "media_id": "M_content_a"},
+        {"source_asset_id": "day_day1_asset_1", "clip_id": "C_REAL_B", "media_id": "M_content_b"},
+    ]}), encoding="utf-8")
+
+    result = build_sync_timeline(project, [
+        _task("completed", created_at="2026-01-01T00:00:00+00:00", task_id="ready"),
+    ])
+    by_camera = {track["camera"]: track["clips"][0] for track in result["tracks"]}
+    assert by_camera["A"]["clip_id"] == "d1a"
+    assert by_camera["A"]["media_clip_id"] == "C_REAL_A"
+    assert by_camera["B"]["media_clip_id"] == "C_REAL_B"
+
+
+def test_sync_preview_refuses_ambiguous_or_provisional_media_identity(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write_sync_artifacts(project)
+    index_path = project.config.output_dir / "material_index.json"
+    index_path.write_text(json.dumps({"clips": [
+        {"source_asset_id": "day_day1_asset_0", "clip_id": "C_A1", "media_id": "M_one"},
+        {"source_asset_id": "day_day1_asset_0", "clip_id": "C_A2", "media_id": "M_conflict"},
+        {"source_asset_id": "day_day1_asset_1", "clip_id": "C_B", "media_id": "MP_filename_only"},
+    ]}), encoding="utf-8")
+    result = build_sync_timeline(project, [
+        _task("completed", created_at="2026-01-01T00:00:00+00:00", task_id="ready"),
+    ])
+    assert result["ready"] is True
+    assert all(not clip["media_clip_id"] for track in result["tracks"] for clip in track["clips"])
+    assert all("media_path" not in clip for track in result["tracks"] for clip in track["clips"])
+
+
 def test_completed_sync_without_media_index_stays_locked(tmp_path: Path) -> None:
     project = _project(tmp_path)
     _write_sync_artifacts(project)
