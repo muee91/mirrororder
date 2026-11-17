@@ -151,6 +151,37 @@ def test_multicam_sync_publishes_analysis_index_before_task_completes(tmp_path: 
     assert saved["result"]["analysis"] == {"clips": 2, "groups": 1}
 
 
+
+def test_direct_sync_persists_worker_checkpoints_for_desktop(tmp_path: Path, monkeypatch) -> None:
+    config = SimpleNamespace(output_dir=tmp_path)
+    row = task_payload("sync-checkpoints", "queued")
+    write_task(tmp_path, row)
+    manager = TaskManager(lambda _project_id: config)
+
+    def fake_sync(*_args, **kwargs):
+        progress = kwargs["progress"]
+        progress(2, 8)
+        during_sync = manager.list("project-1")[0]
+        assert during_sync["progress"] == {"done": 2, "total": 8}
+        assert during_sync["updated_at"]
+        return {"status": "completed"}
+
+    monkeypatch.setattr("script_organizer.tasks_v2.run_multicam_sync", fake_sync)
+    monkeypatch.setattr("script_organizer.tasks_v2._analysis_inputs_available", lambda _config: True)
+    monkeypatch.setattr(
+        "script_organizer.tasks_v2.analyze",
+        lambda *_args, **_kwargs: {"index": {"stats": {"clips": 1}}},
+    )
+
+    manager._run("project-1", row["task_id"])
+
+    saved = manager.list("project-1")[0]
+    assert saved["status"] == "completed"
+    assert saved["progress"] == {"done": 2, "total": 8}
+    assert saved["updated_at"]
+
+
+
 def test_production_task_facade_runs_post_sync_analysis(tmp_path: Path, monkeypatch) -> None:
     config = SimpleNamespace(output_dir=tmp_path)
     row = task_payload("task-sync-analysis-facade", "queued")
