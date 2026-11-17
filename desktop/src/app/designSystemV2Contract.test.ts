@@ -79,14 +79,19 @@ describe("MirrorOrder Design System v2 contract", () => {
     expect(css).toContain("font-size: var(--mo-font-xs)");
   });
 
-  it("keeps project chrome compact and aligned with the current toolbar-plus-canvas authority", () => {
+  it("keeps the project module shell readable and separated from global chrome", () => {
     const project = read("../features/production/professional-project-workbench.css");
+    const workbench = read("../features/production/ProjectWorkbench.tsx");
 
-    expect(project).toContain("grid-template-rows: 44px minmax(0, 1fr)");
-    expect(project).not.toContain("grid-template-rows: 44px 32px");
-    expect(project).toContain(".professional-area-nav button.is-active:hover");
+    expect(project).toContain("grid-template-rows: 62px minmax(0, 1fr)");
+    expect(project).toContain("grid-template-columns: 202px minmax(0, 1fr)");
+    expect(project).toContain(".project-module-rail");
+    expect(project).toContain(".project-module-link.is-active");
+    expect(project).toContain("var(--mo-surface-pane");
     expect(project).not.toContain(".professional-secondary-pages");
-    // The dead second context-bar layer is gone; ProjectWorkbench keeps the only chrome authority.
+    expect(workbench).toContain("<ProjectModuleNavigation");
+    expect(workbench).toContain('aria-label="制作区域"');
+    // Still one project-level layout owner, no stacked legacy context bars.
     expect(existsSync(fileURLToPath(new URL("./project-context-redesign.css", import.meta.url)))).toBe(false);
   });
 
