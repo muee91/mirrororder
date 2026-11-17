@@ -3,9 +3,9 @@
 > 核对：2026-11-17。**只有可追溯的当前事实**，旧修复轮次/过期 SHA 请查 Git history。产品定义：[`../product/REBUILD_2026-11-17.md`](../product/REBUILD_2026-11-17.md)。
 
 ## Git 与自动验证
-- `main`：`88e585e1c5d44ad7698888a54683ab04a03596c3`，尚未合并重制。
+- `main`：首批同步优先重制已由通过检查的 `c1b06f1868c4bae4229d514f8d4ab62177a306e7` 快进合入（2026-11-17）；**后续 HEAD 以 GitHub 实际 ref 为准，不以此行的 SHA 代替当前状态**。
 - Draft PR [#3](https://github.com/muee91/mirrororder/pull/3) 位于 `rebuild/sync-first-workflow-20261117`。
-- 重制分支 CI #132（对应整理之前的 commit）：Python 成功、macOS 成功、Linux Desktop 测试失败，**不是全绿**。后续文档修改须以新 SHA 重新检查。
+- CI #154（对应主线首批代码 `c1b06f1`）：Python / Linux Desktop / macOS 全部通过。随后 Draft PR #3 的交互回归和静默子进程心跳属于后续代码，必须各自通过最新 CI 才能进入 `main`。
 
 ## 已存在的代码能力（不是交付证明）
 - 第一方多机位同步引擎、机位规则、任务与媒体身份索引、设备本机媒体绑定。
