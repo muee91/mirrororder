@@ -99,6 +99,7 @@ export function TimelineWorkbench({
   return (
     <div className="timeline-workspace-shell">
       <TimelineWorkbenchView
+        baseUrl={baseUrl}
         {...model}
         {...timelineActions}
         {...sourceActions}
