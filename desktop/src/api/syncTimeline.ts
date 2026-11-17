@@ -35,6 +35,8 @@ export interface MulticamSyncClip {
   duration: number;
   timecode: string;
   clip_number: string;
+  /** Host clip_id resolved through one unambiguous content identity. Empty means no safe preview. */
+  media_clip_id?: string;
 }
 
 export interface MulticamSyncTrack {
@@ -59,6 +61,25 @@ export interface MulticamSyncTimeline {
   duration_seconds: number;
 }
 
+export interface SyncDeliveryArtifact {
+  target: "davinci" | "premiere" | "final-cut" | "jianying";
+  label: string;
+  format: string;
+  filename: string;
+  available: boolean;
+  /** Device-local absolute path. This is supplied only by the localhost-only route. */
+  local_path: string;
+}
+
+export interface SyncDeliveryArtifacts {
+  contract: "sync_delivery_artifacts.v1";
+  project_id: string;
+  ready: boolean;
+  paths_scope: "localhost_response_only";
+  validation: string;
+  artifacts: SyncDeliveryArtifact[];
+}
+
 function normalizeBaseUrl(baseUrl: string): string {
   const value = baseUrl.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(value)) throw new HostConnectionError("Desktop Host 地址无效");
@@ -76,6 +97,18 @@ export class SyncTimelineClient {
 
   constructor(baseUrl: string) {
     this.baseUrl = normalizeBaseUrl(baseUrl);
+  }
+
+  async readArtifacts(projectId: string): Promise<SyncDeliveryArtifacts> {
+    const response = await fetchWithTimeout(`${this.baseUrl}${projectPath(projectId)}/sync-delivery-artifacts`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) throw new HostConnectionError(`同步工程读取失败：${response.status} ${response.statusText}`, { status: response.status });
+    const result = await response.json() as SyncDeliveryArtifacts;
+    if (!result || result.contract !== "sync_delivery_artifacts.v1" || result.paths_scope !== "localhost_response_only" || !Array.isArray(result.artifacts)) {
+      throw new HostConnectionError("同步工程清单格式不受支持");
+    }
+    return result;
   }
 
   async read(projectId: string): Promise<MulticamSyncTimeline> {
