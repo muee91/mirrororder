@@ -333,3 +333,157 @@ html[data-mirrororder-theme="light"] .multicam-sync-track-lane { background-colo
   .multicam-sync-flow { flex-wrap: wrap; }
   .multicam-sync-flow > span { flex-basis: calc(50% - 8px); }
 }
+
+
+/* Interactive sync master inspector. Keeps source playback and NLE export
+   separate from the authoritative creative/editing timeline. */
+.multicam-sync-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 12px 18px 8px;
+  border-top: 1px solid var(--mo-border-subtle, #27323d);
+  color: var(--mo-text-secondary, #abb8c3);
+  font-size: 12px;
+}
+.multicam-sync-time-controls { display: inline-flex; align-items: center; gap: 12px; }
+.multicam-sync-time-controls strong { font-variant-numeric: tabular-nums; min-width: 65px; text-align: center; font-size: 14px; color: var(--mo-text-primary, #edf2f6); }
+.multicam-sync-time-controls button { min-height: 28px; }
+.multicam-sync-controls select {
+  min-width: 78px;
+  background: var(--mo-surface-raised, #151c24);
+  color: var(--mo-text-primary, #edf2f6);
+  border: 1px solid var(--mo-border-default, #2b3742);
+  border-radius: 5px;
+  padding: 5px 8px;
+}
+.multicam-sync-cursor-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px 12px;
+  font-size: 11px;
+  color: var(--mo-text-secondary, #abb8c3);
+}
+.multicam-sync-cursor-control input { flex: 1; width: 100%; min-width: 80px; accent-color: var(--mo-accent, #609ee8); }
+.multicam-sync-cursor-control span { font-variant-numeric: tabular-nums; }
+.multicam-sync-ruler { font-size: 11px; }
+.multicam-sync-ruler > div { position: relative; height: 18px; }
+.multicam-sync-ruler > div > span { position: absolute; transform: translateX(-50%); }
+.multicam-sync-ruler > div > span:first-child { transform: none; }
+.multicam-sync-ruler > div > span:last-child { transform: translateX(-100%); }
+.multicam-sync-clip {
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  padding: 0;
+  z-index: 1;
+}
+.multicam-sync-clip:hover,
+.multicam-sync-clip:focus-visible,
+.multicam-sync-clip.is-selected {
+  outline: 2px solid var(--mo-text-primary, #edf2f6);
+  outline-offset: 0;
+  z-index: 2;
+}
+.multicam-sync-playhead-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-left: 1px solid #f6e2b0;
+  box-shadow: 0 0 3px #f6e2b0;
+}
+.multicam-sync-monitor-grid {
+  border-top: 1px solid var(--mo-border-subtle, #27323d);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, .45fr);
+  gap: 16px;
+  padding: 18px;
+}
+.multicam-sync-monitor,
+.multicam-sync-details {
+  min-width: 0;
+  border: 1px solid var(--mo-border-subtle, #27323d);
+  border-radius: 7px;
+  background: var(--mo-surface-raised, #151c24);
+  padding: 14px;
+}
+.multicam-sync-monitor-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--mo-text-primary, #edf2f6);
+}
+.multicam-sync-monitor-heading span { color: var(--mo-text-secondary, #abb8c3); }
+.multicam-sync-angle-switch { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.multicam-sync-angle-switch button {
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.multicam-sync-angle-switch button.is-active { border-color: var(--mo-accent, #609ee8); }
+.multicam-sync-video {
+  display: block;
+  width: 100%;
+  max-height: 330px;
+  min-height: 180px;
+  background: #080b0f;
+  border-radius: 5px;
+  object-fit: contain;
+}
+.multicam-sync-preview-empty {
+  display: grid;
+  place-items: center;
+  min-height: 185px;
+  border-radius: 5px;
+  border: 1px dashed var(--mo-border-default, #2b3742);
+  text-align: center;
+  padding: 20px;
+  color: var(--mo-text-secondary, #abb8c3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.multicam-sync-details > strong { font-size: 13px; color: var(--mo-text-primary, #edf2f6); }
+.multicam-sync-details dl {
+  display: grid;
+  grid-template-columns: minmax(80px, .7fr) minmax(0, 1.3fr);
+  gap: 10px 8px;
+  margin: 16px 0;
+  font-size: 12px;
+}
+.multicam-sync-details dt { color: var(--mo-text-muted, #82909c); }
+.multicam-sync-details dd { min-width: 0; overflow-wrap: anywhere; margin: 0; color: var(--mo-text-primary, #edf2f6); }
+.multicam-sync-detail-note,
+.multicam-sync-details > p { font-size: 11px; line-height: 1.55; color: var(--mo-text-secondary, #abb8c3); }
+.multicam-sync-export {
+  padding: 16px 18px 20px;
+  border-top: 1px solid var(--mo-border-subtle, #27323d);
+}
+.multicam-sync-export-heading { display: flex; justify-content: space-between; gap: 12px; }
+.multicam-sync-export-heading strong { font-size: 14px; }
+.multicam-sync-export-heading p,
+.multicam-sync-export-heading > span,
+.multicam-sync-export-hint { font-size: 11px; color: var(--mo-text-secondary, #abb8c3); line-height: 1.5; }
+.multicam-sync-export-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.multicam-sync-export-item {
+  border: 1px solid var(--mo-border-subtle, #27323d);
+  border-radius: 7px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.multicam-sync-export-item > div { display: grid; gap: 4px; min-width: 0; }
+.multicam-sync-export-item strong { font-size: 12px; }
+.multicam-sync-export-item span { color: var(--mo-text-muted, #81909d); font-size: 11px; overflow-wrap: anywhere; }
+.multicam-sync-export-item button { flex: 0 0 auto; font-size: 11px; }
+@media (max-width: 980px) {
+  .multicam-sync-monitor-grid { grid-template-columns: 1fr; }
+  .multicam-sync-export-list { grid-template-columns: 1fr; }
+}
