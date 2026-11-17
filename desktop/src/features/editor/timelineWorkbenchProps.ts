@@ -11,7 +11,6 @@ export type TimelineWorkbenchProps = TimelineWorkbenchModel &
     focusLabel: string;
     onOpenDelivery: () => void;
     onOpenRepair?: (clipId: string) => void;
-    baseUrl: string;
     syncTimeline?: MulticamSyncTimeline;
     onMulticamSync?: () => void;
   };
