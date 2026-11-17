@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProjectSummary } from "../../api/host";
 import { canonicalProductionPage, hasRememberedProjectPage, readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
+import { SyncTaskWorkspace } from "../editor/MulticamSyncTimeline";
+import { SyncInspectionWorkbench } from "../editor/SyncInspectionWorkbench";
+import { SyncDeliveryWorkspace } from "../editor/SyncDeliveryWorkspace";
+import { ProjectModuleNavigation, canOpenProductionModule } from "./ProjectModuleNavigation";
 import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorkspace";
 import "../media/media.css";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
@@ -84,11 +88,13 @@ const ALL_PAGES = new Set<ProductionPage>(Object.values(AREAS).flatMap((area) =>
 
 function safeProductionPage(page: ProductionPage): ProductionPage {
   const canonical = canonicalProductionPage(page);
+  if (canonical === "sync-task" || canonical === "sync-inspect" || canonical === "sync-delivery") return canonical;
   return ALL_PAGES.has(canonical) ? canonical : "slate";
 }
 
 function areaForPage(page: ProductionPage): ProductionArea {
   const canonical = safeProductionPage(page);
+  if (canonical === "sync-task" || canonical === "sync-inspect" || canonical === "sync-delivery") return "timeline";
   for (const [key, area] of Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>) {
     if (area.pages.some((item) => item.page === canonical)) return key;
   }
@@ -97,6 +103,9 @@ function areaForPage(page: ProductionPage): ProductionArea {
 
 function pageLabel(page: ProductionPage): string {
   const canonical = safeProductionPage(page);
+  if (canonical === "sync-task") return "同步任务";
+  if (canonical === "sync-inspect") return "同步核对";
+  if (canonical === "sync-delivery") return "工程交付";
   for (const area of Object.values(AREAS)) {
     const item = area.pages.find((candidate) => candidate.page === canonical);
     if (item) return item.label;
@@ -138,9 +147,13 @@ function normalizedContext(
 }
 
 export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onMulticamSync, onPageChange }: Props) {
-  const [page, setPage] = useState<ProductionPage>(() => project.input_kind === "media-directory" && !hasRememberedProjectPage(project.project_id)
-    ? "timeline"
-    : safeProductionPage(readProjectPage(project.project_id)));
+  const [page, setPage] = useState<ProductionPage>(() => {
+    const saved = safeProductionPage(readProjectPage(project.project_id));
+    if (project.input_kind === "media-directory") {
+      if (!hasRememberedProjectPage(project.project_id) || saved === "timeline") return "sync-task";
+    }
+    return saved;
+  });
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [selection, setSelection] = useState<ProductionSelectionContext>(() => ({ projectId: project.project_id }));
   const [navigationIntent, setNavigationIntent] = useState<ProductionNavigationIntent | null>(null);
@@ -149,7 +162,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const navigationNonce = useRef(0);
   const { syncTimeline, beginSyncTracking, refreshSyncTimeline } = useMulticamSyncGate(baseUrl, project.project_id, project.input_kind);
   const syncBlocked = project.input_kind === "media-directory" && !syncTimeline.ready;
-  const visiblePage = syncBlocked && (page === "script" || page === "watch") ? "timeline" : page;
+  const visiblePage = syncBlocked
+    && !["sync-task", "media-library", "media-binding"].includes(page) ? "sync-task" : page;
 
   const area = areaForPage(visiblePage);
   const currentSelection = selection.projectId === project.project_id ? selection : { projectId: project.project_id };
@@ -173,8 +187,12 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }
 
   function navigate(next: ProductionPage): void {
-    if (syncBlocked && areaForPage(next) !== "material" && next !== "timeline" && next !== "delivery") {
-      setPage("timeline");
+    if (next.startsWith("sync-") && project.input_kind !== "media-directory") {
+      setPage("slate");
+      return;
+    }
+    if (syncBlocked && !["sync-task", "media-library", "media-binding"].includes(next)) {
+      setPage("sync-task");
       return;
     }
     if (next === "delivery") {
@@ -185,11 +203,20 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
     setPage(safeProductionPage(next));
   }
 
-  function switchArea(next: ProductionArea): void {
+  function switchArea(next: ProductionArea, target?: ProductionPage): void {
     if (syncBlocked && next !== "timeline" && next !== "material") return;
-    if (next === area) return;
-    setNavigationIntent(nextIntent(next));
-    navigate(syncBlocked && next === "material" ? "media-library" : AREAS[next].defaultPage);
+    if (next !== area) setNavigationIntent(nextIntent(next));
+    navigate(target ?? (syncBlocked && next === "material" ? "media-library" : AREAS[next].defaultPage));
+  }
+
+  function runMulticamSync(): void {
+    if (syncTimeline.ready && !globalThis.confirm(
+      "重新同步会更新项目本机的同步结果。已分发给剪辑师的工程应单独保留版本。确认重新计算吗？",
+    )) return;
+    beginSyncTracking();
+    onMulticamSync?.();
+    setPage("sync-task");
+    globalThis.setTimeout(() => { void refreshSyncTimeline(); }, 500);
   }
 
   function focusTake(
@@ -230,8 +257,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }, [onPageChange, page, project.project_id]);
 
   useEffect(() => {
-    if (syncBlocked && (page === "script" || page === "watch")) {
-      setPage("timeline");
+    if (syncBlocked && !["sync-task", "media-library", "media-binding"].includes(page)) {
+      setPage("sync-task");
     }
   }, [page, syncBlocked]);
 
@@ -241,7 +268,6 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
 
   const assistantVisible = assistantOpen;
   const canvasKey = `${project.project_id}:${area}:operator-${operatorRevision}`;
-  const primaryNavigation = useMemo(() => Object.entries(AREAS) as Array<[ProductionArea, AreaDefinition]>, []);
 
   return (
     <section
@@ -249,43 +275,50 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
       aria-label={`项目工作台：${project.name || project.project_id}`}
     >
       <header className="professional-project-toolbar">
-        <nav className={`professional-area-nav${syncBlocked ? " is-sync-first" : ""}`} aria-label="制作区域">
-          {syncBlocked ? (
-            <>
-              <button type="button" className={area === "timeline" ? "is-active" : ""}
-                aria-current={area === "timeline" ? "page" : undefined}
-                onClick={() => navigate("timeline")}>同步与交付</button>
-              <button type="button" className={area === "material" ? "is-active" : ""}
-                aria-current={area === "material" ? "page" : undefined}
-                onClick={() => navigate("media-library")}>检查素材</button>
-            </>
-          ) : primaryNavigation.map(([key, definition]) => (
-            <button
-              type="button"
-              className={area === key ? "is-active" : ""}
-              aria-current={area === key ? "page" : undefined}
-              key={key}
-              onClick={() => switchArea(key)}
-            >
-              {definition.label}
-            </button>
-          ))}
-        </nav>
+        <div className="professional-project-identity">
+          <span>当前剧集 · 镜序制作</span>
+          <strong>{project.name || project.project_id}</strong>
+          <small>{pageLabel(visiblePage)}</small>
+        </div>
         <div className="professional-project-tools">
-          <SemanticSearchPalette baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} />
-          {onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>审阅</button> : null}
-          <details className="professional-tools-menu">
+          {!syncBlocked ? <SemanticSearchPalette baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} /> : null}
+          {!syncBlocked && onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>审阅</button> : null}
+          {!syncBlocked ? <details className="professional-tools-menu">
             <summary>工具</summary>
             <div className="professional-tools-popover">
               <CurrentOperatorControl onChange={() => setOperatorRevision((value) => value + 1)} />
               <button type="button" className={`professional-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)} aria-pressed={assistantOpen}>小镜</button>
             </div>
-          </details>
+          </details> : <span className="professional-sync-context">先同步 · 需要时检查原始素材</span>}
         </div>
       </header>
 
+      <div className="project-production-layout">
+        <nav className="project-module-rail" aria-label="制作区域">
+          <ProjectModuleNavigation inputKind={project.input_kind}
+            selected={visiblePage} syncReady={syncTimeline.ready} syncPhase={syncTimeline.phase}
+            onNavigate={(target) => {
+              if (canOpenProductionModule(target, project.input_kind, syncTimeline.ready)) {
+                switchArea(areaForPage(target), target);
+              }
+            }} />
+        </nav>
       <div className="project-workbench-canvas">
         <div className="project-workbench-main owns-chrome" key={canvasKey}>
+          {visiblePage === "sync-task" ? (
+            <SyncTaskWorkspace syncTimeline={syncTimeline} onMulticamSync={runMulticamSync}
+              onInspect={() => navigate("sync-inspect")} />
+          ) : null}
+          {visiblePage === "sync-inspect" && syncTimeline.ready ? (
+            <SyncInspectionWorkbench syncTimeline={syncTimeline} baseUrl={baseUrl}
+              onMulticamSync={runMulticamSync} showDelivery={false}
+              onOpenDelivery={() => navigate("sync-delivery")} />
+          ) : null}
+          {visiblePage === "sync-delivery" && syncTimeline.ready ? (
+            <SyncDeliveryWorkspace baseUrl={baseUrl} syncTimeline={syncTimeline}
+              onInspect={() => navigate("sync-inspect")} onSyncTask={() => navigate("sync-task")} />
+          ) : null}
+
           {area === "material" ? (
             <MaterialWorkspace
               baseUrl={baseUrl}
@@ -323,11 +356,8 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
               baseUrl={baseUrl}
               projectId={project.project_id}
               syncTimeline={syncTimeline}
-              onMulticamSync={() => {
-                beginSyncTracking();
-                onMulticamSync?.();
-                globalThis.setTimeout(() => { void refreshSyncTimeline(); }, 500);
-              }}
+              initialAssemblyExpanded={project.input_kind === "media-directory"}
+              onMulticamSync={runMulticamSync}
               focusIntent={currentIntent?.workspace === "timeline" ? currentIntent : null}
               deliveryRequestNonce={deliveryRequestNonce}
               onSelectionChange={(groupId, clipId, timelineClipId) => updateSelection({ groupId, clipId, timelineClipId, scriptSegmentId: currentSelection.scriptSegmentId })}
@@ -365,6 +395,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             />
           </aside>
         ) : null}
+      </div>
       </div>
     </section>
   );

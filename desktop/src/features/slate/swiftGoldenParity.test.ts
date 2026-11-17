@@ -24,7 +24,11 @@ describe("Swift golden product fidelity", () => {
     expect(resume).toContain('if (page === "rough-cut" || page === "assembly" || page === "delivery") return "timeline";');
     expect(workbench).toContain("professional-project-toolbar");
     expect(workbench).toContain("readProjectPage");
-    // Fresh media-directory projects must open with the sync task, while\n    // existing sessions still restore their last canonical workspace.\n    expect(workbench).toContain('project.input_kind === "media-directory" && !hasRememberedProjectPage(project.project_id)');\n    expect(workbench).toContain('? "timeline"');\n    expect(workbench).toContain("safeProductionPage(readProjectPage(project.project_id))");
+    // A new raw-media series enters the actual sync task module; older
+    // projects still restore their device-local canonical page.
+    expect(workbench).toContain('hasRememberedProjectPage(project.project_id)');
+    expect(workbench).toContain('return "sync-task"');
+    expect(workbench).toContain('readProjectPage(project.project_id)');
     expect(workbench).toContain("owns-chrome");
     expect(workbench).toContain("const assistantVisible = assistantOpen;");
     expect(workbench).toContain("professional-assistant-toggle");

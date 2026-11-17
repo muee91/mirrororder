@@ -64,7 +64,7 @@ async function openReview(t, { empty = false, missingMedia = false, takeCount = 
     return route.fulfill({ status: 404, json: { error: "synthetic endpoint not provided" } });
   });
   await page.goto(`${server.resolvedUrls.local[0]}scripts/fixtures/ux-real.html?project_id=${encodeURIComponent(projectId)}`);
-  await page.locator(".professional-area-nav").getByRole("button", { name: "审阅", exact: true }).click();
+  await page.locator(".project-module-rail").getByRole("button", { name: /^看片审阅/ }).click();
   return page;
 }
 

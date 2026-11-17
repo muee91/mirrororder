@@ -1,24 +1,35 @@
-# 镜序 Desktop 现有信息架构映射
+# 镜序 Desktop 现有模块与代码职责
 
-> **不是当前产品定义。** 唯一产品目标在 [`product/REBUILD_2026-11-17.md`](./product/REBUILD_2026-11-17.md)。本文件只解释已有 React/Python/Rust 代码如何承接重制，历史 2026-09 四域优先流程可从 Git history 查看。
+> 当前产品路线仅以 [`product/REBUILD_2026-11-17.md`](./product/REBUILD_2026-11-17.md) 为准。本文件维护实际 UI 路由与代码职责，不继承旧版四大标签页作为用户工作流。
 
-## 当前代码责任
+## 项目内的三个阶段
 
-- `desktop/src/features/production/ProjectWorkbench.tsx` 仍包含 `素材 / 剧本 / 时间线 / 审阅` 四个域；它们是工程所有权，**不是新项目的四步强制流程**。
-- `desktop/src/features/editor/MulticamSyncTimeline.tsx` 是同步时间线概览；同步进度、任务持久化由 Python Core / Host / Desktop 联动。
-- Material/Slate、Script/Review、Identity/Search 和 Rust Timeline Core 的权威事实不因重制而互相覆盖。
-- **团队审阅是独立协作 surface**。Team Web 只提供 Review / Collaboration，不拥有本机生产媒体、设备路径、正式 Timeline 或 Final Editorial Decision，人工剪辑决定仍由 Production/Core 权威控制。
+### 01 / 同步与交付（原始素材项目）
 
-## 目标入口与当前缺口
-
-| 用户任务 | 当前基础 | 重制方向 |
+| 模块 | 前端 owner | 行为 |
 | --- | --- | --- |
-| 新建剧集并同步 | 媒体目录、机位识别、Sync engine、durable task | 第一屏明确同步任务、真实进度与错误 |
-| 核对同步 | 只读机位时间线 | 可播放、缩放、对轨/漂移核对、人工纠偏 |
-| 分发工程 | FCPXML/Premiere/剪映兼容生成代码 | 多轨母版 + 可切机位素材，按 NLE 真实验收 |
-| 日常找素材 | Slate/Take/剧本映射/搜索代码 | 按拍摄顺序和剧本顺序检索，关联演员实际对白 |
-| 团队交接 | media_id / device-local binding | 不共享绝对路径，跨机复用稳定素材身份 |
+| 同步任务 | `MulticamSyncTimeline.tsx` 中的 `SyncTaskWorkspace` | 运行阶段、最近进展、失败与重试；无可信分母则不显示总进度 |
+| 同步核对 | `SyncInspectionWorkbench.tsx` | 独立的轨道与源媒体预览；尚未提供安全偏移写入或独立 WAV 帧级对齐 |
+| 工程交付 | `SyncDeliveryWorkspace.tsx` | 使用 Host 已生成、经过本机路径校验的工程文件；不把 XML 文件存在视为 NLE 已实际验收 |
 
-**同步母版不是创意组接时间线。** 不要在同一视图同时堆叠同步预览、完整 Source/Program、粗剪建议、场记和导出。AI 后台分析不是剪辑师先交付工程的前提。
+只有同步成功后才能从同步核对进入工程交付。失败时始终允许进入「素材库」与「本机素材」诊断。旧 `MulticamSyncTimeline` 仍是兼容组件，但新项目主导航不得再次把上述模块塞到同一个时间线页面。
 
-组件纪律见 [`ux-principles.md`](./ux-principles.md) / [`design-system-v2.md`](./design-system-v2.md)；真实验收见 [`engineering/STATUS.md`](./engineering/STATUS.md)。
+### 02 / 拍摄素材
+
+`交互场记`（真实拍摄顺序）、`剧本关联`（故事顺序与实际对白）、`演员与角色`、`素材库`、`本机素材` 是不同任务。现有 Material / Script / Identity 的底层事实模型继续复用；这些模块仍需要按照新视觉稿分别完成最终画布设计，不因导航拆分就宣称 UI 已完成。
+
+### 03 / 剪辑辅助
+
+`看片审阅` 保存人工判断；`选片组接` 仍由 Rust Timeline Core 维护唯一编辑 authority，不与同步母版共用编辑器。团队审阅是独立协作 surface。Team Web 是独立协作 surface，不得访问生产设备路径、原始媒体或 Final Editorial Decision 写入权限。
+
+## 共同路由与兼容
+
+`desktop/src/features/production/ProjectWorkbench.tsx` 负责项目会话、选择上下文与导航 intent；`ProjectModuleNavigation.tsx` 只负责模块列表和同步可用性。所有 project-specific 模块都复用现有 Core API，不建立第二套业务 truth。
+
+原始素材目录项目的第一次打开进入 `sync-task`；旧 `timeline` 页面历史在新项目中迁移为同步入口。已经确认的 Take / clip / script segment 跨模块跳转携带原有选择上下文；本地媒体路径始终由 device binding 决定。
+
+全局素材搜索、模型配置、状态中心和团队协作属于全局系统工具；未来可有专业界面，但不能抢占首次同步主任务。
+
+## 不可伪称的能力
+
+本轮工作是**可交互结构重制**，不是生产验证。必须进一步验收：独立 WAV、视频漂移/人工修正、真正原生多机位的四种 NLE 实机导入、跨机媒体重连、持久化同步版本与后续后台剧本/语义分析。实际状态见 [`engineering/STATUS.md`](./engineering/STATUS.md)。

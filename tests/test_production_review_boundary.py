@@ -33,7 +33,7 @@ def test_app_production_is_native_and_team_web_remains_a_separate_surface() -> N
     assert 'page === "attention" || page === "overview"' in resume
 
 
-def test_native_navigation_starts_at_workspace_home_and_uses_four_workspace_toolbar() -> None:
+def test_native_navigation_starts_at_workspace_home_and_has_independent_production_modules() -> None:
     app = (ROOT / "desktop/src/app/App.tsx").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/production/ProjectWorkbench.tsx").read_text(encoding="utf-8")
     material = (ROOT / "desktop/src/features/material/MaterialWorkspace.tsx").read_text(encoding="utf-8")
@@ -43,6 +43,10 @@ def test_native_navigation_starts_at_workspace_home_and_uses_four_workspace_tool
     assert "WorkspaceHome" in app
     assert "safeProductionPage(readProjectPage(project.project_id))" in workbench
     assert 'className="professional-project-toolbar"' in workbench
+    assert "<ProjectModuleNavigation" in workbench
+    assert "<SyncTaskWorkspace" in workbench
+    assert "<SyncInspectionWorkbench" in workbench
+    assert "<SyncDeliveryWorkspace" in workbench
     assert 'aria-label="制作区域"' in workbench
     assert 'className="professional-secondary-nav"' not in workbench
     for label in ("素材", "剧本", "时间线", "审阅"):

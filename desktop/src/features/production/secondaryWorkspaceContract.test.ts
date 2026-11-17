@@ -11,7 +11,7 @@ function read(relative: string): string {
 }
 
 describe("project production workspace contract", () => {
-  it("keeps global context in the sidebar and exactly four project workspaces in ProjectWorkbench", () => {
+  it("keeps global context while exposing distinct production task modules", () => {
     const workbench = read("./ProjectWorkbench.tsx");
     const library = read("../projects/ProjectLibrary.tsx");
 
@@ -20,6 +20,10 @@ describe("project production workspace contract", () => {
     expect(library).toContain('aria-label="系统导航"');
     expect(library).toContain("制作区在项目画布顶部切换。");
     expect(workbench).toContain("const AREAS: Record<ProductionArea, AreaDefinition>");
+    expect(workbench).toContain("<ProjectModuleNavigation");
+    expect(workbench).toContain("<SyncTaskWorkspace");
+    expect(workbench).toContain("<SyncInspectionWorkbench");
+    expect(workbench).toContain("<SyncDeliveryWorkspace");
     for (const label of ["素材", "剧本", "时间线", "审阅"]) expect(workbench).toContain(`label: "${label}"`);
     expect(workbench).toContain('className="professional-project-toolbar"');
     expect(workbench).toContain('aria-label="制作区域"');

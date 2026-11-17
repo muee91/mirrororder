@@ -14,5 +14,6 @@ export type TimelineWorkbenchProps = TimelineWorkbenchModel &
     syncTimeline?: MulticamSyncTimeline;
     onMulticamSync?: () => void;
     assemblyExpanded?: boolean;
+    assemblyOnly?: boolean;
     onToggleAssembly?: () => void;
   };
