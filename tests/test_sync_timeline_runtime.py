@@ -72,6 +72,25 @@ def test_cancelled_latest_attempt_does_not_unlock_from_stale_artifact(tmp_path: 
     assert payload["tracks"] == []
 
 
+
+def test_running_sync_exposes_worker_activity_and_stage_progress(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    task = _task("running", created_at="2026-11-17T08:00:00+00:00", task_id="active")
+    task["stage"] = "sync"
+    task["message"] = "音频互相关同步 day1"
+    task["progress"] = {"done": 3, "total": 8}
+    task["updated_at"] = "2026-11-17T08:05:00+00:00"
+    payload = build_sync_timeline(project, [task])
+
+    assert payload["ready"] is False
+    assert payload["phase"] == "running"
+    assert payload["task"]["stage"] == "sync"
+    assert payload["task"]["progress"] == {"done": 3, "total": 8}
+    assert payload["task"]["updated_at"] == "2026-11-17T08:05:00+00:00"
+    assert payload["task"]["message"] == "音频互相关同步 day1"
+
+
+
 def test_completed_sync_projects_tracks_by_camera_and_concatenates_days(tmp_path: Path) -> None:
     project = _project(tmp_path)
     _write_sync_artifacts(project, days=("day1", "day2"))
