@@ -10,7 +10,7 @@ interface Props {
 
 const SYNC_STEPS = ["确认素材", "计算同步", "建立索引", "检查并交付"] as const;
 
-function stageLabel(phase: MulticamSyncTimeline["phase"], stage: string): string {
+function stageLabel(phase: SyncTimeline["phase"], stage: string): string {
   if (phase === "loading") return "正在读取任务状态";
   if (phase === "unavailable") return "无法读取任务状态";
   if (phase === "failed") return "同步任务失败";
