@@ -19,6 +19,7 @@ interface Props {
   onOpenRepair?: (clipId: string) => void;
   syncTimeline?: MulticamSyncTimeline;
   onMulticamSync?: () => void;
+  initialAssemblyExpanded?: boolean;
 }
 
 export function TimelineWorkbench({
@@ -30,8 +31,9 @@ export function TimelineWorkbench({
   onOpenRepair,
   syncTimeline,
   onMulticamSync,
+  initialAssemblyExpanded = false,
 }: Props) {
-  const [assemblyExpanded, setAssemblyExpanded] = useState(false);
+  const [assemblyExpanded, setAssemblyExpanded] = useState(initialAssemblyExpanded);
   const isSyncProject = Boolean(syncTimeline && syncTimeline.phase !== "not-required");
   // The full editorial model may load thousands of Takes and AI suggestions.
   // Do not load it merely because the user finished syncing their footage.
