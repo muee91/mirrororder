@@ -62,3 +62,37 @@ it("shows a failed sync reason with a retry action instead of the old opaque gat
   expect(host.textContent).toContain("重新执行同步");
   expect(host.querySelector<HTMLButtonElement>(".multicam-sync-action button")?.disabled).toBe(false);
 });
+
+
+it("exposes a playable source only for a verified indexed clip identifier", () => {
+  const payload: SyncTimeline = {
+    contract_version: "multicam_sync_timeline.v1", project_id: "project", phase: "completed",
+    ready: true, message: "ready", task: null, cameras: ["A"], clip_count: 1, duration_seconds: 50,
+    tracks: [{
+      track_id: "video:A", kind: "video", camera: "A", label: "A 机位", clip_count: 1,
+      clips: [{
+        clip_id: "vendor_tmp_identifier", camera: "A", day: "day1", name: "A001.MOV",
+        timeline_start: 0, duration: 20, timecode: "", clip_number: "",
+        media_clip_id: "C_INDEXED_MEDIA",
+      }],
+    }],
+  };
+  const host = document.createElement("div");
+  host.innerHTML = renderToStaticMarkup(createElement(MulticamSyncTimeline, {
+    syncTimeline: payload, baseUrl: "http://127.0.0.1:8765",
+  }));
+  expect(host.querySelectorAll(".multicam-sync-track")).toHaveLength(1);
+  expect(host.querySelector("#multicam-sync-cursor")).not.toBeNull();
+  expect(host.querySelector("#multicam-sync-zoom")).not.toBeNull();
+  const video = host.querySelector<HTMLVideoElement>("video.multicam-sync-video");
+  expect(video?.getAttribute("src")).toBe("http://127.0.0.1:8765/api/v1/projects/project/media/C_INDEXED_MEDIA");
+  expect(video?.getAttribute("src")).not.toContain("vendor_tmp_identifier");
+  expect(host.textContent).toContain("同步工程 · 已生成文件");
+
+  payload.tracks[0].clips[0].media_clip_id = "";
+  host.innerHTML = renderToStaticMarkup(createElement(MulticamSyncTimeline, {
+    syncTimeline: payload, baseUrl: "http://127.0.0.1:8765",
+  }));
+  expect(host.querySelector("video.multicam-sync-video")).toBeNull();
+  expect(host.textContent).toContain("尚未建立无歧义的素材身份");
+});
