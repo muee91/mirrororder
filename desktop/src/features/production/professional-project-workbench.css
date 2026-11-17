@@ -198,3 +198,14 @@
     grid-row: 1;
   }
 }
+
+
+/* New raw-media projects show the two immediate actions, not four disabled
+   workspaces. Existing project navigation returns after synchronization. */
+.professional-area-nav.is-sync-first {
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+}
+.professional-area-nav.is-sync-first button {
+  min-height: 30px;
+  font-size: 12px;
+}
