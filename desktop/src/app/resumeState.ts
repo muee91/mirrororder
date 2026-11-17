@@ -112,6 +112,17 @@ function projectPageKey(projectId: string): string {
   return `${PROJECT_PAGE_PREFIX}${encodeURIComponent(projectId.trim())}`;
 }
 
+
+export function hasRememberedProjectPage(projectId: string, storage: StorageLike | null = browserStorage()): boolean {
+  const id = projectId.trim();
+  if (!id || !storage) return false;
+  try {
+    return VALID_PROJECT_PAGES.has(storage.getItem(projectPageKey(id)) ?? "");
+  } catch {
+    return false;
+  }
+}
+
 export function readProjectPage(projectId: string, storage: StorageLike | null = browserStorage()): ProductionPage {
   const id = projectId.trim();
   if (!id || !storage) return DEFAULT_PROJECT_PAGE;
