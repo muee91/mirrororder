@@ -9,6 +9,7 @@
 3. `docs/engineering/BACKLOG.md`：唯一当前执行顺序。
 4. `docs/engineering/INVARIANTS.md`：安全、authority、测试约束。
 5. `docs/README.md`：按需查阅技术契约，不要通读历史开发记录。
+6. `docs/app-information-architecture.md`：仅现有 UI 结构映射；`docs/ux-principles.md`：可复用交互纪律。
 6. `docs/architecture/desktop-bridge.md` 与 `docs/architecture/repository-layout.md`：涉及跨层或源码与生产数据时再读。
 
 ## 产品顺序
@@ -36,6 +37,7 @@
 - GET/Inspector 不做重扫描、FFmpeg、模型下载或长推理。长任务必须走 durable task，提供真实阶段、最近活动、错误和安全取消；没有可信分母不显示假百分比。
 - 禁止提交真实 `projects/*`、媒体、cache/output、任务日志、模型、密钥和绝对路径；只保留 `projects/.gitkeep` 和合成 `tests/fixtures/`。
 - 不追加全局 CSS 覆盖层掩盖 UI 结构问题，不把四个领域重新揉成一个巨型工作台。
+- 同步优先重制期间不启动与主链无关的大规模 package migration；保留 `src/script_organizer/` compatibility facade 和 `runtime_stack.py` 现有组合入口。
 
 ## 验证与文档
 

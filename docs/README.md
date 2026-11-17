@@ -1,5 +1,7 @@
 # 镜序文档索引
 
+> **一个问题只有一个当前 authority。** 产品目标、当下状态、执行顺序和技术数据事实分别由自己的唯一文件负责。
+
 **唯一产品定义：[`product/REBUILD_2026-11-17.md`](./product/REBUILD_2026-11-17.md)。** 本文仅负责导航，不另写产品方向。旧五步 Product Recovery、历史验收报告和旧 SHA 不再作为开发指令。
 
 ## 接手先读
@@ -27,4 +29,4 @@
 - [`ux-principles.md`](./ux-principles.md)、[`design-system-v2.md`](./design-system-v2.md)：交互规则与既有组件约束，旧页面布局无需照搬。
 - [`user-guide.md`](./user-guide.md)：开发测试阶段使用提示。
 
-历史决策、阶段进展和过期 TODO 已保留在 Git 历史与 GitHub Actions。新方案优先更新上述文件的唯一 owner，不创建另一份“最新方向.md”。
+历史决策、阶段进展和过期 TODO 已保留在 Git 历史与 GitHub Actions。一次性 prompt、阶段 closeout 和验证摘要不提交为长期文档。新方案优先更新上述文件的唯一 owner，不创建另一份“最新方向.md”。

@@ -4,7 +4,7 @@
 
 ## Start here
 
-当前产品与开发优先级：[`../docs/product/REBUILD_2026-11-17.md`](../docs/product/REBUILD_2026-11-17.md)。真实状态见 `../docs/engineering/STATUS.md`，待办见 `../docs/engineering/BACKLOG.md`。不再以旧五步 Product Recovery 或旧 IA 当作下一轮 UI 实现目标。
+当前产品与开发优先级：仓库总索引见 `../docs/README.md`。[`../docs/product/REBUILD_2026-11-17.md`](../docs/product/REBUILD_2026-11-17.md)。真实状态见 `../docs/engineering/STATUS.md`，待办见 `../docs/engineering/BACKLOG.md`。不再以旧五步 Product Recovery 或旧 IA 当作下一轮 UI 实现目标。
 
 P0 是**同步音视频、核对异常、分发剪辑工程**；剧本/场记/搜索/AI 可后台继续。已有多域代码应复用，不新建第二套业务/Timeline authority。
 

@@ -7,6 +7,7 @@
 - `desktop/src/features/production/ProjectWorkbench.tsx` 仍包含 `素材 / 剧本 / 时间线 / 审阅` 四个域；它们是工程所有权，**不是新项目的四步强制流程**。
 - `desktop/src/features/editor/MulticamSyncTimeline.tsx` 是同步时间线概览；同步进度、任务持久化由 Python Core / Host / Desktop 联动。
 - Material/Slate、Script/Review、Identity/Search 和 Rust Timeline Core 的权威事实不因重制而互相覆盖。
+- **团队审阅是独立协作 surface**。Team Web 只提供 Review / Collaboration，不拥有本机生产媒体、设备路径、正式 Timeline 或 Final Editorial Decision，人工剪辑决定仍由 Production/Core 权威控制。
 
 ## 目标入口与当前缺口
 

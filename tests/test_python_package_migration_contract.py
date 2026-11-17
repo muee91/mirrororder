@@ -10,15 +10,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_python_package_migration_is_explicitly_deferred_during_product_recovery() -> None:
+def test_python_package_migration_is_explicitly_deferred_during_sync_first_rebuild() -> None:
     invariants = (ROOT / "docs" / "engineering" / "INVARIANTS.md").read_text(encoding="utf-8")
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
     assert "src/script_organizer/" in invariants
     assert "flat namespace" in invariants
     assert "runtime_stack.py" in invariants
-    assert "Product Recovery 期间不进行与五步主链无关的大规模 package migration" in invariants
-    assert "Product Recovery 期间不启动与主链无关的大规模 package migration" in agents
+    assert "当前同步优先重制期间不进行无关的大规模 package migration" in invariants
+    assert "同步优先重制期间不启动与主链无关的大规模 package migration" in agents
 
 
 def test_tasks_compatibility_module_is_pure_reexport() -> None:
