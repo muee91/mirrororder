@@ -62,7 +62,7 @@ Desktop 项目内只保留四个一级工作区：
 
 场记 / 素材库 / Take / 人物属于素材域内的 view / task；Coverage 是剧本 projection；Rough Cut / Assembly / AI editing 是 Timeline proposal；“需关注”是审阅 filter。它们不建立新的一级工作台。
 
-新项目第一次进入默认打开 **素材 → 场记**；已有项目恢复 canonical Production 上下文。状态中心、团队审阅和设置属于全局工具；`⌘K / Ctrl+K` 是项目搜索入口，小镜是 contextual drawer。
+原始素材目录项目首次进入优先打开 **同步与交付**，先完成多机位同步并给剪辑师提供工程；同步任务未完成时仍允许检查素材清单和本机素材。已有项目恢复之前的 Production 上下文，其它类型的新项目默认打开 **素材 → 场记**。状态中心、团队审阅和设置属于全局工具；`⌘K / Ctrl+K` 是项目搜索入口，小镜是 contextual drawer。
 
 ## 核心语义边界
 
