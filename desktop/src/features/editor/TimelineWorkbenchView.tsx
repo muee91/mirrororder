@@ -7,7 +7,7 @@ import type { TimelineWorkbenchProps } from "./timelineWorkbenchProps";
 import { MulticamSyncTimeline } from "./MulticamSyncTimeline";
 
 export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
-  const { message, snapshot, sequence, focusIntent, focusLabel, onOpenDelivery, syncTimeline, onMulticamSync } = props;
+  const { baseUrl, message, snapshot, sequence, focusIntent, focusLabel, onOpenDelivery, syncTimeline, onMulticamSync } = props;
   const syncBlocked = Boolean(syncTimeline && !syncTimeline.ready);
   return (
     <section className="timeline-workbench editorial-workbench">
@@ -33,7 +33,7 @@ export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
           <small>已从其它工作区带入；时间线会优先定位已有片段，否则定位可播放 Source。</small>
         </div>
       ) : null}
-      {syncTimeline ? <MulticamSyncTimeline syncTimeline={syncTimeline} onMulticamSync={onMulticamSync} /> : null}
+      {syncTimeline ? <MulticamSyncTimeline baseUrl={baseUrl} syncTimeline={syncTimeline} onMulticamSync={onMulticamSync} /> : null}
       {!syncTimeline || syncTimeline.ready ? <>
         <TimelineInitialAssembly {...props} />
         {snapshot && sequence ? <>
