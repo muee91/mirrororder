@@ -13,6 +13,8 @@ interface Props {
   syncTimeline: MulticamSyncTimeline;
   baseUrl?: string;
   onMulticamSync?: () => void;
+  showDelivery?: boolean;
+  onOpenDelivery?: () => void;
 }
 
 const ZOOM_LEVELS = [1, 2, 4, 8, 16, 32, 64, 128] as const;
@@ -91,7 +93,7 @@ function SyncTrack({ track, start, window, position, selectedTrackId, onChoose }
   );
 }
 
-export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync }: Props) {
+export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync, showDelivery = true, onOpenDelivery }: Props) {
   const duration = Math.max(syncTimeline.duration_seconds, 0.1);
   const [position, setPosition] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -129,7 +131,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync 
   }, [sourceTime, playbackUrl, clip]);
 
   useEffect(() => {
-    if (!baseUrl) return;
+    if (!showDelivery || !baseUrl) return;
     let cancelled = false;
     setArtifacts(null);
     setArtifactError("");
@@ -139,7 +141,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync 
       if (!cancelled) setArtifactError(error instanceof Error ? error.message : String(error));
     });
     return () => { cancelled = true; };
-  }, [baseUrl, syncTimeline.project_id]);
+  }, [baseUrl, showDelivery, syncTimeline.project_id]);
 
   function chooseClip(nextTrackId: string, next: MulticamSyncClip): void {
     setTrackId(nextTrackId);
@@ -176,6 +178,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync 
           <span>{syncTimeline.cameras.join(" / ")} 机位</span>
           <span>总长 {secondsLabel(duration)}</span>
           {onMulticamSync ? <button type="button" className="secondary" onClick={onMulticamSync}>重新同步</button> : null}
+          {onOpenDelivery ? <button type="button" onClick={onOpenDelivery}>进入工程交付</button> : null}
         </div>
       </header>
 
@@ -254,7 +257,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync 
         </div>
       </div>
 
-      <div className="multicam-sync-export">
+      {showDelivery ? <div className="multicam-sync-export">
         <div className="multicam-sync-export-heading">
           <div><strong>同步工程 · 已生成文件</strong><p>复用同步引擎的现有导出文件，不需要先完成场记或选片。</p></div>
           <span>外部 NLE 导入仍需实测</span>
@@ -274,7 +277,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync 
         ) : <p className="multicam-sync-export-hint">{artifactError ? "读取交付清单失败，请检查 Host 连接。" : "正在检查同步引擎生成的交付文件…"}</p>}
         {artifactError ? <p role="alert" className="multicam-sync-error">{artifactError}</p> : null}
         <p className="multicam-sync-export-hint">多轨可导入不等于原生多机位可切换；剪映版本兼容及四款剪辑软件的实际导入尚未验收。缺少文件时不要把工程标记为已交付。</p>
-      </div>
+      </div> : null}
     </section>
   );
 }
