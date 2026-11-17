@@ -70,11 +70,11 @@ function SyncGate({ syncTimeline, onMulticamSync }: Props) {
   const problem = ["failed", "cancelled", "interrupted", "invalid"].includes(phase);
   // The worker reports algorithm checkpoints, not the number of media files
   // processed. Do not turn these counts into an invented overall percentage.
-  const done = task?.progress?.done;
-  const total = task?.progress?.total;
-  const hasCheckpoints = running && task?.stage === "sync"
-    && typeof done === "number" && Number.isFinite(done) && done >= 0
-    && typeof total === "number" && Number.isFinite(total) && total >= 5 && done <= total;
+  const rawDone = task?.progress?.done;
+  const rawTotal = task?.progress?.total;
+  const done = typeof rawDone === "number" && Number.isFinite(rawDone) && rawDone >= 0 ? rawDone : null;
+  const total = typeof rawTotal === "number" && Number.isFinite(rawTotal) && rawTotal >= 5 ? rawTotal : null;
+  const hasCheckpoints = running && task?.stage === "sync" && done !== null && total !== null && done <= total;
   const stepIndex = task?.stage === "analysis" ? 2 : running ? 1 : 0;
 
   return (
@@ -104,7 +104,7 @@ function SyncGate({ syncTimeline, onMulticamSync }: Props) {
           {hasCheckpoints ? (
             <div className="multicam-sync-progress">
               <div><span>同步算法检查点，不代表全部文件已处理</span><strong>{done} / {total}</strong></div>
-              <progress value={done} max={total} aria-label="同步算法检查点进度" />
+              <progress value={done ?? 0} max={total ?? 1} aria-label="同步算法检查点进度" />
             </div>
           ) : running ? (
             <p className="multicam-sync-no-progress">正在执行当前阶段。该步骤还没有可信的逐文件进度，不显示虚假的百分比。</p>
