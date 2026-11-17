@@ -9,6 +9,7 @@
 3. `docs/engineering/BACKLOG.md`：唯一当前执行顺序。
 4. `docs/engineering/INVARIANTS.md`：安全、authority、测试约束。
 5. `docs/README.md`：按需查阅技术契约，不要通读历史开发记录。
+6. `docs/architecture/desktop-bridge.md` 与 `docs/architecture/repository-layout.md`：涉及跨层或源码与生产数据时再读。
 
 ## 产品顺序
 
