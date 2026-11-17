@@ -31,7 +31,12 @@ export function TimelineWorkbench({
   syncTimeline,
   onMulticamSync,
 }: Props) {
-  const model = useTimelineWorkbenchModel(baseUrl, projectId, syncTimeline?.ready ?? true);
+  const [assemblyExpanded, setAssemblyExpanded] = useState(false);
+  const isSyncProject = Boolean(syncTimeline && syncTimeline.phase !== "not-required");
+  // The full editorial model may load thousands of Takes and AI suggestions.
+  // Do not load it merely because the user finished syncing their footage.
+  const editorialEnabled = (syncTimeline?.ready ?? true) && (!isSyncProject || assemblyExpanded);
+  const model = useTimelineWorkbenchModel(baseUrl, projectId, editorialEnabled);
   const timelineActions = useTimelineAuthorityActions(model);
   const sourceActions = useTimelineSourceActions(model, timelineActions.apply);
   const appliedFocusNonce = useRef(0);
@@ -44,8 +49,17 @@ export function TimelineWorkbench({
   const focusLabel = focusedTake ? takeDisplayLabel(focusedTake) : focusIntent?.groupId ? "当前 Take" : "";
 
   useEffect(() => {
-    if (deliveryRequestNonce > 0) setDeliveryOpen(true);
+    if (deliveryRequestNonce > 0) {
+      setAssemblyExpanded(true);
+      setDeliveryOpen(true);
+    }
   }, [deliveryRequestNonce]);
+
+  useEffect(() => {
+    if (focusIntent?.workspace === "timeline" && focusIntent.projectId === projectId && focusIntent.nonce > 0) {
+      setAssemblyExpanded(true);
+    }
+  }, [focusIntent?.nonce, focusIntent?.workspace, focusIntent?.projectId, projectId]);
 
   useEffect(() => {
     if (!focusIntent || focusIntent.workspace !== "timeline" || focusIntent.projectId !== projectId) return;
@@ -104,6 +118,8 @@ export function TimelineWorkbench({
         {...sourceActions}
         syncTimeline={syncTimeline}
         onMulticamSync={onMulticamSync}
+        assemblyExpanded={assemblyExpanded}
+        onToggleAssembly={() => setAssemblyExpanded((value) => !value)}
         focusIntent={focusIntent}
         focusLabel={focusLabel}
         onOpenDelivery={() => setDeliveryOpen(true)}
