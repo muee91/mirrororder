@@ -73,6 +73,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const position = toSeconds(cursor, rate);
   const [seekRevision, setSeekRevision] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [followingRecording, setFollowingRecording] = useState(false);
   const [presented, setPresented] = useState<{ source: string; seconds: number } | null>(null);
   const [frameCallbackSupported, setFrameCallbackSupported] = useState(true);
   const seeking = useRef(false);
@@ -160,6 +161,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
     setInspectorWidth(readMonitorSize(syncTimeline.project_id, "inspector-width") ?? 296);
     setTrackId(syncTimeline.tracks[0]?.track_id ?? "");
     setMonitorView({ kind: "all" });
+    setFollowingRecording(false);
     setInspector(null);
   }, [syncTimeline.project_id, rate.numerator, rate.denominator]);
 
@@ -440,7 +442,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
                 <div className="sync-camera-picture">
                   {item && url
                     ? <SyncAnglePreview key={`${item.clip_id}:${item.timeline_start}:${url}`}
-                        src={url} sourceTime={sourcePosition(item, position)} playing={playing} clock={active ? clock : undefined} />
+                        src={url} sourceTime={sourcePosition(item, position)} playing={playing} muteListening={active && inspector === "audio" && followingRecording} clock={active ? clock : undefined} />
                     : <span className="multicam-sync-angle-placeholder">
                         {item ? "尚未建立无歧义的素材身份" : "此处无片段"}
                       </span>}
@@ -555,7 +557,8 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
               {onMulticamSync && <button type="button" className="secondary" onClick={onMulticamSync}>重新同步</button>}
             </div>
           </div> : baseUrl && syncTimeline.recordings && <SyncRecordingMonitor baseUrl={baseUrl} timeline={syncTimeline}
-            cursor={cursor} rate={confirmedRate} playingVideo={playing} onAudition={() => videoRef.current?.pause()} />}
+            cursor={cursor} rate={confirmedRate} playingVideo={playing} onFollowChange={setFollowingRecording}
+            onAudition={() => videoRef.current?.pause()} />}
         </aside>
       </>}
       </div>

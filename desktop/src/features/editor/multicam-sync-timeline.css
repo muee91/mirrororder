@@ -506,3 +506,30 @@
 .sync-recording-monitor p { margin: 4px 0; }
 .sync-recording-monitor select,
 .sync-recording-monitor audio { width: 100%; min-width: 0; }
+
+
+/* The recording monitor owns its controls; no global theme override. */
+.sync-recording-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.sync-recording-mode button {
+  flex: 1 1 108px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--mo-border-default);
+  border-radius: var(--mo-radius-control);
+  background: var(--mo-surface-raised);
+  color: var(--mo-text-secondary);
+  font-size: 13px;
+}
+.sync-recording-mode button[aria-pressed="true"] {
+  background: var(--mo-surface-selected);
+  color: var(--mo-text-primary);
+  border-color: var(--mo-accent);
+}
+.sync-recording-mode button:disabled { opacity: .5; }
+.sync-recording-status { color: var(--mo-text-secondary); overflow-wrap: anywhere; }
+.sync-recording-monitor > button { min-height: 32px; }

@@ -12,10 +12,11 @@ interface Props {
   src: string;
   sourceTime: number;
   playing: boolean;
+  muteListening?: boolean;
   clock?: SyncPreviewClock;
 }
 
-export function SyncAnglePreview({ src, sourceTime, playing, clock }: Props) {
+export function SyncAnglePreview({ src, sourceTime, playing, muteListening = false, clock }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [hasMetadata, setHasMetadata] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -46,7 +47,7 @@ export function SyncAnglePreview({ src, sourceTime, playing, clock }: Props) {
 
   return <>
     <video className="multicam-sync-video" ref={attach} src={src} aria-hidden="true"
-      data-listening={clock ? "" : undefined} muted={!clock} hidden={failed} playsInline preload="auto"
+      data-listening={clock ? "" : undefined} muted={!clock || muteListening} hidden={failed} playsInline preload="auto"
       onLoadedMetadata={event => { setHasMetadata(true); clock?.onLoadedMetadata?.(event); }}
       onError={event => { setFailed(true); clock?.onError?.(event); }}
       onSeeked={clock?.onSeeked} onPlay={clock?.onPlay} onPause={clock?.onPause}
