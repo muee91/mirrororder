@@ -6,7 +6,7 @@
 // document never overflows horizontally.
 //
 // Supported window sizes:
-// - desktop 1440×900: regular desktop window.
+// - desktop 1280×800, 1440×900 and 1920×1080.
 // - compact 1180×768: `tauri.conf.json` sets `minWidth: 1180` and `src/styles.css`
 //   keeps html/body/#root at `min-width: 1180px`, so 1180 is the narrowest real
 //   product window. A narrower viewport only measured a clipped 1180px surface and
@@ -125,8 +125,6 @@ async function collectMetrics(page) {
       canvas: rect(".project-workbench-canvas"),
       main: rect(".project-workbench-main"),
       material: rect(".material-workspace"),
-      domainBar: rect(".material-domain-bar"),
-      activeSubtitle: rect('.material-view-nav button[aria-current="page"] span'),
       slate: rect('[data-layout-test="golden-slate"]'),
       dataRow: rect('[data-layout-test="slate-data-row"]'),
       rowVisibleHeight,
@@ -157,12 +155,8 @@ function assertLayout(name, viewport, metrics) {
   assert.equal(metrics.mainOverflow, "hidden", `${name}: guard must exercise the production clipping boundary`);
 
   approxEqual(metrics.material.height, metrics.main.height, 2, `${name}: Material workspace must fill the production canvas`);
-  assert.ok(metrics.domainBar.bottom <= metrics.canvas.bottom + 1, `${name}: Material domain bar escapes the production canvas`);
-  assert.ok(metrics.activeSubtitle.top >= metrics.domainBar.top - 1, `${name}: active Material subtitle starts outside its bar`);
-  assert.ok(metrics.activeSubtitle.bottom <= metrics.domainBar.bottom + 1, `${name}: active Material subtitle is clipped by its own bar`);
-  assert.ok(metrics.activeSubtitle.bottom <= metrics.canvas.bottom + 1, `${name}: active Material subtitle is clipped by an ancestor canvas`);
+  approxEqual(metrics.slate.top, metrics.material.top, 2, `${name}: slate uses the full project workspace without a duplicate tab bar`);
 
-  approxEqual(metrics.slate.top, metrics.domainBar.bottom, 2, `${name}: Slate must start directly after Material navigation`);
   assert.ok(metrics.slate.height > 250, `${name}: Slate body collapsed to ${metrics.slate.height}px`);
   assert.ok(metrics.slate.bottom <= metrics.canvas.bottom + 2, `${name}: Slate extends beyond the production canvas`);
   assert.ok(metrics.rowVisibleHeight > 0, `${name}: representative Slate data row is not visible`);
@@ -175,8 +169,6 @@ function assertLayout(name, viewport, metrics) {
     ["canvas", metrics.canvas],
     ["main", metrics.main],
     ["material", metrics.material],
-    ["domainBar", metrics.domainBar],
-    ["activeSubtitle", metrics.activeSubtitle],
     ["slate", metrics.slate],
     ["dataRow", metrics.dataRow],
   ];
@@ -212,7 +204,9 @@ try {
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
 
   for (const viewport of [
+    { name: "small-desktop", width: 1280, height: 800 },
     { name: "desktop", width: 1440, height: 900 },
+    { name: "large-desktop", width: 1920, height: 1080 },
     // 1180 = tauri.conf.json minWidth = styles.css root min-width, the real floor.
     { name: "compact", width: 1180, height: 768 },
   ]) {

@@ -98,3 +98,5 @@ html[data-mirrororder-theme="dark"] .settings-advanced-diagnostics { border-colo
   .model-api-key-row { grid-template-columns: minmax(0, 1fr); }
   .model-api-key-row > button { justify-self: start; }
 }
+
+.settings-diagnostic-result { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }

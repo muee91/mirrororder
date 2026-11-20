@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SyncTimelineClient, type MulticamSyncPhase, type MulticamSyncTimeline } from "../../api/syncTimeline";
+import { errorMessage } from "../../api/host";
+import { SyncTimelineClient, type MulticamSyncTimeline } from "../../api/syncTimeline";
 
 const POLL_MS = 1800;
 
-function initialState(inputKind: string): MulticamSyncTimeline {
-  const required = inputKind === "media-directory";
+function initialTimeline(projectId: string, inputKind: string): MulticamSyncTimeline {
+  const raw = inputKind === "media-directory";
   return {
     contract_version: "multicam_sync_timeline.v1",
-    project_id: "",
-    phase: required ? "loading" : "not-required",
-    ready: !required,
-    message: required ? "正在确认多机位同步状态…" : "当前项目不需要多机位同步。",
+    project_id: projectId,
+    phase: raw ? "loading" : "not-required",
+    ready: !raw,
+    message: raw ? "正在读取同步状态…" : "当前项目不需要多机位同步。",
     task: null,
     tracks: [],
     cameras: [],
@@ -19,59 +20,67 @@ function initialState(inputKind: string): MulticamSyncTimeline {
   };
 }
 
-export function useMulticamSyncGate(baseUrl: string, projectId: string, inputKind: string): {
-  syncTimeline: MulticamSyncTimeline;
-  syncPhase: MulticamSyncPhase;
-  refreshSyncTimeline: () => Promise<void>;
-  beginSyncTracking: () => void;
-} {
-  const [syncTimeline, setSyncTimeline] = useState<MulticamSyncTimeline>(() => initialState(inputKind));
+interface SyncState {
+  scope: string;
+  timeline: MulticamSyncTimeline;
+  snapshot: { timeline: MulticamSyncTimeline; readAt: number } | null;
+  readError: string;
+}
+
+export function useMulticamSyncGate(baseUrl: string, projectId: string, inputKind: string) {
+  const scope = JSON.stringify([baseUrl, projectId, inputKind]);
+  const [state, setState] = useState<SyncState>(() => ({
+    scope, timeline: initialTimeline(projectId, inputKind), snapshot: null, readError: "",
+  }));
   const requestId = useRef(0);
+
   const refreshSyncTimeline = useCallback(async () => {
-    if (inputKind !== "media-directory") {
-      setSyncTimeline(initialState(inputKind));
-      return;
-    }
-    const currentRequest = ++requestId.current;
-    try {
-      const next = await new SyncTimelineClient(baseUrl).read(projectId);
-      if (currentRequest === requestId.current) setSyncTimeline(next);
-    } catch (error) {
-      if (currentRequest !== requestId.current) return;
-      setSyncTimeline({
-        ...initialState(inputKind),
-        project_id: projectId,
-        phase: "unavailable",
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }, [baseUrl, inputKind, projectId]);
-
-  const beginSyncTracking = useCallback(() => {
     if (inputKind !== "media-directory") return;
-    setSyncTimeline((current) => ({
-      ...current,
-      project_id: projectId,
-      phase: "running",
-      ready: false,
-      message: "正在提交多机位同步任务…",
-      tracks: [],
-    }));
-  }, [inputKind, projectId]);
+    const request = ++requestId.current;
+    try {
+      const timeline = await new SyncTimelineClient(baseUrl).read(projectId);
+      if (timeline.project_id !== projectId) throw new Error("同步状态属于另一个项目");
+      if (request !== requestId.current) return;
+      const readAt = Date.now();
+      const archived = timeline.previous_master;
+      const saved = archived?.timeline.ready && archived.timeline.project_id === projectId
+        ? { timeline: archived.timeline, readAt: archived.read_at_ms } : null;
+      setState((current) => ({
+        scope, timeline, readError: "",
+        snapshot: timeline.ready ? { timeline, readAt } : saved ?? (current.scope === scope ? current.snapshot : null),
+      }));
+    } catch (error) {
+      if (request !== requestId.current) return;
+      setState((current) => current.scope === scope ? { ...current, readError: errorMessage(error) } : current);
+    }
+  }, [baseUrl, inputKind, projectId, scope]);
 
   useEffect(() => {
-    requestId.current += 1;
-    setSyncTimeline({ ...initialState(inputKind), project_id: projectId });
+    setState({ scope, timeline: initialTimeline(projectId, inputKind), snapshot: null, readError: "" });
     void refreshSyncTimeline();
-  }, [baseUrl, inputKind, projectId, refreshSyncTimeline]);
+    return () => { requestId.current += 1; };
+  }, [inputKind, projectId, refreshSyncTimeline, scope]);
 
   useEffect(() => {
-    if (inputKind !== "media-directory" || syncTimeline.ready) return undefined;
-    const timer = globalThis.setInterval(() => {
-      void refreshSyncTimeline();
-    }, POLL_MS);
-    return () => globalThis.clearInterval(timer);
-  }, [inputKind, refreshSyncTimeline, syncTimeline.ready]);
+    if (inputKind !== "media-directory") return;
+    const refreshOnFocus = () => void refreshSyncTimeline();
+    globalThis.addEventListener("focus", refreshOnFocus);
+    return () => globalThis.removeEventListener("focus", refreshOnFocus);
+  }, [inputKind, refreshSyncTimeline]);
 
-  return { syncTimeline, syncPhase: syncTimeline.phase, refreshSyncTimeline, beginSyncTracking };
+  const current = state.scope === scope ? state : null;
+  const timeline = current?.timeline ?? initialTimeline(projectId, inputKind);
+  const readError = current?.readError ?? "";
+  const poll = inputKind === "media-directory" && (!timeline.ready || Boolean(readError));
+
+  useEffect(() => {
+    if (!poll) return;
+    const timer = globalThis.setInterval(() => void refreshSyncTimeline(), POLL_MS);
+    return () => globalThis.clearInterval(timer);
+  }, [poll, refreshSyncTimeline]);
+
+  const syncTimeline: MulticamSyncTimeline = readError
+    ? { ...timeline, phase: "unavailable", message: readError }
+    : timeline;
+  return { syncTimeline, snapshot: current?.snapshot ?? null, readError, refreshSyncTimeline };
 }

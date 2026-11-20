@@ -297,3 +297,11 @@
     flex-direction: column;
   }
 }
+
+.material-workspace[hidden],
+.material-slate-slot[hidden] { display: none; }
+.material-workspace[data-project-navigation] { grid-template-rows: minmax(0, 1fr); }
+.material-slate-slot { min-height: 0; height: 100%; }
+.slate-workbench-content { display: grid; height: 100%; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.slate-workbench-content[data-view-switch] { grid-template-rows: auto minmax(0, 1fr); }
+.slate-workbench-content > div { min-height: 0; }

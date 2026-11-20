@@ -45,7 +45,7 @@ class ProjectConfig:
     config_path: Path
     name: str
     fcpxml: Path | None
-    script: Path
+    script: Path | None
     output_dir: Path
     transcript_dir: Path
     input_kind: str = "fcpxml"
@@ -115,7 +115,8 @@ class ProjectConfig:
             config_path=config_path,
             name=str(project.get("name", config_path.stem)),
             fcpxml=fcpxml,
-            script=_path(inputs.get("script"), base, base / "script.docx"),
+            script=_path(inputs.get("script"), base, base / "script.docx")
+            if inputs.get("script") or not project.get("format") or input_kind == "fcpxml" else None,
             output_dir=_path(output.get("directory"), base, base / "output"),
             transcript_dir=_path(asr.get("transcript_dir"), base, base / "cache" / "transcripts"),
             input_kind=input_kind,

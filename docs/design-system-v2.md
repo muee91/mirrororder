@@ -44,13 +44,13 @@ MirrorOrder 是专业影视后期 Production 软件，不是 AI Dashboard、模�
 
 Desktop 采用“剪辑室控制台”视觉方向：深色主题以墨黑/炭黑为基础，浅色主题使用暖纸色作为对应变体；琥珀色承担当前选择、焦点和主要动作，绿色、琥珀色和红色承担状态语义，并通过标签、图标、形状或位置补充区分。
 
-视觉层级固定为 App Surface → Sidebar / Chrome → Primary Pane → Raised Control / Inspector。主要工作区不再用连续的白色卡片堆叠，而是通过面板深浅、细边界、留白和单一阴影建立层级。`design-system-v2.css` 负责这组 semantic tokens、shell、toolbar、empty state 和 pane layout，不接管 canonical production object 的 anatomy。
+视觉层级固定为 App Surface → Chrome → Primary Pane → Inspector。`design-system-v2.css` 统一定义深浅主题的分层表面、文字、边界、状态与主按钮 token。`app-chrome.css` 管理应用框架，项目顶栏由 `professional-project-workbench.css` 管理，项目库的表格与空状态由 `project-home.css` 管理。
 
 ## 3. Product shell and navigation
 
 ### 3.1 Global shell
 
-Global Sidebar 只承载长期上下文与全局功能：
+项目库、状态中心与设置等全局页面通过 Global Sidebar 承载长期上下文与全局功能：
 
 - 镜序品牌 / 首页；
 - 项目；
@@ -60,7 +60,7 @@ Global Sidebar 只承载长期上下文与全局功能：
 - 设置；
 - 工作区 disclosure。
 
-项目内 Production Area 不应逐个变成 Global Sidebar 一级导航。
+进入项目后，项目顶栏保留切换项目、搜索、小镜、任务、设置与工作区工具。制作模块位于同一条横向导航，窗口变窄时可独立横向浏览。监看检查器从右侧展开，可调宽并按项目保存宽度。
 
 ### 3.2 Project production hierarchy
 

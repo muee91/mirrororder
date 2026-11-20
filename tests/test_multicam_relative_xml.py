@@ -106,7 +106,7 @@ def test_builders_have_distinct_media_url_policies() -> None:
 def test_mirrororder_has_no_custom_portable_format() -> None:
     root = Path(__file__).resolve().parents[1]
     source = (root / "src" / "script_organizer" / "multicam_sync_engine.py").read_text(encoding="utf-8")
-    assert 'xml_delivery = config.media_root / "交付"' in source
+    assert 'xml_delivery = roots[0] / "交付" / f"同步-{delivery_version}"' in source
     assert "portable_fcpxml" not in source
 
 

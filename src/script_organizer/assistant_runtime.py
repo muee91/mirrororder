@@ -6,6 +6,7 @@ from typing import Any
 
 from .agent_tools import AgentToolRegistry
 from .assistant_orchestrator import AssistantOrchestrator
+from .assistant_context import resolve_question_context
 from .assistant_store import AssistantStore
 from .audit_store import AuditStore
 from .learning_dataset import write_learning_dataset
@@ -175,7 +176,9 @@ def install_assistant_runtime() -> None:
                     task_manager=manager,
                 ).cycle(
                     trigger=f"task:{task_type}",
-                    allow_actions=task_type in {"prepare_project", "incremental_analyze", "auto_resolve", "transcribe"},
+                    # Background completion only refreshes the cached briefing.
+                    # Filling a model route is not consent to run more AI tasks.
+                    allow_actions=False,
                 )
             except Exception:
                 return
@@ -237,7 +240,14 @@ def install_assistant_runtime() -> None:
                         self._send_json(payload)
                         return
                     if parts[5] == "message":
-                        self._send_json(assistant.answer(str(body.get("message", "") or "")))
+                        message = str(body.get("message", "") or "")
+                        context = None
+                        if "context" in body:
+                            try:
+                                context = resolve_question_context(service.project(project_id), service.tasks.list(project_id), body["context"])
+                            except ValueError as error:
+                                raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
+                        self._send_json(assistant.answer(message, context=context))
                         return
 
                 review_write = (

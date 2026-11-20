@@ -76,7 +76,8 @@ class AssistantStore:
             saved["revision"] = int(current.get("revision", 0) or 0) + 1
             saved["updated_at"] = _now()
             saved["items"] = payload.get("items", []) if isinstance(payload.get("items"), list) else []
-            saved["messages"] = (payload.get("messages", []) if isinstance(payload.get("messages"), list) else [])[-40:]
+            messages = payload.get("messages", current.get("messages", []))
+            saved["messages"] = messages[-40:] if isinstance(messages, list) else []
             orchestration = payload.get("orchestration", {}) if isinstance(payload.get("orchestration"), dict) else {}
             orchestration = dict(orchestration)
             orchestration.pop("models", None)
@@ -94,16 +95,16 @@ class AssistantStore:
                     os.unlink(temporary)
             return saved
 
-    def append_message(self, role: str, text: str, *, source: str = "assistant") -> dict[str, Any]:
-        payload = self.load()
-        messages = list(payload.get("messages", []))
-        messages.append(
-            {
+    def append_message(self, role: str, text: str, *, source: str = "assistant", context: dict | None = None) -> dict[str, Any]:
+        with self._lock:
+            payload = self.load()
+            messages = list(payload.get("messages", []))
+            messages.append({
                 "role": "user" if role == "user" else "assistant",
                 "text": str(text or "")[:4000],
                 "source": str(source or "assistant")[:80],
                 "created_at": _now(),
-            }
-        )
-        payload["messages"] = messages[-40:]
-        return self.save(payload)
+                **({"context": context} if context else {}),
+            })
+            payload["messages"] = messages[-40:]
+            return self.save(payload)

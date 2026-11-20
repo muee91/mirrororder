@@ -8,7 +8,8 @@ import { assertManifestToolMatches, buildToolMetadata, findHostPathsInText, isBu
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(desktopRoot, "..");
-const bundleRoot = path.join(desktopRoot, "src-tauri", "target", "release", "bundle", "macos");
+const targetDir = process.env.CARGO_TARGET_DIR || path.join(desktopRoot, "src-tauri", "target");
+const bundleRoot = path.join(targetDir, "release", "bundle", "macos");
 const canonicalIcon = path.join(repoRoot, "branding", "app-icon.png");
 const generatedIcns = path.join(desktopRoot, "src-tauri", "icons", "generated", "icon.icns");
 const EXPECTED_BRAND_ICON_GIT_BLOB = "6ec6f9e08cb89c43a1cb09385ace7c88832bf0b8";
@@ -69,7 +70,7 @@ if (canonicalIconBlob !== EXPECTED_BRAND_ICON_GIT_BLOB) {
 }
 assertFile(generatedIcns, "generated macOS app icon");
 
-const app = findApp();
+const app = process.env.MIRRORORDER_BUNDLE_APP ? path.resolve(process.env.MIRRORORDER_BUNDLE_APP) : findApp();
 const infoPlist = path.join(app, "Contents", "Info.plist");
 const resources = path.join(app, "Contents", "Resources");
 assertFile(infoPlist, "app Info.plist");

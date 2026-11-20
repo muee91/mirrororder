@@ -296,6 +296,8 @@ class SemanticStore:
         *,
         sources: Sequence[str] | None = None,
         embedding_model: str | None = None,
+        selection: dict[str, str] | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         if not self.available:
             return []
@@ -309,11 +311,16 @@ class SemanticStore:
         if embedding_model is not None:
             clauses.append("embedding_model=?")
             parameters.append(embedding_model)
+        for field in ("group_id", "clip_id", "media_id"):
+            if selection and selection.get(field):
+                clauses.append(f"{field}=?")
+                parameters.append(selection[field])
+        query = "SELECT * FROM semantic_documents WHERE " + " AND ".join(clauses) + " ORDER BY source, group_id, document_id"
+        if limit is not None:
+            query += " LIMIT ?"
+            parameters.append(limit)
         with self.database.connection() as connection:
-            rows = connection.execute(
-                "SELECT * FROM semantic_documents WHERE " + " AND ".join(clauses) + " ORDER BY source, group_id, document_id",
-                parameters,
-            ).fetchall()
+            rows = connection.execute(query, parameters).fetchall()
         return [self._row(row) for row in rows]
 
     @staticmethod

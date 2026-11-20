@@ -30,6 +30,7 @@ def _binding_server(tmp_path: Path, monkeypatch):
         index=index,
         config=SimpleNamespace(output_dir=project_output, is_media_directory=True),
         reload=lambda: None,
+        reload_if_changed=lambda: False,
     )
     service = SimpleNamespace(
         workspace=SimpleNamespace(workspace_id="ws_demo"),

@@ -32,9 +32,9 @@ describe("Swift Demo fidelity guards", () => {
     const slate = source("./GoldenSlateWorkbench.tsx");
     const slateCss = source("./golden-slate.css");
     const experience = source("../production/product-experience.css");
-    expect(workbench).toContain("const assistantVisible = assistantOpen;");
+    expect(workbench).toContain("const assistantVisible = active && assistantOpen;");
     expect(workbench).toContain("professional-assistant-toggle");
-    expect(workbench).toContain("aria-pressed={assistantOpen}");
+    expect(workbench).toContain("aria-expanded={assistantOpen}");
     expect(workbench).toContain('className="assistant-context-drawer"');
     expect(experience).toContain(".has-assistant-drawer .project-workbench-canvas");
     expect(experience).toContain(".assistant-context-drawer");

@@ -66,9 +66,9 @@ def test_desktop_project_lifecycle_delegates_to_python_authority() -> None:
     client = read("desktop/src/api/desktop.ts")
     runtime = read("src/script_organizer/desktop_runtime.py")
 
-    assert "client.preflightProject(payload())" in ui
-    assert "client.createProject(payload())" in ui
-    assert "client.prepareProject(created.project_id)" in ui
+    assert "client.preflightProject(values)" in ui
+    assert "client.createProject(values)" in ui
+    assert "client.prepareProject(savedId)" in ui
     assert "new DesktopClient(snapshot.baseUrl).deleteProject(project.project_id)" in app
     assert "永久删除项目" in app
     assert "原始媒体、剧本与 FCPXML 不会删除" in app

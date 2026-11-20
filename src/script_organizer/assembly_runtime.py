@@ -48,6 +48,24 @@ def install_assembly_runtime() -> None:
         BaseHandler = original_make_handler(service, web_root)
 
         class Handler(BaseHandler):
+            def _app_post(self, parsed):
+                parts = web_server._parts(parsed.path)
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "resolve-delivery":
+                    self._local_only()
+                    web_server._body(self)
+                    from .desktop_runtime import _current_service
+                    from .nle_delivery.resolve_delivery import submit_resolve_delivery
+
+                    current = _current_service(service)
+                    project = current.project(parts[3])
+                    try:
+                        task = submit_resolve_delivery(current.workspace, project.project_id, current.tasks.list(project.project_id))
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                    self._send_json(task, web_server.HTTPStatus.ACCEPTED)
+                    return
+                return super()._app_post(parsed)
+
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
                 if (

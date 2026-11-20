@@ -2,7 +2,7 @@
 .project-search-trigger kbd { border: 1px solid #34404b; border-radius: 4px; padding: 1px 4px; color: #aab4bd; background: #0d1216; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 500; }
 .semantic-search-backdrop { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: start center; padding: min(15vh, 140px) 24px 24px; background: rgb(5 8 11 / 62%); backdrop-filter: blur(4px); }
 .semantic-search-palette { display: grid; width: min(760px, 100%); max-height: min(70vh, 720px); grid-template-rows: auto auto auto minmax(0, 1fr) auto; border: 1px solid #34404b; border-radius: 12px; box-shadow: 0 22px 70px rgb(0 0 0 / 42%); background: #0f1419; overflow: hidden; }
-.semantic-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; border-bottom: 1px solid #27313a; padding: 11px; }
+.semantic-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px; border-bottom: 1px solid #27313a; padding: 11px; }
 .semantic-search-form input { min-width: 0; border: 1px solid #36414c; border-radius: 8px; padding: 9px 11px; color: #e5ebf0; background: #141b21; outline: none; font-size: 12px; }
 .semantic-search-form input:focus { border-color: #788897; }
 .semantic-search-filters { display: flex; gap: 4px; padding: 8px 11px 0; overflow-x: auto; }
@@ -46,3 +46,16 @@
   .semantic-result-source { color: #60707d; background: #edf2f5; }
   .semantic-result-main strong { color: #2d3740; }
 }
+.evidence-preview {
+  width: min(46rem, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  color: var(--mo-text-1);
+}
+.evidence-preview::backdrop { background: rgb(0 0 0 / 55%); }
+.evidence-preview header,
+.evidence-preview footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.evidence-preview header { justify-content: space-between; }
+.evidence-preview h2 { margin: 0; font-size: 16px; }
+.evidence-preview p { font-size: 13px; overflow-wrap: anywhere; }
+.evidence-preview video { width: 100%; max-height: min(52dvh, 460px); object-fit: contain; background: #151515; }

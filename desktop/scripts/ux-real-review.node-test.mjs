@@ -187,3 +187,163 @@ test("decision conflict recovery requires a read retry and refreshes the real re
   assert.equal(writes, 1, "conflicting Best must not be replayed after the read retry");
   assert.equal(recoveryReads, 2);
 });
+
+test("search, slate and Take workspaces retain the evidence and playback position", async t => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: "dark" });
+  page.setDefaultTimeout(10_000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  t.after(async () => {
+    if (errors.length) t.diagnostic(errors.join("\n"));
+    await page.close();
+  });
+  const take = model.take_groups[0];
+  const angle = take.angles[0];
+  const cameras = ["A", "B", "C", "D", "E", "F"];
+  const angles = cameras.map(camera => {
+    const clip_id = camera === "A" ? angle.clip_id : `C_SYNTH_${camera}`;
+    const media_id = camera === "A" ? angle.media_id : `M_SYNTH_${camera}`;
+    return {
+      ...angle, clip_id, media_id, camera, name: `synthetic-angle-${camera}.webm`,
+      source_start: 0.25, source_end: 1.9,
+      playback: { ...angle.playback, url: `/api/v1/projects/project/media/${clip_id}`, source_start: 0.25, source_end: 1.9 },
+    };
+  });
+  const record = {
+    record_id: "manual-record", source_group_id: "", script_scene_id: "", episode: 1, scene: "补拍",
+    shot: "", take_number: null, status: "unmarked", note: "窗外逆光补拍", attachments: [], preferred_clip_id: "",
+  };
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (!path.startsWith("/api/")) return route.continue();
+    if (path.endsWith("/workspace")) return route.fulfill({ json: { projects: [{ ...model.project, input_kind: "fcpxml", project_id: "project" }] } });
+    if (path.endsWith("/review-model")) return route.fulfill({ json: {
+      ...model, take_groups: [{ ...take, cameras, angles }],
+    } });
+    if (path.endsWith("/script-supervisor")) return route.fulfill({ json: { revision: 1, records: { [record.record_id]: record }, entries: {} } });
+    if (path.endsWith("/semantic-search")) return route.fulfill({ json: {
+      contract: "semantic_search.v1", mode: "keyword", summary: { documents: 2 }, results: [
+        { document_id: "speech", group_id: take.group_id, clip_id: angle.clip_id, media_id: angle.media_id,
+          start: 0.25, end: 0.75, source: "speech", snippet: "现场实际说过的对白", metadata: { time_basis: "take_relative" } },
+        { document_id: "standalone", group_id: "", clip_id: "", media_id: "", start: 0, end: 0, source: "slate",
+          snippet: record.note, metadata: { record_id: record.record_id } },
+      ],
+    } });
+    if (path.includes("/media/")) {
+      const bytes = readFileSync(resolve(fixtureRoot, "sample.webm"));
+      const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers()["range"] ?? "");
+      if (!range) return route.fulfill({ contentType: "video/webm", body: bytes });
+      const start = Number(range[1]);
+      const end = Math.min(range[2] ? Number(range[2]) : bytes.length - 1, bytes.length - 1);
+      return route.fulfill({ status: 206, contentType: "video/webm",
+        headers: { "accept-ranges": "bytes", "content-range": `bytes ${start}-${end}/${bytes.length}` },
+        body: bytes.subarray(start, end + 1),
+      });
+    }
+    return route.fulfill({ status: 404, json: { error: "synthetic endpoint not provided" } });
+  });
+  await page.goto(`${server.resolvedUrls.local[0]}scripts/fixtures/ux-real.html?project_id=project`);
+  await page.locator(".professional-project-workbench").waitFor().catch(async () => assert.fail(await page.locator("body").innerText()));
+  const search = page.getByRole("button", { name: /搜索/ }).first();
+  await search.click();
+  const input = page.getByRole("textbox", { name: "搜索画面、对白或场记" });
+  await input.fill("对白");
+  await input.press("Enter");
+  await page.getByRole("button", { name: /现场实际说过的对白/ }).click();
+  const preview = page.getByRole("dialog", { name: "定位媒体证据" });
+  await preview.getByText(/原片 0.50 秒/).waitFor();
+  await page.waitForFunction(() => {
+    const video = document.querySelector(".evidence-preview video");
+    return video?.readyState >= 2 && Math.abs(video.currentTime - 0.5) < 0.03;
+  });
+  await page.keyboard.press("Escape");
+  await search.click();
+  await page.getByRole("button", { name: /窗外逆光补拍/ }).click();
+  await preview.getByRole("button", { name: "打开场记" }).click();
+  const row = page.locator('[data-record-id="manual-record"][aria-current="true"]');
+  await row.waitFor();
+  const note = page.locator(".golden-inspector-field textarea");
+  await note.fill("补拍草稿待确认");
+  await page.locator(".project-module-rail").getByRole("button", { name: /^剧本关联/ }).click();
+  await page.evaluate(() => globalThis.dispatchEvent(new CustomEvent("mirrororder:operator-change", { detail: "验收操作员" })));
+  await page.locator(".project-module-rail").getByRole("button", { name: /^交互场记/ }).click();
+  assert.equal(await note.inputValue(), "补拍草稿待确认");
+  assert.equal(await row.count(), 1);
+
+  for (const camera of cameras) {
+    await page.getByRole("columnheader", { name: `${camera} 机`, exact: true }).first().waitFor();
+  }
+  await page.locator("tbody").getByRole("button", { name: /选择 F · synthetic-angle-F\.webm/ }).click();
+  const slatePlayer = page.locator(".golden-slate-player video");
+  await page.waitForFunction(() => document.querySelector(".golden-slate-player video")?.readyState >= 2);
+  await slatePlayer.evaluate(video => { video.currentTime = 1.2; });
+  const expectCameraFAtPosition = async selector => {
+    await page.waitForFunction(target => {
+      const video = document.querySelector(target);
+      return video?.currentSrc.endsWith("/C_SYNTH_F") && video.readyState >= 2 && !video.seeking
+        && Math.abs(video.currentTime - 1.2) < 0.03;
+    }, selector);
+  };
+  await expectCameraFAtPosition(".golden-slate-player video");
+  const navigation = page.locator(".golden-inspector-navigation");
+  for (const destination of ["在素材中打开", "在剧本中打开"]) {
+    await navigation.getByRole("button", { name: destination, exact: true }).click();
+    await expectCameraFAtPosition(".take-player");
+    await page.getByRole("button", { name: "返回场记", exact: true }).click();
+    await expectCameraFAtPosition(".golden-slate-player video");
+  }
+  // The rail uses the shared selection published by Slate, not the inspector's direct link.
+  const rail = page.locator(".project-module-rail");
+  await rail.getByRole("button", { name: /^看片审阅/ }).click();
+  await expectCameraFAtPosition(".review-workspace .take-player");
+  await rail.getByRole("button", { name: /^交互场记/ }).click();
+  await expectCameraFAtPosition(".golden-slate-player video");
+  await page.locator('[data-record-id="manual-record"] td.col-index').click();
+  assert.equal(await note.inputValue(), "补拍草稿待确认");
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+});
+
+test("a failed sync read preserves the verification page and last valid master", async t => {
+  const page = await browser.newPage({ viewport: { width: 1180, height: 760 } });
+  page.setDefaultTimeout(10_000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  t.after(async () => {
+    if (errors.length) t.diagnostic(errors.join("\n"));
+    await page.close();
+  });
+  const projectId = "project";
+  let offline = false;
+  await page.route("**/api/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (!path.startsWith("/api/")) return route.continue();
+    if (path.endsWith("/workspace")) return route.fulfill({ json: { projects: [
+      { project_id: projectId, name: "合成断连项目", input_kind: "media-directory" },
+    ] } });
+    if (path.endsWith("/sync-timeline")) return offline
+      ? route.fulfill({ status: 503, json: { error: "Host 暂时未响应" } })
+      : route.fulfill({ json: {
+        contract_version: "multicam_sync_timeline.v1", project_id: projectId, ready: true, phase: "completed",
+        message: "同步完成", task: { task_id: "version-1", status: "completed", stage: "completed", message: "同步完成" },
+        cameras: ["A"], duration_seconds: 2, clip_count: 1,
+        tracks: [{ track_id: "video:A", label: "A 机位", camera: "A", kind: "video", clip_count: 1,
+          clips: [{ clip_id: "synthetic-a", camera: "A", day: "day1", name: "A001.MOV", timeline_start: 0, duration: 2 }] }],
+      } });
+    if (path.endsWith("/media-binding")) return route.fulfill({ json: { summary: { roots: ["fixture-root"] } } });
+    return route.fulfill({ status: 404, json: { error: "synthetic endpoint not provided" } });
+  });
+  await page.goto(`${server.resolvedUrls.local[0]}scripts/fixtures/ux-real.html?project_id=project`);
+  await page.locator(".professional-project-workbench").waitFor().catch(async () => assert.fail(await page.locator("body").innerText()));
+  const inspect = page.locator(".project-module-rail").getByRole("button", { name: /^同步核对/ });
+  await inspect.click();
+  await page.locator(".multicam-sync-angle-grid").waitFor();
+  offline = true;
+  await page.evaluate(() => globalThis.dispatchEvent(new Event("focus")));
+  await page.getByRole("alert").filter({ hasText: "同步状态读取失败" }).waitFor();
+  await page.locator(".multicam-sync-angle-grid").waitFor();
+  assert.equal(await inspect.getAttribute("aria-current"), "page");
+  offline = false;
+  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.getByRole("alert").filter({ hasText: "同步状态读取失败" }).waitFor({ state: "hidden" });
+  assert.equal(await inspect.getAttribute("aria-current"), "page");
+});

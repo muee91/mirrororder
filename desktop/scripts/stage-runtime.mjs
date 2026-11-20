@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { sourceRevision } from "./source-revision.mjs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -204,6 +205,7 @@ for (const target of [coreTarget, pythonTarget, toolsTarget, manifestDir]) clean
 copyDirectory(organizerSource, path.join(coreTarget, "src", "script_organizer"));
 copyDirectory(multicamSource, path.join(coreTarget, "vendor", "multicam-audio-sync"));
 fs.copyFileSync(pyprojectSource, path.join(coreTarget, "pyproject.toml"));
+fs.writeFileSync(path.join(coreTarget, "BUILD_REVISION"), sourceRevision() + "\n", "utf8");
 copyDirectory(portablePythonRoot, pythonTarget);
 copyDirectory(mediaToolsRoot, toolsTarget);
 // Upstream Homebrew dylibs ship read-only (444); the Tauri build script and

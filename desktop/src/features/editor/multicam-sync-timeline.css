@@ -1,489 +1,535 @@
-.multicam-sync-gate,
-.multicam-sync-inspection {
-  align-self: start;
-  border: 1px solid var(--mo-border-default, #2b3742);
-  border-radius: 10px;
-  background: var(--mo-surface-pane, #10161d);
-}
-
+/* Synchronization task */
 .multicam-sync-gate {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, .42fr);
-  gap: 24px;
-  align-items: center;
-  min-height: 260px;
-  padding: 28px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-app);
+  font-size: 14px;
 }
 
-.multicam-sync-gate-copy { max-width: 700px; }
-.multicam-sync-kicker {
-  margin: 0 0 8px;
-  color: var(--mo-text-muted, #8c9baa);
-  font-size: 10px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
+.sync-task-content {
+  width: min(100%, 1216px);
+  margin-inline: auto;
+  padding: 32px clamp(24px, 4vw, 64px) 40px;
 }
-.multicam-sync-gate h3,
-.multicam-sync-inspection h3 {
-  margin: 0;
-  color: var(--mo-text-primary, #edf2f6);
-  font-size: 17px;
-  letter-spacing: -.02em;
-}
-.multicam-sync-gate-copy > p:not(.multicam-sync-kicker) {
-  max-width: 62ch;
-  margin: 10px 0 0;
-  color: var(--mo-text-secondary, #abb8c3);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.multicam-sync-flow {
+
+.sync-task-heading {
   display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   flex-wrap: wrap;
+  gap: 24px;
+  padding-block-end: 24px;
+  border-bottom: 1px solid var(--mo-border-default);
+}
+
+.sync-task-state {
+  display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin-top: 20px;
-  color: var(--mo-text-muted, #81909d);
-  font-size: 10px;
-}
-.multicam-sync-flow b { color: var(--mo-text-muted, #63717c); font-weight: 500; }
-.multicam-sync-flow strong {
-  color: var(--mo-text-primary, #eef3f6);
-  font-weight: 700;
-}
-.multicam-sync-gate-action {
-  display: grid;
-  justify-items: start;
-  gap: 9px;
-  border: 1px solid var(--mo-border-subtle, #27323d);
-  border-radius: 8px;
-  padding: 16px;
-  background: var(--mo-surface-raised, #151c24);
-}
-.multicam-sync-gate-action > span:not(.multicam-sync-status-dot) {
-  color: var(--mo-text-muted, #91a0ad);
-  font-size: 11px;
-  line-height: 1.45;
-}
-.multicam-sync-gate-action button { margin-top: 4px; }
-.multicam-sync-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #9b88db;
-}
-.multicam-sync-status-dot.is-running { background: #d88a4a; }
-.multicam-sync-status-dot.is-completed { background: #4cb6a5; }
-.multicam-sync-status-dot.is-cancelled,
-.multicam-sync-status-dot.is-interrupted,
-.multicam-sync-status-dot.is-failed,
-.multicam-sync-status-dot.is-invalid { background: #c87578; }
-
-.multicam-sync-inspection { overflow: hidden; }
-.multicam-sync-inspection-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 18px 12px;
-}
-.multicam-sync-inspection-heading p {
-  margin: 6px 0 0;
-  color: var(--mo-text-muted, #82909c);
-  font-size: 11px;
-}
-.multicam-sync-inspection-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px 12px;
-  color: var(--mo-text-muted, #8997a3);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-.multicam-sync-inspection-meta button { flex: 0 0 auto; }
-.multicam-sync-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px 14px;
-  border-top: 1px solid var(--mo-border-subtle, #27323d);
-  border-bottom: 1px solid var(--mo-border-subtle, #27323d);
-  padding: 8px 18px;
-  color: var(--mo-text-muted, #82909c);
-  font-size: 10px;
-}
-.multicam-sync-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.multicam-sync-legend i {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  background: #6b9bc9;
-}
-.multicam-sync-legend i { background: var(--camera-color, #81909d); }
-
-.multicam-sync-ruler,
-.multicam-sync-track {
-  display: grid;
-  grid-template-columns: 170px minmax(760px, 1fr);
-  gap: 12px;
-  min-width: 960px;
-}
-.multicam-sync-ruler {
-  padding: 10px 18px 0;
-  color: var(--mo-text-muted, #74828f);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-}
-.multicam-sync-ruler > div { position: relative; height: 16px; }
-.multicam-sync-ruler span span { position: absolute; transform: translateX(-50%); }
-.multicam-sync-ruler span:first-child { display: block; }
-.multicam-sync-ruler span span:first-child { transform: none; }
-.multicam-sync-ruler span span:last-child { transform: translateX(-100%); }
-
-.multicam-sync-track-list {
-  overflow-x: auto;
-  padding: 0 18px 18px;
-}
-.multicam-sync-track {
-  align-items: center;
-  min-height: 68px;
-  border-top: 1px solid var(--mo-border-subtle, #27323d);
-}
-.multicam-sync-track-label {
-  display: grid;
-  gap: 4px;
-  align-content: center;
-  min-height: 54px;
-}
-.multicam-sync-track-label strong {
-  color: var(--camera-color, #6b9bc9);
+  color: var(--mo-text-secondary);
   font-size: 13px;
-  font-weight: 720;
-}
-.multicam-sync-track-label span {
-  color: var(--mo-text-muted, #81909d);
-  font-size: 10px;
-}
-.multicam-sync-track-lane {
-  position: relative;
-  height: 46px;
-  overflow: hidden;
-  border: 1px solid var(--mo-border-subtle, #27323d);
-  border-radius: 6px;
-  background:
-    linear-gradient(90deg, transparent 0, transparent calc(25% - 1px), var(--mo-border-subtle, #27323d) 25%, transparent calc(25% + 1px), transparent calc(50% - 1px), var(--mo-border-subtle, #27323d) 50%, transparent calc(50% + 1px), transparent calc(75% - 1px), var(--mo-border-subtle, #27323d) 75%, transparent calc(75% + 1px)),
-    var(--mo-surface-app, #0b1015);
-}
-.multicam-sync-clip {
-  position: absolute;
-  top: 7px;
-  bottom: 7px;
-  display: block;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--camera-color, #6b9bc9) 78%, white 4%);
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--camera-color, #6b9bc9) 56%, var(--mo-surface-raised, #151c24));
-}
-.multicam-sync-clip > span {
-  display: block;
-  overflow: hidden;
-  padding: 4px 5px;
-  color: #f5f8fa;
-  font-size: 9px;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-html[data-mirrororder-theme="light"] .multicam-sync-gate,
-html[data-mirrororder-theme="light"] .multicam-sync-inspection { background: #fff; }
-html[data-mirrororder-theme="light"] .multicam-sync-gate-action { background: #f6f8fa; }
-html[data-mirrororder-theme="light"] .multicam-sync-track-lane { background-color: #f7f9fb; }
-
-@media (max-width: 860px) {
-  .multicam-sync-gate { grid-template-columns: 1fr; padding: 20px; }
-  .multicam-sync-inspection-heading { flex-direction: column; }
-  .multicam-sync-inspection-meta { justify-content: flex-start; }
-}
-
-/* Sync-first rebuild: one visible task, its real stage, and a single primary action.
-   The numbers are worker checkpoints, never a fabricated file/overall ETA. */
-.multicam-sync-gate {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  min-height: 0;
-  padding: 24px;
-  gap: 18px;
-}
-.multicam-sync-gate-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-}
-.multicam-sync-gate-header > div { min-width: 0; max-width: 700px; }
-.multicam-sync-gate-header p:not(.multicam-sync-kicker) {
-  margin: 10px 0 0;
-  color: var(--mo-text-secondary, #abb8c3);
-  font-size: 12px;
-  line-height: 1.55;
-}
-.multicam-sync-status {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 8px;
-  align-items: center;
-  border: 1px solid var(--mo-border-default, #2b3742);
-  border-radius: 6px;
-  padding: 7px 10px;
-  color: var(--mo-text-secondary, #abb8c3);
-  font-size: 12px;
   font-weight: 650;
 }
-.multicam-sync-status.is-failed,
-.multicam-sync-status.is-interrupted,
-.multicam-sync-status.is-invalid { color: var(--mo-warning, #e5af81); }
-.multicam-sync-flow {
-  margin-top: 0;
-  flex-wrap: nowrap;
-  gap: 8px;
+
+.sync-task-state::before,
+.sync-task-stages li::before {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  content: "";
 }
-.multicam-sync-flow > span {
-  flex: 1 1 0;
-  min-width: 0;
-  border: 1px solid var(--mo-border-subtle, #27323d);
-  border-radius: 5px;
-  padding: 10px;
-  color: var(--mo-text-muted, #81909d);
-  font-size: 11px;
+.sync-task-state[data-phase="completed"] { color: var(--mo-success); }
+.sync-task-state[data-phase="running"] { color: var(--mo-accent); }
+.sync-task-state[data-phase="failed"],
+.sync-task-state[data-phase="invalid"],
+.sync-task-state[data-phase="unavailable"] { color: var(--mo-danger); }
+.sync-task-state[data-phase="completed"]::before,
+.sync-task-state[data-phase="running"]::before { background: currentColor; }
+
+.sync-task-heading h1 {
+  margin: 8px 0 6px;
+  color: var(--mo-text-primary);
+  font-size: 28px;
+  font-weight: 680;
+  line-height: 1.25;
 }
-.multicam-sync-flow > span.is-current {
-  border-color: var(--mo-accent, #659fe0);
-  color: var(--mo-text-primary, #edf2f6);
-  background: var(--mo-accent-soft, rgba(80, 130, 180, .12));
-}
-.multicam-sync-flow > span.is-done { color: var(--mo-success, #75c69a); }
-.multicam-sync-flow > span strong { margin-right: 4px; }
-.multicam-sync-gate-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 270px);
-  gap: 20px;
-}
-.multicam-sync-live,
-.multicam-sync-action {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border: 1px solid var(--mo-border-subtle, #27323d);
-  border-radius: 8px;
-  padding: 18px;
-  background: var(--mo-surface-raised, #151c24);
-}
-.multicam-sync-live > strong {
-  color: var(--mo-text-primary, #edf2f6);
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-.multicam-sync-label {
+.sync-task-heading p {
+  max-width: 56ch;
   margin: 0;
-  font-size: 11px;
-  color: var(--mo-text-muted, #81909d);
-}
-.multicam-sync-no-progress,
-.multicam-sync-action p,
-.multicam-sync-activity {
-  margin: 0;
-  color: var(--mo-text-secondary, #abb8c3);
-  font-size: 11px;
+  color: var(--mo-text-secondary);
   line-height: 1.6;
 }
-.multicam-sync-action button { align-self: stretch; min-height: 38px; }
-.multicam-sync-action p + p { margin-top: 6px; }
-.multicam-sync-progress { display: grid; gap: 6px; }
+.sync-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sync-task-actions > button { min-height: 38px; padding-inline: 14px; font-size: 14px; }
+.sync-task-actions > button:not(.secondary):not(:disabled) {
+  color: var(--mo-action-text);
+  background: var(--mo-action-fill);
+  border-color: var(--mo-action-fill);
+}
+.sync-task-actions > button:not(.secondary):hover:not(:disabled) { filter: brightness(1.08); }
+
+.sync-task-body {
+  display: grid;
+  grid-template-columns: minmax(215px, .72fr) minmax(0, 1.5fr);
+  gap: clamp(24px, 4vw, 56px);
+  margin-block: 24px 0;
+}
+
+.sync-task-content h2 { margin: 0 0 12px; color: var(--mo-text-primary); font-size: 15px; font-weight: 650; }
+
+.sync-task-sources {
+  align-self: start;
+  padding: 16px 18px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: var(--mo-radius-pane);
+  background: var(--mo-surface-pane);
+}
+.sync-task-sources dl { margin: 0 0 14px; }
+.sync-task-sources dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 9px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+}
+.sync-task-sources dt { color: var(--mo-text-secondary); }
+.sync-task-sources dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-weight: 650; font-variant-numeric: tabular-nums; }
+.sync-task-sources > button { font-size: 13px; }
+.sync-task-warning { color: var(--mo-warning); }
+
+.sync-task-stages ol { margin: 0; padding: 0; list-style: none; }
+.sync-task-stages li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) minmax(62px, auto);
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+}
+.sync-task-stages li::before { color: var(--mo-text-muted); }
+.sync-task-stages li[data-state="current"] { background: var(--mo-surface-selected); }
+.sync-task-stages li[data-state="current"]::before { color: var(--mo-accent); background: currentColor; }
+.sync-task-stages li[data-state="done"]::before { color: var(--mo-success); background: currentColor; }
+.sync-task-step { display: grid; gap: 3px; }
+.sync-task-step small,
+.sync-task-step-status { color: var(--mo-text-secondary); font-size: 13px; line-height: 1.45; }
+.sync-task-step-status { text-align: end; }
+.sync-task-stages li[data-state="current"] .sync-task-step-status { color: var(--mo-text-primary); font-weight: 640; }
+
+.multicam-sync-live {
+  margin-block-start: 24px;
+  padding-block-start: 16px;
+  border-top: 1px solid var(--mo-border-default);
+}
+.multicam-sync-live > header,
 .multicam-sync-progress > div {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  font-size: 11px;
-  color: var(--mo-text-secondary, #abb8c3);
-}
-.multicam-sync-progress progress {
-  display: block;
-  width: 100%;
-  height: 10px;
-  accent-color: var(--mo-accent, #659fe0);
-}
-.multicam-sync-activity { display: flex; gap: 6px 18px; flex-wrap: wrap; }
-.multicam-sync-error {
-  margin: 0;
-  color: var(--mo-warning, #e5af81);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.multicam-sync-ruler { font-size: 11px; }
-.multicam-sync-clip > span { font-size: 11px; }
-@media (max-width: 940px) {
-  .multicam-sync-gate { padding: 18px; }
-  .multicam-sync-gate-header { flex-direction: column; }
-  .multicam-sync-gate-body { grid-template-columns: 1fr; }
-  .multicam-sync-flow { flex-wrap: wrap; }
-  .multicam-sync-flow > span { flex-basis: calc(50% - 8px); }
-}
-
-
-/* Interactive sync master inspector. Keeps source playback and NLE export
-   separate from the authoritative creative/editing timeline. */
-.multicam-sync-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px 16px;
+  align-items: baseline;
   flex-wrap: wrap;
-  padding: 12px 18px 8px;
-  border-top: 1px solid var(--mo-border-subtle, #27323d);
-  color: var(--mo-text-secondary, #abb8c3);
+  gap: 8px 16px;
+}
+.multicam-sync-live > header h2 { margin-block-end: 0; }
+.multicam-sync-live p { margin: 7px 0; overflow-wrap: anywhere; }
+.multicam-sync-live time,
+.multicam-sync-live small { color: var(--mo-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.multicam-sync-progress { display: grid; gap: 6px; margin: 12px 0; max-width: 52ch; font-size: 13px; }
+.multicam-sync-progress progress { width: 100%; height: 6px; accent-color: var(--mo-accent); }
+
+.multicam-sync-error {
+  margin: 8px 0;
+  padding: 8px 10px;
+  color: var(--mo-danger);
+  border: 1px solid var(--mo-border-subtle);
+  background: var(--mo-surface-raised);
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.multicam-sync-inspection {
+  --sync-monitor-control: var(--mo-radius-control);
+  --sync-monitor-group: var(--mo-radius-pill, 999px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  container: sync-desk / inline-size;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-pane);
+}
+.multicam-sync-inspection.is-embedded { height: auto; grid-template-rows: auto auto auto; }
+.multicam-sync-inspection.is-embedded .sync-inspection-desk { height: 640px; }
+.multicam-sync-inspection-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  min-height: 44px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+}
+.sync-master-heading, .multicam-sync-inspection-meta { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sync-master-heading h2 { margin: 0; color: var(--mo-text-primary); font-size: 16px; font-weight: 650; }
+.sync-master-heading > span { color: var(--mo-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.sync-master-heading .sync-monitor-listening {
+  padding-inline-start: 10px;
+  border-inline-start: 1px solid var(--mo-border-subtle);
+  color: var(--mo-text-primary);
+}
+.multicam-sync-inspection-meta { flex-wrap: wrap; gap: 6px; }
+.multicam-sync-inspection-meta > button, .sync-monitor-pair > select {
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: var(--sync-monitor-control);
+  white-space: nowrap;
   font-size: 12px;
 }
-.multicam-sync-time-controls { display: inline-flex; align-items: center; gap: 12px; }
-.multicam-sync-time-controls strong { font-variant-numeric: tabular-nums; min-width: 65px; text-align: center; font-size: 14px; color: var(--mo-text-primary, #edf2f6); }
-.multicam-sync-time-controls button { min-height: 28px; }
-.multicam-sync-controls select {
-  min-width: 78px;
-  background: var(--mo-surface-raised, #151c24);
-  color: var(--mo-text-primary, #edf2f6);
-  border: 1px solid var(--mo-border-default, #2b3742);
-  border-radius: 5px;
-  padding: 5px 8px;
+.multicam-sync-inspection-meta > .sync-gap-toggle[aria-pressed="true"],
+.multicam-sync-inspection-meta > .sync-inspector-toggle[aria-expanded="true"] {
+  background: var(--mo-surface-selected);
+  color: var(--mo-text-primary);
 }
-.multicam-sync-cursor-control {
+.sync-monitor-modes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: var(--sync-monitor-group);
+  background: var(--mo-surface-raised);
+}
+.sync-monitor-modes > button {
+  min-height: 26px;
+  padding: 3px 9px;
+  border: 0;
+  border-radius: var(--sync-monitor-group);
+  background: transparent;
+  color: var(--mo-text-secondary);
+  white-space: nowrap;
+  font-size: 12px;
+  transition: none;
+}
+.sync-monitor-modes > button:hover { background: var(--mo-surface-hover); color: var(--mo-text-primary); }
+.sync-monitor-modes > button[aria-pressed="true"] { background: var(--mo-surface-selected); color: var(--mo-text-primary); }
+.sync-monitor-pair { display: flex; align-items: center; gap: 4px; }
+.sync-monitor-pair > select {
+  width: 84px;
+  padding: 3px 5px;
+  color: var(--mo-text-primary);
+  border: 1px solid var(--mo-border-subtle);
+  background: var(--mo-surface-control);
+}
+.sync-inspection-desk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+.sync-inspection-desk[data-inspector] { grid-template-columns: minmax(0, 1fr) 7px var(--sync-inspector-width); }
+.sync-inspection-grip {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--mo-surface-sidebar);
+}
+.sync-inspection-grip::after {
+  position: absolute;
+  inset: calc(50% - 13px) 2px auto;
+  height: 26px;
+  border-radius: 2px;
+  background: var(--mo-text-muted);
+  content: "";
+}
+.sync-inspection-grip:hover::after,
+.sync-inspection-grip:focus-visible::after { background: var(--mo-accent); }
+.sync-inspection-grip:focus-visible { outline-offset: -2px; }
+.sync-inspection-sidebar {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-inline-start: 1px solid var(--mo-border-default);
+  background: var(--mo-surface-raised);
+  color: var(--mo-text-primary);
+}
+.sync-inspection-sidebar > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 18px 12px;
-  font-size: 11px;
-  color: var(--mo-text-secondary, #abb8c3);
-}
-.multicam-sync-cursor-control input { flex: 1; width: 100%; min-width: 80px; accent-color: var(--mo-accent, #609ee8); }
-.multicam-sync-cursor-control span { font-variant-numeric: tabular-nums; }
-.multicam-sync-ruler { font-size: 11px; }
-.multicam-sync-ruler > div { position: relative; height: 18px; }
-.multicam-sync-ruler > div > span { position: absolute; transform: translateX(-50%); }
-.multicam-sync-ruler > div > span:first-child { transform: none; }
-.multicam-sync-ruler > div > span:last-child { transform: translateX(-100%); }
-.multicam-sync-clip {
-  cursor: pointer;
-  text-align: left;
-  min-width: 0;
-  padding: 0;
-  z-index: 1;
-}
-.multicam-sync-clip:hover,
-.multicam-sync-clip:focus-visible,
-.multicam-sync-clip.is-selected {
-  outline: 2px solid var(--mo-text-primary, #edf2f6);
-  outline-offset: 0;
-  z-index: 2;
-}
-.multicam-sync-playhead-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 3;
-  pointer-events: none;
-  border-left: 1px solid #f6e2b0;
-  box-shadow: 0 0 3px #f6e2b0;
-}
-.multicam-sync-monitor-grid {
-  border-top: 1px solid var(--mo-border-subtle, #27323d);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(210px, .45fr);
-  gap: 16px;
-  padding: 18px;
-}
-.multicam-sync-monitor,
-.multicam-sync-details {
-  min-width: 0;
-  border: 1px solid var(--mo-border-subtle, #27323d);
-  border-radius: 7px;
-  background: var(--mo-surface-raised, #151c24);
-  padding: 14px;
-}
-.multicam-sync-monitor-heading {
-  display: flex;
   justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
-  color: var(--mo-text-primary, #edf2f6);
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  background: var(--mo-surface-raised);
 }
-.multicam-sync-monitor-heading span { color: var(--mo-text-secondary, #abb8c3); }
-.multicam-sync-angle-switch { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
-.multicam-sync-angle-switch button {
-  min-height: 30px;
-  padding: 5px 12px;
-  font-size: 12px;
-  border-radius: 4px;
+.sync-inspection-sidebar > header h3 { margin: 0; font-size: 15px; }
+.sync-inspection-sidebar > header button { font-size: 12px; }
+.multicam-sync-details { padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+.multicam-sync-details dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 9px 12px;
+  margin: 7px 0 15px;
+  font-variant-numeric: tabular-nums;
 }
-.multicam-sync-angle-switch button.is-active { border-color: var(--mo-accent, #609ee8); }
+.multicam-sync-details dt { color: var(--mo-text-secondary); }
+.multicam-sync-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.sync-master-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mo-border-subtle);
+  color: var(--mo-text-secondary);
+}
+.sync-master-info button { font-size: 12px; }
+
+.multicam-sync-inspection-canvas { display: grid; grid-template-rows: var(--sync-preview-height, 300px) 8px minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
+.multicam-sync-monitor { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--mo-monitor-backdrop, #1b1b1b); }
+.multicam-sync-viewers {
+  display: grid;
+  grid-template-columns: repeat(var(--sync-grid-columns, 1), minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  gap: 3px;
+  padding: 4px;
+}
+.sync-camera-cell {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 24px;
+  min-width: 0;
+  min-height: 0;
+  background: var(--mo-monitor-matte, #111);
+}
+.sync-camera-cell[hidden], .multicam-sync-video[hidden] { display: none; }
+.sync-camera-picture { min-width: 0; min-height: 0; overflow: hidden; }
 .multicam-sync-video {
   display: block;
   width: 100%;
-  max-height: 330px;
-  min-height: 180px;
-  background: #080b0f;
-  border-radius: 5px;
+  height: 100%;
   object-fit: contain;
 }
-.multicam-sync-preview-empty {
+.sync-camera-cell .sync-camera-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 0;
+  color: #f2f2f2;
+  background: var(--mo-monitor-label, #2d2d2d);
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+  transition: none;
+}
+.sync-camera-caption::before { content: ""; flex: none; width: 3px; height: 10px; background: var(--camera-color); }
+.sync-camera-caption strong { flex: none; }
+.sync-camera-caption span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #cdcdcd; font-weight: 450; }
+.sync-camera-caption::after { content: ""; position: absolute; inset: 0; }
+.sync-camera-cell[data-listening] .sync-camera-caption { box-shadow: inset 0 -2px var(--camera-color); }
+.sync-camera-cell:has(:focus-visible) { outline: 2px solid #fff; outline-offset: -2px; z-index: 1; }
+.sync-camera-cell:hover .sync-camera-caption:not(:disabled) { background: var(--mo-monitor-label-hover, #414141); }
+.sync-camera-cell .sync-camera-caption:disabled { opacity: 1; color: #a5abad; }
+.multicam-sync-angle-placeholder, .multicam-sync-preview-empty { display: grid; place-items: center; height: 100%; padding: 4px; color: #c0c4c7; text-align: center; font-size: 11px; line-height: 1.4; }
+.multicam-sync-monitor > .multicam-sync-error {
+  position: absolute;
+  z-index: 2;
+  inset: auto 8px 28px;
+  margin: 0;
+  padding: 4px 12px;
+  pointer-events: none;
+  background: var(--mo-surface-pane);
+}
+.multicam-sync-divider {
   display: grid;
   place-items: center;
-  min-height: 185px;
-  border-radius: 5px;
-  border: 1px dashed var(--mo-border-default, #2b3742);
-  text-align: center;
-  padding: 20px;
-  color: var(--mo-text-secondary, #abb8c3);
-  font-size: 12px;
-  line-height: 1.6;
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+  background: var(--mo-surface-raised, #151b20);
+  border-top: 1px solid var(--mo-border-subtle, #202830);
+  border-bottom: 1px solid var(--mo-border-subtle, #202830);
 }
-.multicam-sync-details > strong { font-size: 13px; color: var(--mo-text-primary, #edf2f6); }
-.multicam-sync-details dl {
+.multicam-sync-divider > span { width: 36px; height: 2px; border-radius: 1px; background: var(--mo-text-secondary, #a6b1ba); }
+.multicam-sync-divider:hover,
+.multicam-sync-divider:focus-visible { background: var(--mo-surface-selected, #182535); outline: 1px solid var(--mo-accent, #6fa7e8); outline-offset: -1px; }
+.multicam-sync-timeline-pane { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
+.multicam-sync-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 6px 12px;
+  color: var(--mo-text-primary);
+}
+.multicam-sync-time-controls, .sync-timecode-locator, .sync-zoom-controls { display: flex; align-items: center; flex: none; gap: 3px; }
+.sync-zoom-controls { margin-inline-start: auto; }
+.multicam-sync-controls button, .multicam-sync-controls select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--mo-radius-control);
+  color: var(--mo-text-secondary);
+  background: transparent;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.multicam-sync-controls button:hover:not(:disabled), .multicam-sync-controls select:hover { color: var(--mo-text-primary); background: var(--mo-surface-hover); }
+.multicam-sync-time-controls button { min-width: 30px; font-variant-numeric: tabular-nums; }
+.multicam-sync-controls button svg { width: 16px; height: 16px; fill: currentColor; }
+.multicam-sync-controls .sync-play { color: var(--mo-text-primary); background: var(--mo-surface-selected); }
+.sync-timecode-locator { position: relative; }
+.sync-timecode-locator input { width: 118px; min-height: 30px; padding: 4px 7px; border: 1px solid var(--mo-border-default); border-radius: var(--mo-radius-control); background: var(--mo-surface-control); color: var(--mo-text-primary); font: 600 14px var(--mo-font-mono, monospace); font-variant-numeric: tabular-nums; }
+.sync-timecode-locator input:focus-visible { outline: 2px solid var(--mo-accent); }
+.sync-timecode-locator [role="alert"] { position: absolute; z-index: 8; top: 100%; left: 0; width: max-content; max-width: 245px; padding: 7px; background: var(--mo-surface-pane); border: 1px solid var(--mo-warning); color: var(--mo-text-primary); font-size: 12px; }
+.sync-rate { margin-inline-start: 5px; font-size: 11px; color: var(--mo-text-secondary); }
+.multicam-sync-controls select { width: 74px; border-color: var(--mo-border-subtle); font-variant-numeric: tabular-nums; }
+.multicam-sync-overview {
   display: grid;
-  grid-template-columns: minmax(80px, .7fr) minmax(0, 1.3fr);
-  gap: 10px 8px;
-  margin: 16px 0;
-  font-size: 12px;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 1px 12px 4px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  color: var(--mo-text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
-.multicam-sync-details dt { color: var(--mo-text-muted, #82909c); }
-.multicam-sync-details dd { min-width: 0; overflow-wrap: anywhere; margin: 0; color: var(--mo-text-primary, #edf2f6); }
-.multicam-sync-detail-note,
-.multicam-sync-details > p { font-size: 11px; line-height: 1.55; color: var(--mo-text-secondary, #abb8c3); }
-.multicam-sync-export {
-  padding: 16px 18px 20px;
-  border-top: 1px solid var(--mo-border-subtle, #27323d);
+.multicam-sync-overview-map { display: block; width: 100%; height: 20px; background: var(--mo-surface-raised); }
+.sync-overview-map input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; margin: 0; opacity: 0; cursor: crosshair; }
+.sync-overview-map:focus-within { outline: 2px solid var(--mo-accent); }
+.multicam-sync-track-list { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.multicam-sync-ruler,
+.multicam-sync-track { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 0; min-width: 0; padding: 0 12px; }
+.multicam-sync-ruler { position: sticky; top: 0; z-index: 5; height: 26px; align-items: center; background: var(--mo-surface-pane, #10151a); border-bottom: 1px solid var(--mo-border-subtle, #202830); color: var(--mo-text-secondary, #a6b1ba); font-size: 11px; font-variant-numeric: tabular-nums; }
+.multicam-sync-ruler > div { position: relative; height: 26px; overflow: hidden; }
+.multicam-sync-ruler > div > span { position: absolute; transform: translateX(-50%); }
+
+.multicam-sync-track { align-items: center; height: 36px; border-bottom: 1px solid var(--mo-border-subtle, #202830); }
+.multicam-sync-track-label { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; }
+.multicam-sync-track-label strong { color: color-mix(in srgb, var(--camera-color, #81909d) 35%, var(--mo-text-primary, #e2e8ed)); font-size: 12px; }
+.multicam-sync-track-label span { color: var(--mo-text-secondary, #a6b1ba); font-size: 11px; }
+.multicam-sync-track-lane { position: relative; height: 32px; overflow: hidden; background: var(--mo-surface-app, #0b0f13); }
+
+.multicam-sync-clip {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  z-index: 1;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--camera-color, #81909d) 60%, var(--mo-border-default, #29333d));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--camera-color, #81909d) 24%, var(--mo-surface-raised, #151b20));
+  cursor: pointer;
+  text-align: left;
+  transition: none;
 }
+.multicam-sync-clip > span { display: block; padding: 5px 6px; overflow: hidden; color: var(--mo-text-primary, #e2e8ed); font-size: 11px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.multicam-sync-clip:hover,
+.multicam-sync-clip:focus-visible,
+.multicam-sync-clip.is-selected { outline: 1px solid var(--mo-text-primary, #e2e8ed); outline-offset: -1px; z-index: 2; }
+.multicam-sync-playhead-line { position: absolute; top: 0; bottom: 0; z-index: 3; pointer-events: none; border-left: 1px solid var(--mo-text-primary, #e2e8ed); }
+.multicam-sync-export { padding: 16px 18px 20px; border-top: 1px solid var(--mo-border-subtle, #202830); }
 .multicam-sync-export-heading { display: flex; justify-content: space-between; gap: 12px; }
 .multicam-sync-export-heading strong { font-size: 14px; }
 .multicam-sync-export-heading p,
 .multicam-sync-export-heading > span,
-.multicam-sync-export-hint { font-size: 11px; color: var(--mo-text-secondary, #abb8c3); line-height: 1.5; }
+.multicam-sync-export-hint { color: var(--mo-text-secondary, #a6b1ba); font-size: 11px; line-height: 1.5; }
 .multicam-sync-export-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
-.multicam-sync-export-item {
-  border: 1px solid var(--mo-border-subtle, #27323d);
-  border-radius: 7px;
-  padding: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
+.multicam-sync-export-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px; border: 1px solid var(--mo-border-subtle, #202830); border-radius: 7px; }
 .multicam-sync-export-item > div { display: grid; gap: 4px; min-width: 0; }
 .multicam-sync-export-item strong { font-size: 12px; }
-.multicam-sync-export-item span { color: var(--mo-text-muted, #81909d); font-size: 11px; overflow-wrap: anywhere; }
+.multicam-sync-export-item span { color: var(--mo-text-secondary, #a6b1ba); font-size: 11px; overflow-wrap: anywhere; }
 .multicam-sync-export-item button { flex: 0 0 auto; font-size: 11px; }
-@media (max-width: 980px) {
-  .multicam-sync-monitor-grid { grid-template-columns: 1fr; }
+@container sync-desk (max-width: 740px) {
+  .sync-rate { display: none; }
+  .multicam-sync-controls { gap: 4px 8px; padding-inline: 8px; }
+  .multicam-sync-viewers[data-view="all"] { grid-template-columns: repeat(var(--sync-grid-narrow-columns, 1), minmax(0, 1fr)); }
   .multicam-sync-export-list { grid-template-columns: 1fr; }
 }
+@media (max-aspect-ratio: 1 / 1) and (min-height: 920px) {
+  .multicam-sync-viewers[data-view="all"] { grid-template-columns: repeat(var(--sync-grid-narrow-columns, 1), minmax(0, 1fr)); }
+}
+@container sync-desk (max-width: 560px) {
+  .multicam-sync-inspection-heading { padding-inline: 8px; }
+  .sync-master-heading { gap: 8px; }
+  .sync-zoom-controls { margin-inline-start: 0; }
+}
+
+.sync-overview-map { position: relative; cursor: crosshair; }
+.sync-overview-window { position: absolute; top: 0; bottom: 0; min-width: 1px; box-sizing: border-box; pointer-events: none; border: 1px solid var(--mo-text-primary); background: var(--mo-accent-soft); }
+.sync-overview-playhead { position: absolute; top: 0; bottom: 0; pointer-events: none; border-left: 1px solid var(--mo-text-primary); }
+.sync-working-surface { cursor: crosshair; touch-action: none; user-select: none; }
+.sync-working-surface.is-pan, .sync-working-surface.is-pan .multicam-sync-clip { cursor: grabbing; }
+.sync-working-surface .multicam-sync-clip { cursor: crosshair; }
+.sync-working-ruler { outline-offset: -2px; }
+.sync-working-ruler > span { padding-top: 5px; pointer-events: none; }
+.sync-playhead-grip { position: absolute; top: 0; bottom: 0; z-index: 7; width: 16px; margin-left: -8px; cursor: ew-resize; }
+.sync-playhead-grip svg { display: block; width: 12px; height: 16px; margin: 0 auto; fill: var(--mo-text-primary); }
+.sync-playhead-grip::after { content: ""; position: absolute; top: 14px; bottom: 0; left: 8px; border-left: 1px solid var(--mo-text-primary); }
+.multicam-sync-clip.is-selected { outline-width: 2px; outline-offset: -2px; }
+
+.sync-lane-ticks { position: absolute; inset: 0; pointer-events: none; }
+.sync-lane-ticks i { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--mo-border-subtle); }
+
+.sync-recording-monitor { display: grid; justify-items: start; gap: 11px; }
+.sync-recording-monitor label { display: grid; gap: 5px; width: 100%; }
+.sync-recording-monitor p { margin: 4px 0; }
+.sync-recording-monitor select,
+.sync-recording-monitor audio { width: 100%; min-width: 0; }
+
+
+/* The recording monitor owns its controls; no global theme override. */
+.sync-recording-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.sync-recording-mode button {
+  flex: 1 1 108px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--mo-border-default);
+  border-radius: var(--mo-radius-control);
+  background: var(--mo-surface-raised);
+  color: var(--mo-text-secondary);
+  font-size: 13px;
+}
+.sync-recording-mode button[aria-pressed="true"] {
+  background: var(--mo-surface-selected);
+  color: var(--mo-text-primary);
+  border-color: var(--mo-accent);
+}
+.sync-recording-mode button:disabled { opacity: .5; }
+.sync-recording-status { color: var(--mo-text-secondary); overflow-wrap: anywhere; }
+.sync-recording-monitor > button { min-height: 32px; }

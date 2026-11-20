@@ -80,7 +80,7 @@ jobs:
         run: npm run test:layout-runtime
       - name: Test real UX gate against synthetic review media
         working-directory: desktop
-        run: npm run test:ux-real
+        run: npm run test:ux-synthetic
       - name: Upload layout runtime screenshots
         if: failure()
         uses: actions/upload-artifact@v4

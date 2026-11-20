@@ -23,7 +23,7 @@ export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
       <header className="production-heading timeline-heading">
         <div>
           <p className="eyebrow">{showSync ? "同步母版" : "编辑组接"}</p>
-          <h2>{showSync ? (syncBlocked ? "多机位同步" : "同步核对与工程交付") : "组接与导出"}</h2>
+          <h2>{showSync ? (syncBlocked ? "多机位同步" : "同步核对与工程交付") : "选片组接"}</h2>
           <p className="production-note">{showSync
             ? syncBlocked
               ? "先同步视频和同期声；任务阶段、已知进度与失败原因都在这里。检查素材不受阻。"

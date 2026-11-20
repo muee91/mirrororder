@@ -27,7 +27,8 @@ describe("MirrorOrder professional UI contracts", () => {
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
     expect(aux).toBeGreaterThan(c);
-    expect(slateRow).toContain('SLATE_CAMERA_COLUMNS.map((camera) => <td className="col-media" key={camera}>{renderMedia(camera)}</td>)');
+    expect(slateRow).toContain("cameraColumns.map((camera)");
+    expect(slateRow).toContain('<td className="col-media" key={camera} onClick={stopRowSelection}>{renderMedia(camera)}</td>');
   });
 
   it("keeps Take cards on the shared A/B/C/AUX contract before custom cameras", () => {

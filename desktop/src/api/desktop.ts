@@ -4,6 +4,10 @@ import { fetchWithTimeout } from "./requestWithTimeout";
 export interface DesktopCommandStatus { name: string; available: boolean; path: string }
 export interface DesktopModuleStatus { name: string; available: boolean; required: boolean }
 export interface DesktopEnvironment {
+  core_version?: string;
+  core_build_revision?: string;
+  host_contract_version?: string;
+  packaged_runtime?: boolean;
   python: { executable: string; version: string };
   commands: DesktopCommandStatus[];
   python_modules: DesktopModuleStatus[];
@@ -107,12 +111,13 @@ export interface MediaBindingSummary {
   ambiguous_content_count?: number;
   version: number; device_id: string; device_name: string; state_path: string; roots: string[];
   total: number; resolved: number; missing: number; items: MediaBindingItem[]; pending_analysis?: boolean;
+  unavailable_roots?: string[];
   scan?: { files_seen: number; verified_matches: number; provisional_name_matches: number; provisional_name_candidates?: number };
 }
 export interface MediaBindingPayload { contract: "media_binding.v1" | string; project_id: string; summary: MediaBindingSummary }
 export interface MediaInventoryScanPayload { contract: "media_inventory_scan.v1" | string; project_id: string; task: ProjectTask }
 export interface ProjectCreatePayload {
-  name: string; project_id?: string; input_kind: "fcpxml" | "media-directory"; script: string;
+  name: string; project_id?: string; input_kind: "fcpxml" | "media-directory"; script?: string;
   fcpxml?: string; media_roots?: string[]; timeline_mode?: "sequential" | "timestamp" | string; camera_patterns?: Record<string, string>;
 }
 export interface ProjectPreflight { ready: boolean; errors: string[]; warnings: string[]; detected?: Record<string, unknown>; project_id?: string; [key: string]: unknown }
@@ -176,6 +181,16 @@ export class DesktopClient {
     const normalized = [...new Set(roots.map((root) => root.trim()).filter(Boolean))];
     if (!normalized.length) throw new HostConnectionError("扫描本机素材至少需要一个目录");
     return requestJson(this.baseUrl, `${projectPath(projectId)}/media-binding`, { method: "POST", body: JSON.stringify({ action: replace ? "replace_and_scan" : "scan", roots: normalized }) });
+  }
+  saveSourceRoots(projectId: string, roots: string[], replace: boolean): Promise<MediaBindingPayload> {
+    return requestJson(this.baseUrl, `${projectPath(projectId)}/media-binding`, {
+      method: "POST", body: JSON.stringify({ action: replace ? "replace_source_roots" : "add_source_roots", roots }),
+    });
+  }
+  attachScript(projectId: string, script: string): Promise<{ script: string; task: ProjectTask }> {
+    return requestJson(this.baseUrl, `${projectPath(projectId)}/script`, {
+      method: "POST", body: JSON.stringify({ script, only_if_missing: true }),
+    });
   }
   confirmProvisionalMediaBinding(projectId: string, mediaId: string, candidatePath: string): Promise<MediaBindingPayload> {
     const media_id = mediaId.trim();

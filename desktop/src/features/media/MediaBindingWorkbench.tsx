@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { DesktopClient, type MediaBindingSummary } from "../../api/desktop";
 import { HostConnectionError, errorMessage } from "../../api/host";
 import { PlatformClient } from "../../api/platform";
@@ -70,10 +70,10 @@ function isInventorySnapshotPublishFailure(task: Pick<ProjectTaskRecord, "error"
 
 function scanFailureMessage(task: Pick<ProjectTaskRecord, "error" | "message" | "status">): string {
   if (task.status === "interrupted") {
-    return "素材扫描因 Host 重启而中断；请先在时间线完成多机位同步，之后再重新扫描。";
+    return "素材扫描因 Host 重启而中断；可以重新扫描已登记目录。";
   }
   if (task.status === "cancelled") {
-    return "素材扫描已取消；请先在时间线完成多机位同步，之后再重新扫描。";
+    return "素材扫描已取消；可以重新扫描已登记目录。";
   }
   if (isInventorySnapshotPublishFailure(task)) {
     return "素材扫描失败：绑定已提交，但索引快照发布失败；连接结果暂不可用，请重新扫描。";
@@ -90,11 +90,14 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
   const [scanTask, setScanTask] = useState<ProjectTaskRecord | null>(null);
   const [scanError, setScanError] = useState<ProjectTaskRecord | null>(null);
   const [busy, setBusy] = useState(false);
+  const submission = useRef(false);
   const [message, setMessage] = useState("正在读取本机素材连接…");
 
   function describeSummary(next: MediaBindingSummary): string {
     if (next.pending_analysis) {
-      return "请先在时间线完成多机位同步；同步完成后镜序会建立媒体身份，才能扫描并连接本机素材。";
+      return next.unavailable_roots?.length
+        ? `${next.unavailable_roots.length} 个原始目录无法读取，请检查硬盘或更新位置。`
+        : next.roots.length ? "原始目录可访问，可以开始同步。" : "请选择视频和同期录音所在的目录。";
     }
     if (entry==="slate"&&next.total>0&&next.resolved===0&&next.roots.length) {
       return "素材还未关联。可以直接扫描已经保存的目录；若读不到，再选择新的位置。";
@@ -220,7 +223,25 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
       setMessage("至少需要一个本机素材目录。");
       return;
     }
+    if (!summary || submission.current) return;
+    submission.current = true;
+    if (summary.pending_analysis) {
+      setBusy(true);
+      try {
+        const result = await client.saveSourceRoots(projectId, normalized, replace);
+        setSummary(result.summary);
+        setRootsText(result.summary.roots.join("\n"));
+        setMessage(describeSummary(result.summary));
+      } catch (error) {
+        setMessage(errorMessage(error));
+      } finally {
+        submission.current = false;
+        setBusy(false);
+      }
+      return;
+    }
     if (scanTask && activeMediaScan(scanTask)) {
+      submission.current = false;
       setMessage("当前已有素材扫描正在进行。先等待完成或取消当前扫描，再提交新的素材位置。");
       return;
     }
@@ -268,6 +289,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
         setMessage(errorMessage(error));
       }
     } finally {
+      submission.current = false;
       setBusy(false);
     }
   }
@@ -290,13 +312,11 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
   }
 
   async function reconnectMovedMedia(): Promise<void> {
-    if (summary?.pending_analysis) {
-      setMessage("请先在时间线完成多机位同步；同步完成后才能扫描本机素材。");
-      return;
-    }
     const values = await chooseDirectories(summary?.missing ? "选择素材移动后的新位置" : "设置本机素材位置");
     if (!values.length) return;
-    const explanation = summary?.roots.length
+    const explanation = summary?.pending_analysis
+      ? "替换这台设备用于同步的原始素材目录？"
+      : summary?.roots.length
       ? `将当前设备的素材搜索位置替换为所选 ${values.length} 个目录并立即扫描。\n\n旧位置和绑定通常会保留到新扫描成功后才替换。取消通常不会破坏当前连接；如果出现“索引快照发布失败”，绑定已提交但连接结果需要重新扫描恢复，应用不会自动回滚设备绑定。\n\n这不会新建或更改项目中的媒体身份，也不会修改共享项目；已校验素材会按内容身份重新连接。旧项目只有文件名线索的素材仍会要求你逐项确认。`
       : `将所选 ${values.length} 个目录设为当前设备的素材搜索位置并立即扫描。\n\n如果出现“索引快照发布失败”，绑定已提交但连接结果需要重新扫描恢复，应用不会自动回滚设备绑定。\n\n这不会新建或更改项目中的媒体身份，也不会修改共享项目。`;
     if (typeof globalThis.confirm === "function" && !globalThis.confirm(explanation)) return;
@@ -304,10 +324,6 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
   }
 
   async function addSearchLocations(): Promise<void> {
-    if (summary?.pending_analysis) {
-      setMessage("请先在时间线完成多机位同步；同步完成后才能扫描本机素材。");
-      return;
-    }
     const values = await chooseDirectories("添加素材搜索位置");
     if (!values.length) return;
     const merged = [...new Set([...splitRoots(rootsText), ...values])];
@@ -315,10 +331,6 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
   }
 
   async function scanManualRoots(): Promise<void> {
-    if (summary?.pending_analysis) {
-      setMessage("请先在时间线完成多机位同步；同步完成后才能扫描本机素材。");
-      return;
-    }
     await submitScan(splitRoots(rootsText), false, "manual");
   }
 
@@ -359,13 +371,21 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
   const scanProgress = scanTask ? taskProgress(scanTask) : null;
   const recoveryState = pendingAnalysis ? "is-pending" : missing > 0 ? "is-missing" : total > 0 ? "is-ready" : "is-empty";
 
+  if (!summary) {
+    return <section className="phase3-workbench media-binding-workbench" aria-label="本机素材">
+      <header className="production-heading"><h2>本机素材</h2></header>
+      <p role={message.startsWith("正在读取") ? "status" : "alert"}>{message}</p>
+      <button type="button" className="secondary" onClick={() => void reload()}>重新读取</button>
+    </section>;
+  }
+
   return (
     <section className="phase3-workbench media-binding-workbench">
       <header className="production-heading media-binding-heading">
         <div>
           <p className="eyebrow">当前设备</p>
           <h2>本机素材</h2>
-          <span>项目记住媒体身份；这里仅告诉当前 Mac 去哪里找到对应文件。</span>
+          <span>项目记住媒体身份；这里仅告诉当前设备 去哪里找到对应文件。</span>
         </div>
         <div className="media-binding-heading-actions">
           <button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>刷新</button>
@@ -398,18 +418,18 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
         <section className="media-binding-section media-binding-setup">
           <div className={`media-binding-recovery-state ${recoveryState}`}>
             <div className="media-binding-recovery-copy">
-              <p className="eyebrow">{missing > 0 ? "需要重新连接" : pendingAnalysis ? "等待建立身份" : total > 0 ? "连接正常" : "设置素材位置"}</p>
+              <p className="eyebrow">{missing > 0 ? "需要重新连接" : pendingAnalysis ? "原始素材" : total > 0 ? "连接正常" : "设置素材位置"}</p>
               <strong>{missing > 0
                 ? `${missing} 个素材在当前设备未找到`
                 : pendingAnalysis
-                  ? "先完成多机位同步，再扫描本机素材"
+                  ? "同步前检查原始素材目录"
                   : total > 0
                     ? `${resolved}/${total} 个媒体身份已连接`
-                    : "选择当前 Mac 上的素材目录"}</strong>
+                    : "选择当前设备上的素材目录"}</strong>
               <span>{missing > 0
                 ? "如果素材只是换盘、移动文件夹或更换硬盘，不需要重新导入项目。选择素材的新位置后，镜序会用已有媒体身份重新连接。"
                 : pendingAnalysis
-                  ? "时间线里的多机位同步会先建立全部素材的排列和媒体身份；完成后再回到这里扫描，才能显示可连接的素材。"
+                  ? "目录登记仅保存在这台设备。同步任务会检查视频和录音并建立媒体身份。"
                   : total > 0
                     ? "当前连接只保存在这台设备。移动素材后使用“重新连接已移动素材”，不会改动共享项目。"
                     : "设置位置只建立当前设备的搜索范围，不会把本机绝对路径写进共享项目。"}</span>
@@ -417,8 +437,8 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
             <div className="media-binding-recovery-actions">
               {entry==="slate"&&roots.length>0&&<button type="button" disabled={busy||scanActive||pendingAnalysis}
                 onClick={()=>void submitScan(roots,false,"manual")}>扫描已保存的目录</button>}
-              <button type="button" disabled={busy || scanActive || pendingAnalysis || !isTauri()} onClick={() => void reconnectMovedMedia()}>{pendingAnalysis ? "先完成多机位同步" : roots.length || total ? "重新连接已移动素材…" : "设置素材位置…"}</button>
-              {roots.length || total ? <button type="button" className="secondary" disabled={busy || scanActive || pendingAnalysis || !isTauri()} onClick={() => void addSearchLocations()}>{pendingAnalysis ? "同步后添加位置" : "添加搜索位置…"}</button> : null}
+              <button type="button" disabled={!summary || busy || scanActive || !isTauri()} onClick={() => void reconnectMovedMedia()}>{pendingAnalysis ? "替换原始目录…" : roots.length || total ? "重新连接已移动素材…" : "设置素材位置…"}</button>
+              {roots.length || total ? <button type="button" className="secondary" disabled={!summary || busy || scanActive || !isTauri()} onClick={() => void addSearchLocations()}>{pendingAnalysis ? "添加原始目录…" : "添加搜索位置…"}</button> : null}
             </div>
           </div>
 
@@ -432,7 +452,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
           </header>
 
           <div className="media-binding-current-roots">
-            {roots.length ? roots.map((root) => <code key={root}>{root}</code>) : <span>还没有本机搜索位置。</span>}
+            {roots.length ? roots.map((root) => <code key={root}>{root}{summary?.unavailable_roots?.includes(root) ? " · 不可读取" : ""}</code>) : <span>还没有本机搜索位置。</span>}
           </div>
 
           {!!summary?.ambiguous_content_count&&<details className="media-binding-advanced" aria-label="重复原片集中复核">
@@ -454,7 +474,10 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
                 placeholder="/Volumes/PROJECT/Media"
               />
             </label>
-            <button type="button" className="secondary" disabled={busy || scanActive || pendingAnalysis || !roots.length} onClick={() => void scanManualRoots()}>{pendingAnalysis ? "同步后扫描" : "按当前列表扫描"}</button>
+            {pendingAnalysis && <button type="button" className="secondary"
+              disabled={busy || !splitRoots(rootsText).length}
+              onClick={() => void submitScan(splitRoots(rootsText), true, "manual")}>用此列表替换原始目录</button>}
+            <button type="button" className="secondary" disabled={!summary || busy || scanActive || !splitRoots(rootsText).length} onClick={() => void scanManualRoots()}>{pendingAnalysis ? "添加列表中的目录" : "按当前列表扫描"}</button>
           </details>
 
           <details className="media-binding-help">

@@ -96,27 +96,45 @@ def install_media_playback_runtime() -> None:
 
         class Handler(BaseHandler):
             def _media(self, project: Any, clip_id: str, head_only: bool = False) -> None:
-                clip = project.clips.get(clip_id)
-                if not clip:
-                    raise web_server.ApiError(HTTPStatus.NOT_FOUND, "unknown clip")
-                # A slate inspector knows the exact pair, while legacy players
-                # request only clip_id. Check the optional pair before resolving
-                # bytes on every HEAD/range request; don't let a changed index
-                # silently show a different original in review.
-                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
-                if "expected_media_id" in query:
-                    identities = query["expected_media_id"]
-                    if len(identities) != 1 or not re.fullmatch(r"M_[0-9a-f]{24}", identities[0]):
-                        raise web_server.ApiError(HTTPStatus.BAD_REQUEST, "invalid expected media identity")
-                    if clip.get("media_id") != identities[0]:
-                        raise web_server.ApiError(HTTPStatus.CONFLICT, "clip media identity changed")
-                if "slate_registered_source" in query:
-                    if query["slate_registered_source"]!=["1"] or "expected_media_id" not in query:
-                        raise web_server.ApiError(HTTPStatus.BAD_REQUEST,"invalid slate preview identity")
-                    path=_registered_preview_path(project,identities[0])
-                    if path is None:
-                        raise web_server.ApiError(HTTPStatus.NOT_FOUND,"registered source missing or changed")
-                else:path = Path(project.resolve_media_path(clip))
+                if clip_id.startswith("sync-recording:"):
+                    self._local_only()
+                    media_id = clip_id.removeprefix("sync-recording:")
+                    query = parse_qs(urlsplit(self.path).query)
+                    version = query.get("sync_task_id") or []
+                    if not re.fullmatch(r"M_[0-9a-f]{24}", media_id) or len(version) != 1:
+                        raise web_server.ApiError(HTTPStatus.BAD_REQUEST, "无效的录音定位")
+                    from .sync_timeline_runtime import _read_json, sync_recordings
+
+                    report = _read_json(project.config.output_dir / "sync" / "sync_report.json")
+                    recordings = sync_recordings(report, version[0])
+                    if not recordings or not any(row["media_id"] == media_id for row in recordings["placements"]):
+                        raise web_server.ApiError(HTTPStatus.NOT_FOUND, "录音未归入当前同步版本")
+                    path = _registered_preview_path(project, media_id)
+                    if path is None or path.suffix.lower() != ".wav":
+                        raise web_server.ApiError(HTTPStatus.NOT_FOUND, "该同期录音未在本机连接")
+                else:
+                    project.reload_if_changed()
+                    clip = project.clips.get(clip_id)
+                    if not clip:
+                        raise web_server.ApiError(HTTPStatus.NOT_FOUND, "unknown clip")
+                    # A slate inspector knows the exact pair, while legacy players
+                    # request only clip_id. Check the optional pair before resolving
+                    # bytes on every HEAD/range request; don't let a changed index
+                    # silently show a different original in review.
+                    query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                    if "expected_media_id" in query:
+                        identities = query["expected_media_id"]
+                        if len(identities) != 1 or not re.fullmatch(r"M_[0-9a-f]{24}", identities[0]):
+                            raise web_server.ApiError(HTTPStatus.BAD_REQUEST, "invalid expected media identity")
+                        if clip.get("media_id") != identities[0]:
+                            raise web_server.ApiError(HTTPStatus.CONFLICT, "clip media identity changed")
+                    if "slate_registered_source" in query:
+                        if query["slate_registered_source"]!=["1"] or "expected_media_id" not in query:
+                            raise web_server.ApiError(HTTPStatus.BAD_REQUEST,"invalid slate preview identity")
+                        path=_registered_preview_path(project,identities[0])
+                        if path is None:
+                            raise web_server.ApiError(HTTPStatus.NOT_FOUND,"registered source missing or changed")
+                    else:path = Path(project.resolve_media_path(clip))
                 if not path.exists() or not path.is_file():
                     raise web_server.ApiError(HTTPStatus.NOT_FOUND, "media missing")
 

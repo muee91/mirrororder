@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +41,7 @@ def _normalize_roots(raw: object) -> list[str]:
         if not text:
             continue
         path = Path(text).expanduser()
-        if not path.is_dir():
+        if not path.is_dir() or not os.access(path, os.R_OK | os.X_OK):
             raise ValueError(f"媒体目录不存在或不可读取：{path}")
         resolved = str(path.resolve())
         if resolved not in roots:
@@ -56,7 +57,16 @@ def _media_summary(service: Any, project: Any) -> dict[str, Any]:
     # Recovery/status GETs consume the last explicit scan/confirmation
     # snapshot. Playback remains the content-identity verification boundary
     # for the one clip being opened.
-    return store.summary(workspace_id, project.project_id, project.index, verify_content=False)
+    project.reload_if_changed()
+    summary = store.summary(workspace_id, project.project_id, project.index, verify_content=False)
+    if project.config.is_media_directory and not (project.index.get("clips") or project.index.get("groups")):
+        summary["pending_analysis"] = True
+        roots = summary["roots"] or [str(root) for root in project.config.media_roots]
+        summary["roots"] = roots
+        summary["unavailable_roots"] = [
+            root for root in roots if not Path(root).is_dir() or not os.access(root, os.R_OK | os.X_OK)
+        ]
+    return summary
 
 
 def _local_runtime_payload(service: Any) -> dict[str, Any]:
@@ -322,6 +332,31 @@ def install_desktop_runtime() -> None:
                     action = str(payload.get("action", "scan") or "scan").strip().lower()
                     store = DeviceMediaStore()
                     workspace_id = _workspace_id(current)
+                    if action in {"add_source_roots", "replace_source_roots"}:
+                        # Before identities exist, update only this device's source
+                        # directories. The sync task will inspect their contents.
+                        with current.tasks._lock:
+                            if any(
+                                task.get("type") in {"multicam_sync", "prepare_project", "media_inventory_scan"}
+                                and task.get("status") in {"queued", "running"}
+                                for task in current.tasks.list(project.project_id)
+                            ):
+                                raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, "当前项目有同步或扫描任务，请结束后再更改素材目录")
+                            project.reload_if_changed()
+                            summary = _media_summary(current, project)
+                            if not project.config.is_media_directory or not summary.get("pending_analysis"):
+                                raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, "项目已有媒体身份，请通过内容校验重新连接")
+                            roots = _normalize_roots(payload.get("roots"))
+                            if action == "add_source_roots":
+                                store.add_roots(workspace_id, project.project_id, [*summary["roots"], *roots])
+                            else:
+                                store.replace_roots(workspace_id, project.project_id, roots)
+                        self._send_json({
+                            "contract": "media_binding.v1",
+                            "project_id": project.project_id,
+                            "summary": _media_summary(current, project),
+                        })
+                        return
                     if action == "confirm_provisional":
                         store.confirm_provisional(
                             workspace_id,

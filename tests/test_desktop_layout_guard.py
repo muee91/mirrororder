@@ -11,17 +11,22 @@ def read(path: str) -> str:
 def test_desktop_shell_fills_available_canvas() -> None:
     app = read("desktop/src/app/App.tsx")
     redesign = read("desktop/src/app/mirrororder-redesign.css")
+    chrome = read("desktop/src/app/app-chrome.css")
+    launcher = read("desktop/src/features/projects/WorkspaceLauncher.tsx")
     experience = read("desktop/src/features/production/product-experience.css")
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
     assert 'className="app-shell production-app-shell mirrororder-redesign-shell"' in app
-    assert 'className="startup-shell"' in app
-    assert 'className="workspace-shell application-frame"' in app
+    assert 'return <WorkspaceLauncher' in app
+    assert 'className="startup-shell"' in launcher
+    assert 'workspace-shell application-frame${isProjectOpen ? " is-project-open" : ""}' in app
     assert 'className="app-main-column"' in app
-    assert 'className="app-global-topbar"' in app
+    assert '!isProjectOpen && <header className="app-global-topbar"' in app
+    assert '!isProjectOpen && <aside className="global-sidebar"' in app
     assert ".mirrororder-redesign-shell .application-frame" in redesign
     assert "height: 100%" in redesign
-    assert "grid-template-columns: 208px minmax(0, 1fr)" in redesign
+    assert ".application-frame.is-project-open {\n  grid-template-columns: minmax(0, 1fr);" in chrome
+    assert "grid-template-columns: 232px minmax(0, 1fr)" in chrome
     assert ".app-main-column" in redesign
     assert ".project-workbench-canvas { flex: 1;" in experience
     assert 'className="project-workbench-main owns-chrome"' in workbench

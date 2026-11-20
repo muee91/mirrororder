@@ -17,6 +17,7 @@ import { TeamGatewayClient, teamWorkbenchUrl } from "../api/team";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectHome } from "../features/projects/ProjectHome";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
+import { WorkspaceLauncher } from "../features/projects/WorkspaceLauncher";
 import { WorkspaceHome } from "../features/projects/WorkspaceHome";
 import { useProjectActivities } from "../features/projects/projectActivity";
 import { SettingsStatusWorkbench } from "../features/settings/SettingsStatusWorkbench";
@@ -54,6 +55,9 @@ type AppSurface = "home" | "projects" | "production" | "status" | "team" | "sett
 interface ProjectPageRequest { projectId: string; page: ProductionPage; nonce: number }
 
 const PRODUCTION_PAGE_TITLES: Partial<Record<ProductionPage, string>> = {
+  "sync-task": "同步任务",
+  "sync-inspect": "同步核对",
+  "sync-delivery": "工程交付",
   slate: "场记",
   takes: "Take",
   script: "剧本",
@@ -80,10 +84,9 @@ export function App() {
   const [state, setState] = useState<HostConnectionState>("idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
-  const [activeProjectPage, setActiveProjectPage] = useState<ProductionPage>("slate");
   const [pageRequest, setPageRequest] = useState<ProjectPageRequest | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
-  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "打开一个工作区开始制作。");
+  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "");
   const [noticeVisible, setNoticeVisible] = useState(false);
   const [resumeEnabledForSession, setResumeEnabledForSession] = useState(false);
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
@@ -141,7 +144,6 @@ export function App() {
       setActiveWorkspacePath(launchResume.workspacePath);
       setSnapshot(next);
       setSelectedProject(rememberedProject);
-      setActiveProjectPage(rememberedPage);
       setPageRequest(null);
       setSurface(rememberedProject ? "production" : "projects");
       setResumeEnabledForSession(true);
@@ -184,7 +186,6 @@ export function App() {
       setActiveWorkspacePath(normalizedPath);
       setSnapshot(next);
       setSelectedProject(null);
-      setActiveProjectPage("slate");
       setPageRequest(null);
       setSurface("projects");
       setResumeEnabledForSession(true);
@@ -224,6 +225,7 @@ export function App() {
       });
       if (typeof selected === "string" && selected.trim()) await openWorkspacePath(selected);
     } catch (error) {
+      if (!snapshot) setState("error");
       setMessage(`选择工作区失败：${errorMessage(error)}`);
     }
   }
@@ -292,7 +294,7 @@ export function App() {
     }
   }
 
-  async function refreshWorkspace(preferredProjectId?: string): Promise<void> {
+  async function refreshWorkspace(preferredProjectId?: string, openProject = false): Promise<void> {
     const activeBaseUrl = snapshot?.baseUrl ?? baseUrl;
     let activeConnection: HostConnection;
     try {
@@ -302,17 +304,23 @@ export function App() {
     }
     const next = await activeConnection.connect();
     const preferred = projectById(next, preferredProjectId);
+    if (openProject && !preferred) {
+      throw new HostConnectionError("项目已保存，刷新后的工作区尚未找到该项目。");
+    }
     const existing = selectedProject ? projectById(next, selectedProject.project_id) : null;
     const project = preferred ?? existing;
     setSnapshot(next);
     setSelectedProject(project);
+    if (openProject && project) {
+      setPageRequest(null);
+      setSurface("production");
+    }
     if (project && resumeEnabledForSession) rememberProject(project.project_id);
     setState("connected");
     setMessage(project ? `项目已刷新 · ${project.name || project.project_id}` : `工作区已刷新 · ${next.projects.length} 个项目`);
   }
 
   function selectProject(project: ProjectSummary): void {
-    if (selectedProject?.project_id !== project.project_id) setActiveProjectPage(readProjectPage(project.project_id));
     setSelectedProject(project);
     setPageRequest(null);
     setSurface("production");
@@ -322,7 +330,6 @@ export function App() {
   function openProjectPage(project: ProjectSummary, page: ProductionPage): void {
     pageRequestNonce.current += 1;
     setSelectedProject(project);
-    setActiveProjectPage(page);
     setPageRequest({ projectId: project.project_id, page, nonce: pageRequestNonce.current });
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
@@ -443,43 +450,30 @@ export function App() {
   const revealLabel = platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器";
 
   if (!snapshot) {
-    return (
-      <main className="startup-shell">
-        <section className={`startup-home ${recoveryFailed ? "is-recovery" : ""}`}>
-          <div className="startup-brand">
-            <div className="startup-logo" aria-hidden="true" />
-            <div><strong>镜序</strong><span>MirrorOrder</span></div>
-          </div>
-          <div className="startup-primary">
-            <p className="eyebrow">{recovering ? "恢复工作区" : recoveryFailed ? "工作区恢复" : "Production"}</p>
-            <h1>{recovering ? "正在恢复上次工作区" : recoveryFailed ? "重新定位工作区" : "继续制作"}</h1>
-            <p>{recovering
-              ? "正在启动本机制作服务。恢复完成后回到上次工作现场。"
-              : recoveryFailed
-                ? "上次工作区没有成功打开。重新定位它，或选择其他工作区；项目数据不会被改写。"
-                : "打开工作区后选择项目继续制作。"}</p>
-            {workspacePath.trim() ? <code className="startup-path">{workspacePath}</code> : null}
-            <div className="startup-actions">
-              <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>{recoveryFailed ? "重新定位" : "打开工作区"}</button>
-              <button type="button" className="secondary" onClick={() => void chooseWorkspace(false)} disabled={!isTauri() || state === "starting"}>打开工作区文件</button>
-              {recoveryFailed ? <button type="button" className="secondary" onClick={() => { forgetWorkspaceResume(); setWorkspacePath(""); setResumeEnabledForSession(false); setState("idle"); setMessage("已清除自动恢复记录。"); }}>清除恢复记录</button> : null}
-            </div>
-            <p className={`startup-message ${state === "error" ? "is-error" : ""}`}>{message}</p>
-          </div>
-          <details className="startup-advanced">
-            <summary>工作区与连接</summary>
-            <div className="startup-advanced-body">
-              <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
-              <button type="button" onClick={() => void openWorkspacePath(workspacePath)} disabled={state === "starting" || !workspacePath.trim()}>打开此路径</button>
-              <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
-              <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>连接已运行服务</button>
-            </div>
-          </details>
-        </section>
-      </main>
-    );
+    return <WorkspaceLauncher
+      state={state}
+      recovering={recovering}
+      recoveryFailed={recoveryFailed}
+      native={isTauri()}
+      workspacePath={workspacePath}
+      serviceAddress={baseUrl}
+      message={message}
+      onWorkspacePathChange={setWorkspacePath}
+      onServiceAddressChange={setBaseUrl}
+      onChooseWorkspace={(directory) => void chooseWorkspace(directory)}
+      onOpenPath={() => void openWorkspacePath(workspacePath)}
+      onConnect={() => void connect()}
+      onClearRecovery={() => {
+        forgetWorkspaceResume();
+        setWorkspacePath("");
+        setResumeEnabledForSession(false);
+        setState("idle");
+        setMessage("已清除自动恢复记录。");
+      }}
+    />;
   }
 
+  const isProjectOpen = surface === "production" && selectedProject !== null;
   const runningProjects = Object.values(projectActivities).filter((activity) => activity.state === "active").length;
   const currentTitle = surface === "home"
     ? "首页"
@@ -491,22 +485,82 @@ export function App() {
           ? "设置"
           : surface === "team"
             ? "团队审阅"
-            : pageTitle(activeProjectPage);
+            : "项目库";
   const contextLabel = (surface === "production" || surface === "team") && selectedProject
     ? selectedProject.name || selectedProject.project_id
     : snapshot.workspace.workspace;
 
+  const workspaceMenu = (
+    <details className="app-workspace-menu">
+      <summary className="app-workspace-chip">
+        <span className={`status-dot status-${state}`} aria-hidden="true" />
+        <span>{snapshot.workspace.workspace}</span>
+        <small aria-hidden="true">⌄</small>
+      </summary>
+      <div className="app-workspace-menu-popover">
+        <div className="app-workspace-menu-heading">
+          <span><strong>{snapshot.workspace.workspace}</strong><small>{connectionLabel(state)}</small></span>
+          {activeWorkspacePath.trim() ? <code title={activeWorkspacePath}>{activeWorkspacePath}</code> : null}
+        </div>
+        <div className="app-workspace-menu-actions">
+          <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id).catch((error) => setMessage(errorMessage(error)))}>刷新工作区</button>
+          <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>切换工作区…</button>
+          <button type="button" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>在 {revealLabel} 中显示</button>
+        </div>
+        <details className="workspace-advanced app-workspace-advanced">
+          <summary>高级连接</summary>
+          <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
+          <button type="button" className="secondary" onClick={() => void openWorkspacePath(workspacePath)} disabled={state === "starting" || !workspacePath.trim()}>打开此路径</button>
+          <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
+          <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>连接已运行服务</button>
+          {resumeEnabledForSession ? <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动恢复</button> : null}
+        </details>
+      </div>
+    </details>
+  );
+  const switchProject = selectedProject && (
+    <>
+      <button type="button" className="secondary app-project-library-link" onClick={openProjects}>项目库</button>
+      <details className="app-project-switcher" onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+      }} onKeyDown={(event) => {
+        if (event.key === "Escape" && event.currentTarget.open) {
+          event.stopPropagation();
+          event.currentTarget.open = false;
+          event.currentTarget.querySelector("summary")?.focus();
+        }
+      }}>
+        <summary aria-label={`切换项目 · ${selectedProject.name || selectedProject.project_id}`}>
+          <span>{selectedProject.name || selectedProject.project_id}</span>
+        </summary>
+        <div className="app-project-switcher-list">
+          {snapshot.projects.map((project) => (
+            <button key={project.project_id} type="button" className="secondary"
+              aria-current={project.project_id === selectedProject.project_id ? "true" : undefined}
+              onClick={(event) => {
+                const menu = event.currentTarget.closest("details");
+                if (menu) {
+                  menu.open = false;
+                  menu.querySelector("summary")?.focus();
+                }
+                selectProject(project);
+              }}>{project.name || project.project_id}</button>
+          ))}
+        </div>
+      </details>
+    </>
+  );
+
   return (
     <main className="app-shell production-app-shell mirrororder-redesign-shell">
-      <section className="workspace-shell application-frame">
-        <aside className="global-sidebar">
+      <section className={`workspace-shell application-frame${isProjectOpen ? " is-project-open" : ""}`}>
+        {!isProjectOpen && <aside className="global-sidebar">
           <ProjectLibrary
             baseUrl={snapshot.baseUrl}
             workspace={snapshot.workspace}
             activities={projectActivities}
             selectedProjectId={selectedProject?.project_id ?? null}
             primaryActive={primaryActive}
-            activeProjectPage={activeProjectPage}
             revealLabel={revealLabel}
             onSelectProject={selectProject}
             onOpenProjects={openProjects}
@@ -522,10 +576,10 @@ export function App() {
             onDeleteProject={(project) => deleteProject(project)}
             onWorkspaceChanged={refreshWorkspace}
           />
-        </aside>
+        </aside>}
 
         <section className="app-main-column">
-          <header className="app-global-topbar">
+          {!isProjectOpen && <header className="app-global-topbar">
             <div className="app-global-context">
               <span>{contextLabel}</span>
               <strong>{currentTitle}</strong>
@@ -535,34 +589,9 @@ export function App() {
                 <span className={`app-topbar-status-dot ${runningProjects ? "is-active" : ""}`} />
                 {runningProjects ? `${runningProjects} 个项目处理中` : "后台正常"}
               </button>
-              <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id)}>刷新工作区</button>
-              <details className="app-workspace-menu">
-                <summary className="app-workspace-chip">
-                  <span className={`status-dot status-${state}`} aria-hidden="true" />
-                  <span>{snapshot.workspace.workspace}</span>
-                  <small aria-hidden="true">⌄</small>
-                </summary>
-                <div className="app-workspace-menu-popover">
-                  <div className="app-workspace-menu-heading">
-                    <span><strong>{snapshot.workspace.workspace}</strong><small>{connectionLabel(state)}</small></span>
-                    {activeWorkspacePath.trim() ? <code title={activeWorkspacePath}>{activeWorkspacePath}</code> : null}
-                  </div>
-                  <div className="app-workspace-menu-actions">
-                    <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>切换工作区…</button>
-                    <button type="button" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>在 {revealLabel} 中显示</button>
-                  </div>
-                  <details className="workspace-advanced app-workspace-advanced">
-                    <summary>高级连接</summary>
-                    <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
-                    <button type="button" className="secondary" onClick={() => void openWorkspacePath(workspacePath)} disabled={state === "starting" || !workspacePath.trim()}>打开此路径</button>
-                    <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
-                    <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>连接已运行服务</button>
-                    {resumeEnabledForSession ? <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动恢复</button> : null}
-                  </details>
-                </div>
-              </details>
+              {workspaceMenu}
             </div>
-          </header>
+          </header>}
 
           <section className={`workbench-shell main-stage surface-${surface}`}>
             {surface === "home" ? (
@@ -589,7 +618,7 @@ export function App() {
                 onPrepareProject={(project) => prepareProject(project)}
                 onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
                 onDeleteProject={(project) => deleteProject(project)}
-                onWorkspaceChanged={refreshWorkspace}
+                onWorkspaceChanged={(id) => refreshWorkspace(id, Boolean(id))}
               />
             ) : surface === "status" ? (
               <StatusCenterWorkbench
@@ -602,18 +631,8 @@ export function App() {
             ) : surface === "team" ? (
               <TeamWebWorkbench workspacePath={activeWorkspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
             ) : surface === "settings" ? (
-              <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} />
-            ) : selectedProject ? (
-              <ProjectWorkbench
-                key={`${snapshot.workspace.workspace_id}:${selectedProject.project_id}`}
-                baseUrl={snapshot.baseUrl}
-                project={selectedProject}
-                pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
-                onOpenTeamReview={() => openTeamProject(selectedProject)}
-                 onMulticamSync={() => void multicamSyncProject(selectedProject)}
-                onPageChange={setActiveProjectPage}
-              />
-            ) : (
+              <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} projectId={selectedProject?.project_id} />
+            ) : !selectedProject ? (
               <WorkspaceHome
                 workspace={snapshot.workspace}
                 activities={projectActivities}
@@ -622,7 +641,28 @@ export function App() {
                 onOpenStatus={() => setSurface("status")}
                 onOpenSettings={() => setSurface("settings")}
               />
-            )}
+            ) : null}
+            {selectedProject && <div className="app-project-surface" hidden={surface !== "production"}>
+              <ProjectWorkbench
+                key={`${snapshot.workspace.workspace_id}:${selectedProject.project_id}`}
+                baseUrl={snapshot.baseUrl}
+                project={selectedProject}
+                active={surface === "production"}
+                projectNavigation={switchProject}
+                systemTools={<>
+                  <button type="button" className="secondary app-project-status" onClick={() => setSurface("status")}>
+                    {runningProjects ? `后台任务 ${runningProjects}` : "状态中心"}
+                  </button>
+                  <button type="button" className="secondary" onClick={() => setSurface("settings")}>设置</button>
+                  {workspaceMenu}
+                </>}
+                pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
+                onOpenTeamReview={() => openTeamProject(selectedProject)}
+                workspaceId={snapshot.workspace.workspace_id}
+                onTaskChanged={() => void refreshActivities()}
+                onOpenStatus={() => setSurface("status")}
+              />
+            </div>}
           </section>
         </section>
       </section>

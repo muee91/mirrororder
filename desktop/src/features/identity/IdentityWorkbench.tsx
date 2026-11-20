@@ -8,7 +8,7 @@ import "./identity-workbench.css";
 interface Props {
   baseUrl: string;
   projectId: string;
-  onOpenTake?: (groupId: string) => void;
+  onOpenOccurrence?: (occurrence: VisualIdentityOccurrence) => void;
 }
 
 type VisualIdentityOccurrence = IdentityOccurrence & {
@@ -40,7 +40,7 @@ function evidenceCard(host: HostConnection, projectId: string, occurrence: Visua
   };
 }
 
-export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
+export function IdentityWorkbench({ baseUrl, projectId, onOpenOccurrence }: Props) {
   const client = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const [kind, setKind] = useState<"" | "face" | "speaker">("");
@@ -50,6 +50,7 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
   const [roleName, setRoleName] = useState("");
   const [message, setMessage] = useState("正在更新人物识别…");
   const [busy, setBusy] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState("");
   const [suggestions, setSuggestions] = useState<IdentityMergeSuggestion[]>([]);
   const [merging, setMerging] = useState("");
 
@@ -57,8 +58,9 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
     try {
       const payload = await client.mergeSuggestions(projectId);
       setSuggestions(payload.suggestions);
-    } catch {
-      setSuggestions([]);
+      setSuggestionsError("");
+    } catch (error) {
+      setSuggestionsError(errorMessage(error));
     }
   }
 
@@ -161,6 +163,7 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
         <span className="identity-toolbar-status" role="status">{message}</span>
       </div>
 
+      {suggestionsError && <p role="alert">读取身份合并建议失败。 {suggestionsError} <button type="button" className="secondary" onClick={() => void reloadSuggestions()}>重新读取</button></p>}
       {suggestions.length ? (
         <details className="identity-merge-suggestions" data-testid="identity-merge-suggestions">
           <summary>
@@ -274,7 +277,7 @@ export function IdentityWorkbench({ baseUrl, projectId, onOpenTake }: Props) {
                           <MirrorOrderMediaCard
                             model={model}
                             compact
-                            onSelect={onOpenTake && occurrence.group_id ? () => onOpenTake(occurrence.group_id) : undefined}
+                            onSelect={onOpenOccurrence && occurrence.clip_id ? () => onOpenOccurrence(occurrence) : undefined}
                           />
                           <div className="identity-evidence-meta">
                             <strong>匹配 {confidenceLabel(occurrence.confidence)}</strong>

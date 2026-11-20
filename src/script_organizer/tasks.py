@@ -415,6 +415,9 @@ class TaskManager(_impl.TaskManager):
                     return
             elif task_type == "multicam_sync":
                 with self._resource(config, task, "sync", "sync", "多机位同步"):
+                    from .sync_timeline_runtime import cache_previous_sync_timeline
+
+                    cache_previous_sync_timeline(config, project_id, self.list(project_id))
                     result = _impl.run_multicam_sync(
                         config,
                         self._task_message_reporter(config, task_id),
@@ -424,6 +427,7 @@ class TaskManager(_impl.TaskManager):
                             progress={"done": done, "total": total},
                         ),
                         cancel_requested=lambda: self._cancel_requested(config, task_id),
+                        sync_context=(self.workspace_id, project_id, task_id),
                     )
                 if result.get("status") == "completed":
                     result["analysis"] = self._post_sync_analysis(project_id, config, task)
@@ -486,6 +490,12 @@ class TaskManager(_impl.TaskManager):
                     result["perception"] = self._perception_best_effort(config, task, mode="semantic", group_ids=group_ids)
                     result["identity"] = self._identity_after_analysis(config, task, group_ids=group_ids, explicit=True)
 
+            if task_type in {"multicam_sync", "prepare_project"} and config.is_media_directory:
+                from .sync_timeline_runtime import cache_previous_sync_timeline
+
+                cache_previous_sync_timeline(config, project_id, [{
+                    **task, "status": "completed", "stage": "completed", "message": "任务完成",
+                }])
             self._update(config, task_id, status="completed", stage="completed", result=result, message="任务完成")
         except ResourceCancelled as error:
             message = str(error).strip() or "任务已取消"
@@ -520,6 +530,7 @@ class TaskManager(_impl.TaskManager):
                         progress={"done": done, "total": total},
                     ),
                     cancel_requested=lambda: self._cancel_requested(config, task_id),
+                    sync_context=(self.workspace_id, project_id, task_id),
                 )
             if self._cancel_requested(config, task_id):
                 return {**result, "cancelled": True}

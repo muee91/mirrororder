@@ -12,6 +12,7 @@ import { mappingLabel, takeDisplayLabel } from "../material-script/TakeCard";
 import { VirtualTakeList, episodeLabel } from "../material-script/VirtualTakeList";
 import { takeEpisodeIds, takeMatchesProductionStatus, type ProductionStatusFilter } from "../material-script/model";
 import { useReviewModelSnapshot } from "../material-script/useReviewModelSnapshot";
+import type { ProductionSelectionContext } from "../production/productionNavigation";
 import "../material-script/material-script.css";
 
 type MaterialTakeFilter = "all" | "unmapped" | "candidate" | "mapped" | "offline" | ProductionStatusFilter;
@@ -30,6 +31,7 @@ interface Props {
   project: ProjectSummary;
   initialGroupId?: string | null;
   initialClipId?: string | null;
+  playbackFocus?: ProductionSelectionContext;
   onSelectionChange?: (groupId: string | null, clipId: string | null) => void;
   onOpenScript?: (groupId: string, clipId?: string | null) => void;
   onOpenReview?: (groupId: string, clipId?: string | null) => void;
@@ -144,6 +146,7 @@ export function MaterialTakeView({
   project,
   initialGroupId = null,
   initialClipId = null,
+  playbackFocus,
   onSelectionChange,
   onOpenScript,
   onOpenReview,
@@ -260,8 +263,9 @@ export function MaterialTakeView({
   }, [filteredTakes, model, selectedGroupId]);
 
   useEffect(() => {
+    if (!model) return;
     onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId);
-  }, [selectedTake?.group_id, selectedClipId]);
+  }, [model, selectedTake?.group_id, selectedClipId]);
 
   function selectTake(take: ReviewTakeGroup): void {
     setSelectedGroupId(take.group_id);
@@ -366,6 +370,7 @@ export function MaterialTakeView({
                   projectId={project.project_id}
                   take={selectedTake}
                   selectedClipId={selectedClipId}
+                  playbackFocus={playbackFocus}
                   onSelectClip={setSelectedClipId}
                   onPlaybackResult={handlePlaybackResult}
                   writeSaving={false}

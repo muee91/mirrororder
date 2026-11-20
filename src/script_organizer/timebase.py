@@ -3,7 +3,13 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from fractions import Fraction
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
+from xml.parsers import expat
+
+
+def first_frame_at_or_after(seconds: float, numerator: int, denominator: int) -> int:
+    nearest = round(seconds * numerator / denominator)
+    return nearest + int(nearest * denominator / numerator < seconds)
 
 
 def _tag(element: ET.Element) -> str:
@@ -25,6 +31,31 @@ def _time(value: object) -> Fraction | None:
     return value if value > 0 else None
 
 
+def _validate_xml_declaration(stream: BinaryIO) -> None:
+    # Expat accepts an empty version token; the Rust timebase contract rejects
+    # it. Inspect only the prolog with the parser, preserving XML quoting,
+    # whitespace and encoding handling instead of matching raw file text.
+    parser = expat.ParserCreate()
+    root_seen = False
+
+    def declaration(version: str, _encoding: str | None, _standalone: int) -> None:
+        if not version:
+            raise ET.ParseError("Empty XML version")
+
+    def root(_name: str, _attributes: dict[str, str]) -> None:
+        nonlocal root_seen
+        root_seen = True
+
+    parser.XmlDeclHandler = declaration
+    parser.StartElementHandler = root
+    while not root_seen:
+        chunk = stream.read(4096)
+        parser.Parse(chunk, not chunk)
+        if not chunk:
+            break
+    stream.seek(0)
+
+
 def fcpxml_project_timebase(path: str | Path) -> dict[str, Any]:
     """Return the active project sequence timebase without guessing.
 
@@ -37,8 +68,10 @@ def fcpxml_project_timebase(path: str | Path) -> dict[str, Any]:
     if not source.is_file():
         return {"status": "unknown", "source": "fcpxml_sequence", "reason": "source_missing"}
     try:
-        root = ET.parse(source).getroot()
-    except (OSError, ET.ParseError):
+        with source.open("rb") as stream:
+            _validate_xml_declaration(stream)
+            root = ET.parse(stream).getroot()
+    except (OSError, ET.ParseError, expat.ExpatError):
         return {"status": "unknown", "source": "fcpxml_sequence", "reason": "parse_failed"}
 
     formats: dict[str, Fraction] = {}

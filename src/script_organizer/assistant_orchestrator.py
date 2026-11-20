@@ -205,10 +205,12 @@ class AssistantOrchestrator:
             "actions": ["focus"],
         }
 
-    def _supervisor_notes(self, limit: int = 48) -> list[dict[str, Any]]:
+    def _supervisor_notes(self, limit: int = 48, *, group: str = "") -> list[dict[str, Any]]:
         board = ScriptSupervisorStore(self.config.output_dir).load()
         rows = []
         for group_id, raw in _as_dict(board.get("entries")).items():
+            if group and group_id != group:
+                continue
             entry = _as_dict(raw)
             note = str(entry.get("note", "") or "").strip()
             status = str(entry.get("status", "unmarked") or "unmarked")
@@ -466,7 +468,6 @@ class AssistantOrchestrator:
             "summary": summary,
             "items": items,
             "orchestration": orchestration,
-            "messages": previous.get("messages", []),
         }
         if previous.get("source_fingerprint") == fingerprint and previous.get("summary") == summary and previous.get("items") == items and not action_results and not plan:
             return previous
@@ -478,7 +479,12 @@ class AssistantOrchestrator:
             return self.cycle(trigger="read", allow_actions=False)
         return current
 
-    def answer(self, message: str) -> dict[str, Any]:
+    def answer(self, message: str, *, context: dict | None = None) -> dict[str, Any]:
+        if context is not None:
+            # Desktop selections always use the same evidence-aware answer, including
+            # callers that install the assistant layer before the semantic runtime.
+            from .semantic_runtime import answer_project_question
+            return answer_project_question(self, message, context=context)
         text = str(message or "").strip()[:3000]
         if not text:
             raise ValueError("消息不能为空")

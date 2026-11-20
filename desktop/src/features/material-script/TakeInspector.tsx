@@ -3,6 +3,7 @@ import type { HostConnection, ReviewTakeGroup } from "../../api/host";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
 import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
+import type { ProductionSelectionContext } from "../production/productionNavigation";
 import { AngleEvidenceCard } from "./AngleEvidenceCard";
 import { AuditEvidencePanel } from "./AuditEvidencePanel";
 import { CandidateEvidence } from "./CandidateEvidence";
@@ -23,6 +24,7 @@ export function TakeInspector({
   projectId,
   take,
   selectedClipId,
+  playbackFocus,
   onSelectClip,
   onShowScript,
   onClearPlacement,
@@ -35,6 +37,7 @@ export function TakeInspector({
   projectId: string;
   take: ReviewTakeGroup | null;
   selectedClipId: string | null;
+  playbackFocus?: ProductionSelectionContext;
   onSelectClip: (clipId: string) => void;
   onShowScript?: () => void;
   onClearPlacement?: () => void;
@@ -44,6 +47,14 @@ export function TakeInspector({
   hideHeader?: boolean;
 }) {
   const angle = take?.angles.find((item) => item.clip_id === selectedClipId) ?? take?.angles[0] ?? null;
+  const sourceIn = angle?.playback.source_start ?? angle?.source_start ?? 0;
+  const sourceOut = angle?.playback.source_end ?? angle?.source_end;
+  const range = playbackFocus?.projectId === projectId && playbackFocus.groupId === take?.group_id
+    && (!playbackFocus.clipId || playbackFocus.clipId === angle?.clip_id)
+    && (!playbackFocus.mediaId || playbackFocus.mediaId === angle?.media_id)
+    ? playbackFocus.sourceRange : undefined;
+  const requestedStart = range ? range.start + (range.basis === "take" ? sourceIn : 0) : sourceIn;
+  const start = requestedStart >= sourceIn && (sourceOut == null || requestedStart < sourceOut) ? requestedStart : sourceIn;
   const playbackUrl = useMemo(
     () => angle ? connection.mediaUrl(projectId, angle.clip_id) : "",
     [angle, connection, projectId],
@@ -140,18 +151,20 @@ export function TakeInspector({
           controls
           preload="metadata"
           src={playbackUrl}
-          key={`${angle.clip_id}-${playbackRetry}`}
+          key={`${angle.clip_id}-${playbackRetry}-${start}`}
           onError={() => {
             setPlaybackFailed(true);
             // video.error 分不清缺失和解码；报错后探测一次给出可行动的原因。
             void classifyPlaybackFailure(playbackUrl).then(setFailureDetail);
           }}
           onLoadedMetadata={(event) => {
-            if (angle.source_start > 0) event.currentTarget.currentTime = angle.source_start;
+            const player = event.currentTarget;
+            const target = start < player.duration ? start : sourceIn;
+            if (target > 0 && target < player.duration) player.currentTime = target;
           }}
           onTimeUpdate={(event) => {
-            if (event.currentTarget.currentTime < angle.source_start) event.currentTarget.currentTime = angle.source_start;
-            if (angle.source_end !== null && event.currentTarget.currentTime >= angle.source_end) event.currentTarget.pause();
+            if (event.currentTarget.currentTime < sourceIn) event.currentTarget.currentTime = sourceIn;
+            if (sourceOut != null && event.currentTarget.currentTime >= sourceOut) event.currentTarget.pause();
           }}
         />
       ) : angle && playbackUrl ? (

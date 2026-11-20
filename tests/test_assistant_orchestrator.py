@@ -5,6 +5,9 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from script_organizer.assistant_context import resolve_question_context
 from script_organizer.agent_tools import AgentToolRegistry
 from script_organizer.assistant_orchestrator import AssistantOrchestrator
 from script_organizer.assistant_runtime import _refresh_after_review
@@ -17,6 +20,10 @@ from script_organizer.device_runtime_settings import save_runtime_settings
 from script_organizer.model_connections import load_model_connections, save_model_connections
 from script_organizer.model_registry import ModelRegistry
 from script_organizer.review_store import ReviewStore
+from script_organizer.semantic_runtime import answer_project_question
+from script_organizer.semantic_store import SemanticStore
+from script_organizer.web_server import ProjectService
+from script_organizer.workspace_db import WorkspaceDatabase
 from script_organizer.vision_provider import VisionProviderConfig
 
 
@@ -39,6 +46,56 @@ class FakeTaskManager:
         }
         self.submitted.append(row)
         return row
+
+
+def test_question_uses_the_selected_occurrence_even_without_query_keywords(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "state"))
+    project = ProjectService("demo", _config(tmp_path))
+    data = SemanticStore(WorkspaceDatabase("ws"))
+    documents = [
+        {"document_id": clip, "source": "speech", "clip_id": clip, "group_id": "G1",
+         "text": text, "content_fingerprint": clip}
+        for clip, text in (("CA", "走到门前"), ("CB", "转身离开"))
+    ]
+    data.replace_documents("demo", "speech", documents)
+    data.replace_documents("demo", "visual", [
+        {"document_id": "group-view", "source": "visual", "clip_id": "CA", "group_id": "G1",
+         "text": "多机位全组画面", "metadata": {"member_count": 2}, "content_fingerprint": "group-view"}
+    ])
+    assistant = AssistantOrchestrator("ws", "demo", project.config)
+    assistant.language = SimpleNamespace(enabled=False)
+    for clip in ("CA", "CB"):
+        raw = {"project_id": "demo", "page": "watch", "group_id": "G1", "clip_id": clip}
+        context = resolve_question_context(project, [], raw)
+        reply = answer_project_question(assistant, "查这条", context=context)
+        assert [row["clip_id"] for row in reply["retrieval"]["results"]] == [clip]
+        assert reply["context"]["label"].startswith(clip[-1] + "001.mov")
+        assert reply["assistant"]["messages"][-1]["context"] == reply["context"]
+    assert assistant.store.load()["messages"][1]["context"]["selection"]["clip_id"] == "CA"
+    take = resolve_question_context(project, [], {"project_id": "demo", "page": "watch", "group_id": "G1"})
+    take_rows = answer_project_question(assistant, "查这组", context=take)["retrieval"]["results"]
+    assert any(row["source_label"] == "Take 画面" and row["snippet"] == "多机位全组画面" for row in take_rows)
+    for bad in ({"project_id": "other"}, {"clip_id": "absent"}, {"group_id": "unknown"}):
+        with pytest.raises(ValueError):
+            resolve_question_context(project, [], {**raw, **bad})
+
+
+def test_cancelled_sync_can_answer_without_model_index_or_new_tasks(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    monkeypatch.setenv("MIRRORORDER_DATA_DIR", str(tmp_path / "state"))
+    project = ProjectService("demo", _config(tmp_path))
+    manager = FakeTaskManager()
+    task = {"task_id": "cancelled-sync", "type": "multicam_sync", "status": "cancelled",
+            "stage": "matching", "message": "已取消", "error": "/private/device/source"}
+    context = resolve_question_context(project, [task], {"project_id": "demo", "page": "sync-task"})
+    assistant = AssistantOrchestrator("ws", "demo", project.config, task_manager=manager)
+    assistant.language = SimpleNamespace(enabled=True)  # inference would fail this test
+    reply = answer_project_question(assistant, "为什么还不能交？", context=context)
+    assert "已取消" in reply["answer"] and "matching" in reply["answer"]
+    assert reply["diagnosis"]["destination"] == "sync-task"
+    assert "/private/" not in json.dumps(reply)
+    assert reply["context"]["selection"] == {} and not manager.submitted
 
 
 class FakeLanguagePlan:

@@ -4,7 +4,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "desktop" / "src" / "app" / "App.tsx"
 RESUME = ROOT / "desktop" / "src" / "app" / "resumeState.ts"
-REDESIGN = ROOT / "desktop" / "src" / "app" / "mirrororder-redesign.css"
 WORKBENCH = ROOT / "desktop" / "src" / "features" / "production" / "ProjectWorkbench.tsx"
 MATERIAL_WORKSPACE = ROOT / "desktop" / "src" / "features" / "material" / "MaterialWorkspace.tsx"
 MATERIAL_TAKE = ROOT / "desktop" / "src" / "features" / "material" / "MaterialTakeView.tsx"
@@ -34,7 +33,6 @@ def test_desktop_uses_workspace_home_and_four_production_workspaces() -> None:
     timeline = TIMELINE.read_text(encoding="utf-8")
     library = PROJECT_LIBRARY.read_text(encoding="utf-8")
     workspace_home = WORKSPACE_HOME.read_text(encoding="utf-8")
-    redesign = REDESIGN.read_text(encoding="utf-8")
 
     assert "WorkspaceHome" in app
     assert "ProjectHome" in app
@@ -47,7 +45,9 @@ def test_desktop_uses_workspace_home_and_four_production_workspaces() -> None:
     assert "今晚继续哪里？" in workspace_home
     assert "制作台" not in app
     assert "app-workspace-switch" not in app
-    assert "grid-template-columns: 208px minmax(0, 1fr)" in redesign
+    chrome = (ROOT / "desktop/src/app/app-chrome.css").read_text(encoding="utf-8")
+    assert ".application-frame.is-project-open" in chrome
+    assert "grid-template-columns: 232px minmax(0, 1fr)" in chrome
 
     assert "const AREAS: Record<ProductionArea, AreaDefinition>" in workbench
     assert 'className="professional-project-toolbar"' in workbench
@@ -184,8 +184,11 @@ def test_slate_is_dense_table_and_preserves_keyboard_flow() -> None:
     assert 'from "./SlateRow"' in slate
     assert "<SlateRow" in slate
     assert "<SlateTableHead" in slate
-    for column in ("集", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
+    for column in ("集", "场号", "镜号", "次号", "状态"):
         assert f">{column}<" in slate_row
+    assert 'SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"]' in slate_row
+    assert 'cameraColumns.map((camera)' in slate_row
+    assert "辅助 / 特殊" in slate_row
     assert 'SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"]' in slate_row
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s"' in slate
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n"' in slate

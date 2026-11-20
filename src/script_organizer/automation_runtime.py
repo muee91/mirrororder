@@ -67,7 +67,11 @@ def _replace_project_script(config_path: Path, raw_script: object) -> Path:
             replaced = True
             break
     if not replaced:
-        raise ValueError("项目配置缺少 [input].script")
+        try:
+            input_header = next(index for index, line in enumerate(lines) if line.strip() == "[input]")
+        except StopIteration as error:
+            raise ValueError("项目配置缺少 [input]") from error
+        lines.insert(input_header + 1, f'script = "{escaped}"')
 
     fd, temporary = tempfile.mkstemp(prefix=config_path.name + ".", suffix=".tmp", dir=config_path.parent)
     try:
@@ -83,8 +87,11 @@ def _replace_project_script(config_path: Path, raw_script: object) -> Path:
 
 
 def _project_relative_script(project: Any) -> str:
+    script = project.config.script
+    if script is None:
+        return ""
     try:
-        relative = project.config.script.resolve().relative_to(project.config.project_dir.resolve())
+        relative = script.resolve().relative_to(project.config.project_dir.resolve())
         return "./" + relative.as_posix()
     except (OSError, ValueError):
         return ""
@@ -145,7 +152,6 @@ def install_automation_runtime() -> None:
     original_project_payload = web_server.ProjectService.project_payload
     original_state = web_server.ProjectService.state
     original_capabilities = web_server.WorkspaceService.capabilities
-    original_create = WorkspaceRegistry.create
     original_make_handler = web_server.make_handler
     original_task_submit = TaskManager.submit
 
@@ -163,16 +169,6 @@ def install_automation_runtime() -> None:
 
     def workspace_project(service: Any, project_id: str) -> Any:
         project = original_workspace_project(service, project_id)
-        fresh = service.registry.project_config(project_id)
-        if (
-            fresh.input_kind != project.config.input_kind
-            or fresh.fcpxml != project.config.fcpxml
-            or fresh.media_root != project.config.media_root
-            or fresh.media_roots != project.config.media_roots
-            or fresh.script != project.config.script
-        ):
-            service._projects.pop(project_id, None)
-            project = original_workspace_project(service, project_id)
         _apply(project)
         return project
 
@@ -211,29 +207,6 @@ def install_automation_runtime() -> None:
         payload = original_capabilities(service, agent)
         payload["task_types"] = sorted(_AGENT_TASK_TYPES)
         return payload
-
-    def create_and_prepare(registry: WorkspaceRegistry, payload: dict[str, Any]) -> dict[str, Any]:
-        preflight = registry.preflight_create(payload)
-        entry = original_create(registry, payload)
-        detected = preflight.get("detected", {}) if isinstance(preflight, dict) else {}
-        clips = int(detected.get("logical_clips", 0) or 0) if isinstance(detected, dict) else 0
-        available = int(detected.get("available_media", 0) or 0) if isinstance(detected, dict) else 0
-        if str(payload.get("input_kind", "") or "") == "fcpxml" and clips > 0 and available == 0:
-            result = dict(entry)
-            result["prepare_task_id"] = ""
-            result["prepare_required"] = "FCPXML 的源媒体在这台 Mac 上不可达。项目和本机素材目录已保存，但跨路径 XML 媒体重连尚未完成，暂不能开始 ASR"
-            return result
-        manager = TaskManager(registry.project_config, registry.config.workspace_id)
-        task = manager.submit(
-            str(entry["project_id"]),
-            "prepare_project",
-            {},
-            idempotency_key=f"prepare_project:{entry['project_id']}:initial",
-            actor="mirrororder-host",
-        )
-        result = dict(entry)
-        result["prepare_task_id"] = task.get("task_id", "")
-        return result
 
     def make_handler_with_project_inputs(service: Any, web_root: Path):
         BaseHandler = original_make_handler(service, web_root)
@@ -409,8 +382,15 @@ def install_automation_runtime() -> None:
                     if active:
                         raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, "当前项目仍有后台任务运行，请结束后再更换剧本")
                     payload = web_server._body(self)
-                    config = service.registry.project_config(project_id)
-                    script = _replace_project_script(config.config_path, payload.get("script"))
+                    with service.registry._registry_lock():
+                        config = service.registry.project_config(project_id)
+                        if payload.get("only_if_missing") is True:
+                            if config.script is not None and config.script.is_file():
+                                raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, "该项目已有剧本，请刷新剧本状态")
+                            source = Path(str(payload.get("script") or "")).expanduser()
+                            if not source.is_file() or source.suffix.lower() not in _SCRIPT_SUFFIXES:
+                                raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "请选择可读取的 DOCX、TXT 或 Markdown 剧本")
+                        script = _replace_project_script(config.config_path, payload.get("script"))
                     service._projects.pop(project_id, None)
                     stat = script.stat()
                     task = service.tasks.submit(
@@ -435,5 +415,4 @@ def install_automation_runtime() -> None:
     web_server.ProjectService.state = project_state
     web_server.WorkspaceService.capabilities = capabilities
     web_server.make_handler = make_handler_with_project_inputs
-    WorkspaceRegistry.create = create_and_prepare
     _INSTALLED = True

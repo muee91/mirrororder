@@ -7,6 +7,10 @@ The Apache Software Foundation (http://www.apache.org/).
 Third-party components
 ----------------------
 
+Interact.js 1.10.28, Copyright (c) 2012-present Taye Adeyemi,
+is used under the MIT license. Its complete notice is included in
+desktop/third-party/interactjs-LICENSE.txt and bundled under third-party/.
+
 This product depends on, and in packaged distributions bundles, third-party
 software provided under separate terms. The bundled runtime inventory recorded in
 `desktop/src-tauri/resources/mirrororder-runtime/mirrororder-runtime-manifest.json`
