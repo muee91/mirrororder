@@ -327,6 +327,7 @@ class DeviceMediaStore:
                 if isinstance(raw.get("confirmed_provisional", {}), dict)
                 else {}
             ),
+            "content_conflicts": [v for v in raw.get("content_conflicts",[]) if isinstance(v,str)] if isinstance(raw.get("content_conflicts",[]),list) else [],
             "updated_at": str(raw.get("updated_at", "") or ""),
         }
 
@@ -426,6 +427,7 @@ class DeviceMediaStore:
         missing = []
         candidates = project.get("candidates", {}) if isinstance(project.get("candidates", {}), dict) else {}
         resolver = self.resolve_from_snapshot if verify_content else self.resolve_from_snapshot_light
+        conflicted = set(project.get("content_conflicts",[]))
         for item in inventory:
             path = resolver(project, item)
             candidate = str(candidates.get(str(item.get("media_id", "")), "") or "")
@@ -437,6 +439,7 @@ class DeviceMediaStore:
                 "local_exists": bool(path),
                 "candidate_path": candidate,
                 "needs_confirmation": bool(candidate and not item.get("verified", False) and not path),
+                "identity_conflict": str(item.get("media_id","")) in conflicted and not path,
             }
             (resolved if path else missing).append(row)
         return {
@@ -448,6 +451,7 @@ class DeviceMediaStore:
             "total": len(inventory),
             "resolved": len(resolved),
             "missing": len(missing),
+            "ambiguous_content_count": sum(i["identity_conflict"] for i in missing),
             "items": resolved + missing,
             "pending_analysis": bool(project["roots"] and not inventory),
             "verification": "content" if verify_content else "snapshot",
@@ -532,14 +536,31 @@ class DeviceMediaStore:
                 candidates[media_id] = path
                 provisional_candidates += 1
 
+        by_verified_file: dict[str, dict[tuple[int | str,int | str],str]] = defaultdict(dict)
         for path in files:
             self._check_cancelled(cancelled)
             media_id = media_id_for_path(path)
             if media_id and media_rows is not None:
                 media_rows.append((media_id, str(path)))
             if media_id and media_id in expected_by_id:
-                bindings[media_id] = str(path)
-                matched_verified += 1
+                try:
+                    stat=path.stat()
+                    canonical=str(path.resolve(strict=True))
+                    physical=(stat.st_dev,stat.st_ino) if stat.st_ino else ("path",canonical)
+                except OSError:
+                    continue
+                same_file=by_verified_file[media_id].get(physical)
+                by_verified_file[media_id][physical]=min(same_file,canonical) if same_file else canonical
+        content_conflicts=[]
+        for media_id,matches in by_verified_file.items():
+            self._check_cancelled(cancelled)
+            if len(matches)==1:
+                bindings[media_id]=next(iter(matches.values()))
+                matched_verified+=1
+            elif media_id not in bindings:
+                # Multiple physical files with the same sampled identity are
+                # not permission to pick one. Keep any prior explicit binding.
+                content_conflicts.append(media_id)
 
         self._check_cancelled(cancelled)
         next_project = {
@@ -547,6 +568,7 @@ class DeviceMediaStore:
             "roots": selected_roots,
             "bindings": bindings,
             "candidates": candidates,
+            "content_conflicts": sorted(content_conflicts),
             "confirmed_provisional": {
                 key: value
                 for key, value in existing_confirmed.items()
@@ -602,6 +624,7 @@ class DeviceMediaStore:
         summary["scan"] = {
             "files_seen": len(files),
             "verified_matches": matched_verified,
+            "ambiguous_content_candidates": len(content_conflicts),
             "provisional_name_matches": 0,
             "provisional_name_candidates": provisional_candidates,
         }

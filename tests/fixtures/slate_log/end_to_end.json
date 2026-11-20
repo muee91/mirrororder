@@ -1,0 +1,16 @@
+{
+  "synthetic": true,
+  "notice": "Not real handwritten input or a Resolve-exported header sample.",
+  "rows": [
+    {"scene":"001A","shot":"02","take":"003","page":"paper-01","row":"1","text":"001A / 02 / 003, card A one.mov","filename":"one.mov","card":"A","confirmed":true},
+    {"scene":"002","shot":"01","take":"01","page":"paper-01","row":"2","text":"002 / 01 / 01, no filename"}
+  ],
+  "assets": [{"clip_id":"clip-1","media_id":"media-1","filename":"one.mov","card":"A"}],
+  "template":"SOURCE_TEST,PATH_TEST,SCENE_TEST,SHOT_TEST,TAKE_TEST\none.mov,card-A,,,\n",
+  "transport": {
+    "bindings":{"media-1":0},
+    "field_columns":{"scene":"SCENE_TEST","shot":"SHOT_TEST","take":"TAKE_TEST"},
+    "identity_columns":["SOURCE_TEST","PATH_TEST"],
+    "template_source":"synthetic-example-not-Resolve"
+  }
+}

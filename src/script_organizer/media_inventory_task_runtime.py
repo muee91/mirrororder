@@ -42,11 +42,20 @@ class InventorySnapshotPublishError(RuntimeError):
     """The device state committed but its read-model snapshot did not publish."""
 
 
+class InventoryProjectionCancelled(MediaScanCancelled):
+    """Binding commit finished; the read-model projection was interrupted."""
+
+    def __init__(self, considered: int, rows_built: int):
+        super().__init__("素材绑定已提交，但预览索引未发布")
+        self.considered = considered
+        self.rows_built = rows_built
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _atomic_json(path: Path, payload: object) -> None:
+def _atomic_json(path: Path, payload: object, *, before_publish=None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
     try:
@@ -54,6 +63,8 @@ def _atomic_json(path: Path, payload: object) -> None:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
             handle.flush()
             os.fsync(handle.fileno())
+        if before_publish is not None:
+            before_publish()
         os.replace(temporary, path)
     finally:
         if os.path.exists(temporary):
@@ -84,32 +95,38 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _probe_dimensions(path_text: str) -> dict[str, int]:
-    """Best-effort scan-time ffprobe sampling; missing/failed dims stay absent.
-
-    Runs only inside the explicit scan task while the file is being hashed
-    anyway; the read path never touches media bytes.
-    """
+def _dimension_stdout(command, cancelled):
+    if cancelled is None:
+        return subprocess.run(command, capture_output=True, text=True, timeout=12, check=True).stdout
+    DeviceMediaStore._check_cancelled(cancelled)
+    child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    deadline = monotonic() + 12
     try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=width,height",
-                "-of",
-                "json",
-                path_text,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=12,
-            check=True,
-        )
-        payload = json.loads(result.stdout)
+        while True:
+            DeviceMediaStore._check_cancelled(cancelled)
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, 12)
+            try:
+                stdout, _ = child.communicate(timeout=min(0.1, remaining))
+            except subprocess.TimeoutExpired:
+                continue
+            DeviceMediaStore._check_cancelled(cancelled)
+            if child.returncode != 0:
+                raise subprocess.CalledProcessError(child.returncode, command)
+            return stdout
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.communicate()
+
+
+def _probe_dimensions(path_text: str, *, cancelled=None) -> dict[str, int]:
+    """Bounded, best-effort preview dimensions; cancellation is not a probe miss."""
+    try:
+        command = ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                   "-show_entries", "stream=width,height", "-of", "json", path_text]
+        payload = json.loads(_dimension_stdout(command, cancelled))
         if not isinstance(payload, dict):
             return {}
         streams = payload.get("streams", [])
@@ -130,10 +147,18 @@ def _write_inventory_snapshot(
     *,
     media_rows: Iterable[tuple[str, str]] | None = None,
     media_files: Iterable[Path] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     root_values = [str(Path(value).expanduser()) for value in roots if str(value)]
     candidates: list[tuple[str, str]] = []
     source_count = 0
+    rows: list[dict[str, Any]] = []
+
+    def check():
+        if cancelled is not None and cancelled():
+            raise InventoryProjectionCancelled(source_count, len(rows))
+        return False
+
     if media_rows is not None:
         candidates = [(str(media_id), str(path)) for media_id, path in media_rows if str(media_id)]
         source_count = len(candidates)
@@ -141,19 +166,20 @@ def _write_inventory_snapshot(
         files = list(media_files) if media_files is not None else device._media_files(root_values)
         source_count = len(files)
         for path in files[:_MAX_INVENTORY_FILES]:
+            check()
             media_id = media_id_for_path(path)
             if media_id:
                 candidates.append((media_id, str(path)))
 
-    rows: list[dict[str, Any]] = []
     seen_media: set[str] = set()
     for media_id, path_text in candidates[:_MAX_INVENTORY_FILES]:
+        check()
         if not media_id or media_id in seen_media:
             continue
         seen_media.add(media_id)
         row: dict[str, Any] = {"media_id": media_id, "path": path_text}
         if Path(path_text).is_file():
-            row.update(_probe_dimensions(path_text))
+            row.update(_probe_dimensions(path_text, cancelled=check) if cancelled is not None else _probe_dimensions(path_text))
         rows.append(row)
     payload = {
         "version": 2,
@@ -164,7 +190,7 @@ def _write_inventory_snapshot(
         "items": rows,
         "truncated": source_count > _MAX_INVENTORY_FILES,
     }
-    _atomic_json(_snapshot_path(device, workspace_id, project_id), payload)
+    _atomic_json(_snapshot_path(device, workspace_id, project_id), payload, before_publish=check)
     return payload
 
 
@@ -176,6 +202,7 @@ def _write_inventory_snapshot_or_invalidate(
     *,
     media_rows: Iterable[tuple[str, str]] | None = None,
     media_files: Iterable[Path] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Publish a snapshot or remove the previous one on write failure.
 
@@ -194,12 +221,15 @@ def _write_inventory_snapshot_or_invalidate(
             roots,
             media_rows=media_rows,
             media_files=media_files,
+            cancelled=cancelled,
         )
     except Exception as error:
         try:
             path.unlink(missing_ok=True)
         except OSError:
             pass
+        if isinstance(error, InventoryProjectionCancelled):
+            raise
         raise InventorySnapshotPublishError(
             "素材绑定已提交，但 inventory 快照发布失败；请重新扫描"
         ) from error
@@ -553,6 +583,7 @@ def install_media_inventory_task_runtime() -> None:
             project_id,
             state.get("roots", []),
             media_rows=captured_rows,
+            cancelled=cancelled,
         )
         return summary
 
@@ -585,6 +616,7 @@ def install_media_inventory_task_runtime() -> None:
             project_id,
             state.get("roots", []),
             media_files=captured_files,
+            cancelled=cancelled,
         )
         return summary
 
@@ -671,6 +703,14 @@ def install_media_inventory_task_runtime() -> None:
                 stage="completed",
                 result=result,
                 message=f"素材扫描完成 · {result['files_seen']} 个文件",
+            )
+        except InventoryProjectionCancelled as error:
+            manager._update(
+                config, task_id, status="cancelled", stage="inventory_projection_cancelled",
+                result={"device_local": True, "paths_exposed": False, "bindings_committed": True,
+                        "inventory_published": False, "project_coverage_complete": False,
+                        "selected_scan_entries": error.considered, "preview_rows_built": error.rows_built},
+                message="已取消预览索引生成；已提交的本机素材绑定仍保留，未完成连接结果发布。",
             )
         except MediaScanCancelled:
             manager._update(config, task_id, status="cancelled", stage="cancelled", message="素材扫描已取消；原有本机素材绑定保持不变")

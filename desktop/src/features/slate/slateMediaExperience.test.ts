@@ -12,7 +12,7 @@ describe("golden slate media experience", () => {
     expect(workbench).toContain('event.key === "Escape" && takePickerOpen');
     expect(workbench).toContain("setTakePickerOpen(false)");
     expect(workbench).toContain('setTakeSearch("")');
-    expect(workbench).toContain("[takePickerOpen]");
+    expect(workbench).toContain("[takePickerOpen, intervalSurface]");
   });
 
   it("uses the shared camera presentation for take evidence instead of raw camera text", () => {

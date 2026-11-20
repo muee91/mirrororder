@@ -83,7 +83,7 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("shortcutActionsRef");
     expect(slate).toContain('globalThis.addEventListener("keydown", keydown)');
     expect(slate).toContain('if (event.key === "Escape" && takePickerOpen)');
-    expect(slate).toContain("}, [takePickerOpen]);");
+    expect(slate).toContain("}, [takePickerOpen, intervalSurface]);");
     expect(slate).not.toContain("track.clips =");
     expect(css).toContain("height: 48px");
     expect(css).toContain("height: 36px");
@@ -114,7 +114,8 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("function sceneOrderValue");
     expect(slate).toContain("draft.scene.trim() || draft.script_scene_id.trim()");
     expect(slate).toContain("function displayOrder");
-    expect(slate).toContain("const displayedDrafts = useMemo(() => displayOrder(drafts), [drafts])");
+    expect(slate).toContain("const ordered = displayOrder(drafts)");
+    expect(slate).toContain("if (!editLayout) return ordered");
     expect(slate).toContain('script_scene_id: selected?.script_scene_id ?? ""');
     expect(slate).toContain("displayedDrafts[visualIndex - 1]");
     expect(slate).toContain("script_scene_id: previous.script_scene_id");

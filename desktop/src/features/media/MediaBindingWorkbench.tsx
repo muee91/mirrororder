@@ -9,6 +9,7 @@ import { ProjectTaskClient, canCancelTask, type ProjectTaskRecord } from "../../
 interface Props {
   baseUrl: string;
   projectId: string;
+  entry?: "slate";
 }
 
 type ScanIntent = "reconnect" | "add" | "manual";
@@ -80,7 +81,7 @@ function scanFailureMessage(task: Pick<ProjectTaskRecord, "error" | "message" | 
   return `素材扫描失败：${task.error || task.message || "未知错误"}；请重新扫描或检查素材位置。`;
 }
 
-export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
+export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
   const client = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const tasks = useMemo(() => new ProjectTaskClient(baseUrl), [baseUrl]);
   const platform = useMemo(() => new PlatformClient(), []);
@@ -94,6 +95,9 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
   function describeSummary(next: MediaBindingSummary): string {
     if (next.pending_analysis) {
       return "请先在时间线完成多机位同步；同步完成后镜序会建立媒体身份，才能扫描并连接本机素材。";
+    }
+    if (entry==="slate"&&next.total>0&&next.resolved===0&&next.roots.length) {
+      return "素材还未关联。可以直接扫描已经保存的目录；若读不到，再选择新的位置。";
     }
     if (next.missing > 0) {
       return `已连接 ${next.resolved}/${next.total} 个媒体身份；${next.missing} 个素材需要重新连接。`;
@@ -411,6 +415,8 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
                     : "设置位置只建立当前设备的搜索范围，不会把本机绝对路径写进共享项目。"}</span>
             </div>
             <div className="media-binding-recovery-actions">
+              {entry==="slate"&&roots.length>0&&<button type="button" disabled={busy||scanActive||pendingAnalysis}
+                onClick={()=>void submitScan(roots,false,"manual")}>扫描已保存的目录</button>}
               <button type="button" disabled={busy || scanActive || pendingAnalysis || !isTauri()} onClick={() => void reconnectMovedMedia()}>{pendingAnalysis ? "先完成多机位同步" : roots.length || total ? "重新连接已移动素材…" : "设置素材位置…"}</button>
               {roots.length || total ? <button type="button" className="secondary" disabled={busy || scanActive || pendingAnalysis || !isTauri()} onClick={() => void addSearchLocations()}>{pendingAnalysis ? "同步后添加位置" : "添加搜索位置…"}</button> : null}
             </div>
@@ -429,6 +435,11 @@ export function MediaBindingWorkbench({ baseUrl, projectId }: Props) {
             {roots.length ? roots.map((root) => <code key={root}>{root}</code>) : <span>还没有本机搜索位置。</span>}
           </div>
 
+          {!!summary?.ambiguous_content_count&&<details className="media-binding-advanced" aria-label="重复原片集中复核">
+            <summary>{summary.ambiguous_content_count} 个素材有多份文件，未自动关联</summary>
+            <p>选择只包含正确原片的位置后重扫。镜序不会从几份候选里随便取一份。</p>
+            <ul>{summary.items.filter(item=>item.identity_conflict).slice(0,30).map(item=><li key={item.media_id}>{item.name}</li>)}</ul>
+          </details>}
           <details className="media-binding-advanced">
             <summary>高级：手动编辑搜索位置</summary>
             <p>每行一个目录。“按当前列表扫描”只会添加/扫描这些位置，不会删除已经登记的旧位置；如果是整盘移动或希望替换旧搜索位置，请使用上面的“重新连接已移动素材”。</p>

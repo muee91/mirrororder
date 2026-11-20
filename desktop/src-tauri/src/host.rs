@@ -3,7 +3,7 @@ use crate::service_health::probe_service;
 use serde::Serialize;
 use std::{
     net::TcpListener,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
@@ -385,7 +385,14 @@ pub fn start_python_host(
     if let Some(path) = path_with_tools(runtime.tool_bin.as_deref())? {
         command.env("PATH", path);
     }
+    // Never inherit a caller-selected executable for PDF tasks.
+    command.env_remove("MIRRORORDER_NATIVE_PDF_HELPER");
     if runtime.origin == RuntimeOrigin::PackagedResource {
+        if let Ok(helper) = app.path().resolve("native/paper-pdf-render", tauri::path::BaseDirectory::Resource) {
+            if helper.is_file() && std::fs::symlink_metadata(&helper).map(|m| !m.file_type().is_symlink()).unwrap_or(false) {
+                command.env("MIRRORORDER_NATIVE_PDF_HELPER", helper);
+            }
+        }
         let data_dir = app
             .path()
             .app_data_dir()
@@ -506,7 +513,7 @@ mod tests {
 
     #[test]
     fn identifies_only_the_same_local_host_workspace_for_reclamation() {
-        let workspace = PathBuf::from("/Users/muee/Code workspace/短剧素材核对平台GPT版");
+        let workspace = PathBuf::from("/fixture/Code workspace/项目");
         let command = format!(
             "/Applications/镜序.app/Contents/Resources/mirrororder-python/bin/python3 -m script_organizer.cli serve '{}' --local-only --port 8765",
             workspace.display()
@@ -526,6 +533,44 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn owned_private_consumers_resolve_directory_to_the_same_manifest_as_explicit_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "mirrororder-host-manifest-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&dir).unwrap();
+        let manifest = dir.join("workspace.toml");
+        let other = dir.join("explicit-test.toml");
+        std::fs::write(&manifest, "[workspace]\n").unwrap();
+        std::fs::write(&other, "[workspace]\n").unwrap();
+        let manager = HostManager::default();
+        assert!(super::scene_interval_workspace(&manager).is_err());
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        *manager.child.lock().unwrap() = Some(ManagedHost {
+            child,
+            workspace_path: dir.clone(),
+            base_url: "http://127.0.0.1:8765".to_string(),
+            port: 8765,
+        });
+        let result = super::scene_interval_workspace(&manager).unwrap();
+        assert_eq!(result, manifest.canonicalize().unwrap());
+        manager.child.lock().unwrap().as_mut().unwrap().workspace_path = manifest.clone();
+        assert_eq!(super::scene_interval_workspace(&manager).unwrap(), result);
+        manager.child.lock().unwrap().as_mut().unwrap().workspace_path = other.clone();
+        assert_eq!(super::scene_interval_workspace(&manager).unwrap(), other.canonicalize().unwrap());
+        manager.child.lock().unwrap().as_mut().unwrap().workspace_path = dir.clone();
+        std::fs::remove_file(&manifest).unwrap();
+        assert!(super::scene_interval_workspace(&manager).is_err());
+        std::fs::create_dir(&manifest).unwrap();
+        assert!(super::scene_interval_workspace(&manager).is_err());
+        shutdown(&manager).unwrap();
+        std::fs::remove_dir(&manifest).unwrap();
+        std::fs::remove_file(&other).unwrap();
+        std::fs::remove_dir(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn shutdown_stops_the_managed_host_child() {
         let child = Command::new("sleep").arg("30").spawn().unwrap();
         let manager = HostManager::default();
@@ -539,4 +584,38 @@ mod tests {
         shutdown(&manager).unwrap();
         assert!(manager.child.lock().unwrap().is_none());
     }
+}
+
+// Like the Python Host CLI's workspace resolver, a selected directory denotes
+// its workspace.toml. Private consumers open the manifest directly; normalize
+// only the path owned by the running Host, not a fresh renderer-supplied path.
+fn managed_workspace_config(path: &Path) -> Result<PathBuf, String> {
+    let candidate = if path.is_dir() {
+        path.join("workspace.toml")
+    } else {
+        path.to_path_buf()
+    };
+    let canonical = candidate
+        .canonicalize()
+        .map_err(|_| "managed workspace configuration unavailable")?;
+    if !canonical.is_file() {
+        return Err("managed workspace configuration unavailable".into());
+    }
+    Ok(canonical)
+}
+
+/// Workspace comes only from the currently owned Host, never renderer paths.
+pub(crate) fn scene_interval_workspace(manager: &HostManager) -> Result<PathBuf, String> {
+    trusted_interval_workspace(manager, None)
+}
+pub(crate) fn trusted_interval_workspace(manager: &HostManager, expected_base: Option<&str>) -> Result<PathBuf, String> {
+    let mut slot = manager.child.lock().map_err(|_| "Host state unavailable")?;
+    let host = slot.as_mut().ok_or("managed Host is not running")?;
+    if expected_base.is_some_and(|url| url != host.base_url.as_str()) {
+        return Err("电子场记板只能使用当前受管的本机工作区".into());
+    }
+    if host.child.try_wait().map_err(|_| "Host state unavailable")?.is_some() {
+        return Err("managed Host is not running".into());
+    }
+    managed_workspace_config(&host.workspace_path)
 }

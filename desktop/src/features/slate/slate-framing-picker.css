@@ -1,0 +1,6 @@
+.slate-framing-picker{min-inline-size:0;display:grid;gap:.5rem;padding:.65rem .75rem;border:1px solid var(--mo-border,rgba(127,150,139,.32));border-radius:6px;background:var(--mo-surface-raised,var(--surface,#202321));color:var(--mo-text-primary,var(--text,#f1f4f2))}
+.slate-framing-title,.slate-framing-options,.slate-framing-picker form{display:flex;align-items:center;gap:.42rem;flex-wrap:wrap}
+.slate-framing-title{justify-content:space-between}
+.slate-framing-picker button{width:max-content;max-width:100%;overflow-wrap:anywhere;white-space:normal}
+.slate-framing-options button[aria-pressed=true]{outline:1px solid currentColor}
+.slate-framing-picker input{max-inline-size:10rem}

@@ -1,4 +1,4 @@
-.golden-slate-workbench { position: relative; display: grid; height: 100%; min-height: 0; grid-template-rows: 48px 36px minmax(0,1fr) auto; color: #dbe2e7; background: #0b0f13; }
+.golden-slate-workbench { position: relative; display: grid; height: 100%; min-height: 0; grid-template-rows: 48px auto minmax(0,1fr) auto; color: #dbe2e7; background: #0b0f13; }
 .golden-slate-toolbar { display: flex; min-width: 0; justify-content: space-between; gap: 12px; align-items: center; height: 48px; border-bottom: 1px solid #252d35; padding: 0 12px; background: #11171c; }
 .golden-slate-title { display: grid; min-width: 0; gap: 1px; }
 .golden-slate-title > strong { overflow: hidden; color: #e1e7ec; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }

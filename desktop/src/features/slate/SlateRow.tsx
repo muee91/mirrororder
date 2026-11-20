@@ -45,6 +45,8 @@ export interface SlateRowModel {
 interface SlateRowProps {
   row: SlateRowModel;
   onSelect: () => void;
+  onEditStart?: () => void;
+  onEditEnd?: () => void;
   onPatch: (patch: SlateRowPatch) => void;
   renderMedia: (camera: SlateCameraColumn) => ReactNode;
 }
@@ -70,11 +72,24 @@ export function SlateTableHead() {
   );
 }
 
-export function SlateRow({ row, onSelect, onPatch, renderMedia }: SlateRowProps) {
+export function SlateRow({ row, onSelect, onPatch, renderMedia, onEditStart, onEditEnd }: SlateRowProps) {
   return (
     <tr
       className={`slate-row ${row.selected ? "is-selected" : ""} ${row.dirty ? "is-dirty" : ""}`}
       data-slate-columns={SLATE_COLUMN_KEYS.join(" ")}
+      data-record-id={row.recordId}
+      onFocusCapture={(event) => {
+        if (event.target instanceof HTMLInputElement) onEditStart?.();
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onEditEnd?.();
+      }}
+      onKeyDownCapture={(event) => {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing && event.target instanceof HTMLInputElement) {
+          event.preventDefault();
+          event.target.blur();
+        }
+      }}
       tabIndex={0}
       aria-current={row.selected ? "true" : undefined}
       onClick={onSelect}

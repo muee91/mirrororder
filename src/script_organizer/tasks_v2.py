@@ -36,6 +36,7 @@ from .transcript import TranscriptStore
 
 TASK_TYPES = {
     "prepare_project",
+    "scene_interval_prepare",
     "multicam_sync",
     "incremental_analyze",
     "auto_resolve",
@@ -245,6 +246,9 @@ class TaskManager:
             raise ValueError("不支持的任务类型")
         config = self.project_loader(project_id)
         targets = targets if isinstance(targets, dict) else {}
+        if task_type == "scene_interval_prepare":
+            from .scene_interval_prepare import validate_targets
+            validate_targets(targets)
         affected = self._affected_group_ids(config, targets) if task_type in {"incremental_analyze", "transcribe"} else []
         canonical = json.dumps({"type": task_type, "targets": targets}, ensure_ascii=False, sort_keys=True)
         key = idempotency_key or hashlib.sha1(canonical.encode("utf-8")).hexdigest()
@@ -359,6 +363,11 @@ class TaskManager:
                 if result.get("cancelled"):
                     self._update(config, task_id, status="cancelled", stage="cancelled", result=result, message="任务已取消")
                     return
+            elif task["type"] == "scene_interval_prepare":
+                result = self._prepare_scene_interval(project_id, config, task)
+                if result.get("status") == "cancelled":
+                    self._update(config, task_id, status="cancelled", stage="cancelled", result=result)
+                    return
             elif task["type"] == "multicam_sync":
                 self._update(config, task_id, stage="sync")
                 result = run_multicam_sync(
@@ -423,6 +432,14 @@ class TaskManager:
             self._update(config, task_id, status="failed", stage="failed", error=str(error), message="任务失败")
         finally:
             self._threads.pop(task_id, None)
+
+    def _prepare_scene_interval(self, project_id, config, task):
+        from .scene_interval_prepare import prepare_selected, bounded_probe
+        from .media_identity import DeviceMediaStore, device_state_dir
+        cancel = lambda: self._cancel_requested(config, task["task_id"])
+        self._update(config, task["task_id"], stage="source_descriptor", message="核对选定原片区间")
+        return prepare_selected(config, self.workspace_id, project_id, task["targets"],
+            DeviceMediaStore(), device_state_dir(), probe=lambda path: bounded_probe(path, cancelled=cancel), cancelled=cancel)
 
     def _prepare_project(self, project_id: str, config: ProjectConfig, task: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}

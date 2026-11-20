@@ -47,6 +47,7 @@ export interface HostLaunchResult {
 
 export interface HostProcessStatus {
   running: boolean;
+  healthy?: boolean;
   pid: number | null;
   base_url: string | null;
   workspace_path: string | null;

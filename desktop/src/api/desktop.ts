@@ -101,8 +101,10 @@ export interface MediaBindingItem {
   local_exists: boolean;
   candidate_path?: string;
   needs_confirmation?: boolean;
+  identity_conflict?: boolean;
 }
 export interface MediaBindingSummary {
+  ambiguous_content_count?: number;
   version: number; device_id: string; device_name: string; state_path: string; roots: string[];
   total: number; resolved: number; missing: number; items: MediaBindingItem[]; pending_analysis?: boolean;
   scan?: { files_seen: number; verified_matches: number; provisional_name_matches: number; provisional_name_candidates?: number };

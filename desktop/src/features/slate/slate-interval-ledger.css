@@ -1,0 +1,48 @@
+.slate-interval-ledger{container-type:inline-size;display:grid;gap:.5rem;min-inline-size:0;text-align:start}
+.slate-interval-ledger .sil-toolbar,.slate-interval-ledger .sil-toolbar nav,.slate-interval-ledger .sil-manual{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+.slate-interval-ledger .sil-toolbar>input{flex:1;min-inline-size:12rem;max-inline-size:32rem}
+.slate-interval-ledger .sil-toolbar button[aria-pressed=true]{font-weight:650;color:var(--accent,currentColor)}
+.slate-interval-ledger .sil-workspace{display:grid;grid-template-columns:minmax(24rem,1.45fr) minmax(17rem,1fr);gap:.75rem;min-inline-size:0;align-items:start}
+.slate-interval-ledger .sil-table-wrap{overflow:auto;max-block-size:clamp(16rem,52vh,36rem);border:1px solid var(--line,#7775)}
+.slate-interval-ledger .sil-table{inline-size:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.slate-interval-ledger .sil-table th,.slate-interval-ledger .sil-table td{text-align:start;padding:.28rem .43rem;border-block-end:1px solid var(--line,#7775);overflow-wrap:anywhere}
+.slate-interval-ledger .sil-table thead{position:sticky;inset-block-start:0;z-index:1;background:var(--panel-bg,Canvas)}
+.slate-interval-ledger .sil-table td:first-child{inline-size:2.2rem}
+.slate-interval-ledger .sil-table td:nth-child(2),.slate-interval-ledger .sil-table td:last-child{white-space:nowrap}
+.slate-interval-ledger .sil-table .sil-group th,.slate-interval-ledger tr[data-active=true]{background:var(--surface-muted,#7772)}
+.slate-interval-ledger .sil-row{font:inherit;padding:.12rem .38rem}
+.slate-interval-ledger .sil-inspector{display:grid;min-inline-size:0;overflow-wrap:anywhere;gap:.65rem}
+.slate-interval-ledger .sil-evidence{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem}
+.slate-interval-ledger .sil-inspector section,.slate-interval-ledger .sil-form{padding:.5rem;border:1px solid var(--line,#7775);min-inline-size:0}
+.slate-interval-ledger h3,.slate-interval-ledger p{margin:.2rem 0}
+.slate-interval-ledger h3{font-size:.86rem}
+.slate-interval-ledger .sil-form label{display:flex;gap:.5rem;align-items:center;min-inline-size:0;margin:.4rem 0}
+.slate-interval-ledger .sil-form input,.slate-interval-ledger .sil-form select{min-inline-size:0;max-inline-size:100%}
+.slate-interval-ledger .sil-status{min-block-size:1.25rem}
+.slate-interval-ledger .sil-empty{padding:.75rem}
+@container (max-width:46rem){.slate-interval-ledger .sil-workspace{grid-template-columns:minmax(0,1fr)}}
+.slate-interval-view-switch{display:flex;gap:.5rem;flex-wrap:wrap;margin-block-end:.5rem}
+.slate-interval-view-switch button[aria-pressed=true]{font-weight:650;color:var(--accent,currentColor)}
+.slate-interval-ledger .sil-camera-choices{display:flex;flex-wrap:wrap;gap:.3rem}
+.slate-interval-ledger .sil-camera-choices button[aria-pressed=true]{font-weight:650;color:var(--accent,currentColor)}
+.slate-interval-ledger .sil-priority{display:flex;gap:.38rem;flex-wrap:wrap;font-size:.84rem}
+.slate-interval-ledger .sil-priority button[aria-pressed=true]{background:var(--mo-surface-muted,#b2c3d140);font-weight:650}
+.slate-interval-ledger .sil-priority strong{font-variant-numeric:tabular-nums}
+.slate-interval-ledger .sil-action-hint,.sil-return-status{color:var(--mo-text-secondary,currentColor);font-size:.87rem}
+.sil-repair-view{display:grid;gap:.55rem;min-inline-size:0}
+.sil-repair-view>.sil-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
+.sil-electronic-import{margin-block-end:.55rem;min-inline-size:0}
+.sil-electronic-import p{margin-block:.35rem}
+.sil-electronic-import form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:end}
+.sil-electronic-import label{display:grid;gap:.2rem;min-inline-size:0;max-inline-size:100%}
+.sil-electronic-import input{min-inline-size:0;max-inline-size:100%}
+.slate-interval-ledger .sil-original-playback{display:grid;justify-items:start;max-inline-size:100%;gap:.3rem}
+
+.sil-electronic-match{display:grid;gap:.4rem;min-inline-size:0}
+.sil-electronic-match fieldset{display:grid;gap:.2rem;min-inline-size:0;max-block-size:12rem;overflow:auto;padding:.32rem;border:1px solid var(--line,#7775)}
+.sil-electronic-match fieldset label{display:flex;align-items:baseline;gap:.3rem;overflow-wrap:anywhere}
+.sil-electronic-match>button{justify-self:start}
+.slate-interval-ledger .sil-source-triage{display:flex;align-items:baseline;flex-wrap:wrap;gap:.45rem .65rem;font-size:.84rem}
+.slate-interval-ledger .sil-source-triage label{display:flex;align-items:baseline;gap:.3rem}
+.slate-interval-ledger .sil-triage-badges{display:flex;flex-wrap:wrap;gap:.26rem}
+.slate-interval-ledger .sil-triage-badges small{border:1px solid var(--line,#7775);padding:.08rem .25rem;border-radius:.3rem}

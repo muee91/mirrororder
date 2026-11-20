@@ -11,6 +11,7 @@ const resourcesRoot = path.join(desktopRoot, "src-tauri", "resources");
 const coreTarget = path.join(resourcesRoot, "mirrororder-core");
 const pythonTarget = path.join(resourcesRoot, "mirrororder-python");
 const toolsTarget = path.join(resourcesRoot, "mirrororder-tools");
+const nativeTarget = path.join(resourcesRoot, "native");
 const manifestDir = path.join(resourcesRoot, "mirrororder-runtime");
 const manifestTarget = path.join(manifestDir, "mirrororder-runtime-manifest.json");
 
@@ -283,6 +284,14 @@ try {
   fail(`staged media tool redistribution policy: ${error.message}`);
 }
 
+// Build this source-only PDFKit/CoreGraphics helper with the app. Never
+// copy a prebuilt executable or carry a device-selected file into the package.
+cleanGeneratedTarget(nativeTarget);
+if (process.platform === "darwin") {
+  const rendererSource = path.join(desktopRoot, "native", "PaperPDFRender.swift");
+  run("/usr/bin/xcrun", ["swiftc", "-O", rendererSource, "-o", path.join(nativeTarget, "paper-pdf-render")],
+      "native paper PDF renderer");
+}
 const manifest = {
   contract: "mirrororder_packaged_runtime.v1",
   platform: process.platform,

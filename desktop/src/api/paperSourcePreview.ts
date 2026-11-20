@@ -1,0 +1,15 @@
+import {invoke,isTauri} from '@tauri-apps/api/core';
+import type {PaperPageGeometry} from '../features/slate/paperPageGeometry';
+export type PageReceipt=PaperPageGeometry['receipt'];
+export interface RegisteredPage {status:'registered';binding_id:string;document_id:string;page_index:number;pdf_sha256:string}
+export interface PagePreview {binding_id:string;paper_row_id:string;revision:number;receipt:PageReceipt;highlights:{geometry_id:string;cell_pointer:string;pdf_polygon:(string|number)[][]}[];source_bytes_currently_checked:true;authority:false;ocr_performed:false;png_base64:string;mime_type:'image/png'}
+export type DiscoveredPage={status:'available';binding_id:string;paper_row_id:string;document_id:string;revision:number;pdf_sha256:string;image_sha256:string;page_index:number;source_bytes_currently_checked:true}|{status:'not_registered';paper_row_id:string;document_id:string}|{status:'unavailable';paper_row_id:string;reason:string};
+export class PaperSourceClient {
+ discover(project_id:string,paper_row_id:string){return this.call<DiscoveredPage>({action:'discover',project_id,paper_row_id})}
+ async call<T>(request:Record<string,unknown>):Promise<T>{if(!isTauri())throw Error('原页查看仅在本机桌面可用');const result=await invoke<{ok:boolean;data?:T;error?:{message:string}}>('paper_source_preview',{request});if(!result.ok||!result.data)throw Error(result.error?.message||'原页不可用，请刷新场记来源后重试');return result.data;}
+ register(project_id:string,document_id:string,expected_paper_revision:number,expected_document_digest:string,page_index:number){return this.call<RegisteredPage|{status:'cancelled'}>({action:'register',project_id,document_id,expected_paper_revision,expected_document_digest,page_index})}
+ previewPage(project_id:string,binding_id:string,paper_row_id:string){return this.call<PagePreview>({action:'preview_page',project_id,binding_id,paper_row_id})}
+ preview(project_id:string,geometry_id:string){return this.call<{geometry_id:string;pdf_sha256:string;image_sha256:string;png_base64:string;mime_type:'image/png'}>({action:'preview',project_id,geometry_id})}
+}
+export async function verifiedPng(base64:string,mime:string,expectedHash:string):Promise<Blob>{if(mime!=='image/png'||typeof base64!=='string'||base64.length>11200000||!/^[a-f0-9]{64}$/.test(expectedHash))throw Error('原页图片格式不可用');let raw:string;try{raw=atob(base64)}catch{throw Error('原页图片编码不可用')}const bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));if(bytes.length>8388608||bytes.length<24||[137,80,78,71,13,10,26,10].some((v,i)=>bytes[i]!==v))throw Error('原页图片格式不可用');const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');if(hash!==expectedHash)throw Error('原页图片已变化，请重新读取');return new Blob([bytes],{type:'image/png'})}
+export function sourcePageIndex(raw:Record<string,unknown>):number|null{const value=raw.pdf_page??raw.page;if(typeof value!=='string'&&typeof value!=='number')return null;const text=String(value);if(!/^[1-9]\d*$/.test(text))return null;const page=Number(text);return Number.isSafeInteger(page)?page-1:null;}

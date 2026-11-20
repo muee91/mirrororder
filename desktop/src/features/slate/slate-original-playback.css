@@ -1,0 +1,29 @@
+/* The actual video/control box, not a landscape surround, owns the shape. */
+.sil-original-playback {
+  position: relative;
+  --slate-fit-max-height: min(47vh, 27rem);
+}
+.slate-interval-ledger .sil-original-playback {
+  --slate-fit-max-height: min(37vh, 21rem);
+}
+.sil-original-playback .sil-oriented-video[data-frame="loading"] {
+  position: absolute;
+  inset: 0 auto auto 0;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.sil-original-playback .sil-oriented-video[data-frame="ready"] {
+  inline-size: min(100%, calc(var(--slate-fit-max-height) * var(--slate-display-ratio)));
+  max-inline-size: 100%;
+  block-size: auto;
+  max-block-size: var(--slate-fit-max-height);
+  aspect-ratio: var(--slate-display-ratio);
+  display: block;
+  margin-inline: auto;
+  object-fit: contain;
+  object-position: center;
+  background: transparent;
+  border-radius: 3px;
+}

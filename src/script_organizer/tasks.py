@@ -407,6 +407,12 @@ class TaskManager(_impl.TaskManager):
                 if result.get("cancelled"):
                     self._update(config, task_id, status="cancelled", stage="cancelled", result=result, message="任务已取消")
                     return
+            elif task_type == "scene_interval_prepare":
+                with self._resource(config, task, "cpu", "source_descriptor", "选定原片区间"):
+                    result = self._prepare_scene_interval(project_id, config, task)
+                if result.get("status") == "cancelled":
+                    self._update(config, task_id, status="cancelled", stage="cancelled", result=result)
+                    return
             elif task_type == "multicam_sync":
                 with self._resource(config, task, "sync", "sync", "多机位同步"):
                     result = _impl.run_multicam_sync(

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from functools import lru_cache
 import mimetypes
+import re
+from urllib.parse import parse_qs, urlsplit
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -53,6 +56,30 @@ def _parse_http_byte_range(header: str, size: int) -> tuple[int, int] | None:
     return size - suffix_length, size - 1
 
 
+@lru_cache(maxsize=128)
+def _sample_registered(path, identity_stat):
+    from .source_descriptor_receipt import _sampled_id
+    return _sampled_id(Path(path))
+
+
+def _registered_preview_path(project, media_id):
+    from .source_descriptor_receipt import _stat
+    from .media_identity import DeviceMediaStore
+    from .paper_filename_context import _bindings
+    attrs=(getattr(project,'workspace_id',''),project.project_id)
+    if not attrs[0]:return None
+    store=DeviceMediaStore(create=False)
+    current=lambda:_bindings(store,*attrs).get(media_id)
+    bound=current()
+    if not isinstance(bound,str) or not Path(bound).is_absolute():return None
+    try:
+        path=Path(bound).resolve(strict=True);before=_stat(path)
+        if (not path.is_file() or _sample_registered(str(path),tuple(before))!=media_id or
+            _stat(path)!=before or current()!=bound or Path(bound).resolve(strict=True)!=path):return None
+        return path
+    except OSError:return None
+
+
 def install_media_playback_runtime() -> None:
     """Harden production Host media responses for native WebKit playback."""
 
@@ -72,7 +99,24 @@ def install_media_playback_runtime() -> None:
                 clip = project.clips.get(clip_id)
                 if not clip:
                     raise web_server.ApiError(HTTPStatus.NOT_FOUND, "unknown clip")
-                path = Path(project.resolve_media_path(clip))
+                # A slate inspector knows the exact pair, while legacy players
+                # request only clip_id. Check the optional pair before resolving
+                # bytes on every HEAD/range request; don't let a changed index
+                # silently show a different original in review.
+                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                if "expected_media_id" in query:
+                    identities = query["expected_media_id"]
+                    if len(identities) != 1 or not re.fullmatch(r"M_[0-9a-f]{24}", identities[0]):
+                        raise web_server.ApiError(HTTPStatus.BAD_REQUEST, "invalid expected media identity")
+                    if clip.get("media_id") != identities[0]:
+                        raise web_server.ApiError(HTTPStatus.CONFLICT, "clip media identity changed")
+                if "slate_registered_source" in query:
+                    if query["slate_registered_source"]!=["1"] or "expected_media_id" not in query:
+                        raise web_server.ApiError(HTTPStatus.BAD_REQUEST,"invalid slate preview identity")
+                    path=_registered_preview_path(project,identities[0])
+                    if path is None:
+                        raise web_server.ApiError(HTTPStatus.NOT_FOUND,"registered source missing or changed")
+                else:path = Path(project.resolve_media_path(clip))
                 if not path.exists() or not path.is_file():
                     raise web_server.ApiError(HTTPStatus.NOT_FOUND, "media missing")
 

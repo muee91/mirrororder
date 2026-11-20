@@ -100,7 +100,7 @@ describe("Swift Demo fidelity guards", () => {
     expect(activity).not.toContain("active ? 1000 : 8000");
   });
 
-  it("aligns the native and DOM minimum window with a Slate layout that fits it", () => {
+  it("keeps the native Slate window floor while allowing the browser shell to fit its actual viewport", () => {
     const tauri = source("../../../src-tauri/tauri.conf.json");
     const shell = source("../../styles.css");
     const slateCss = source("./golden-slate.css");
@@ -109,7 +109,7 @@ describe("Swift Demo fidelity guards", () => {
     expect(tauri).toContain('"height": 860');
     expect(tauri).toContain('"minWidth": 1180');
     expect(tauri).not.toContain('"minWidth": 960');
-    expect(shell).toContain("min-width: 1180px");
+    expect(shell).toMatch(/html, body, #root \{[^}]*min-width: 0;/);
     expect(shell).not.toContain("min-width: 1040px");
     expect(shell).toContain("grid-template-columns: 216px minmax(0, 1fr)");
     expect(slateCss).toContain("@media (max-width: 1208px)");

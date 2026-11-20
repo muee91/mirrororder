@@ -570,3 +570,14 @@ export class ProductionClient {
     );
   }
 }
+
+export interface AssistantSelection {
+  group_id?: string;
+  clip_id?: string;
+  media_id?: string;
+  script_segment_id?: string;
+  sync_clip_id?: string;
+  sync_task_id?: string;
+  camera?: string;
+  playhead_frame?: number;
+}

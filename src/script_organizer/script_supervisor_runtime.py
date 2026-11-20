@@ -155,6 +155,10 @@ def install_script_supervisor_runtime() -> None:
                 parts = web_server._parts(parsed.path)
                 if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "script-supervisor":
                     self._local_only(); project = service.project(parts[3]); self._send_json(_safe_board(ScriptSupervisorStore(project.config.output_dir).load())); return
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "script-supervisor-paper":
+                    from .paper_intake_store import PaperIntakeStore
+                    self._local_only(); project = service.project(parts[3])
+                    self._send_json(PaperIntakeStore(project.config.output_dir, parts[3]).read_model()); return
                 return super()._app_get(parsed)
 
             def _app_post(self, parsed):
@@ -191,7 +195,25 @@ def install_script_supervisor_runtime() -> None:
                             pass
                         return
                     if parts[4] == "script-supervisor-parse":
-                        self._local_only(); body = web_server._body(self); text = str(body.get("text", "") or "").strip()
+                        self._local_only(); body = web_server._body(self)
+                        if body.get("operation") == "ingest":
+                            from .paper_intake_store import PaperIntakeStore
+                            from .scene_interval_store import IntervalConflict
+                            try:
+                                result = PaperIntakeStore(project.config.output_dir, project_id).ingest(body)
+                            except IntervalConflict as error:
+                                raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                            except (ValueError, TypeError) as error:
+                                raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
+                            self._send_json(result); return
+                        if body.get("mode") is not None:
+                            from .slate_log_intake import prepare_project_request
+                            try:
+                                proposal = prepare_project_request(body, project.index, ScriptSupervisorStore(project.config.output_dir).load())
+                            except (ValueError, TypeError) as error:
+                                raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
+                            self._send_json(proposal); return
+                        text = str(body.get("text", "") or "").strip()
                         if not text:
                             raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "快速录入内容不能为空")
                         parsed_result = parse_supervisor_text(text, previous=_as_dict(body.get("previous")), allow_model=bool(body.get("allow_model", True)))

@@ -1,14 +1,23 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModelPayload, type ReviewTakeGroup, errorMessage } from "../../api/host";
-import { ProductionClient, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord } from "../../api/production";
+import { ProductionClient, type AssistantSelection, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord } from "../../api/production";
 import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
 import { SlateRecordClient } from "../../api/slateRecords";
 import { TakeListRow } from "../material-script/TakeCard";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
 import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
 import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
+import type { PaperRow } from "../../api/paperIntake";
+import { SlateOriginalFormSheet } from "./SlateOriginalFormSheet";
+import { SlateIntervalBoardSurface } from "./SlateIntervalBoardSurface";
+import type { ElectronicSlateIngest } from "./SlateElectronicImport";
+import { type SlateIntervalLedgerProps } from "./SlateIntervalLedger";
+import { useNativeSlateIntervalLedger } from "./useNativeSlateIntervalLedger";
+import { SlatePaperIntake } from "./SlatePaperIntake";
+import { SlateSourceIntervalPanel } from "./SlateSourceIntervalPanel";
+import { SlateSpeechEvidencePanel } from "./SlateSpeechEvidencePanel";
 import { SlateRow, SlateTableHead, type SlateCameraColumn } from "./SlateRow";
 import { SlateWorkbench } from "./SlateWorkbench";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
@@ -19,6 +28,11 @@ import "./golden-slate-media-experience.css";
 interface Props {
   baseUrl: string;
   projectId: string;
+  projectName?: string;
+  onInspectSelection?: (selection: AssistantSelection) => void;
+  // The interval ledger must be supplied by a private, project-verified adapter.
+  enableNativeIntervalLedger?: boolean;
+  intervalLedger?: Omit<SlateIntervalLedgerProps, "catalog"> & { projectId: string; importElectronic?: ElectronicSlateIngest };
 }
 
 type Draft = SlateRecord & { dirty: boolean; derived: boolean; derivedSource: string; xmlOrder: number };
@@ -280,14 +294,23 @@ function primaryAttachment(draft: Draft, camera: SlateCameraColumn): { item: Sla
 
 
 
-export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
+export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspectSelection, intervalLedger, enableNativeIntervalLedger=false }: Props) {
+  const [slateSurface, setSlateSurface] = useState<"intervals" | "takes">("intervals");
+  const nativeIntervalLedger=useNativeSlateIntervalLedger(baseUrl,projectId,enableNativeIntervalLedger);
+  const ledger = intervalLedger?.projectId === projectId ? intervalLedger : nativeIntervalLedger.ledger;
+  const ledgerSurface=Boolean(ledger || nativeIntervalLedger.available);
+  const intervalSurface = ledgerSurface && slateSurface === "intervals";
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
   const records = useMemo(() => new SlateRecordClient(baseUrl), [baseUrl]);
   const slateMedia = useMemo(() => new SlateMediaClient(baseUrl), [baseUrl]);
+  const [paperSource, setPaperSource] = useState<{row:PaperRow;revision:number}|null>(null);
   const [review, setReview] = useState<ReviewModelPayload | null>(null);
   const [board, setBoard] = useState<SlateBoard | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  // Keep the actual unsaved values live for Save, but do not move an editor
+  // between table parents until focus leaves the row (or Enter completes it).
+  const [editLayout, setEditLayout] = useState<Map<string, { index: number; placed: boolean }> | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState("");
   const [selectedClipId, setSelectedClipId] = useState("");
   const [actor, setActor] = useState(readCurrentOperator);
@@ -342,6 +365,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    setEditLayout(null);
     Promise.all([host.reviewModel(projectId), production.scriptSupervisor(projectId)])
       .then(([nextReview, nextBoard]) => {
         if (cancelled) return;
@@ -379,6 +403,17 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
       ?? null
     : angleIndex.byClip.get(selectedClipId) ?? null;
   const selectedPlaybackKey = selectedAngle?.clip_id || selectedClipId;
+  useLayoutEffect(() => {
+    const clipId = selectedAttachment?.clip_id || selectedAngle?.clip_id || undefined;
+    const mediaId = selectedAttachment?.media_id || selectedAngle?.media_id || undefined;
+    // A manually attached insert can belong to another Take.
+    const inTake = selectedTake?.angles.some(angle => clipId ? angle.clip_id === clipId : angle.media_id === mediaId);
+    onInspectSelection?.({
+      group_id: inTake || (!clipId && !mediaId) ? selected?.source_group_id || undefined : undefined,
+      clip_id: clipId,
+      media_id: mediaId,
+    });
+  }, [onInspectSelection, selected?.source_group_id, selectedAttachment, selectedAngle, selectedTake]);
   const selectedPlaybackFailed = Boolean(selectedPlaybackKey && playbackFailedClipId === selectedPlaybackKey);
   useEffect(() => {
     if (!selectedPlaybackFailed) setPlaybackFailureDetail(null);
@@ -386,13 +421,18 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   const selectedPersisted = Boolean(selected && board?.records[selected.record_id]);
   const selectedCanDelete = Boolean(selected && (selectedPersisted || !selected.derived));
   const dirtyCount = drafts.filter((row) => row.dirty).length;
-  const displayedDrafts = useMemo(() => displayOrder(drafts), [drafts]);
+  const displayedDrafts = useMemo(() => {
+    const ordered = displayOrder(drafts);
+    if (!editLayout) return ordered;
+    return ordered.sort((a, b) => (editLayout.get(a.record_id)?.index ?? Number.MAX_SAFE_INTEGER)
+      - (editLayout.get(b.record_id)?.index ?? Number.MAX_SAFE_INTEGER));
+  }, [drafts, editLayout]);
   const displayIndexByRecord = useMemo(
     () => new Map(displayedDrafts.map((row, index) => [row.record_id, index])),
     [displayedDrafts],
   );
-  const placedDrafts = useMemo(() => displayedDrafts.filter(isPlacedDraft), [displayedDrafts]);
-  const unplacedDrafts = useMemo(() => displayedDrafts.filter((row) => !isPlacedDraft(row)), [displayedDrafts]);
+  const placedDrafts = useMemo(() => displayedDrafts.filter((row) => editLayout?.get(row.record_id)?.placed ?? isPlacedDraft(row)), [displayedDrafts, editLayout]);
+  const unplacedDrafts = useMemo(() => displayedDrafts.filter((row) => !(editLayout?.get(row.record_id)?.placed ?? isPlacedDraft(row))), [displayedDrafts, editLayout]);
   const usedTakeIds = useMemo(() => new Set(drafts.filter((row) => !row.derived && row.source_group_id).map((row) => row.source_group_id)), [drafts]);
   const takeCandidates = useMemo(() => {
     const query = takeSearch.trim().toLowerCase();
@@ -562,7 +602,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   }
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || intervalSurface) return;
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void getCurrentWebview().onDragDropEvent((event) => {
@@ -591,7 +631,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
       if (!disposed) setMessage(`无法启用 Finder 拖入：${errorMessage(error)}`);
     });
     return () => { disposed = true; unlisten?.(); };
-  }, [projectId, selectedRecordId, slateMedia]);
+  }, [projectId, selectedRecordId, slateMedia, intervalSurface]);
 
   async function saveDraft(draft: Draft, revision: number): Promise<SlateBoard> {
     if (!actor.trim()) throw new HostConnectionError("保存场记前需要操作者昵称");
@@ -744,6 +784,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
   });
 
   useEffect(() => {
+    if (intervalSurface) return;
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && takePickerOpen) {
         event.preventDefault();
@@ -760,7 +801,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
     };
     globalThis.addEventListener("keydown", keydown);
     return () => globalThis.removeEventListener("keydown", keydown);
-  }, [takePickerOpen]);
+  }, [takePickerOpen, intervalSurface]);
 
   function mediaCell(draft: Draft, camera: SlateCameraColumn) {
     const row = primaryAttachment(draft, camera);
@@ -794,6 +835,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
             takeNumber: draft.take_number,
             status: draft.status,
           }}
+          onEditStart={() => setEditLayout((current) => current ?? new Map(displayedDrafts.map((row, index) => [row.record_id, { index, placed: isPlacedDraft(row) }])))}
+          onEditEnd={() => setEditLayout(null)}
           onSelect={() => selectRecord(draft.record_id)}
           onPatch={(patch) => patchRecord(draft.record_id, patch)}
           renderMedia={(camera) => mediaCell(draft, camera)}
@@ -819,8 +862,16 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
 
   const inspectorAttachments = selected?.attachments ?? [];
 
-  return (
-    <section className={`golden-slate-workbench ${inspectorOpen ? "has-inspector" : ""} ${dropActive ? "is-file-drop-active" : ""}`}>
+  return (<>
+    {ledgerSurface && <nav className="slate-interval-view-switch" aria-label="场记工作视图">
+      <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>电子场记板</button>
+      <button type="button" aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>旧 Take 场记</button>
+    </nav>}
+    {ledger && <div hidden={!intervalSurface}><SlateIntervalBoardSurface key={JSON.stringify([baseUrl,projectId])} {...ledger} baseUrl={baseUrl} projectName={projectName} catalog={(review?.episodes ?? []).flatMap((entry)=>entry.scenes.map((scene)=>({episode:entry.episode,scene_id:scene.scene_id,label:prettySceneId(scene.scene_id)})))}/></div>}
+    {intervalSurface && !ledger && <section aria-label="电子场记板"><SlateOriginalFormSheet page={{title:projectName?.trim()||"",day:"",date:"",printedPage:""}} rows={[]} />
+      {nativeIntervalLedger.error ? <><p role="alert">{nativeIntervalLedger.error}</p><button type="button" onClick={()=>void nativeIntervalLedger.refresh().catch(()=>{})}>重读列表</button></> : <p role="status">正在读取电子场记板…</p>}
+    </section>}
+    <div hidden={intervalSurface}><section className={`golden-slate-workbench ${inspectorOpen ? "has-inspector" : ""} ${dropActive ? "is-file-drop-active" : ""}`}>
       <header className="golden-slate-toolbar">
         <div className="golden-slate-title">
           <strong>场记表</strong>
@@ -841,6 +892,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
         </div>
       </header>
 
+      <div className="golden-slate-entry">
       <section className="golden-slate-quick">
         <input value={quickText} onChange={(event) => setQuickText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void applyQuickEntry(); } }} placeholder="EP3 12场 B近 可用 / 同场下一条 C中" />
         <button type="button" className="quick-fill" disabled={!selected || busy || !quickText.trim()} onClick={() => void applyQuickEntry()}>填入</button>
@@ -849,6 +901,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
         <button type="button" className="secondary" onClick={inheritPrevious}>同上</button>
         <button type="button" onClick={() => addBlank()}>空白</button>
       </section>
+
+      <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} onSelect={setPaperSource} />
+      </div>
 
       {takePickerOpen ? (
         <section className="golden-take-picker" aria-label="加入 Take / 镜头">
@@ -890,6 +945,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
                   ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                 </div>
 
+                {selectedAttachment?.clip_id ? <SlateSpeechEvidencePanel key={`${baseUrl}:${projectId}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}`} baseUrl={baseUrl} projectId={projectId} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} /> : null}
+
+                {selectedAttachment?.clip_id && selectedAttachment.media_id ? <SlateSourceIntervalPanel key={`${baseUrl}:${projectId}:${selected.record_id}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}:${board?.revision}:${paperSource?.row.paper_row_id}:${paperSource?.revision}`} paperSource={paperSource} baseUrl={baseUrl} projectId={projectId} recordId={selected.record_id} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} savedRecord={board?.records[selected.record_id]} boardRevision={board?.revision ?? -1} dirty={selected.dirty} /> : null}
+
                 {episodeCandidates.length ? <section className="golden-episode-candidates"><header><strong>第 {selected.episode} 集候选</strong><span>{episodeCandidates.length} Take</span></header>{episodeCandidates.map((take) => <TakeListRow key={take.group_id} take={take} onSelect={() => addTake(take)} />)}</section> : null}
 
                 <section className="golden-inspector-media"><header><strong>机位素材</strong><span>{inspectorAttachments.length}</span></header>
@@ -923,6 +982,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId }: Props) {
       </div>
 
       <details className="golden-slate-review-tools"><summary>Review 归集辅助 · 待归集 / 已归集 / 已排除 / 孤立素材 / 场景目标</summary><SlateWorkbench baseUrl={baseUrl} projectId={projectId} /></details>
-    </section>
-  );
+    </section></div>
+  </>);
 }

@@ -1,0 +1,62 @@
+/* The production paper grid remains a complete sheet; only its own viewport may scroll. */
+.slate-form-stage{min-inline-size:0;display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem;align-items:start;container-name:slate-form;container-type:inline-size}
+.slate-form-stage > .slate-form-paper-area,.slate-form-stage > .slate-form-detail{min-inline-size:0;max-inline-size:100%;grid-column:1}
+.slate-form-stage > .slate-form-detail{
+  padding:.85rem 1rem;display:grid;gap:.55rem;
+  border:1px solid var(--mo-border,rgba(127,150,139,.32));
+  border-radius:6px;background:var(--mo-surface-raised,var(--surface,#202321));
+  color:var(--mo-text-primary,var(--text,#f1f4f2));overflow-wrap:anywhere;
+}
+.slate-form-stage > .slate-form-detail :is(h2,h3,p){margin:0}
+.slate-form-stage > .slate-form-detail :is(p,small){line-height:1.45}
+.slate-form-stage > .slate-form-detail .sil-original-playback{display:grid;min-inline-size:0;max-inline-size:100%;justify-items:start;gap:.4rem}
+
+.slate-form-stage[data-inspecting] .slate-paper-form-scroll{max-block-size:min(38vh,24rem)}
+/* A real 1180px window usually has a smaller content region after app chrome, so stack there.
+   For a genuinely wide content area the media drawer sits beside the still-intact sheet. */
+@container slate-form (min-width:90rem){
+  .slate-form-stage[data-inspecting] > .slate-form-paper-area{grid-column:1;grid-row:1}
+  .slate-form-stage[data-inspecting] > .slate-form-detail{width:22rem;grid-column:2;grid-row:1;max-block-size:min(70vh,52rem);overflow:auto}
+  .slate-form-stage[data-inspecting] .slate-paper-form-scroll{max-block-size:min(70vh,52rem)}
+}
+.slate-manual-entry{padding:.65rem 0}
+.slate-manual-entry>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.4rem,1fr));gap:.45rem;margin-bottom:.5rem}
+.slate-manual-entry label{display:grid;gap:.2rem;font-size:.85rem}
+.slate-manual-entry input{min-width:0;width:100%}
+.slate-manual-entry button+button{margin-left:.45rem}
+.slate-sheet-sync-caption{margin:.3rem 0 .6rem;font-size:.85rem}
+.slate-import-optional{margin:.7rem 0}
+.slate-browse-tools{display:flex;flex-wrap:wrap;align-items:end;gap:.5rem .7rem;padding:.55rem 0}
+.slate-browse-tools label{display:grid;gap:.2rem;font-size:.8rem}
+.slate-browse-tools input{max-width:18rem;min-width:8rem}
+.slate-paper-form-table .slate-paper-browse-group th{position:static;background:#dce5da;color:#274e40;text-align:start;padding:.36rem .62rem}
+.slate-sync-angle{display:grid;gap:.45rem;margin-block:.5rem}
+.slate-sync-angle label{display:grid;gap:.25rem}
+.slate-sync-angle textarea{width:100%;min-width:0}
+.slate-sync-angle button{margin:.12rem .23rem .12rem 0}
+.slate-sheet-connect{margin-block:.05rem .55rem}
+.slate-pdf-jump{display:flex;align-items:end;gap:.35rem}
+.slate-browse-tools .slate-pdf-jump input{width:4rem;min-width:0}
+
+.slate-paper-hint {
+  display: block;
+  margin: .125rem auto;
+  padding: .125rem .25rem;
+  color: #704b1b;
+  background: #fcf2da;
+  border: 1px solid #dac19a;
+  border-radius: .3rem;
+  font-size: .7rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+tr[data-paper-located] > td { background-color: #fff1c9; }
+/* Independent detail at full native-window widths; table has its own local scroll. */
+@container slate-form (min-width:43rem){
+ .slate-form-stage[data-inspecting] > .slate-form-paper-area{grid-column:1;grid-row:1}
+ .slate-form-stage[data-inspecting] > .slate-form-detail{inline-size:clamp(15.5rem,26cqw,22rem);grid-column:2;grid-row:1;max-block-size:min(70vh,52rem);overflow:auto;align-self:start}
+ .slate-form-stage[data-inspecting] .slate-paper-form-scroll{max-block-size:min(70vh,52rem)}
+}
+
+.slate-source-pane {display:grid;gap:.4rem;min-inline-size:0}
+.slate-source-pane+.slate-source-pane {border-block-start:1px solid var(--mo-border,rgba(127,150,139,.28));padding-block-start:.6rem}

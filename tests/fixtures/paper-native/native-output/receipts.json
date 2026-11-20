@@ -1,0 +1,258 @@
+[
+  {
+    "authority" : false,
+    "crop_box" : [
+      10,
+      20,
+      210,
+      120
+    ],
+    "detected_red_bounds" : [
+      20,
+      60,
+      40,
+      80
+    ],
+    "document_sha256" : "a6b3fc9233a171c820a5fc56a93994ff1ef41e7cbd5a2108136f4f13d7937740",
+    "ocr_performed" : false,
+    "original_corners" : [
+      [
+        30,
+        60
+      ],
+      [
+        50,
+        60
+      ],
+      [
+        50,
+        40
+      ],
+      [
+        30,
+        40
+      ]
+    ],
+    "page_index" : 0,
+    "pdf_to_pixel" : [
+      1,
+      0,
+      -10,
+      -0,
+      -1,
+      120,
+      0,
+      0,
+      1
+    ],
+    "pixel_to_pdf" : [
+      1,
+      0,
+      10,
+      -0,
+      -1,
+      120,
+      0,
+      0,
+      1
+    ],
+    "raster_sha256" : "9c63f8c6684d2cea5e3cd53f7ad2ced156ccf121f636760f73f007c1c026aa7c",
+    "raster_size" : [
+      200,
+      100
+    ],
+    "rotation" : 0
+  },
+  {
+    "authority" : false,
+    "crop_box" : [
+      10,
+      20,
+      210,
+      120
+    ],
+    "detected_red_bounds" : [
+      20,
+      20,
+      40,
+      40
+    ],
+    "document_sha256" : "a33fc94c0948ccfa41832c62b12be44ba96a287c71dd541fe9939d901d8cfab0",
+    "ocr_performed" : false,
+    "original_corners" : [
+      [
+        30,
+        40
+      ],
+      [
+        30,
+        60
+      ],
+      [
+        50,
+        60
+      ],
+      [
+        50,
+        40
+      ]
+    ],
+    "page_index" : 0,
+    "pdf_to_pixel" : [
+      0,
+      1,
+      -20,
+      1,
+      -0,
+      -10,
+      0,
+      0,
+      1
+    ],
+    "pixel_to_pdf" : [
+      0,
+      1,
+      10,
+      1,
+      -0,
+      20,
+      0,
+      0,
+      1
+    ],
+    "raster_sha256" : "2aca31798bf2dfbe73cd11a83ddeb0291eb5034821b3e9a117b4f08d1fa9dfa8",
+    "raster_size" : [
+      100,
+      200
+    ],
+    "rotation" : 90
+  },
+  {
+    "authority" : false,
+    "crop_box" : [
+      10,
+      20,
+      210,
+      120
+    ],
+    "detected_red_bounds" : [
+      160,
+      20,
+      180,
+      40
+    ],
+    "document_sha256" : "171612d78fa1d1104eda5c0ca8f31457f38cf7acb973b8754b2710011c061a06",
+    "ocr_performed" : false,
+    "original_corners" : [
+      [
+        50,
+        40
+      ],
+      [
+        30,
+        40
+      ],
+      [
+        30,
+        60
+      ],
+      [
+        50,
+        60
+      ]
+    ],
+    "page_index" : 0,
+    "pdf_to_pixel" : [
+      -1,
+      0,
+      210,
+      -0,
+      1,
+      -20,
+      0,
+      0,
+      1
+    ],
+    "pixel_to_pdf" : [
+      -1,
+      0,
+      210,
+      -0,
+      1,
+      20,
+      0,
+      0,
+      1
+    ],
+    "raster_sha256" : "debcbd0ee8094cb60da6dae07cf4b08df66794350274f43b270e06dbe8a9e2c1",
+    "raster_size" : [
+      200,
+      100
+    ],
+    "rotation" : 180
+  },
+  {
+    "authority" : false,
+    "crop_box" : [
+      10,
+      20,
+      210,
+      120
+    ],
+    "detected_red_bounds" : [
+      60,
+      160,
+      80,
+      180
+    ],
+    "document_sha256" : "78c5655af69d69b92260e9e06c6bc5ee7641d2ef1e9957fdaea6c3043d8e82d3",
+    "ocr_performed" : false,
+    "original_corners" : [
+      [
+        50,
+        60
+      ],
+      [
+        50,
+        40
+      ],
+      [
+        30,
+        40
+      ],
+      [
+        30,
+        60
+      ]
+    ],
+    "page_index" : 0,
+    "pdf_to_pixel" : [
+      0,
+      -1,
+      120,
+      -1,
+      -0,
+      210,
+      0,
+      0,
+      1
+    ],
+    "pixel_to_pdf" : [
+      0,
+      -1,
+      210,
+      -1,
+      -0,
+      120,
+      0,
+      0,
+      1
+    ],
+    "raster_sha256" : "2d3ad5adfa980f93033bbfa461aa03c60a02ba9173c03932c904f8ee19985bb3",
+    "raster_size" : [
+      100,
+      200
+    ],
+    "rotation" : 270
+  }
+]

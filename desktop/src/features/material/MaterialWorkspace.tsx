@@ -1,4 +1,7 @@
-import type { ProjectSummary } from "../../api/host";
+import { useEffect, useState } from "react";
+import { HostConnection, type ProjectSummary } from "../../api/host";
+import { isOwnedSlateHost } from "./ownedSlateHost";
+import type { AssistantSelection } from "../../api/production";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
 import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
@@ -13,9 +16,11 @@ interface Props {
   baseUrl: string;
   project: ProjectSummary;
   view: MaterialView;
+  showViewNavigation?: boolean;
   initialGroupId?: string | null;
   initialClipId?: string | null;
   onSelectionChange?: (groupId: string | null, clipId: string | null) => void;
+  onInspectSelection?: (selection: AssistantSelection) => void;
   onViewChange: (view: MaterialView, groupId?: string) => void;
   onOpenScript?: (groupId: string, clipId?: string | null) => void;
   onOpenReview?: (groupId?: string, clipId?: string | null) => void;
@@ -29,26 +34,25 @@ const MATERIAL_VIEWS: Array<{ view: Exclude<MaterialView, "repair">; label: stri
   { view: "people", label: "人物", hint: "人物与角色" },
 ];
 
-const DEFAULT_VIEW_DEFINITION = { view: "slate", label: "场记", hint: "拍摄事实" } as const;
-
 export function MaterialWorkspace({
   baseUrl,
   project,
   view,
+  showViewNavigation = true,
   initialGroupId = null,
   initialClipId = null,
   onSelectionChange,
+  onInspectSelection,
   onViewChange,
   onOpenScript,
   onOpenReview,
   onOpenTimeline,
 }: Props) {
   const activeView = view === "repair" ? "library" : view;
-  const activeDefinition = MATERIAL_VIEWS.find((item) => item.view === activeView) ?? DEFAULT_VIEW_DEFINITION;
 
   return (
-    <section className="material-workspace" data-material-view={view}>
-      <header className="material-domain-bar">
+    <section className="material-workspace" data-material-view={view} data-project-navigation={!showViewNavigation || undefined}>
+      {showViewNavigation && <header className="material-domain-bar">
         <nav className="material-view-nav" aria-label="素材视图">
           {MATERIAL_VIEWS.map((item) => (
             <button
@@ -64,14 +68,16 @@ export function MaterialWorkspace({
           ))}
         </nav>
         {view === "repair" ? <div className="material-domain-context"><span>素材库工具</span></div> : null}
-      </header>
+      </header>}
 
       <div className="material-view-canvas">
         {view === "slate" ? (
           <>
-            <GoldenSlateWorkbench
-              baseUrl={baseUrl}
+            <OwnedSlateWorkbench
+              key={JSON.stringify([baseUrl, project.project_id])}
+                baseUrl={baseUrl}
               projectId={project.project_id}
+              projectName={project.name}
             />
             <SlatePlaybackShortcuts />
           </>
@@ -122,4 +128,27 @@ export function MaterialWorkspace({
       </div>
     </section>
   );
+}
+
+function OwnedSlateWorkbench(props: {
+  baseUrl: string;
+  projectId: string;
+  projectName: string;
+  onInspectSelection?: (selection: AssistantSelection) => void;
+}) {
+  const [owned, setOwned] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const readStatus = async () => {
+      try {
+        return isOwnedSlateHost(props.baseUrl, await new HostConnection(props.baseUrl).managedStatus());
+      } catch {
+        return false;
+      }
+    };
+    void readStatus().then((result) => { if (alive) setOwned(result); });
+    return () => { alive = false; };
+  }, [props.baseUrl]);
+  if (owned === null) return <p role="status">正在打开场记…</p>;
+  return <GoldenSlateWorkbench {...props} enableNativeIntervalLedger={owned} />;
 }

@@ -1,5 +1,8 @@
 mod gateway;
 mod host;
+mod scene_interval_ipc;
+mod paper_source_ipc;
+mod paper_draft_ipc;
 mod persistence;
 mod platform;
 mod runtime;
@@ -20,6 +23,10 @@ fn main() {
             gateway::team_gateway_status,
             gateway::stop_team_gateway,
             host::start_python_host,
+            scene_interval_ipc::scene_interval_review,
+            scene_interval_ipc::slate_thumbnail_cancel,
+            paper_source_ipc::paper_source_preview,
+            paper_draft_ipc::paper_pdf_draft,
             host::host_process_status,
             host::stop_python_host,
             platform::platform_info,
