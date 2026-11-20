@@ -1,49 +1,21 @@
 /* MirrorOrder desktop architecture redesign.
-   Loaded last: this file owns the application shell and high-level product surfaces,
-   while specialist workbenches (Slate/media/review) keep their domain geometry. */
+   Existing surfaces use aliases of the shared Design System v2 palette. */
 
 :root {
-  --mo-bg: #f4f7fa;
-  --mo-surface: #ffffff;
-  --mo-surface-soft: #f8fafc;
-  --mo-surface-muted: #eef3f7;
-  --mo-border: #dbe3ea;
-  --mo-border-strong: #c8d3dc;
-  --mo-text: #17212b;
-  --mo-text-2: #526272;
-  --mo-text-3: #8392a0;
-  --mo-accent: #2563eb;
-  --mo-accent-soft: #eaf1ff;
-  --mo-success: #2f855a;
-  --mo-success-soft: #eaf7ef;
-  --mo-warning: #a66b14;
-  --mo-warning-soft: #fff5e5;
-  --mo-danger: #bd4b4b;
-  --mo-danger-soft: #fff0ef;
-  --mo-shadow: 0 10px 30px rgba(35, 53, 72, .07);
+  --mo-bg: var(--mo-surface-app);
+  --mo-surface: var(--mo-surface-pane);
+  --mo-surface-soft: var(--mo-surface-raised);
+  --mo-surface-muted: var(--mo-surface-hover);
+  --mo-border: var(--mo-border-subtle);
+  --mo-text: var(--mo-text-primary);
+  --mo-text-2: var(--mo-text-secondary);
+  --mo-text-3: var(--mo-text-muted);
+  --mo-success-soft: color-mix(in srgb, var(--mo-success) 13%, var(--mo-surface-pane));
+  --mo-warning-soft: color-mix(in srgb, var(--mo-warning) 13%, var(--mo-surface-pane));
+  --mo-danger-soft: color-mix(in srgb, var(--mo-danger) 13%, var(--mo-surface-pane));
+  --mo-shadow: var(--mo-shadow-panel);
   --mo-radius: 12px;
   --mo-radius-sm: 8px;
-}
-
-html[data-mirrororder-theme="dark"] {
-  --mo-bg: #11161b;
-  --mo-surface: #181e24;
-  --mo-surface-soft: #1c242c;
-  --mo-surface-muted: #232d36;
-  --mo-border: #2f3a44;
-  --mo-border-strong: #3c4955;
-  --mo-text: #edf2f6;
-  --mo-text-2: #a9b6c1;
-  --mo-text-3: #748390;
-  --mo-accent: #75a7ff;
-  --mo-accent-soft: #1d2d49;
-  --mo-success: #70c995;
-  --mo-success-soft: #183126;
-  --mo-warning: #e8b85e;
-  --mo-warning-soft: #352a17;
-  --mo-danger: #ec8b88;
-  --mo-danger-soft: #3a2021;
-  --mo-shadow: 0 16px 36px rgba(0, 0, 0, .24);
 }
 
 html,
@@ -869,35 +841,6 @@ textarea {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
-}
-
-/* Startup follows the new product language */
-.startup-shell {
-  background:
-    radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--mo-accent) 10%, transparent), transparent 34%),
-    var(--mo-bg);
-}
-
-.startup-home {
-  border: 1px solid var(--mo-border);
-  border-radius: 18px;
-  background: var(--mo-surface);
-  box-shadow: var(--mo-shadow);
-}
-
-.startup-primary h1 { color: var(--mo-text); letter-spacing: -.03em; }
-.startup-primary > p { color: var(--mo-text-2); }
-
-/* Notice */
-.mirrororder-redesign-shell .app-notice {
-  right: 18px;
-  bottom: 16px;
-  max-width: 520px;
-  border: 1px solid var(--mo-border-strong);
-  border-radius: 10px;
-  background: var(--mo-surface);
-  color: var(--mo-text);
-  box-shadow: var(--mo-shadow);
 }
 
 @media (max-width: 1180px) {

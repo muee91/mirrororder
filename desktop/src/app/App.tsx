@@ -17,6 +17,7 @@ import { TeamGatewayClient, teamWorkbenchUrl } from "../api/team";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectHome } from "../features/projects/ProjectHome";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
+import { WorkspaceLauncher } from "../features/projects/WorkspaceLauncher";
 import { WorkspaceHome } from "../features/projects/WorkspaceHome";
 import { useProjectActivities } from "../features/projects/projectActivity";
 import { SettingsStatusWorkbench } from "../features/settings/SettingsStatusWorkbench";
@@ -85,7 +86,7 @@ export function App() {
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [pageRequest, setPageRequest] = useState<ProjectPageRequest | null>(null);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
-  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "打开一个工作区开始制作。");
+  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "");
   const [noticeVisible, setNoticeVisible] = useState(false);
   const [resumeEnabledForSession, setResumeEnabledForSession] = useState(false);
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
@@ -224,6 +225,7 @@ export function App() {
       });
       if (typeof selected === "string" && selected.trim()) await openWorkspacePath(selected);
     } catch (error) {
+      if (!snapshot) setState("error");
       setMessage(`选择工作区失败：${errorMessage(error)}`);
     }
   }
@@ -448,41 +450,27 @@ export function App() {
   const revealLabel = platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器";
 
   if (!snapshot) {
-    return (
-      <main className="startup-shell">
-        <section className={`startup-home ${recoveryFailed ? "is-recovery" : ""}`}>
-          <div className="startup-brand">
-            <div className="startup-logo" aria-hidden="true" />
-            <div><strong>镜序</strong><span>MirrorOrder</span></div>
-          </div>
-          <div className="startup-primary">
-            <p className="eyebrow">{recovering ? "恢复工作区" : recoveryFailed ? "工作区恢复" : "Production"}</p>
-            <h1>{recovering ? "正在恢复上次工作区" : recoveryFailed ? "重新定位工作区" : "继续制作"}</h1>
-            <p>{recovering
-              ? "正在启动本机制作服务。恢复完成后回到上次工作现场。"
-              : recoveryFailed
-                ? "上次工作区没有成功打开。重新定位它，或选择其他工作区；项目数据不会被改写。"
-                : "打开工作区后选择项目继续制作。"}</p>
-            {workspacePath.trim() ? <code className="startup-path">{workspacePath}</code> : null}
-            <div className="startup-actions">
-              <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>{recoveryFailed ? "重新定位" : "打开工作区"}</button>
-              <button type="button" className="secondary" onClick={() => void chooseWorkspace(false)} disabled={!isTauri() || state === "starting"}>打开工作区文件</button>
-              {recoveryFailed ? <button type="button" className="secondary" onClick={() => { forgetWorkspaceResume(); setWorkspacePath(""); setResumeEnabledForSession(false); setState("idle"); setMessage("已清除自动恢复记录。"); }}>清除恢复记录</button> : null}
-            </div>
-            <p className={`startup-message ${state === "error" ? "is-error" : ""}`}>{message}</p>
-          </div>
-          <details className="startup-advanced">
-            <summary>工作区与连接</summary>
-            <div className="startup-advanced-body">
-              <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
-              <button type="button" onClick={() => void openWorkspacePath(workspacePath)} disabled={state === "starting" || !workspacePath.trim()}>打开此路径</button>
-              <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
-              <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>连接已运行服务</button>
-            </div>
-          </details>
-        </section>
-      </main>
-    );
+    return <WorkspaceLauncher
+      state={state}
+      recovering={recovering}
+      recoveryFailed={recoveryFailed}
+      native={isTauri()}
+      workspacePath={workspacePath}
+      serviceAddress={baseUrl}
+      message={message}
+      onWorkspacePathChange={setWorkspacePath}
+      onServiceAddressChange={setBaseUrl}
+      onChooseWorkspace={(directory) => void chooseWorkspace(directory)}
+      onOpenPath={() => void openWorkspacePath(workspacePath)}
+      onConnect={() => void connect()}
+      onClearRecovery={() => {
+        forgetWorkspaceResume();
+        setWorkspacePath("");
+        setResumeEnabledForSession(false);
+        setState("idle");
+        setMessage("已清除自动恢复记录。");
+      }}
+    />;
   }
 
   const isProjectOpen = surface === "production" && selectedProject !== null;

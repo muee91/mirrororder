@@ -12,11 +12,13 @@ def test_desktop_shell_fills_available_canvas() -> None:
     app = read("desktop/src/app/App.tsx")
     redesign = read("desktop/src/app/mirrororder-redesign.css")
     chrome = read("desktop/src/app/app-chrome.css")
+    launcher = read("desktop/src/features/projects/WorkspaceLauncher.tsx")
     experience = read("desktop/src/features/production/product-experience.css")
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
     assert 'className="app-shell production-app-shell mirrororder-redesign-shell"' in app
-    assert 'className="startup-shell"' in app
+    assert 'return <WorkspaceLauncher' in app
+    assert 'className="startup-shell"' in launcher
     assert 'workspace-shell application-frame${isProjectOpen ? " is-project-open" : ""}' in app
     assert 'className="app-main-column"' in app
     assert '!isProjectOpen && <header className="app-global-topbar"' in app

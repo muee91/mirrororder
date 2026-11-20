@@ -19,10 +19,11 @@ describe("editor-first resume flow", () => {
 
   it("uses the project picker as the fallback after opening an unremembered workspace", () => {
     const app = read("./App.tsx");
+    const launcher = read("../features/projects/WorkspaceLauncher.tsx");
 
     expect(app).toContain('setSurface("projects");');
     expect(app).toContain('setSurface(sameWorkspace ? previousSurface : "projects");');
-    expect(app).toContain('打开工作区后选择项目继续制作。');
+    expect(launcher).toContain("onChooseWorkspace(true)");
   });
 
   it("restores each project to its own last page when switching projects", () => {

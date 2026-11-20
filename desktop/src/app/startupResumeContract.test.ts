@@ -5,9 +5,16 @@ import { describe, expect, it } from "vitest";
 describe("startup and production resume product contract", () => {
   it("keeps Host connection details out of the primary startup surface", () => {
     const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
-    expect(source).toContain('className={`startup-home');
-    expect(source).toContain("继续制作");
-    expect(source).toContain("工作区与连接");
+    const launcher = readFileSync(fileURLToPath(new URL("../features/projects/WorkspaceLauncher.tsx", import.meta.url)), "utf8");
+    expect(source).toContain("return <WorkspaceLauncher");
+    expect(launcher).toContain('className="startup-home"');
+    expect(launcher).toContain("选择工作区文件夹…");
+    expect(launcher).toContain("选择工作区文件…");
+    const advanced = launcher.slice(launcher.indexOf('<details className="startup-advanced">'));
+    expect(advanced).toContain("<summary>手动打开与连接</summary>");
+    expect(advanced).toContain("本机服务地址");
+    expect(advanced).toContain("工作区路径");
+    expect(launcher).toContain('className="startup-logo" src={logo}');
     expect(source).toContain("高级连接");
     expect(source).not.toContain('<section className="connection-panel">');
     expect(source).not.toContain("app-workspace-switch");
