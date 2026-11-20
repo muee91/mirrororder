@@ -8,6 +8,7 @@ from .device_runtime_settings import application_support_root, load_runtime_sett
 from .device_tasks import get_device_task_manager, initialize_device_tasks
 from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
+from .media_batch_relink import preview_directory_relink
 from .media_identity import DeviceMediaStore
 from .runtime_diagnostics import environment_payload
 
@@ -320,6 +321,36 @@ def install_desktop_runtime() -> None:
                             "audit": current.collaborators.audit(),
                         }
                     )
+                    return
+                if (
+                    len(parts) == 5
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "media-relink-preview"
+                ):
+                    self._local_only()
+                    project = current.project(parts[3])
+                    payload = web_server._body(self)
+                    scan_root = str(payload.get("scan_root", "") or "").strip()
+                    if not scan_root:
+                        raise web_server.ApiError(
+                            web_server.HTTPStatus.BAD_REQUEST,
+                            "scan_root 为必填项",
+                        )
+                    max_files = payload.get("max_files", 20000)
+                    try:
+                        max_files_int = max(1, min(int(max_files), 50000))
+                    except (TypeError, ValueError):
+                        max_files_int = 20000
+                    project.reload_if_changed()
+                    try:
+                        preview = preview_directory_relink(
+                            project.index,
+                            scan_root,
+                            max_files=max_files_int,
+                        )
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
+                    self._send_json(preview)
                     return
                 if (
                     len(parts) == 5

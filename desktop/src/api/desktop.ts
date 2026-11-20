@@ -116,6 +116,32 @@ export interface MediaBindingSummary {
 }
 export interface MediaBindingPayload { contract: "media_binding.v1" | string; project_id: string; summary: MediaBindingSummary }
 export interface MediaInventoryScanPayload { contract: "media_inventory_scan.v1" | string; project_id: string; task: ProjectTask }
+export interface MediaRelinkPreviewItem {
+  media_id: string;
+  name: string;
+  candidate_path?: string;
+  confidence?: "exact_media_id" | "filename_only" | string;
+  requires_confirmation: boolean;
+  reason?: string;
+  size_bytes?: number | null;
+}
+export interface MediaRelinkPreviewPayload {
+  contract: "media_batch_relink_preview.v1" | string;
+  scope: "device_local_response" | string;
+  scan_root: string;
+  truncated: boolean;
+  files_scanned: number;
+  symlinks_skipped: number;
+  summary: {
+    total_media: number;
+    exact_count: number;
+    filename_only_count: number;
+    missing_count: number;
+  };
+  matched_exact: MediaRelinkPreviewItem[];
+  matched_filename_only: MediaRelinkPreviewItem[];
+  still_missing: MediaRelinkPreviewItem[];
+}
 export interface ProjectCreatePayload {
   name: string; project_id?: string; input_kind: "fcpxml" | "media-directory"; script?: string;
   fcpxml?: string; media_roots?: string[]; timeline_mode?: "sequential" | "timestamp" | string; camera_patterns?: Record<string, string>;
@@ -185,6 +211,14 @@ export class DesktopClient {
   saveSourceRoots(projectId: string, roots: string[], replace: boolean): Promise<MediaBindingPayload> {
     return requestJson(this.baseUrl, `${projectPath(projectId)}/media-binding`, {
       method: "POST", body: JSON.stringify({ action: replace ? "replace_source_roots" : "add_source_roots", roots }),
+    });
+  }
+  previewDirectoryRelink(projectId: string, scanRoot: string, maxFiles = 20000): Promise<MediaRelinkPreviewPayload> {
+    const scan_root = scanRoot.trim();
+    if (!scan_root) throw new HostConnectionError("预览目录重连需要指定目录路径");
+    return requestJson(this.baseUrl, `${projectPath(projectId)}/media-relink-preview`, {
+      method: "POST",
+      body: JSON.stringify({ scan_root, max_files: maxFiles }),
     });
   }
   attachScript(projectId: string, script: string): Promise<{ script: string; task: ProjectTask }> {

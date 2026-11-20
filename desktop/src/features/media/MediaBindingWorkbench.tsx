@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { DesktopClient, type MediaBindingSummary } from "../../api/desktop";
+import { DesktopClient, type MediaBindingSummary, type MediaRelinkPreviewPayload } from "../../api/desktop";
 import { HostConnectionError, errorMessage } from "../../api/host";
 import { PlatformClient } from "../../api/platform";
 import { ProjectTaskClient, canCancelTask, type ProjectTaskRecord } from "../../api/tasks";
@@ -90,6 +90,8 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
   const [scanTask, setScanTask] = useState<ProjectTaskRecord | null>(null);
   const [scanError, setScanError] = useState<ProjectTaskRecord | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [relinkPreview, setRelinkPreview] = useState<MediaRelinkPreviewPayload | null>(null);
   const submission = useRef(false);
   const [message, setMessage] = useState("正在读取本机素材连接…");
 
@@ -334,6 +336,40 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
     await submitScan(splitRoots(rootsText), false, "manual");
   }
 
+  async function previewBatchRelink(explicitRoot?: string): Promise<void> {
+    if (previewing || busy) return;
+    let targetRoot = (explicitRoot || "").trim();
+    if (!targetRoot) {
+      if (isTauri()) {
+        const picked = await chooseDirectories("选择新硬盘或文件夹以预览重连命中率");
+        targetRoot = picked[0] ?? "";
+      } else {
+        targetRoot = splitRoots(rootsText)[0] ?? "";
+      }
+    }
+    if (!targetRoot) {
+      setMessage("请先选择一个本机目录，或在下方“高级”列表填写至少一个目录路径后再预览重连命中率。");
+      return;
+    }
+    setPreviewing(true);
+    setMessage(`正在只读预检目录命中率：${targetRoot}…`);
+    try {
+      const preview = await client.previewDirectoryRelink(projectId, targetRoot);
+      setRelinkPreview(preview);
+      setMessage(
+        `预检完成（只读，未修改绑定）：指纹精确命中 ${preview.summary.exact_count}/${preview.summary.total_media}` +
+        (preview.summary.filename_only_count ? `，仅文件名候选 ${preview.summary.filename_only_count}（需确认）` : "") +
+        (preview.summary.missing_count ? `，仍缺失 ${preview.summary.missing_count}` : "") +
+        "。",
+      );
+    } catch (error) {
+      setRelinkPreview(null);
+      setMessage(errorMessage(error));
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   async function confirm(mediaId: string, candidatePath: string): Promise<void> {
     setBusy(true);
     setMessage("正在确认旧项目素材候选…");
@@ -438,9 +474,45 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
               {entry==="slate"&&roots.length>0&&<button type="button" disabled={busy||scanActive||pendingAnalysis}
                 onClick={()=>void submitScan(roots,false,"manual")}>扫描已保存的目录</button>}
               <button type="button" disabled={!summary || busy || scanActive || !isTauri()} onClick={() => void reconnectMovedMedia()}>{pendingAnalysis ? "替换原始目录…" : roots.length || total ? "重新连接已移动素材…" : "设置素材位置…"}</button>
+              {!pendingAnalysis && total > 0 ? <button type="button" className="secondary" disabled={!summary || busy || scanActive || previewing} onClick={() => void previewBatchRelink()}>{previewing ? "正在预检…" : "智能目录重连预览"}</button> : null}
               {roots.length || total ? <button type="button" className="secondary" disabled={!summary || busy || scanActive || !isTauri()} onClick={() => void addSearchLocations()}>{pendingAnalysis ? "添加原始目录…" : "添加搜索位置…"}</button> : null}
             </div>
           </div>
+
+          {relinkPreview ? (
+            <section className="media-binding-relink-preview" aria-label="目录重连预检结果">
+              <div className="media-binding-relink-preview-head">
+                <div>
+                  <p className="eyebrow">只读重连预检 · 未修改设备绑定</p>
+                  <strong>{relinkPreview.scan_root}</strong>
+                  <span>
+                    扫描 {relinkPreview.files_scanned} 个文件{relinkPreview.truncated ? "（已达上限截断）" : ""}
+                    {relinkPreview.symlinks_skipped ? ` · 已拦截越界符号链接 ${relinkPreview.symlinks_skipped}` : ""}
+                  </span>
+                </div>
+                <div className="media-binding-relink-preview-actions">
+                  <button
+                    type="button"
+                    disabled={busy || scanActive || relinkPreview.summary.exact_count + relinkPreview.summary.filename_only_count === 0}
+                    onClick={() => void submitScan([relinkPreview.scan_root], true, "reconnect")}
+                  >
+                    用此目录执行正式重连
+                  </button>
+                  <button type="button" className="secondary" onClick={() => setRelinkPreview(null)}>收起预检</button>
+                </div>
+              </div>
+              <div className="media-binding-relink-metrics">
+                <span className="is-exact"><strong>{relinkPreview.summary.exact_count}</strong> 指纹精确命中</span>
+                <span className="is-candidate"><strong>{relinkPreview.summary.filename_only_count}</strong> 仅文件名候选（需确认）</span>
+                <span className="is-missing"><strong>{relinkPreview.summary.missing_count}</strong> 仍缺失</span>
+              </div>
+              {relinkPreview.matched_filename_only.length > 0 ? (
+                <p className="media-binding-relink-note">
+                  仅文件名候选（如 {relinkPreview.matched_filename_only.slice(0, 3).map((item) => item.name).join("、")}）不会静默覆盖正式指纹，正式扫描后仍需逐项人工确认。
+                </p>
+              ) : null}
+            </section>
+          ) : null}
 
           <header className="media-binding-section-heading media-binding-location-heading">
             <div><strong>当前搜索位置</strong><span>{roots.length ? `${roots.length} 个目录 · 仅当前设备` : "尚未设置"}</span></div>

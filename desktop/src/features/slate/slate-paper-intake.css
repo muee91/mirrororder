@@ -6,6 +6,6 @@
 .slate-paper-intake :focus-visible{outline:2px solid var(--mo-accent);outline-offset:2px}.slate-paper-intake button{min-height:32px;white-space:normal}
 
 .slate-paper-intake .paper-source-bar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:4px 8px}.slate-paper-intake .paper-source-bar small{grid-column:1/-1}
-.slate-paper-intake .paper-paste-fields{display:grid;grid-template-columns:minmax(90px,120px) minmax(0,1fr);gap:6px 10px;padding-top:6px;max-height:24vh;overflow:auto}.slate-paper-intake .paper-paste-fields small{grid-column:1}.slate-paper-intake .paper-paste-fields>button{justify-self:start;align-self:end}
+.slate-paper-intake .paper-paste-fields{display:grid;grid-template-columns:minmax(90px,120px) minmax(0,1fr);gap:6px 10px;padding-top:6px;max-height:24vh;overflow:auto}.slate-paper-intake .paper-paste-fields small{grid-column:1}.slate-paper-intake .paper-paste-fields>button,.slate-paper-intake .paper-paste-actions{justify-self:start;align-self:end;display:flex;flex-wrap:wrap;gap:6px}
 .slate-paper-intake .paper-raw dl{max-height:16vh;overflow:auto}.slate-paper-intake summary{cursor:pointer;min-height:28px}.slate-paper-intake p{margin:2px 0}
 @media(max-width:640px){.slate-paper-intake .paper-paste-fields{grid-template-columns:minmax(0,1fr)}.slate-paper-intake .paper-paste-fields small{grid-column:auto}}

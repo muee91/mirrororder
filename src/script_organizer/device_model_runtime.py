@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .model_connections import load_model_connections, save_model_connections, test_model_connection
 from .model_registry import ModelRegistry
+from .paper_vlm_intake import extract_paper_slate_photo_candidates
 
 
 _INSTALLED = False
@@ -107,6 +109,14 @@ def install_device_model_runtime() -> None:
 
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
+                if parts == ["api", "v1", "assistant", "paper-slate-ocr"]:
+                    self._local_only()
+                    try:
+                        payload = extract_paper_slate_photo_candidates(web_server._body(self))
+                    except ValueError as error:
+                        raise web_server.ApiError(HTTPStatus.BAD_REQUEST, str(error)) from error
+                    self._send_json(payload)
+                    return
                 if parts == ["api", "v1", "assistant", "models"]:
                     self._local_only()
                     saved = save_model_connections(web_server._body(self))

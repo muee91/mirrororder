@@ -40,6 +40,21 @@
 .media-binding-row.is-missing > em { color: #c88378; font-weight: 650; }
 .media-binding-row.is-resolved > em { color: #72a989; font-weight: 650; }
 
+.media-binding-relink-preview { display: grid; gap: 10px; margin: 0 0 16px; border: 1px solid #355068; border-radius: 9px; padding: 12px 14px; background: #10171f; }
+.media-binding-relink-preview-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.media-binding-relink-preview-head > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.media-binding-relink-preview-head strong { color: #dce4ec; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-binding-relink-preview-head span { color: #8796a4; font-size: 10px; }
+.media-binding-relink-preview-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.media-binding-relink-preview-actions button { min-height: 30px; white-space: nowrap; }
+.media-binding-relink-metrics { display: flex; flex-wrap: wrap; gap: 8px; }
+.media-binding-relink-metrics span { display: inline-flex; align-items: baseline; gap: 5px; border: 1px solid #2a343f; border-radius: 6px; padding: 5px 9px; background: #0d1319; color: #96a4b1; font-size: 10px; }
+.media-binding-relink-metrics span strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.media-binding-relink-metrics span.is-exact strong { color: #67c48f; }
+.media-binding-relink-metrics span.is-candidate strong { color: #e2b15b; }
+.media-binding-relink-metrics span.is-missing strong { color: #e07b72; }
+.media-binding-relink-note { margin: 0; color: #c7a670; font-size: 10px; line-height: 1.5; }
+
 html[data-mirrororder-theme="light"] .media-binding-scan-state { border-color: #bdd0e1; background: #f3f8fc; }
 html[data-mirrororder-theme="light"] .media-binding-scan-state strong { color: #26313a; }
 html[data-mirrororder-theme="light"] .media-binding-scan-state span,
@@ -60,6 +75,11 @@ html[data-mirrororder-theme="light"] .media-binding-current-roots code { border-
 html[data-mirrororder-theme="light"] .media-binding-advanced { border-color: #e1e6eb; }
 html[data-mirrororder-theme="light"] .media-binding-row.is-missing > em { color: #a55348; }
 html[data-mirrororder-theme="light"] .media-binding-row.is-resolved > em { color: #3f7e5a; }
+html[data-mirrororder-theme="light"] .media-binding-relink-preview { border-color: #bdd0e1; background: #f3f8fc; }
+html[data-mirrororder-theme="light"] .media-binding-relink-preview-head strong { color: #1f2b36; }
+html[data-mirrororder-theme="light"] .media-binding-relink-preview-head span { color: #5b6a77; }
+html[data-mirrororder-theme="light"] .media-binding-relink-metrics span { border-color: #d6e0e9; background: #ffffff; color: #52616e; }
+html[data-mirrororder-theme="light"] .media-binding-relink-note { color: #8c5c19; }
 
 html[data-mirrororder-theme="dark"] .media-binding-scan-state { border-color: #33495d; background: #111820; }
 html[data-mirrororder-theme="dark"] .media-binding-recovery-state { border-color: #2e3841; background: #11171c; }
