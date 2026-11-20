@@ -1,4 +1,5 @@
 import type { ProductionPage } from "../../app/resumeState";
+import { StudioIcon, type StudioIconName } from "../../components/StudioIcons";
 
 export interface ProductionModule {
   page: ProductionPage;
@@ -80,6 +81,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
                 disabled={!available}
                 title={available ? item.description : "同步完成后开放此模块"}
                 onClick={() => onNavigate(item.page)}>
+                <StudioIcon name={item.page as StudioIconName} size={13.5} className="project-module-icon" />
                 <span className="project-module-link-title">{item.label}</span>
                 {item.page === "sync-task" && syncPhase === "running" && <span className="project-module-running">同步中</span>}
               </button>

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, 
 import { errorMessage } from "../../api/host";
 import { SemanticSearchClient, type SemanticSearchPayload, type SemanticSearchResult } from "../../api/semantic";
 import { canOpenEvidence } from "../production/evidenceLocation";
+import { StudioIcon } from "../../components/StudioIcons";
 import "./semantic-search.css";
 
 interface Props {
@@ -150,7 +151,11 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
 
   return (
     <>
-      <button ref={triggerRef} type="button" className="project-search-trigger" onClick={show}>搜索 <kbd>{shortcut}</kbd></button>
+      <button ref={triggerRef} type="button" className="project-search-trigger" onClick={show}>
+        <StudioIcon name="search" size={13} />
+        <span>搜索</span>
+        <kbd>{shortcut}</kbd>
+      </button>
       {active && open ? (
         <div className="semantic-search-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
           <section className="semantic-search-palette" role="dialog" aria-modal="true" aria-label="搜索项目证据" onKeyDown={dialogKeys}>

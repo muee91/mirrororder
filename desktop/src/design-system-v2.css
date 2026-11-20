@@ -1013,3 +1013,84 @@ html[data-mirrororder-theme] .assistant-context-drawer {
   background: var(--mo-surface-elevated);
   box-shadow: var(--mo-shadow-float);
 }
+
+/* CRITICAL FIX: Never let generic button / button:hover rules paint the drawer scrim opaque! */
+html[data-mirrororder-theme] button.workspace-context-backdrop,
+html[data-mirrororder-theme] button.workspace-context-backdrop:hover:not(:disabled),
+html[data-mirrororder-theme] button.workspace-context-backdrop:focus-visible {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  min-height: 100%;
+  background: rgba(7, 8, 10, 0.34);
+  backdrop-filter: blur(2px);
+  box-shadow: none;
+  outline: none;
+}
+
+/* Unified Optical Studio Pro ghost chrome inside the Project Top Toolbar */
+html[data-mirrororder-theme] .professional-project-toolbar button.secondary,
+html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigger,
+html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle,
+html[data-mirrororder-theme] .professional-project-toolbar .professional-tools-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--mo-text-secondary);
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+html[data-mirrororder-theme] .professional-project-toolbar button.secondary:hover:not(:disabled),
+html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigger:hover:not(:disabled),
+html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle:hover:not(:disabled),
+html[data-mirrororder-theme] .professional-project-toolbar .professional-tools-menu > summary:hover,
+html[data-mirrororder-theme] .professional-project-toolbar .professional-tools-menu[open] > summary {
+  border-color: var(--mo-border-subtle);
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-hover);
+  box-shadow: var(--mo-bevel);
+}
+
+html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle.is-active,
+html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--mo-accent) 42%, var(--mo-border-default));
+  color: var(--mo-text-primary);
+  background: var(--mo-accent-soft);
+}
+
+html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigger {
+  border-color: var(--mo-border-subtle);
+  background: var(--mo-surface-app);
+  padding: 0 8px 0 9px;
+}
+
+html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigger kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--mo-border-default);
+  border-radius: 4px;
+  background: var(--mo-surface-raised);
+  color: var(--mo-text-muted);
+  font-family: var(--mo-font-mono);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.mo-studio-icon {
+  flex: none;
+  opacity: 0.82;
+  transition: opacity 120ms var(--mo-ease), color 120ms var(--mo-ease);
+}
+
+button:hover .mo-studio-icon,
+summary:hover .mo-studio-icon,
+button.is-active .mo-studio-icon,
+button[aria-current="page"] .mo-studio-icon {
+  opacity: 1;
+}

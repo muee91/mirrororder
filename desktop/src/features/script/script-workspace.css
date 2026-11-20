@@ -6,8 +6,9 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 8px 0;
+  padding: 9px 18px;
   border-bottom: 1px solid var(--mo-border-subtle, #202830);
+  background: var(--mo-surface-pane);
 }
 
 .script-projection-switch {
@@ -55,7 +56,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--mo-border-subtle, #202830);
+  background: var(--mo-surface-app);
 }
 
 .script-episode-bar .episode-strip {
@@ -68,9 +71,10 @@
   min-width: 0;
   align-items: center;
   gap: 6px;
-  padding: 7px 0;
+  padding: 7px 18px;
   overflow-x: auto;
   border-bottom: 1px solid var(--mo-border-subtle, #202830);
+  background: var(--mo-surface-app);
 }
 
 .script-coverage-summary > span {

@@ -3,6 +3,7 @@ import type { PlaybackState, ReviewAngle } from "../../api/host";
 import type { SlateAttachment } from "../../api/production";
 import { canPreviewReviewPlayback } from "./mediaPlaybackProjection";
 import { cameraPresentation } from "./cameraPresentation";
+import { StudioIcon } from "../../components/StudioIcons";
 import "./mirrororder-media-card.css";
 import "./camera-presentation.css";
 
@@ -181,11 +182,13 @@ export function MirrorOrderMediaCard({
       <div className="mo-media-thumb" aria-hidden="true">
         {previewEnabled ? (
           <>
-            <span className="mo-media-preview-fallback">{camera.label}</span>
+            <span className="mo-media-preview-fallback"><StudioIcon name="film" size={18} /></span>
             <video ref={videoRef} className={previewReady ? "is-ready" : ""} src={model.playbackUrl} preload="metadata" muted playsInline tabIndex={-1} />
           </>
         ) : (
-          <span className={unavailable ? "is-missing" : unknown ? "is-unknown" : ""}>{unavailable ? "▧" : unknown ? "?" : camera.label}</span>
+          <span className={unavailable ? "is-missing" : unknown ? "is-unknown" : "mo-media-preview-fallback"}>
+            {unavailable ? "缺失" : unknown ? "待检" : <StudioIcon name="film" size={18} />}
+          </span>
         )}
         <span className="mo-media-camera-badge" data-camera-tone={camera.tone}>{camera.label}</span>
       </div>

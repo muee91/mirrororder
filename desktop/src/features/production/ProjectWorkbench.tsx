@@ -7,6 +7,7 @@ import { EvidencePreview } from "./EvidencePreview";
 import { evidenceLocation, type EvidenceReference } from "./evidenceLocation";
 import { canonicalProductionPage, hasRememberedProjectPage, readProjectPage, rememberProjectPage, readSyncSubmissionIssue, rememberSyncSubmissionIssue, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
+import { StudioIcon } from "../../components/StudioIcons";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
@@ -368,11 +369,22 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
         </div>
         <div className="professional-project-tools">
           <SemanticSearchPalette active={active} baseUrl={baseUrl} projectId={project.project_id} onOpenEvidence={openEvidence} />
-          <button type="button" ref={assistantToggle} className="professional-assistant-toggle" aria-expanded={assistantOpen}
-            onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
-          {!syncBlocked && onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>团队审阅</button> : null}
+          <button type="button" ref={assistantToggle} className={`professional-assistant-toggle${assistantOpen ? " is-active" : ""}`} aria-expanded={assistantOpen}
+            onClick={() => setAssistantOpen((value) => !value)}>
+            <StudioIcon name="sparkle" size={13.5} />
+            <span>小镜</span>
+          </button>
+          {!syncBlocked && onOpenTeamReview ? (
+            <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>
+              <StudioIcon name="team" size={13.5} />
+              <span>团队审阅</span>
+            </button>
+          ) : null}
           <details className="professional-tools-menu">
-            <summary>工具</summary>
+            <summary>
+              <StudioIcon name="tools" size={13.5} />
+              <span>工具</span>
+            </summary>
             <div className="professional-tools-popover">
               <CurrentOperatorControl />
             </div>

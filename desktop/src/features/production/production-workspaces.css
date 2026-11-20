@@ -6,6 +6,17 @@
   position: relative;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+}
+
+.script-workspace {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.review-workspace {
+  overflow: auto;
 }
 
 .workspace-toolbar {
@@ -64,9 +75,17 @@
 }
 
 .script-primary-canvas {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 10px 0 28px;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  overflow-y: auto;
+  margin: 0;
+  padding: 14px clamp(16px, 2.5vw, 32px) 36px;
+}
+
+.script-primary-canvas > * {
+  max-width: 1080px;
+  margin-inline: auto;
 }
 
 .script-workspace-toolbar .episode-strip {
@@ -126,27 +145,28 @@
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  height: min(820px, 100%);
+  height: 100%;
   max-height: 100%;
   overflow: auto;
+  padding-bottom: 28px;
   border-left: 1px solid var(--mo-border-default, #303a44);
-  background: var(--mo-surface-pane, #0d1115);
-  box-shadow: -16px 0 30px rgba(0, 0, 0, .22);
+  background: var(--mo-surface-pane, #14171c);
+  box-shadow: -20px 0 48px rgba(0, 0, 0, .44), inset 1px 0 0 rgba(255, 255, 255, .04);
   pointer-events: auto;
 }
 
 .workspace-context-heading {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   min-height: 54px;
   border-bottom: 1px solid var(--mo-border-subtle, #202830);
-  padding: 9px 12px;
-  background: var(--mo-surface-pane, #0d1115);
+  padding: 10px 14px;
+  background: var(--mo-surface-pane, #14171c);
 }
 
 .workspace-context-heading > div {

@@ -12,6 +12,7 @@ import {
   type ProjectSummary,
 } from "../api/host";
 import { PlatformClient, type PlatformInfo } from "../api/platform";
+import { StudioIcon } from "../components/StudioIcons";
 import { ProjectActionClient } from "../api/projectActions";
 import { TeamGatewayClient, teamWorkbenchUrl } from "../api/team";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
@@ -582,7 +583,10 @@ export function App() {
   );
   const switchProject = selectedProject && (
     <>
-      <button type="button" className="secondary app-project-library-link" onClick={openProjects}>项目库</button>
+      <button type="button" className="secondary app-project-library-link" onClick={openProjects}>
+        <StudioIcon name="back" size={13.5} />
+        <span>项目库</span>
+      </button>
       <details className="app-project-switcher" onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
       }} onKeyDown={(event) => {
@@ -729,9 +733,13 @@ export function App() {
                 projectNavigation={switchProject}
                 systemTools={<>
                   <button type="button" className="secondary app-project-status" onClick={() => setSurface("status")}>
-                    {runningProjects ? `后台任务 ${runningProjects}` : "状态中心"}
+                    <StudioIcon name="activity" size={13.5} />
+                    <span>{runningProjects ? `后台任务 ${runningProjects}` : "状态中心"}</span>
                   </button>
-                  <button type="button" className="secondary" onClick={() => setSurface("settings")}>设置</button>
+                  <button type="button" className="secondary" onClick={() => setSurface("settings")}>
+                    <StudioIcon name="settings" size={13.5} />
+                    <span>设置</span>
+                  </button>
                   {workspaceMenu}
                 </>}
                 pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
