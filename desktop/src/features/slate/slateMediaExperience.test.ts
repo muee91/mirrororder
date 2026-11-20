@@ -38,6 +38,6 @@ describe("golden slate media experience", () => {
     expect(workbench).toContain("function selectClip(clipId: string)");
     expect(workbench).toContain("setSelectedClipId(clipId)");
     expect(workbench).toContain('setPlaybackFailedClipId("")');
-    expect(workbench).toContain("onSelect={selectClip}");
+    expect(workbench).toContain("onSelect={() => selectClip(key)}");
   });
 });
