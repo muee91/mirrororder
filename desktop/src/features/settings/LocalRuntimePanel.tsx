@@ -6,6 +6,7 @@ import {
 } from "../../api/desktop";
 import { errorMessage } from "../../api/host";
 import { MODEL_ROUTING_CHANGED_EVENT } from "../../api/models";
+import { StudioIcon } from "../../components/StudioIcons";
 
 interface Props { baseUrl: string }
 type Capability = "vision" | "face" | "speaker";
@@ -162,7 +163,7 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
           aria-busy={refreshing}
           onClick={() => void reload(true)}
         >
-          <span className="settings-refresh-icon" aria-hidden="true">↻</span>
+          <span className="settings-refresh-icon" aria-hidden="true"><StudioIcon name="refresh" size={13} /></span>
           <span>刷新</span>
         </button>
       </div>

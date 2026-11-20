@@ -540,7 +540,7 @@ export function App() {
       <summary className="app-workspace-chip">
         <span className={`status-dot status-${state}`} aria-hidden="true" />
         <span>{snapshot.workspace.workspace}</span>
-        <small aria-hidden="true">⌄</small>
+        <small aria-hidden="true"><StudioIcon name="chevron-down" size={11.5} /></small>
       </summary>
       <div className="app-workspace-menu-popover">
         <div className="app-workspace-menu-heading">

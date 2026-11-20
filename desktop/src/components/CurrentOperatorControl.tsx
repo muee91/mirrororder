@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { StudioIcon } from "./StudioIcons";
 import "./current-operator.css";
 
 const OPERATOR_KEYS = [
@@ -126,7 +127,7 @@ export function CurrentOperatorControl({ onChange }: Props) {
       >
         <span className="current-operator-avatar" aria-hidden="true">{operator ? operator.slice(0, 1).toUpperCase() : "?"}</span>
         <span className="current-operator-copy"><small>当前操作者</small><strong>{operator || "设置操作者"}</strong></span>
-        <span className="current-operator-chevron" aria-hidden="true">⌄</span>
+        <span className="current-operator-chevron" aria-hidden="true"><StudioIcon name="chevron-down" size={12} /></span>
       </button>
       {open ? (
         <div ref={rootRef} className="current-operator-popover" role="dialog" aria-label="当前操作者">

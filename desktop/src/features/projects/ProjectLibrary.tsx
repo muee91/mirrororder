@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import mirrororderLogo from "../../assets/mirrororder-logo.svg";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import type { ProductionPage } from "../../app/resumeState";
+import { StudioIcon } from "../../components/StudioIcons";
 import type { ProjectActivitySummary } from "./projectActivity";
 import { projectPresentation } from "./projectPresentation";
 import "./project-context-menu.css";
@@ -42,12 +43,8 @@ interface ProjectMenuState {
 type IconName = "projects" | "status" | "settings";
 
 function NavIcon({ name }: { name: IconName }) {
-  const paths: Record<IconName, string> = {
-    projects: "M3 6.5h7l2 2H21v10.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z",
-    status: "M12 3a9 9 0 1 0 9 9M12 7v5l3 2",
-    settings: "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0-5 1.2 2.3 2.6.4.5 2.6 2 1.7-1.2 2.3 1.2 2.3-2 1.7-.5 2.6-2.6.4L12 20.5l-1.2-2.3-2.6-.4-.5-2.6-2-1.7 1.2-2.3-1.2-2.3 2-1.7.5-2.6 2.6-.4Z",
-  };
-  return <svg className="project-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} /></svg>;
+  const iconName = name === "projects" ? "library" : name;
+  return <StudioIcon name={iconName} size={15.5} className="project-nav-icon" />;
 }
 
 export function ProjectLibrary({

@@ -6,6 +6,7 @@ import { DesktopClient, type DesktopStatusPayload, type FrontendSettings } from 
 import { HostConnection, type HostProcessStatus, errorMessage } from "../../api/host";
 import { PlatformClient, type PlatformInfo } from "../../api/platform";
 import { AssistantModelsPanel } from "../assistant/AssistantModelsPanel";
+import { StudioIcon } from "../../components/StudioIcons";
 import { CollaborationPanel } from "./CollaborationPanel";
 import { DesktopAppearanceControl } from "./DesktopAppearanceControl";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
@@ -177,7 +178,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
             aria-busy={refreshing}
             onClick={() => void refreshStatus()}
           >
-            <span className="settings-refresh-icon" aria-hidden="true">↻</span>
+            <span className="settings-refresh-icon" aria-hidden="true"><StudioIcon name="refresh" size={13} /></span>
             <span>刷新状态</span>
           </button>
         </div>
