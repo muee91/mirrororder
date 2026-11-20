@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 from urllib.parse import urlparse
 
-from .model_connections import load_model_connections
+from .model_connections import (
+    gemini_embed_texts,
+    load_model_connections,
+    resolve_openai_endpoint,
+)
 
 
 @dataclass(frozen=True)
@@ -158,10 +162,36 @@ class SemanticEncoder:
         if not self.enabled:
             self.last_error = "embedding encoder disabled"
             return None
-        url = self.config.base_url.rstrip("/")
-        if not url.endswith("/v1"):
-            url += "/v1"
-        url += "/embeddings"
+        if self.config.provider == "gemini":
+            try:
+                raw_vectors = gemini_embed_texts(
+                    base_url=self.config.base_url,
+                    api_key=self.config.api_key,
+                    model=self.config.model,
+                    texts=clean,
+                    timeout_seconds=self.config.timeout_seconds,
+                )
+                if not raw_vectors or len(raw_vectors) != len(clean):
+                    raise ValueError("gemini embedding count mismatch")
+                normalized = [self._normalize(v) for v in raw_vectors]
+                if any(v is None for v in normalized):
+                    raise ValueError("invalid gemini embedding vector")
+                dimensions = {len(v or []) for v in normalized}
+                if len(dimensions) != 1:
+                    raise ValueError("gemini embedding dimensions differ")
+                self.last_error = ""
+                return [v or [] for v in normalized]
+            except (
+                OSError,
+                urllib.error.URLError,
+                urllib.error.HTTPError,
+                UnicodeDecodeError,
+                ValueError,
+                TypeError,
+            ) as error:
+                self.last_error = str(error)[:500]
+                return None
+        url = resolve_openai_endpoint(self.config.base_url, "/embeddings")
         payload = {
             "model": self.config.model,
             "input": clean,

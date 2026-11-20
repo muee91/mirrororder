@@ -6,7 +6,12 @@ from typing import Any
 from .assembly_timeline import ASSEMBLY_CONTRACT, build_assembly_timeline
 from .coverage_graph import coverage_revision
 from .coverage_runtime import _filters
-from .sync_timeline_runtime import build_sync_timeline, build_sync_delivery_artifacts
+from .sync_timeline_runtime import (
+    apply_sync_manual_offset,
+    build_sync_delivery_artifacts,
+    build_sync_timeline,
+    undo_sync_manual_offset,
+)
 
 
 _INSTALLED = False
@@ -63,6 +68,38 @@ def install_assembly_runtime() -> None:
                     except ValueError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
                     self._send_json(task, web_server.HTTPStatus.ACCEPTED)
+                    return
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "sync-offsets":
+                    self._local_only()
+                    body = web_server._body(self)
+                    project = service.project(parts[3])
+                    try:
+                        updated = apply_sync_manual_offset(project, service.tasks.list(parts[3]), body)
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                    self._send_json(updated)
+                    return
+                if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4:] == ["sync-offsets", "undo"]:
+                    self._local_only()
+                    body = web_server._body(self)
+                    project = service.project(parts[3])
+                    try:
+                        updated = undo_sync_manual_offset(project, service.tasks.list(parts[3]), body)
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                    self._send_json(updated)
+                    return
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "sync-delivery-enriched":
+                    self._local_only()
+                    body = web_server._body(self)
+                    project = service.project(parts[3])
+                    from .nle_delivery.delivery_markers import build_enriched_sync_fcpxml_bundle
+
+                    try:
+                        manifest = build_enriched_sync_fcpxml_bundle(project, service.tasks.list(parts[3]), body)
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                    self._send_json(manifest)
                     return
                 return super()._app_post(parsed)
 

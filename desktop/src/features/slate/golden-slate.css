@@ -169,3 +169,46 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
   .golden-take-picker { border-color: #cdd6de; background: #fff; }
   .golden-slate-review-tools { background: #f4f6f8; }
 }
+
+.golden-quick-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 6px 0 2px;
+}
+.golden-quick-tags button {
+  min-height: 24px;
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+.golden-quicklook-popover {
+  color-scheme: only dark;
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 90;
+  width: min(420px, calc(100vw - 32px));
+  display: grid;
+  gap: 0;
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: var(--mo-radius-overlay, 10px);
+  background: #0d1014;
+  color: #edf0f5;
+  box-shadow: 0 26px 64px rgba(0, 0, 0, .68);
+  overflow: hidden;
+}
+.golden-quicklook-popover header,
+.golden-quicklook-popover footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #14181e;
+}
+.golden-quicklook-popover header { border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.golden-quicklook-popover header strong { font-family: var(--mo-font-mono); font-size: 11px; color: #edf0f5; }
+.golden-quicklook-popover video { width: 100%; max-height: 240px; display: block; background: #07080a; object-fit: contain; }
+.golden-quicklook-popover footer { border-top: 1px solid rgba(255, 255, 255, .08); font-size: 11px; color: #a5aebd; }
+.golden-quicklook-popover footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -13,17 +13,20 @@ interface Props {
   onAudition: () => void;
   onStartVideo?: () => void;
   onFollowChange?: (following: boolean) => void;
+  onSplitPanChange?: (split: boolean) => void;
 }
 
-export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingVideo, onAudition, onStartVideo, onFollowChange }: Props) {
+export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingVideo, onAudition, onStartVideo, onFollowChange, onSplitPanChange }: Props) {
   const recordings = timeline.recordings!;
   const [preferredKey, setPreferredKey] = useState("");
   const [followVideo, setFollowVideo] = useState(false);
+  const [splitPan, setSplitPan] = useState(false);
   const [error, setError] = useState("");
   const [loadKey, setLoadKey] = useState(0);
   const followRef = useRef(false);
   const starting = useRef(false);
   const player = useRef<HTMLAudioElement | null>(null);
+  const pannerRef = useRef<{ ctx: AudioContext; panner: StereoPannerNode; el: HTMLAudioElement } | null>(null);
   const placement = useMemo(
     () => recordingForMasterFrame(recordings.placements, cursor, preferredKey, followVideo),
     [recordings.placements, cursor, preferredKey, followVideo],
@@ -35,13 +38,42 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
       + "?sync_task_id=" + encodeURIComponent(taskId)
     : "", [baseUrl, timeline.project_id, taskId, placement, rate]);
 
-  function setFollow(next: boolean): void {
+  function setFollow(next: boolean, nextSplit = false): void {
     followRef.current = next;
     setFollowVideo(next);
+    setSplitPan(next && nextSplit);
     onFollowChange?.(next);
+    onSplitPanChange?.(next && nextSplit);
     setError("");
     if (!next) player.current?.pause();
   }
+
+  // Apply Web Audio StereoPannerNode (+1 right ear) in split-pan mode with safe fallback
+  useEffect(() => {
+    const audio = player.current;
+    if (!audio) return;
+    if (!splitPan) {
+      if (pannerRef.current && pannerRef.current.el === audio) {
+        pannerRef.current.panner.pan.value = 0;
+      }
+      return;
+    }
+    try {
+      const AudioCtx = globalThis.AudioContext || (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!pannerRef.current || pannerRef.current.el !== audio) {
+        const ctx = new AudioCtx();
+        const source = ctx.createMediaElementSource(audio);
+        const panner = ctx.createStereoPanner();
+        source.connect(panner).connect(ctx.destination);
+        pannerRef.current = { ctx, panner, el: audio };
+      }
+      if (pannerRef.current.ctx.state === "suspended") void pannerRef.current.ctx.resume().catch(() => undefined);
+      pannerRef.current.panner.pan.value = 1;
+    } catch {
+      // Fallback: continue normal playback if Web Audio routing is unavailable.
+    }
+  }, [splitPan, playback]);
 
   const beginAudio = useCallback((audio: HTMLAudioElement) => {
     if (starting.current) return;
@@ -82,11 +114,16 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
   useEffect(() => () => {
     player.current?.pause();
     onFollowChange?.(false);
-  }, [onFollowChange]);
+    onSplitPanChange?.(false);
+    if (pannerRef.current) {
+      void pannerRef.current.ctx.close().catch(() => undefined);
+      pannerRef.current = null;
+    }
+  }, [onFollowChange, onSplitPanChange]);
 
-  function openLinkedMode(): void {
+  function openLinkedMode(enableSplit = false): void {
     if (!rate || !playback) return;
-    setFollow(true);
+    setFollow(true, enableSplit);
     const audio = player.current;
     if (audio && sourceSeconds !== null) {
       if (audio.readyState >= 1) audio.currentTime = sourceSeconds;
@@ -114,9 +151,12 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
     </label>}
     {recordings.placements.length === 0 && <p role="status">当前母版尚无可试听的同期声上轨片段。</p>}
     {recordings.placements.length > 0 && <div className="sync-recording-mode" role="group" aria-label="同期录音试听模式">
-      <button type="button" aria-pressed={!followVideo} onClick={() => setFollow(false)}>独立试听</button>
-      <button type="button" aria-pressed={followVideo} disabled={!hasRecordedTime || !playback}
-        onClick={openLinkedMode}>跟随画面</button>
+      <button type="button" aria-pressed={!followVideo} onClick={() => setFollow(false, false)}>独立试听</button>
+      <button type="button" aria-pressed={followVideo && !splitPan} disabled={!hasRecordedTime || !playback}
+        onClick={() => openLinkedMode(false)}>跟随画面</button>
+      <button type="button" aria-pressed={followVideo && splitPan} disabled={!hasRecordedTime || !playback}
+        title="左耳放机内参考音、右耳放同期 WAV，1 帧误差立刻可听出相位回声"
+        onClick={() => openLinkedMode(true)}>声相分裂</button>
     </div>}
     {playback && <>
       <audio ref={player} key={playback + ":" + String(placement?.at) + ":" + String(loadKey)} src={playback}
@@ -144,8 +184,9 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
     <p className="sync-recording-status" role="status">
       {!hasRecordedTime ? "母版时间基未确认，暂时只能独立试听。"
         : followVideo && sourceSeconds === null ? "当前播放头没有已上轨的同期声，移动到有效区间后将自动跟随。"
-          : followVideo ? "跟随画面播放与暂停；机内声音暂时静音。"
-            : "独立试听不会修改同步母版。选择跟随画面可同时听看核对。"}
+          : followVideo && splitPan ? "声相分裂监听中：左声道机内参考音 / 右声道同期 WAV；对齐瞬间声音会聚回正中干声。"
+            : followVideo ? "跟随画面播放与暂停；机内声音暂时静音。"
+              : "独立试听不会修改同步母版。选择跟随画面或声相分裂可精准对口型。"}
     </p>
     {error && <p role="alert">{error} <button className="secondary" type="button" onClick={() => {
       setError("");

@@ -82,10 +82,11 @@
 .sync-delivery-target[aria-pressed="true"] {
   border-color: var(--mo-border-default);
   background: var(--mo-surface-selected);
+  box-shadow: inset 2.5px 0 0 var(--mo-accent);
 }
 .sync-delivery-target:hover { background: var(--mo-surface-hover); }
 .sync-delivery-target[aria-pressed="true"]:hover { background: var(--mo-surface-selected); }
-.sync-delivery-file-state { color: var(--mo-text-secondary); font-size: 13px; font-weight: 550; }
+.sync-delivery-file-state { color: var(--mo-text-secondary); font-size: 12px; font-weight: 560; }
 .sync-delivery-file-state[data-ready] { color: var(--mo-success); }
 
 .sync-delivery-detail {
@@ -94,6 +95,7 @@
   border: 1px solid var(--mo-border-default);
   border-radius: var(--mo-radius-pane);
   background: var(--mo-surface-pane);
+  box-shadow: var(--mo-bevel);
 }
 .sync-delivery-detail > header {
   display: flex;
@@ -134,3 +136,50 @@
   .sync-delivery-body { grid-template-columns: minmax(0, 1fr); }
   .sync-delivery-targets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.sync-enriched-pack {
+  margin-top: 24px;
+  padding: 20px 22px;
+  border: 1px solid var(--mo-border-default);
+  border-radius: var(--mo-radius-pane);
+  background: var(--mo-surface-pane);
+  box-shadow: var(--mo-bevel);
+  display: grid;
+  gap: 14px;
+}
+.sync-enriched-pack > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sync-enriched-pack h3 { margin: 0 0 4px; font-size: 16px; color: var(--mo-text-primary); }
+.sync-enriched-pack > header p { margin: 0; font-size: 12px; color: var(--mo-text-secondary); }
+.sync-enriched-pack > header button:not(:disabled) {
+  min-height: 34px;
+  padding-inline: 14px;
+  background: var(--mo-action-fill);
+  border-color: var(--mo-action-fill);
+  color: var(--mo-action-text);
+}
+.sync-enriched-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  padding-block: 10px;
+  border-block: 1px solid var(--mo-border-subtle);
+  font-size: 12px;
+  color: var(--mo-text-secondary);
+}
+.sync-enriched-options label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.sync-enriched-result { display: grid; gap: 12px; }
+.sync-enriched-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 12px;
+  color: var(--mo-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.sync-enriched-metrics strong { color: var(--mo-text-primary); font-family: var(--mo-font-mono); margin-inline-end: 4px; }

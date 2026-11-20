@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from .device_runtime_settings import load_runtime_settings
-from .model_connections import load_model_connections
+from .model_connections import (
+    gemini_interactions_request,
+    load_model_connections,
+    resolve_openai_endpoint,
+)
 from .local_vision_runtime import (
     DEFAULT_LOCAL_VISION_MODEL,
     LocalVisionRuntime,
@@ -192,44 +196,65 @@ class VisionProvider:
         base_url = self._base_url()
         if not base_url:
             return None
-        url = base_url
-        if not url.endswith("/v1"):
-            url += "/v1"
-        url += "/chat/completions"
         system = (
             "你是短剧素材的视觉二审器。根据抽帧判断人物、场景和动作，但只能从输入给出的 candidate_id 中选择。"
             "禁止发明剧本位置。输出严格 JSON："
             '{"candidate_id":"...","confidence":0.0,"visual_summary":"...","reason":"..."}。'
             "证据不足时 candidate_id 为空且 confidence 低于0.5。"
         )
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": json.dumps(context, ensure_ascii=False)},
-        ]
-        for frame in frames:
-            content.append({"type": "image_url", "image_url": {"url": self._encode_image(frame)}})
-        payload = {
-            "model": self._request_model(),
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": content},
-            ],
-        }
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self.config.api_key:
-            headers["Authorization"] = "Bearer " + self.config.api_key
-        request = urllib.request.Request(
-            url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            method="POST",
-            headers=headers,
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-            text = raw["choices"][0]["message"]["content"]
-        except (OSError, urllib.error.URLError, urllib.error.HTTPError, UnicodeDecodeError, ValueError, KeyError, IndexError, TypeError):
-            return None
+        if self.config.provider == "gemini":
+            parts: list[dict[str, Any]] = [
+                {"type": "text", "text": json.dumps(context, ensure_ascii=False)},
+            ]
+            for frame in frames:
+                mime = mimetypes.guess_type(frame.name)[0] or "image/jpeg"
+                parts.append(
+                    {
+                        "type": "image",
+                        "data": base64.b64encode(frame.read_bytes()).decode("ascii"),
+                        "mime_type": mime,
+                    }
+                )
+            text = gemini_interactions_request(
+                base_url=base_url,
+                api_key=self.config.api_key,
+                model=self._request_model(),
+                system_instruction=system,
+                input_payload=parts,
+                timeout_seconds=self.config.timeout_seconds,
+            )
+            if not text:
+                return None
+        else:
+            url = resolve_openai_endpoint(base_url, "/chat/completions")
+            content: list[dict[str, Any]] = [
+                {"type": "text", "text": json.dumps(context, ensure_ascii=False)},
+            ]
+            for frame in frames:
+                content.append({"type": "image_url", "image_url": {"url": self._encode_image(frame)}})
+            payload = {
+                "model": self._request_model(),
+                "temperature": 0,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": content},
+                ],
+            }
+            headers = {"Content-Type": "application/json", "Accept": "application/json"}
+            if self.config.api_key:
+                headers["Authorization"] = "Bearer " + self.config.api_key
+            request = urllib.request.Request(
+                url,
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                method="POST",
+                headers=headers,
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
+                    raw = json.loads(response.read().decode("utf-8"))
+                text = raw["choices"][0]["message"]["content"]
+            except (OSError, urllib.error.URLError, urllib.error.HTTPError, UnicodeDecodeError, ValueError, KeyError, IndexError, TypeError):
+                return None
         if isinstance(text, list):
             text = "".join(str(item.get("text", "")) for item in text if isinstance(item, dict))
         text = str(text or "").strip()

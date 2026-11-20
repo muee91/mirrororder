@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
-from .model_connections import load_model_connections
+from .model_connections import (
+    gemini_interactions_request,
+    load_model_connections,
+    resolve_openai_endpoint,
+)
 from .model_provider import ModelProviderConfig
 from .semantic_encoder import SemanticEmbeddingConfig
 from .vision_provider import VisionProviderConfig
@@ -259,10 +263,17 @@ class AssistantLanguageModel:
         base = self._base_url()
         if not base:
             return None
-        url = base
-        if not url.endswith("/v1"):
-            url += "/v1"
-        url += "/chat/completions"
+        if self.config.provider == "gemini":
+            text = gemini_interactions_request(
+                base_url=base,
+                api_key=self.config.api_key,
+                model=self.config.model,
+                system_instruction=system,
+                input_payload=json.dumps(context, ensure_ascii=False),
+                timeout_seconds=self.config.timeout_seconds,
+            )
+            return self._parse_json(text) if text else None
+        url = resolve_openai_endpoint(base, "/chat/completions")
         payload = {
             "model": self.config.model,
             "temperature": max(0.0, min(1.0, float(temperature))),

@@ -68,7 +68,14 @@ export function compactSyncTimeline(timeline: MulticamSyncTimeline, rate: FrameR
 
 export { timecode, parseTimecode } from "./timelineTimecode";
 export function cameraColor(camera: string): string {
-  const colors: Record<string, string> = { A: "#4cb6a5", B: "#d88a4a", C: "#9b88db", D: "#609ee8", E: "#d47caf", F: "#a0b754" };
+  const colors: Record<string, string> = {
+    A: "#38b2ac",
+    B: "#dd8b42",
+    C: "#937ce6",
+    D: "#4e94e6",
+    E: "#d96b9e",
+    F: "#8db84e",
+  };
   const name = camera.trim().toUpperCase();
   return colors[name] || (/^[A-Z]$/.test(name) ? `hsl(${Math.round((name.charCodeAt(0) - 65) * 137.508) % 360} 55% 58%)` : "#81909d");
 }

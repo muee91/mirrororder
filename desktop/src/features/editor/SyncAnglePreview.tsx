@@ -13,11 +13,13 @@ interface Props {
   sourceTime: number;
   playing: boolean;
   muteListening?: boolean;
+  panLeft?: boolean;
   clock?: SyncPreviewClock;
 }
 
-export function SyncAnglePreview({ src, sourceTime, playing, muteListening = false, clock }: Props) {
+export function SyncAnglePreview({ src, sourceTime, playing, muteListening = false, panLeft = false, clock }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const pannerRef = useRef<{ ctx: AudioContext; panner: StereoPannerNode; el: HTMLVideoElement } | null>(null);
   const [hasMetadata, setHasMetadata] = useState(false);
   const [failed, setFailed] = useState(false);
   const clockRef = clock?.video;
@@ -25,6 +27,37 @@ export function SyncAnglePreview({ src, sourceTime, playing, muteListening = fal
     if (clockRef && (video || clockRef.current === videoRef.current)) clockRef.current = video;
     videoRef.current = video;
   }, [clockRef]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !clock) return;
+    if (!panLeft) {
+      if (pannerRef.current && pannerRef.current.el === video) pannerRef.current.panner.pan.value = 0;
+      return;
+    }
+    try {
+      const AudioCtx = globalThis.AudioContext || (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!pannerRef.current || pannerRef.current.el !== video) {
+        const ctx = new AudioCtx();
+        const source = ctx.createMediaElementSource(video);
+        const panner = ctx.createStereoPanner();
+        source.connect(panner).connect(ctx.destination);
+        pannerRef.current = { ctx, panner, el: video };
+      }
+      if (pannerRef.current.ctx.state === "suspended") void pannerRef.current.ctx.resume().catch(() => undefined);
+      pannerRef.current.panner.pan.value = -1;
+    } catch {
+      // Safe fallback when Web Audio is unavailable.
+    }
+  }, [panLeft, clock, src]);
+
+  useEffect(() => () => {
+    if (pannerRef.current) {
+      void pannerRef.current.ctx.close().catch(() => undefined);
+      pannerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;

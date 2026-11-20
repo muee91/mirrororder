@@ -281,6 +281,233 @@ def sync_recordings(report: dict[str, Any], task_id: str) -> dict[str, Any] | No
     }
 
 
+def _offsets_path(config: Any) -> Path:
+    return Path(config.output_dir) / "sync" / "manual_offsets.json"
+
+
+def _load_manual_offsets(config: Any, sync_task_id: str) -> dict[str, Any]:
+    raw = _read_json(_offsets_path(config))
+    if not raw or raw.get("contract") != "sync_manual_offsets.v1":
+        return {"revision": 0, "sync_task_id": sync_task_id, "clip_offsets": {}, "recording_offsets": {}, "history": []}
+    if sync_task_id and _text(raw.get("sync_task_id")) != sync_task_id:
+        return {"revision": 0, "sync_task_id": sync_task_id, "clip_offsets": {}, "recording_offsets": {}, "history": []}
+    clip_offsets: dict[str, int] = {}
+    for k, v in _as_dict(raw.get("clip_offsets")).items():
+        if isinstance(v, int) and not isinstance(v, bool) and -15000 <= v <= 15000:
+            clip_offsets[str(k)] = v
+    rec_offsets: dict[str, int] = {}
+    for k, v in _as_dict(raw.get("recording_offsets")).items():
+        if isinstance(v, int) and not isinstance(v, bool) and -15000 <= v <= 15000:
+            rec_offsets[str(k)] = v
+    history = [row for row in _as_list(raw.get("history")) if isinstance(row, dict)]
+    revision = int(raw.get("revision", 0) or 0)
+    return {
+        "revision": max(0, revision),
+        "sync_task_id": sync_task_id,
+        "clip_offsets": clip_offsets,
+        "recording_offsets": rec_offsets,
+        "history": history[-50:],
+    }
+
+
+def _apply_offsets_to_tracks(
+    tracks: list[dict[str, Any]],
+    timebase: dict[str, Any],
+    clip_offsets: dict[str, int],
+) -> tuple[list[dict[str, Any]], float]:
+    fps = (
+        float(timebase["numerator"]) / float(timebase["denominator"])
+        if timebase.get("status") == "confirmed" and timebase.get("numerator") and timebase.get("denominator")
+        else 25.0
+    )
+    max_end = 0.0
+    for track in tracks:
+        for clip in track.get("clips", []):
+            cid = _text(clip.get("clip_id"))
+            delta_frames = int(clip_offsets.get(cid, 0) or 0)
+            if delta_frames:
+                shifted = max(0.0, float(clip.get("timeline_start", 0.0)) + delta_frames / fps)
+                clip["timeline_start"] = shifted
+                clip["manual_offset_frames"] = delta_frames
+            max_end = max(max_end, float(clip.get("timeline_start", 0.0)) + float(clip.get("duration", 0.0)))
+        track["clips"].sort(key=lambda item: (float(item["timeline_start"]), item.get("day", ""), item.get("name", "")))
+    return tracks, max_end
+
+
+def _apply_offsets_to_recordings(
+    recordings: dict[str, Any] | None,
+    recording_offsets: dict[str, int],
+) -> dict[str, Any] | None:
+    if not recordings or not recording_offsets:
+        return recordings
+    for row in recordings.get("placements", []):
+        mid = _text(row.get("media_id"))
+        delta_frames = int(recording_offsets.get(mid, 0) or 0)
+        if delta_frames:
+            row["at"] = max(0, int(row.get("at", 0)) + delta_frames)
+            row["manual_offset_frames"] = delta_frames
+    return recordings
+
+
+def apply_sync_manual_offset(project: Any, tasks: Iterable[object], body: object) -> dict[str, Any]:
+    """Persist a human-confirmed, versioned frame offset without touching delivered artifacts."""
+    from .media_identity import _atomic_json
+
+    if not isinstance(body, dict):
+        raise ValueError("偏移修正参数必须是对象")
+    timeline = build_sync_timeline(project, tasks)
+    if not timeline.get("ready"):
+        raise ValueError("同步母版尚未就绪，无法写入人工偏移修正")
+    task_id = _text(_as_dict(timeline.get("task")).get("task_id"))
+    if not task_id:
+        raise ValueError("缺少当前同步母版版本标识")
+
+    delta = body.get("delta_frames")
+    if type(delta) is not int or delta == 0 or not (-2500 <= delta <= 2500):
+        raise ValueError("delta_frames 必须为非零整数（范围 -2500 至 +2500 帧）")
+    target_kind = _text(body.get("target_kind") or "clip").lower()
+    if target_kind not in {"clip", "recording"}:
+        raise ValueError("target_kind 必须是 clip 或 recording")
+    scope = _text(body.get("scope") or "single").lower()
+    if scope not in {"single", "following", "track"}:
+        raise ValueError("scope 必须是 single、following 或 track")
+
+    state = _load_manual_offsets(project.config, task_id)
+    expected = body.get("expected_revision")
+    if expected is not None and int(expected) != state["revision"]:
+        raise ValueError(f"偏移版本冲突（期望 r{expected}，当前 r{state['revision']}），请刷新后重试")
+
+    applied_clip_ids: list[str] = []
+    applied_recording_ids: list[str] = []
+
+    if target_kind == "clip":
+        track_id = _text(body.get("track_id"))
+        clip_id = _text(body.get("clip_id"))
+        track = next((t for t in timeline.get("tracks", []) if t.get("track_id") == track_id), None)
+        if track is None:
+            raise ValueError("未找到目标机位轨道")
+        clips = list(track.get("clips", []))
+        anchor = next((c for c in clips if c.get("clip_id") == clip_id), None)
+        if scope in {"single", "following"} and anchor is None:
+            raise ValueError("未找到目标片段")
+        anchor_start = float(anchor["timeline_start"]) if anchor else 0.0
+        for c in clips:
+            cid = _text(c.get("clip_id"))
+            if not cid:
+                continue
+            if scope == "single" and cid != clip_id:
+                continue
+            if scope == "following" and float(c.get("timeline_start", 0.0)) + 1e-6 < anchor_start:
+                continue
+            state["clip_offsets"][cid] = max(-15000, min(15000, int(state["clip_offsets"].get(cid, 0)) + delta))
+            if state["clip_offsets"][cid] == 0:
+                state["clip_offsets"].pop(cid, None)
+            applied_clip_ids.append(cid)
+        if not applied_clip_ids:
+            raise ValueError("没有匹配到可修正的片段")
+    else:
+        recordings = _as_dict(timeline.get("recordings"))
+        placements = list(_as_list(recordings.get("placements")))
+        media_id = _text(body.get("media_id"))
+        anchor = next((p for p in placements if _text(p.get("media_id")) == media_id), None)
+        if scope in {"single", "following"} and anchor is None:
+            raise ValueError("未找到目标同期录音片段")
+        anchor_at = int(anchor["at"]) if anchor else 0
+        seen: set[str] = set()
+        for p in placements:
+            mid = _text(p.get("media_id"))
+            if not mid or mid in seen:
+                continue
+            if scope == "single" and mid != media_id:
+                continue
+            if scope == "following" and int(p.get("at", 0)) < anchor_at:
+                continue
+            seen.add(mid)
+            state["recording_offsets"][mid] = max(-15000, min(15000, int(state["recording_offsets"].get(mid, 0)) + delta))
+            if state["recording_offsets"][mid] == 0:
+                state["recording_offsets"].pop(mid, None)
+            applied_recording_ids.append(mid)
+        if not applied_recording_ids:
+            raise ValueError("没有匹配到可修正的同期录音")
+
+    next_revision = state["revision"] + 1
+    entry = {
+        "revision": next_revision,
+        "at": datetime.now(timezone.utc).isoformat(),
+        "actor": _text(body.get("actor"))[:80] or "desktop-editor",
+        "target_kind": target_kind,
+        "scope": scope,
+        "delta_frames": delta,
+        "clip_ids": applied_clip_ids,
+        "recording_ids": applied_recording_ids,
+        "note": _text(body.get("note"))[:240],
+    }
+    state["revision"] = next_revision
+    state["history"].append(entry)
+    _atomic_json(
+        _offsets_path(project.config),
+        {
+            "contract": "sync_manual_offsets.v1",
+            "sync_task_id": task_id,
+            "revision": state["revision"],
+            "clip_offsets": state["clip_offsets"],
+            "recording_offsets": state["recording_offsets"],
+            "history": state["history"][-50:],
+        },
+    )
+    return build_sync_timeline(project, tasks)
+
+
+def undo_sync_manual_offset(project: Any, tasks: Iterable[object], body: object = None) -> dict[str, Any]:
+    """Revert the latest manual offset revision safely."""
+    from .media_identity import _atomic_json
+
+    timeline = build_sync_timeline(project, tasks)
+    if not timeline.get("ready"):
+        raise ValueError("同步母版尚未就绪")
+    task_id = _text(_as_dict(timeline.get("task")).get("task_id"))
+    state = _load_manual_offsets(project.config, task_id)
+    if not state["history"]:
+        raise ValueError("当前没有可撤销的人工偏移记录")
+    if isinstance(body, dict) and body.get("expected_revision") is not None:
+        if int(body["expected_revision"]) != state["revision"]:
+            raise ValueError("偏移版本已变更，请刷新后重试")
+
+    last = state["history"].pop()
+    delta = int(last.get("delta_frames", 0) or 0)
+    for cid in _as_list(last.get("clip_ids")):
+        key = _text(cid)
+        if not key:
+            continue
+        updated = int(state["clip_offsets"].get(key, 0)) - delta
+        if updated == 0:
+            state["clip_offsets"].pop(key, None)
+        else:
+            state["clip_offsets"][key] = updated
+    for mid in _as_list(last.get("recording_ids")):
+        key = _text(mid)
+        if not key:
+            continue
+        updated = int(state["recording_offsets"].get(key, 0)) - delta
+        if updated == 0:
+            state["recording_offsets"].pop(key, None)
+        else:
+            state["recording_offsets"][key] = updated
+    state["revision"] = max(0, state["revision"] - 1)
+    _atomic_json(
+        _offsets_path(project.config),
+        {
+            "contract": "sync_manual_offsets.v1",
+            "sync_task_id": task_id,
+            "revision": state["revision"],
+            "clip_offsets": state["clip_offsets"],
+            "recording_offsets": state["recording_offsets"],
+            "history": state["history"][-50:],
+        },
+    )
+    return build_sync_timeline(project, tasks)
+
+
 def _snapshot_path(config: Any, task_id: str) -> Path | None:
     if not re.fullmatch(r"[a-zA-Z0-9_-]{1,96}", task_id):
         return None
@@ -333,6 +560,14 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
     timebase = fcpxml_project_timebase(sync_file) if ready else {
         "status": "unknown", "source": "fcpxml_sequence", "reason": "sync_not_ready",
     }
+    task_id = _text(latest_task.get("task_id")) if latest_task else ""
+    offsets = _load_manual_offsets(config, task_id) if ready and task_id else {"revision": 0, "clip_offsets": {}, "recording_offsets": {}, "history": []}
+    if ready and offsets["clip_offsets"]:
+        tracks, shifted_duration = _apply_offsets_to_tracks(tracks, timebase, offsets["clip_offsets"])
+        duration_seconds = max(duration_seconds, shifted_duration)
+    recordings = sync_recordings(report, task_id) if ready and latest_task else None
+    if ready and recordings and offsets["recording_offsets"]:
+        recordings = _apply_offsets_to_recordings(recordings, offsets["recording_offsets"])
     previous = None
     if not ready:
         completed = _latest_sync_task(row for row in task_history if isinstance(row, dict) and row.get("status") == "completed")
@@ -350,7 +585,7 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
         "ready": ready,
         "message": message,
         "task": _safe_task(latest_task),
-        "recordings": sync_recordings(report, _text(latest_task.get("task_id"))) if ready and latest_task else None,
+        "recordings": recordings,
         "tracks": tracks,
         "cameras": cameras,
         "clip_count": sum(int(track.get("clip_count", 0) or 0) for track in tracks),
@@ -358,6 +593,8 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
         "timebase": timebase,
         "review_gaps": _review_gaps(tracks, timebase),
         "previous_master": previous,
+        "offset_revision": offsets["revision"],
+        "offset_history": offsets["history"][-10:],
     }
 
 
@@ -456,4 +693,10 @@ def build_sync_delivery_artifacts(project: Any, tasks: Iterable[object]) -> dict
     }
 
 
-__all__ = ["CONTRACT_VERSION", "build_sync_timeline", "build_sync_delivery_artifacts"]
+__all__ = [
+    "CONTRACT_VERSION",
+    "build_sync_timeline",
+    "build_sync_delivery_artifacts",
+    "apply_sync_manual_offset",
+    "undo_sync_manual_offset",
+]

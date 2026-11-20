@@ -35,6 +35,7 @@
   border: 1px solid var(--mo-border-default);
   border-radius: var(--mo-radius-overlay);
   background: var(--mo-surface-pane);
+  box-shadow: var(--mo-shadow-float);
 }
 
 .startup-entry {

@@ -66,7 +66,18 @@ export interface ModelConnectionWrite {
   api_key?: string;
 }
 
+export interface ModelConnectionTestResult {
+  ok: boolean;
+  role: ModelRole;
+  provider: string;
+  model: string;
+  status_code: number;
+  latency_ms: number;
+  detail: string;
+}
+
 const DEVICE_MODEL_PATH = "/api/v1/assistant/models";
+const DEVICE_MODEL_TEST_PATH = "/api/v1/assistant/models/test";
 
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -102,6 +113,13 @@ export class ModelSettingsClient {
     return request<AssistantModelsPayload>(this.baseUrl, DEVICE_MODEL_PATH, {
       method: "POST",
       body: JSON.stringify(connections),
+    });
+  }
+
+  test(role: ModelRole, connection: Pick<ModelConnectionWrite, "provider" | "base_url" | "model" | "api_key">): Promise<ModelConnectionTestResult> {
+    return request<ModelConnectionTestResult>(this.baseUrl, DEVICE_MODEL_TEST_PATH, {
+      method: "POST",
+      body: JSON.stringify({ role, ...connection }),
     });
   }
 }

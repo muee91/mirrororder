@@ -58,6 +58,7 @@ const SHOT_LABELS: Record<string, string> = {
   insert: "插入镜头",
 };
 const SHOT_OPTIONS = Object.keys(SHOT_LABELS);
+const QUICK_SLATE_TAGS = ["保条 ★", "临场改词", "情绪爆发", "补拍特写", "OS", "空镜", "穿帮", "虚焦"] as const;
 
 function newRecordId(): string {
   const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -325,6 +326,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
   const [message, setMessage] = useState("正在读取多机位电子场记…");
   const [busy, setBusy] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [orderMode, setOrderMode] = useState<"script" | "shooting">("script");
+  const [quickLookOpen, setQuickLookOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const [takePickerOpen, setTakePickerOpen] = useState(false);
   const [takeSearch, setTakeSearch] = useState("");
@@ -494,6 +497,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
     return ordered.sort((a, b) => (editLayout.get(a.record_id)?.index ?? Number.MAX_SAFE_INTEGER)
       - (editLayout.get(b.record_id)?.index ?? Number.MAX_SAFE_INTEGER));
   }, [drafts, editLayout]);
+  const shootingOrderedDrafts = useMemo(
+    () => drafts.slice().sort((left, right) => left.xmlOrder - right.xmlOrder),
+    [drafts],
+  );
   const displayIndexByRecord = useMemo(
     () => new Map(displayedDrafts.map((row, index) => [row.record_id, index])),
     [displayedDrafts],
@@ -845,9 +852,17 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
     }
   }
 
-  const shortcutActionsRef = useRef({ saveAll, addBlank, setIO });
+  function appendNoteTag(tag: string): void {
+    if (!selected) return;
+    const current = selected.note.trim();
+    if (current.includes(tag)) return;
+    const next = current ? `${current} · ${tag}` : tag;
+    patchRecord(selected.record_id, { note: next });
+  }
+
+  const shortcutActionsRef = useRef({ saveAll, addBlank, nextSameScene, setIO, patchRecord, selected, playbackUrl, quickLookOpen });
   useEffect(() => {
-    shortcutActionsRef.current = { saveAll, addBlank, setIO };
+    shortcutActionsRef.current = { saveAll, addBlank, nextSameScene, setIO, patchRecord, selected, playbackUrl, quickLookOpen };
   });
 
   useEffect(() => {
@@ -860,12 +875,31 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
         setTakeSearch("");
         return;
       }
+      if (event.key === "Escape" && shortcutActionsRef.current.quickLookOpen) {
+        event.preventDefault();
+        setQuickLookOpen(false);
+        return;
+      }
       const target = event.target as HTMLElement | null;
       const editing = Boolean(target?.closest("input, textarea, select, [contenteditable=true]"));
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void shortcutActionsRef.current.saveAll(); return; }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") { event.preventDefault(); shortcutActionsRef.current.addBlank(); return; }
-      if (!editing && event.key.toLowerCase() === "i") { event.preventDefault(); shortcutActionsRef.current.setIO("in"); }
-      if (!editing && event.key.toLowerCase() === "o") { event.preventDefault(); shortcutActionsRef.current.setIO("out"); }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d") { event.preventDefault(); shortcutActionsRef.current.nextSameScene(); return; }
+      if (!editing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.key.toLowerCase() === "i") { event.preventDefault(); shortcutActionsRef.current.setIO("in"); return; }
+        if (event.key.toLowerCase() === "o") { event.preventDefault(); shortcutActionsRef.current.setIO("out"); return; }
+        const currentSelected = shortcutActionsRef.current.selected;
+        if (currentSelected && !target?.closest("button")) {
+          if (event.key === "1") { event.preventDefault(); shortcutActionsRef.current.patchRecord(currentSelected.record_id, { status: "usable" }); return; }
+          if (event.key === "2") { event.preventDefault(); shortcutActionsRef.current.patchRecord(currentSelected.record_id, { status: "partial" }); return; }
+          if (event.key === "3") { event.preventDefault(); shortcutActionsRef.current.patchRecord(currentSelected.record_id, { status: "ng" }); return; }
+          if (event.key === "4") { event.preventDefault(); shortcutActionsRef.current.patchRecord(currentSelected.record_id, { status: "unmarked" }); return; }
+          if (event.code === "Space" && target?.tagName !== "TR" && shortcutActionsRef.current.playbackUrl) {
+            event.preventDefault();
+            setQuickLookOpen((open) => !open);
+          }
+        }
+      }
     };
     globalThis.addEventListener("keydown", keydown);
     return () => globalThis.removeEventListener("keydown", keydown);
@@ -949,6 +983,26 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
           <span>{message}</span>
         </div>
         <div className="golden-slate-actions">
+          <button
+            type="button"
+            className={`secondary ${orderMode === "shooting" ? "is-active" : ""}`}
+            aria-pressed={orderMode === "shooting"}
+            title="在真实拍摄顺序与剧本归位顺序间切换"
+            onClick={() => setOrderMode((mode) => mode === "shooting" ? "script" : "shooting")}
+          >
+            {orderMode === "shooting" ? "拍摄顺序" : "剧本归位"}
+          </button>
+          {playbackUrl ? (
+            <button
+              type="button"
+              className={`secondary ${quickLookOpen ? "is-active" : ""}`}
+              aria-pressed={quickLookOpen}
+              title="浮窗快速预览当前选中行素材"
+              onClick={() => setQuickLookOpen((open) => !open)}
+            >
+              快速预览
+            </button>
+          ) : null}
           {drafts.length ? <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>从 Take 加入</button> : null}
           <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>检视</button>
           <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="刷新场记">刷新场记</button>
@@ -996,7 +1050,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
       <div className="golden-slate-body">
         <div className="golden-slate-table-shell">
           {dropActive ? <div className="golden-slate-drop-overlay">松开以加入当前场记</div> : null}
-          {placedDrafts.length && unplacedDrafts.length ? (
+          {orderMode === "shooting" && shootingOrderedDrafts.length ? (
+            section("真实拍摄顺序 · 全场记", shootingOrderedDrafts, "placed")
+          ) : placedDrafts.length && unplacedDrafts.length ? (
             <div className="golden-slate-split-sections">{section("已按剧本归位", placedDrafts, "placed")}{section("待标记 · 保持 XML 顺序", unplacedDrafts, "unplaced")}</div>
           ) : placedDrafts.length ? section("已按剧本归位", placedDrafts, "placed") : unplacedDrafts.length ? section("待标记 · 保持 XML 顺序", unplacedDrafts, "unplaced") : (
             <div className="golden-slate-empty"><strong>从 Take 加入第一条多机位场记</strong><span>A / B / C 会落在同一行；场号、镜号、次号只记录一次。</span><div><button type="button" onClick={() => setTakePickerOpen(true)}>从 Take 加入</button><button type="button" className="secondary" onClick={() => addBlank()}>新建空白场记</button></div></div>
@@ -1056,6 +1112,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
                 </section>
 
                 <div className="golden-io-row"><button type="button" className="secondary" onClick={() => setIO("in")}>I 设入点</button><label><span>入点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.start ?? ""} onChange={(event) => { const start = event.target.value ? Number(event.target.value) : 0; const end = selected.usable_range?.end ?? start + 0.04; patchRecord(selected.record_id, { usable_range: { start, end: Math.max(end, start + 0.04) } }); }} /></label><label><span>出点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.end ?? ""} onChange={(event) => { const end = event.target.value ? Number(event.target.value) : 0; const start = selected.usable_range?.start ?? 0; if (end > start) patchRecord(selected.record_id, { usable_range: { start, end } }); }} /></label><button type="button" className="secondary" onClick={() => setIO("out")}>O 设出点</button></div>
+                <div className="golden-quick-tags" role="group" aria-label="快捷现场标签">
+                  {QUICK_SLATE_TAGS.map((tag) => (
+                    <button key={tag} type="button" className="secondary" onClick={() => appendNoteTag(tag)}>
+                      + {tag}
+                    </button>
+                  ))}
+                </div>
                 <label className="golden-inspector-field"><span>备注</span><textarea rows={4} value={selected.note} onChange={(event) => patchRecord(selected.record_id, { note: event.target.value })} placeholder="场记原话、可用范围描述、连续性提醒…" /></label>
                 <div className="golden-inspector-link"><span>关联</span><strong>{selectedTake ? `Take ${selectedTake.take_index}` : selected.source_group_id ? "关联 Take" : "独立场记"}</strong>{selected.script_scene_id ? <small>剧本场景 · {selected.script_scene_id}</small> : null}<small>{selectedTake?.transcript.text || "没有 Take 转写证据"}</small></div>
                 <div className="golden-inspector-actions"><button type="button" disabled={busy || !selected.dirty || !actor.trim()} onClick={() => void saveSelected()}>保存当前行</button>{selectedCanDelete ? <button type="button" className="danger-subtle" disabled={busy} onClick={() => void requestDeleteSelected()}>{selectedPersisted ? "删除人工场记…" : "移除草稿…"}</button> : null}</div>
@@ -1066,6 +1129,18 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
       </div>
 
       <details className="golden-slate-review-tools"><summary>Review 归集辅助 · 待归集 / 已归集 / 已排除 / 孤立素材 / 场景目标</summary><SlateWorkbench baseUrl={baseUrl} projectId={projectId} /></details>
+      {quickLookOpen && selected && playbackUrl ? (
+        <aside className="golden-quicklook-popover" role="dialog" aria-label="场记快速预览">
+          <header>
+            <strong>EP {selected.episode ?? "—"} · 场 {selected.scene || selected.script_scene_id || "—"} · 镜 {selected.shot || "—"} · T{selected.take_number ?? "—"}</strong>
+            <button type="button" className="secondary" onClick={() => setQuickLookOpen(false)}>关闭 (Esc)</button>
+          </header>
+          <video src={playbackUrl} controls autoPlay playsInline />
+          <footer>
+            <span>{selected.note || selectedTake?.transcript.text || "快捷键：1 可用 · 2 部分 · 3 NG · ⌘D 连拍下一条"}</span>
+          </footer>
+        </aside>
+      ) : null}
     </section></div>
   </div>);
 }

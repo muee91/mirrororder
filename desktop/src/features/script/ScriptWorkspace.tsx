@@ -150,6 +150,9 @@ export function ScriptWorkspace({
   const [writeMessage, setWriteMessage] = useState("");
   const [roughText, setRoughText] = useState("");
   const [roughPreview, setRoughPreview] = useState<RoughPlacementPayload | null>(null);
+  const [auditionIndex, setAuditionIndex] = useState(0);
+  const [auditionAutoAdvance, setAuditionAutoAdvance] = useState(true);
+  const auditionVideoRef = useRef<HTMLVideoElement | null>(null);
   const appliedFocusKey = useRef("");
 
   // The top-level operator control is shared by every workspace. Keep the
@@ -174,6 +177,22 @@ export function ScriptWorkspace({
     if (!model) return null;
     return findScriptBlock(model.episodes, selectedScriptSegmentId);
   }, [model, selectedScriptSegmentId]);
+
+  useEffect(() => {
+    setAuditionIndex(0);
+  }, [selectedScriptSegmentId]);
+
+  const auditionTakes = useMemo(() => {
+    if (!model || !selectedBlock) return [];
+    const ids = relatedTakeIds(model, selectedBlock.segment_id);
+    const byId = new Map(model.take_groups.map((item) => [item.group_id, item]));
+    return ids.map((id) => byId.get(id)).filter((item): item is ReviewTakeGroup => Boolean(item));
+  }, [model, selectedBlock]);
+
+  const activeAuditionTake = auditionTakes[Math.min(auditionIndex, Math.max(0, auditionTakes.length - 1))] ?? null;
+  const activeAuditionAngle = activeAuditionTake?.angles.find((angle) => Boolean(angle.playback?.url)) ?? activeAuditionTake?.angles[0] ?? null;
+  const activeAuditionUrl = activeAuditionAngle?.playback?.url ?? "";
+  const activeAuditionStart = activeAuditionAngle?.playback?.source_start ?? activeAuditionAngle?.source_start ?? 0;
 
   useEffect(() => {
     if (!model) return;
@@ -705,6 +724,55 @@ export function ScriptWorkspace({
                         <span className={selectedBlock.issues.length ? "needs-attention" : ""}><strong>{selectedBlock.issues.length}</strong>问题</span>
                       </div>
                     </div>
+                    {activeAuditionTake && auditionTakes.length > 0 ? (
+                      <section className="script-audition-reel" aria-label="同句台词多 Take 对比连播">
+                        <header className="script-audition-head">
+                          <div>
+                            <strong>多 Take 对比连播</strong>
+                            <span>{Math.min(auditionIndex + 1, auditionTakes.length)} / {auditionTakes.length} · {takeDisplayLabel(activeAuditionTake)}{activeAuditionAngle ? ` · ${activeAuditionAngle.camera}机` : ""}</span>
+                          </div>
+                          <label className="script-audition-loop">
+                            <input type="checkbox" checked={auditionAutoAdvance} onChange={(e) => setAuditionAutoAdvance(e.target.checked)} />
+                            3秒连播
+                          </label>
+                        </header>
+                        {activeAuditionUrl ? (
+                          <video
+                            ref={auditionVideoRef}
+                            key={`${activeAuditionTake.group_id}:${activeAuditionAngle?.clip_id ?? ""}`}
+                            className="script-audition-video"
+                            src={activeAuditionUrl}
+                            controls
+                            playsInline
+                            preload="metadata"
+                            onLoadedMetadata={(event) => {
+                              const video = event.currentTarget;
+                              if (activeAuditionStart > 0 && activeAuditionStart < video.duration) video.currentTime = activeAuditionStart;
+                            }}
+                            onTimeUpdate={(event) => {
+                              if (!auditionAutoAdvance || auditionTakes.length <= 1) return;
+                              const video = event.currentTarget;
+                              if (!video.paused && video.currentTime - activeAuditionStart >= 3.0) {
+                                setAuditionIndex((idx) => (idx + 1) % auditionTakes.length);
+                              }
+                            }}
+                          />
+                        ) : <p className="script-audition-empty">该 Take 当前设备无可播放预览；可先检查本机绑定。</p>}
+                        <div className="script-audition-transcript">
+                          <span>实际对白</span>
+                          <p>{activeAuditionTake.transcript.text || "尚未转写实际对白"}</p>
+                        </div>
+                        <div className="script-audition-controls">
+                          <button type="button" className="secondary" disabled={auditionTakes.length <= 1} onClick={() => setAuditionIndex((idx) => (idx - 1 + auditionTakes.length) % auditionTakes.length)}>上一条</button>
+                          <button type="button" className="secondary" disabled={auditionTakes.length <= 1} onClick={() => setAuditionIndex((idx) => (idx + 1) % auditionTakes.length)}>下一条</button>
+                          {!activeAuditionTake.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id) ? (
+                            <button type="button" disabled={writeState === "saving"} onClick={() => void placeTakeOnSelectedBlock(activeAuditionTake)}>归集到此段</button>
+                          ) : (
+                            <button type="button" className="secondary" onClick={() => onOpenReview?.(activeAuditionTake.group_id, activeAuditionAngle?.clip_id ?? null, selectedBlock.segment_id)}>去审阅定稿</button>
+                          )}
+                        </div>
+                      </section>
+                    ) : null}
                     {selectedTake && selectedTakeMappedHere ? (
                       <ScriptAssignmentDecision
                         baseUrl={baseUrl}

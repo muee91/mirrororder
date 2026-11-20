@@ -16,6 +16,7 @@ interface Props {
   canPlay: boolean;
   onSeek: (frame: number, trackId?: string) => void;
   onTogglePlay: () => void;
+  onOpenRecordings?: () => void;
 }
 const LEVELS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536];
 const label = (frame: number, rate: FrameRate, precise: boolean) => precise ? timecode(frame, rate) : `${toSeconds(frame, rate).toFixed(3)}s`;
@@ -72,7 +73,54 @@ const Overview = memo(function Overview({ timeline }: { timeline: MulticamSyncTi
   return <canvas ref={ref} className="multicam-sync-overview-map" aria-hidden="true" />;
 });
 
-export function SyncTimelineViewport({ timeline, rate, frameAccurate, cursor, trackId, playing, canPlay, onSeek, onTogglePlay }: Props) {
+const WavTrack = memo(function WavTrack({ timeline, view, cursor, ticks, onSeek, onOpenRecordings }: {
+  timeline: MulticamSyncTimeline; view: FrameWindow; cursor: number; ticks: number[];
+  onSeek: Props["onSeek"]; onOpenRecordings?: () => void;
+}) {
+  const placements = timeline.recordings?.placements ?? [];
+  const visible = useMemo(() => placements.filter((item) => {
+    const end = item.at + Math.max(1, item.frames);
+    return end > view.start && item.at < view.start + view.span;
+  }), [placements, view]);
+  if (!placements.length) return null;
+  const x = framePosition(cursor, view) * 100;
+  return (
+    <div className="multicam-sync-track is-wav-track" data-track-role="sync-wav">
+      <div className="multicam-sync-track-label">
+        <strong>WAV</strong>
+        <span title={`${placements.length} 段同期声已上轨`}>{placements.length} 段</span>
+      </div>
+      <div className="multicam-sync-track-lane is-wav-lane" aria-label="同期录音波形轨">
+        <div className="sync-lane-ticks" aria-hidden="true">{ticks.map(frame => <i key={frame} style={{ left: `${(frame - view.start) / view.span * 100}%` }} />)}</div>
+        {visible.map((item) => {
+          const spanFrames = Math.max(1, item.frames);
+          const left = clamp((item.at - view.start) / view.span * 100, 0, 100);
+          const right = clamp((item.at + spanFrames - view.start) / view.span * 100, 0, 100);
+          const active = cursor >= item.at && cursor < item.at + spanFrames;
+          return (
+            <button
+              type="button"
+              key={`${item.media_id}:${item.at}`}
+              draggable={false}
+              className={`multicam-sync-clip is-wav-clip${active ? " is-selected" : ""}`}
+              style={{ left: `${left}%`, width: `${Math.max(0.4, right - left)}%` }}
+              title={`同期 WAV · ${item.name} · 母版第 ${item.at} 帧`}
+              onClick={() => {
+                onSeek(item.at);
+                onOpenRecordings?.();
+              }}
+            >
+              <span>{item.name}</span>
+            </button>
+          );
+        })}
+        {x >= 0 && x <= 100 ? <span className="multicam-sync-playhead-line" style={{ left: `${x}%` }} aria-hidden="true" /> : null}
+      </div>
+    </div>
+  );
+});
+
+export function SyncTimelineViewport({ timeline, rate, frameAccurate, cursor, trackId, playing, canPlay, onSeek, onTogglePlay, onOpenRecordings }: Props) {
   const total = Math.max(1, Math.ceil(timeline.duration_seconds * rate.numerator / rate.denominator));
   const initialZoom = LEVELS.filter(level => level <= Math.max(1, timeline.duration_seconds / 600)).at(-1) ?? 1;
   const [view, setView] = useState<FrameWindow>(() => boundedWindow(0, total / initialZoom, total));
@@ -225,6 +273,7 @@ export function SyncTimelineViewport({ timeline, rate, frameAccurate, cursor, tr
         </div>
       </div>
       {timeline.tracks.map(track => <Track key={track.track_id} track={track} view={view} rate={rate} cursor={cursor} selected={track.track_id === trackId} onSeek={seek} ticks={tickFrames} />)}
+      <WavTrack timeline={timeline} view={view} cursor={cursor} ticks={tickFrames} onSeek={seek} onOpenRecordings={onOpenRecordings} />
     </div>
   </div>;
 }

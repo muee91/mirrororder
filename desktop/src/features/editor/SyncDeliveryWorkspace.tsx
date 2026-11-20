@@ -1,6 +1,12 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
-import { SyncTimelineClient, syncDeliveryFileLabel, type MulticamSyncTimeline, type SyncDeliveryArtifacts } from "../../api/syncTimeline";
+import {
+  SyncTimelineClient,
+  syncDeliveryFileLabel,
+  type MulticamSyncTimeline,
+  type SyncDeliveryArtifacts,
+  type SyncEnrichedDeliveryManifest,
+} from "../../api/syncTimeline";
 import { PlatformClient } from "../../api/platform";
 import "./sync-delivery-workspace.css";
 
@@ -26,6 +32,12 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSync
   const [selectedTarget, setSelectedTarget] = useState("davinci");
   const [busyTarget, setBusyTarget] = useState("");
   const [lastRequest, setLastRequest] = useState(0);
+  const [includeMarkers, setIncludeMarkers] = useState(true);
+  const [splitByScene, setSplitByScene] = useState(true);
+  const [exportSrt, setExportSrt] = useState(true);
+  const [enrichedBusy, setEnrichedBusy] = useState(false);
+  const [enrichedError, setEnrichedError] = useState("");
+  const [enrichedManifest, setEnrichedManifest] = useState<SyncEnrichedDeliveryManifest | null>(null);
   const platform = useMemo(() => new PlatformClient(), []);
   const client = useMemo(() => new SyncTimelineClient(baseUrl), [baseUrl]);
 
@@ -69,6 +81,24 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSync
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setBusyTarget("");
+    }
+  }
+
+  async function createEnrichedPack() {
+    if (!canGenerate || enrichedBusy) return;
+    setEnrichedBusy(true);
+    setEnrichedError("");
+    try {
+      const result = await client.createEnrichedDelivery(syncTimeline.project_id, {
+        include_markers: includeMarkers,
+        split_by_scene: splitByScene,
+        export_srt: exportSrt,
+      });
+      setEnrichedManifest(result);
+    } catch (reason) {
+      setEnrichedError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setEnrichedBusy(false);
     }
   }
 
@@ -180,6 +210,42 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSync
             </div>
           </section>
         </div> : !error && <p className="sync-delivery-loading" role="status">{manifest ? "当前版本暂无可列出的文件。" : "正在查找工程文件…"}</p>}
+
+        <section className="sync-enriched-pack" aria-label="剪辑增强交付包">
+          <header>
+            <div>
+              <h3>增强交付包（场记彩色 Marker · 分场子序列 · 实际台词 SRT）</h3>
+              <p>写入独立版本号目录，不覆盖既有同步母版；含当前人工微调 r{syncTimeline.offset_revision ?? 0}。</p>
+            </div>
+            <button type="button" disabled={!canGenerate || enrichedBusy} onClick={() => void createEnrichedPack()}>
+              {enrichedBusy ? "生成中…" : "生成增强交付包"}
+            </button>
+          </header>
+          <div className="sync-enriched-options">
+            <label><input type="checkbox" checked={includeMarkers} onChange={(e) => setIncludeMarkers(e.target.checked)} />写入场记状态 / 保条 ★ / 偏移 Marker</label>
+            <label><input type="checkbox" checked={splitByScene} onChange={(e) => setSplitByScene(e.target.checked)} />按场次自动拆分子序列（FCPXML）</label>
+            <label><input type="checkbox" checked={exportSrt} onChange={(e) => setExportSrt(e.target.checked)} />附带帧精确实际台词 .srt 字幕轨</label>
+          </div>
+          {enrichedError ? <p className="sync-delivery-error" role="alert">{enrichedError}</p> : null}
+          {enrichedManifest ? (
+            <div className="sync-enriched-result" role="status">
+              <div className="sync-enriched-metrics">
+                <span><strong>{enrichedManifest.marker_count}</strong> 条 Marker</span>
+                <span><strong>{enrichedManifest.scene_sequences.length}</strong> 条分场序列</span>
+                <span><strong>{enrichedManifest.srt_cue_count}</strong> 条实际对白字幕</span>
+                <span>偏移版本 <code>r{enrichedManifest.offset_revision}</code></span>
+              </div>
+              <div className="sync-delivery-actions">
+                <button type="button" disabled={!isTauri() || Boolean(busyTarget)} onClick={() => void revealArtifact(enrichedManifest.master_fcpxml, "enriched-master")}>
+                  显示带 Marker 母版 FCPXML
+                </button>
+                <button type="button" className="secondary" disabled={!isTauri() || Boolean(busyTarget)} onClick={() => void revealArtifact(enrichedManifest.bundle_dir, "enriched-dir")}>
+                  打开完整增强包目录
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </section>
       </div>
     </section>
   );

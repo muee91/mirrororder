@@ -92,3 +92,22 @@
   .baseline-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
   .settings-advanced-diagnostics > summary strong { color: #46515b; }
 }
+
+.model-preset-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.model-preset-strip button {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.model-test-status {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-family: var(--mo-font-mono);
+}
+.model-test-status.is-ok { color: var(--mo-success); }
+.model-test-status.is-error { color: var(--mo-danger); }

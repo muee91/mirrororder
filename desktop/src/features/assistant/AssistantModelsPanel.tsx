@@ -6,6 +6,7 @@ import {
   type EffectiveModelRoute,
   type EffectiveModelRouting,
   type ModelConnection,
+  type ModelConnectionTestResult,
   type ModelConnectionWrite,
   type ModelRole,
   type ModelRoutingMode,
@@ -20,6 +21,50 @@ interface Draft extends ModelConnectionWrite {
   api_key: string;
   clear_api_key: boolean;
 }
+
+interface ProviderPreset {
+  id: string;
+  label: string;
+  provider: string;
+  base_url: string;
+  models: Record<ModelRole, string>;
+}
+
+const PROVIDER_PRESETS: readonly ProviderPreset[] = [
+  {
+    id: "gemini",
+    label: "Gemini 主力",
+    provider: "gemini",
+    base_url: "https://generativelanguage.googleapis.com",
+    models: {
+      text: "gemini-4-hydrogen",
+      vision: "gemini-4-hydrogen",
+      embedding: "gemini-embedding-2",
+    },
+  },
+  {
+    id: "openai",
+    label: "OpenAI 主力",
+    provider: "openai",
+    base_url: "https://api.openai.com/v1",
+    models: {
+      text: "gpt-4.1",
+      vision: "gpt-4.1",
+      embedding: "text-embedding-3-large",
+    },
+  },
+  {
+    id: "local",
+    label: "本地兜底",
+    provider: "local",
+    base_url: "http://127.0.0.1:11434/v1",
+    models: {
+      text: "qwen2.5:7b",
+      vision: "qwen2.5vl:7b",
+      embedding: "bge-m3",
+    },
+  },
+];
 
 const ROLES: Array<{ role: ModelRole; label: string; description: string }> = [
   { role: "text", label: "对话与推理", description: "覆盖小镜自动选择的语言模型" },
@@ -104,6 +149,8 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
   const [drafts, setDrafts] = useState<Record<ModelRole, Draft>>(emptyDraft);
   const [message, setMessage] = useState("正在读取小镜实际运行方式…");
   const [busy, setBusy] = useState(false);
+  const [testingRole, setTestingRole] = useState<ModelRole | null>(null);
+  const [testResults, setTestResults] = useState<Partial<Record<ModelRole, ModelConnectionTestResult>>>({});
 
   function applyPayload(next: AssistantModelsPayload): void {
     setPayload(next);
@@ -142,6 +189,51 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
   function patch(role: ModelRole, value: Partial<Draft>): void {
     if (busy) return;
     setDrafts((current) => ({ ...current, [role]: { ...current[role], ...value } }));
+    setTestResults((current) => {
+      if (!current[role]) return current;
+      const next = { ...current };
+      delete next[role];
+      return next;
+    });
+  }
+
+  function applyPreset(role: ModelRole, preset: ProviderPreset): void {
+    patch(role, {
+      enabled: true,
+      provider: preset.provider,
+      base_url: preset.base_url,
+      model: preset.models[role],
+    });
+  }
+
+  async function testRole(role: ModelRole): Promise<void> {
+    if (busy || testingRole) return;
+    const row = drafts[role];
+    setTestingRole(role);
+    try {
+      const result = await client.test(role, {
+        provider: row.provider,
+        base_url: row.base_url,
+        model: row.model,
+        ...(row.api_key.trim() ? { api_key: row.api_key.trim() } : {}),
+      });
+      setTestResults((current) => ({ ...current, [role]: result }));
+    } catch (error) {
+      setTestResults((current) => ({
+        ...current,
+        [role]: {
+          ok: false,
+          role,
+          provider: row.provider,
+          model: row.model,
+          status_code: 0,
+          latency_ms: 0,
+          detail: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    } finally {
+      setTestingRole(null);
+    }
   }
 
   const dirty = Boolean(payload && ROLES.some(({ role }) => {
@@ -223,8 +315,15 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
                       <div><strong>{label}</strong><small>{description}</small></div>
                       <label><input type="checkbox" checked={row.enabled} disabled={busy} onChange={(event) => patch(role, { enabled: event.target.checked })} />启用覆盖</label>
                     </div>
-                    <label className="production-field"><span>提供方</span><select value={row.provider} disabled={busy} onChange={(event) => patch(role, { provider: event.target.value })}><option value="openai-compatible">OpenAI-compatible</option><option value="openai">OpenAI</option><option value="local">{role === "vision" ? "本机视觉语义" : "本机服务"}</option><option value="llama.cpp">llama.cpp</option><option value="llama-server">llama-server</option></select></label>
-                    <label className="production-field"><span>服务地址</span><input value={row.base_url} disabled={busy} onChange={(event) => patch(role, { base_url: event.target.value })} placeholder="http://127.0.0.1:... 或兼容 API" /></label>
+                    <div className="model-preset-strip" role="group" aria-label={`${label}快速预设`}>
+                      {PROVIDER_PRESETS.map((preset) => (
+                        <button key={preset.id} type="button" className="secondary" disabled={busy} onClick={() => applyPreset(role, preset)}>
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="production-field"><span>提供方</span><select value={row.provider} disabled={busy} onChange={(event) => patch(role, { provider: event.target.value })}><option value="gemini">Google Gemini（原生 API）</option><option value="openai">OpenAI</option><option value="openai-compatible">OpenAI-compatible</option><option value="local">{role === "vision" ? "本机视觉语义" : "本机服务"}</option><option value="llama.cpp">llama.cpp</option><option value="llama-server">llama-server</option></select></label>
+                    <label className="production-field"><span>服务地址</span><input value={row.base_url} disabled={busy} onChange={(event) => patch(role, { base_url: event.target.value })} placeholder="https://generativelanguage.googleapis.com 或 https://api.openai.com/v1" /></label>
                     <label className="production-field"><span>模型</span><input value={row.model} disabled={busy} onChange={(event) => patch(role, { model: event.target.value })} /></label>
                     <div className="model-api-key-row">
                       <label className="production-field">
@@ -242,7 +341,15 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
                           {row.clear_api_key ? "保留已保存 Key" : "清除已保存 Key"}
                         </button>
                       ) : null}
+                      <button type="button" className="secondary" disabled={busy || testingRole !== null || !row.base_url.trim()} onClick={() => void testRole(role)}>
+                        {testingRole === role ? "测试中…" : "测试连通"}
+                      </button>
                     </div>
+                    {testResults[role] ? (
+                      <p className={`model-test-status ${testResults[role]!.ok ? "is-ok" : "is-error"}`} role="status">
+                        {testResults[role]!.ok ? "✓ " : "✕ "}{testResults[role]!.detail}
+                      </p>
+                    ) : null}
                   </section>
                 );
               })}

@@ -3,14 +3,28 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Any
-from urllib.parse import urlparse
+from typing import Any, Sequence
+from urllib.parse import quote, urlparse
 
 from .device_runtime_settings import application_support_root
 
 
 _LEGACY_EXTERNAL_VISION_PROVIDERS = {"renamerx", "renamerx-local", "renamerx-local-ai"}
+DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+SUPPORTED_PROVIDERS = {
+    "gemini",
+    "openai-compatible",
+    "openai",
+    "local",
+    "llama",
+    "llama.cpp",
+    "llama-server",
+}
 
 
 def _connections_path() -> Path:
@@ -110,10 +124,15 @@ def _normalize_connection(
 ) -> dict[str, Any]:
     enabled = bool(raw.get("enabled", current.get("enabled", False)))
     provider = str(raw.get("provider", current.get("provider", "openai-compatible")) or "openai-compatible").strip().lower()
-    supported = {"openai-compatible", "openai", "local", "llama", "llama.cpp", "llama-server"}
-    if provider not in supported:
-        raise ValueError("当前只支持 OpenAI-compatible 或本地兼容接口")
-    base_url = _valid_base_url(str(raw.get("base_url", current.get("base_url", "")) or ""))
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError("当前只支持 Gemini、OpenAI / OpenAI-compatible 或本地兼容接口")
+    raw_base_url = str(raw.get("base_url", current.get("base_url", "")) or "").strip()
+    if not raw_base_url:
+        if provider == "gemini":
+            raw_base_url = DEFAULT_GEMINI_BASE_URL
+        elif provider == "openai":
+            raw_base_url = DEFAULT_OPENAI_BASE_URL
+    base_url = _valid_base_url(raw_base_url)
     model = str(raw.get("model", current.get("model", "")) or "").strip()[:300]
     # 声称"本地"却指向远程地址通常是配置笔误：数据不出设备的承诺会被打破。
     if provider in {"local", "llama", "llama.cpp", "llama-server"} and base_url:
@@ -158,3 +177,201 @@ def save_model_connections(raw: object) -> dict[str, Any]:
             secrets.pop(key_name, None)
     _atomic(_secrets_path(), secrets, secret=True)
     return load_model_connections(include_secrets=False)
+
+
+def resolve_openai_endpoint(base_url: str, suffix: str) -> str:
+    """Resolve an OpenAI-compatible endpoint without double-appending /v1."""
+    url = str(base_url or "").strip().rstrip("/")
+    clean_suffix = "/" + suffix.lstrip("/")
+    if url.endswith(clean_suffix):
+        return url
+    lower = url.lower()
+    if lower.endswith(("/v1", "/v1beta", "/v1beta/openai", "/openai")):
+        return url + clean_suffix
+    return url + "/v1" + clean_suffix
+
+
+def _extract_gemini_interaction_text(raw: object) -> str:
+    if not isinstance(raw, dict):
+        return ""
+    if isinstance(raw.get("output_text"), str) and raw["output_text"].strip():
+        return raw["output_text"]
+    texts: list[str] = []
+    for key in ("outputs", "steps"):
+        items = raw.get(key)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "text" and isinstance(item.get("text"), str):
+                texts.append(item["text"])
+            content = item.get("content")
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and isinstance(part.get("text"), str):
+                        texts.append(part["text"])
+            elif isinstance(content, str):
+                texts.append(content)
+    return "".join(texts).strip()
+
+
+def gemini_interactions_request(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    system_instruction: str,
+    input_payload: str | list[dict[str, Any]],
+    timeout_seconds: int = 60,
+) -> str | None:
+    """Invoke the official Gemini Interactions REST API (v1beta/v1)."""
+    root = (str(base_url or "").strip().rstrip("/") or DEFAULT_GEMINI_BASE_URL)
+    if root.endswith("/interactions"):
+        url = root
+    elif root.endswith(("/v1", "/v1beta")):
+        url = root + "/interactions"
+    else:
+        url = root + "/v1beta/interactions"
+    payload: dict[str, Any] = {
+        "model": model.removeprefix("models/"),
+        "input": input_payload,
+        "store": False,
+    }
+    if system_instruction:
+        payload["system_instruction"] = system_instruction
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if api_key:
+        headers["x-goog-api-key"] = api_key
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        method="POST",
+        headers=headers,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw = json.loads(response.read().decode("utf-8"))
+        text = _extract_gemini_interaction_text(raw)
+        return text or None
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError, UnicodeDecodeError, ValueError, TypeError):
+        return None
+
+
+def gemini_embed_texts(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    texts: Sequence[str],
+    timeout_seconds: int = 30,
+) -> list[list[float]] | None:
+    """Call native Gemini embedContent per text so gemini-embedding-2 returns distinct vectors."""
+    root = (str(base_url or "").strip().rstrip("/") or DEFAULT_GEMINI_BASE_URL)
+    clean_model = model.removeprefix("models/")
+    if root.endswith(("/v1", "/v1beta")):
+        url = f"{root}/models/{quote(clean_model, safe='')}:embedContent"
+    else:
+        url = f"{root}/v1beta/models/{quote(clean_model, safe='')}:embedContent"
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if api_key:
+        headers["x-goog-api-key"] = api_key
+    vectors: list[list[float]] = []
+    for text in texts:
+        payload = {
+            "model": f"models/{clean_model}",
+            "content": {"parts": [{"text": text}]},
+        }
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            method="POST",
+            headers=headers,
+        )
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw = json.loads(response.read().decode("utf-8"))
+        embedding = raw.get("embedding", {}) if isinstance(raw, dict) else {}
+        values = embedding.get("values", []) if isinstance(embedding, dict) else []
+        if not isinstance(values, list) or not values:
+            raise ValueError("gemini embedding response missing values")
+        vectors.append([float(v) for v in values])
+    return vectors
+
+
+def test_model_connection(raw: object) -> dict[str, Any]:
+    """Verify reachability and auth of a model provider without leaking secrets."""
+    if not isinstance(raw, dict):
+        raise ValueError("测试参数必须是对象")
+    role = str(raw.get("role", "text") or "text").strip().lower()
+    if role not in {"text", "vision", "embedding"}:
+        raise ValueError("role 必须是 text、vision 或 embedding")
+    saved = load_model_connections(include_secrets=True).get(role, {})
+    provider = str(raw.get("provider", saved.get("provider", "openai-compatible")) or "openai-compatible").strip().lower()
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError("不支持的模型提供方")
+    raw_base = str(raw.get("base_url", saved.get("base_url", "")) or "").strip()
+    if not raw_base:
+        raw_base = DEFAULT_GEMINI_BASE_URL if provider == "gemini" else DEFAULT_OPENAI_BASE_URL if provider == "openai" else ""
+    base_url = _valid_base_url(raw_base)
+    model = str(raw.get("model", saved.get("model", "")) or "").strip()[:300]
+    if not base_url:
+        raise ValueError("请先填写模型服务地址")
+    if provider in {"local", "llama", "llama.cpp", "llama-server"}:
+        host = urlparse(base_url).hostname or ""
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            raise ValueError(f"本地模型地址指向远程主机 {host}，已拒绝外连测试")
+    api_key = str(raw.get("api_key", "") or "").strip() or str(saved.get("api_key", "") or "").strip()
+    headers = {"Accept": "application/json"}
+    if provider == "gemini":
+        clean_model = model.removeprefix("models/")
+        root = base_url.rstrip("/")
+        prefix = root if root.endswith(("/v1", "/v1beta")) else root + "/v1beta"
+        url = f"{prefix}/models/{quote(clean_model, safe='')}" if clean_model else f"{prefix}/models"
+        if api_key:
+            headers["x-goog-api-key"] = api_key
+    else:
+        url = resolve_openai_endpoint(base_url, "/models")
+        if api_key:
+            headers["Authorization"] = "Bearer " + api_key
+
+    started = time.monotonic()
+    req = urllib.request.Request(url, method="GET", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            status_code = int(getattr(resp, "status", 200) or 200)
+            resp.read(4096)
+        latency_ms = max(1, int((time.monotonic() - started) * 1000))
+        return {
+            "ok": True,
+            "role": role,
+            "provider": provider,
+            "model": model,
+            "status_code": status_code,
+            "latency_ms": latency_ms,
+            "detail": f"已连通（{latency_ms} ms）",
+        }
+    except urllib.error.HTTPError as error:
+        latency_ms = max(1, int((time.monotonic() - started) * 1000))
+        hint = "鉴权失败，请检查 API Key" if error.code in {401, 403} else f"服务返回 HTTP {error.code}"
+        if error.code == 404 and model:
+            hint = f"未找到模型 {model}（HTTP 404），请确认模型名称"
+        return {
+            "ok": False,
+            "role": role,
+            "provider": provider,
+            "model": model,
+            "status_code": int(error.code),
+            "latency_ms": latency_ms,
+            "detail": hint,
+        }
+    except (OSError, urllib.error.URLError, ValueError) as error:
+        latency_ms = max(1, int((time.monotonic() - started) * 1000))
+        return {
+            "ok": False,
+            "role": role,
+            "provider": provider,
+            "model": model,
+            "status_code": 0,
+            "latency_ms": latency_ms,
+            "detail": f"无法连接服务：{str(error)[:240]}",
+        }

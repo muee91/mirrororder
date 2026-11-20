@@ -409,6 +409,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
           {active && visiblePage === "sync-inspect" && master.ready ? (
             <SyncInspectionWorkbench syncTimeline={master} baseUrl={syncTimeline.ready ? baseUrl : undefined} onInspectSelection={inspectSelection}
               onMulticamSync={runMulticamSync} showDelivery={false}
+              onTimelineUpdated={() => void refreshSyncTimeline()}
               onOpenDelivery={() => navigate("sync-delivery")} />
           ) : null}
           {active && visiblePage === "sync-delivery" && master.ready ? (

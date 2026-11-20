@@ -38,6 +38,7 @@ export interface MulticamSyncClip {
   clip_number: string;
   /** Host clip_id resolved through one unambiguous content identity. Empty means no safe preview. */
   media_clip_id?: string;
+  manual_offset_frames?: number;
 }
 
 export interface MulticamSyncTrack {
@@ -60,6 +61,45 @@ export interface SyncRecordingPlacement {
   at: number;
   source: number;
   frames: number;
+  manual_offset_frames?: number;
+}
+
+export interface SyncManualOffsetEntry {
+  revision: number;
+  at: string;
+  actor: string;
+  target_kind: "clip" | "recording";
+  scope: "single" | "following" | "track";
+  delta_frames: number;
+  clip_ids: string[];
+  recording_ids: string[];
+  note?: string;
+}
+
+export interface SyncManualOffsetWrite {
+  target_kind: "clip" | "recording";
+  scope: "single" | "following" | "track";
+  delta_frames: number;
+  track_id?: string;
+  clip_id?: string;
+  media_id?: string;
+  expected_revision?: number;
+  actor?: string;
+  note?: string;
+}
+
+export interface SyncEnrichedDeliveryManifest {
+  contract: "sync_enriched_delivery.v1";
+  project_id: string;
+  generated_at: string;
+  sync_task_id: string;
+  offset_revision: number;
+  bundle_dir: string;
+  master_fcpxml: string;
+  marker_count: number;
+  scene_sequences: Array<{ scene: string; filename: string; local_path: string }>;
+  dialogue_srt: string;
+  srt_cue_count: number;
 }
 
 export interface MulticamSyncTimeline {
@@ -84,6 +124,8 @@ export interface MulticamSyncTimeline {
   timebase?: { status: "confirmed" | "unknown"; source: string; numerator?: number; denominator?: number; reason?: string };
   /** Half-open master frame intervals with no video on any camera. */
   review_gaps?: MulticamSyncGap[];
+  offset_revision?: number;
+  offset_history?: SyncManualOffsetEntry[];
 }
 
 export interface SyncDeliveryArtifact {
@@ -160,6 +202,48 @@ export class SyncTimelineClient {
       const payload = await response.json().catch(() => null) as { error?: string } | null;
       throw new HostConnectionError(payload?.error || `Resolve 工程生成失败（${response.status}）`, { status: response.status });
     }
+  }
+
+  async applyOffset(projectId: string, body: SyncManualOffsetWrite): Promise<MulticamSyncTimeline> {
+    const response = await fetchWithTimeout(`${this.baseUrl}${projectPath(projectId)}/sync-offsets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      throw new HostConnectionError(payload?.error || `偏移修正保存失败（${response.status}）`, { status: response.status });
+    }
+    return await response.json() as MulticamSyncTimeline;
+  }
+
+  async undoOffset(projectId: string, expectedRevision?: number): Promise<MulticamSyncTimeline> {
+    const response = await fetchWithTimeout(`${this.baseUrl}${projectPath(projectId)}/sync-offsets/undo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(expectedRevision !== undefined ? { expected_revision: expectedRevision } : {}),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      throw new HostConnectionError(payload?.error || `撤销偏移失败（${response.status}）`, { status: response.status });
+    }
+    return await response.json() as MulticamSyncTimeline;
+  }
+
+  async createEnrichedDelivery(
+    projectId: string,
+    options: { include_markers?: boolean; split_by_scene?: boolean; export_srt?: boolean } = {},
+  ): Promise<SyncEnrichedDeliveryManifest> {
+    const response = await fetchWithTimeout(`${this.baseUrl}${projectPath(projectId)}/sync-delivery-enriched`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(options),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      throw new HostConnectionError(payload?.error || `增强交付包生成失败（${response.status}）`, { status: response.status });
+    }
+    return await response.json() as SyncEnrichedDeliveryManifest;
   }
 
   async read(projectId: string): Promise<MulticamSyncTimeline> {

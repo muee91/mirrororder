@@ -7,7 +7,7 @@ from .device_runtime_settings import load_runtime_settings
 from .device_tasks import initialize_device_tasks
 from .identity_runtime import IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
-from .model_connections import load_model_connections, save_model_connections
+from .model_connections import load_model_connections, save_model_connections, test_model_connection
 from .model_registry import ModelRegistry
 
 
@@ -113,6 +113,10 @@ def install_device_model_runtime() -> None:
                     payload = device_models_payload()
                     payload["connections"] = saved
                     self._send_json(payload)
+                    return
+                if parts == ["api", "v1", "assistant", "models", "test"]:
+                    self._local_only()
+                    self._send_json(test_model_connection(web_server._body(self)))
                     return
                 return super()._app_post(parsed)
 
