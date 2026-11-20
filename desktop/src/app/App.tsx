@@ -26,6 +26,7 @@ import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
 import {
   forgetWorkspaceResume,
   loadAppResume,
+  loadRecentWorkspaces,
   readProjectPage,
   rememberProject,
   rememberWorkspace,
@@ -81,6 +82,7 @@ export function App() {
   const [baseUrl, setBaseUrl] = useState(defaultHostBaseUrl);
   const [workspacePath, setWorkspacePath] = useState(launchResume.workspacePath);
   const [activeWorkspacePath, setActiveWorkspacePath] = useState("");
+  const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(() => loadRecentWorkspaces());
   const [state, setState] = useState<HostConnectionState>("idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
@@ -149,6 +151,7 @@ export function App() {
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(launchResume.workspacePath);
+      setRecentWorkspaces(loadRecentWorkspaces());
       setMessage(rememberedProject
         ? `已恢复 · ${rememberedProject.name || rememberedProject.project_id} · ${pageTitle(rememberedPage)}`
         : `工作区已恢复 · 选择项目继续制作`);
@@ -191,6 +194,7 @@ export function App() {
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(normalizedPath);
+      setRecentWorkspaces(loadRecentWorkspaces());
       setMessage(`工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       if (previousSnapshot) {
@@ -507,6 +511,24 @@ export function App() {
           <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>切换工作区…</button>
           <button type="button" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>在 {revealLabel} 中显示</button>
         </div>
+        {recentWorkspaces.filter((item) => item !== activeWorkspacePath).length > 0 ? (
+          <div className="app-workspace-recent">
+            <span className="app-workspace-recent-label">最近工作区</span>
+            {recentWorkspaces.filter((item) => item !== activeWorkspacePath).slice(0, 4).map((item) => (
+              <button
+                key={item}
+                type="button"
+                className="secondary app-workspace-recent-item"
+                disabled={state === "starting"}
+                title={item}
+                onClick={() => void openWorkspacePath(item)}
+              >
+                <strong>{item.split(/[\\/]/).filter(Boolean).pop() || item}</strong>
+                <code>{item}</code>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <details className="workspace-advanced app-workspace-advanced">
           <summary>高级连接</summary>
           <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
@@ -558,6 +580,7 @@ export function App() {
           <ProjectLibrary
             baseUrl={snapshot.baseUrl}
             workspace={snapshot.workspace}
+            workspacePath={activeWorkspacePath}
             activities={projectActivities}
             selectedProjectId={selectedProject?.project_id ?? null}
             primaryActive={primaryActive}
@@ -566,6 +589,7 @@ export function App() {
             onOpenProjects={openProjects}
             onOpenStatusCenter={() => setSurface("status")}
             onOpenSettings={() => setSurface("settings")}
+            onSwitchWorkspace={isTauri() ? () => void chooseWorkspace(true) : undefined}
             onOpenProjectPage={openProjectPage}
             onOpenTeamProject={openTeamProject}
             onCopyShareLink={(project) => copyProjectShareLink(project)}
@@ -607,8 +631,13 @@ export function App() {
               <ProjectHome
                 baseUrl={snapshot.baseUrl}
                 workspace={snapshot.workspace}
+                workspacePath={activeWorkspacePath}
+                recentWorkspaces={recentWorkspaces}
                 activities={projectActivities}
                 revealLabel={revealLabel}
+                onSwitchWorkspace={isTauri() ? () => void chooseWorkspace(true) : undefined}
+                onOpenWorkspacePath={isTauri() ? (path) => void openWorkspacePath(path) : undefined}
+                onRevealWorkspace={isTauri() && activeWorkspacePath.trim() ? () => void revealWorkspace() : undefined}
                 onOpenProject={selectProject}
                 onOpenProjectPage={openProjectPage}
                 onOpenTeamProject={openTeamProject}

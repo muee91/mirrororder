@@ -32,6 +32,7 @@ interface StorageLike {
 }
 
 const APP_RESUME_KEY = "mirrororder.desktop.resume";
+const RECENT_WORKSPACES_KEY = "mirrororder.desktop.recent-workspaces";
 const PROJECT_PAGE_PREFIX = "mirrororder.desktop.project-page.";
 const DEFAULT_PROJECT_PAGE: ProductionPage = "slate";
 const VALID_PROJECT_PAGES = new Set<string>(PRODUCTION_PAGES);
@@ -71,6 +72,32 @@ export function loadAppResume(storage: StorageLike | null = browserStorage()): A
   }
 }
 
+export function loadRecentWorkspaces(storage: StorageLike | null = browserStorage()): string[] {
+  if (!storage) return [];
+  try {
+    const raw = storage.getItem(RECENT_WORKSPACES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.map((item) => normalized(item)).filter(Boolean))].slice(0, 6);
+  } catch {
+    return [];
+  }
+}
+
+export function rememberRecentWorkspace(workspacePath: string, storage: StorageLike | null = browserStorage()): string[] {
+  const nextPath = workspacePath.trim();
+  const existing = loadRecentWorkspaces(storage);
+  if (!nextPath || !storage) return existing;
+  const next = [nextPath, ...existing.filter((item) => item !== nextPath)].slice(0, 6);
+  try {
+    storage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(next));
+  } catch {
+    // Device-local convenience only.
+  }
+  return next;
+}
+
 export function rememberWorkspace(workspacePath: string, storage: StorageLike | null = browserStorage()): void {
   if (!storage) return;
   const nextPath = workspacePath.trim();
@@ -81,6 +108,7 @@ export function rememberWorkspace(workspacePath: string, storage: StorageLike | 
       workspacePath: nextPath,
       projectId: current.workspacePath === nextPath ? current.projectId : "",
     } satisfies AppResumeState));
+    rememberRecentWorkspace(nextPath, storage);
   } catch {
     // Device-local convenience only; it must never block production work.
   }

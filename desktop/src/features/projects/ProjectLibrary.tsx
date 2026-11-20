@@ -11,6 +11,7 @@ import "./project-library-fidelity.css";
 interface Props {
   baseUrl?: string;
   workspace: WorkspacePayload;
+  workspacePath?: string;
   activities?: Record<string, ProjectActivitySummary>;
   selectedProjectId: string | null;
   primaryActive?: "home" | "projects" | "status" | "settings" | "team" | null;
@@ -20,6 +21,7 @@ interface Props {
   onOpenProjects?: () => void;
   onOpenStatusCenter?: () => void;
   onOpenSettings?: () => void;
+  onSwitchWorkspace?: () => void;
   onOpenProjectPage?: (project: ProjectSummary, page: ProductionPage) => void;
   onOpenTeamProject?: (project: ProjectSummary) => void;
   onCopyShareLink?: (project: ProjectSummary) => void | Promise<void>;
@@ -50,6 +52,7 @@ function NavIcon({ name }: { name: IconName }) {
 
 export function ProjectLibrary({
   workspace,
+  workspacePath = "",
   activities = {},
   selectedProjectId,
   primaryActive = null,
@@ -59,6 +62,7 @@ export function ProjectLibrary({
   onOpenProjectPage,
   onOpenStatusCenter,
   onOpenSettings,
+  onSwitchWorkspace,
   onOpenTeamProject,
   onCopyShareLink,
   onRevealProject,
@@ -180,6 +184,17 @@ export function ProjectLibrary({
           </div>
         </section>
       ) : null}
+
+      <div className="project-sidebar-workspace" aria-label="当前工作区">
+        <div className="project-sidebar-workspace-info">
+          <span className="project-sidebar-workspace-label">工作区</span>
+          <strong title={workspacePath || workspace.workspace}>{workspace.workspace || "未命名工作区"}</strong>
+          {workspacePath.trim() ? <code title={workspacePath}>{workspacePath}</code> : null}
+        </div>
+        {onSwitchWorkspace ? (
+          <button type="button" className="secondary project-sidebar-switch-btn" onClick={onSwitchWorkspace}>切换…</button>
+        ) : null}
+      </div>
 
       <nav className="project-system-nav" aria-label="系统导航">
         <button type="button" className={primaryActive === "status" ? "is-active" : ""} onClick={onOpenStatusCenter}><NavIcon name="status" /><span>状态中心</span>{runningCount ? <small className="project-system-badge">{runningCount}</small> : null}</button>

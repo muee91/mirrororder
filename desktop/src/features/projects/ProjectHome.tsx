@@ -13,8 +13,13 @@ import "./project-library-fidelity.css";
 interface Props {
   baseUrl: string;
   workspace: WorkspacePayload;
+  workspacePath?: string;
+  recentWorkspaces?: string[];
   activities?: Record<string, ProjectActivitySummary>;
   revealLabel?: string;
+  onSwitchWorkspace?: () => void;
+  onOpenWorkspacePath?: (path: string) => void;
+  onRevealWorkspace?: () => void;
   onOpenProject: (project: ProjectSummary) => void;
   onOpenProjectPage?: (project: ProjectSummary, page: "sync-task" | "timeline") => void;
   onOpenTeamProject: (project: ProjectSummary) => void;
@@ -37,8 +42,13 @@ interface HomeMenuState {
 export function ProjectHome({
   baseUrl,
   workspace,
+  workspacePath = "",
+  recentWorkspaces = [],
   activities = {},
   revealLabel = "Finder / Explorer",
+  onSwitchWorkspace,
+  onOpenWorkspacePath,
+  onRevealWorkspace,
   onOpenProject,
   onOpenProjectPage,
   onOpenTeamProject,
@@ -153,6 +163,22 @@ export function ProjectHome({
         </div>
       </header>
 
+      <section className="project-workspace-banner" aria-label="当前工作区位置">
+        <div className="project-workspace-banner-copy">
+          <span className="project-workspace-eyebrow">当前工作区</span>
+          <strong>{workspace.workspace || "未命名工作区"}</strong>
+          {workspacePath.trim() ? <code title={workspacePath}>{workspacePath}</code> : <span className="project-workspace-hint">工作区目录用于存放一个或多个短剧项目</span>}
+        </div>
+        <div className="project-workspace-banner-actions">
+          {onSwitchWorkspace ? (
+            <button type="button" className="secondary" onClick={onSwitchWorkspace}>切换工作区 / 打开已有工程目录…</button>
+          ) : null}
+          {onRevealWorkspace ? (
+            <button type="button" className="secondary" onClick={onRevealWorkspace}>在 {revealLabel} 中显示</button>
+          ) : null}
+        </div>
+      </section>
+
       {visible.length ? (
         <div className="project-home-list" aria-label="项目列表">
           <div className="project-home-columns" aria-hidden="true">
@@ -216,10 +242,47 @@ export function ProjectHome({
             );
           })}
         </div>
-      ) : (
+      ) : workspace.projects.length ? (
         <div className="project-home-empty">
-          <strong>{workspace.projects.length ? "没有匹配项目" : "还没有项目"}</strong>
-          <span>{workspace.projects.length ? "调整搜索关键词。" : "使用右上角“新建项目”或“打开项目”开始制作。"}</span>
+          <strong>没有匹配项目</strong>
+          <span>调整搜索关键词。</span>
+        </div>
+      ) : (
+        <div className="project-home-onboarding">
+          <div className="project-home-empty-hero">
+            <strong>当前工作区还没有项目</strong>
+            <span>镜序以「工作区文件夹」为单位管理多部短剧项目。你可以切换到已有测试工程所在的工作区目录，或在这里新建一部剧。</span>
+          </div>
+          <div className="project-onboarding-grid">
+            <article className="project-onboarding-card is-highlighted">
+              <span className="project-onboarding-step">01 · 打开已有工程</span>
+              <h3>切换工作区文件夹</h3>
+              <p>如果你之前在其他文件夹建过测试工程（包含 <code>projects/registry.json</code> 或 <code>workspace.toml</code>），直接选中那个文件夹即可立即恢复全部项目。</p>
+              {onSwitchWorkspace ? (
+                <button type="button" onClick={onSwitchWorkspace}>选择已有工程所在目录…</button>
+              ) : null}
+              {onOpenWorkspacePath && recentWorkspaces.filter((item) => item !== workspacePath).length > 0 ? (
+                <div className="project-onboarding-recent">
+                  <span>最近打开过：</span>
+                  {recentWorkspaces.filter((item) => item !== workspacePath).slice(0, 3).map((item) => (
+                    <button key={item} type="button" className="secondary" title={item} onClick={() => onOpenWorkspacePath(item)}>
+                      {item.split(/[\\/]/).filter(Boolean).pop() || item}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </article>
+            <article className="project-onboarding-card">
+              <span className="project-onboarding-step">02 · 从素材开新剧</span>
+              <h3>新建多机位短剧工程</h3>
+              <p>点击右上角 <strong>「新建项目」</strong>，选择原始视频与同期 WAV 录音目录（或导入 FCPXML），即可开始多机位同步、场记与 NLE 交付。</p>
+            </article>
+            <article className="project-onboarding-card">
+              <span className="project-onboarding-step">03 · 跨电脑交接</span>
+              <h3>导入 .mirrorpkg 工程包</h3>
+              <p>如果是另一台剪辑机导出的便携工程包，点击右上角 <strong>「打开项目」</strong> 导入，再在「本机素材」中按指纹一键重连硬盘原片。</p>
+            </article>
+          </div>
         </div>
       )}
 

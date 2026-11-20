@@ -36,7 +36,7 @@
 .main-stage > .settings-status-workbench,
 .main-stage > .team-web-workbench { min-height: 100%; height: 100%; overflow: auto; padding: 12px 14px 28px; }
 .main-stage > .settings-status-workbench .production-heading,
-.main-stage > .status-center-workbench .production-heading { position: sticky; z-index: 3; top: -12px; margin: -12px -14px 12px; border-bottom: 1px solid #232b33; padding: 12px 14px 10px; background: #0f1419; }
+.main-stage > .status-center-workbench .production-heading { position: static; margin: 0 auto 14px; border-bottom: 1px solid var(--mo-border-subtle, #232b33); padding: 0 0 14px; background: transparent; }
 
 /* The app's resolved theme is authoritative. These project utilities must never fall back to the OS theme. */
 html[data-mirrororder-theme="light"] .project-production-workbench,
