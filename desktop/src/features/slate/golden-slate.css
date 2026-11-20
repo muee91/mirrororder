@@ -212,3 +212,6 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
 .golden-quicklook-popover video { width: 100%; max-height: 240px; display: block; background: #07080a; object-fit: contain; }
 .golden-quicklook-popover footer { border-top: 1px solid rgba(255, 255, 255, .08); font-size: 11px; color: #a5aebd; }
 .golden-quicklook-popover footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.golden-clapper-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--mo-border-subtle); border-radius: 7px; background: var(--mo-surface-pane); }
+.golden-clapper-bar button { min-height: 28px; white-space: nowrap; }
+.golden-clapper-bar span { font-size: 11px; color: var(--mo-text-muted); }

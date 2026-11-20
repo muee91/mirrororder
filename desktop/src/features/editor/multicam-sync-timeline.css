@@ -591,6 +591,65 @@
 .sync-recording-status { color: var(--mo-text-secondary); overflow-wrap: anywhere; }
 .sync-recording-monitor > button { min-height: 32px; }
 
+.sync-waveform-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: 8px;
+  background: var(--mo-surface-pane);
+}
+.sync-waveform-canvas {
+  position: relative;
+  height: 52px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: 6px;
+  background: #0c1015;
+  overflow: hidden;
+  cursor: pointer;
+}
+.sync-waveform-canvas:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: 2px;
+}
+.sync-waveform-canvas svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sync-waveform-centerline {
+  stroke: rgba(148, 163, 184, 0.22);
+  stroke-width: 0.6;
+}
+.sync-waveform-bar {
+  stroke: #4ea8de;
+  stroke-width: 0.85;
+  stroke-linecap: round;
+}
+.sync-waveform-bar.is-transient {
+  stroke: #f59e0b;
+}
+.sync-waveform-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: #ef4444;
+  pointer-events: none;
+}
+.sync-waveform-empty {
+  display: grid;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--mo-text-secondary);
+  line-height: 1.45;
+}
+.sync-waveform-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .sync-offset-card {
   display: grid;
   gap: 8px;

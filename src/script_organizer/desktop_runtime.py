@@ -7,6 +7,7 @@ from typing import Any
 from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
 from .device_tasks import get_device_task_manager, initialize_device_tasks
 from .identity_runtime import IdentityRuntime
+from .clapperboard_ocr import extract_clapperboard_proposal
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .media_batch_relink import preview_directory_relink
 from .media_identity import DeviceMediaStore
@@ -321,6 +322,31 @@ def install_desktop_runtime() -> None:
                             "audit": current.collaborators.audit(),
                         }
                     )
+                    return
+                if (
+                    len(parts) == 7
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "clips"
+                    and parts[6] == "clapperboard-ocr"
+                ):
+                    self._local_only()
+                    project = current.project(parts[3])
+                    clip_id = parts[5]
+                    project.reload_if_changed()
+                    clip = project.clips.get(clip_id)
+                    if not isinstance(clip, dict):
+                        raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "clip 不存在")
+                    media_path = project.resolve_media_path(clip)
+                    if not media_path or not Path(media_path).is_file():
+                        raise web_server.ApiError(
+                            web_server.HTTPStatus.BAD_REQUEST,
+                            "当前设备未找到该片段的本地视频文件，请先连接本机素材",
+                        )
+                    try:
+                        proposal = extract_clapperboard_proposal(media_path)
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
+                    self._send_json(proposal)
                     return
                 if (
                     len(parts) == 5

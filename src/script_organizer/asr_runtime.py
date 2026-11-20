@@ -6,12 +6,16 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from . import model_connections
+from .cloud_asr_provider import CloudASRConfig, CloudASRProvider
 from .config import ProjectConfig
 from .device_runtime_settings import application_support_root
 from .models import Clip, Transcript, TranscriptSegment
 from .script_parser import parse_script
 from .transcript import TranscriptStore, transcript_fingerprint
 
+
+_CLOUD_BACKENDS = {"gemini", "openai", "cloud"}
 
 _MLX_MODEL_ALIASES = {
     "tiny": "mlx-community/whisper-tiny-mlx",
@@ -37,6 +41,50 @@ def _configure_model_cache() -> Path:
     if not any(os.environ.get(key, "").strip() for key in ("HF_HOME", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE")):
         os.environ["HF_HOME"] = str(root)
     return root
+
+
+def _cloud_config_from_connections(requested: str, config: ProjectConfig) -> CloudASRConfig | None:
+    """Resolve an explicit cloud request from device-local model connections.
+
+    Credentials are read only from the device secret store and stay inside the
+    returned config; they are never placed on a shared project or a log line.
+    """
+    try:
+        connections = model_connections.load_model_connections(include_secrets=True)
+    except Exception:
+        return None
+    rows = [connections.get(role, {}) for role in ("text", "vision", "embedding")]
+    selected: dict[str, Any] | None = None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("enabled") is False:
+            continue
+        provider = str(row.get("provider", "") or "").strip().lower()
+        normalized = "gemini" if provider == "gemini" else "openai" if provider in {"openai", "openai-compatible"} else ""
+        if not normalized:
+            continue
+        if requested != "cloud" and normalized != requested:
+            continue
+        if not str(row.get("api_key", "") or "").strip():
+            continue
+        selected = row
+        break
+    if selected is None:
+        return None
+    provider = str(selected.get("provider", "")).strip().lower()
+    normalized = "gemini" if provider == "gemini" else "openai"
+    raw_model = str(selected.get("model", "") or "").strip()
+    if normalized == "openai" and raw_model and not any(tok in raw_model.lower() for tok in ("whisper", "transcribe")):
+        # Do not pass a chat model such as gpt-4.1 to /audio/transcriptions.
+        raw_model = ""
+    return CloudASRConfig(
+        provider=normalized,
+        api_key=str(selected.get("api_key", "") or "").strip(),
+        base_url=str(selected.get("base_url", "") or "").strip(),
+        model=raw_model,
+        language=config.asr_language,
+    )
 
 
 def script_asr_prompt(script_path: str | Path | None, max_speakers: int = 80) -> str:
@@ -74,12 +122,44 @@ class ASRRuntime:
     device: str = "auto"
     fallback_allowed: bool = False
     _faster_model: Any = None
+    _cloud_config: CloudASRConfig | None = None
+    _local_model: str = "small"
 
     @classmethod
     def from_config(cls, config: ProjectConfig) -> "ASRRuntime":
         requested = str(config.asr_backend or "auto").strip().lower()
         if requested == "cache":
             return cls("cache", config.asr_model, config.asr_language, config.asr_device)
+        if requested in _CLOUD_BACKENDS:
+            cloud = _cloud_config_from_connections(requested, config)
+            if cloud is None:
+                # No usable cloud credential: stay usable locally, but mark the
+                # results so a cloud request is never mistaken for a cloud run.
+                if _is_apple_silicon():
+                    runtime = cls(
+                        "mlx-whisper", _MLX_MODEL_ALIASES.get(config.asr_model, config.asr_model),
+                        config.asr_language, config.asr_device, fallback_allowed=True,
+                        _local_model=config.asr_model,
+                    )
+                else:
+                    runtime = cls(
+                        "faster-whisper", config.asr_model, config.asr_language,
+                        config.asr_device, fallback_allowed=True,
+                        _local_model=config.asr_model,
+                    )
+                runtime.degraded_from = ("cloud", requested)
+                return runtime
+            return cls(
+                cloud.provider,
+                cloud.resolved_model(),
+                config.asr_language,
+                config.asr_device,
+                # ``cloud`` is a preference with a local safety net; requesting
+                # a named provider is explicit and should fail loudly instead.
+                fallback_allowed=requested == "cloud",
+                _cloud_config=cloud,
+                _local_model=config.asr_model,
+            )
         if requested in {"auto", "mlx", "mlx-whisper"} and _is_apple_silicon():
             return cls(
                 "mlx-whisper",
@@ -111,9 +191,24 @@ class ASRRuntime:
     def transcribe(self, clip: Clip, store: TranscriptStore, initial_prompt: str = "") -> Transcript:
         if not self.enabled:
             raise RuntimeError("ASR backend=cache，不能主动转写")
+        if self._cloud_config is not None:
+            try:
+                return CloudASRProvider(self._cloud_config).transcribe(clip, store, initial_prompt)
+            except Exception:
+                if not self.fallback_allowed:
+                    raise
+                # Never log the raw exception: a provider error may echo the
+                # API key.  Only the clip identity and provider are safe here.
+                import logging
+
+                logging.getLogger("mirrororder.asr").warning(
+                    "云端转写失败，降级为本地 ASR：%s（%s）", clip.clip_id, self._cloud_config.provider
+                )
+                self._switch_to_local_after_cloud_failure()
         if self.backend == "mlx-whisper":
             try:
-                return self._transcribe_mlx(clip, store, initial_prompt)
+                transcript = self._transcribe_mlx(clip, store, initial_prompt)
+                return self._with_degrade_marker(transcript)
             except Exception:
                 if not self.fallback_allowed:
                     raise
@@ -131,12 +226,33 @@ class ASRRuntime:
                     self.model = "large-v3-turbo"
                 self.degraded_from = ("mlx-whisper", original_model)
         transcript = self._transcribe_faster(clip, store, initial_prompt)
-        if getattr(self, "degraded_from", None):
-            transcript = replace(
-                transcript,
-                backend=f"{transcript.backend}（已从 mlx 降级；原模型 {self.degraded_from[1]}）",
-            )
-        return transcript
+        return self._with_degrade_marker(transcript)
+
+    def _switch_to_local_after_cloud_failure(self) -> None:
+        """Switch this runtime to a local backend and leave a discoverable mark."""
+        failed = f"{self._cloud_config.provider}:{self.model}"
+        self.degraded_from = ("cloud", failed)
+        self._cloud_config = None
+        if _is_apple_silicon():
+            self.backend = "mlx-whisper"
+            self.model = _MLX_MODEL_ALIASES.get(self._local_model, self._local_model)
+        else:
+            self.backend = "faster-whisper"
+            self.model = self._local_model
+
+    def _marked_backend(self) -> str:
+        degraded = getattr(self, "degraded_from", None)
+        if not degraded:
+            return self.backend_id
+        if degraded[0] == "cloud":
+            return f"{self.backend_id}（云端 {degraded[1]} 失败已降级本地）"
+        return f"{self.backend_id}（已从 mlx 降级；原模型 {degraded[1]}）"
+
+    def _with_degrade_marker(self, transcript: Transcript) -> Transcript:
+        marked = self._marked_backend()
+        if transcript.backend == marked:
+            return transcript
+        return replace(transcript, backend=marked)
 
     def _transcribe_mlx(self, clip: Clip, store: TranscriptStore, initial_prompt: str) -> Transcript:
         _configure_model_cache()
@@ -215,7 +331,8 @@ class ASRRuntime:
     ) -> Transcript:
         text = "".join(texts)
         error = "" if text.strip() or segments else "no_speech_or_only_production_command"
-        store.write(clip, text, segments, backend=self.backend_id, error=error)
+        backend_label = self._marked_backend()
+        store.write(clip, text, segments, backend=backend_label, error=error)
         typed_segments = tuple(
             TranscriptSegment(float(item["start"]), float(item["end"]), str(item["text"]))
             for item in segments
@@ -227,6 +344,6 @@ class ASRRuntime:
             fingerprint=transcript_fingerprint(clip),
             text=text,
             segments=typed_segments,
-            backend=self.backend_id,
+            backend=backend_label,
             error=error,
         )

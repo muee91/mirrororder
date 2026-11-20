@@ -1,6 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { DesktopClient } from "../../api/desktop";
 import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModelPayload, type ReviewTakeGroup, errorMessage } from "../../api/host";
 import { ProductionClient, type AssistantSelection, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord } from "../../api/production";
 import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
@@ -310,6 +311,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
   const intervalSurface = ledgerSurface && slateSurface === "intervals";
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const production = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
+  const desktopClient = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
+  const [clapperBusy, setClapperBusy] = useState(false);
   const records = useMemo(() => new SlateRecordClient(baseUrl), [baseUrl]);
   const slateMedia = useMemo(() => new SlateMediaClient(baseUrl), [baseUrl]);
   const [paperSource, setPaperSource] = useState<{row:PaperRow;revision:number}|null>(null);
@@ -602,6 +605,38 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
     }
     patchRecord(selected.record_id, { episode: previous.episode, script_scene_id: previous.script_scene_id, scene: previous.scene, shot: previous.shot, status: previous.status });
     setMessage("已沿用屏幕上一条的集 / 场 / 镜 / 剧本场景 / 状态；素材与 I/O 未复制。");
+  }
+
+  async function detectClapperboardFrame(): Promise<void> {
+    if (!selected || !clipId || clapperBusy) return;
+    setClapperBusy(true);
+    setMessage("正在抽取片头打板帧并调用视觉模型识别（仅生成草稿提案，不自动保存）…");
+    try {
+      const proposal = await desktopClient.detectClapperboard(projectId, clipId);
+      if (!proposal.detected) {
+        setMessage(proposal.warning || `已检视片头 ${proposal.frames_inspected} 帧，未发现清晰场记板，未修改当前草稿。`);
+        return;
+      }
+      const patch: Partial<Draft> = {};
+      if (proposal.episode) patch.episode = proposal.episode;
+      if (proposal.scene) patch.scene = proposal.scene;
+      if (proposal.shot) patch.shot = proposal.shot;
+      const takeMatch = proposal.take.match(/\d+/);
+      if (takeMatch) patch.take_number = Number(takeMatch[0]);
+      if (proposal.slate_note) {
+        patch.note = selected.note ? `${selected.note} · [打板] ${proposal.slate_note}` : `[打板] ${proposal.slate_note}`;
+      }
+      if (Object.keys(patch).length > 0) {
+        patchRecord(selected.record_id, patch);
+        setMessage(`AI (${proposal.provider}/${proposal.model}) 识别到打板信息并填入未保存草稿，请核对后点击保存。`);
+      } else {
+        setMessage(proposal.warning || "识别到打板画面但未能提取有效场/镜/次号，请人工录入。");
+      }
+    } catch (error) {
+      setMessage(`打板帧识别失败：${errorMessage(error)}`);
+    } finally {
+      setClapperBusy(false);
+    }
   }
 
   function addTake(take: ReviewTakeGroup): void {
@@ -1078,6 +1113,19 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
                     <div className="golden-player-error"><strong>当前设备无法读取或解码这个素材</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedClipId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
                   ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                 </div>
+                {clipId ? (
+                  <div className="golden-clapper-bar">
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy || clapperBusy}
+                      onClick={() => void detectClapperboardFrame()}
+                    >
+                      {clapperBusy ? "正在识别打板帧…" : "识别片头打板帧（AI 提案）"}
+                    </button>
+                    <span>仅回填草稿，需人工核对保存</span>
+                  </div>
+                ) : null}
 
                 {selectedPlaybackFailed && onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}
                 {groupId && onOpenTake && <div className="golden-inspector-actions golden-inspector-navigation">

@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import type { AssistantSelection } from "../../api/production";
+import { ProductionClient, type AssistantSelection, type WaveformPayload } from "../../api/production";
 import {
   SyncTimelineClient,
   syncDeliveryFileLabel,
@@ -80,6 +80,9 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const [nudgeScope, setNudgeScope] = useState<"single" | "following" | "track">("single");
   const [nudgeBusy, setNudgeBusy] = useState(false);
   const [nudgeMessage, setNudgeMessage] = useState("");
+  const [clipWaveform, setClipWaveform] = useState<WaveformPayload | null>(null);
+  const [waveformState, setWaveformState] = useState<"idle" | "loading" | "missing" | "building" | "ready">("idle");
+  const [waveformNote, setWaveformNote] = useState("");
   const [presented, setPresented] = useState<{ source: string; seconds: number } | null>(null);
   const [frameCallbackSupported, setFrameCallbackSupported] = useState(true);
   const seeking = useRef(false);
@@ -108,6 +111,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const [revealBusy, setRevealBusy] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const platform = useMemo(() => new PlatformClient(), []);
+  const productionClient = useMemo(() => baseUrl ? new ProductionClient(baseUrl) : null, [baseUrl]);
   const tracks = syncTimeline.tracks;
   const selectedTrack = tracks.find(track => track.track_id === trackId) ?? tracks[0];
   const selectedTrackId = selectedTrack?.track_id ?? "";
@@ -155,6 +159,48 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
     const trigger = inspector === "audio" ? audioInspectorButton : clipInspectorButton;
     setInspector(null);
     trigger.current?.focus();
+  }
+
+  useEffect(() => {
+    if (inspector !== "clip" || !productionClient || !clip?.media_clip_id) {
+      setClipWaveform(null);
+      setWaveformState("idle");
+      setWaveformNote("");
+      return;
+    }
+    let cancelled = false;
+    setWaveformState("loading");
+    setWaveformNote("");
+    void productionClient.waveform(syncTimeline.project_id, clip.media_clip_id, 256)
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload.peaks?.length) {
+          setClipWaveform(payload);
+          setWaveformState("ready");
+        } else {
+          setClipWaveform(null);
+          setWaveformState("missing");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setClipWaveform(null);
+        setWaveformState("missing");
+      });
+    return () => { cancelled = true; };
+  }, [inspector, productionClient, syncTimeline.project_id, clip?.media_clip_id]);
+
+  async function requestClipWaveform(): Promise<void> {
+    if (!productionClient || !clip?.media_clip_id || waveformState === "building") return;
+    setWaveformState("building");
+    setWaveformNote("已提交后台声波生成任务，稍后自动刷新…");
+    try {
+      await productionClient.buildWaveform(syncTimeline.project_id, clip.media_clip_id, 256);
+      setWaveformNote("后台波形任务已排队，完成后点击「刷新波形」即可查看峰值。");
+    } catch (error) {
+      setWaveformState("missing");
+      setWaveformNote(error instanceof Error ? error.message : "无法提交波形生成任务");
+    }
   }
 
   function resizeInspector(width: number, persist: boolean): void {
@@ -658,6 +704,76 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
                 <dt>人工偏移</dt><dd>{clip.manual_offset_frames ? `${clip.manual_offset_frames > 0 ? "+" : ""}${clip.manual_offset_frames} 帧（r${syncTimeline.offset_revision ?? 0}）` : `0 帧（r${syncTimeline.offset_revision ?? 0}）`}</dd>
               </dl>
             ) : <p>请在时间线选择片段，或移动播放头到有素材的位置。</p>}
+            {baseUrl && clip ? (
+              <section className="sync-waveform-card" aria-label="声波峰值对齐预览">
+                <div className="sync-offset-head">
+                  <strong>音频声波峰值</strong>
+                  <span>{waveformState === "ready" && clipWaveform ? `${clipWaveform.peaks.length} 采样点` : waveformState === "loading" ? "读取缓存…" : "按需生成"}</span>
+                </div>
+                {waveformState === "ready" && clipWaveform && clipWaveform.peaks.length > 0 ? (
+                  <div
+                    className="sync-waveform-canvas"
+                    role="button"
+                    tabIndex={0}
+                    aria-label="点击声波跳转到对应位置"
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      if (rect.width <= 0) return;
+                      const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+                      const targetSec = clip.timeline_start + ratio * clip.duration;
+                      const targetMasterFrame = toFrame(targetSec, rate);
+                      onSeek(compactView ? toReviewFrame(targetMasterFrame, reviewGaps) : targetMasterFrame);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        togglePlay();
+                      }
+                    }}
+                  >
+                    <svg viewBox={`0 0 ${clipWaveform.peaks.length} 48`} preserveAspectRatio="none" aria-hidden="true">
+                      <line x1="0" y1="24" x2={clipWaveform.peaks.length} y2="24" className="sync-waveform-centerline" />
+                      {clipWaveform.peaks.map((peak, index) => {
+                        const half = Math.max(1, Math.min(22, peak * 22));
+                        return (
+                          <line
+                            key={index}
+                            x1={index + 0.5}
+                            x2={index + 0.5}
+                            y1={24 - half}
+                            y2={24 + half}
+                            className={peak > 0.72 ? "sync-waveform-bar is-transient" : "sync-waveform-bar"}
+                          />
+                        );
+                      })}
+                    </svg>
+                    <span
+                      className="sync-waveform-playhead"
+                      style={{ left: `${clamp((sourceTime / Math.max(0.01, clip.duration)) * 100, 0, 100)}%` }}
+                    />
+                  </div>
+                ) : (
+                  <div className="sync-waveform-empty">
+                    <span>{waveformNote || (clip.media_clip_id ? "尚未缓存该片段声波，点击后通过后台任务生成（不阻塞检视）。" : "该片段尚未关联项目媒体 ID。")}</span>
+                    {clip.media_clip_id ? (
+                      <div className="sync-waveform-actions">
+                        <button type="button" className="secondary" disabled={waveformState === "building"} onClick={() => void requestClipWaveform()}>
+                          {waveformState === "building" ? "已提交任务…" : "生成实时声波"}
+                        </button>
+                        {waveformState === "building" ? (
+                          <button type="button" className="secondary" onClick={() => {
+                            if (!productionClient || !clip.media_clip_id) return;
+                            void productionClient.waveform(syncTimeline.project_id, clip.media_clip_id, 256)
+                              .then((payload) => { if (payload.peaks?.length) { setClipWaveform(payload); setWaveformState("ready"); setWaveformNote(""); } })
+                              .catch(() => { setWaveformNote("波形仍在后台生成中，请稍候再试。"); });
+                          }}>刷新波形</button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </section>
+            ) : null}
             {baseUrl && clip ? (
               <section className="sync-offset-card" aria-label="帧级偏移修正">
                 <div className="sync-offset-head">

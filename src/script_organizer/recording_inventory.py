@@ -6,6 +6,7 @@ import wave
 from pathlib import Path
 from typing import Callable
 
+from .media_batch_relink import classify_audio_asset_role
 from .media_identity import media_id_for_path
 
 
@@ -45,13 +46,24 @@ def discover_recordings(roots: tuple[Path, ...], *, output: Path,
                     excluded += 1
                     continue
                 row = {'media_id': identity, 'status': 'unverified_candidate', 'source_kind': 'unverified'}
+                duration_seconds: float | None = None
                 try:
                     with wave.open(str(path), 'rb') as audio:
-                        row.update(sample_rate=audio.getframerate(), sample_count=audio.getnframes(), channels=audio.getnchannels())
-                    if row['sample_count'] <= 0:
+                        sample_rate = audio.getframerate()
+                        sample_count = audio.getnframes()
+                        channels = audio.getnchannels()
+                    row.update(sample_rate=sample_rate, sample_count=sample_count, channels=channels)
+                    if sample_count <= 0:
                         row['status'] = 'invalid_or_empty_audio'
+                    elif sample_rate > 0:
+                        duration_seconds = sample_count / sample_rate
                 except (OSError, EOFError, wave.Error):
                     row['status'] = 'unsupported_or_unreadable_audio'
+                # Read-only, non-authoritative hint.  It must never filter out a
+                # file or change the existing recording_inventory.v1 fields.
+                row['audio_role_hint'] = classify_audio_asset_role(
+                    path, duration_seconds=duration_seconds, channels=row.get('channels')
+                )
                 rows[identity] = row
                 if local_paths is not None:
                     local_paths[identity] = path

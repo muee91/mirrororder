@@ -142,6 +142,24 @@ export interface MediaRelinkPreviewPayload {
   matched_filename_only: MediaRelinkPreviewItem[];
   still_missing: MediaRelinkPreviewItem[];
 }
+export interface ClapperboardOcrProposal {
+  contract: "clapperboard_ocr_proposal.v1" | string;
+  authority: false;
+  detected: boolean;
+  clapper_time_seconds: number | null;
+  episode: number | null;
+  scene: string;
+  shot: string;
+  take: string;
+  camera: string;
+  roll: string;
+  slate_note: string;
+  confidence: number;
+  provider: string;
+  model: string;
+  frames_inspected: number;
+  warning: string;
+}
 export interface ProjectCreatePayload {
   name: string; project_id?: string; input_kind: "fcpxml" | "media-directory"; script?: string;
   fcpxml?: string; media_roots?: string[]; timeline_mode?: "sequential" | "timestamp" | string; camera_patterns?: Record<string, string>;
@@ -219,6 +237,14 @@ export class DesktopClient {
     return requestJson(this.baseUrl, `${projectPath(projectId)}/media-relink-preview`, {
       method: "POST",
       body: JSON.stringify({ scan_root, max_files: maxFiles }),
+    });
+  }
+  detectClapperboard(projectId: string, clipId: string): Promise<ClapperboardOcrProposal> {
+    const value = clipId.trim();
+    if (!value) throw new HostConnectionError("打板识别需要 clip_id");
+    return requestJson(this.baseUrl, `${projectPath(projectId)}/clips/${encodeURIComponent(value)}/clapperboard-ocr`, {
+      method: "POST",
+      body: JSON.stringify({}),
     });
   }
   attachScript(projectId: string, script: string): Promise<{ script: string; task: ProjectTask }> {
