@@ -73,6 +73,8 @@ evidence / rough-cut proposal
 
 - 不修改用户原始 FCPXML。
 - 当前 delivery 继续复用 Python exporter。
+- 原始素材同步的交换工程按版本写入本机素材根的 `交付/同步-<版本>`。任务记录和前一次完成的母版快照分别读取；本次失败或取消时，可以核对上一版摆位。Resolve 的设备任务与创建时的同步任务绑定，DRP 按设备任务分别保存。
+- 原始素材项目可省略 `input.script`，首次同步索引使用空的剧本段列表。导入后调用既有剧本接口提交增量关联任务。仍要求 v1 manifest 必含剧本的旧包需要升级后才能打开这类新项目。
 - macOS Final Cut adapter 只做窄平台动作，不重写 FCPXML 业务逻辑。
 - Resolve/Premiere 或其它新 NLE adapter 必须先形成独立、可验证的 adapter boundary；contract、authority、failure isolation 和 native smoke 明确后，才进入常规 Production 路径。
 
