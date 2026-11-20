@@ -50,6 +50,6 @@ describe("independent production module routing", () => {
     );
     expect(nav.find((button) => button.textContent?.includes("工程交付"))?.disabled).toBe(true);
     expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步任务");
-    expect(root.textContent).toContain("正在同步");
+    expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步中");
   });
 });

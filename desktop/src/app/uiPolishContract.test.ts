@@ -59,7 +59,8 @@ describe("Desktop UI polish contract", () => {
     expect(library).toContain("projectPresentation(project, activity)");
     expect(home).not.toContain("function projectStatus(");
     expect(library).not.toContain("function projectSubtitle(");
-    expect(css).toContain(".project-home-state.status-idle");
+    expect(home).toContain("{presentation.statusLabel}");
+    expect(css).toContain(".project-home-state { display: flex;");
     expect(css).not.toContain(".project-home-state { display: none; }");
   });
 

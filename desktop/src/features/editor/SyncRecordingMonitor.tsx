@@ -43,7 +43,7 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
         {recordings.invalid_count > 0 && ` · ${recordings.invalid_count} 条空文件或无法读取`}</p>
       {recordings.placements.length > 0 && <label>
         监听录音
-        <select value={placement ? `${placement.media_id}:${placement.at}` : ""} onChange={(event) => {
+        <select aria-label="监听录音" value={placement ? `${placement.media_id}:${placement.at}` : ""} onChange={(event) => {
           setError("");
           setSelection(recordings.placements.find((row) => `${row.media_id}:${row.at}` === event.target.value) ?? null);
         }}>

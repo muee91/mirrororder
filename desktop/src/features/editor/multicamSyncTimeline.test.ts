@@ -22,7 +22,8 @@ it("renders six separate camera tracks with distinct colors and a separate uncla
   expect(tracks).toHaveLength(7);
   expect(tracks.map((row) => row.querySelector("strong")?.textContent)).toEqual(labels);
   expect(new Set(tracks.slice(0, 6).map((row) => row.style.getPropertyValue("--camera-color"))).size).toBe(6);
-  expect(host.querySelector(".multicam-sync-inspection-meta")?.textContent).toContain("A / B / C / D / E / F 机位");
+  expect([...host.querySelectorAll(".sync-camera-cell")].map(cell => cell.getAttribute("data-camera"))).toEqual(labels);
+  expect(host.querySelector(".sync-master-heading")?.textContent).toContain("6 机位");
 });
 
 
@@ -41,12 +42,12 @@ it("shows a live worker stage and only labels true algorithm checkpoints", () =>
   };
   const html = renderToStaticMarkup(createElement(MulticamSyncTimeline, { syncTimeline: payload, onMulticamSync: () => {} }));
   expect(html).toContain("提取同步音频缓存");
-  expect(html).toContain("同步算法检查点，不代表全部文件已处理");
+  expect(html).toContain('aria-label="同步算法检查点进度"');
   expect(html).toContain('value="2" max="8"');
-  expect(html).toContain("最近任务记录");
+  expect(html).toContain("最近活动");
   const host = document.createElement("div");
   host.innerHTML = html;
-  expect(host.querySelector<HTMLButtonElement>(".multicam-sync-action button")?.disabled).toBe(true);
+  expect(host.querySelector<HTMLButtonElement>(".sync-task-actions button")?.disabled).toBe(true);
 });
 
 it("shows a failed sync reason with a retry action instead of the old opaque gate", () => {
@@ -59,9 +60,9 @@ it("shows a failed sync reason with a retry action instead of the old opaque gat
   };
   const host = document.createElement("div");
   host.innerHTML = renderToStaticMarkup(createElement(MulticamSyncTimeline, { syncTimeline: payload, onMulticamSync: () => {} }));
-  expect(host.textContent).toContain("失败原因：素材目录不存在");
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("素材目录不存在");
   expect(host.textContent).toContain("重新执行同步");
-  expect(host.querySelector<HTMLButtonElement>(".multicam-sync-action button")?.disabled).toBe(false);
+  expect(host.querySelector<HTMLButtonElement>(".sync-task-actions button")?.disabled).toBe(false);
 });
 
 
@@ -139,6 +140,9 @@ it("switches active camera at the same master time without creating a new edit t
   await act(async () => { b?.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
   expect(host.querySelector(".sync-camera-cell[data-listening] .sync-camera-caption strong")?.textContent).toContain("B 机位");
   expect([...host.querySelectorAll(".sync-camera-cell")]).toEqual(cells);
+  const inspector = host.querySelector<HTMLButtonElement>(".sync-inspector-toggle");
+  expect(inspector).not.toBeNull();
+  await act(async () => { inspector!.click(); });
   expect(host.querySelector(".multicam-sync-details")?.textContent).toContain("B.MOV");
   await act(async () => { root.unmount(); });
   host.remove();

@@ -172,7 +172,7 @@ describe("Swift golden product fidelity", () => {
     expect(workspaceHome).toContain("今晚继续哪里？");
     expect(workspaceHome).toContain("最近项目");
     expect(workspaceHome).toContain("状态中心");
-    expect(home).toContain("管理工作区内的制作项目");
+    expect(home).toContain('aria-label="项目列表"');
     expect(home).toContain("<ProjectLifecyclePanel");
     expect(home).toContain("project-home-list");
     expect(home).toContain("project-home-more");
@@ -197,10 +197,10 @@ describe("Swift golden product fidelity", () => {
     expect(library).toContain("最近使用");
     expect(library).toContain("复制局域网协作链接");
     expect(library).toContain("永久删除项目…");
-    expect(redesign).toContain("grid-template-columns: 208px minmax(0, 1fr)");
+    expect(app).toContain('!isProjectOpen && <aside className="global-sidebar"');
     expect(redesign).toContain(".workspace-home-grid");
-    expect(redesign).toContain(".project-home-list");
-    expect(redesign).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(redesign).not.toContain(".project-home-list");
+    expect(source("../projects/project-home.css")).toContain(".project-home-columns");
   });
 
   it("keeps explicit file-drop identity path-free and human-save gated", () => {

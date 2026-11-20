@@ -83,10 +83,10 @@ describe("MirrorOrder Design System v2 contract", () => {
     const project = read("../features/production/professional-project-workbench.css");
     const workbench = read("../features/production/ProjectWorkbench.tsx");
 
-    expect(project).toContain("grid-template-rows: minmax(54px, auto) minmax(0, 1fr)");
-    expect(project).toContain("grid-template-columns: 202px minmax(0, 1fr)");
+    expect(project).toContain("grid-template-rows: auto minmax(0, 1fr)");
+    expect(project.match(/\.project-production-layout\s*\{[^}]*\}/)?.[0]).toContain("grid-template-rows: auto minmax(0, 1fr)");
     expect(project).toContain(".project-module-rail");
-    expect(project).toContain(".project-module-link.is-active");
+    expect(project).toContain('.project-module-link[aria-current="page"]');
     expect(project).toContain("var(--mo-surface-pane");
     expect(project).not.toContain(".professional-secondary-pages");
     expect(workbench).toContain("<ProjectModuleNavigation");
@@ -98,8 +98,9 @@ describe("MirrorOrder Design System v2 contract", () => {
   it("keeps global chrome quiet, compact and row-oriented", () => {
     const chrome = read("./app-chrome.css");
 
-    expect(chrome).toContain("grid-template-columns: 224px minmax(0, 1fr)");
-    expect(chrome).toContain("grid-template-rows: 46px minmax(0, 1fr)");
+    expect(chrome).toContain("grid-template-columns: 232px minmax(0, 1fr)");
+    expect(chrome).toContain(".application-frame.is-project-open {\n  grid-template-columns: minmax(0, 1fr)");
+    expect(chrome).toContain("grid-template-rows: 50px minmax(0, 1fr)");
     expect(chrome).toContain(".project-current-card.is-active-context:hover");
     expect(chrome).toContain("box-shadow: inset 2px 0 0 var(--mo-accent");
     expect(chrome).toContain(".app-global-actions button");

@@ -81,7 +81,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
                 title={available ? item.description : "同步完成后开放此模块"}
                 onClick={() => onNavigate(item.page)}>
                 <span className="project-module-link-title">{item.label}</span>
-                {item.page === "sync-task" && syncPhase === "running" && <span className="project-module-running" aria-label="运行中" />}
+                {item.page === "sync-task" && syncPhase === "running" && <span className="project-module-running">同步中</span>}
               </button>
             );
           })}

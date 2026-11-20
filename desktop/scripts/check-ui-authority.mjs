@@ -135,7 +135,8 @@ for (const directImport of ["IdentityWorkbench", "MediaLibraryWorkbench", "Media
   assert(!projectWorkbench.includes(`import { ${directImport} }`), `ProjectWorkbench must not directly own Material child view ${directImport}`);
 }
 assert(materialWorkspace.includes('onOpenMediaBinding={() => onViewChange("repair")}'), "media repair must remain a contextual Material tool");
-assert(materialWorkspace.includes('onClick={() => onViewChange("library")}'), "Material repair must return to the library context");
+assert(materialWorkspace.includes('onClick={onReturnFromRepair ?? (() => onViewChange("library"))}'), "Material repair must return to its origin with a library fallback");
+assert(projectWorkbench.includes("onReturnFromRepair={returnPage") && projectWorkbench.includes("navigate(returnPage);"), "The project shell must supply the originating workspace for media repair");
 
 // Review placement/exclusion writes have exactly one home (Script) plus one
 // sanctioned auxiliary surface (golden-slate-placement-pools, 具名豁免见
