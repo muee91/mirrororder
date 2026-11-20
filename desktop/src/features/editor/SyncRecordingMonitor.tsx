@@ -11,10 +11,11 @@ interface Props {
   rate: FrameRate | null;
   playingVideo: boolean;
   onAudition: () => void;
+  onStartVideo?: () => void;
   onFollowChange?: (following: boolean) => void;
 }
 
-export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingVideo, onAudition, onFollowChange }: Props) {
+export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingVideo, onAudition, onStartVideo, onFollowChange }: Props) {
   const recordings = timeline.recordings!;
   const [preferredKey, setPreferredKey] = useState("");
   const [followVideo, setFollowVideo] = useState(false);
@@ -87,9 +88,12 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
     if (!rate || !playback) return;
     setFollow(true);
     const audio = player.current;
-    if (audio && sourceSeconds !== null && audio.readyState >= 1) {
-      audio.currentTime = sourceSeconds;
-      if (playingVideo) beginAudio(audio);
+    if (audio && sourceSeconds !== null) {
+      if (audio.readyState >= 1) audio.currentTime = sourceSeconds;
+      if (!playingVideo) onStartVideo?.();
+      // Starting both media elements in one user gesture also works on WebViews
+      // that reject an effect-triggered audio.play() as autoplay.
+      beginAudio(audio);
     }
   }
 
@@ -123,10 +127,10 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
           if (playingVideo) beginAudio(event.currentTarget);
         }}
         onPlay={() => {
-          if (!followRef.current || !playingVideo) {
-            if (followRef.current) setFollow(false);
+          if (followRef.current && !playingVideo && !starting.current) {
+            setFollow(false);
             onAudition();
-          }
+          } else if (!followRef.current) onAudition();
         }}
         onError={() => {
           if (followRef.current) setFollow(false);

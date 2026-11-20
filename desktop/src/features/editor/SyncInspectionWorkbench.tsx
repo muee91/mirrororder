@@ -558,6 +558,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
             </div>
           </div> : baseUrl && syncTimeline.recordings && <SyncRecordingMonitor baseUrl={baseUrl} timeline={syncTimeline}
             cursor={cursor} rate={confirmedRate} playingVideo={playing} onFollowChange={setFollowingRecording}
+            onStartVideo={() => { const video = videoRef.current; if (video?.paused) playVideo(video); }}
             onAudition={() => videoRef.current?.pause()} />}
         </aside>
       </>}
