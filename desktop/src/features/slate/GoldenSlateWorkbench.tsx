@@ -20,7 +20,7 @@ import { SlateSourceIntervalPanel } from "./SlateSourceIntervalPanel";
 import { SlateSpeechEvidencePanel } from "./SlateSpeechEvidencePanel";
 import { SlateRow, SlateTableHead, SLATE_CAMERA_COLUMNS, type SlateCameraColumn } from "./SlateRow";
 import { originalPlaybackUrl } from "./SlateOriginalPlayback";
-import type { ProductionSelectionContext } from "../production/productionNavigation";
+import type { ProductionSelectionContext, ProductionWorkspace } from "../production/productionNavigation";
 import { SlateWorkbench } from "./SlateWorkbench";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import "../media/camera-presentation.css";
@@ -34,8 +34,7 @@ interface Props {
   active?: boolean;
   focus?: ProductionSelectionContext | null;
   onSelection?: (selection: ProductionSelectionContext) => void;
-  onOpenScript?: (groupId: string, clipId?: string | null) => void;
-  onOpenReview?: (groupId?: string, clipId?: string | null) => void;
+  onOpenTake?: (destination: ProductionWorkspace, selection: ProductionSelectionContext) => void;
   onRepair?: () => void;
   onInspectSelection?: (selection: AssistantSelection) => void;
   // The interval ledger must be supplied by a private, project-verified adapter.
@@ -294,7 +293,7 @@ function cameraKey(value: string): string {
 function primaryAttachment(draft: Draft, camera: SlateCameraColumn, cameraColumns: readonly SlateCameraColumn[]): { item: SlateAttachment; count: number } | null {
   const rows = draft.attachments.filter((attachment) => {
     const key = cameraKey(attachment.camera);
-    if (camera === "AUX") return !cameraColumns.filter(column => column !== "AUX").includes(key) || attachment.source_role !== "sync_camera";
+    if (camera === "AUX") return key === "AUX" || !cameraColumns.includes(key) || attachment.source_role !== "sync_camera";
     return key === camera && attachment.source_role === "sync_camera";
   });
   return rows[0] ? { item: rows[0], count: rows.length } : null;
@@ -302,7 +301,7 @@ function primaryAttachment(draft: Draft, camera: SlateCameraColumn, cameraColumn
 
 
 
-export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active = true, focus, onSelection, onOpenScript, onOpenReview, onRepair, onInspectSelection, intervalLedger, enableNativeIntervalLedger=false }: Props) {
+export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active = true, focus, onSelection, onOpenTake, onRepair, onInspectSelection, intervalLedger, enableNativeIntervalLedger=false }: Props) {
   const [slateSurface, setSlateSurface] = useState<"intervals" | "takes">("intervals");
   const nativeIntervalLedger=useNativeSlateIntervalLedger(baseUrl,projectId,enableNativeIntervalLedger);
   const ledger = intervalLedger?.projectId === projectId ? intervalLedger : nativeIntervalLedger.ledger;
@@ -453,17 +452,18 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
       ?? null
     : angleIndex.byClip.get(selectedClipId) ?? null;
   const selectedPlaybackKey = selectedAngle?.clip_id || selectedClipId;
+  const clipId = selectedAttachment?.clip_id || selectedAngle?.clip_id || undefined;
+  const mediaId = selectedAttachment?.media_id || selectedAngle?.media_id || undefined;
+  // A manually attached insert can belong to another Take.
+  const inTake = selectedTake?.angles.some(angle => clipId ? angle.clip_id === clipId : angle.media_id === mediaId);
+  const groupId = inTake || (!clipId && !mediaId) ? selected?.source_group_id || undefined : undefined;
+  const recordId = selected?.record_id;
+  const selection = useMemo(() => ({ projectId, recordId, groupId, clipId, mediaId }), [projectId, recordId, groupId, clipId, mediaId]);
   useLayoutEffect(() => {
-    const clipId = selectedAttachment?.clip_id || selectedAngle?.clip_id || undefined;
-    const mediaId = selectedAttachment?.media_id || selectedAngle?.media_id || undefined;
-    // A manually attached insert can belong to another Take.
-    const inTake = selectedTake?.angles.some(angle => clipId ? angle.clip_id === clipId : angle.media_id === mediaId);
-    onInspectSelection?.({
-      group_id: inTake || (!clipId && !mediaId) ? selected?.source_group_id || undefined : undefined,
-      clip_id: clipId,
-      media_id: mediaId,
-    });
-  }, [active, onInspectSelection, onSelection, projectId, selected?.record_id, selected?.source_group_id, selectedAttachment, selectedAngle, selectedTake]);
+    if (!active || intervalSurface) return;
+    onInspectSelection?.({ group_id: selection.groupId, clip_id: selection.clipId, media_id: selection.mediaId });
+    if (selection.recordId) onSelection?.(selection);
+  }, [active, intervalSurface, onInspectSelection, onSelection, selection]);
   const selectedPlaybackFailed = Boolean(selectedPlaybackKey && playbackFailedClipId === selectedPlaybackKey);
   const standaloneUrl = selectedAttachment?.clip_id && selectedAttachment.media_id && !selectedAngle
     ? originalPlaybackUrl(baseUrl, projectId, { clipId: selectedAttachment.clip_id, mediaId: selectedAttachment.media_id, selectionKey: selectedPlaybackKey })
@@ -471,6 +471,17 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
   const playbackUrl = (selectedAngle?.playback.url && canPreviewReviewPlayback(selectedAngle.playback) ? selectedAngle.playback.url : null) || standaloneUrl;
   const playbackStart = locatedRange && locatedRange.recordId === selectedRecordId && locatedRange.clipId === selectedClipId
     ? locatedRange.start : selectedAngle?.playback.source_start ?? selectedAngle?.source_start ?? 0;
+  function currentLocation(): ProductionSelectionContext {
+    const player = playerRef.current;
+    const start = player && player.readyState >= 1 ? player.currentTime : playbackStart;
+    if (!playbackUrl || !selection.clipId || !Number.isFinite(start) || start < 0) return selection;
+    return { ...selection, sourceRange: { basis: "source", start } };
+  }
+
+  function publishPlaybackLocation(): void {
+    if (active && !intervalSurface) onSelection?.(currentLocation());
+  }
+
   useEffect(() => {
     if (!selectedPlaybackFailed) setPlaybackFailureDetail(null);
   }, [selectedPlaybackFailed]);
@@ -869,7 +880,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
     const angle = angleIndex.byClip.get(row.item.clip_id) ?? (row.item.media_id ? angleIndex.byMedia.get(row.item.media_id) : undefined) ?? null;
     const model = angle ? mediaCardFromAngle(angle, row.item) : mediaCardFromAttachment(row.item);
     model.duplicateCount = row.count;
-    return <MirrorOrderMediaCard model={model} compact selected={draft.record_id === selectedRecordId && model.id === selectedClipId} preferred={draft.preferred_clip_id === model.id} onSelect={() => { selectRecord(draft.record_id); selectClip(model.id); }} />;
+    const key = attachmentKey(row.item);
+    return <MirrorOrderMediaCard model={model} compact selected={draft.record_id === selectedRecordId && key === selectedClipId} preferred={draft.preferred_clip_id === key} onSelect={() => { selectRecord(draft.record_id); selectClip(key); }} />;
   }
 
   function renderRows(rows: Draft[]) {
@@ -1000,6 +1012,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
                   {playbackUrl && !selectedPlaybackFailed ? (
                     <video ref={playerRef} key={`${selectedPlaybackKey}-${playbackRetry}-${playbackStart}`}
                       src={playbackUrl} controls preload="auto" playsInline
+                      onSeeked={publishPlaybackLocation} onPause={publishPlaybackLocation}
                       onError={() => { setPlaybackFailedClipId(selectedPlaybackKey); void classifyPlaybackFailure(playbackUrl).then(setPlaybackFailureDetail); }}
                       onLoadedMetadata={(event) => {
                         const video = event.currentTarget;
@@ -1011,9 +1024,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
                 </div>
 
                 {selectedPlaybackFailed && onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}
-                {selectedTake && <div className="golden-inspector-actions">
-                  {onOpenScript && <button type="button" className="secondary" onClick={() => onOpenScript(selectedTake.group_id, selectedAngle?.clip_id)}>在剧本中打开</button>}
-                  {onOpenReview && <button type="button" className="secondary" onClick={() => onOpenReview(selectedTake.group_id, selectedAngle?.clip_id)}>看片审阅</button>}
+                {groupId && onOpenTake && <div className="golden-inspector-actions golden-inspector-navigation">
+                  <button type="button" className="secondary" onClick={() => onOpenTake("material", currentLocation())}>在素材中打开</button>
+                  <button type="button" className="secondary" onClick={() => onOpenTake("script", currentLocation())}>在剧本中打开</button>
+                  <button type="button" className="secondary" onClick={() => onOpenTake("review", currentLocation())}>看片审阅</button>
                 </div>}
                 {selectedAttachment?.clip_id ? <SlateSpeechEvidencePanel key={`${baseUrl}:${projectId}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}`} baseUrl={baseUrl} projectId={projectId} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} /> : null}
 
@@ -1028,7 +1042,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active =
                     const model = angle ? mediaCardFromAngle(angle, attachment) : mediaCardFromAttachment(attachment);
                     return (
                       <div className="golden-angle-editor" key={`${attachment.clip_id}-${attachment.media_id}`}>
-                        <MirrorOrderMediaCard model={model} selected={key === selectedClipId} preferred={selected.preferred_clip_id === key} showPreview onSelect={selectClip} onPrefer={(clipId) => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === clipId ? "" : clipId })} />
+                        <MirrorOrderMediaCard model={model} selected={key === selectedClipId} preferred={selected.preferred_clip_id === key} showPreview onSelect={() => selectClip(key)} onPrefer={() => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === key ? "" : key })} />
                         <div className="golden-angle-fields">
                           <label><span>机位</span><input value={attachment.camera} onChange={(event) => patchAttachment(selected.record_id, key, { camera: event.target.value })} /></label>
                           <label><span>景别</span><select value={attachment.shot_type || "unknown"} onChange={(event) => patchAttachment(selected.record_id, key, { shot_type: event.target.value })}>{SHOT_OPTIONS.map((shot) => <option value={shot} key={shot}>{SHOT_LABELS[shot] ?? shot}</option>)}</select></label>

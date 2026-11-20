@@ -6,7 +6,7 @@
 // document never overflows horizontally.
 //
 // Supported window sizes:
-// - desktop 1440×900: regular desktop window.
+// - desktop 1280×800, 1440×900 and 1920×1080.
 // - compact 1180×768: `tauri.conf.json` sets `minWidth: 1180` and `src/styles.css`
 //   keeps html/body/#root at `min-width: 1180px`, so 1180 is the narrowest real
 //   product window. A narrower viewport only measured a clipped 1180px surface and
@@ -204,7 +204,9 @@ try {
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
 
   for (const viewport of [
+    { name: "small-desktop", width: 1280, height: 800 },
     { name: "desktop", width: 1440, height: 900 },
+    { name: "large-desktop", width: 1920, height: 1080 },
     // 1180 = tauri.conf.json minWidth = styles.css root min-width, the real floor.
     { name: "compact", width: 1180, height: 768 },
   ]) {

@@ -207,7 +207,8 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
 
   const selectSlateRecord = useCallback((value: ProductionSelectionContext) => {
     setSelection((previous) => ({ ...value,
-      sourceRange: previous.recordId === value.recordId && previous.clipId === value.clipId ? previous.sourceRange : undefined,
+      sourceRange: value.sourceRange ?? (previous.recordId === value.recordId && previous.clipId === value.clipId
+        && previous.mediaId === value.mediaId ? previous.sourceRange : undefined),
       scriptSegmentId: previous.groupId === value.groupId ? previous.scriptSegmentId : undefined,
     }));
   }, []);
@@ -293,20 +294,21 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
     destination: ProductionWorkspace,
     clipId?: string | null,
     scriptSegmentId?: string | null,
+    location = currentSelection,
   ): void {
     const value = groupId.trim();
     if (!value) return;
     const target = destination === "material" ? "takes" : destination === "script" ? "script" : destination === "review" ? "watch" : "timeline";
     if (syncBlocked) return;
-    const sameTake = currentSelection.groupId === value;
-    const sameClip = sameTake && (!clipId || currentSelection.clipId === clipId);
+    const sameTake = location.groupId === value;
+    const sameClip = sameTake && (!clipId || location.clipId === clipId);
     const context = normalizedContext(project.project_id, {
       groupId: value,
-      clipId: clipId ?? (sameTake ? currentSelection.clipId : undefined),
-      scriptSegmentId: scriptSegmentId ?? (sameTake ? currentSelection.scriptSegmentId : undefined),
-      mediaId: sameClip ? currentSelection.mediaId : undefined,
-      recordId: sameTake ? currentSelection.recordId : undefined,
-      sourceRange: sameClip ? currentSelection.sourceRange : undefined,
+      clipId: clipId ?? (sameTake ? location.clipId : undefined),
+      scriptSegmentId: scriptSegmentId ?? (currentSelection.groupId === value ? currentSelection.scriptSegmentId : undefined),
+      mediaId: sameClip ? location.mediaId : undefined,
+      recordId: sameTake ? location.recordId : undefined,
+      sourceRange: sameClip ? location.sourceRange : undefined,
     });
     if (target !== visiblePage) setReturnPage(visiblePage);
     setSelection(context);
@@ -424,6 +426,9 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
               slateFocus={slateFocus}
               onOpenEvidence={openEvidence}
               onSlateSelection={selectSlateRecord}
+              onOpenSlateTake={(destination, location) => {
+                if (location.groupId) focusTake(location.groupId, destination, location.clipId, undefined, location);
+              }}
               repairReturnLabel={returnPage && returnPage !== "media-binding" ? `返回${pageLabel(returnPage)}` : undefined}
               onReturnFromRepair={returnPage && returnPage !== "media-binding" ? () => {
                 navigate(returnPage);
@@ -432,6 +437,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
               onInspectSelection={inspectSelection}
               initialGroupId={currentSelection.groupId ?? null}
               initialClipId={currentSelection.clipId ?? null}
+              playbackFocus={currentSelection}
               onSelectionChange={(groupId, clipId) => updateSelection({ groupId, clipId })}
               onViewChange={(view, groupId) => {
                 if (groupId?.trim()) updateSelection({ groupId });
@@ -451,6 +457,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
               initialGroupId={currentSelection.groupId ?? null}
               initialClipId={currentSelection.clipId ?? null}
               initialScriptSegmentId={currentSelection.scriptSegmentId ?? null}
+              playbackFocus={currentSelection}
               onSelectionChange={(groupId, clipId, scriptSegmentId) => updateSelection({ groupId, clipId, scriptSegmentId })}
               onOpenMaterial={(groupId, clipId) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId)}
               onOpenReview={(groupId, clipId, scriptSegmentId) => focusTake(groupId, "review", clipId, scriptSegmentId)}
@@ -478,6 +485,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
               project={project}
               initialGroupId={currentSelection.groupId ?? null}
               initialClipId={currentSelection.clipId ?? null}
+              playbackFocus={currentSelection}
               onSelectionChange={(groupId, clipId) => updateSelection({ groupId, clipId, scriptSegmentId: currentSelection.scriptSegmentId })}
               onOpenMaterial={(groupId, clipId) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId)}
               onOpenScript={(groupId, clipId) => focusTake(groupId, "script", clipId, currentSelection.scriptSegmentId)}

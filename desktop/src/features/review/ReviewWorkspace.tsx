@@ -4,6 +4,7 @@ import { mappingLabel, takeDisplayLabel } from "../material-script/TakeCard";
 import { TakeInspector } from "../material-script/TakeInspector";
 import { VirtualTakeList } from "../material-script/VirtualTakeList";
 import { useReviewModelSnapshot } from "../material-script/useReviewModelSnapshot";
+import type { ProductionSelectionContext } from "../production/productionNavigation";
 import { ReviewDecisionPanel } from "./ReviewDecisionPanel";
 import { reviewTakeAttention } from "./reviewAttention";
 import "../material-script/material-script.css";
@@ -17,6 +18,7 @@ interface Props {
   project: ProjectSummary;
   initialGroupId?: string | null;
   initialClipId?: string | null;
+  playbackFocus?: ProductionSelectionContext;
   onSelectionChange?: (groupId: string | null, clipId: string | null) => void;
   onOpenMaterial?: (groupId: string, clipId?: string | null) => void;
   onOpenScript?: (groupId: string, clipId?: string | null) => void;
@@ -66,6 +68,7 @@ export function ReviewWorkspace({
   project,
   initialGroupId = null,
   initialClipId = null,
+  playbackFocus,
   onSelectionChange,
   onOpenMaterial,
   onOpenScript,
@@ -132,6 +135,7 @@ export function ReviewWorkspace({
   }, [initialClipId, initialGroupId, model, project.project_id]);
 
   useEffect(() => {
+    if (!model) return;
     if (!selectedTake) {
       setSelectedClipId(null);
       return;
@@ -139,7 +143,7 @@ export function ReviewWorkspace({
     if (!selectedClipId || !selectedTake.angles.some((angle) => angle.clip_id === selectedClipId)) {
       setSelectedClipId(selectedTake.angles[0]?.clip_id ?? null);
     }
-  }, [selectedClipId, selectedTake]);
+  }, [model, selectedClipId, selectedTake]);
 
   useEffect(() => {
     if (!model) return;
@@ -154,8 +158,9 @@ export function ReviewWorkspace({
   }, [filteredTakes, model, selectedGroupId]);
 
   useEffect(() => {
+    if (!model) return;
     onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId);
-  }, [selectedTake?.group_id, selectedClipId]);
+  }, [model, selectedTake?.group_id, selectedClipId]);
 
   function selectTake(take: ReviewTakeGroup): void {
     setSelectedGroupId(take.group_id);
@@ -236,6 +241,7 @@ export function ReviewWorkspace({
                 projectId={project.project_id}
                 take={selectedTake}
                 selectedClipId={selectedClipId}
+                playbackFocus={playbackFocus}
                 onSelectClip={setSelectedClipId}
                 writeSaving={false}
                 afterPlayback={selectedTake ? (

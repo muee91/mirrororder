@@ -121,6 +121,8 @@
 .golden-inspector-link small { color: #74818c; font-size: 10px; line-height: 1.45; }
 .golden-inspector-actions { display: flex; gap: 6px; margin: 10px 12px 14px; }
 .golden-inspector-actions button { flex: 1; min-height: 30px; font-size: 10px; }
+.golden-inspector-navigation { flex-wrap: wrap; }
+.golden-inspector-navigation button { flex-basis: max-content; font-size: 12px; }
 button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b1212; }
 
 .golden-slate-review-tools { border-top: 1px solid #252d35; background: #0e1317; }

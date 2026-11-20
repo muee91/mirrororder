@@ -2,6 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DesktopClient } from "../../api/desktop";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import type { ProductionSelectionContext } from "../production/productionNavigation";
 import type {
   ProjectSummary,
   ReviewEpisode,
@@ -39,6 +40,7 @@ interface Props {
   initialGroupId?: string | null;
   initialClipId?: string | null;
   initialScriptSegmentId?: string | null;
+  playbackFocus?: ProductionSelectionContext;
   onSelectionChange?: (groupId: string | null, clipId: string | null, scriptSegmentId: string | null) => void;
   onOpenMaterial?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
   onOpenReview?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
@@ -120,6 +122,7 @@ export function ScriptWorkspace({
   initialGroupId = null,
   initialClipId = null,
   initialScriptSegmentId = null,
+  playbackFocus,
   onSelectionChange,
   onOpenMaterial,
   onOpenReview,
@@ -223,8 +226,9 @@ export function ScriptWorkspace({
   }, [activeEpisode, selectedScriptSegmentId]);
 
   useEffect(() => {
+    if (!model) return;
     onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId, selectedScriptSegmentId);
-  }, [selectedTake?.group_id, selectedClipId, selectedScriptSegmentId]);
+  }, [model, selectedTake?.group_id, selectedClipId, selectedScriptSegmentId]);
 
   const visibleEpisode = useMemo(() => {
     if (!selectedEpisode || !model) return null;
@@ -772,6 +776,7 @@ export function ScriptWorkspace({
                   projectId={project.project_id}
                   take={selectedTake}
                   selectedClipId={selectedClipId}
+                  playbackFocus={playbackFocus}
                   onSelectClip={setSelectedClipId}
                   onClearPlacement={() => void clearPlacement()}
                   writeSaving={writeState === "saving"}

@@ -188,7 +188,7 @@ test("decision conflict recovery requires a read retry and refreshes the real re
   assert.equal(recoveryReads, 2);
 });
 
-test("search previews the source-relative dialogue and opens a standalone record", async t => {
+test("search, slate and Take workspaces retain the evidence and playback position", async t => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: "dark" });
   page.setDefaultTimeout(10_000);
   const errors = [];
@@ -199,6 +199,16 @@ test("search previews the source-relative dialogue and opens a standalone record
   });
   const take = model.take_groups[0];
   const angle = take.angles[0];
+  const cameras = ["A", "B", "C", "D", "E", "F"];
+  const angles = cameras.map(camera => {
+    const clip_id = camera === "A" ? angle.clip_id : `C_SYNTH_${camera}`;
+    const media_id = camera === "A" ? angle.media_id : `M_SYNTH_${camera}`;
+    return {
+      ...angle, clip_id, media_id, camera, name: `synthetic-angle-${camera}.webm`,
+      source_start: 0.25, source_end: 1.9,
+      playback: { ...angle.playback, url: `/api/v1/projects/project/media/${clip_id}`, source_start: 0.25, source_end: 1.9 },
+    };
+  });
   const record = {
     record_id: "manual-record", source_group_id: "", script_scene_id: "", episode: 1, scene: "补拍",
     shot: "", take_number: null, status: "unmarked", note: "窗外逆光补拍", attachments: [], preferred_clip_id: "",
@@ -208,9 +218,7 @@ test("search previews the source-relative dialogue and opens a standalone record
     if (!path.startsWith("/api/")) return route.continue();
     if (path.endsWith("/workspace")) return route.fulfill({ json: { projects: [{ ...model.project, input_kind: "fcpxml", project_id: "project" }] } });
     if (path.endsWith("/review-model")) return route.fulfill({ json: {
-      ...model, take_groups: [{ ...take, angles: [{ ...angle, source_start: 0.25, playback: {
-        ...angle.playback, source_start: 0.25, source_end: 1.9,
-      } }] }],
+      ...model, take_groups: [{ ...take, cameras, angles }],
     } });
     if (path.endsWith("/script-supervisor")) return route.fulfill({ json: { revision: 1, records: { [record.record_id]: record }, entries: {} } });
     if (path.endsWith("/semantic-search")) return route.fulfill({ json: {
@@ -261,6 +269,37 @@ test("search previews the source-relative dialogue and opens a standalone record
   await page.locator(".project-module-rail").getByRole("button", { name: /^交互场记/ }).click();
   assert.equal(await note.inputValue(), "补拍草稿待确认");
   assert.equal(await row.count(), 1);
+
+  for (const camera of cameras) {
+    await page.getByRole("columnheader", { name: `${camera} 机`, exact: true }).first().waitFor();
+  }
+  await page.locator("tbody").getByRole("button", { name: /选择 F · synthetic-angle-F\.webm/ }).click();
+  const slatePlayer = page.locator(".golden-slate-player video");
+  await page.waitForFunction(() => document.querySelector(".golden-slate-player video")?.readyState >= 2);
+  await slatePlayer.evaluate(video => { video.currentTime = 1.2; });
+  const expectCameraFAtPosition = async selector => {
+    await page.waitForFunction(target => {
+      const video = document.querySelector(target);
+      return video?.currentSrc.endsWith("/C_SYNTH_F") && video.readyState >= 2 && !video.seeking
+        && Math.abs(video.currentTime - 1.2) < 0.03;
+    }, selector);
+  };
+  await expectCameraFAtPosition(".golden-slate-player video");
+  const navigation = page.locator(".golden-inspector-navigation");
+  for (const destination of ["在素材中打开", "在剧本中打开"]) {
+    await navigation.getByRole("button", { name: destination, exact: true }).click();
+    await expectCameraFAtPosition(".take-player");
+    await page.getByRole("button", { name: "返回场记", exact: true }).click();
+    await expectCameraFAtPosition(".golden-slate-player video");
+  }
+  // The rail uses the shared selection published by Slate, not the inspector's direct link.
+  const rail = page.locator(".project-module-rail");
+  await rail.getByRole("button", { name: /^看片审阅/ }).click();
+  await expectCameraFAtPosition(".review-workspace .take-player");
+  await rail.getByRole("button", { name: /^交互场记/ }).click();
+  await expectCameraFAtPosition(".golden-slate-player video");
+  await page.locator('[data-record-id="manual-record"] td.col-index').click();
+  assert.equal(await note.inputValue(), "补拍草稿待确认");
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 });
 

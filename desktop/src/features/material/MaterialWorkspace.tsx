@@ -3,7 +3,7 @@ import { HostConnection, type ProjectSummary } from "../../api/host";
 import { isOwnedSlateHost } from "./ownedSlateHost";
 import type { ComponentProps } from "react";
 import type { EvidenceReference } from "../production/evidenceLocation";
-import type { ProductionSelectionContext } from "../production/productionNavigation";
+import type { ProductionSelectionContext, ProductionWorkspace } from "../production/productionNavigation";
 import type { AssistantSelection } from "../../api/production";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
@@ -26,10 +26,12 @@ interface Props {
   slateFocus?: ProductionSelectionContext | null;
   onOpenEvidence?: (reference: EvidenceReference) => void;
   onSlateSelection?: (selection: ProductionSelectionContext) => void;
+  onOpenSlateTake?: (destination: ProductionWorkspace, selection: ProductionSelectionContext) => void;
   onReturnFromRepair?: () => void;
   repairReturnLabel?: string;
   initialGroupId?: string | null;
   initialClipId?: string | null;
+  playbackFocus?: ProductionSelectionContext;
   onSelectionChange?: (groupId: string | null, clipId: string | null) => void;
   onInspectSelection?: (selection: AssistantSelection) => void;
   onViewChange: (view: MaterialView, groupId?: string) => void;
@@ -56,10 +58,12 @@ export function MaterialWorkspace({
   slateFocus,
   onOpenEvidence,
   onSlateSelection,
+  onOpenSlateTake,
   onReturnFromRepair,
   repairReturnLabel,
   initialGroupId = null,
   initialClipId = null,
+  playbackFocus,
   onSelectionChange,
   onInspectSelection,
   onViewChange,
@@ -101,8 +105,7 @@ export function MaterialWorkspace({
               focus={slateFocus}
               onSelection={onSlateSelection}
               onInspectSelection={onInspectSelection}
-              onOpenScript={onOpenScript}
-              onOpenReview={onOpenReview}
+              onOpenTake={onOpenSlateTake}
               onRepair={() => onViewChange("repair")}
             />
             {active && view === "slate" && <SlatePlaybackShortcuts />}
@@ -124,6 +127,7 @@ export function MaterialWorkspace({
             project={project}
             initialGroupId={initialGroupId}
             initialClipId={initialClipId}
+            playbackFocus={playbackFocus}
             onSelectionChange={onSelectionChange}
             onOpenScript={onOpenScript}
             onOpenReview={(groupId, clipId) => onOpenReview?.(groupId, clipId)}

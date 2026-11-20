@@ -135,7 +135,9 @@ export function SlateRow({ row, onSelect, onPatch, renderMedia, onEditStart, onE
           onChange={(event) => onPatch({ take_number: event.target.value ? Number(event.target.value) : null })}
         />
       </td>
-      {cameraColumns.map((camera) => <td className="col-media" key={camera}>{renderMedia(camera)}</td>)}
+      {cameraColumns.map((camera) => (
+        <td className="col-media" key={camera} onClick={stopRowSelection}>{renderMedia(camera)}</td>
+      ))}
       <td className="col-status">
         <label className="golden-status-control" onClick={stopRowSelection}>
           <SlateStatusIndicator state={row.status} />
