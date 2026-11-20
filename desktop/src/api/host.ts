@@ -715,7 +715,17 @@ export class HostConnection {
   }
 
   async startAndConnect(workspacePath: string, port = 8765): Promise<HostSnapshot> {
-    const launched = await this.startLocal(workspacePath, port);
+    let launched: HostLaunchResult;
+    try {
+      launched = await this.startLocal(workspacePath, port);
+    } catch (error) {
+      if (error instanceof HostConnectionError && error.message.includes("已有 Python Host 正在运行")) {
+        await this.stopLocal();
+        launched = await this.startLocal(workspacePath, port);
+      } else {
+        throw error;
+      }
+    }
     const connection = new HostConnection(launched.base_url);
     // startLocal() already returns only after Rust has verified the managed
     // child as mirrororder-host. One bounded read is enough here; retrying the
