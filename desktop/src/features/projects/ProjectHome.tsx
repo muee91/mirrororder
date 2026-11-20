@@ -178,10 +178,7 @@ export function ProjectHome({
       </header>
 
       {visible.length ? (
-        <div className="project-home-list" aria-label="项目列表">
-          <div className="project-home-columns" aria-hidden="true">
-            <span>项目 · {visible.length}</span><span>素材与审阅</span><span>状态</span><span />
-          </div>
+        <div className="project-home-list project-home-grid" aria-label="项目列表">
           {visible.map((project) => {
             const activity = activities[project.project_id];
             const review = reviewSummaries[project.project_id];
@@ -206,23 +203,29 @@ export function ProjectHome({
                     }
                   }}
                 >
-                  <span className="project-home-project-copy">
-                    <strong>{project.name || project.project_id}</strong>
-                    <small>{presentation.kind}</small>
-                  </span>
-                  <span className="project-home-stats">
-                      <span>{presentation.takes} Take</span>
-                      <span>{presentation.clips} 素材</span>
-                      {review?.unmappedCount ? <span className="needs-attention">{review.unmappedCount} 未归集</span> : null}
-                      {review?.scriptGapCount ? <span className="needs-attention">{review.scriptGapCount} 剧本缺口</span> : null}
+                  <div className="project-card-cover" aria-hidden="true">
+                    <span className="project-card-spectrum" />
+                    <span className="project-card-kind-pill">{presentation.kind}</span>
+                    <span className={`project-home-state status-${presentation.statusTone}`}>
+                      {activity?.state === "active" ? <span className="project-activity-spinner" aria-hidden="true" /> : <span className="project-home-state-dot" aria-hidden="true" />}
+                      <span>{presentation.statusLabel}</span>
+                    </span>
+                  </div>
+                  <div className="project-card-body">
+                    <span className="project-home-project-copy">
+                      <strong>{project.name || project.project_id}</strong>
+                      <small>{project.project_id}</small>
+                    </span>
+                    <span className="project-home-stats">
+                      <span><strong>{presentation.takes}</strong> Take</span>
+                      <span><strong>{presentation.clips}</strong> 素材</span>
+                      {review?.unmappedCount ? <span className="needs-attention"><strong>{review.unmappedCount}</strong> 未归集</span> : null}
+                      {review?.scriptGapCount ? <span className="needs-attention"><strong>{review.scriptGapCount}</strong> 剧本缺口</span> : null}
                       {review && !review.attentionCount && !review.unmappedCount && !review.scriptGapCount
                         ? <span>{review.unreviewedCount ? `${review.unreviewedCount} 未决定` : `已决定 ${reviewedDecisions}`}</span>
                         : null}
-                  </span>
-                  <span className={`project-home-state status-${presentation.statusTone}`}>
-                    {activity?.state === "active" ? <span className="project-activity-spinner" aria-hidden="true" /> : <span className="project-home-state-dot" aria-hidden="true" />}
-                    <span>{presentation.statusLabel}</span>
-                  </span>
+                    </span>
+                  </div>
                 </button>
                 <button
                   type="button"

@@ -6,55 +6,57 @@
 :root {
   --mo-font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", sans-serif;
   --mo-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  /* Optical Grade Graphite — color-neutral darkroom surfaces */
-  --mo-monitor-backdrop: #07080a;
-  --mo-monitor-matte: #0b0d10;
-  --mo-monitor-label: rgba(11, 13, 17, 0.78);
-  --mo-monitor-label-hover: rgba(24, 29, 36, 0.92);
-  --mo-surface-app: #0e1013;
-  --mo-surface-sidebar: #111418;
-  --mo-surface-pane: #15181c;
-  --mo-surface-raised: #1c2026;
-  --mo-surface-control: #1f242b;
-  --mo-surface-hover: #252b34;
-  --mo-surface-selected: rgba(74, 144, 242, .16);
-  --mo-surface-elevated: #1b1f25;
-  --mo-border-subtle: rgba(255, 255, 255, .065);
+  /* Frame.io v4 / Linear Flagship Darkroom — True Obsidian + Elevated Floating Canvas */
+  --mo-frame-obsidian: #050608;
+  --mo-monitor-backdrop: #040507;
+  --mo-monitor-matte: #080a0e;
+  --mo-monitor-label: rgba(8, 10, 14, 0.84);
+  --mo-monitor-label-hover: rgba(20, 24, 34, 0.94);
+  --mo-surface-app: #0c0e13;
+  --mo-surface-sidebar: #050608;
+  --mo-surface-pane: #12151c;
+  --mo-surface-raised: #171b24;
+  --mo-surface-control: #1c212c;
+  --mo-surface-hover: #222836;
+  --mo-surface-selected: rgba(74, 144, 242, .18);
+  --mo-surface-elevated: #171b24;
+  --mo-border-subtle: rgba(255, 255, 255, .07);
   --mo-border-default: rgba(255, 255, 255, .115);
-  --mo-border-strong: rgba(255, 255, 255, .21);
-  --mo-bevel: inset 0 1px 0 rgba(255, 255, 255, .055);
-  --mo-text-primary: #edf0f5;
-  --mo-text-secondary: #a5aebd;
-  --mo-text-muted: #6c7585;
-  --mo-text-disabled: #4b5260;
+  --mo-border-strong: rgba(255, 255, 255, .22);
+  --mo-bevel: inset 0 1px 0 rgba(255, 255, 255, .065);
+  --mo-text-primary: #f2f5fa;
+  --mo-text-secondary: #a4aec0;
+  --mo-text-muted: #687386;
+  --mo-text-disabled: #464e5e;
   /* Decoupled semantics: Ice Cobalt accent vs Editorial Amber warning */
   --mo-accent: #4a90f2;
-  --mo-accent-strong: #67a4f8;
-  --mo-accent-soft: rgba(74, 144, 242, .16);
-  --mo-success: #34c77b;
-  --mo-warning: #e5a04b;
-  --mo-danger: #e8544e;
-  --mo-wav-track: #7ad4c4;
-  --mo-action-fill: var(--mo-accent);
+  --mo-accent-strong: #6ba6ff;
+  --mo-accent-soft: rgba(74, 144, 242, .17);
+  --mo-accent-glow: 0 0 0 1px rgba(74, 144, 242, .45), 0 4px 16px rgba(74, 144, 242, .22);
+  --mo-success: #34d389;
+  --mo-warning: #f0ab4c;
+  --mo-danger: #f05a54;
+  --mo-wav-track: #5fd6c2;
+  --mo-action-fill: #3d84ed;
   --mo-action-text: #ffffff;
-  --mo-radius-control: 4px;
-  --mo-radius-pane: 6px;
-  --mo-radius-overlay: 10px;
-  --mo-control-sm: 28px;
-  --mo-control-md: 32px;
+  --mo-radius-control: 7px;
+  --mo-radius-pane: 10px;
+  --mo-radius-overlay: 14px;
+  --mo-control-sm: 30px;
+  --mo-control-md: 34px;
   --mo-pane-gap: 1px;
   --mo-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
   --mo-font-xs: 10px;
-  --mo-font-sm: 11px;
-  --mo-font-md: 12px;
-  --mo-font-lg: 14px;
-  --mo-font-xl: 17px;
+  --mo-font-sm: 12px;
+  --mo-font-md: 13px;
+  --mo-font-lg: 14.5px;
+  --mo-font-xl: 18px;
 
-  --mo-shadow-panel: 0 1px 0 rgba(255, 255, 255, .045) inset;
-  --mo-shadow-float: 0 24px 60px rgba(0, 0, 0, .58), 0 0 0 1px rgba(255, 255, 255, .08), 0 1px 0 rgba(255, 255, 255, .06) inset;
-  --mo-focus-ring: 0 0 0 3px rgba(74, 144, 242, .26);
-  --mo-scrollbar-thumb: #4b5563;
+  --mo-shadow-panel: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 8px 24px rgba(0, 0, 0, .26);
+  --mo-shadow-float: 0 28px 72px rgba(0, 0, 0, .68), 0 0 0 1px rgba(255, 255, 255, .09), 0 1px 0 rgba(255, 255, 255, .07) inset;
+  --mo-focus-ring: 0 0 0 3px rgba(74, 144, 242, .28);
+  --mo-scrollbar-thumb: rgba(148, 163, 184, 0.28);
   --mo-scrollbar-track: transparent;
 }
 
@@ -63,10 +65,11 @@ html[data-mirrororder-theme="dark"] {
 }
 
 html[data-mirrororder-theme="light"] {
-  /* Daylight Studio — neutral cool silver (no warm parchment cast) */
-  --mo-surface-app: #eceef2;
-  --mo-surface-sidebar: #e3e6ec;
-  --mo-surface-pane: #f7f8fa;
+  /* Daylight Studio — crisp architectural silver with floating white canvas */
+  --mo-frame-obsidian: #e6e9f0;
+  --mo-surface-app: #f4f6f9;
+  --mo-surface-sidebar: #e6e9f0;
+  --mo-surface-pane: #ffffff;
   --mo-surface-raised: #ffffff;
   --mo-surface-control: #ffffff;
   --mo-surface-hover: #e5e8ef;
@@ -1080,6 +1083,145 @@ html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigg
   font-family: var(--mo-font-mono);
   font-size: 10px;
   line-height: 1.3;
+}
+
+/* =====================================================================
+ * Frame.io v4 / Linear Flagship Darkroom Layer
+ * Obsidian outer frame + floating rounded-12px glass-rimmed inner canvas
+ * ===================================================================== */
+html[data-mirrororder-theme] .mirrororder-redesign-shell,
+html[data-mirrororder-theme] .mirrororder-redesign-shell .application-frame,
+html[data-mirrororder-theme] .mirrororder-redesign-shell .workspace-shell {
+  background: var(--mo-frame-obsidian);
+}
+
+html[data-mirrororder-theme] .mirrororder-redesign-shell .global-sidebar {
+  border-right: 0;
+  background: var(--mo-frame-obsidian);
+}
+
+/* Floating rounded studio card for outer surfaces (Projects, Settings, Status) */
+html[data-mirrororder-theme] .application-frame:not(.is-project-open) > .app-main-column {
+  margin: 8px 8px 8px 0;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: 13px;
+  overflow: hidden;
+  background: var(--mo-surface-app);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 48px rgba(0, 0, 0, 0.48);
+}
+
+html[data-mirrororder-theme] .application-frame:not(.is-project-open) .app-global-topbar {
+  background: rgba(18, 21, 28, 0.72);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--mo-border-subtle);
+}
+
+html[data-mirrororder-theme="light"] .application-frame:not(.is-project-open) .app-global-topbar {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+/* Floating rounded studio stage inside an open project */
+html[data-mirrororder-theme] .professional-project-workbench {
+  background: var(--mo-frame-obsidian);
+}
+
+html[data-mirrororder-theme] .professional-project-toolbar {
+  border-bottom: 0;
+  background: var(--mo-frame-obsidian);
+  box-shadow: none;
+  padding: 6px 14px 4px;
+  min-height: 46px;
+}
+
+html[data-mirrororder-theme] .project-module-rail {
+  border-bottom: 0;
+  background: var(--mo-frame-obsidian);
+  padding: 2px 10px 8px;
+}
+
+html[data-mirrororder-theme] .project-production-layout > .project-workbench-canvas {
+  margin: 0 8px 8px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: 13px;
+  overflow: hidden;
+  background: var(--mo-surface-app);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 50px rgba(0, 0, 0, 0.52);
+}
+
+/* Recessed Spotlight search pill */
+html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigger {
+  min-width: 158px;
+  justify-content: space-between;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 0 7px 0 10px;
+  color: var(--mo-text-muted);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mo-accent) 45%, var(--mo-border-default));
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--mo-text-primary);
+}
+
+/* Luminous cobalt AI toggle */
+html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle {
+  border: 1px solid color-mix(in srgb, var(--mo-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--mo-accent) 10%, transparent);
+  color: #a7cbff;
+}
+
+html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle:hover:not(:disabled),
+html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle.is-active {
+  border-color: color-mix(in srgb, var(--mo-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--mo-accent) 22%, transparent);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(74, 144, 242, 0.25);
+}
+
+/* Floating glass right inspector drawer inside workspaces */
+html[data-mirrororder-theme] .workspace-context-drawer {
+  margin: 10px;
+  height: calc(100% - 20px);
+  max-height: calc(100% - 20px);
+  border: 1px solid var(--mo-border-default);
+  border-radius: 13px;
+  background: rgba(16, 19, 26, 0.94);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+html[data-mirrororder-theme="light"] .workspace-context-drawer {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+html[data-mirrororder-theme] .workspace-context-heading {
+  background: transparent;
+  backdrop-filter: blur(12px);
+}
+
+/* Luminous sapphire primary action buttons (linear/pro-studio bevel) */
+html[data-mirrororder-theme] .project-home-new-button.project-new-button,
+html[data-mirrororder-theme] .startup-primary .startup-choose:not(:disabled) {
+  border: 1px solid rgba(122, 179, 255, 0.45);
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #5498f8 0%, #377ce3 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 14px rgba(55, 124, 227, 0.34);
+  font-weight: 620;
+}
+
+html[data-mirrororder-theme] .project-home-new-button.project-new-button:hover:not(:disabled),
+html[data-mirrororder-theme] .startup-primary .startup-choose:hover:not(:disabled) {
+  background: linear-gradient(180deg, #64a3fb 0%, #4185eb 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 6px 20px rgba(55, 124, 227, 0.44);
+}
+
+/* Tactile micro-press on all interactive studio buttons */
+button:active:not(:disabled):not(.workspace-context-backdrop) {
+  transform: translateY(0.5px);
 }
 
 .mo-studio-icon {

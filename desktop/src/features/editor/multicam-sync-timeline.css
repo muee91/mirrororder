@@ -650,6 +650,33 @@
   gap: 6px;
 }
 
+/* Frame.io v4 / Broadcast Darkroom Sync Stage Elevation */
+.multicam-sync-stage {
+  background:
+    radial-gradient(680px circle at 50% 45%, rgba(74, 144, 242, 0.06), transparent 70%),
+    #040507;
+}
+.multicam-sync-controls {
+  border-top: 1px solid var(--mo-border-subtle);
+  border-bottom: 1px solid var(--mo-border-subtle);
+  background: linear-gradient(180deg, #13161e 0%, #0e1016 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.multicam-sync-timecode,
+.multicam-sync-controls .timecode {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: #06080c;
+  color: #e8f1ff;
+  font-family: var(--mo-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.65), 0 0 12px rgba(74, 144, 242, 0.08);
+}
+
 .sync-offset-card {
   display: grid;
   gap: 8px;
