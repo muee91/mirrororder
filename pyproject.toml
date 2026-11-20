@@ -44,7 +44,8 @@ local-intelligence = [
 ]
 # Speech-to-text back-ends. mlx-whisper is Apple Silicon only.
 asr = ["faster-whisper>=1.0", "mlx-whisper>=0.4; platform_machine == 'arm64'"]
-dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+# PDF test fixtures use an independent reader to check native render metadata.
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pypdf>=5.0", "reportlab>=4.0"]
 
 [project.scripts]
 script-organizer = "script_organizer.cli:main"
