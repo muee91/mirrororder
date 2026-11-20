@@ -197,7 +197,7 @@ def test_direct_sync_persists_worker_checkpoints_for_desktop(tmp_path: Path, mon
 
 
 def test_production_task_facade_runs_post_sync_analysis(tmp_path: Path, monkeypatch) -> None:
-    config = SimpleNamespace(output_dir=tmp_path)
+    config = SimpleNamespace(output_dir=tmp_path, is_media_directory=True)
     row = task_payload("task-sync-analysis-facade", "queued")
     write_task(tmp_path, row)
     manager = compat_tasks.TaskManager(lambda _project_id: config, workspace_id="ws_demo")
