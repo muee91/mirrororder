@@ -154,30 +154,28 @@ export function ProjectHome({
     <section className="project-home-canvas">
       <header className="project-home-heading">
         <div className="project-home-heading-copy">
-          <h1>项目库</h1>
-          {actionMessage && <span role="status">{actionMessage}</span>}
+          <div className="project-home-title-row">
+            <h1>项目库</h1>
+            <span className="project-home-count">{workspace.projects.length}</span>
+          </div>
+          <div className="project-home-meta-row">
+            {workspacePath.trim() ? (
+              onRevealWorkspace ? (
+                <button type="button" className="project-home-path-link" title={`在 ${revealLabel} 中打开：${workspacePath}`} onClick={onRevealWorkspace}>
+                  <code>{workspacePath}</code>
+                </button>
+              ) : (
+                <code className="project-home-path-text" title={workspacePath}>{workspacePath}</code>
+              )
+            ) : null}
+            {actionMessage ? <span className="project-home-status-msg" role="status">{actionMessage}</span> : null}
+          </div>
         </div>
         <div className="project-home-actions">
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目…" aria-label="搜索项目" />
           <ProjectLifecyclePanel baseUrl={baseUrl} workspaceId={workspace.workspace_id} onWorkspaceChanged={onWorkspaceChanged} onStatusMessage={setActionMessage} />
         </div>
       </header>
-
-      <section className="project-workspace-banner" aria-label="当前工作区位置">
-        <div className="project-workspace-banner-copy">
-          <span className="project-workspace-eyebrow">当前工作区</span>
-          <strong>{workspace.workspace || "未命名工作区"}</strong>
-          {workspacePath.trim() ? <code title={workspacePath}>{workspacePath}</code> : <span className="project-workspace-hint">工作区目录用于存放一个或多个短剧项目</span>}
-        </div>
-        <div className="project-workspace-banner-actions">
-          {onSwitchWorkspace ? (
-            <button type="button" className="secondary" onClick={onSwitchWorkspace}>切换工作区 / 打开已有工程目录…</button>
-          ) : null}
-          {onRevealWorkspace ? (
-            <button type="button" className="secondary" onClick={onRevealWorkspace}>在 {revealLabel} 中显示</button>
-          ) : null}
-        </div>
-      </section>
 
       {visible.length ? (
         <div className="project-home-list" aria-label="项目列表">

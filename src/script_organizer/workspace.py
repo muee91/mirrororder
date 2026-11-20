@@ -111,6 +111,16 @@ class WorkspaceConfig:
         config_path = Path(path).expanduser().resolve()
         with config_path.open("rb") as handle:
             raw = tomllib.load(handle)
+        if (
+            "workspace" not in raw
+            and config_path.name.lower() == "project.toml"
+            and config_path.parent.parent.name.lower() == "projects"
+        ):
+            parent_workspace = config_path.parent.parent.parent / "workspace.toml"
+            if parent_workspace.is_file():
+                config_path = parent_workspace.resolve()
+                with config_path.open("rb") as handle:
+                    raw = tomllib.load(handle)
         workspace = raw.get("workspace", {})
         base = config_path.parent
         workspace_id = str(workspace.get("id", workspace.get("workspace_id", "")) or "").strip()

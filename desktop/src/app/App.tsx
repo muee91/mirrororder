@@ -52,6 +52,34 @@ function projectById(snapshot: HostSnapshot, projectId: string | null | undefine
   return id ? snapshot.projects.find((item) => item.project_id === id) ?? null : null;
 }
 
+/**
+ * Users often pick an inner `project.toml`, `projects/<id>`, or `projects/`
+ * folder when trying to open an existing project. Walk back up to the parent
+ * workspace root so the Host loads the real `workspace.toml` & project list
+ * instead of treating the inner folder as an empty 0-project workspace.
+ */
+function normalizeWorkspaceSelection(rawPath: string): { workspacePath: string; targetProjectId: string } {
+  const trimmed = rawPath.trim().replace(/[\\/]+$/, "");
+  if (!trimmed) return { workspacePath: "", targetProjectId: "" };
+  const projectToml = trimmed.match(/^(.*)[\\/]projects[\\/]([^\\/]+)[\\/]project\.toml$/i);
+  if (projectToml && projectToml[1]) {
+    return { workspacePath: projectToml[1], targetProjectId: projectToml[2] || "" };
+  }
+  const registryFile = trimmed.match(/^(.*)[\\/]projects[\\/]registry\.json$/i);
+  if (registryFile && registryFile[1]) {
+    return { workspacePath: registryFile[1], targetProjectId: "" };
+  }
+  const projectDir = trimmed.match(/^(.*)[\\/]projects[\\/]([^\\/]+)$/i);
+  if (projectDir && projectDir[1]) {
+    return { workspacePath: projectDir[1], targetProjectId: projectDir[2] || "" };
+  }
+  const projectsDir = trimmed.match(/^(.*)[\\/]projects$/i);
+  if (projectsDir && projectsDir[1]) {
+    return { workspacePath: projectsDir[1], targetProjectId: "" };
+  }
+  return { workspacePath: trimmed, targetProjectId: "" };
+}
+
 type AppSurface = "home" | "projects" | "production" | "status" | "team" | "settings";
 interface ProjectPageRequest { projectId: string; page: ProductionPage; nonce: number }
 
@@ -77,7 +105,14 @@ function pageTitle(page: ProductionPage): string {
 }
 
 export function App() {
-  const [launchResume] = useState(() => loadAppResume());
+  const [launchResume] = useState(() => {
+    const raw = loadAppResume();
+    const resolved = normalizeWorkspaceSelection(raw.workspacePath);
+    return {
+      workspacePath: resolved.workspacePath || raw.workspacePath,
+      projectId: resolved.targetProjectId || raw.projectId,
+    };
+  });
   const [surface, setSurface] = useState<AppSurface>("home");
   const [baseUrl, setBaseUrl] = useState(defaultHostBaseUrl);
   const [workspacePath, setWorkspacePath] = useState(launchResume.workspacePath);
@@ -154,7 +189,7 @@ export function App() {
       setRecentWorkspaces(loadRecentWorkspaces());
       setMessage(rememberedProject
         ? `已恢复 · ${rememberedProject.name || rememberedProject.project_id} · ${pageTitle(rememberedPage)}`
-        : `工作区已恢复 · 选择项目继续制作`);
+        : `工作区已恢复 · ${next.projects.length} 个项目`);
     }).catch((error: unknown) => {
       if (!active) return;
       setActiveWorkspacePath("");
@@ -169,7 +204,8 @@ export function App() {
   }, [launchResume.projectId, launchResume.workspacePath]);
 
   async function openWorkspacePath(path: string): Promise<void> {
-    const normalizedPath = path.trim();
+    const resolved = normalizeWorkspaceSelection(path);
+    const normalizedPath = resolved.workspacePath;
     if (!normalizedPath) {
       setState("error");
       setMessage("先选择工作区目录或文件。");
@@ -181,21 +217,25 @@ export function App() {
     const previousSurface = surface;
     setWorkspacePath(normalizedPath);
     setState("starting");
-    setMessage("正在打开工作区…");
+    setMessage(resolved.targetProjectId ? "已定位到项目所属工作区，正在打开…" : "正在打开工作区…");
     try {
       const next = await new HostConnection(defaultHostBaseUrl).startAndConnect(normalizedPath);
+      const targetProject = resolved.targetProjectId ? projectById(next, resolved.targetProjectId) : null;
       setBaseUrl(next.baseUrl);
       setWorkspacePath(normalizedPath);
       setActiveWorkspacePath(normalizedPath);
       setSnapshot(next);
-      setSelectedProject(null);
+      setSelectedProject(targetProject);
       setPageRequest(null);
-      setSurface("projects");
+      setSurface(targetProject ? "production" : "projects");
       setResumeEnabledForSession(true);
       setState("connected");
       rememberWorkspace(normalizedPath);
+      if (targetProject) rememberProject(targetProject.project_id);
       setRecentWorkspaces(loadRecentWorkspaces());
-      setMessage(`工作区已就绪 · ${next.projects.length} 个项目`);
+      setMessage(targetProject
+        ? `已打开工程 · ${targetProject.name || targetProject.project_id}`
+        : `工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       if (previousSnapshot) {
         setWorkspacePath(previousPath);
@@ -605,8 +645,17 @@ export function App() {
         <section className="app-main-column">
           {!isProjectOpen && <header className="app-global-topbar">
             <div className="app-global-context">
-              <span>{contextLabel}</span>
-              <strong>{currentTitle}</strong>
+              {surface === "projects" ? (
+                <>
+                  <span>工作区</span>
+                  <strong>{contextLabel}</strong>
+                </>
+              ) : (
+                <>
+                  <span>{contextLabel}</span>
+                  <strong>{currentTitle}</strong>
+                </>
+              )}
             </div>
             <div className="app-global-actions">
               <button type="button" className="app-topbar-status" onClick={() => setSurface("status")}>

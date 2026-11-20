@@ -8,68 +8,68 @@
 }
 
 .project-home-heading,
-.project-workspace-banner,
 .project-home-list,
 .project-home-onboarding {
   width: min(100%, 1180px);
   margin-inline: auto;
 }
 
-.project-workspace-banner {
+.project-home-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.project-home-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: 999px;
+  background: var(--mo-surface-pane);
+  color: var(--mo-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.project-home-meta-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px 18px;
-  margin-block-end: 20px;
-  padding: 14px 18px;
-  border: 1px solid var(--mo-border-subtle);
-  border-radius: 12px;
-  background: var(--mo-surface-pane);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.project-workspace-banner-copy {
-  display: grid;
+  gap: 8px 12px;
   min-width: 0;
-  gap: 3px;
 }
 
-.project-workspace-eyebrow {
+.project-home-path-link {
+  padding: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
   color: var(--mo-text-muted);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
 }
 
-.project-workspace-banner-copy strong {
-  color: var(--mo-text-primary);
-  font-size: 15px;
-  font-weight: 650;
-}
-
-.project-workspace-banner-copy code {
+.project-home-path-link:hover {
+  background: transparent;
   color: var(--mo-text-secondary);
+}
+
+.project-home-path-link code,
+.project-home-path-text {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 11.5px;
+  color: inherit;
   overflow-wrap: anywhere;
 }
 
-.project-workspace-hint {
-  color: var(--mo-text-secondary);
+.project-home-status-msg {
+  color: var(--mo-accent-strong);
   font-size: 12px;
-}
-
-.project-workspace-banner-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.project-workspace-banner-actions button {
-  min-height: 34px;
-  padding: 0 13px;
-  font-size: 12.5px;
 }
 
 .project-home-heading {
