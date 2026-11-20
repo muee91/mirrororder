@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { errorMessage } from "../../api/host";
 import { SemanticSearchClient, type SemanticSearchPayload, type SemanticSearchResult } from "../../api/semantic";
 import { canOpenEvidence } from "../production/evidenceLocation";
@@ -41,12 +41,16 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setOpen(true);
-        globalThis.requestAnimationFrame(() => inputRef.current?.focus());
+        inputRef.current?.focus();
       }
     }
     globalThis.addEventListener("keydown", onKeyDown);
     return () => globalThis.removeEventListener("keydown", onKeyDown);
   }, [active]);
+
+  useLayoutEffect(() => {
+    if (active && open) inputRef.current?.focus();
+  }, [active, open]);
 
   useEffect(() => {
     setPayload(null);
@@ -55,7 +59,7 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
 
   function show(): void {
     setOpen(true);
-    globalThis.requestAnimationFrame(() => inputRef.current?.focus());
+    inputRef.current?.focus();
   }
 
   async function search(event?: FormEvent, semantic = false): Promise<void> {

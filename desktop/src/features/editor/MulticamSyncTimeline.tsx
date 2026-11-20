@@ -16,7 +16,12 @@ interface Props {
   submissionError?: string;
 }
 
-const SYNC_STEPS = ["确认素材", "计算同步", "建立索引", "检查并交付"] as const;
+const SYNC_STEPS = [
+  ["确认原始目录", "确认摄影机原片和同期录音可读"],
+  ["计算多机位同步", "建立各机位与同期录音的摆位"],
+  ["建立媒体索引", "关联原片，供核对与重连使用"],
+  ["核对与交付", "对照音画，再打开目标工程"],
+] as const;
 
 function stageLabel(phase: SyncTimeline["phase"], stage: string): string {
   if (phase === "loading") return "正在读取任务状态";
@@ -50,28 +55,9 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
     }).catch(() => { if (active) setSourcesUnreadable(true); });
     return () => { active = false; };
   }, [baseUrl, syncTimeline.project_id, syncTimeline.phase]);
-  if (syncTimeline.ready && syncTimeline.phase === "completed") {
-    return (
-      <section className="multicam-sync-gate is-complete" aria-label="多机位同步任务">
-        <div className="multicam-sync-gate-header"><div>
-          <h3>同步母版已建立，下一步检查音画</h3>
-          <p>已识别 {syncTimeline.clip_count} 个视频片段、{syncTimeline.cameras.length} 个机位。进入核对页检查音画与待处理异常。</p>
-        </div><span className="multicam-sync-status is-completed" role="status">同步任务完成</span></div>
-        <div className="multicam-sync-gate-body"><div className="multicam-sync-live">
-          <p className="multicam-sync-label">最近任务记录</p>
-          <strong>{syncTimeline.task?.message || syncTimeline.message}</strong>
-          <div className="multicam-sync-activity">
-            {syncTimeline.task?.updated_at ? <span>最近活动：{activityLabel(syncTimeline.task.updated_at)}</span> : null}
-          </div>
-        </div><div className="multicam-sync-action">
-          <button type="button" onClick={onInspect} disabled={!onInspect}>进入同步核对</button>
-          {onOpenStatus && <button type="button" className="secondary" onClick={onOpenStatus}>任务详情</button>}
-        </div></div>
-      </section>
-    );
-  }
   const task = syncTimeline.task;
   const phase = syncTimeline.phase;
+  const complete = syncTimeline.ready && phase === "completed";
   const running = phase === "running";
   const loading = phase === "loading";
   const unreadable = phase === "unavailable";
@@ -83,61 +69,85 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
   const done = typeof rawDone === "number" && Number.isFinite(rawDone) && rawDone >= 0 ? rawDone : null;
   const total = typeof rawTotal === "number" && Number.isFinite(rawTotal) && rawTotal >= 5 ? rawTotal : null;
   const hasCheckpoints = running && task?.stage === "sync" && done !== null && total !== null && done <= total;
-  const stepIndex = task?.stage === "analysis" ? 2 : running ? 1 : 0;
+  const stepIndex = complete ? 3 : task?.stage === "analysis" ? 2 : task?.stage && task.stage !== "queued" ? 1 : 0;
+  const sourceRoots = sourcesUnreadable ? "暂不可读" : sources ? `${sources.roots.length} 个` : "读取中";
+  const inaccessible = !sourcesUnreadable ? sources?.unavailable_roots?.length ?? 0 : 0;
+  const lastActivity = task?.updated_at || task?.completed_at;
+  const latestMessage = unreadable ? "等待状态恢复" : task?.message || syncTimeline.message;
+  const primaryLabel = complete ? "进入同步核对"
+    : command === "start" ? "正在提交…"
+      : running ? "同步正在运行" : loading ? "检查状态中" : unreadable ? "状态暂不可读"
+        : problem || submissionError ? "重新执行同步" : "开始多机位同步";
+  const phaseLabel = complete ? "同步任务完成"
+    : submissionError && !running ? "同步提交失败" : stageLabel(phase, task?.stage ?? "");
+  const footage = syncTimeline.ready ? `${syncTimeline.clip_count.toLocaleString()} 个片段` : "同步后统计";
+  const cameras = syncTimeline.cameras.length ? syncTimeline.cameras.join(" / ") : "待识别";
+  const recordings = syncTimeline.recordings ? `${syncTimeline.recordings.placements.length} 段已上轨` : "同步后统计";
 
   return (
     <section className="multicam-sync-gate" aria-label="多机位同步任务">
-      <header className="multicam-sync-gate-header">
-        <div>
-          <h3>同步原始视频与同期录音</h3>
-          <p>{sourcesUnreadable ? "无法读取原始目录状态"
-            : sources?.unavailable_roots?.length ? `${sources.unavailable_roots.length} 个原始目录不可访问`
-            : sources ? `${sources.roots.length} 个已登记目录` : "正在读取原始目录"}</p>
+      <div className="sync-task-content">
+        <header className="sync-task-heading">
+          <div>
+            <span className="sync-task-state" data-phase={submissionError && !running && !complete ? "failed" : phase} role="status">{phaseLabel}</span>
+            <h1>{complete ? "同步母版已就绪" : "同步原始素材"}</h1>
+            <p>{complete ? "核对机位与同期录音，确认后生成目标剪辑软件工程。" : "将摄影机原片和同期录音整理到同一条同步母版。"}</p>
+          </div>
+          <div className="sync-task-actions">
+            <button type="button"
+              disabled={complete ? !onInspect : Boolean(command) || running || loading || unreadable || !onMulticamSync}
+              onClick={complete ? onInspect : onMulticamSync}>
+              {primaryLabel}
+            </button>
+            {running && task && onCancel && <button type="button" className="secondary" disabled={Boolean(command) || task.cancel_requested}
+              onClick={onCancel}>{task.cancel_requested || command === "cancel" ? "正在取消…" : "取消同步"}</button>}
+            {task && onOpenStatus && <button type="button" className="secondary" onClick={onOpenStatus}>任务详情</button>}
+            {!complete && onInspect && <button type="button" className="secondary" onClick={onInspect}>查看上次有效母版</button>}
+          </div>
+        </header>
+
+        <div className="sync-task-body">
+          <section className="sync-task-sources" aria-labelledby="sync-task-sources-title">
+            <h2 id="sync-task-sources-title">素材来源</h2>
+            <dl>
+              <div><dt>原始目录</dt><dd>{sourceRoots}</dd></div>
+              <div><dt>视频</dt><dd>{footage}</dd></div>
+              <div><dt>机位</dt><dd>{cameras}</dd></div>
+              <div><dt>同期录音</dt><dd>{recordings}</dd></div>
+            </dl>
+            {inaccessible > 0 && <p className="sync-task-warning" role="status">{inaccessible} 个原始目录不可访问</p>}
+            {onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}
+          </section>
+
+          <section className="sync-task-stages" aria-labelledby="sync-task-stages-title">
+            <h2 id="sync-task-stages-title">制作进度</h2>
+            <ol>
+              {SYNC_STEPS.map(([label, hint], index) => {
+                const current = index === stepIndex;
+                const done = index < stepIndex && !unreadable;
+                const stageStatus = done ? "已完成" : current ? complete ? "下一步" : phaseLabel : "待执行";
+                return <li key={label} data-state={done ? "done" : current ? "current" : "upcoming"} aria-current={current ? "step" : undefined}>
+                  <div className="sync-task-step"><strong>{label}</strong><small>{hint}</small></div>
+                  <span className="sync-task-step-status">{stageStatus}</span>
+                </li>;
+              })}
+            </ol>
+          </section>
         </div>
-        <span className={`multicam-sync-status is-${phase}`} role="status">
-          <span className={`multicam-sync-status-dot is-${phase}`} aria-hidden="true" />
-          {stageLabel(phase, task?.stage ?? "")}
-        </span>
-      </header>
-      <div className="multicam-sync-flow" aria-label="制作流程">
-        {SYNC_STEPS.map((label, index) => (
-          <span className={index === stepIndex ? "is-current" : index < stepIndex ? "is-done" : ""} key={label}>
-            <strong>{String(index + 1).padStart(2, "0")}</strong> {label}
-          </span>
-        ))}
-      </div>
-      <div className="multicam-sync-gate-body">
-        <div className="multicam-sync-live" aria-live="polite">
-          <p className="multicam-sync-label">当前任务</p>
-          <strong>{unreadable ? "等待状态恢复" : task?.message || syncTimeline.message}</strong>
+
+        <section className="multicam-sync-live" aria-label="最近活动" aria-live="polite">
+          <header><h2>最近活动</h2>{lastActivity && <time>{activityLabel(lastActivity)}</time>}</header>
+          <p>{latestMessage}</p>
           {submissionError && <p className="multicam-sync-error" role="alert">{submissionError}</p>}
           {task?.cancel_requested && <p role="status">已请求取消，正在等待安全中断点。</p>}
-          {hasCheckpoints ? (
-            <div className="multicam-sync-progress">
-              <div><span>同步算法检查点，不代表全部文件已处理</span><strong>{done} / {total}</strong></div>
-              <progress value={done ?? 0} max={total ?? 1} aria-label="同步算法检查点进度" />
-            </div>
-          ) : running ? (
-            <p className="multicam-sync-no-progress">当前阶段正在运行。</p>
-          ) : null}
-          {problem && task?.error ? <p className="multicam-sync-error" role="alert">失败原因：{task.error}</p> : null}
-          {unreadable ? <p className="multicam-sync-error" role="alert">{syncTimeline.message}</p> : null}
-          <div className="multicam-sync-activity">
-            {task?.started_at ? <span>开始时间：{activityLabel(task.started_at)}</span> : null}
-            {task?.updated_at ? <span>最近任务记录：{activityLabel(task.updated_at)}</span> : null}
-            {task?.task_id ? <span title={task.task_id}>已记录后台任务</span> : null}
-          </div>
-        </div>
-        <div className="multicam-sync-action">
-          <button type="button" disabled={Boolean(command) || running || loading || unreadable || !onMulticamSync} onClick={onMulticamSync}>
-            {command === "start" ? "正在提交…" : running ? "同步正在运行" : loading ? "检查状态中" : unreadable ? "状态暂不可读" : problem || submissionError ? "重新执行同步" : "开始多机位同步"}
-          </button>
-          {running && task && onCancel && <button type="button" className="secondary" disabled={Boolean(command) || task.cancel_requested}
-            onClick={onCancel}>{task.cancel_requested || command === "cancel" ? "正在取消…" : "取消同步"}</button>}
-          {task && onOpenStatus && <button type="button" className="secondary" onClick={onOpenStatus}>任务详情</button>}
-          {onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}
-          {onInspect && <button type="button" className="secondary" onClick={onInspect}>查看上次有效母版</button>}
-        </div>
+          {hasCheckpoints && <div className="multicam-sync-progress">
+            <div><span>同步算法检查点</span><strong>{done} / {total}</strong></div>
+            <progress value={done ?? 0} max={total ?? 1} aria-label="同步算法检查点进度" />
+          </div>}
+          {problem && task?.error && <p className="multicam-sync-error" role="alert">{task.error}</p>}
+          {unreadable && <p className="multicam-sync-error" role="alert">{syncTimeline.message}</p>}
+          {task?.started_at && <small>开始时间 {activityLabel(task.started_at)}</small>}
+        </section>
       </div>
     </section>
   );

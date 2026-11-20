@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { errorMessage, type ProjectSummary } from "../../api/host";
 import { DesktopClient } from "../../api/desktop";
 import type { AssistantSelection } from "../../api/production";
@@ -36,6 +36,8 @@ interface Props {
   project: ProjectSummary;
   workspaceId?: string;
   active?: boolean;
+  projectNavigation?: ReactNode;
+  systemTools?: ReactNode;
   pageRequest?: { page: ProductionPage; nonce: number } | null;
   onOpenTeamReview?: () => void;
   onTaskChanged?: () => void;
@@ -162,7 +164,7 @@ function normalizedContext(
   };
 }
 
-export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, active = true, pageRequest = null, onOpenTeamReview, onTaskChanged, onOpenStatus, onPageChange }: Props) {
+export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, active = true, projectNavigation, systemTools, pageRequest = null, onOpenTeamReview, onTaskChanged, onOpenStatus, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => {
     const saved = safeProductionPage(readProjectPage(project.project_id));
     if (project.input_kind === "media-directory") {
@@ -360,8 +362,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
     >
       <header className="professional-project-toolbar">
         <div className="professional-project-identity">
-          <strong>{project.name || project.project_id}</strong>
-          <small>{pageLabel(visiblePage)}</small>
+          {projectNavigation ?? <strong>{project.name || project.project_id}</strong>}
           {returnPage && returnPage !== visiblePage && visiblePage !== "media-binding" && !syncBlocked && <button type="button" className="secondary"
             onClick={() => { navigate(returnPage); setReturnPage(null); }}>返回{pageLabel(returnPage)}</button>}
         </div>
@@ -369,13 +370,14 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
           <SemanticSearchPalette active={active} baseUrl={baseUrl} projectId={project.project_id} onOpenEvidence={openEvidence} />
           <button type="button" ref={assistantToggle} className="professional-assistant-toggle" aria-expanded={assistantOpen}
             onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
-          {!syncBlocked && onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>审阅</button> : null}
+          {!syncBlocked && onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>团队审阅</button> : null}
           <details className="professional-tools-menu">
             <summary>工具</summary>
             <div className="professional-tools-popover">
               <CurrentOperatorControl />
             </div>
           </details>
+          {systemTools && <div className="professional-project-system">{systemTools}</div>}
         </div>
       </header>
 

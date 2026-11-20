@@ -16,7 +16,7 @@ interface Props {
   activities?: Record<string, ProjectActivitySummary>;
   revealLabel?: string;
   onOpenProject: (project: ProjectSummary) => void;
-  onOpenProjectPage?: (project: ProjectSummary, page: "timeline") => void;
+  onOpenProjectPage?: (project: ProjectSummary, page: "sync-task" | "timeline") => void;
   onOpenTeamProject: (project: ProjectSummary) => void;
   onCopyShareLink: (project: ProjectSummary) => void | Promise<void>;
   onRevealProject: (project: ProjectSummary) => void | Promise<void>;
@@ -144,8 +144,8 @@ export function ProjectHome({
     <section className="project-home-canvas">
       <header className="project-home-heading">
         <div className="project-home-heading-copy">
-          <div><h1>项目库</h1><span className="project-home-count">{workspace.projects.length}</span></div>
-          <span aria-live="polite">{actionMessage || "管理工作区内的制作项目"}</span>
+          <h1>项目库</h1>
+          {actionMessage && <span role="status">{actionMessage}</span>}
         </div>
         <div className="project-home-actions">
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目…" aria-label="搜索项目" />
@@ -155,6 +155,9 @@ export function ProjectHome({
 
       {visible.length ? (
         <div className="project-home-list" aria-label="项目列表">
+          <div className="project-home-columns" aria-hidden="true">
+            <span>项目 · {visible.length}</span><span>素材与审阅</span><span>状态</span><span />
+          </div>
           {visible.map((project) => {
             const activity = activities[project.project_id];
             const review = reviewSummaries[project.project_id];
@@ -180,8 +183,10 @@ export function ProjectHome({
                   }}
                 >
                   <span className="project-home-project-copy">
-                    <span className="project-home-title-row"><strong>{project.name || project.project_id}</strong><small>{presentation.kind}</small></span>
-                    <span className="project-home-stats">
+                    <strong>{project.name || project.project_id}</strong>
+                    <small>{presentation.kind}</small>
+                  </span>
+                  <span className="project-home-stats">
                       <span>{presentation.takes} Take</span>
                       <span>{presentation.clips} 素材</span>
                       {review?.unmappedCount ? <span className="needs-attention">{review.unmappedCount} 未归集</span> : null}
@@ -189,7 +194,6 @@ export function ProjectHome({
                       {review && !review.attentionCount && !review.unmappedCount && !review.scriptGapCount
                         ? <span>{review.unreviewedCount ? `${review.unreviewedCount} 未决定` : `已决定 ${reviewedDecisions}`}</span>
                         : null}
-                    </span>
                   </span>
                   <span className={`project-home-state status-${presentation.statusTone}`}>
                     {activity?.state === "active" ? <span className="project-activity-spinner" aria-hidden="true" /> : <span className="project-home-state-dot" aria-hidden="true" />}
@@ -225,7 +229,7 @@ export function ProjectHome({
           <div className="project-context-group-label">开始制作</div>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenProject(menu.project))}>打开项目</button>
           <button type="button" role="menuitem" title="本机素材 / 换素材盘" onClick={() => run(() => onOpenMediaBinding(menu.project))}>连接素材</button>
-          <button type="button" role="menuitem" title="多机位同步在时间线中执行" onClick={() => run(() => onOpenProjectPage?.(menu.project, "timeline"))}>打开时间线（多机位同步）</button>
+          <button type="button" role="menuitem" onClick={() => run(() => onOpenProjectPage?.(menu.project, menu.project.input_kind === "media-directory" ? "sync-task" : "timeline"))}>{menu.project.input_kind === "media-directory" ? "打开同步任务" : "打开选片组接"}</button>
           <button type="button" role="menuitem" title="重新整理项目" onClick={() => run(() => onPrepareProject(menu.project))}>完整整理项目</button>
           <details className="project-context-advanced">
             <summary>高级操作</summary>

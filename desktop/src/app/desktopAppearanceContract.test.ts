@@ -55,6 +55,7 @@ describe("Desktop appearance product contract", () => {
     const takeCard = read("../features/material-script/take-card.css");
     const slate = read("../desktop-theme-slate.css");
     const frozen = read("../desktop-theme-frozen-surfaces.css");
+    const projectHome = read("../features/projects/project-home.css");
     const mediaCard = read("../features/media/mirrororder-media-card.css");
     expect(css).toContain('html[data-mirrororder-theme="light"]');
     expect(css).toContain('html[data-mirrororder-theme="dark"]');
@@ -79,8 +80,12 @@ describe("Desktop appearance product contract", () => {
     expect(slate).toContain('html[data-mirrororder-theme="light"] button.danger-subtle');
     expect(slate).toContain('html[data-mirrororder-theme="dark"] button.danger-subtle');
     expect(slate).toContain(".golden-inspector-actions .danger-subtle { flex: 0 0 auto;");
-    expect(frozen).toContain('html[data-mirrororder-theme="light"] .project-home-heading');
-    expect(frozen).toContain('html[data-mirrororder-theme="dark"] .project-home-heading');
+    expect(projectHome).toContain(".project-home-heading");
+    expect(projectHome).toContain("background: var(--mo-surface-pane)");
+    expect(projectHome).toContain("color: var(--mo-text-primary)");
+    expect(projectHome).not.toContain("data-mirrororder-theme");
+    expect(frozen).not.toContain(".project-home-heading");
+    expect(css).not.toContain(".project-home-heading");
     expect(mediaCard).toContain('html[data-mirrororder-theme="light"] .mo-media-prefer');
     expect(mediaCard).toContain('html[data-mirrororder-theme="dark"] .mo-media-prefer');
   });

@@ -1,78 +1,161 @@
+/* Synchronization task */
 .multicam-sync-gate {
-  max-width: 1040px;
-  padding: clamp(16px, 2.5vw, 28px);
-}
-.multicam-sync-gate h3 {
-  margin: 0;
-  color: var(--mo-text-primary, #edf2f6);
-  font-size: 18px;
-  font-weight: 650;
-}
-.multicam-sync-gate-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
-  margin-bottom: 14px;
-}
-.multicam-sync-gate-header p {
-  margin: 5px 0 0;
-  color: var(--mo-text-secondary, #abb8c3);
-  font-size: 12px;
-}
-.multicam-sync-live {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--mo-border-subtle, #27323d);
-  border-radius: var(--mo-radius-pane);
-  padding: 14px;
-  background: var(--mo-surface-pane);
-}
-.multicam-sync-gate > footer { margin-top: 10px; }
-.multicam-sync-live > strong {
-  color: var(--mo-text-primary, #edf2f6);
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-app);
   font-size: 14px;
-  overflow-wrap: anywhere;
-}
-.multicam-sync-label {
-  margin: 0;
-  font-size: 11px;
-  color: var(--mo-text-muted, #81909d);
-}
-.multicam-sync-activity {
-  margin: 0;
-  color: var(--mo-text-secondary, #abb8c3);
-  font-size: 11px;
-  line-height: 1.6;
-}
-.multicam-sync-progress { display: grid; gap: 6px; }
-.multicam-sync-progress > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 11px;
-  color: var(--mo-text-secondary, #abb8c3);
-}
-.multicam-sync-progress progress {
-  display: block;
-  width: 100%;
-  height: 10px;
-  accent-color: var(--mo-accent, #659fe0);
-}
-.multicam-sync-activity { display: flex; gap: 6px 18px; flex-wrap: wrap; }
-.multicam-sync-error {
-  margin: 0;
-  color: var(--mo-warning, #e5af81);
-  font-size: 12px;
-  overflow-wrap: anywhere;
 }
 
-/* Read-only sync inspection: bounded source monitor above independent tracks.
-   Camera colors identify tracks only; project and editorial authority stay separate. */
+.sync-task-content {
+  width: min(100%, 1216px);
+  margin-inline: auto;
+  padding: 32px clamp(24px, 4vw, 64px) 40px;
+}
+
+.sync-task-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding-block-end: 24px;
+  border-bottom: 1px solid var(--mo-border-default);
+}
+
+.sync-task-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mo-text-secondary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sync-task-state::before,
+.sync-task-stages li::before {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  content: "";
+}
+.sync-task-state[data-phase="completed"] { color: var(--mo-success); }
+.sync-task-state[data-phase="running"] { color: var(--mo-accent); }
+.sync-task-state[data-phase="failed"],
+.sync-task-state[data-phase="invalid"],
+.sync-task-state[data-phase="unavailable"] { color: var(--mo-danger); }
+.sync-task-state[data-phase="completed"]::before,
+.sync-task-state[data-phase="running"]::before { background: currentColor; }
+
+.sync-task-heading h1 {
+  margin: 8px 0 6px;
+  color: var(--mo-text-primary);
+  font-size: 28px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+.sync-task-heading p {
+  max-width: 56ch;
+  margin: 0;
+  color: var(--mo-text-secondary);
+  line-height: 1.6;
+}
+.sync-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sync-task-actions > button { min-height: 38px; padding-inline: 14px; font-size: 14px; }
+.sync-task-actions > button:not(.secondary):not(:disabled) {
+  color: var(--mo-action-text);
+  background: var(--mo-action-fill);
+  border-color: var(--mo-action-fill);
+}
+.sync-task-actions > button:not(.secondary):hover:not(:disabled) { filter: brightness(1.08); }
+
+.sync-task-body {
+  display: grid;
+  grid-template-columns: minmax(215px, .72fr) minmax(0, 1.5fr);
+  gap: clamp(24px, 4vw, 56px);
+  margin-block: 24px 0;
+}
+
+.sync-task-content h2 { margin: 0 0 12px; color: var(--mo-text-primary); font-size: 15px; font-weight: 650; }
+
+.sync-task-sources {
+  align-self: start;
+  padding: 16px 18px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: var(--mo-radius-pane);
+  background: var(--mo-surface-pane);
+}
+.sync-task-sources dl { margin: 0 0 14px; }
+.sync-task-sources dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 9px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+}
+.sync-task-sources dt { color: var(--mo-text-secondary); }
+.sync-task-sources dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-weight: 650; font-variant-numeric: tabular-nums; }
+.sync-task-sources > button { font-size: 13px; }
+.sync-task-warning { color: var(--mo-warning); }
+
+.sync-task-stages ol { margin: 0; padding: 0; list-style: none; }
+.sync-task-stages li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) minmax(62px, auto);
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+}
+.sync-task-stages li::before { color: var(--mo-text-muted); }
+.sync-task-stages li[data-state="current"] { background: var(--mo-surface-selected); }
+.sync-task-stages li[data-state="current"]::before { color: var(--mo-accent); background: currentColor; }
+.sync-task-stages li[data-state="done"]::before { color: var(--mo-success); background: currentColor; }
+.sync-task-step { display: grid; gap: 3px; }
+.sync-task-step small,
+.sync-task-step-status { color: var(--mo-text-secondary); font-size: 13px; line-height: 1.45; }
+.sync-task-step-status { text-align: end; }
+.sync-task-stages li[data-state="current"] .sync-task-step-status { color: var(--mo-text-primary); font-weight: 640; }
+
+.multicam-sync-live {
+  margin-block-start: 24px;
+  padding-block-start: 16px;
+  border-top: 1px solid var(--mo-border-default);
+}
+.multicam-sync-live > header,
+.multicam-sync-progress > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.multicam-sync-live > header h2 { margin-block-end: 0; }
+.multicam-sync-live p { margin: 7px 0; overflow-wrap: anywhere; }
+.multicam-sync-live time,
+.multicam-sync-live small { color: var(--mo-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.multicam-sync-progress { display: grid; gap: 6px; margin: 12px 0; max-width: 52ch; font-size: 13px; }
+.multicam-sync-progress progress { width: 100%; height: 6px; accent-color: var(--mo-accent); }
+
+.multicam-sync-error {
+  margin: 8px 0;
+  padding: 8px 10px;
+  color: var(--mo-danger);
+  border: 1px solid var(--mo-border-subtle);
+  background: var(--mo-surface-raised);
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
 .multicam-sync-inspection {
   --sync-monitor-control: var(--mo-radius-control);
   --sync-monitor-group: var(--mo-radius-pill, 999px);
@@ -87,7 +170,7 @@
   background: var(--mo-surface-pane);
 }
 .multicam-sync-inspection.is-embedded { height: auto; grid-template-rows: auto auto auto; }
-.multicam-sync-inspection.is-embedded .multicam-sync-inspection-canvas { height: 640px; }
+.multicam-sync-inspection.is-embedded .sync-inspection-desk { height: 640px; }
 .multicam-sync-inspection-heading {
   display: flex;
   flex-wrap: wrap;
@@ -99,22 +182,23 @@
   border-bottom: 1px solid var(--mo-border-subtle);
 }
 .sync-master-heading, .multicam-sync-inspection-meta { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.sync-master-heading h3 { margin: 0; color: var(--mo-text-primary); font-size: 15px; font-weight: 650; }
-.sync-master-heading > span { color: var(--mo-text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sync-master-heading h2 { margin: 0; color: var(--mo-text-primary); font-size: 16px; font-weight: 650; }
+.sync-master-heading > span { color: var(--mo-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
 .sync-master-heading .sync-monitor-listening {
   padding-inline-start: 10px;
   border-inline-start: 1px solid var(--mo-border-subtle);
   color: var(--mo-text-primary);
 }
 .multicam-sync-inspection-meta { flex-wrap: wrap; gap: 6px; }
-.multicam-sync-inspection-meta > button, .sync-clip-info > summary, .sync-monitor-pair > select {
+.multicam-sync-inspection-meta > button, .sync-monitor-pair > select {
   min-height: 30px;
   padding: 4px 10px;
   border-radius: var(--sync-monitor-control);
   white-space: nowrap;
   font-size: 12px;
 }
-.multicam-sync-inspection-meta > .sync-gap-toggle[aria-pressed="true"] {
+.multicam-sync-inspection-meta > .sync-gap-toggle[aria-pressed="true"],
+.multicam-sync-inspection-meta > .sync-inspector-toggle[aria-expanded="true"] {
   background: var(--mo-surface-selected);
   color: var(--mo-text-primary);
 }
@@ -147,30 +231,74 @@
   border: 1px solid var(--mo-border-subtle);
   background: var(--mo-surface-control);
 }
-.sync-clip-info { position: relative; }
-.sync-clip-info > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; color: var(--mo-text-secondary); }
-.sync-clip-info > summary::-webkit-details-marker { display: none; }
-.sync-clip-info > summary::after { content: ""; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-1px) rotate(45deg); }
-.sync-clip-info[open] > summary, .sync-clip-info > summary:hover { background: var(--mo-surface-hover); color: var(--mo-text-primary); }
-.multicam-sync-details {
+.sync-inspection-desk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+.sync-inspection-desk[data-inspector] { grid-template-columns: minmax(0, 1fr) 7px var(--sync-inspector-width); }
+.sync-inspection-grip {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--mo-surface-sidebar);
+}
+.sync-inspection-grip::after {
   position: absolute;
-  z-index: 15;
-  top: calc(100% + 5px);
-  right: 0;
-  width: min(320px, 72cqi);
-  max-height: min(390px, 70vh);
+  inset: calc(50% - 13px) 2px auto;
+  height: 26px;
+  border-radius: 2px;
+  background: var(--mo-text-muted);
+  content: "";
+}
+.sync-inspection-grip:hover::after,
+.sync-inspection-grip:focus-visible::after { background: var(--mo-accent); }
+.sync-inspection-grip:focus-visible { outline-offset: -2px; }
+.sync-inspection-sidebar {
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
-  padding: 16px;
-  border: 1px solid var(--mo-border-default);
-  border-radius: var(--mo-radius-control);
-  background: var(--mo-surface-elevated, var(--mo-surface-pane));
+  border-inline-start: 1px solid var(--mo-border-default);
+  background: var(--mo-surface-raised);
   color: var(--mo-text-primary);
 }
-.multicam-sync-details > strong { font-size: 13px; }
-.multicam-sync-details dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 16px; margin: 12px 0; font-size: 12px; line-height: 1.45; font-variant-numeric: tabular-nums; }
+.sync-inspection-sidebar > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  background: var(--mo-surface-raised);
+}
+.sync-inspection-sidebar > header h3 { margin: 0; font-size: 15px; }
+.sync-inspection-sidebar > header button { font-size: 12px; }
+.multicam-sync-details { padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+.multicam-sync-details dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 9px 12px;
+  margin: 7px 0 15px;
+  font-variant-numeric: tabular-nums;
+}
 .multicam-sync-details dt { color: var(--mo-text-secondary); }
 .multicam-sync-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
-.sync-master-info { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid var(--mo-border-subtle); color: var(--mo-text-secondary); font-size: 11px; }
+.sync-master-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mo-border-subtle);
+  color: var(--mo-text-secondary);
+}
+.sync-master-info button { font-size: 12px; }
+
 .multicam-sync-inspection-canvas { display: grid; grid-template-rows: var(--sync-preview-height, 300px) 8px minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
 .multicam-sync-monitor { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--mo-monitor-backdrop, #1b1b1b); }
 .multicam-sync-viewers {
@@ -373,9 +501,8 @@
 .sync-lane-ticks { position: absolute; inset: 0; pointer-events: none; }
 .sync-lane-ticks i { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--mo-border-subtle); }
 
-.sync-recording-monitor { position: relative; }
-.sync-recording-monitor > summary { cursor: pointer; font-size: 13px; }
-.sync-recording-monitor .multicam-sync-details { min-width: min(340px, 68vw); max-width: 420px; }
-.sync-recording-monitor .multicam-sync-details label { display: grid; gap: 6px; }
+.sync-recording-monitor { display: grid; justify-items: start; gap: 11px; }
+.sync-recording-monitor label { display: grid; gap: 5px; width: 100%; }
+.sync-recording-monitor p { margin: 4px 0; }
 .sync-recording-monitor select,
-.sync-recording-monitor audio { max-width: 100%; }
+.sync-recording-monitor audio { width: 100%; min-width: 0; }

@@ -53,12 +53,6 @@ html[data-mirrororder-theme="light"] .project-context-menu > button { color: #53
 html[data-mirrororder-theme="light"] .project-context-menu > button:hover:not(:disabled),
 html[data-mirrororder-theme="light"] .project-context-menu > button:focus-visible { color: #1f2a33; background: #eef2f5; }
 
-html[data-mirrororder-theme="light"] .project-home-heading h1 { color: #202a33; }
-html[data-mirrororder-theme="light"] .project-home-card { border-color: #d5dde4; background: #fff; }
-html[data-mirrororder-theme="light"] .project-home-card:hover { border-color: #bec9d2; background: #fbfcfd; }
-html[data-mirrororder-theme="light"] .project-home-visual { border-color: #dce3e8; color: #667581; background: linear-gradient(145deg,#f2f5f7,#e7edf1); }
-html[data-mirrororder-theme="light"] .project-home-copy > strong { color: #26313a; }
-html[data-mirrororder-theme="light"] .project-home-meta small { background: #eef2f5; }
 
 html[data-mirrororder-theme="light"] .project-toolbar { border-color: #dce3e9; background: #fff; }
 html[data-mirrororder-theme="light"] .project-identity h1 { color: #26313a; }
@@ -140,12 +134,6 @@ html[data-mirrororder-theme="dark"] .project-context-menu > button { color: #aeb
 html[data-mirrororder-theme="dark"] .project-context-menu > button:hover:not(:disabled),
 html[data-mirrororder-theme="dark"] .project-context-menu > button:focus-visible { color: #eef2f5; background: #202830; }
 
-html[data-mirrororder-theme="dark"] .project-home-heading h1 { color: #e7edf2; }
-html[data-mirrororder-theme="dark"] .project-home-card { border-color: #28313a; color: inherit; background: #11171c; }
-html[data-mirrororder-theme="dark"] .project-home-card:hover { border-color: #3a4651; background: #141b21; }
-html[data-mirrororder-theme="dark"] .project-home-visual { border-color: #252e36; color: #8999a6; background: linear-gradient(145deg,#182028,#0c1115); }
-html[data-mirrororder-theme="dark"] .project-home-copy > strong { color: #e0e7ec; }
-html[data-mirrororder-theme="dark"] .project-home-meta small { background: #1c242b; }
 
 html[data-mirrororder-theme="dark"] .project-toolbar { border-color: #232b33; background: #10151a; }
 html[data-mirrororder-theme="dark"] .project-identity h1 { color: #dce3e8; }

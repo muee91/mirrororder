@@ -74,12 +74,6 @@ textarea {
   min-height: 0;
 }
 
-.mirrororder-redesign-shell .application-frame {
-  display: grid;
-  grid-template-columns: 208px minmax(0, 1fr);
-  background: var(--mo-bg);
-}
-
 .mirrororder-redesign-shell .global-sidebar {
   min-width: 0;
   min-height: 0;
@@ -398,7 +392,6 @@ textarea {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 54px minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -839,99 +832,6 @@ textarea {
 .workspace-home-flow i { opacity: .55; font-style: normal; }
 
 /* Project home becomes a grid management surface */
-.mirrororder-redesign-shell .project-home-canvas {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  min-height: 0;
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 26px clamp(24px, 3vw, 42px) 40px;
-  background: var(--mo-bg);
-}
-
-.mirrororder-redesign-shell .project-home-heading {
-  width: 100%;
-  max-width: 1180px;
-  margin: 0 auto 18px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.mirrororder-redesign-shell .project-home-heading-copy > div {
-  align-items: center;
-  gap: 8px;
-}
-
-.mirrororder-redesign-shell .project-home-heading-copy h1 {
-  color: var(--mo-text);
-  font-size: 26px;
-  letter-spacing: -.02em;
-}
-
-.mirrororder-redesign-shell .project-home-heading-copy > span {
-  color: var(--mo-text-2);
-  font-size: 11px;
-}
-
-.mirrororder-redesign-shell .project-home-count {
-  min-width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--mo-surface-muted);
-  color: var(--mo-text-2);
-  font-size: 10px;
-}
-
-.mirrororder-redesign-shell .project-home-actions input {
-  min-width: 210px;
-  height: 34px;
-  border: 1px solid var(--mo-border);
-  border-radius: 9px;
-  background: var(--mo-surface);
-  color: var(--mo-text);
-}
-
-.mirrororder-redesign-shell .project-home-list {
-  width: 100%;
-  max-width: 1180px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 11px;
-}
-
-.mirrororder-redesign-shell .project-home-card {
-  min-height: 98px;
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px;
-  border: 1px solid var(--mo-border);
-  border-radius: var(--mo-radius);
-  background: var(--mo-surface);
-  box-shadow: 0 1px 0 rgba(38, 55, 73, .02);
-}
-
-.mirrororder-redesign-shell .project-home-card:hover {
-  border-color: var(--mo-border-strong);
-  box-shadow: var(--mo-shadow);
-}
-
-.mirrororder-redesign-shell .project-home-open {
-  min-height: 96px;
-  padding: 15px 16px;
-}
-
-.mirrororder-redesign-shell .project-home-title-row strong { color: var(--mo-text); font-size: 13px; }
-.mirrororder-redesign-shell .project-home-title-row small,
-.mirrororder-redesign-shell .project-home-stats,
-.mirrororder-redesign-shell .project-home-state { color: var(--mo-text-3); font-size: 10px; }
-.mirrororder-redesign-shell .project-home-more { border-left: 1px solid var(--mo-border); color: var(--mo-text-2); background: var(--mo-surface-soft); }
-
 /* Project secondary tools */
 .mirrororder-redesign-shell .project-production-workbench,
 .mirrororder-redesign-shell .project-workbench-canvas,
@@ -1001,7 +901,6 @@ textarea {
 }
 
 @media (max-width: 1180px) {
-  .mirrororder-redesign-shell .application-frame { grid-template-columns: 188px minmax(0, 1fr); }
   .workspace-home-canvas,
   .mirrororder-redesign-shell .project-home-canvas { padding-left: 20px; padding-right: 20px; }
   .workspace-home-grid { grid-template-columns: minmax(0, 1fr) 280px; }
@@ -1011,7 +910,6 @@ textarea {
 }
 
 @media (max-width: 980px) {
-  .mirrororder-redesign-shell .application-frame { grid-template-columns: 64px minmax(0, 1fr); }
   .project-library-redesign { padding-left: 8px; padding-right: 8px; }
   .project-library-redesign .project-library-brand { justify-content: center; }
   .project-library-redesign .project-library-brand-copy,
@@ -1035,6 +933,5 @@ textarea {
   .project-current-empty { display: none; }
   .workspace-home-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-home-grid { grid-template-columns: 1fr; }
-  .mirrororder-redesign-shell .project-home-list { grid-template-columns: 1fr; }
   .app-workspace-menu-popover { width: min(318px, calc(100vw - 84px)); }
 }

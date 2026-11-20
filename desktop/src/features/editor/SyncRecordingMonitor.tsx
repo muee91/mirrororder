@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { HostConnection } from "../../api/host";
 import type { MulticamSyncTimeline, SyncRecordingPlacement } from "../../api/syncTimeline";
 import type { FrameRate } from "../../api/timeline";
@@ -18,6 +18,13 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
   const [error, setError] = useState("");
   const [loadKey, setLoadKey] = useState(0);
   const player = useRef<HTMLAudioElement>(null);
+  const attachPlayer = useCallback((element: HTMLAudioElement | null) => {
+    player.current = element;
+    return () => {
+      element?.pause();
+      player.current = null;
+    };
+  }, []);
   const taskId = timeline.task?.task_id;
   const placement = selection && recordings.placements.find((row) => row.media_id === selection.media_id && row.at === selection.at);
   const frame = placement && rate && cursor >= placement.at && cursor < placement.at + placement.frames
@@ -31,12 +38,7 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
     if (playingVideo) player.current?.pause();
   }, [playingVideo]);
 
-  return <details className="sync-recording-monitor" onToggle={(event) => {
-    if (!event.currentTarget.open) player.current?.pause();
-  }}>
-    <summary>同期录音 <span>{recordings.placements.length}</span></summary>
-    <div className="multicam-sync-details">
-      <strong>同期录音核对</strong>
+  return <div className="sync-recording-monitor multicam-sync-details">
       <p>{recordings.candidate_count} 条已发现 · {recordings.unplaced_count} 条未上轨
         {recordings.invalid_count > 0 && ` · ${recordings.invalid_count} 条空文件或无法读取`}</p>
       {recordings.placements.length > 0 && <label>
@@ -52,7 +54,7 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
         </select>
       </label>}
       {playback && !error && <>
-        <audio ref={player} key={`${playback}:${placement?.at}:${loadKey}`} src={playback} preload="metadata" controls
+        <audio ref={attachPlayer} key={`${playback}:${placement?.at}:${loadKey}`} src={playback} preload="metadata" controls
           onPlay={onAudition} onError={() => setError("无法读取当前设备上的同期 WAV。")} />
         <button type="button" className="secondary" disabled={frame === null}
           onClick={() => {
@@ -63,6 +65,5 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
       {error && <p role="alert">{error} <button className="secondary" type="button" onClick={() => {
         setError(""); setLoadKey(value => value + 1);
       }}>重新加载</button></p>}
-    </div>
-  </details>;
+  </div>;
 }

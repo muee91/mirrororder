@@ -4,37 +4,34 @@
  */
 
 :root {
-  --mo-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mo-font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", sans-serif;
   --mo-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-
-  --mo-surface-app: #0b0f13;
-  --mo-surface-sidebar: #0e1216;
-  --mo-surface-pane: #10151a;
-  --mo-surface-raised: #151b20;
-  --mo-surface-control: #11171c;
-  --mo-surface-hover: #171f26;
-  --mo-surface-selected: #182535;
-
-  --mo-border-subtle: #202830;
-  --mo-border-default: #29333d;
-  --mo-border-strong: #3a4651;
-
-  --mo-text-primary: #e2e8ed;
-  --mo-text-secondary: #a6b1ba;
-  --mo-text-muted: #778590;
-  --mo-text-disabled: #56626c;
-
-  --mo-accent: #6fa7e8;
-  --mo-accent-strong: #8bb9ee;
-  --mo-accent-soft: rgba(95, 151, 215, .14);
-  --mo-success: #65bb87;
-  --mo-warning: #d0aa54;
-  --mo-danger: #d66f6f;
-
+  --mo-surface-app: #0d0e0e;
+  --mo-surface-sidebar: #111211;
+  --mo-surface-pane: #171817;
+  --mo-surface-raised: #1e1e1b;
+  --mo-surface-control: #191a18;
+  --mo-surface-hover: #27241f;
+  --mo-surface-selected: #35291d;
+  --mo-surface-elevated: #24231f;
+  --mo-border-subtle: rgba(232, 207, 164, .12);
+  --mo-border-default: rgba(232, 207, 164, .22);
+  --mo-border-strong: rgba(232, 207, 164, .40);
+  --mo-text-primary: #f2efe7;
+  --mo-text-secondary: #c8c1b5;
+  --mo-text-muted: #918a7d;
+  --mo-text-disabled: #615c53;
+  --mo-accent: #d89b4c;
+  --mo-accent-strong: #efbd73;
+  --mo-accent-soft: rgba(216, 155, 76, .17);
+  --mo-success: #8dbb92;
+  --mo-warning: #d89b4c;
+  --mo-danger: #d98270;
+  --mo-action-fill: var(--mo-accent);
+  --mo-action-text: #19120a;
   --mo-radius-control: 5px;
-  --mo-radius-pane: 4px;
-  --mo-radius-overlay: 8px;
-
+  --mo-radius-pane: 7px;
+  --mo-radius-overlay: 9px;
   --mo-control-sm: 28px;
   --mo-control-md: 32px;
   --mo-pane-gap: 1px;
@@ -45,61 +42,43 @@
   --mo-font-lg: 14px;
   --mo-font-xl: 17px;
 
-  --mo-focus-ring: 0 0 0 2px rgba(111, 167, 232, .34);
+  --mo-shadow-panel: 0 14px 32px rgba(0, 0, 0, .24), 0 1px 0 rgba(255, 239, 209, .035) inset;
+  --mo-shadow-float: 0 22px 52px rgba(0, 0, 0, .38), 0 1px 0 rgba(255, 239, 209, .05) inset;
+  --mo-focus-ring: 0 0 0 3px rgba(216, 155, 76, .22);
+}
+
+html[data-mirrororder-theme="dark"] {
+  color-scheme: dark;
 }
 
 html[data-mirrororder-theme="light"] {
-  --mo-surface-app: #f7f8fa;
-  --mo-surface-sidebar: #f1f4f6;
-  --mo-surface-pane: #ffffff;
-  --mo-surface-raised: #f5f7f9;
-  --mo-surface-control: #ffffff;
-  --mo-surface-hover: #edf2f5;
-  --mo-surface-selected: #e7f0fb;
-
-  --mo-border-subtle: #e3e8ec;
-  --mo-border-default: #d4dce3;
-  --mo-border-strong: #b9c5cf;
-
-  --mo-text-primary: #26313a;
-  --mo-text-secondary: #52606b;
-  --mo-text-muted: #74818c;
-  --mo-text-disabled: #a3adb5;
-
-  --mo-accent: #3f79b9;
-  --mo-accent-strong: #2f659f;
-  --mo-accent-soft: rgba(63, 121, 185, .10);
-  --mo-success: #3d8e5d;
-  --mo-warning: #a57922;
-  --mo-danger: #b95151;
-  --mo-focus-ring: 0 0 0 2px rgba(63, 121, 185, .24);
-}
-
-@media (prefers-color-scheme: light) {
-  html:not([data-mirrororder-theme]),
-  html[data-mirrororder-theme="system"] {
-    --mo-surface-app: #f7f8fa;
-    --mo-surface-sidebar: #f1f4f6;
-    --mo-surface-pane: #ffffff;
-    --mo-surface-raised: #f5f7f9;
-    --mo-surface-control: #ffffff;
-    --mo-surface-hover: #edf2f5;
-    --mo-surface-selected: #e7f0fb;
-    --mo-border-subtle: #e3e8ec;
-    --mo-border-default: #d4dce3;
-    --mo-border-strong: #b9c5cf;
-    --mo-text-primary: #26313a;
-    --mo-text-secondary: #52606b;
-    --mo-text-muted: #74818c;
-    --mo-text-disabled: #a3adb5;
-    --mo-accent: #3f79b9;
-    --mo-accent-strong: #2f659f;
-    --mo-accent-soft: rgba(63, 121, 185, .10);
-    --mo-success: #3d8e5d;
-    --mo-warning: #a57922;
-    --mo-danger: #b95151;
-    --mo-focus-ring: 0 0 0 2px rgba(63, 121, 185, .24);
-  }
+  --mo-surface-app: #f1eee7;
+  --mo-surface-sidebar: #e7e2d8;
+  --mo-surface-pane: #faf8f3;
+  --mo-surface-raised: #f4f0e8;
+  --mo-surface-control: #fffdf8;
+  --mo-surface-hover: #ebe5db;
+  --mo-surface-selected: #f3e4cc;
+  --mo-surface-elevated: #fffdf8;
+  --mo-border-subtle: rgba(55, 45, 33, .12);
+  --mo-border-default: rgba(55, 45, 33, .20);
+  --mo-border-strong: rgba(55, 45, 33, .34);
+  --mo-text-primary: #251f19;
+  --mo-text-secondary: #5e554b;
+  --mo-text-muted: #82786c;
+  --mo-text-disabled: #aea59a;
+  --mo-accent: #a96d2d;
+  --mo-accent-strong: #87521f;
+  --mo-accent-soft: rgba(169, 109, 45, .14);
+  --mo-success: #4c8159;
+  --mo-warning: #a96d2d;
+  --mo-danger: #b45f4c;
+  --mo-action-fill: var(--mo-accent-strong);
+  --mo-action-text: #fffdf8;
+  --mo-shadow-panel: 0 14px 32px rgba(68, 53, 37, .09), 0 1px 0 rgba(255, 255, 255, .82) inset;
+  --mo-shadow-float: 0 22px 52px rgba(68, 53, 37, .16), 0 1px 0 rgba(255, 255, 255, .84) inset;
+  --mo-focus-ring: 0 0 0 3px rgba(169, 109, 45, .18);
+  color-scheme: light;
 }
 
 html, body, button, input, textarea, select { font-family: var(--mo-font-sans); }
@@ -316,77 +295,6 @@ input, textarea, select {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .001ms !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
 }
-/*
- * MirrorOrder visual refresh
- *
- * This is the final presentation layer. It changes visual hierarchy, colour,
- * typography and surface treatment while leaving canonical object anatomy and
- * workspace ownership to their feature stylesheets.
- */
-
-:root {
-  --mo-font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", sans-serif;
-  --mo-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --mo-surface-app: #0d0e0e;
-  --mo-surface-sidebar: #111211;
-  --mo-surface-pane: #171817;
-  --mo-surface-raised: #1e1e1b;
-  --mo-surface-control: #191a18;
-  --mo-surface-hover: #27241f;
-  --mo-surface-selected: #35291d;
-  --mo-surface-elevated: #24231f;
-  --mo-border-subtle: rgba(232, 207, 164, .12);
-  --mo-border-default: rgba(232, 207, 164, .22);
-  --mo-border-strong: rgba(232, 207, 164, .40);
-  --mo-text-primary: #f2efe7;
-  --mo-text-secondary: #c8c1b5;
-  --mo-text-muted: #918a7d;
-  --mo-text-disabled: #615c53;
-  --mo-accent: #d89b4c;
-  --mo-accent-strong: #efbd73;
-  --mo-accent-soft: rgba(216, 155, 76, .17);
-  --mo-success: #8dbb92;
-  --mo-warning: #d89b4c;
-  --mo-danger: #d98270;
-  --mo-radius-control: 5px;
-  --mo-radius-pane: 7px;
-  --mo-radius-overlay: 9px;
-  --mo-shadow-panel: 0 14px 32px rgba(0, 0, 0, .24), 0 1px 0 rgba(255, 239, 209, .035) inset;
-  --mo-shadow-float: 0 22px 52px rgba(0, 0, 0, .38), 0 1px 0 rgba(255, 239, 209, .05) inset;
-  --mo-focus-ring: 0 0 0 3px rgba(216, 155, 76, .22);
-}
-
-html[data-mirrororder-theme="dark"] {
-  color-scheme: dark;
-}
-
-html[data-mirrororder-theme="light"] {
-  --mo-surface-app: #f1eee7;
-  --mo-surface-sidebar: #e7e2d8;
-  --mo-surface-pane: #faf8f3;
-  --mo-surface-raised: #f4f0e8;
-  --mo-surface-control: #fffdf8;
-  --mo-surface-hover: #ebe5db;
-  --mo-surface-selected: #f3e4cc;
-  --mo-surface-elevated: #fffdf8;
-  --mo-border-subtle: rgba(55, 45, 33, .12);
-  --mo-border-default: rgba(55, 45, 33, .20);
-  --mo-border-strong: rgba(55, 45, 33, .34);
-  --mo-text-primary: #251f19;
-  --mo-text-secondary: #5e554b;
-  --mo-text-muted: #82786c;
-  --mo-text-disabled: #aea59a;
-  --mo-accent: #a96d2d;
-  --mo-accent-strong: #87521f;
-  --mo-accent-soft: rgba(169, 109, 45, .14);
-  --mo-success: #4c8159;
-  --mo-warning: #a96d2d;
-  --mo-danger: #b45f4c;
-  --mo-shadow-panel: 0 14px 32px rgba(68, 53, 37, .09), 0 1px 0 rgba(255, 255, 255, .82) inset;
-  --mo-shadow-float: 0 22px 52px rgba(68, 53, 37, .16), 0 1px 0 rgba(255, 255, 255, .84) inset;
-  --mo-focus-ring: 0 0 0 3px rgba(169, 109, 45, .18);
-  color-scheme: light;
-}
 
 html,
 body,
@@ -460,11 +368,6 @@ textarea::placeholder { color: var(--mo-text-muted); }
 }
 
 /* App frame and sidebar */
-.mirrororder-redesign-shell .application-frame {
-  grid-template-columns: 232px minmax(0, 1fr);
-  background: var(--mo-surface-app);
-}
-
 .mirrororder-redesign-shell .global-sidebar {
   border-right: 1px solid var(--mo-border-subtle);
   background: var(--mo-surface-sidebar);
@@ -574,7 +477,6 @@ textarea::placeholder { color: var(--mo-text-muted); }
 .project-system-nav { margin-top: 10px; padding-top: 10px; border-top-color: var(--mo-border-subtle); }
 
 /* Global topbar */
-.app-main-column { grid-template-rows: 50px minmax(0, 1fr); }
 .app-global-topbar {
   padding: 0 12px 0 16px;
   gap: 12px;
@@ -616,61 +518,6 @@ textarea::placeholder { color: var(--mo-text-muted); }
   box-shadow: var(--mo-shadow-float);
 }
 
-/* Production header and primary navigation */
-.professional-project-workbench {
-  grid-template-rows: 56px minmax(0, 1fr);
-}
-.professional-project-toolbar {
-  grid-template-columns: minmax(360px, 1fr) auto;
-  min-height: 56px;
-  gap: 12px;
-  border-bottom-color: var(--mo-border-subtle);
-  padding: 8px 14px;
-  background: var(--mo-surface-pane);
-}
-.professional-area-nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  padding: 0;
-  background: transparent;
-}
-.professional-area-nav button {
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--mo-text-muted);
-  background: transparent;
-  font-size: 12px;
-  font-weight: 620;
-}
-.professional-area-nav button:hover { color: var(--mo-text-primary); background: var(--mo-surface-hover); }
-.professional-area-nav button.is-active,
-.professional-area-nav button.is-active:hover {
-  border-color: transparent;
-  border-bottom-color: var(--mo-accent);
-  color: var(--mo-text-primary);
-  background: var(--mo-accent-soft);
-  box-shadow: inset 0 -2px 0 var(--mo-accent);
-}
-.professional-project-tools { gap: 6px; }
-.professional-project-tools > button,
-.professional-assistant-toggle,
-.professional-team-review {
-  min-height: 30px;
-  padding-inline: 9px;
-  border-radius: 5px;
-  font-size: 11px;
-}
-.professional-assistant-toggle,
-.professional-team-review { color: var(--mo-text-secondary); background: transparent; }
-.professional-assistant-toggle.is-active,
-.professional-assistant-toggle.is-active:hover,
-.professional-team-review:hover { color: var(--mo-text-primary); background: var(--mo-surface-selected); }
-
-/* Search owns its legacy light media-query fallback; Desktop appearance must win. */
 html[data-mirrororder-theme="light"] .professional-project-tools .project-search-trigger {
   border-color: var(--mo-border-default);
   color: var(--mo-text-secondary);
@@ -965,15 +812,6 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 .status-center-task.is-history { background: color-mix(in srgb, var(--mo-surface-raised) 62%, transparent); }
 
 /* Project library/home */
-.project-home-canvas { background: var(--mo-surface-app); }
-.project-home-heading { min-height: 78px; padding: 18px 22px; border-bottom-color: var(--mo-border-subtle); background: var(--mo-surface-pane); }
-.project-home-heading h1 { font-size: 21px; letter-spacing: -.03em; }
-.project-home-actions > input { min-height: 36px; border-color: var(--mo-border-default); border-radius: 10px; background: var(--mo-surface-control); }
-.project-home-list { gap: 10px; padding: 18px 22px 30px; }
-.project-home-card { border-color: var(--mo-border-subtle); border-radius: var(--mo-radius-pane); background: var(--mo-surface-pane); box-shadow: var(--mo-shadow-panel); }
-.project-home-card:hover { border-color: var(--mo-border-strong); background: var(--mo-surface-raised); box-shadow: var(--mo-shadow-float); }
-.project-home-open { padding: 16px 18px; }
-.project-home-more { margin: 10px 12px 10px 0; border-radius: 9px; }
 
 /* Drawers and popovers */
 .workspace-context-drawer,
@@ -992,12 +830,10 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 /* Empty and loading states keep a single calm focal point. */
 .primary-empty,
 .status-center-empty,
-.project-home-empty,
 .review-empty-state,
 .timeline-empty { color: var(--mo-text-muted); }
 .primary-empty h2,
 .status-center-empty strong,
-.project-home-empty strong,
 .review-empty-state strong,
 .timeline-empty strong { color: var(--mo-text-primary); font-size: 16px; letter-spacing: -.02em; }
 .phase-placeholder,
@@ -1005,8 +841,6 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 .fatal-error { border-color: var(--mo-border-default); border-radius: var(--mo-radius-pane); background: var(--mo-surface-pane); box-shadow: var(--mo-shadow-panel); }
 
 @media (max-width: 1180px) {
-  .mirrororder-redesign-shell .application-frame { grid-template-columns: 224px minmax(0, 1fr); }
-  .professional-project-toolbar { padding-inline: 14px; }
   .material-domain-bar { padding-inline: 14px; }
   .script-command-bar,
   .review-workspace-toolbar,
@@ -1017,12 +851,6 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
   .media-library-layout,
   .identity-toolbar,
   .identity-grid { margin-inline: 14px; }
-}
-
-@media (max-width: 1040px) {
-  .mirrororder-redesign-shell .application-frame { grid-template-columns: 208px minmax(0, 1fr); }
-  .professional-project-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
-  .professional-area-nav { grid-row: 2; grid-column: 1 / -1; }
 }
 
 /* Resolved-theme authority for the Slate ledger. The legacy theme sheet uses
@@ -1064,13 +892,6 @@ html[data-mirrororder-theme="light"] .golden-slate-empty-media { border-color: v
   .mirrororder-redesign-shell *::after { transition-duration: .001ms !important; animation-duration: .001ms !important; }
 }
 
-@media (max-width: 1040px) {
-  .professional-project-workbench { grid-template-rows: 76px minmax(0, 1fr); }
-  .professional-project-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
-  .professional-area-nav { grid-row: 2; grid-column: 1 / -1; }
-  .professional-project-tools { grid-column: 2; grid-row: 1; }
-}
-
 /* Explicit Light/Dark choices share the same geometry and semantic surfaces.
  * These root-prefixed rules intentionally come last so older theme sheets
  * cannot reintroduce the previous blue/cool-gray chrome in one mode only. */
@@ -1080,8 +901,7 @@ html[data-mirrororder-theme] .app-shell,
 html[data-mirrororder-theme] .production-app-shell,
 html[data-mirrororder-theme] .workspace-shell,
 html[data-mirrororder-theme] .main-stage,
-html[data-mirrororder-theme] .project-production-workbench,
-html[data-mirrororder-theme] .project-home-canvas {
+html[data-mirrororder-theme] .project-production-workbench {
   color: var(--mo-text-primary);
   background: var(--mo-surface-app);
 }
@@ -1091,8 +911,7 @@ html[data-mirrororder-theme] .global-sidebar {
   background: var(--mo-surface-sidebar);
   box-shadow: none;
 }
-html[data-mirrororder-theme] .app-global-topbar,
-html[data-mirrororder-theme] .professional-project-toolbar {
+html[data-mirrororder-theme] .app-global-topbar {
   border-color: var(--mo-border-subtle);
   background: var(--mo-surface-pane);
 }
@@ -1100,7 +919,6 @@ html[data-mirrororder-theme] .project-library-redesign .project-library-brand,
 html[data-mirrororder-theme] .project-primary-nav button,
 html[data-mirrororder-theme] .project-system-nav button,
 html[data-mirrororder-theme] .project-recent-list button,
-html[data-mirrororder-theme] .professional-area-nav button,
 html[data-mirrororder-theme] .app-global-actions button {
   color: var(--mo-text-secondary);
   background: transparent;
@@ -1109,7 +927,6 @@ html[data-mirrororder-theme] .project-library-redesign .project-library-brand:ho
 html[data-mirrororder-theme] .project-primary-nav button:hover,
 html[data-mirrororder-theme] .project-system-nav button:hover,
 html[data-mirrororder-theme] .project-recent-list button:hover,
-html[data-mirrororder-theme] .professional-area-nav button:hover,
 html[data-mirrororder-theme] .app-global-actions button:hover:not(:disabled) {
   color: var(--mo-text-primary);
   background: var(--mo-surface-hover);
@@ -1117,7 +934,6 @@ html[data-mirrororder-theme] .app-global-actions button:hover:not(:disabled) {
 html[data-mirrororder-theme] .project-primary-nav button.is-active,
 html[data-mirrororder-theme] .project-system-nav button.is-active,
 html[data-mirrororder-theme] .project-current-card.is-active-context,
-html[data-mirrororder-theme] .professional-area-nav button.is-active,
 html[data-mirrororder-theme] .professional-area-nav button.is-active:hover {
   border-color: color-mix(in srgb, var(--mo-accent) 42%, var(--mo-border-default));
   color: var(--mo-text-primary);

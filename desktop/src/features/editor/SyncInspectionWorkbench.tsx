@@ -1,5 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { AssistantSelection } from "../../api/production";
 import {
   SyncTimelineClient,
@@ -39,15 +39,15 @@ function secondsLabel(value: number): string {
     : `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
-function readPreviewHeight(projectId: string): number | null {
+function readMonitorSize(projectId: string, dimension: "preview-height" | "inspector-width"): number | null {
   try {
-    const value = Number(globalThis.localStorage?.getItem(`mirrororder.sync-preview-height.${projectId}`));
+    const value = Number(globalThis.localStorage?.getItem(`mirrororder.sync-${dimension}.${projectId}`));
     return Number.isFinite(value) && value >= 120 ? value : null;
   } catch { return null; }
 }
 
-function rememberPreviewHeight(projectId: string, height: number): void {
-  try { globalThis.localStorage?.setItem(`mirrororder.sync-preview-height.${projectId}`, String(height)); }
+function rememberMonitorSize(projectId: string, dimension: "preview-height" | "inspector-width", size: number): void {
+  try { globalThis.localStorage?.setItem(`mirrororder.sync-${dimension}.${projectId}`, String(size)); }
   catch { /* A layout preference must not block source inspection. */ }
 }
 
@@ -77,10 +77,15 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const [frameCallbackSupported, setFrameCallbackSupported] = useState(true);
   const seeking = useRef(false);
   const resumeOnAngleChange = useRef(false);
-  const [previewHeight, setPreviewHeight] = useState<number | null>(() => readPreviewHeight(syncTimeline.project_id));
-  const [deskSize, setDeskSize] = useState({ height: 0, chrome: 110, row: 36 });
+  const [previewHeight, setPreviewHeight] = useState<number | null>(() => readMonitorSize(syncTimeline.project_id, "preview-height"));
+  const [preferredInspectorWidth, setInspectorWidth] = useState(() => readMonitorSize(syncTimeline.project_id, "inspector-width") ?? 296);
+  const [deskSize, setDeskSize] = useState({ height: 0, width: 0, chrome: 110, row: 36 });
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const resizeStart = useRef<{ y: number; height: number } | null>(null);
+  const inspectorResizeStart = useRef<{ x: number; width: number } | null>(null);
+  const minInspectorWidth = 228;
+  const maxInspectorWidth = Math.max(minInspectorWidth, Math.min(448, Math.floor((deskSize.width || 1180) * 0.44)));
+  const inspectorWidth = clamp(preferredInspectorWidth, minInspectorWidth, maxInspectorWidth);
   const minPreviewHeight = 120;
   const minimumRows = Math.min(3, syncTimeline.tracks.length);
   const maxPreviewHeight = Math.max(minPreviewHeight, deskSize.height - deskSize.chrome - minimumRows * deskSize.row);
@@ -129,54 +134,55 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const gridColumns = viewKind === "all" && tracks.length >= 3
     ? tracks.length === 4 ? 2 : 3
     : Math.max(1, displayTracks.length);
-  const infoRef = useRef<HTMLDetailsElement>(null);
+  const [inspector, setInspector] = useState<"clip" | "audio" | null>(null);
+  const clipInspectorButton = useRef<HTMLButtonElement>(null);
+  const audioInspectorButton = useRef<HTMLButtonElement>(null);
+  const inspectorId = useId();
+  const recordingsAvailable = Boolean(baseUrl && syncTimeline.recordings);
 
-  useEffect(() => {
-    function dismiss(event: PointerEvent | KeyboardEvent) {
-      const info = infoRef.current;
-      if (!info?.open) return;
-      if (event instanceof KeyboardEvent) {
-        if (event.key !== "Escape") return;
-        info.open = false;
-        info.querySelector("summary")?.focus();
-      } else if (event.target instanceof Node && !info.contains(event.target)) {
-        info.open = false;
-      }
-    }
-    document.addEventListener("pointerdown", dismiss);
-    document.addEventListener("keydown", dismiss);
-    return () => {
-      document.removeEventListener("pointerdown", dismiss);
-      document.removeEventListener("keydown", dismiss);
-    };
-  }, []);
+  function closeInspector() {
+    const trigger = inspector === "audio" ? audioInspectorButton : clipInspectorButton;
+    setInspector(null);
+    trigger.current?.focus();
+  }
+
+  function resizeInspector(width: number, persist: boolean): void {
+    const next = clamp(width, minInspectorWidth, maxInspectorWidth);
+    setInspectorWidth(next);
+    if (persist) rememberMonitorSize(syncTimeline.project_id, "inspector-width", next);
+  }
 
   useEffect(() => {
     resumeOnAngleChange.current = false;
     setCursor(firstClipFrame(firstPosition, rate));
     setSeekRevision(value => value + 1);
-    setPreviewHeight(readPreviewHeight(syncTimeline.project_id));
+    setPreviewHeight(readMonitorSize(syncTimeline.project_id, "preview-height"));
+    setInspectorWidth(readMonitorSize(syncTimeline.project_id, "inspector-width") ?? 296);
     setTrackId(syncTimeline.tracks[0]?.track_id ?? "");
     setMonitorView({ kind: "all" });
+    setInspector(null);
   }, [syncTimeline.project_id, rate.numerator, rate.denominator]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const desk = canvas?.parentElement;
+    if (!canvas || !desk) return;
     const bars = Array.from(canvas.querySelectorAll<HTMLElement>(
       ".multicam-sync-divider, .multicam-sync-controls, .multicam-sync-overview, .multicam-sync-ruler"));
     const lane = canvas.querySelector<HTMLElement>(".multicam-sync-track");
     const measure = () => {
       const height = canvas.clientHeight;
+      const width = desk.clientWidth;
       const chrome = bars.reduce((sum, bar) => sum + bar.offsetHeight, 2);
       const row = lane?.offsetHeight || 36;
-      setDeskSize(previous => previous.height === height && previous.chrome === chrome && previous.row === row
-        ? previous : { height, chrome, row });
+      setDeskSize(previous => previous.height === height && previous.width === width && previous.chrome === chrome && previous.row === row
+        ? previous : { height, width, chrome, row });
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(canvas);
+    observer.observe(desk);
     bars.forEach(bar => observer.observe(bar));
     if (lane) observer.observe(lane);
     return () => observer.disconnect();
@@ -383,7 +389,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
     <section className={`multicam-sync-inspection${showDelivery ? " is-embedded" : ""}`} aria-label="多机位同步时间线检查">
       <header className="multicam-sync-inspection-heading">
         <div className="sync-master-heading">
-          {showDelivery && <h3>同步母版</h3>}
+          <h2>{showDelivery ? "同步母版" : "多机位监看"}</h2>
           <span>{syncTimeline.cameras.length} 机位 · {syncTimeline.clip_count.toLocaleString()} 个片段</span>
           {selectedTrack && <span className="sync-monitor-listening">监听 {selectedTrack.label}</span>}
         </div>
@@ -404,43 +410,20 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
                 {tracks.map(track => <option key={track.track_id} value={track.track_id}>{track.label}</option>)}
               </select>)}
             </div>}
-          <details className="sync-clip-info" ref={infoRef}>
-            <summary>片段信息</summary>
-            <div className="multicam-sync-details">
-              <strong>当前片段</strong>
-              {clip ? (
-                <dl>
-                  <dt>文件</dt><dd>{clip.name}</dd>
-                  <dt>机位 / 拍摄日</dt><dd>{clip.camera} / {clip.day}</dd>
-                  <dt>母版起点</dt><dd>{secondsLabel(clip.timeline_start)}</dd>
-                  <dt>片段时长</dt><dd>{secondsLabel(clip.duration)}</dd>
-                  <dt>目标源内</dt><dd>{sourceTime.toFixed(6)}s</dd>
-                  <dt>画面源内</dt><dd>{!selectedVisible ? "监听机位未显示" : displayedTime !== null ? `${displayedTime.toFixed(6)}s` : "等待画面"}</dd>
-                  <dt>定位时间码</dt><dd>{confirmedRate ? timecode(reviewCursor, rate) : `${position.toFixed(3)}s`}</dd>
-                  {compactView && <><dt>母版时间码</dt><dd>{timecode(cursor, rate)}</dd></>}
-                  <dt>画面时间码</dt><dd data-testid="sync-presented-frame"
-                    data-frame={reviewPresentedFrame}>
-                    {!selectedVisible ? "监听机位未显示" : reviewPresentedFrame !== undefined
-                      ? confirmedRate ? timecode(reviewPresentedFrame, rate) : `${displayedTime?.toFixed(3)}s`
-                      : frameCallbackSupported ? "等待画面定位" : "当前系统未提供显示帧时间"}</dd>
-                  <dt>原始时码</dt><dd>{clip.timecode || "未记录"}</dd>
-                  <dt>媒体匹配</dt><dd>{clip.media_clip_id ? "已关联项目媒体身份" : "待核实"}</dd>
-                </dl>
-              ) : <p>请在时间线选择片段，或移动播放头到有素材的位置。</p>}
-              <div className="sync-master-info">
-                <span>{syncTimeline.cameras.length ? `${syncTimeline.cameras.join(" / ")} 机位` : "暂无已识别机位"}</span>
-                {onMulticamSync && <button type="button" className="secondary" onClick={onMulticamSync}>重新同步</button>}
-              </div>
-            </div>
-          </details>
+          <button type="button" className="secondary sync-inspector-toggle" ref={clipInspectorButton}
+            aria-expanded={inspector === "clip"} aria-controls={inspector === "clip" ? inspectorId : undefined}
+            onClick={() => setInspector(current => current === "clip" ? null : "clip")}>片段检查器</button>
+          {recordingsAvailable && <button type="button" className="secondary sync-inspector-toggle" ref={audioInspectorButton}
+            aria-expanded={inspector === "audio"} aria-controls={inspector === "audio" ? inspectorId : undefined}
+            onClick={() => setInspector(current => current === "audio" ? null : "audio")}>同期录音 <span>{syncTimeline.recordings?.placements.length}</span></button>}
           {reviewGaps.length > 0 && <button type="button" className="sync-gap-toggle secondary" aria-pressed={compactView}
             title="只去除所有机位都停拍的间隙" onClick={toggleGaps}>去除共同间隙</button>}
-          {baseUrl && syncTimeline.recordings && <SyncRecordingMonitor baseUrl={baseUrl} timeline={syncTimeline}
-            cursor={cursor} rate={confirmedRate} playingVideo={playing} onAudition={() => videoRef.current?.pause()} />}
           {onOpenDelivery && <button type="button" onClick={onOpenDelivery}>进入工程交付</button>}
         </div>
       </header>
 
+      <div className="sync-inspection-desk" data-inspector={inspector && (inspector === "clip" || recordingsAvailable) || undefined}
+        style={{ "--sync-inspector-width": `${inspectorWidth}px` } as CSSProperties}>
       <div className="multicam-sync-inspection-canvas" ref={canvasRef}
         style={{ "--sync-preview-height": `${pictureHeight}px` } as CSSProperties}>
         <div className="multicam-sync-monitor">
@@ -491,7 +474,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
             const height = clamp(resizeStart.current.height + event.clientY - resizeStart.current.y,
               minPreviewHeight, maxPreviewHeight);
             setPreviewHeight(height);
-            rememberPreviewHeight(syncTimeline.project_id, height);
+            rememberMonitorSize(syncTimeline.project_id, "preview-height", height);
           }
           resizeStart.current = null;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -505,10 +488,76 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
           event.preventDefault();
           const height = clamp(next, minPreviewHeight, maxPreviewHeight);
           setPreviewHeight(height);
-          rememberPreviewHeight(syncTimeline.project_id, height);
+          rememberMonitorSize(syncTimeline.project_id, "preview-height", height);
         }}><span aria-hidden="true" /></div>
       <SyncTimelineViewport key={`${syncTimeline.project_id}:${compactView}`} timeline={reviewTimeline} rate={rate} frameAccurate={Boolean(confirmedRate)}
         cursor={reviewCursor} trackId={selectedTrack?.track_id ?? ""} playing={playing} canPlay={Boolean(playbackUrl)} onSeek={onSeek} onTogglePlay={togglePlay} />
+      </div>
+      {inspector && (inspector === "clip" || recordingsAvailable) && <>
+        <div className="sync-inspection-grip" role="separator" aria-label="调整检查器宽度" aria-orientation="vertical"
+          aria-valuemin={minInspectorWidth} aria-valuemax={maxInspectorWidth} aria-valuenow={inspectorWidth}
+          aria-controls={inspectorId} tabIndex={0}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.currentTarget.focus();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            inspectorResizeStart.current = { x: event.clientX, width: inspectorWidth };
+          }}
+          onPointerMove={(event) => {
+            const start = inspectorResizeStart.current;
+            if (start) resizeInspector(start.width + start.x - event.clientX, false);
+          }}
+          onPointerUp={(event) => {
+            const start = inspectorResizeStart.current;
+            if (start) resizeInspector(start.width + start.x - event.clientX, true);
+            inspectorResizeStart.current = null;
+          }}
+          onLostPointerCapture={() => { inspectorResizeStart.current = null; }}
+          onKeyDown={(event) => {
+            const width = event.key === "ArrowLeft" ? inspectorWidth + 16
+              : event.key === "ArrowRight" ? inspectorWidth - 16
+                : event.key === "Home" ? minInspectorWidth : event.key === "End" ? maxInspectorWidth : null;
+            if (width === null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            resizeInspector(width, true);
+          }} />
+        <aside className="sync-inspection-sidebar" id={inspectorId} aria-label="同步检查器" onKeyDown={(event) => {
+          if (event.key === "Escape" && !event.nativeEvent.isComposing) { event.stopPropagation(); closeInspector(); }
+        }}>
+          <header>
+            <h3>{inspector === "clip" ? "片段信息" : "同期录音"}</h3>
+            <button type="button" className="secondary" aria-label="关闭检查器" onClick={closeInspector}>收起</button>
+          </header>
+          {inspector === "clip" ? <div className="multicam-sync-details">
+            {clip ? (
+              <dl>
+                <dt>文件</dt><dd>{clip.name}</dd>
+                <dt>机位 / 拍摄日</dt><dd>{clip.camera} / {clip.day}</dd>
+                <dt>母版起点</dt><dd>{secondsLabel(clip.timeline_start)}</dd>
+                <dt>片段时长</dt><dd>{secondsLabel(clip.duration)}</dd>
+                <dt>目标源内</dt><dd>{sourceTime.toFixed(6)}s</dd>
+                <dt>画面源内</dt><dd>{!selectedVisible ? "监听机位未显示" : displayedTime !== null ? `${displayedTime.toFixed(6)}s` : "等待画面"}</dd>
+                <dt>定位时间码</dt><dd>{confirmedRate ? timecode(reviewCursor, rate) : `${position.toFixed(3)}s`}</dd>
+                {compactView && <><dt>母版时间码</dt><dd>{timecode(cursor, rate)}</dd></>}
+                <dt>画面时间码</dt><dd data-testid="sync-presented-frame"
+                  data-frame={reviewPresentedFrame}>
+                  {!selectedVisible ? "监听机位未显示" : reviewPresentedFrame !== undefined
+                    ? confirmedRate ? timecode(reviewPresentedFrame, rate) : `${displayedTime?.toFixed(3)}s`
+                    : frameCallbackSupported ? "等待画面定位" : "当前系统未提供显示帧时间"}</dd>
+                <dt>原始时码</dt><dd>{clip.timecode || "未记录"}</dd>
+                <dt>媒体匹配</dt><dd>{clip.media_clip_id ? "已关联项目媒体身份" : "待核实"}</dd>
+              </dl>
+            ) : <p>请在时间线选择片段，或移动播放头到有素材的位置。</p>}
+            <div className="sync-master-info">
+              <span>{syncTimeline.cameras.length ? `${syncTimeline.cameras.join(" / ")} 机位` : "暂无已识别机位"}</span>
+              {onMulticamSync && <button type="button" className="secondary" onClick={onMulticamSync}>重新同步</button>}
+            </div>
+          </div> : baseUrl && syncTimeline.recordings && <SyncRecordingMonitor baseUrl={baseUrl} timeline={syncTimeline}
+            cursor={cursor} rate={confirmedRate} playingVideo={playing} onAudition={() => videoRef.current?.pause()} />}
+        </aside>
+      </>}
       </div>
 
       {showDelivery ? <div className="multicam-sync-export">

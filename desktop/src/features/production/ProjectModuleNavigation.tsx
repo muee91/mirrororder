@@ -69,16 +69,9 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
   const selectedModule = selected === "takes" ? "media-library" : selected;
   return (
     <div className="project-module-navigation">
-      <div className="project-module-intro">
-        <span>制作流程</span>
-        <strong>{inputKind === "media-directory" ? "先同步，再整理" : "素材整理与交付"}</strong>
-        <small>{inputKind === "media-directory"
-          ? syncPhase === "unavailable" ? "同步状态暂不可读" : syncReady ? "可查看同步母版" : syncPhase === "running" ? "正在同步 · 可检查原始素材" : "同步完成前只开放必要操作"
-          : "原有 FCPXML 项目不需要重新对轨"}</small>
-      </div>
       {modulesForProject(inputKind).map((group) => (
-        <div className="project-module-group" key={group.id}>
-          <p className="project-module-group-title">{group.title}</p>
+        <div className="project-module-group" role="group" aria-label={group.title} key={group.id}>
+          <span className="project-module-group-title" aria-hidden="true">{group.title}</span>
           {group.modules.map((item) => {
             const available = canOpenProductionModule(item.page, inputKind, syncReady);
             return (
@@ -88,13 +81,12 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
                 title={available ? item.description : "同步完成后开放此模块"}
                 onClick={() => onNavigate(item.page)}>
                 <span className="project-module-link-title">{item.label}</span>
-                <small>{available ? item.description : "等待同步结果"}</small>
+                {item.page === "sync-task" && syncPhase === "running" && <span className="project-module-running" aria-label="运行中" />}
               </button>
             );
           })}
         </div>
       ))}
-      <div className="project-module-footer">模型配置与团队协作位于全局工具，不要求剪辑师先完成 AI 设置。</div>
     </div>
   );
 }
