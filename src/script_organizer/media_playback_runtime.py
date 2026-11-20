@@ -113,6 +113,7 @@ def install_media_playback_runtime() -> None:
                     if path is None or path.suffix.lower() != ".wav":
                         raise web_server.ApiError(HTTPStatus.NOT_FOUND, "该同期录音未在本机连接")
                 else:
+                    project.reload_if_changed()
                     clip = project.clips.get(clip_id)
                     if not clip:
                         raise web_server.ApiError(HTTPStatus.NOT_FOUND, "unknown clip")

@@ -292,7 +292,7 @@ export function App() {
     }
   }
 
-  async function refreshWorkspace(preferredProjectId?: string): Promise<void> {
+  async function refreshWorkspace(preferredProjectId?: string, openProject = false): Promise<void> {
     const activeBaseUrl = snapshot?.baseUrl ?? baseUrl;
     let activeConnection: HostConnection;
     try {
@@ -302,10 +302,17 @@ export function App() {
     }
     const next = await activeConnection.connect();
     const preferred = projectById(next, preferredProjectId);
+    if (openProject && !preferred) {
+      throw new HostConnectionError("项目已保存，刷新后的工作区尚未找到该项目。");
+    }
     const existing = selectedProject ? projectById(next, selectedProject.project_id) : null;
     const project = preferred ?? existing;
     setSnapshot(next);
     setSelectedProject(project);
+    if (openProject && project) {
+      setPageRequest(null);
+      setSurface("production");
+    }
     if (project && resumeEnabledForSession) rememberProject(project.project_id);
     setState("connected");
     setMessage(project ? `项目已刷新 · ${project.name || project.project_id}` : `工作区已刷新 · ${next.projects.length} 个项目`);
@@ -589,7 +596,7 @@ export function App() {
                 onPrepareProject={(project) => prepareProject(project)}
                 onOpenMediaBinding={(project) => openProjectPage(project, "media-binding")}
                 onDeleteProject={(project) => deleteProject(project)}
-                onWorkspaceChanged={refreshWorkspace}
+                onWorkspaceChanged={(id) => refreshWorkspace(id, Boolean(id))}
               />
             ) : surface === "status" ? (
               <StatusCenterWorkbench

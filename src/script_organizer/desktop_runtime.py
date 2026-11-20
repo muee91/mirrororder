@@ -57,6 +57,7 @@ def _media_summary(service: Any, project: Any) -> dict[str, Any]:
     # Recovery/status GETs consume the last explicit scan/confirmation
     # snapshot. Playback remains the content-identity verification boundary
     # for the one clip being opened.
+    project.reload_if_changed()
     summary = store.summary(workspace_id, project.project_id, project.index, verify_content=False)
     if project.config.is_media_directory and not (project.index.get("clips") or project.index.get("groups")):
         summary["pending_analysis"] = True

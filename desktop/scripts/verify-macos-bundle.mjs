@@ -70,7 +70,7 @@ if (canonicalIconBlob !== EXPECTED_BRAND_ICON_GIT_BLOB) {
 }
 assertFile(generatedIcns, "generated macOS app icon");
 
-const app = findApp();
+const app = process.env.MIRRORORDER_BUNDLE_APP ? path.resolve(process.env.MIRRORORDER_BUNDLE_APP) : findApp();
 const infoPlist = path.join(app, "Contents", "Info.plist");
 const resources = path.join(app, "Contents", "Resources");
 assertFile(infoPlist, "app Info.plist");
