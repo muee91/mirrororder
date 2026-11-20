@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ProjectSummary } from "../../api/host";
-import { canonicalProductionPage, hasRememberedProjectPage, readProjectPage, rememberProjectPage, type ProductionPage } from "../../app/resumeState";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { errorMessage, type ProjectSummary } from "../../api/host";
+import { DesktopClient } from "../../api/desktop";
+import type { AssistantSelection } from "../../api/production";
+import { ProjectTaskClient, canRetryTask } from "../../api/tasks";
+import { EvidencePreview } from "./EvidencePreview";
+import { evidenceLocation, type EvidenceReference } from "./evidenceLocation";
+import { canonicalProductionPage, hasRememberedProjectPage, readProjectPage, rememberProjectPage, readSyncSubmissionIssue, rememberSyncSubmissionIssue, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
@@ -29,9 +34,12 @@ import "./production-workspaces.css";
 interface Props {
   baseUrl: string;
   project: ProjectSummary;
+  workspaceId?: string;
+  active?: boolean;
   pageRequest?: { page: ProductionPage; nonce: number } | null;
   onOpenTeamReview?: () => void;
-  onMulticamSync?: () => void;
+  onTaskChanged?: () => void;
+  onOpenStatus?: () => void;
   onPageChange?: (page: ProductionPage) => void;
 }
 
@@ -51,6 +59,9 @@ interface AreaDefinition {
 type ProductionSelectionValues = {
   groupId?: string | null;
   clipId?: string | null;
+  mediaId?: string | null;
+  recordId?: string | null;
+  sourceRange?: ProductionSelectionContext["sourceRange"];
   scriptSegmentId?: string | null;
   timelineClipId?: string | null;
 };
@@ -105,7 +116,9 @@ function pageLabel(page: ProductionPage): string {
   const canonical = safeProductionPage(page);
   if (canonical === "sync-task") return "同步任务";
   if (canonical === "sync-inspect") return "同步核对";
-  if (canonical === "sync-delivery") return "工程交付";
+  if (canonical === "sync-delivery") return "同步工程交付";
+  if (canonical === "takes") return "素材库 / Take 详情";
+  if (canonical === "timeline") return "选片组接";
   for (const area of Object.values(AREAS)) {
     const item = area.pages.find((candidate) => candidate.page === canonical);
     if (item) return item.label;
@@ -141,16 +154,19 @@ function normalizedContext(
     projectId,
     ...(groupId ? { groupId } : {}),
     ...(clipId ? { clipId } : {}),
+    ...(values.mediaId ? { mediaId: values.mediaId } : {}),
+    ...(values.recordId ? { recordId: values.recordId } : {}),
+    ...(values.sourceRange ? { sourceRange: values.sourceRange } : {}),
     ...(scriptSegmentId ? { scriptSegmentId } : {}),
     ...(timelineClipId ? { timelineClipId } : {}),
   };
 }
 
-export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenTeamReview, onMulticamSync, onPageChange }: Props) {
+export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, active = true, pageRequest = null, onOpenTeamReview, onTaskChanged, onOpenStatus, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => {
     const saved = safeProductionPage(readProjectPage(project.project_id));
     if (project.input_kind === "media-directory") {
-      if (!hasRememberedProjectPage(project.project_id) || saved === "timeline") return "sync-task";
+      if (!hasRememberedProjectPage(project.project_id)) return "sync-task";
     }
     return saved;
   });
@@ -158,20 +174,52 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   const [selection, setSelection] = useState<ProductionSelectionContext>(() => ({ projectId: project.project_id }));
   const [navigationIntent, setNavigationIntent] = useState<ProductionNavigationIntent | null>(null);
   const [deliveryRequestNonce, setDeliveryRequestNonce] = useState(0);
-  const [operatorRevision, setOperatorRevision] = useState(0);
+  const [returnPage, setReturnPage] = useState<ProductionPage | null>(null);
+  const [evidence, setEvidence] = useState<{ selection: ProductionSelectionContext; snippet?: string } | null>(null);
+  const [slateFocus, setSlateFocus] = useState<ProductionSelectionContext | null>(null);
+  const [slateVisited, setSlateVisited] = useState(false);
+  const [command, setCommand] = useState<"start" | "cancel" | "">("");
+  const [commandError, setCommandError] = useState("");
+  const [submissionIssue, setSubmissionIssue] = useState(() => readSyncSubmissionIssue(workspaceId, project.project_id));
+  const commanding = useRef(false);
+  const assistantToggle = useRef<HTMLButtonElement>(null);
+  const assistantDraft = useMemo(() => ({ text: "", includeSelection: true }), [baseUrl, project.project_id]);
   const navigationNonce = useRef(0);
-  const { syncTimeline, beginSyncTracking, refreshSyncTimeline } = useMulticamSyncGate(baseUrl, project.project_id, project.input_kind);
-  const syncBlocked = project.input_kind === "media-directory" && !syncTimeline.ready;
+  const { syncTimeline, snapshot, readError, refreshSyncTimeline } = useMulticamSyncGate(baseUrl, project.project_id, project.input_kind);
+  const master = syncTimeline.ready ? syncTimeline : snapshot?.timeline ?? syncTimeline;
+  const syncBlocked = project.input_kind === "media-directory" && !master.ready;
   const visiblePage = syncBlocked
     && !["sync-task", "media-library", "media-binding"].includes(page) ? "sync-task" : page;
 
   const area = areaForPage(visiblePage);
   const currentSelection = selection.projectId === project.project_id ? selection : { projectId: project.project_id };
+  const pageFocus = useMemo<{ current: AssistantSelection }>(() => ({ current: {} }), [project.project_id, visiblePage]);
+  const inspectSelection = useCallback((next: AssistantSelection) => { pageFocus.current = next; }, [pageFocus]);
   const currentIntent = navigationIntent?.projectId === project.project_id ? navigationIntent : null;
 
   const updateSelection = useCallback((values: ProductionSelectionValues): void => {
-    setSelection(normalizedContext(project.project_id, values));
+    setSelection((previous) => {
+      const next = normalizedContext(project.project_id, values);
+      if (previous.projectId !== next.projectId || previous.clipId !== next.clipId || previous.groupId !== next.groupId) return next;
+      return { ...previous, ...next };
+    });
   }, [project.project_id]);
+
+  const selectSlateRecord = useCallback((value: ProductionSelectionContext) => {
+    setSelection((previous) => ({ ...value,
+      sourceRange: previous.recordId === value.recordId && previous.clipId === value.clipId ? previous.sourceRange : undefined,
+      scriptSegmentId: previous.groupId === value.groupId ? previous.scriptSegmentId : undefined,
+    }));
+  }, []);
+
+  function openEvidence(reference: EvidenceReference) {
+    setEvidence({ selection: { ...evidenceLocation(project.project_id, reference), returnPage: visiblePage }, snippet: reference.snippet });
+  }
+
+  function closeAssistant() {
+    setAssistantOpen(false);
+    assistantToggle.current?.focus();
+  }
 
   function nextIntent(
     workspace: ProductionWorkspace,
@@ -191,15 +239,13 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
       setPage("slate");
       return;
     }
-    if (syncBlocked && !["sync-task", "media-library", "media-binding"].includes(next)) {
-      setPage("sync-task");
-      return;
-    }
+    if (syncBlocked && !["sync-task", "media-library", "media-binding"].includes(next)) return;
     if (next === "delivery") {
       setDeliveryRequestNonce((value) => value + 1);
       setPage("timeline");
       return;
     }
+    if (next === "media-binding" && visiblePage !== "media-binding") setReturnPage(visiblePage);
     setPage(safeProductionPage(next));
   }
 
@@ -209,15 +255,38 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
     navigate(target ?? (syncBlocked && next === "material" ? "media-library" : AREAS[next].defaultPage));
   }
 
-  function runMulticamSync(): void {
-    if (syncTimeline.ready && !globalThis.confirm(
-      "重新同步会更新项目本机的同步结果。已分发给剪辑师的工程应单独保留版本。确认重新计算吗？",
-    )) return;
-    beginSyncTracking();
-    onMulticamSync?.();
-    setPage("sync-task");
-    globalThis.setTimeout(() => { void refreshSyncTimeline(); }, 500);
+  async function changeSyncTask(action: "start" | "cancel", restart = false): Promise<void> {
+    if (commanding.current || readError) return;
+    const projectId = project.project_id;
+    const task = syncTimeline.task;
+    if (action === "start" && syncTimeline.phase === "running") return;
+    if (restart && master.ready && !globalThis.confirm("重新计算同步？现有交付文件保留在原版本。")) return;
+    commanding.current = true;
+    setCommand(action);
+    setCommandError("");
+    try {
+      const tasks = new ProjectTaskClient(baseUrl);
+      if (action === "cancel" && task) {
+        await tasks.cancel(projectId, task.task_id);
+      } else if (action === "start") {
+        setPage("sync-task");
+        const latest = task && canRetryTask(task) ? (await tasks.list(projectId)).find((row) => row.task_id === task.task_id) : null;
+        if (latest?.type === "multicam_sync" && canRetryTask(latest)) await tasks.retry(projectId, latest);
+        else await new DesktopClient(baseUrl).multicamSync(projectId);
+        rememberSyncSubmissionIssue(workspaceId, projectId, "");
+        setSubmissionIssue("");
+      }
+      onTaskChanged?.();
+    } catch (error) {
+      setCommandError(errorMessage(error));
+    } finally {
+      await refreshSyncTimeline();
+      commanding.current = false;
+      setCommand("");
+    }
   }
+
+  function runMulticamSync(): void { void changeSyncTask("start", master.ready); }
 
   function focusTake(
     groupId: string,
@@ -227,14 +296,22 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   ): void {
     const value = groupId.trim();
     if (!value) return;
+    const target = destination === "material" ? "takes" : destination === "script" ? "script" : destination === "review" ? "watch" : "timeline";
+    if (syncBlocked) return;
+    const sameTake = currentSelection.groupId === value;
+    const sameClip = sameTake && (!clipId || currentSelection.clipId === clipId);
     const context = normalizedContext(project.project_id, {
       groupId: value,
-      clipId,
-      scriptSegmentId,
+      clipId: clipId ?? (sameTake ? currentSelection.clipId : undefined),
+      scriptSegmentId: scriptSegmentId ?? (sameTake ? currentSelection.scriptSegmentId : undefined),
+      mediaId: sameClip ? currentSelection.mediaId : undefined,
+      recordId: sameTake ? currentSelection.recordId : undefined,
+      sourceRange: sameClip ? currentSelection.sourceRange : undefined,
     });
+    if (target !== visiblePage) setReturnPage(visiblePage);
     setSelection(context);
     setNavigationIntent(nextIntent(destination, context));
-    navigate(destination === "material" ? "takes" : destination === "script" ? "script" : destination === "review" ? "watch" : "timeline");
+    navigate(target);
   }
 
   function openReviewWithoutSelection(): void {
@@ -257,78 +334,108 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
   }, [onPageChange, page, project.project_id]);
 
   useEffect(() => {
-    if (syncBlocked && !["sync-task", "media-library", "media-binding"].includes(page)) {
-      setPage("sync-task");
-    }
-  }, [page, syncBlocked]);
+    if (visiblePage === "slate") setSlateVisited(true);
+  }, [visiblePage]);
+
+  useEffect(() => {
+    if (!syncTimeline.task?.task_id || !submissionIssue) return;
+    rememberSyncSubmissionIssue(workspaceId, project.project_id, "");
+    setSubmissionIssue("");
+  }, [workspaceId, project.project_id, syncTimeline.task?.task_id, submissionIssue]);
 
   useEffect(() => {
     if (pageRequest) navigate(pageRequest.page);
   }, [pageRequest?.nonce]);
 
-  const assistantVisible = assistantOpen;
-  const canvasKey = `${project.project_id}:${area}:operator-${operatorRevision}`;
+  const assistantVisible = active && assistantOpen;
+
 
   return (
     <section
       className={`project-production-workbench professional-project-workbench ${assistantVisible ? "has-assistant-drawer" : ""}`}
+      data-sync-read-error={Boolean(readError || (!syncTimeline.ready && snapshot)) || undefined}
       aria-label={`项目工作台：${project.name || project.project_id}`}
     >
       <header className="professional-project-toolbar">
         <div className="professional-project-identity">
-          <span>当前剧集 · 镜序制作</span>
           <strong>{project.name || project.project_id}</strong>
           <small>{pageLabel(visiblePage)}</small>
+          {returnPage && returnPage !== visiblePage && visiblePage !== "media-binding" && !syncBlocked && <button type="button" className="secondary"
+            onClick={() => { navigate(returnPage); setReturnPage(null); }}>返回{pageLabel(returnPage)}</button>}
         </div>
         <div className="professional-project-tools">
-          {!syncBlocked ? <SemanticSearchPalette baseUrl={baseUrl} projectId={project.project_id} onOpenTake={(groupId) => focusTake(groupId, "script")} /> : null}
+          <SemanticSearchPalette active={active} baseUrl={baseUrl} projectId={project.project_id} onOpenEvidence={openEvidence} />
+          <button type="button" ref={assistantToggle} className="professional-assistant-toggle" aria-expanded={assistantOpen}
+            onClick={() => setAssistantOpen((value) => !value)}>小镜</button>
           {!syncBlocked && onOpenTeamReview ? <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>审阅</button> : null}
-          {!syncBlocked ? <details className="professional-tools-menu">
+          <details className="professional-tools-menu">
             <summary>工具</summary>
             <div className="professional-tools-popover">
-              <CurrentOperatorControl onChange={() => setOperatorRevision((value) => value + 1)} />
-              <button type="button" className={`professional-assistant-toggle ${assistantOpen ? "is-active" : ""}`} onClick={() => setAssistantOpen((value) => !value)} aria-pressed={assistantOpen}>小镜</button>
+              <CurrentOperatorControl />
             </div>
-          </details> : <span className="professional-sync-context">先同步 · 需要时检查原始素材</span>}
+          </details>
         </div>
       </header>
 
+      {(readError || (!syncTimeline.ready && snapshot)) && <div className="production-connection-notice" role={readError ? "alert" : "status"}>
+        <span>{readError ? "同步状态读取失败。" : "本次同步尚未产生可核对的母版。"}
+          {snapshot ? ` 正在显示 ${new Date(snapshot.readAt).toLocaleString()} 确认的母版。` : ` ${readError}`}</span>
+        <button type="button" className="secondary" onClick={() => void refreshSyncTimeline()}>重新读取</button>
+      </div>}
       <div className="project-production-layout">
         <nav className="project-module-rail" aria-label="制作区域">
           <ProjectModuleNavigation inputKind={project.input_kind}
-            selected={visiblePage} syncReady={syncTimeline.ready} syncPhase={syncTimeline.phase}
+            selected={visiblePage} syncReady={master.ready} syncPhase={syncTimeline.phase}
             onNavigate={(target) => {
-              if (canOpenProductionModule(target, project.input_kind, syncTimeline.ready)) {
+              if (canOpenProductionModule(target, project.input_kind, master.ready)) {
                 switchArea(areaForPage(target), target);
               }
             }} />
         </nav>
       <div className="project-workbench-canvas">
-        <div className="project-workbench-main owns-chrome" key={canvasKey}>
-          {visiblePage === "sync-task" ? (
-            <SyncTaskWorkspace syncTimeline={syncTimeline} onMulticamSync={runMulticamSync}
-              onInspect={() => navigate("sync-inspect")} />
+        <div className="project-workbench-main owns-chrome">
+          {active && visiblePage === "sync-task" ? (
+            <SyncTaskWorkspace syncTimeline={syncTimeline} baseUrl={baseUrl} command={command}
+              submissionError={commandError || submissionIssue}
+              onMulticamSync={() => void changeSyncTask("start")}
+              onCancel={() => void changeSyncTask("cancel")}
+              onRepair={() => navigate("media-binding")} onOpenStatus={onOpenStatus}
+              onInspect={master.ready ? () => navigate("sync-inspect") : undefined} />
           ) : null}
-          {visiblePage === "sync-inspect" && syncTimeline.ready ? (
-            <SyncInspectionWorkbench syncTimeline={syncTimeline} baseUrl={baseUrl}
+          {active && visiblePage === "sync-inspect" && master.ready ? (
+            <SyncInspectionWorkbench syncTimeline={master} baseUrl={syncTimeline.ready ? baseUrl : undefined} onInspectSelection={inspectSelection}
               onMulticamSync={runMulticamSync} showDelivery={false}
               onOpenDelivery={() => navigate("sync-delivery")} />
           ) : null}
-          {visiblePage === "sync-delivery" && syncTimeline.ready ? (
-            <SyncDeliveryWorkspace baseUrl={baseUrl} syncTimeline={syncTimeline}
+          {active && visiblePage === "sync-delivery" && master.ready ? (
+            <SyncDeliveryWorkspace baseUrl={baseUrl} syncTimeline={master} canGenerate={syncTimeline.ready && !readError} onRepair={() => navigate("media-binding")}
               onInspect={() => navigate("sync-inspect")} onSyncTask={() => navigate("sync-task")} />
           ) : null}
 
-          {area === "material" ? (
+          {((active && area === "material") || slateVisited) ? (
             <MaterialWorkspace
               baseUrl={baseUrl}
               project={project}
-              view={materialViewForPage(page)}
+              active={active && area === "material"}
+              keepSlate={slateVisited}
+              showViewNavigation={false}
+              view={materialViewForPage(visiblePage)}
+              canOpenTakes={!syncBlocked}
+              slateFocus={slateFocus}
+              onOpenEvidence={openEvidence}
+              onSlateSelection={selectSlateRecord}
+              repairReturnLabel={returnPage && returnPage !== "media-binding" ? `返回${pageLabel(returnPage)}` : undefined}
+              onReturnFromRepair={returnPage && returnPage !== "media-binding" ? () => {
+                navigate(returnPage);
+                setReturnPage(null);
+              } : undefined}
+              onInspectSelection={inspectSelection}
               initialGroupId={currentSelection.groupId ?? null}
               initialClipId={currentSelection.clipId ?? null}
               onSelectionChange={(groupId, clipId) => updateSelection({ groupId, clipId })}
               onViewChange={(view, groupId) => {
                 if (groupId?.trim()) updateSelection({ groupId });
+                if (view === "takes") setReturnPage(visiblePage);
                 navigate(pageForMaterialView(view));
               }}
               onOpenScript={(groupId, clipId) => focusTake(groupId, "script", clipId)}
@@ -337,7 +444,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             />
           ) : null}
 
-          {visiblePage === "script" ? (
+          {active && visiblePage === "script" ? (
             <ScriptWorkspace
               baseUrl={baseUrl}
               project={project}
@@ -351,11 +458,11 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             />
           ) : null}
 
-          {visiblePage === "timeline" ? (
+          {active && visiblePage === "timeline" ? (
             <TimelineWorkbench
               baseUrl={baseUrl}
               projectId={project.project_id}
-              syncTimeline={syncTimeline}
+              syncTimeline={master}
               initialAssemblyExpanded={project.input_kind === "media-directory"}
               onMulticamSync={runMulticamSync}
               focusIntent={currentIntent?.workspace === "timeline" ? currentIntent : null}
@@ -365,7 +472,7 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
             />
           ) : null}
 
-          {visiblePage === "watch" ? (
+          {active && visiblePage === "watch" ? (
             <ReviewWorkspace
               baseUrl={baseUrl}
               project={project}
@@ -380,23 +487,51 @@ export function ProjectWorkbench({ baseUrl, project, pageRequest = null, onOpenT
         </div>
 
         {assistantVisible ? (
-          <aside className="assistant-context-drawer" aria-label="小镜上下文助手">
+          <aside className="assistant-context-drawer" aria-label="小镜上下文助手" onKeyDown={(event) => {
+            if (event.key === "Escape" && !event.nativeEvent.isComposing) { event.stopPropagation(); closeAssistant(); }
+          }}>
             <div className="assistant-drawer-heading">
             <div><p className="eyebrow">{AREAS[area].label} / {pageLabel(visiblePage)}</p><strong>小镜</strong></div>
-              <button type="button" className="secondary" onClick={() => setAssistantOpen(false)} aria-label="关闭小镜">关闭</button>
+              <button type="button" className="secondary" onClick={closeAssistant} aria-label="关闭小镜">关闭</button>
             </div>
             <AssistantWorkbench
               baseUrl={baseUrl}
               projectId={project.project_id}
-              onFocusTake={(groupId, destination) => {
-                setAssistantOpen(false);
-                focusTake(groupId, destination ?? "material");
+              draft={assistantDraft}
+              readContext={(includeSelection) => ({
+                project_id: project.project_id,
+                page: visiblePage,
+                ...(includeSelection ? (Object.keys(pageFocus.current).length ? pageFocus.current : {
+                  group_id: currentSelection.groupId, clip_id: currentSelection.clipId,
+                  media_id: currentSelection.mediaId, script_segment_id: currentSelection.scriptSegmentId,
+                }) : {}),
+              })}
+              onOpenEvidence={openEvidence}
+              onOpenDiagnostic={(target) => { closeAssistant(); navigate(target); }}
+              onFocusTake={(groupId, destination, clipId) => {
+                closeAssistant();
+                focusTake(groupId, destination ?? "material", clipId);
               }}
             />
           </aside>
         ) : null}
       </div>
       </div>
+      {active && evidence && <EvidencePreview baseUrl={baseUrl} selection={evidence.selection} snippet={evidence.snippet}
+        onClose={() => setEvidence(null)}
+        onRepair={() => { setEvidence(null); navigate("media-binding"); }}
+        onOpenObject={evidence.selection.recordId && !syncBlocked ? () => {
+          setSelection(evidence.selection);
+          setSlateFocus(evidence.selection);
+          setReturnPage(evidence.selection.returnPage ?? null);
+          setEvidence(null);
+          navigate("slate");
+        } : evidence.selection.groupId && !syncBlocked ? () => {
+          setSelection(evidence.selection);
+          setReturnPage(evidence.selection.returnPage ?? null);
+          setEvidence(null);
+          navigate("takes");
+        } : undefined} />}
     </section>
   );
 }

@@ -18,7 +18,9 @@ import { useNativeSlateIntervalLedger } from "./useNativeSlateIntervalLedger";
 import { SlatePaperIntake } from "./SlatePaperIntake";
 import { SlateSourceIntervalPanel } from "./SlateSourceIntervalPanel";
 import { SlateSpeechEvidencePanel } from "./SlateSpeechEvidencePanel";
-import { SlateRow, SlateTableHead, type SlateCameraColumn } from "./SlateRow";
+import { SlateRow, SlateTableHead, SLATE_CAMERA_COLUMNS, type SlateCameraColumn } from "./SlateRow";
+import { originalPlaybackUrl } from "./SlateOriginalPlayback";
+import type { ProductionSelectionContext } from "../production/productionNavigation";
 import { SlateWorkbench } from "./SlateWorkbench";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import "../media/camera-presentation.css";
@@ -29,6 +31,12 @@ interface Props {
   baseUrl: string;
   projectId: string;
   projectName?: string;
+  active?: boolean;
+  focus?: ProductionSelectionContext | null;
+  onSelection?: (selection: ProductionSelectionContext) => void;
+  onOpenScript?: (groupId: string, clipId?: string | null) => void;
+  onOpenReview?: (groupId?: string, clipId?: string | null) => void;
+  onRepair?: () => void;
   onInspectSelection?: (selection: AssistantSelection) => void;
   // The interval ledger must be supplied by a private, project-verified adapter.
   enableNativeIntervalLedger?: boolean;
@@ -283,10 +291,10 @@ function cameraKey(value: string): string {
   return value.trim().toUpperCase().replace(/机/g, "");
 }
 
-function primaryAttachment(draft: Draft, camera: SlateCameraColumn): { item: SlateAttachment; count: number } | null {
+function primaryAttachment(draft: Draft, camera: SlateCameraColumn, cameraColumns: readonly SlateCameraColumn[]): { item: SlateAttachment; count: number } | null {
   const rows = draft.attachments.filter((attachment) => {
     const key = cameraKey(attachment.camera);
-    if (camera === "AUX") return !["A", "B", "C"].includes(key) || attachment.source_role !== "sync_camera";
+    if (camera === "AUX") return !cameraColumns.filter(column => column !== "AUX").includes(key) || attachment.source_role !== "sync_camera";
     return key === camera && attachment.source_role === "sync_camera";
   });
   return rows[0] ? { item: rows[0], count: rows.length } : null;
@@ -294,7 +302,7 @@ function primaryAttachment(draft: Draft, camera: SlateCameraColumn): { item: Sla
 
 
 
-export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspectSelection, intervalLedger, enableNativeIntervalLedger=false }: Props) {
+export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, active = true, focus, onSelection, onOpenScript, onOpenReview, onRepair, onInspectSelection, intervalLedger, enableNativeIntervalLedger=false }: Props) {
   const [slateSurface, setSlateSurface] = useState<"intervals" | "takes">("intervals");
   const nativeIntervalLedger=useNativeSlateIntervalLedger(baseUrl,projectId,enableNativeIntervalLedger);
   const ledger = intervalLedger?.projectId === projectId ? intervalLedger : nativeIntervalLedger.ledger;
@@ -324,6 +332,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
   const [playbackFailedClipId, setPlaybackFailedClipId] = useState("");
   const [playbackRetry, setPlaybackRetry] = useState(0);
   const [playbackFailureDetail, setPlaybackFailureDetail] = useState<PlaybackFailure | null>(null);
+  const slateRef = useRef<HTMLDivElement>(null);
+  const appliedFocus = useRef<ProductionSelectionContext | null>(null);
+  const [locatedRange, setLocatedRange] = useState<{ recordId: string; clipId: string; start: number } | null>(null);
   const playerRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
@@ -382,6 +393,45 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
     return () => { cancelled = true; };
   }, [host, production, projectId]);
 
+  useEffect(() => {
+    if (!active) slateRef.current?.querySelectorAll("video, audio").forEach((node) => (node as HTMLMediaElement).pause());
+  }, [active]);
+
+  useEffect(() => {
+    if (!focus?.recordId || !board || focus === appliedFocus.current || focus.projectId !== projectId || !active) return;
+    const row = drafts.find((draft) => draft.record_id === focus.recordId);
+    if (!row) return;
+    appliedFocus.current = focus;
+    const attachment = row.attachments.find((item) => (!focus.clipId || focus.clipId === item.clip_id)
+      && (!focus.mediaId || focus.mediaId === item.media_id));
+    const clip = attachment ? attachmentKey(attachment) : row.preferred_clip_id || (row.attachments[0] ? attachmentKey(row.attachments[0]) : "");
+    setSlateSurface("takes");
+    setInspectorOpen(true);
+    setSelectedRecordId(row.record_id);
+    setSelectedClipId(clip);
+    setLocatedRange(focus.sourceRange?.basis === "source" && attachment
+      ? { recordId: row.record_id, clipId: clip, start: focus.sourceRange.start } : null);
+    requestAnimationFrame(() => {
+      slateRef.current?.querySelector(`[data-record-id="${CSS.escape(row.record_id)}"]`)?.scrollIntoView({ block: "nearest" });
+    });
+  }, [focus, board, drafts, projectId, active]);
+
+  const cameraColumns = useMemo(() => {
+    const cameras = new Set<string>(SLATE_CAMERA_COLUMNS.filter(camera => camera !== "AUX"));
+    for (const take of review?.take_groups ?? []) {
+      for (const angle of take.angles) {
+        const camera = cameraKey(angle.camera);
+        if (/^[A-Z]$/.test(camera)) cameras.add(camera);
+      }
+    }
+    for (const record of Object.values(board?.records ?? {})) {
+      for (const attachment of record.attachments ?? []) {
+        const camera = cameraKey(attachment.camera);
+        if (attachment.source_role === "sync_camera" && /^[A-Z]$/.test(camera)) cameras.add(camera);
+      }
+    }
+    return [...cameras].sort().concat("AUX");
+  }, [board, review]);
   const selected = drafts.find((row) => row.record_id === selectedRecordId) ?? null;
   const selectedTake = selected?.source_group_id ? review?.take_groups.find((take) => take.group_id === selected.source_group_id) ?? null : null;
   const selectedAttachment = selected?.attachments.find((item) => attachmentKey(item) === selectedClipId) ?? null;
@@ -413,8 +463,14 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
       clip_id: clipId,
       media_id: mediaId,
     });
-  }, [onInspectSelection, selected?.source_group_id, selectedAttachment, selectedAngle, selectedTake]);
+  }, [active, onInspectSelection, onSelection, projectId, selected?.record_id, selected?.source_group_id, selectedAttachment, selectedAngle, selectedTake]);
   const selectedPlaybackFailed = Boolean(selectedPlaybackKey && playbackFailedClipId === selectedPlaybackKey);
+  const standaloneUrl = selectedAttachment?.clip_id && selectedAttachment.media_id && !selectedAngle
+    ? originalPlaybackUrl(baseUrl, projectId, { clipId: selectedAttachment.clip_id, mediaId: selectedAttachment.media_id, selectionKey: selectedPlaybackKey })
+    : null;
+  const playbackUrl = (selectedAngle?.playback.url && canPreviewReviewPlayback(selectedAngle.playback) ? selectedAngle.playback.url : null) || standaloneUrl;
+  const playbackStart = locatedRange && locatedRange.recordId === selectedRecordId && locatedRange.clipId === selectedClipId
+    ? locatedRange.start : selectedAngle?.playback.source_start ?? selectedAngle?.source_start ?? 0;
   useEffect(() => {
     if (!selectedPlaybackFailed) setPlaybackFailureDetail(null);
   }, [selectedPlaybackFailed]);
@@ -602,7 +658,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
   }
 
   useEffect(() => {
-    if (!isTauri() || intervalSurface) return;
+    if (!active || !isTauri() || intervalSurface) return;
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void getCurrentWebview().onDragDropEvent((event) => {
@@ -631,7 +687,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
       if (!disposed) setMessage(`无法启用 Finder 拖入：${errorMessage(error)}`);
     });
     return () => { disposed = true; unlisten?.(); };
-  }, [projectId, selectedRecordId, slateMedia, intervalSurface]);
+  }, [projectId, selectedRecordId, slateMedia, intervalSurface, active]);
 
   async function saveDraft(draft: Draft, revision: number): Promise<SlateBoard> {
     if (!actor.trim()) throw new HostConnectionError("保存场记前需要操作者昵称");
@@ -784,8 +840,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
   });
 
   useEffect(() => {
-    if (intervalSurface) return;
+    if (!active || intervalSurface) return;
     const keydown = (event: KeyboardEvent) => {
+      if (event.isComposing || document.querySelector("dialog[open], .semantic-search-palette")) return;
       if (event.key === "Escape" && takePickerOpen) {
         event.preventDefault();
         setTakePickerOpen(false);
@@ -801,12 +858,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
     };
     globalThis.addEventListener("keydown", keydown);
     return () => globalThis.removeEventListener("keydown", keydown);
-  }, [takePickerOpen, intervalSurface]);
+  }, [takePickerOpen, intervalSurface, active]);
 
   function mediaCell(draft: Draft, camera: SlateCameraColumn) {
-    const row = primaryAttachment(draft, camera);
+    const row = primaryAttachment(draft, camera, cameraColumns);
     if (!row) {
-      return <button type="button" className="golden-slate-empty-media" onClick={(event) => { event.stopPropagation(); selectRecord(draft.record_id); setTakePickerOpen(true); }}>{camera === "AUX" ? "—" : `＋ ${camera}`}</button>;
+      if (camera === "AUX") return <span className="golden-slate-empty-media">—</span>;
+      return <button type="button" className="golden-slate-empty-media" onClick={(event) => { event.stopPropagation(); selectRecord(draft.record_id); setTakePickerOpen(true); }}>{`＋ ${camera}`}</button>;
     }
     const angle = angleIndex.byClip.get(row.item.clip_id) ?? (row.item.media_id ? angleIndex.byMedia.get(row.item.media_id) : undefined) ?? null;
     const model = angle ? mediaCardFromAngle(angle, row.item) : mediaCardFromAttachment(row.item);
@@ -839,6 +897,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
           onEditEnd={() => setEditLayout(null)}
           onSelect={() => selectRecord(draft.record_id)}
           onPatch={(patch) => patchRecord(draft.record_id, patch)}
+          cameraColumns={cameraColumns}
           renderMedia={(camera) => mediaCell(draft, camera)}
         />
       );
@@ -852,7 +911,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
         <header><span className="section-dot" /><strong>{title}</strong><small>{rows.length} 条</small></header>
         <div className="golden-slate-section-scroll">
           <table className="golden-slate-table">
-            <thead><SlateTableHead /></thead>
+            <thead><SlateTableHead cameraColumns={cameraColumns} /></thead>
             <tbody>{renderRows(rows)}</tbody>
           </table>
         </div>
@@ -862,10 +921,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
 
   const inspectorAttachments = selected?.attachments ?? [];
 
-  return (<>
+  return (<div className="slate-workbench-content" data-view-switch={ledgerSurface || undefined} ref={slateRef}>
     {ledgerSurface && <nav className="slate-interval-view-switch" aria-label="场记工作视图">
-      <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>电子场记板</button>
-      <button type="button" aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>旧 Take 场记</button>
+      <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>来源场记</button>
+      <button type="button" aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>生产场记</button>
     </nav>}
     {ledger && <div hidden={!intervalSurface}><SlateIntervalBoardSurface key={JSON.stringify([baseUrl,projectId])} {...ledger} baseUrl={baseUrl} projectName={projectName} catalog={(review?.episodes ?? []).flatMap((entry)=>entry.scenes.map((scene)=>({episode:entry.episode,scene_id:scene.scene_id,label:prettySceneId(scene.scene_id)})))}/></div>}
     {intervalSurface && !ledger && <section aria-label="电子场记板"><SlateOriginalFormSheet page={{title:projectName?.trim()||"",day:"",date:"",printedPage:""}} rows={[]} />
@@ -938,13 +997,24 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
               <>
                 <div className="golden-inspector-head"><div><strong>选中素材</strong><span>EP {selected.episode ?? "—"} / 场 {selected.scene || selected.script_scene_id || "—"} / 镜 {selected.shot || "—"} / 次 {selected.take_number ?? "—"}</span></div>{selected.dirty ? <em>未保存</em> : null}</div>
                 <div className="golden-slate-player">
-                  {selectedAngle?.playback.url && canPreviewReviewPlayback(selectedAngle.playback) && !selectedPlaybackFailed ? (
-                    <video ref={playerRef} key={`${selectedAngle.clip_id}-${playbackRetry}`} src={selectedAngle.playback.url} controls preload="metadata" playsInline onError={() => { setPlaybackFailedClipId(selectedPlaybackKey); void classifyPlaybackFailure(selectedAngle.playback.url).then(setPlaybackFailureDetail); }} onLoadedMetadata={(event) => { const video = event.currentTarget; const start = selectedAngle.playback.source_start ?? selectedAngle.source_start ?? 0; if (start > 0) { try { video.currentTime = start; } catch { /* safe fallback */ } } }} />
+                  {playbackUrl && !selectedPlaybackFailed ? (
+                    <video ref={playerRef} key={`${selectedPlaybackKey}-${playbackRetry}-${playbackStart}`}
+                      src={playbackUrl} controls preload="auto" playsInline
+                      onError={() => { setPlaybackFailedClipId(selectedPlaybackKey); void classifyPlaybackFailure(playbackUrl).then(setPlaybackFailureDetail); }}
+                      onLoadedMetadata={(event) => {
+                        const video = event.currentTarget;
+                        if (playbackStart >= 0 && playbackStart < video.duration) video.currentTime = playbackStart;
+                      }} />
                   ) : selectedPlaybackFailed ? (
                     <div className="golden-player-error"><strong>当前设备无法读取或解码这个素材</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" onClick={() => { setPlaybackFailedClipId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
                   ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                 </div>
 
+                {selectedPlaybackFailed && onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}
+                {selectedTake && <div className="golden-inspector-actions">
+                  {onOpenScript && <button type="button" className="secondary" onClick={() => onOpenScript(selectedTake.group_id, selectedAngle?.clip_id)}>在剧本中打开</button>}
+                  {onOpenReview && <button type="button" className="secondary" onClick={() => onOpenReview(selectedTake.group_id, selectedAngle?.clip_id)}>看片审阅</button>}
+                </div>}
                 {selectedAttachment?.clip_id ? <SlateSpeechEvidencePanel key={`${baseUrl}:${projectId}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}`} baseUrl={baseUrl} projectId={projectId} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} /> : null}
 
                 {selectedAttachment?.clip_id && selectedAttachment.media_id ? <SlateSourceIntervalPanel key={`${baseUrl}:${projectId}:${selected.record_id}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}:${board?.revision}:${paperSource?.row.paper_row_id}:${paperSource?.revision}`} paperSource={paperSource} baseUrl={baseUrl} projectId={projectId} recordId={selected.record_id} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} savedRecord={board?.records[selected.record_id]} boardRevision={board?.revision ?? -1} dirty={selected.dirty} /> : null}
@@ -983,5 +1053,5 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, onInspec
 
       <details className="golden-slate-review-tools"><summary>Review 归集辅助 · 待归集 / 已归集 / 已排除 / 孤立素材 / 场景目标</summary><SlateWorkbench baseUrl={baseUrl} projectId={projectId} /></details>
     </section></div>
-  </>);
+  </div>);
 }

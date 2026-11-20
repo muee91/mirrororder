@@ -83,7 +83,7 @@ describe("MirrorOrder Design System v2 contract", () => {
     const project = read("../features/production/professional-project-workbench.css");
     const workbench = read("../features/production/ProjectWorkbench.tsx");
 
-    expect(project).toContain("grid-template-rows: 62px minmax(0, 1fr)");
+    expect(project).toContain("grid-template-rows: minmax(54px, auto) minmax(0, 1fr)");
     expect(project).toContain("grid-template-columns: 202px minmax(0, 1fr)");
     expect(project).toContain(".project-module-rail");
     expect(project).toContain(".project-module-link.is-active");

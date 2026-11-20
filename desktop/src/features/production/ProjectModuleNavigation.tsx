@@ -15,7 +15,7 @@ export interface ProductionModuleGroup {
 
 const RAW_MEDIA_GROUP: ProductionModuleGroup = {
   id: "delivery",
-  title: "01 / 同步与交付",
+  title: "同步与交付",
   modules: [
     { page: "sync-task", label: "同步任务", description: "进度、异常和重试", requiresSync: false },
     { page: "sync-inspect", label: "同步核对", description: "机位与源视频监看", requiresSync: true },
@@ -25,7 +25,7 @@ const RAW_MEDIA_GROUP: ProductionModuleGroup = {
 
 const ORGANIZE_GROUP: ProductionModuleGroup = {
   id: "organize",
-  title: "02 / 拍摄素材",
+  title: "拍摄素材",
   modules: [
     { page: "slate", label: "交互场记", description: "实际拍摄顺序", requiresSync: true },
     { page: "script", label: "剧本关联", description: "故事顺序与对白", requiresSync: true },
@@ -37,7 +37,7 @@ const ORGANIZE_GROUP: ProductionModuleGroup = {
 
 const EDITORIAL_GROUP: ProductionModuleGroup = {
   id: "editorial",
-  title: "03 / 剪辑辅助",
+  title: "剪辑辅助",
   modules: [
     { page: "watch", label: "看片审阅", description: "人工选择与判断", requiresSync: true },
     { page: "timeline", label: "选片组接", description: "生成外部 NLE 起点", requiresSync: true },
@@ -52,6 +52,7 @@ export function modulesForProject(inputKind: string): readonly ProductionModuleG
 
 export function canOpenProductionModule(page: ProductionPage, inputKind: string, syncReady: boolean): boolean {
   const module = modulesForProject(inputKind).flatMap((group) => group.modules).find((item) => item.page === page);
+  if (page === "takes") return inputKind !== "media-directory" || syncReady;
   if (!module) return false;
   return !module.requiresSync || inputKind !== "media-directory" || syncReady;
 }
@@ -65,13 +66,14 @@ interface Props {
 }
 
 export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPhase, onNavigate }: Props) {
+  const selectedModule = selected === "takes" ? "media-library" : selected;
   return (
     <div className="project-module-navigation">
       <div className="project-module-intro">
         <span>制作流程</span>
         <strong>{inputKind === "media-directory" ? "先同步，再整理" : "素材整理与交付"}</strong>
         <small>{inputKind === "media-directory"
-          ? syncReady ? "同步可核对 · 可以开始分发工程" : syncPhase === "running" ? "正在同步 · 可检查原始素材" : "同步完成前只开放必要操作"
+          ? syncPhase === "unavailable" ? "同步状态暂不可读" : syncReady ? "可查看同步母版" : syncPhase === "running" ? "正在同步 · 可检查原始素材" : "同步完成前只开放必要操作"
           : "原有 FCPXML 项目不需要重新对轨"}</small>
       </div>
       {modulesForProject(inputKind).map((group) => (
@@ -80,8 +82,8 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
           {group.modules.map((item) => {
             const available = canOpenProductionModule(item.page, inputKind, syncReady);
             return (
-              <button type="button" className={`project-module-link${selected === item.page ? " is-active" : ""}`}
-                key={item.page} aria-current={selected === item.page ? "page" : undefined}
+              <button type="button" className={`project-module-link${selectedModule === item.page ? " is-active" : ""}`}
+                key={item.page} aria-current={selectedModule === item.page ? "page" : undefined}
                 disabled={!available}
                 title={available ? item.description : "同步完成后开放此模块"}
                 onClick={() => onNavigate(item.page)}>

@@ -172,13 +172,32 @@ export interface AssistantStatus {
   updated_at: string;
   summary: string;
   items: AssistantItem[];
+  messages?: Array<{ role: string; text: string; context?: AssistantAnswer["context"] }>;
   [key: string]: unknown;
+}
+
+export interface AssistantSelection {
+  group_id?: string;
+  clip_id?: string;
+  media_id?: string;
+  script_segment_id?: string;
+  sync_clip_id?: string;
+  sync_task_id?: string;
+  camera?: string;
+  playhead_frame?: number;
+}
+
+export interface AssistantQuestionContext extends AssistantSelection {
+  project_id: string;
+  page: string;
 }
 
 export interface AssistantAnswer {
   message?: string;
   answer?: string;
   text?: string;
+  context?: { label: string; selection: AssistantSelection };
+  diagnosis?: { summary: string; destination: "sync-task" | "media-binding" | "sync-delivery" };
   [key: string]: unknown;
 }
 
@@ -523,12 +542,12 @@ export class ProductionClient {
     });
   }
 
-  messageAssistant(projectId: string, message: string): Promise<AssistantAnswer> {
+  messageAssistant(projectId: string, message: string, context?: AssistantQuestionContext): Promise<AssistantAnswer> {
     const value = message.trim();
     if (!value) throw new HostConnectionError("小镜消息不能为空");
     return requestJson<AssistantAnswer>(this.baseUrl, `${projectPath(projectId)}/assistant/message`, {
       method: "POST",
-      body: JSON.stringify({ message: value }),
+      body: JSON.stringify({ message: value, context }),
     });
   }
 

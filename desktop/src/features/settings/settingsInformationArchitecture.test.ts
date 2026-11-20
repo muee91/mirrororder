@@ -26,7 +26,8 @@ describe("Desktop settings information architecture", () => {
     const models = read("../../api/models.ts");
     const panel = read("../assistant/AssistantModelsPanel.tsx");
     const runtime = read("./LocalRuntimePanel.tsx");
-    expect(settings).not.toContain("projectId");
+    expect(settings).toContain("projectId ? await desktop.projectTasks(projectId)");
+    expect(settings).toContain("<LocalRuntimePanel baseUrl={baseUrl}");
     expect(settings).not.toContain("先从左侧选择一个项目");
     expect(models).toContain('const DEVICE_MODEL_PATH = "/api/v1/assistant/models"');
     expect(models).not.toContain("模型设置需要 project_id");

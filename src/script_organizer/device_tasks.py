@@ -26,7 +26,7 @@ from .identity_runtime import IdentityPreparationCancelled, IdentityRuntime
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 
 
-DEVICE_TASK_TYPES = {"local_vision_prepare", "identity_runtime_prepare"}
+DEVICE_TASK_TYPES = {"local_vision_prepare", "identity_runtime_prepare", "resolve_delivery"}
 PROCESS_RUNNER_ID = "device_host_" + uuid4().hex
 _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
 _MANAGER: DeviceTaskManager | None = None
@@ -104,6 +104,10 @@ def _logical_model(value: object) -> str:
 
 def _targets(task_type: str, raw: object) -> dict[str, Any]:
     source = raw if isinstance(raw, dict) else {}
+    if task_type == "resolve_delivery":
+        from .nle_delivery.resolve_delivery import task_targets
+
+        return task_targets(source)
     if task_type == "local_vision_prepare":
         return {"model": _logical_model(source.get("model"))}
     if task_type == "identity_runtime_prepare":
@@ -330,6 +334,11 @@ class DeviceTaskManager:
 
             task_type = str(task.get("type", "") or "")
             targets = _targets(task_type, task.get("targets"))
+            if task_type == "resolve_delivery":
+                from .nle_delivery.resolve_delivery import run_task
+
+                run_task(self, task_id, task)
+                return
             if task_type == "local_vision_prepare":
                 model = str(targets["model"])
                 self._update(task_id, stage="vision_prepare", message="正在准备本地视觉模型")

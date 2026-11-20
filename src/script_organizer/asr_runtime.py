@@ -39,13 +39,15 @@ def _configure_model_cache() -> Path:
     return root
 
 
-def script_asr_prompt(script_path: str | Path, max_speakers: int = 80) -> str:
+def script_asr_prompt(script_path: str | Path | None, max_speakers: int = 80) -> str:
     """Build a small vocabulary prompt from script speaker names.
 
     The prompt is deliberately small: it improves proper-name recognition without
     leaking whole dialogue lines into ASR and then mistaking prompted text for
     acoustic evidence.
     """
+    if script_path is None:
+        return ""
     try:
         document = parse_script(script_path)
     except Exception:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import parse_qs
 
@@ -58,6 +60,106 @@ def _deterministic_answer(query: str, retrieval: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _append_filename_matches(project: Any, payload: dict[str, Any], text: str, limit: int) -> None:
+    """Search existing clip names even when no semantic index has been built."""
+    results = payload["results"]
+    matched_clips = {row.get("clip_id") for row in results}
+    needle = text.casefold()
+    for clip in project.index.get("clips", []):
+        if len(results) >= limit:
+            break
+        if not isinstance(clip, dict):
+            continue
+        clip_id = clip.get("clip_id")
+        name = PurePosixPath(str(clip.get("name") or "").replace(chr(92), "/")).name
+        if not clip_id or clip_id in matched_clips or not name or needle not in name.casefold():
+            continue
+        results.append({
+            "document_id": f"file:{clip_id}", "group_id": "", "clip_id": clip_id,
+            "media_id": str(clip.get("media_id") or ""), "source": "file", "source_label": "文件名",
+            "score": 0.0, "keyword_rank": None, "vector_rank": None, "vector_similarity": None,
+            "start": 0.0, "end": 0.0, "snippet": name,
+            "metadata": {"file_name": name, "camera": str(clip.get("camera") or "")},
+        })
+        matched_clips.add(clip_id)
+    payload["summary"]["returned"] = len(results)
+
+
+def answer_project_question(self: Any, message: str, *, context: dict | None = None) -> dict[str, Any]:
+    text = str(message or "").strip()[:3000]
+    if not text:
+        raise ValueError("消息不能为空")
+    context = context or {}
+    selection = context.get("selection", {})
+    facts = context.get("facts", {})
+    diagnosis = context.get("diagnosis")
+    receipt = {key: context[key] for key in ("project_id", "page", "label", "selection", "analysis_revision") if key in context}
+    project_question = not selection or "项目" in text or "工程" in text
+    diagnostics_question = diagnosis and project_question and any(
+        term in text for term in ("同步", "交付", "能交", "不能交", "卡", "取消", "停在", "阻塞", "重连", "目录")
+    )
+    self.store.append_message("user", text, source="user", context=receipt)
+    retrieval = {"contract": "semantic_search.v1", "query": text, "mode": "unavailable",
+                 "results": [], "summary": {}, "semantics": {"read_only": True}}
+    if diagnostics_question:
+        answer = diagnosis["summary"]
+    else:
+        try:
+            searcher = SemanticSearcher(self.workspace_id, self.project_id, self.config, read_only=True)
+            retrieval = safe_search_payload(searcher.search(text, limit=14, refresh=False, selection=selection))
+        except (OSError, ValueError, RuntimeError, sqlite3.Error):
+            pass
+        if selection:
+            group = selection.get("group_id")
+            notes = self._supervisor_notes(group=group) if group else []
+            model_facts = {"selected_material": facts, "selection": selection, "take_slate": notes}
+        else:
+            notes = self._supervisor_notes(limit=36)
+            model_facts = {"project": self.tools.inspect_project(), "attention": self.tools.list_attention_groups(limit=12),
+                           "script_supervisor": notes[:20], "assistant_summary": self.status().get("summary", "")}
+        answer = ""
+        has_evidence = retrieval["results"] or notes or facts.get("script_text") or model_facts.get("attention")
+        if self.language.enabled and (not context or has_evidence):
+            raw = self.language.complete_json(
+                system=(
+                    "你是小镜，服务短剧后期制作。按提问时的选区、已记录的同步状态、画面、实际对白和人工场记回答。"
+                    "缺少证据就说明缺什么。剧本正文与实拍对白分开。不要推测说话人、精确可用时段或画面错帧数。"
+                    "整组 Take 的场记或画面只能按整组引用。场记和候选不能升级成最终归属或 Best/Reject。不要声称执行了未发生的动作。"
+                    '输出严格JSON：{"answer":"中文回答"}。'
+                ),
+                context={"question": text, "semantic_retrieval": retrieval, **model_facts, "delivery_status": diagnosis},
+                temperature=0.15,
+            )
+            answer = str(_as_dict(raw).get("answer") or "").strip()
+        if not answer:
+            if selection:
+                lines = [context["label"]]
+                if facts.get("position_note"):
+                    lines.append(facts["position_note"])
+                if facts.get("source_timecode"):
+                    lines.append(f"源起始时间码 {facts['source_timecode']}。")
+                media_state = {"verified": "本机素材已验证。", "missing": "本机已登记的素材缺失。", "unknown": "本机素材绑定待核对。"}
+                if facts.get("media_state") in media_state:
+                    lines.append(media_state[facts["media_state"]])
+                if facts.get("script_text"):
+                    lines.append(f"剧本原文：{facts['script_text']}")
+                if notes and notes[0].get("note"):
+                    lines.append(f"人工场记：{notes[0]['note']}")
+                if retrieval["results"]:
+                    lines.append(_deterministic_answer(text, retrieval))
+                else:
+                    lines.append("当前选区没有可引用的画面、转写或场记索引。")
+                answer = "\n".join(lines)
+            elif diagnosis and not retrieval["results"]:
+                answer = diagnosis["summary"] + "\n当前问题没有检索到相关的画面、对白或场记证据。"
+            else:
+                answer = _deterministic_answer(text, retrieval)
+    saved = self.store.append_message("assistant", answer, source=self.models.assistant.source, context=receipt)
+    return {"answer": answer, "assistant": saved, "retrieval": retrieval,
+            **({"context": receipt} if receipt else {}),
+            **({"diagnosis": diagnosis} if diagnosis and (not selection or diagnostics_question) else {})}
+
+
 def install_semantic_runtime() -> None:
     """Install read-only semantic retrieval above existing production evidence.
 
@@ -106,65 +208,6 @@ def install_semantic_runtime() -> None:
         return safe_search_payload(
             searcher.search(query, limit=limit, sources=sources, refresh=False)
         )
-
-    def answer_with_semantic(self: AssistantOrchestrator, message: str) -> dict[str, Any]:
-        text = str(message or "").strip()[:3000]
-        if not text:
-            raise ValueError("消息不能为空")
-        current = self.status()
-        current = self.store.append_message("user", text, source="user")
-        project = self.tools.inspect_project()
-        attention = self.tools.list_attention_groups(limit=30)
-        supervisor = self._supervisor_notes(limit=36)
-        try:
-            retrieval = SemanticSearcher(
-                self.workspace_id,
-                self.project_id,
-                self.config,
-            ).search(text, limit=14, refresh=False)
-            safe_retrieval = safe_search_payload(retrieval)
-        except Exception:
-            safe_retrieval = {
-                "contract": "semantic_search.v1",
-                "query": text,
-                "mode": "unavailable",
-                "results": [],
-                "summary": {},
-                "semantics": {"read_only": True},
-            }
-
-        if self.language.enabled:
-            system = (
-                "你是小镜，服务短剧后期制作。回答用户前优先使用 semantic_retrieval 中召回的画面、对白和人工场记证据；"
-                "没有召回证据时明确说证据不足，不要用常识补写素材内容。"
-                "画面描述来自可重建视觉索引；ASR可能有转写误差；场记是人工生产证据，但都不能自行升级成Best/Reject、最终归集或Editorial Decision。"
-                "场记里的‘只要前半段’可以解释为局部可用，但没有人工精确范围时绝不能编造秒数。"
-                "多机位画面里可见人物不等于正在说话的人。不要声称执行了未发生的动作，也不要输出模型、向量或运行时技术宣传。"
-                "输出严格JSON：{\"answer\":\"中文回答\"}。"
-            )
-            raw = self.language.complete_json(
-                system=system,
-                context={
-                    "question": text,
-                    "semantic_retrieval": safe_retrieval,
-                    "project": project,
-                    "attention": attention[:12],
-                    "script_supervisor": supervisor[:20],
-                    "assistant_summary": current.get("summary", ""),
-                },
-                temperature=0.15,
-            )
-            answer = str(_as_dict(raw).get("answer", "") or "").strip()
-        else:
-            answer = _deterministic_answer(text, safe_retrieval)
-        if not answer:
-            answer = _deterministic_answer(text, safe_retrieval)
-        saved = self.store.append_message("assistant", answer, source=self.models.assistant.source)
-        return {
-            "answer": answer,
-            "assistant": saved,
-            "retrieval": safe_retrieval,
-        }
 
     def capabilities_with_semantic(service: Any, agent: dict[str, Any]) -> dict[str, Any]:
         payload = original_capabilities(service, agent)
@@ -404,6 +447,8 @@ def install_semantic_runtime() -> None:
                         refresh=False,
                         allow_query_embedding=False,
                     )
+                    if not sources:
+                        _append_filename_matches(service.project(project_id), payload, text, limit)
                     self._send_json(payload)
                     return
                 return super()._app_get(parsed)
@@ -438,7 +483,7 @@ def install_semantic_runtime() -> None:
 
     model_registry.ModelRegistry.public = models_public_with_semantic
     AgentToolRegistry.search_project_semantics = search_project_semantics
-    AssistantOrchestrator.answer = answer_with_semantic
+    AssistantOrchestrator.answer = answer_project_question
     web_server.WorkspaceService.capabilities = capabilities_with_semantic
     web_server.make_handler = make_handler_with_semantic
     tasks_module.TaskManager._run = run_with_semantic

@@ -171,6 +171,7 @@ def _special_node_document(prefix: str = "", content: str = "", suffix: str = ""
     "prefix, content, suffix",
     [
         pytest.param('<?xml version="1.0"?>', "", "", id="minimal-declaration"),
+        pytest.param("<?xml" + " " * 4096 + "version='1.0'?>", "", "", id="long-declaration"),
         pytest.param(
             "\ufeff<?xml\nversion = '1.0'\tencoding = 'uTf-8' standalone = 'yes' ?>",
             "",
@@ -226,6 +227,9 @@ def test_rust_timebase_matches_python_for_valid_special_nodes(
         pytest.param('<?xml encoding="UTF-8"?>', "", "", id="encoding-without-version"),
         pytest.param('<?xml encoding="UTF-8" version="1.0"?>', "", "", id="version-not-first"),
         pytest.param('<?xml version=""?>', "", "", id="empty-version"),
+        pytest.param("<?xml version=''?>", "", "", id="empty-version-single-quotes"),
+        pytest.param("\ufeff<?xml\nversion = '' encoding='UTF-8'?>", "", "", id="empty-version-bom"),
+        pytest.param("<?xml" + " " * 4096 + "version=''?>", "", "", id="empty-version-long-declaration"),
         pytest.param('<?xml version="1&0"?>', "", "", id="invalid-version-token"),
         pytest.param('<?xml version="1.0" extra="yes"?>', "", "", id="unknown-declaration-field"),
         pytest.param('<?xml version="1.0" version="1.0"?>', "", "", id="duplicate-version"),

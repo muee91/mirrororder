@@ -77,6 +77,14 @@ def project_id_for(value: str) -> str:
     return candidate[:48] or "project"
 
 
+_SCRIPT_SUFFIXES = {".docx", ".txt", ".md", ".markdown"}
+
+
+def _script_source(payload: dict[str, Any]) -> Path | None:
+    value = str(payload.get("script") or "").strip()
+    return Path(value).expanduser().resolve() if value else None
+
+
 def _has_media_file(root: Path, limit: int = 512) -> bool:
     """Bounded preflight probe; full media enumeration belongs to a task."""
     try:
@@ -294,7 +302,7 @@ class WorkspaceRegistry:
         input_kind = str(payload.get("input_kind", "fcpxml"))
         if input_kind not in {"fcpxml", "media-directory"}:
             raise ValueError("不支持的项目类型")
-        script = Path(str(payload.get("script", ""))).expanduser().resolve()
+        script = _script_source(payload)
         fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser().resolve() if payload.get("fcpxml") else None
         raw_media_roots = payload.get("media_roots", [])
         if not isinstance(raw_media_roots, list):
@@ -306,8 +314,7 @@ class WorkspaceRegistry:
         ]
         if not media_roots and payload.get("media_root"):
             media_roots = [Path(str(payload.get("media_root"))).expanduser().resolve()]
-        media_root = media_roots[0] if media_roots else None
-        if not script.is_file() or script.suffix.lower() not in {".docx", ".txt", ".md", ".markdown"}:
+        if script is not None and (not script.is_file() or script.suffix.lower() not in _SCRIPT_SUFFIXES):
             raise ValueError("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
         if input_kind == "fcpxml" and (
             fcpxml is None
@@ -320,17 +327,18 @@ class WorkspaceRegistry:
         ):
             raise ValueError("媒体目录项目需要可读取的媒体目录")
         project_dir = self.config.registry_path.parent / project_id
-        if project_dir.exists():
-            raise ValueError("项目目录已存在")
+        project_dir.mkdir()
         output_dir = project_dir / "output"
         transcript_dir = project_dir / "cache" / "transcripts"
+        script_copy = None
         try:
-            for directory in (project_dir, output_dir, transcript_dir):
+            for directory in (output_dir, transcript_dir):
                 directory.mkdir(parents=True, exist_ok=True)
             inputs_dir = project_dir / "inputs"
-            inputs_dir.mkdir(parents=True, exist_ok=True)
-            script_copy = inputs_dir / f"script{script.suffix.lower()}"
-            shutil.copy2(script, script_copy)
+            inputs_dir.mkdir()
+            if script is not None:
+                script_copy = inputs_dir / f"script{script.suffix.lower()}"
+                shutil.copy2(script, script_copy)
             fcpxml_copy = None
             if fcpxml:
                 fcpxml_copy = inputs_dir / "source.fcpxml"
@@ -351,8 +359,9 @@ class WorkspaceRegistry:
             "",
             "[input]",
             f"kind = {json.dumps(input_kind)}",
-            'script = "./inputs/' + script_copy.name + '"',
         ]
+        if script_copy:
+            lines.append(f'script = "./inputs/{script_copy.name}"')
         if fcpxml_copy:
             lines.append('fcpxml = "./inputs/source.fcpxml"')
         lines.extend([
@@ -443,7 +452,7 @@ class WorkspaceRegistry:
         name = str(payload.get("name", "")).strip()
         project_id = project_id_for(str(payload.get("project_id") or name))
         input_kind = str(payload.get("input_kind", "fcpxml"))
-        script = Path(str(payload.get("script", ""))).expanduser()
+        script = _script_source(payload)
         fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser() if payload.get("fcpxml") else None
         raw_media_roots = payload.get("media_roots", [])
         if not isinstance(raw_media_roots, list):
@@ -455,10 +464,10 @@ class WorkspaceRegistry:
             errors.append("项目名称不能为空")
         if input_kind not in {"fcpxml", "media-directory"}:
             errors.append("不支持的项目类型")
-        if not script.is_file() or script.suffix.lower() not in {".docx", ".txt", ".md", ".markdown"}:
+        if script is None and input_kind == "fcpxml":
+            errors.append("FCPXML 项目需要选择剧本")
+        elif script is not None and (not script.is_file() or script.suffix.lower() not in _SCRIPT_SUFFIXES or not os.access(script, os.R_OK)):
             errors.append("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
-        elif not os.access(script, os.R_OK):
-            errors.append("剧本没有读取权限")
         if input_kind == "fcpxml":
             if fcpxml is None or not fcpxml.is_file() or fcpxml.suffix.lower() not in {".fcpxml", ".fcpxmld"}:
                 errors.append("FCPXML 项目需要可读取的 FCPXML 文件")
@@ -492,12 +501,13 @@ class WorkspaceRegistry:
                         warnings.append(f"FCPXML 有 {missing} 个源媒体当前不可达，将依赖本机 media_id 绑定")
             except Exception as error:
                 errors.append(f"FCPXML 无法解析：{error}")
-        if script.is_file() and script.suffix.lower() in {".docx", ".txt", ".md", ".markdown"}:
+        if script is not None and script.is_file() and script.suffix.lower() in _SCRIPT_SUFFIXES:
             try:
                 segments = parse_script(script).segments
                 detected["script_segments"] = len(segments)
                 if not segments:
-                    errors.append("剧本没有解析出可用段落，请检查集数、场次和文本格式")
+                    issues = warnings if input_kind == "media-directory" else errors
+                    issues.append("剧本没有解析出可用段落，请检查集数、场次和文本格式")
             except Exception as error:
                 errors.append(f"剧本无法解析：{error}")
         if input_kind == "media-directory" and not environment_payload()["media_directory_sync_ready"]:

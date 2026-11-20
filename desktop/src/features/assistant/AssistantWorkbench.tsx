@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { canOpenEvidence, type EvidenceReference } from "../production/evidenceLocation";
 import { errorMessage } from "../../api/host";
-import { ProductionClient, type AssistantAnswer, type AssistantItem, type AssistantStatus } from "../../api/production";
+import { ProductionClient, type AssistantAnswer, type AssistantItem, type AssistantQuestionContext, type AssistantStatus } from "../../api/production";
 
 interface Props {
   baseUrl: string;
   projectId: string;
-  onFocusTake?: (groupId: string, destination?: "material" | "script" | "review") => void;
+  draft: { text: string; includeSelection: boolean };
+  readContext: (includeSelection: boolean) => AssistantQuestionContext;
+  onOpenEvidence: (reference: EvidenceReference) => void;
+  onOpenDiagnostic: (page: "sync-task" | "media-binding" | "sync-delivery") => void;
+  onFocusTake?: (groupId: string, destination?: "material" | "script" | "review", clipId?: string) => void;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -14,13 +19,7 @@ const SOURCE_LABELS: Record<string, string> = {
   slate: "场记",
 };
 
-interface RetrievalResult {
-  group_id?: string;
-  source?: string;
-  source_label?: string;
-  snippet?: string;
-  start?: number;
-}
+type RetrievalResult = EvidenceReference & { source_label?: string };
 
 function retrievalResults(answer: AssistantAnswer | null): RetrievalResult[] {
   const retrieval = answer?.retrieval as { results?: unknown } | undefined;
@@ -51,32 +50,34 @@ function itemKindLabel(value: unknown): string {
   }[String(value ?? "")] ?? "项目事项";
 }
 
-export function AssistantWorkbench({ baseUrl, projectId, onFocusTake }: Props) {
+export function AssistantWorkbench({ baseUrl, projectId, draft, readContext, onOpenDiagnostic, onOpenEvidence, onFocusTake }: Props) {
   const client = useMemo(() => new ProductionClient(baseUrl), [baseUrl]);
   const [status, setStatus] = useState<AssistantStatus | null>(null);
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(draft.text);
   const [answer, setAnswer] = useState<AssistantAnswer | null>(null);
   const [message, setMessage] = useState("正在读取项目关注事项…");
   const [busy, setBusy] = useState(false);
-
-  async function reload(): Promise<void> {
-    setMessage("正在读取项目关注事项…");
-    try {
-      const next = await client.assistant(projectId);
-      setStatus(next);
-      setMessage(next.items?.length ? `${next.items.length} 个项目事项` : "当前没有需要特别关注的事项");
-    } catch (error) {
-      setMessage(errorMessage(error));
-    }
-  }
+  const [includeSelection, setIncludeSelection] = useState(draft.includeSelection);
+  const interacted = useRef(false);
 
   useEffect(() => {
-    void reload();
-    // client is stable for baseUrl.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let active = true;
+    void client.assistant(projectId).then((next) => {
+      if (!active) return;
+      if (interacted.current) {
+        setStatus((current) => current ?? next);
+        return;
+      }
+      setStatus(next);
+      const previous = [...(next.messages ?? [])].reverse().find((item) => item.role === "assistant" && item.context);
+      if (previous) setAnswer((current) => current ?? { answer: previous.text, context: previous.context });
+      setMessage(next.items?.length ? `${next.items.length} 个项目事项` : "");
+    }).catch((error) => { if (active && !interacted.current) setMessage(errorMessage(error)); });
+    return () => { active = false; };
   }, [client, projectId]);
 
   async function cycle(): Promise<void> {
+    interacted.current = true;
     setBusy(true);
     setMessage("正在重新检查当前项目…");
     try {
@@ -92,12 +93,13 @@ export function AssistantWorkbench({ baseUrl, projectId, onFocusTake }: Props) {
 
   async function ask(): Promise<void> {
     if (!prompt.trim()) return;
+    interacted.current = true;
     setBusy(true);
     setMessage("小镜正在基于当前项目证据回答…");
     try {
-      const response = await client.messageAssistant(projectId, prompt);
+      const response = await client.messageAssistant(projectId, prompt, readContext(includeSelection));
       setAnswer(response);
-      setMessage("回答完成；任何生产结论仍由你确认。");
+      setMessage("");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -106,21 +108,55 @@ export function AssistantWorkbench({ baseUrl, projectId, onFocusTake }: Props) {
   }
 
   return (
-    <section className="phase3-workbench">
-      <header className="production-heading">
-        <div>
-          <p className="eyebrow">项目事项</p>
-        </div>
-        <div className="assistant-heading-actions">
-          <span className="production-state">{message}</span>
-          <button type="button" className="secondary" disabled={busy} onClick={() => void cycle()}>重新检查</button>
-        </div>
-      </header>
-
-      <div className="production-grid assistant-grid">
-        <div className="production-panel">
-          <p className="eyebrow">关注事项</p>
-          <h3>{status?.summary || "当前没有摘要"}</h3>
+    <section className="assistant-workbench">
+      <div className="assistant-chat">
+          <label>提问范围
+            <select value={includeSelection ? "selection" : "project"} onChange={(event) => {
+              draft.includeSelection = event.target.value === "selection";
+              setIncludeSelection(draft.includeSelection);
+            }}>
+              <option value="selection">当前页面与选区</option>
+              <option value="project">整个项目</option>
+            </select>
+          </label>
+          <textarea aria-label="给小镜的问题" autoFocus rows={3} value={prompt} onChange={(event) => {
+              draft.text = event.target.value;
+              setPrompt(draft.text);
+            }}
+            placeholder="这条素材有什么依据？项目为什么还不能交付？" />
+          <button type="button" disabled={busy || !prompt.trim()} onClick={() => void ask()}>询问小镜</button>
+          <span className="production-state" role="status">{message}</span>
+          {answer ? (
+            <div className="assistant-answer">
+              {answer.context && <strong>{answer.context.label}</strong>}
+              <p>{answerText(answer) || "小镜未返回可阅读的回答。"}</p>
+              {answer.diagnosis && <div className="assistant-item-actions">
+                <button type="button" className="secondary" onClick={() => { if (answer.diagnosis) onOpenDiagnostic(answer.diagnosis.destination); }}>
+                  {{ "sync-task": "查看同步任务", "media-binding": "检查本机素材", "sync-delivery": "查看工程交付" }[answer.diagnosis.destination]}
+                </button>
+              </div>}
+              {retrievalResults(answer).length ? (
+                <div className="assistant-answer-evidence">
+                  <p className="eyebrow">证据引用</p>
+                  {retrievalResults(answer).slice(0, 6).map((row, index) => (
+                    <button
+                      type="button"
+                      key={`${row.group_id ?? "doc"}-${index}`}
+                      disabled={!canOpenEvidence(row)}
+                      onClick={() => onOpenEvidence(row)}
+                    >
+                      <span className="assistant-evidence-source">{row.source_label || SOURCE_LABELS[row.source ?? ""] || "证据"}</span>
+                      <small>{row.snippet || "没有可显示的片段"}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+      </div>
+      <details className="assistant-project-items">
+        <summary>项目事项 <span>{status?.items?.length ?? 0}</span></summary>
+        {status?.summary && <p>{status.summary}</p>}
           <div className="assistant-items">
             {(status?.items ?? []).length ? (status?.items ?? []).slice(0, 18).map((item, index) => {
               const groupId = typeof item.group_id === "string" ? item.group_id : "";
@@ -146,38 +182,10 @@ export function AssistantWorkbench({ baseUrl, projectId, onFocusTake }: Props) {
                   ) : null}
                 </article>
               );
-            }) : <p className="empty-copy">当前没有需要小镜突出显示的事项。</p>}
+            }) : <p className="empty-copy">当前没有待处理事项。</p>}
           </div>
-        </div>
-
-        <aside className="production-panel assistant-chat">
-          <p className="eyebrow">项目对话</p>
-          <textarea rows={5} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="例如：哪些场还缺明确 Best？场记 NG 与当前选择有没有冲突？" />
-          <button type="button" disabled={busy || !prompt.trim()} onClick={() => void ask()}>询问小镜</button>
-          {answer ? (
-            <div className="assistant-answer">
-              <p>{answerText(answer) || JSON.stringify(answer, null, 2)}</p>
-              {retrievalResults(answer).length ? (
-                <div className="assistant-answer-evidence">
-                  <p className="eyebrow">证据引用 · 点击定位到看片</p>
-                  {retrievalResults(answer).slice(0, 6).map((row, index) => (
-                    <button
-                      type="button"
-                      key={`${row.group_id ?? "doc"}-${index}`}
-                      disabled={!row.group_id || !onFocusTake}
-                      onClick={() => { if (row.group_id && onFocusTake) onFocusTake(row.group_id, "review"); }}
-                    >
-                      <span className="assistant-evidence-source">{SOURCE_LABELS[row.source ?? ""] ?? row.source_label ?? "证据"}</span>
-                      <small>{row.snippet || "没有可显示的片段"}</small>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          <p className="production-note">小镜只分析已有项目证据并提出建议；不会直接写入人工审核、最终剪辑决定或交付结果。</p>
-        </aside>
-      </div>
+        <button type="button" className="secondary" disabled={busy} onClick={() => void cycle()}>重新检查</button>
+      </details>
     </section>
   );
 }

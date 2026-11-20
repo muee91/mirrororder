@@ -23,7 +23,7 @@ describe("Desktop media reconnect recovery", () => {
   it("explains that local reconnect preserves project media identity and old bindings until success", () => {
     const source = read("./MediaBindingWorkbench.tsx");
 
-    expect(source).toContain("项目记住媒体身份；这里仅告诉当前 Mac 去哪里找到对应文件。");
+    expect(source).toContain("项目记住媒体身份；这里仅告诉当前设备 去哪里找到对应文件。");
     expect(source).toContain("这不会新建或更改项目中的媒体身份");
     expect(source).toContain("不会修改共享项目");
     expect(source).toContain("旧位置和绑定通常会保留到新扫描成功后才替换");

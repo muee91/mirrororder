@@ -98,18 +98,18 @@ def _fcpxml_locator_for_clip(project: Any, clip: dict[str, Any]) -> str:
     config = getattr(project, "config", None)
     fcpxml = getattr(config, "fcpxml", None)
     asset_id = str(clip.get("source_asset_id", "") or "")
-    if not fcpxml or not asset_id:
+    if not asset_id:
         return ""
-    try:
-        from .fcpxml_reader import read_fcpxml
 
-        for candidate in read_fcpxml(fcpxml):
-            if candidate.source_asset_id == asset_id:
-                return str(candidate.media_path or "")
-    except Exception:
-        # Playback should fail closed when the source XML cannot be read.
-        return ""
-    return ""
+    from .fcpxml_reader import fcpxml_asset_locator, is_generated_sync_asset_id
+
+    if not fcpxml and getattr(config, "is_media_directory", False):
+        if not is_generated_sync_asset_id(asset_id) or not str(clip.get("media_id", "")).startswith("M_"):
+            return ""
+        from .analysis_runtime import generated_sync_fcpxml
+
+        fcpxml = generated_sync_fcpxml(config)
+    return fcpxml_asset_locator(fcpxml, asset_id) if fcpxml else ""
 
 
 DEFAULT_FRONTEND_SETTINGS: dict[str, Any] = {
@@ -511,16 +511,15 @@ class WorkspaceService:
         return self.registry.project_config(project_id)
 
     def project(self, project_id: str) -> ProjectService:
-        entry = self.registry.get(project_id)
-        config_path = self.registry.project_config(project_id).config_path
+        config = self.registry.project_config(project_id)
         # ProjectService.reload() reads the potentially large index/script/
         # matches files. The HTTP server is threaded, so concurrent App reads
         # must not materialize the same project repeatedly during first paint.
         with self._projects_lock:
             current = self._projects.get(project_id)
-            if current and current.config.config_path == config_path:
+            if current and current.config == config:
                 return current
-            project = ProjectService(project_id, ProjectConfig.from_file(config_path))
+            project = ProjectService(project_id, config)
             project.workspace_id = self.workspace.workspace_id
             self._projects[project_id] = project
             return project

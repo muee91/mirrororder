@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { DesktopClient, type MediaBindingSummary } from "../../api/desktop";
 import type { MulticamSyncTimeline as SyncTimeline } from "../../api/syncTimeline";
 import { SyncInspectionWorkbench } from "./SyncInspectionWorkbench";
 import "./multicam-sync-timeline.css";
@@ -7,6 +9,11 @@ interface Props {
   baseUrl?: string;
   onMulticamSync?: () => void;
   onInspect?: () => void;
+  onCancel?: () => void;
+  onRepair?: () => void;
+  onOpenStatus?: () => void;
+  command?: "start" | "cancel" | "";
+  submissionError?: string;
 }
 
 const SYNC_STEPS = ["确认素材", "计算同步", "建立索引", "检查并交付"] as const;
@@ -32,14 +39,23 @@ function activityLabel(value: string | undefined): string {
   return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString("zh-CN");
 }
 
-export function SyncTaskWorkspace({ syncTimeline, onMulticamSync, onInspect }: Props) {
-  if (syncTimeline.ready) {
+export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onInspect, onCancel, onRepair, onOpenStatus, command, submissionError }: Props) {
+  const [sources, setSources] = useState<MediaBindingSummary | null>(null);
+  const [sourcesUnreadable, setSourcesUnreadable] = useState(false);
+  useEffect(() => {
+    if (!baseUrl || !syncTimeline.project_id) return;
+    let active = true;
+    void new DesktopClient(baseUrl).mediaBinding(syncTimeline.project_id).then(({ summary }) => {
+      if (active) { setSources(summary); setSourcesUnreadable(false); }
+    }).catch(() => { if (active) setSourcesUnreadable(true); });
+    return () => { active = false; };
+  }, [baseUrl, syncTimeline.project_id, syncTimeline.phase]);
+  if (syncTimeline.ready && syncTimeline.phase === "completed") {
     return (
       <section className="multicam-sync-gate is-complete" aria-label="多机位同步任务">
         <div className="multicam-sync-gate-header"><div>
-          <p className="multicam-sync-kicker">01 / 同步任务 · 已完成</p>
           <h3>同步母版已建立，下一步检查音画</h3>
-          <p>已识别 {syncTimeline.clip_count} 个视频片段、{syncTimeline.cameras.length} 个机位。任务完成不代表逐帧音画或独立 WAV 已通过验收。</p>
+          <p>已识别 {syncTimeline.clip_count} 个视频片段、{syncTimeline.cameras.length} 个机位。进入核对页检查音画与待处理异常。</p>
         </div><span className="multicam-sync-status is-completed" role="status">同步任务完成</span></div>
         <div className="multicam-sync-gate-body"><div className="multicam-sync-live">
           <p className="multicam-sync-label">最近任务记录</p>
@@ -49,7 +65,7 @@ export function SyncTaskWorkspace({ syncTimeline, onMulticamSync, onInspect }: P
           </div>
         </div><div className="multicam-sync-action">
           <button type="button" onClick={onInspect} disabled={!onInspect}>进入同步核对</button>
-          <p>核对后在独立的「工程交付」模块查看已有导出文件。</p>
+          {onOpenStatus && <button type="button" className="secondary" onClick={onOpenStatus}>任务详情</button>}
         </div></div>
       </section>
     );
@@ -73,9 +89,10 @@ export function SyncTaskWorkspace({ syncTimeline, onMulticamSync, onInspect }: P
     <section className="multicam-sync-gate" aria-label="多机位同步任务">
       <header className="multicam-sync-gate-header">
         <div>
-          <p className="multicam-sync-kicker">新项目 · 第一步</p>
-          <h3>同步音视频，先让剪辑师开工</h3>
-          <p>优先完成多机位同步与媒体身份整理。剧本、场记、演员和语义分析可以在交付同步工程后继续。</p>
+          <h3>同步原始视频与同期录音</h3>
+          <p>{sourcesUnreadable ? "无法读取原始目录状态"
+            : sources?.unavailable_roots?.length ? `${sources.unavailable_roots.length} 个原始目录不可访问`
+            : sources ? `${sources.roots.length} 个已登记目录` : "正在读取原始目录"}</p>
         </div>
         <span className={`multicam-sync-status is-${phase}`} role="status">
           <span className={`multicam-sync-status-dot is-${phase}`} aria-hidden="true" />
@@ -92,29 +109,34 @@ export function SyncTaskWorkspace({ syncTimeline, onMulticamSync, onInspect }: P
       <div className="multicam-sync-gate-body">
         <div className="multicam-sync-live" aria-live="polite">
           <p className="multicam-sync-label">当前任务</p>
-          <strong>{task?.message || syncTimeline.message}</strong>
+          <strong>{unreadable ? "等待状态恢复" : task?.message || syncTimeline.message}</strong>
+          {submissionError && <p className="multicam-sync-error" role="alert">{submissionError}</p>}
+          {task?.cancel_requested && <p role="status">已请求取消，正在等待安全中断点。</p>}
           {hasCheckpoints ? (
             <div className="multicam-sync-progress">
               <div><span>同步算法检查点，不代表全部文件已处理</span><strong>{done} / {total}</strong></div>
               <progress value={done ?? 0} max={total ?? 1} aria-label="同步算法检查点进度" />
             </div>
           ) : running ? (
-            <p className="multicam-sync-no-progress">正在执行当前阶段。该步骤还没有可信的逐文件进度，不显示虚假的百分比。</p>
+            <p className="multicam-sync-no-progress">当前阶段正在运行。</p>
           ) : null}
           {problem && task?.error ? <p className="multicam-sync-error" role="alert">失败原因：{task.error}</p> : null}
           {unreadable ? <p className="multicam-sync-error" role="alert">{syncTimeline.message}</p> : null}
           <div className="multicam-sync-activity">
             {task?.started_at ? <span>开始时间：{activityLabel(task.started_at)}</span> : null}
             {task?.updated_at ? <span>最近任务记录：{activityLabel(task.updated_at)}</span> : null}
-            {task?.task_id ? <span title={task.task_id}>任务已记录，可在状态中心查看详情</span> : null}
+            {task?.task_id ? <span title={task.task_id}>已记录后台任务</span> : null}
           </div>
         </div>
         <div className="multicam-sync-action">
-          <button type="button" disabled={running || loading || unreadable || !onMulticamSync} onClick={onMulticamSync}>
-            {running ? "同步正在运行" : loading ? "检查状态中" : unreadable ? "状态暂不可读" : problem ? "重新执行同步" : "开始多机位同步"}
+          <button type="button" disabled={Boolean(command) || running || loading || unreadable || !onMulticamSync} onClick={onMulticamSync}>
+            {command === "start" ? "正在提交…" : running ? "同步正在运行" : loading ? "检查状态中" : unreadable ? "状态暂不可读" : problem || submissionError ? "重新执行同步" : "开始多机位同步"}
           </button>
-          <p>任务会继续在后台运行。需要查看日志、取消或排查失败，请打开左侧「状态中心」。</p>
-          <p>同步未完成时仍可查看「素材」里的媒体清单和本机素材状态；尚未确认的内容不会被伪装成同步成功。</p>
+          {running && task && onCancel && <button type="button" className="secondary" disabled={Boolean(command) || task.cancel_requested}
+            onClick={onCancel}>{task.cancel_requested || command === "cancel" ? "正在取消…" : "取消同步"}</button>}
+          {task && onOpenStatus && <button type="button" className="secondary" onClick={onOpenStatus}>任务详情</button>}
+          {onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}
+          {onInspect && <button type="button" className="secondary" onClick={onInspect}>查看上次有效母版</button>}
         </div>
       </div>
     </section>

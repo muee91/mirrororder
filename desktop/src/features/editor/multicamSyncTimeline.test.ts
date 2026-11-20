@@ -98,6 +98,23 @@ it("exposes a playable source only for a verified indexed clip identifier", () =
   expect(host.textContent).toContain("尚未建立无歧义的素材身份");
 });
 
+it("opens on the first source frame when the synchronized track starts after zero", () => {
+  const payload: SyncTimeline = {
+    contract_version: "multicam_sync_timeline.v1", project_id: "project", phase: "completed",
+    ready: true, message: "ready", task: null, cameras: ["A"], clip_count: 1, duration_seconds: 38883,
+    tracks: [{ track_id: "video:A", kind: "video", camera: "A", label: "A 机位", clip_count: 1,
+      clips: [{ clip_id: "vendor-A", media_clip_id: "C_A", camera: "A", day: "day1", name: "A.MOV",
+        timeline_start: 0.335, duration: 50, timecode: "", clip_number: "1" }] }],
+  };
+  const host = document.createElement("div");
+  host.innerHTML = renderToStaticMarkup(createElement(MulticamSyncTimeline, {
+    syncTimeline: payload, baseUrl: "http://127.0.0.1:8765",
+  }));
+  expect(host.querySelector("video")?.getAttribute("src")).toContain("/media/C_A");
+  expect(host.querySelector<HTMLInputElement>("#multicam-sync-cursor")?.getAttribute("value")).toBe("0.335");
+  expect(host.querySelector<HTMLSelectElement>("#multicam-sync-zoom option[selected]")?.textContent).toBe("64×");
+});
+
 
 it("switches active camera at the same master time without creating a new edit timeline", async () => {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -114,12 +131,14 @@ it("switches active camera at the same master time without creating a new edit t
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => { root.render(createElement(MulticamSyncTimeline, { syncTimeline: payload })); });
-  expect(host.querySelector(".multicam-sync-monitor-heading span")?.textContent).toContain("A 机位");
-  const b = [...host.querySelectorAll<HTMLButtonElement>(".multicam-sync-angle-switch button")]
+  expect(host.querySelector(".sync-camera-cell[data-listening] .sync-camera-caption strong")?.textContent).toContain("A 机位");
+  const cells = [...host.querySelectorAll(".sync-camera-cell")];
+  const b = [...host.querySelectorAll<HTMLButtonElement>(".multicam-sync-angle-grid button")]
     .find((button) => button.textContent?.includes("B 机"));
   expect(b).toBeDefined();
   await act(async () => { b?.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
-  expect(host.querySelector(".multicam-sync-monitor-heading span")?.textContent).toContain("B 机位");
+  expect(host.querySelector(".sync-camera-cell[data-listening] .sync-camera-caption strong")?.textContent).toContain("B 机位");
+  expect([...host.querySelectorAll(".sync-camera-cell")]).toEqual(cells);
   expect(host.querySelector(".multicam-sync-details")?.textContent).toContain("B.MOV");
   await act(async () => { root.unmount(); });
   host.remove();

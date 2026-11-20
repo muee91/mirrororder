@@ -184,8 +184,11 @@ def test_slate_is_dense_table_and_preserves_keyboard_flow() -> None:
     assert 'from "./SlateRow"' in slate
     assert "<SlateRow" in slate
     assert "<SlateTableHead" in slate
-    for column in ("集", "场号", "镜号", "次号", "A 机", "B 机", "C 机", "辅助 / 特殊", "状态"):
+    for column in ("集", "场号", "镜号", "次号", "状态"):
         assert f">{column}<" in slate_row
+    assert 'SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"]' in slate_row
+    assert 'cameraColumns.map((camera)' in slate_row
+    assert "辅助 / 特殊" in slate_row
     assert 'SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"]' in slate_row
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s"' in slate
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n"' in slate

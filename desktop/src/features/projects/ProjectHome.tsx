@@ -149,7 +149,7 @@ export function ProjectHome({
         </div>
         <div className="project-home-actions">
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目…" aria-label="搜索项目" />
-          <ProjectLifecyclePanel baseUrl={baseUrl} onWorkspaceChanged={onWorkspaceChanged} onStatusMessage={setActionMessage} />
+          <ProjectLifecyclePanel baseUrl={baseUrl} workspaceId={workspace.workspace_id} onWorkspaceChanged={onWorkspaceChanged} onStatusMessage={setActionMessage} />
         </div>
       </header>
 

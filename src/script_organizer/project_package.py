@@ -96,8 +96,8 @@ def _validate_v1(raw: Mapping[str, Any]) -> None:
     input_kind = str(inputs.get("kind", "") or "").strip()
     if input_kind not in {"fcpxml", "media-directory"}:
         raise ProjectPackageError("input.kind 必须是 fcpxml 或 media-directory")
-    if "script" not in inputs:
-        raise ProjectPackageError("input.script 是 MirrorOrder Project v1 必填字段")
+    if input_kind == "fcpxml" and "script" not in inputs:
+        raise ProjectPackageError("FCPXML 项目必须声明 input.script")
     if input_kind == "fcpxml" and "fcpxml" not in inputs:
         raise ProjectPackageError("fcpxml 项目必须声明 input.fcpxml")
 

@@ -55,7 +55,7 @@ def _script_segments(config: ProjectConfig) -> list[dict[str, Any]]:
     if rows:
         return [dict(row) for row in rows if isinstance(row, dict)]
     try:
-        return [segment.to_dict() for segment in parse_script(config.script).segments]
+        return [segment.to_dict() for segment in parse_script(config.script).segments] if config.script is not None else []
     except Exception:
         return []
 

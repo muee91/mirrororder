@@ -30,7 +30,7 @@ describe("Swift golden product fidelity", () => {
     expect(workbench).toContain('return "sync-task"');
     expect(workbench).toContain('readProjectPage(project.project_id)');
     expect(workbench).toContain("owns-chrome");
-    expect(workbench).toContain("const assistantVisible = assistantOpen;");
+    expect(workbench).toContain("const assistantVisible = active && assistantOpen;");
     expect(workbench).toContain("professional-assistant-toggle");
     expect(workbench).toContain('className="assistant-context-drawer"');
     expect(workbench).not.toContain("MaterialScriptWorkbench");
@@ -49,7 +49,9 @@ describe("Swift golden product fidelity", () => {
     const row = source("./SlateRow.tsx");
     const takeCard = source("../material-script/TakeCard.tsx");
     const css = source("./golden-slate.css");
-    for (const label of ["A 机", "B 机", "C 机", "辅助 / 特殊"]) expect(row).toContain(label);
+    expect(row).toContain('SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"]');
+    expect(row).toContain('`${camera} 机`');
+    expect(row).toContain("辅助 / 特殊");
     for (const label of [
       "从 Take 加入",
       "同场下一条",
@@ -83,7 +85,7 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("shortcutActionsRef");
     expect(slate).toContain('globalThis.addEventListener("keydown", keydown)');
     expect(slate).toContain('if (event.key === "Escape" && takePickerOpen)');
-    expect(slate).toContain("}, [takePickerOpen, intervalSurface]);");
+    expect(slate).toContain("}, [takePickerOpen, intervalSurface, active]);");
     expect(slate).not.toContain("track.clips =");
     expect(css).toContain("height: 48px");
     expect(css).toContain("height: 36px");
@@ -186,7 +188,7 @@ describe("Swift golden product fidelity", () => {
     expect(activity).not.toContain('state: "failed"');
     expect(lifecycle).toContain(">新建项目</button>");
     expect(lifecycle).toContain("创建并整理");
-    expect(lifecycle).toContain("client.preflightProject(payload())");
+    expect(lifecycle).toContain("client.preflightProject(values)");
     expect(library).toContain('aria-label="主导航"');
     expect(library).toContain('aria-label="系统导航"');
     expect(library).toContain("制作区在项目画布顶部切换。");

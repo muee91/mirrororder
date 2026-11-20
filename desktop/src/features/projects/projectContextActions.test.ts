@@ -90,6 +90,6 @@ describe("project actions", () => {
     expect(workbench).not.toContain("project-workbench-primary");
     expect(materialWorkspace).toContain('view === "repair"');
     expect(materialWorkspace).toContain("<MediaBindingWorkbench");
-    expect(materialWorkspace).toContain('onClick={() => onViewChange("library")}');
+    expect(materialWorkspace).toContain('onClick={onReturnFromRepair ?? (() => onViewChange("library"))}');
   });
 });

@@ -24,6 +24,7 @@ interface Props {
   baseUrl: string;
   projectId: string;
   onOpenMediaBinding?: () => void;
+  onOpenTakes?: () => void;
 }
 
 type Filter = "all" | "auxiliary" | "unindexed" | "labeled" | "needsCamera";
@@ -340,7 +341,7 @@ function MediaLibraryRow({
   );
 }
 
-export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }: Props) {
+export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, onOpenTakes }: Props) {
   const client = useMemo(() => new MediaRoleClient(baseUrl), [baseUrl]);
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const [inventory, setInventory] = useState<MediaInventory | null>(null);
@@ -786,6 +787,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       <header className="production-heading">
         <div><p className="eyebrow">素材库</p><h2>素材清单</h2></div>
         <div className="assistant-heading-actions"><span className="production-state" aria-live="polite">{message}</span></div>
+        {onOpenTakes && <button type="button" className="secondary" onClick={onOpenTakes}>浏览镜次</button>}
       </header>
 
       <div

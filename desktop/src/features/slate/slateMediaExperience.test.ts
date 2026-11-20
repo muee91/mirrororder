@@ -12,7 +12,7 @@ describe("golden slate media experience", () => {
     expect(workbench).toContain('event.key === "Escape" && takePickerOpen');
     expect(workbench).toContain("setTakePickerOpen(false)");
     expect(workbench).toContain('setTakeSearch("")');
-    expect(workbench).toContain("[takePickerOpen, intervalSurface]");
+    expect(workbench).toContain("[takePickerOpen, intervalSurface, active]");
   });
 
   it("uses the shared camera presentation for take evidence instead of raw camera text", () => {
@@ -26,7 +26,7 @@ describe("golden slate media experience", () => {
   it("recovers from a playback error without forcing a project refresh", () => {
     const workbench = source("./GoldenSlateWorkbench.tsx");
     expect(workbench).toContain("const [playbackRetry, setPlaybackRetry] = useState(0)");
-    expect(workbench).toContain('key={`${selectedAngle.clip_id}-${playbackRetry}`}');
+    expect(workbench).toContain('key={`${selectedPlaybackKey}-${playbackRetry}-${playbackStart}`}');
     expect(workbench).toContain("golden-player-error");
     expect(workbench).toContain("重新加载");
     expect(workbench).toContain('setPlaybackFailedClipId("")');

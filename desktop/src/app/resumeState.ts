@@ -147,3 +147,22 @@ export function rememberProjectPage(projectId: string, page: ProductionPage, sto
     // Device-local convenience only.
   }
 }
+
+export function readSyncSubmissionIssue(workspaceId: string, projectId: string): string {
+  try {
+    return browserStorage()?.getItem(`mirrororder.desktop.sync-submission.${JSON.stringify([workspaceId, projectId])}`) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function rememberSyncSubmissionIssue(workspaceId: string, projectId: string, message: string): void {
+  const key = `mirrororder.desktop.sync-submission.${JSON.stringify([workspaceId, projectId])}`;
+  try {
+    const storage = browserStorage();
+    if (message) storage?.setItem(key, message);
+    else storage?.removeItem(key);
+  } catch {
+    // The task store is authoritative. This only records errors before submission is confirmed.
+  }
+}

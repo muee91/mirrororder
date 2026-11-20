@@ -665,7 +665,7 @@ def analyze(
         raise ValueError(f"不支持的 input.kind: {config.input_kind}")
 
     groups = build_multicam_groups(clips, config.minimum_overlap_seconds, config.split_bridge_ratio)
-    script = parse_script(config.script)
+    script = parse_script(config.script) if config.script is not None else ScriptDocument(())
     store = TranscriptStore(config.transcript_dir)
     transcripts = {}
     clip_by_id = {clip.clip_id: clip for clip in clips}

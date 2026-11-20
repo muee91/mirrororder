@@ -17,6 +17,7 @@ export interface MulticamSyncTaskSummary {
   task_id: string;
   status: string;
   stage: string;
+  cancel_requested?: boolean;
   message: string;
   progress?: Record<string, unknown>;
   created_at?: string;
@@ -48,6 +49,19 @@ export interface MulticamSyncTrack {
   clips: MulticamSyncClip[];
 }
 
+export interface MulticamSyncGap {
+  start_frame: number;
+  end_frame: number;
+}
+
+export interface SyncRecordingPlacement {
+  media_id: string;
+  name: string;
+  at: number;
+  source: number;
+  frames: number;
+}
+
 export interface MulticamSyncTimeline {
   contract_version: "multicam_sync_timeline.v1" | string;
   project_id: string;
@@ -57,8 +71,19 @@ export interface MulticamSyncTimeline {
   task: MulticamSyncTaskSummary | null;
   tracks: MulticamSyncTrack[];
   cameras: string[];
+  recordings?: {
+    candidate_count: number;
+    unplaced_count: number;
+    invalid_count: number;
+    placements: SyncRecordingPlacement[];
+  } | null;
   clip_count: number;
   duration_seconds: number;
+  previous_master?: { timeline: MulticamSyncTimeline; read_at_ms: number } | null;
+  /** Read-only grid proved from the generated master, never guessed from a camera. */
+  timebase?: { status: "confirmed" | "unknown"; source: string; numerator?: number; denominator?: number; reason?: string };
+  /** Half-open master frame intervals with no video on any camera. */
+  review_gaps?: MulticamSyncGap[];
 }
 
 export interface SyncDeliveryArtifact {
@@ -67,8 +92,23 @@ export interface SyncDeliveryArtifact {
   format: string;
   filename: string;
   available: boolean;
+  unavailable_reason?: "" | "sync_not_ready" | "not_generated" | "media_roots_unbound" | "unexpected_location" | "file_missing";
   /** Device-local absolute path. This is supplied only by the localhost-only route. */
   local_path: string;
+  task?: MulticamSyncTaskSummary;
+  details?: { version?: string; audio_segments?: number; camera_audio_tracks?: number; delivery_kind?: string; native_multicam?: boolean; conversion_required?: boolean; conversion_instruction?: string; relocation_instruction?: string; diagnostics?: { code: string; message: string }[] };
+}
+
+export function syncDeliveryFileLabel(artifact: SyncDeliveryArtifact): string {
+  if (artifact.available) return "已生成文件";
+  switch (artifact.unavailable_reason) {
+    case "sync_not_ready": return "等待同步完成";
+    case "not_generated": return "尚未生成";
+    case "media_roots_unbound": return "本机素材目录未登记";
+    case "unexpected_location": return "交付文件位置待确认";
+    case "file_missing": return "交付文件未找到";
+    default: return "文件不可用";
+  }
 }
 
 export interface SyncDeliveryArtifacts {
@@ -77,6 +117,7 @@ export interface SyncDeliveryArtifacts {
   ready: boolean;
   paths_scope: "localhost_response_only";
   validation: string;
+  sync_version?: string;
   artifacts: SyncDeliveryArtifact[];
 }
 
@@ -109,6 +150,16 @@ export class SyncTimelineClient {
       throw new HostConnectionError("同步工程清单格式不受支持");
     }
     return result;
+  }
+
+  async createResolveDelivery(projectId: string): Promise<void> {
+    const response = await fetchWithTimeout(`${this.baseUrl}${projectPath(projectId)}/resolve-delivery`, {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: "{}",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      throw new HostConnectionError(payload?.error || `Resolve 工程生成失败（${response.status}）`, { status: response.status });
+    }
   }
 
   async read(projectId: string): Promise<MulticamSyncTimeline> {

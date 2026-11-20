@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .multicam_sync_engine import _engine_candidates, _valid_engine
 
 
@@ -91,7 +92,14 @@ def environment_payload(workspaces: list[Path] | None = None) -> dict[str, Any]:
         and command_map["ffprobe"]["available"]
         and all(module_map[name]["available"] for name in ("numpy", "pandas", "scipy"))
     )
+    try:
+        build_revision = (Path(__file__).resolve().parents[2] / "BUILD_REVISION").read_text(encoding="utf-8").strip()
+    except OSError:
+        build_revision = ""
     return {
+        "core_version": __version__,
+        "core_build_revision": build_revision,
+        "host_contract_version": "v1",
         "python": {
             "executable": sys.executable,
             "version": sys.version.split()[0],

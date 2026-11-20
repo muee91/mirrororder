@@ -232,3 +232,13 @@
   font-size: var(--mo-font-xs, 10px);
   line-height: 1.45;
 }
+
+.script-source-intake {
+  padding: 16px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  overflow-wrap: anywhere;
+}
+.script-source-intake h2 { margin: 0 0 8px; font-size: 16px; }
+.script-source-intake form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-bottom: 8px; }
+.script-source-intake label { display: grid; gap: 4px; flex: 1 1 220px; min-width: 0; }

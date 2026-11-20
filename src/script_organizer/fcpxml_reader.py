@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from dataclasses import replace
 from fractions import Fraction
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -38,14 +39,35 @@ def _media_path(src: str, document_dir: Path | None = None) -> str:
     return value
 
 
-def _asset_media_path(asset: ET.Element, document_dir: Path | None = None) -> str:
+def _asset_media_url(asset: ET.Element) -> str:
     direct = asset.get("src", "")
     if direct:
-        return _media_path(direct, document_dir)
+        return direct
     reps = list(asset.findall("./media-rep"))
     original = next((item for item in reps if item.get("kind") == "original-media"), None)
     chosen = original if original is not None else (reps[0] if reps else None)
-    return _media_path(chosen.get("src", ""), document_dir) if chosen is not None else ""
+    return chosen.get("src", "") if chosen is not None else ""
+
+
+def _asset_media_path(asset: ET.Element, document_dir: Path | None = None) -> str:
+    return _media_path(_asset_media_url(asset), document_dir)
+
+
+@lru_cache(maxsize=16)
+def _asset_urls(document: Path, file_version: tuple[int, int, int]) -> dict[str, str]:
+    root = ET.parse(document).getroot()
+    return {item.get("id", ""): _asset_media_url(item) for item in _descendants(root, "asset")}
+
+
+def fcpxml_asset_locator(path: str | Path, asset_id: str) -> str:
+    """Resolve one source without hashing the other files in the XML."""
+    try:
+        document = Path(path).expanduser().resolve()
+        info = document.stat()
+        urls = _asset_urls(document, (info.st_mtime_ns, info.st_ctime_ns, info.st_size))
+        return _media_path(urls.get(asset_id, ""), document.parent)
+    except (OSError, RuntimeError, ValueError, ET.ParseError):
+        return ""
 
 
 def _tag(element: ET.Element) -> str:

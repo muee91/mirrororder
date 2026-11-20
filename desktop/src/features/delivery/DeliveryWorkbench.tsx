@@ -233,7 +233,7 @@ export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
   return (
     <section className="phase3-workbench delivery-workbench">
       <header className="production-heading">
-        <div><p className="eyebrow">剪辑</p><h2>交付</h2><p className="production-note">Final Cut Pro 与 Premiere Pro 都从同一份已保存剪辑生成，不重新解释选片决定。</p></div>
+        <div><p className="eyebrow">剪辑</p><h2>组接工程导出</h2><p className="production-note">Final Cut Pro 与 Premiere Pro 都从同一份已保存剪辑生成，不重新解释选片决定。</p></div>
         <span className="production-state">{message}</span>
       </header>
 

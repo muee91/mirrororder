@@ -14,10 +14,13 @@ from string import ascii_uppercase
 from threading import Thread
 from time import monotonic
 from typing import Any, Callable
+from uuid import uuid4
 
 from .config import ProjectConfig
 from .media_reader import infer_camera_label
 from .media_role_store import MediaRoleStore
+from .media_identity import _atomic_json
+from .recording_inventory import discover_recordings, recording_diagnostics
 from .resource_scheduler import ResourceCancelled
 
 
@@ -537,6 +540,7 @@ def run_multicam_sync(
     compress_gaps: bool = True,
     progress: Callable[[int, int], None] | None = None,
     cancel_requested: Callable[[], bool] | None = None,
+    sync_context: tuple[str, str, str] | None = None,
 ) -> dict[str, Any]:
     def check_cancelled() -> None:
         if cancel_requested is not None and cancel_requested():
@@ -559,14 +563,15 @@ def run_multicam_sync(
     work = config.output_dir / ".multicam-sync" / "work"
     stage = config.output_dir / ".multicam-sync" / "media-layout"
     report_dir = config.output_dir / "sync"
-    xml_delivery = config.media_root / "交付" if len(roots) == 1 and config.media_root else roots[0] / "交付"
+    delivery_version = uuid4().hex
+    xml_delivery = roots[0] / "交付" / f"同步-{delivery_version}"
     project_runtime.mkdir(parents=True, exist_ok=True)
     engine, engine_source = _resolve_engine()
     engine_origin = _engine_origin(engine)
     script_dir = engine / "scripts"
     work.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
-    xml_delivery.mkdir(parents=True, exist_ok=True)
+    xml_delivery.mkdir(parents=True, exist_ok=False)
     media_base, layout, export_base = _prepare_multiple_media_roots(
         roots,
         stage,
@@ -631,6 +636,11 @@ def run_multicam_sync(
         emit(f"另有 {camera_counts['?']} 条视频未识别机位，单独显示在未分类轨道，不归入 A 机")
     total_steps = 2 + len(days) * 3 + 3
     update_progress(2, total_steps)
+    recording_local_paths: dict = {}
+    recording_inventory = discover_recordings(roots, output=config.output_dir, roles=media_roles, check_cancelled=check_cancelled, local_paths=recording_local_paths)
+    audio_diagnostics = recording_diagnostics(recording_inventory)
+    for diagnostic in audio_diagnostics:
+        emit(diagnostic["message"])
     positions = []
     for index, day in enumerate(days, start=1):
         emit(f"音频互相关同步 {day}")
@@ -726,6 +736,8 @@ def run_multicam_sync(
         "media_root": str(roots[0]),
         "media_roots": [str(root) for root in roots],
         "xml_delivery": str(xml_delivery),
+        "delivery_version": delivery_version,
+        "sync_task_id": sync_context[2] if sync_context else "",
         "normalized_media_base": str(media_base),
         "layout": layout,
         "days": days,
@@ -739,6 +751,7 @@ def run_multicam_sync(
         "premiere_xml": premiere,
         "media_reference_mode": "relative-to-xml",
         "source_kind": "media-directory",
+        "gap_policy": "common-video-gaps-compressed" if compress_gaps else "preserve-all-gaps",
         "camera_detection": {
             "contract_version": "camera_detection.v2",
             "conventional": list(ascii_uppercase),
@@ -755,7 +768,43 @@ def run_multicam_sync(
         },
         "project_promoted_to_fcpxml": False,
     }
-    (report_dir / "sync_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    report["recording_inventory"] = recording_inventory
+    report["diagnostics"] = audio_diagnostics
+    # A new video sync must not silently erase externally/manual confirmed audio.
+    # Retain its old revision verbatim; the consumer must reject stale authority.
+    report_path = report_dir / "sync_report.json"
+    if report_path.exists():
+        previous = json.loads(report_path.read_text(encoding="utf-8"))
+        if not isinstance(previous, dict):
+            raise ValueError("已有同步报告无效，拒绝覆盖录音证据")
+        if "recording_alignment" in previous:
+            report["recording_alignment"] = previous["recording_alignment"]
+    from .recording_auto_alignment import auto_align_recordings
+    prior_alignment = report.get("recording_alignment")
+    try:
+        alignment, audio_diagnostics = auto_align_recordings(
+            inventory=recording_inventory, local_paths=recording_local_paths,
+            work=work, media_base=media_base, days=days, master=fcpxml, roots=roots,
+            context=sync_context, prior=prior_alignment, check_cancelled=check_cancelled, log=emit,
+        )
+    except (OSError, ValueError, KeyError, StopIteration) as error:
+        alignment = None
+        audio_diagnostics = [{"code": "waveform_alignment_unavailable", "message": "原录音波形自动对齐证据不足或解码失败，已保留旧摆位；不宣称完整录音交付。"}]
+        emit("录音自动对齐未完成：" + type(error).__name__)
+    # A confirmation written while measuring must win; do not silently replace it.
+    if report_path.exists():
+        latest_alignment = json.loads(report_path.read_text(encoding="utf-8")).get("recording_alignment")
+        if latest_alignment != prior_alignment:
+            alignment = None
+            report["recording_alignment"] = latest_alignment
+            audio_diagnostics = [{"code": "recording_authority_changed", "message": "测量期间录音摆位已变化，保留最新确认，自动结果未写入。"}]
+    if alignment is not None:
+        report["recording_alignment"] = alignment
+    report["diagnostics"] = audio_diagnostics
+    for diagnostic in audio_diagnostics:
+        emit(diagnostic["message"])
+    check_cancelled()
+    _atomic_json(report_path, report)
     check_cancelled()
     update_progress(total_steps, total_steps)
     return report

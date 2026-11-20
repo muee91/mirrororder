@@ -535,7 +535,7 @@ export function App() {
                 <span className={`app-topbar-status-dot ${runningProjects ? "is-active" : ""}`} />
                 {runningProjects ? `${runningProjects} 个项目处理中` : "后台正常"}
               </button>
-              <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id)}>刷新工作区</button>
+              <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id).catch((error) => setMessage(errorMessage(error)))}>刷新工作区</button>
               <details className="app-workspace-menu">
                 <summary className="app-workspace-chip">
                   <span className={`status-dot status-${state}`} aria-hidden="true" />
@@ -602,18 +602,8 @@ export function App() {
             ) : surface === "team" ? (
               <TeamWebWorkbench workspacePath={activeWorkspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
             ) : surface === "settings" ? (
-              <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} />
-            ) : selectedProject ? (
-              <ProjectWorkbench
-                key={`${snapshot.workspace.workspace_id}:${selectedProject.project_id}`}
-                baseUrl={snapshot.baseUrl}
-                project={selectedProject}
-                pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
-                onOpenTeamReview={() => openTeamProject(selectedProject)}
-                 onMulticamSync={() => void multicamSyncProject(selectedProject)}
-                onPageChange={setActiveProjectPage}
-              />
-            ) : (
+              <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} projectId={selectedProject?.project_id} />
+            ) : !selectedProject ? (
               <WorkspaceHome
                 workspace={snapshot.workspace}
                 activities={projectActivities}
@@ -622,7 +612,21 @@ export function App() {
                 onOpenStatus={() => setSurface("status")}
                 onOpenSettings={() => setSurface("settings")}
               />
-            )}
+            ) : null}
+            {selectedProject && <div className="app-project-surface" hidden={surface !== "production"}>
+              <ProjectWorkbench
+                key={`${snapshot.workspace.workspace_id}:${selectedProject.project_id}`}
+                baseUrl={snapshot.baseUrl}
+                project={selectedProject}
+                active={surface === "production"}
+                pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
+                onOpenTeamReview={() => openTeamProject(selectedProject)}
+                workspaceId={snapshot.workspace.workspace_id}
+                onTaskChanged={() => void refreshActivities()}
+                onOpenStatus={() => setSurface("status")}
+                onPageChange={setActiveProjectPage}
+              />
+            </div>}
           </section>
         </section>
       </section>

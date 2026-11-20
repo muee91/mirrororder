@@ -146,10 +146,8 @@ def _clip_from_index(item: dict[str, Any], media_path: str) -> Clip:
 
 
 def _analysis_inputs_available(config: ProjectConfig) -> bool:
-    if not config.script.exists():
-        return False
     if config.is_fcpxml:
-        return bool(config.fcpxml and config.fcpxml.exists())
+        return bool(config.script and config.script.is_file() and config.fcpxml and config.fcpxml.exists())
     if config.is_media_directory:
         return bool(
             any(root.exists() for root in (config.media_roots or ((config.media_root,) if config.media_root else ())))
@@ -339,7 +337,7 @@ class TaskManager:
     def _post_sync_analysis(self, project_id: str, config: ProjectConfig, task: dict[str, Any]) -> dict[str, Any]:
         """Publish the media index before a direct sync task becomes complete."""
         if not _analysis_inputs_available(config):
-            raise ValueError("多机位同步已完成，但缺少剧本或同步产物，无法建立媒体身份索引")
+            raise ValueError("多机位同步已完成，但缺少可读取的素材或同步产物，无法建立媒体身份索引")
         task_id = str(task["task_id"])
         self._update(config, task_id, stage="analysis", message="多机位同步完成，正在建立媒体身份索引")
         analysis = analyze(
@@ -377,6 +375,7 @@ class TaskManager:
                         config, task_id, progress={"done": done, "total": total}
                     ),
                     cancel_requested=lambda: self._cancel_requested(config, task_id),
+                    sync_context=(self.workspace_id, project_id, task_id),
                 )
                 if result.get("status") == "completed":
                     result["analysis"] = self._post_sync_analysis(project_id, config, task)
@@ -452,6 +451,7 @@ class TaskManager:
                     config, task["task_id"], progress={"done": done, "total": total}
                 ),
                 cancel_requested=lambda: self._cancel_requested(config, task["task_id"]),
+                sync_context=(self.workspace_id, project_id, str(task["task_id"])),
             )
             if self._cancel_requested(config, task["task_id"]):
                 return {**result, "cancelled": True}

@@ -1,3 +1,5 @@
+import { getVersion } from "@tauri-apps/api/app";
+import { version as frontendVersion } from "../../../package.json";
 import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import { DesktopClient, type DesktopStatusPayload, type FrontendSettings } from "../../api/desktop";
@@ -9,7 +11,9 @@ import { DesktopAppearanceControl } from "./DesktopAppearanceControl";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
 import "./settings-preferences.css";
 
-interface Props { baseUrl: string }
+declare const __MIRRORORDER_FRONTEND_REVISION__: string;
+
+interface Props { baseUrl: string; projectId?: string }
 type EpisodeMode = "first" | "all" | "number";
 
 function availabilityLabel(value: boolean): string { return value ? "可用" : "缺失"; }
@@ -28,7 +32,7 @@ function validEpisodeNumber(value: string): number | null {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 9999 ? parsed : null;
 }
 
-export function SettingsStatusWorkbench({ baseUrl }: Props) {
+export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   const desktop = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const platform = useMemo(() => new PlatformClient(), []);
@@ -39,6 +43,7 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [hostProcess, setHostProcess] = useState<HostProcessStatus | null>(null);
   const [error, setError] = useState("");
+  const [diagnosticMessage, setDiagnosticMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -130,6 +135,31 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
     }
   }
 
+  async function copyDiagnostics() {
+    const app = isTauri() ? await getVersion().catch(() => "读取失败") : "浏览器";
+    const tasks = projectId ? await desktop.projectTasks(projectId).catch(() => null) : null;
+    const current = tasks?.find((task) => ["queued", "running"].includes(task.status))
+      ?? tasks?.find((task) => ["failed", "interrupted"].includes(task.status));
+    const revision = typeof __MIRRORORDER_FRONTEND_REVISION__ === "string" ? __MIRRORORDER_FRONTEND_REVISION__ : "";
+    const lines = [
+      `采集时间 ${new Date().toISOString()}`,
+      `App ${app}`,
+      `前端 ${frontendVersion} · ${revision || "无构建标识"}`,
+      `Host ${status?.environment.host_contract_version || "无版本标识"} · ${status?.environment.platform || "未读取"}`,
+      `Core ${status?.environment.core_version || "未读取"} · ${status?.environment.core_build_revision || "无构建标识"}`,
+      `工作区 ${status?.workspace.name || "未读取"} · ${status?.workspace.workspace_id || ""}`,
+      projectId ? `项目 ${projectId}` : "当前未选项目",
+      current ? `任务 ${current.task_id} · ${current.type} · ${current.stage} · ${current.status}` : tasks ? "没有进行中或失败的任务" : "任务状态未读取",
+      current?.completed_at && `任务结束时间 ${current.completed_at}`,
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setDiagnosticMessage("已复制诊断摘要。");
+    } catch {
+      setDiagnosticMessage(lines.join("\n"));
+    }
+  }
+
   const settingsDirty = Boolean(settings && savedSettings && !sameSettings(settings, savedSettings));
   const requiredModules = status?.environment.python_modules.filter((item) => item.required) ?? [];
   const optionalModules = status?.environment.python_modules.filter((item) => !item.required) ?? [];
@@ -213,6 +243,8 @@ export function SettingsStatusWorkbench({ baseUrl }: Props) {
             <div><strong>高级诊断</strong><span>工作区、运行环境、平台适配与当前设备</span></div>
             <small>{status ? `${status.environment.platform} · Python ${status.environment.python.version}` : "尚未读取"}</small>
           </summary>
+          <button type="button" className="secondary" onClick={() => void copyDiagnostics()}>复制运行诊断</button>
+          {diagnosticMessage && <p className="settings-diagnostic-result" role="status">{diagnosticMessage}</p>}
           <p className="production-note settings-diagnostics-note">这里用于排查安装和设备环境问题；任务进度与失败恢复仍以状态中心为准。</p>
           <div className="settings-diagnostics-grid">
             <div className="production-panel status-card">

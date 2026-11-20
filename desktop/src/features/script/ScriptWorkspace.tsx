@@ -1,3 +1,6 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { DesktopClient } from "../../api/desktop";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type {
   ProjectSummary,
@@ -137,6 +140,10 @@ export function ScriptWorkspace({
   const [candidateScope, setCandidateScope] = useState<CandidateScope>("context");
   const [candidateQuery, setCandidateQuery] = useState("");
   const [writeState, setWriteState] = useState<WriteState>("idle");
+  const [scriptPath, setScriptPath] = useState("");
+  const [attachState, setAttachState] = useState<"idle" | "saving" | "submitted" | "error">("idle");
+  const [attachMessage, setAttachMessage] = useState("");
+  const attaching = useRef(false);
   const [writeMessage, setWriteMessage] = useState("");
   const [roughText, setRoughText] = useState("");
   const [roughPreview, setRoughPreview] = useState<RoughPlacementPayload | null>(null);
@@ -474,16 +481,61 @@ export function ScriptWorkspace({
     }
   }
 
+  async function chooseScript(): Promise<void> {
+    try {
+      const file = await openDialog({ multiple: false,
+        filters: [{ name: "剧本", extensions: ["docx", "txt", "md", "markdown"] }] });
+      if (typeof file === "string") setScriptPath(file);
+    } catch (error) {
+      setAttachState("error");
+      setAttachMessage(reviewModelErrorMessage(error));
+    }
+  }
+
+  async function attachScript(): Promise<void> {
+    if (attaching.current || !scriptPath.trim()) return;
+    attaching.current = true;
+    setAttachState("saving");
+    setAttachMessage("");
+    try {
+      const result = await new DesktopClient(baseUrl).attachScript(project.project_id, scriptPath.trim());
+      setAttachState("submitted");
+      setAttachMessage(result.task?.task_id
+        ? "剧本已保存。后台关联已提交，完成后刷新此页查看。"
+        : "剧本已保存，请刷新剧本关联。");
+    } catch (error) {
+      setAttachState("error");
+      setAttachMessage(reviewModelErrorMessage(error));
+    } finally {
+      attaching.current = false;
+    }
+  }
+
   if (loadState !== "ready" || !model) {
     return (
       <section className="script-workspace">
-        <div className={`projection-status ${loadState === "error" ? "is-error" : ""}`}>{message}</div>
+        <div className={`projection-status ${loadState === "error" ? "is-error" : ""}`} role={loadState === "error" ? "alert" : "status"}>{message}
+          {loadState === "error" && <button type="button" className="secondary" onClick={() => void refresh().catch(() => null)}>重新读取</button>}
+        </div>
       </section>
     );
   }
 
   return (
     <section className="script-workspace">
+      {!model.episodes.length && project.input_kind === "media-directory" && <section className="script-source-intake">
+        <h2>导入剧本</h2>
+        <p>将剧本关联到已有 Take。同步母版和工程文件会保留。</p>
+        {attachState !== "submitted" && <form onSubmit={(event) => { event.preventDefault(); void attachScript(); }}>
+          <label>剧本文件<input value={scriptPath} onChange={(event) => setScriptPath(event.target.value)} disabled={attachState === "saving"} /></label>
+          {isTauri() && <button type="button" className="secondary" onClick={() => void chooseScript()} disabled={attachState === "saving"}>选择文件…</button>}
+          <button disabled={!scriptPath.trim() || attachState === "saving"}>导入并关联</button>
+        </form>}
+        {attachMessage && <p role={attachState === "error" ? "alert" : "status"}>{attachMessage}</p>}
+        <button type="button" className="secondary" onClick={() => void refresh().catch((error) => {
+          setAttachState("error"); setAttachMessage(reviewModelErrorMessage(error));
+        })}>刷新剧本关联</button>
+      </section>}
       <header className="script-command-bar">
         <div className="script-projection-switch" aria-label="剧本显示模式">
           {PROJECTION_OPTIONS.map((option) => (

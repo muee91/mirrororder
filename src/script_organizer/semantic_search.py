@@ -78,6 +78,7 @@ class SemanticSearcher:
         sources: Sequence[str] | None = None,
         refresh: bool = True,
         allow_query_embedding: bool = True,
+        selection: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Hybrid retrieval over cached production evidence.
 
@@ -96,14 +97,27 @@ class SemanticSearcher:
         if refresh:
             refresh_report = self._refresh()
 
-        keyword_rows = self.store.keyword_search(self.project_id, text, limit=max(80, limit * 6))
+        # Deictic questions such as “查这条” do not contain searchable media words.
+        # A selected frame in a camera gap has no source documents at all.
+        selection_rows = []
+        if selection and any(selection.get(key) for key in ("group_id", "clip_id", "media_id")):
+            # Older documents can identify the occurrence without a physical media_id.
+            keys = ("group_id", "clip_id") if selection.get("clip_id") else ("group_id", "media_id")
+            selectors = {key: selection[key] for key in keys if selection.get(key)}
+            selection_rows = self.store.documents(self.project_id, selection=selectors, sources=sorted(selected_sources), limit=limit * 6)
+            if selection.get("clip_id") or selection.get("media_id"):
+                # Take-wide descriptions are indexed under their first member for navigation.
+                selection_rows = [row for row in selection_rows if not (
+                    row["source"] == "visual" and row.get("group_id") and row["metadata"].get("member_count") != 1
+                )]
+        keyword_rows = [] if selection else self.store.keyword_search(self.project_id, text, limit=max(80, limit * 6))
         if selected_sources:
             keyword_rows = [row for row in keyword_rows if row.get("source") in selected_sources]
         keyword_rank = {row["document_id"]: rank for rank, row in enumerate(keyword_rows, start=1)}
 
         query_vector: list[float] | None = None
         vector_rows: list[tuple[dict[str, Any], float]] = []
-        if allow_query_embedding and self.encoder.enabled:
+        if not selection and allow_query_embedding and self.encoder.enabled:
             query_vector = self.encoder.encode_one(text)
             if query_vector:
                 documents = self.store.documents(
@@ -122,6 +136,7 @@ class SemanticSearcher:
         vector_score = {row["document_id"]: score for row, score in vector_rows}
 
         all_rows: dict[str, dict[str, Any]] = {row["document_id"]: row for row in keyword_rows}
+        all_rows.update({row["document_id"]: row for row in selection_rows})
         all_rows.update({row["document_id"]: row for row, _score in vector_rows})
         fused: list[tuple[float, dict[str, Any]]] = []
         for document_id, row in all_rows.items():
@@ -141,14 +156,18 @@ class SemanticSearcher:
         results = []
         for score, row in fused[:limit]:
             document_id = str(row.get("document_id", "") or "")
+            source = str(row.get("source", "") or "")
+            source_label = SOURCE_LABELS.get(source, source)
+            if selection and row.get("group_id") and source in {"visual", "slate"}:
+                source_label = f"Take {source_label}"
             results.append(
                 {
                     "document_id": document_id,
                     "group_id": str(row.get("group_id", "") or ""),
                     "clip_id": str(row.get("clip_id", "") or ""),
                     "media_id": str(row.get("media_id", "") or ""),
-                    "source": str(row.get("source", "") or ""),
-                    "source_label": SOURCE_LABELS.get(str(row.get("source", "")), str(row.get("source", ""))),
+                    "source": source,
+                    "source_label": source_label,
                     "score": round(score, 8),
                     "vector_similarity": (
                         round(float(vector_score[document_id]), 6)
@@ -163,7 +182,7 @@ class SemanticSearcher:
                 }
             )
 
-        mode = "hybrid" if query_vector and keyword_rows else "vector" if query_vector else "keyword"
+        mode = "selection" if selection else "hybrid" if query_vector and keyword_rows else "vector" if query_vector else "keyword"
         summary = self.store.summary(self.project_id)
         return {
             "contract": SEMANTIC_SEARCH_CONTRACT,

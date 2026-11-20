@@ -19,7 +19,8 @@ describe("desktop playback URL authority", () => {
   it("keeps Slate and media cards consuming the canonical review playback URL", () => {
     const slate = read("../features/slate/GoldenSlateWorkbench.tsx");
     const card = read("../features/media/MirrorOrderMediaCard.tsx");
-    expect(slate).toContain("src={selectedAngle.playback.url}");
+    expect(slate).toContain("canPreviewReviewPlayback(selectedAngle.playback) ? selectedAngle.playback.url");
+    expect(slate).toContain("src={playbackUrl}");
     expect(card).toContain("canPreviewReviewPlayback(angle.playback) ? angle.playback.url : undefined");
   });
 });

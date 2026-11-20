@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { HostConnection, type ProjectSummary } from "../../api/host";
 import { isOwnedSlateHost } from "./ownedSlateHost";
+import type { ComponentProps } from "react";
+import type { EvidenceReference } from "../production/evidenceLocation";
+import type { ProductionSelectionContext } from "../production/productionNavigation";
 import type { AssistantSelection } from "../../api/production";
 import { IdentityWorkbench } from "../identity/IdentityWorkbench";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
@@ -17,6 +20,14 @@ interface Props {
   project: ProjectSummary;
   view: MaterialView;
   showViewNavigation?: boolean;
+  active?: boolean;
+  keepSlate?: boolean;
+  canOpenTakes?: boolean;
+  slateFocus?: ProductionSelectionContext | null;
+  onOpenEvidence?: (reference: EvidenceReference) => void;
+  onSlateSelection?: (selection: ProductionSelectionContext) => void;
+  onReturnFromRepair?: () => void;
+  repairReturnLabel?: string;
   initialGroupId?: string | null;
   initialClipId?: string | null;
   onSelectionChange?: (groupId: string | null, clipId: string | null) => void;
@@ -39,6 +50,14 @@ export function MaterialWorkspace({
   project,
   view,
   showViewNavigation = true,
+  active = true,
+  keepSlate = false,
+  canOpenTakes = true,
+  slateFocus,
+  onOpenEvidence,
+  onSlateSelection,
+  onReturnFromRepair,
+  repairReturnLabel,
   initialGroupId = null,
   initialClipId = null,
   onSelectionChange,
@@ -51,8 +70,8 @@ export function MaterialWorkspace({
   const activeView = view === "repair" ? "library" : view;
 
   return (
-    <section className="material-workspace" data-material-view={view} data-project-navigation={!showViewNavigation || undefined}>
-      {showViewNavigation && <header className="material-domain-bar">
+    <section className="material-workspace" hidden={!active} data-material-view={view} data-project-navigation={!showViewNavigation || undefined}>
+      {showViewNavigation && active && <header className="material-domain-bar">
         <nav className="material-view-nav" aria-label="素材视图">
           {MATERIAL_VIEWS.map((item) => (
             <button
@@ -71,27 +90,35 @@ export function MaterialWorkspace({
       </header>}
 
       <div className="material-view-canvas">
-        {view === "slate" ? (
-          <>
+        {(active && view === "slate") || keepSlate ? (
+          <div className="material-slate-slot" hidden={!active || view !== "slate"}>
             <OwnedSlateWorkbench
               key={JSON.stringify([baseUrl, project.project_id])}
-                baseUrl={baseUrl}
+              baseUrl={baseUrl}
               projectId={project.project_id}
               projectName={project.name}
+              active={active && view === "slate"}
+              focus={slateFocus}
+              onSelection={onSlateSelection}
+              onInspectSelection={onInspectSelection}
+              onOpenScript={onOpenScript}
+              onOpenReview={onOpenReview}
+              onRepair={() => onViewChange("repair")}
             />
-            <SlatePlaybackShortcuts />
-          </>
+            {active && view === "slate" && <SlatePlaybackShortcuts />}
+          </div>
         ) : null}
 
-        {view === "library" ? (
+        {active && view === "library" ? (
           <MediaLibraryWorkbench
             baseUrl={baseUrl}
             projectId={project.project_id}
             onOpenMediaBinding={() => onViewChange("repair")}
+            onOpenTakes={canOpenTakes ? () => onViewChange("takes") : undefined}
           />
         ) : null}
 
-        {view === "takes" ? (
+        {active && view === "takes" ? (
           <MaterialTakeView
             baseUrl={baseUrl}
             project={project}
@@ -105,22 +132,25 @@ export function MaterialWorkspace({
           />
         ) : null}
 
-        {view === "people" ? (
+        {active && view === "people" ? (
           <IdentityWorkbench
             baseUrl={baseUrl}
             projectId={project.project_id}
-            onOpenTake={(groupId) => onViewChange("takes", groupId)}
+            onOpenOccurrence={(occurrence) => onOpenEvidence?.({
+              clip_id: occurrence.clip_id, group_id: occurrence.group_id, media_id: occurrence.media_id,
+              start: occurrence.source_time, metadata: { time_basis: "source" },
+            })}
           />
         ) : null}
 
-        {view === "repair" ? (
+        {active && view === "repair" ? (
           <section className="material-repair-view" aria-label="素材恢复工具">
             <div className="material-repair-banner">
               <div>
                 <strong>本机素材恢复</strong>
                 <span>这里只修复当前设备的素材绑定与扫描，不改变共享拍摄事实。</span>
               </div>
-              <button type="button" className="secondary" onClick={() => onViewChange("library")}>返回素材库</button>
+              <button type="button" className="secondary" onClick={onReturnFromRepair ?? (() => onViewChange("library"))}>{repairReturnLabel ?? "返回素材库"}</button>
             </div>
             <MediaBindingWorkbench baseUrl={baseUrl} projectId={project.project_id} />
           </section>
@@ -130,12 +160,7 @@ export function MaterialWorkspace({
   );
 }
 
-function OwnedSlateWorkbench(props: {
-  baseUrl: string;
-  projectId: string;
-  projectName: string;
-  onInspectSelection?: (selection: AssistantSelection) => void;
-}) {
+function OwnedSlateWorkbench(props: ComponentProps<typeof GoldenSlateWorkbench>) {
   const [owned, setOwned] = useState<boolean | null>(null);
   useEffect(() => {
     let alive = true;

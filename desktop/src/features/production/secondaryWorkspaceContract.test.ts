@@ -45,7 +45,7 @@ describe("project production workspace contract", () => {
 
     expect(material).toContain('view === "repair"');
     expect(material).toContain("<MediaBindingWorkbench");
-    expect(material).toContain('onClick={() => onViewChange("library")}');
+    expect(material).toContain('onClick={onReturnFromRepair ?? (() => onViewChange("library"))}');
     expect(project).not.toContain("CoverageWorkbench");
     expect(project).not.toContain("RoughCutWorkbench");
     expect(project).not.toContain("AssemblyWorkbench");

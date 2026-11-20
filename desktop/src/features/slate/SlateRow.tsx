@@ -4,7 +4,7 @@ import { SlateStatusIndicator } from "../../components/StatusIndicators";
 import "./slate-row.css";
 
 export const SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"] as const;
-export type SlateCameraColumn = typeof SLATE_CAMERA_COLUMNS[number];
+export type SlateCameraColumn = string;
 
 export const SLATE_COLUMN_KEYS = [
   "index",
@@ -48,6 +48,7 @@ interface SlateRowProps {
   onEditStart?: () => void;
   onEditEnd?: () => void;
   onPatch: (patch: SlateRowPatch) => void;
+  cameraColumns?: readonly SlateCameraColumn[];
   renderMedia: (camera: SlateCameraColumn) => ReactNode;
 }
 
@@ -55,28 +56,28 @@ function stopRowSelection(event: { stopPropagation: () => void }): void {
   event.stopPropagation();
 }
 
-export function SlateTableHead() {
+function columnKeys(cameraColumns: readonly SlateCameraColumn[]): string {
+  return [...SLATE_COLUMN_KEYS.slice(0, 5), ...cameraColumns.map((camera) => `camera-${camera}`), "status"].join(" ");
+}
+export function SlateTableHead({ cameraColumns = SLATE_CAMERA_COLUMNS }: { cameraColumns?: readonly SlateCameraColumn[] } = {}) {
   return (
-    <tr data-slate-columns={SLATE_COLUMN_KEYS.join(" ")}>
+    <tr data-slate-columns={columnKeys(cameraColumns)}>
       <th className="col-index">序号</th>
       <th className="col-number">集</th>
       <th className="col-text">场号</th>
       <th className="col-text">镜号</th>
       <th className="col-number">次号</th>
-      <th className="col-media">A 机</th>
-      <th className="col-media">B 机</th>
-      <th className="col-media">C 机</th>
-      <th className="col-media">辅助 / 特殊</th>
+      {cameraColumns.map((camera) => <th className="col-media" key={camera}>{camera === "AUX" ? "辅助 / 特殊" : `${camera} 机`}</th>)}
       <th className="col-status">状态</th>
     </tr>
   );
 }
 
-export function SlateRow({ row, onSelect, onPatch, renderMedia, onEditStart, onEditEnd }: SlateRowProps) {
+export function SlateRow({ row, onSelect, onPatch, renderMedia, onEditStart, onEditEnd, cameraColumns = SLATE_CAMERA_COLUMNS }: SlateRowProps) {
   return (
     <tr
       className={`slate-row ${row.selected ? "is-selected" : ""} ${row.dirty ? "is-dirty" : ""}`}
-      data-slate-columns={SLATE_COLUMN_KEYS.join(" ")}
+      data-slate-columns={columnKeys(cameraColumns)}
       data-record-id={row.recordId}
       onFocusCapture={(event) => {
         if (event.target instanceof HTMLInputElement) onEditStart?.();
@@ -134,7 +135,7 @@ export function SlateRow({ row, onSelect, onPatch, renderMedia, onEditStart, onE
           onChange={(event) => onPatch({ take_number: event.target.value ? Number(event.target.value) : null })}
         />
       </td>
-      {SLATE_CAMERA_COLUMNS.map((camera) => <td className="col-media" key={camera}>{renderMedia(camera)}</td>)}
+      {cameraColumns.map((camera) => <td className="col-media" key={camera}>{renderMedia(camera)}</td>)}
       <td className="col-status">
         <label className="golden-status-control" onClick={stopRowSelection}>
           <SlateStatusIndicator state={row.status} />

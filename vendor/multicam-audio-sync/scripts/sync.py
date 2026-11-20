@@ -44,7 +44,7 @@ def load_data():
     df["cam"] = df["cam"].astype(str)
     # clipn：优先取文件名里的片段序号（如 C001 → 1）；取不到则按 天/相机 内
     # TC 顺序编号，保证每个相机内部编号唯一
-    clip = df["file"].str.extract(r"[Cc](\d+)", expand=False)
+    clip = df["file"].str.extract(r".*[Cc](\d+)", expand=False)
     df["clipn"] = pd.to_numeric(clip, errors="coerce")
     missing = df["clipn"].isna()
     if missing.any():
@@ -54,6 +54,25 @@ def load_data():
                 if df.at[i, "clipn"] != df.at[i, "clipn"]:  # NaN 判等
                     df.at[i, "clipn"] = k
     df["clipn"] = df["clipn"].astype(int)
+    # SMPTE clock labels wrap at midnight. Keep file-number chronology within
+    # each shooting day/camera before fitting its continuous recording clock.
+    # A smaller rollback is a clock reset, not evidence of another midnight.
+    for (day, cam), idx in df.groupby(["day", "cam"]).groups.items():
+        if not clip.loc[idx].notna().all():
+            continue
+        previous = None
+        shift = 0.0
+        for row_index, row in df.loc[idx].sort_values(["clipn", "file"]).iterrows():
+            value = row["tc_s"]
+            if np.isnan(value):
+                continue
+            if previous is not None and value < previous:
+                if previous >= 18 * 3600 and value <= 6 * 3600 and previous - value > 12 * 3600:
+                    shift += 24 * 3600
+                else:
+                    raise RuntimeError(f"{day}/{cam} 时间码回拨，无法假定连续时钟：{row['file']}")
+            df.at[row_index, "tc_s"] = value + shift
+            previous = value
     # TC is a useful prior, not a hard prerequisite. When a camera has no
     # usable TC, use its deterministic clip order and cumulative durations as
     # a local coordinate; cross-camera audio correlation then solves the offset.
