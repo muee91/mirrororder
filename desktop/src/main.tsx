@@ -24,7 +24,11 @@ if (isXiaoJingWindow) document.title = "小镜";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      {isXiaoJingWindow ? <Suspense><XiaoJingFloatingWindow /></Suspense> : <App />}
+      {isXiaoJingWindow ? (
+        <Suspense fallback={<div style={{ height: "100vh", background: "#090b0f" }} />}>
+          <XiaoJingFloatingWindow />
+        </Suspense>
+      ) : <App />}
     </ErrorBoundary>
   </StrictMode>,
 );

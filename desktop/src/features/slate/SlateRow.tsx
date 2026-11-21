@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode, type Ref } from "react";
 import type { SlateRecord, SlateStatus } from "../../api/production";
 import { SlateStatusIndicator } from "../../components/StatusIndicators";
 import "./slate-row.css";
@@ -44,6 +44,7 @@ export interface SlateRowModel {
 
 interface SlateRowProps {
   row: SlateRowModel;
+  rowRef?: Ref<HTMLTableRowElement>;
   onSelect: () => void;
   onEditStart?: () => void;
   onEditEnd?: () => void;
@@ -73,9 +74,10 @@ export function SlateTableHead({ cameraColumns = SLATE_CAMERA_COLUMNS }: { camer
   );
 }
 
-export function SlateRow({ row, onSelect, onPatch, renderMedia, onEditStart, onEditEnd, cameraColumns = SLATE_CAMERA_COLUMNS }: SlateRowProps) {
+export const SlateRow = memo(function SlateRow({ row, rowRef, onSelect, onPatch, renderMedia, onEditStart, onEditEnd, cameraColumns = SLATE_CAMERA_COLUMNS }: SlateRowProps) {
   return (
     <tr
+      ref={rowRef}
       className={`slate-row ${row.selected ? "is-selected" : ""} ${row.dirty ? "is-dirty" : ""}`}
       data-slate-columns={columnKeys(cameraColumns)}
       data-record-id={row.recordId}
@@ -148,4 +150,4 @@ export function SlateRow({ row, onSelect, onPatch, renderMedia, onEditStart, onE
       </td>
     </tr>
   );
-}
+});

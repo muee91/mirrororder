@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewTakeGroup, errorMessage } from "../../api/host";
 import { takeDisplayLabel } from "../material-script/TakeCard";
 import { classifyPlaybackFailure, type PlaybackFailure } from "./playbackFailure";
@@ -15,7 +15,7 @@ import { StudioIcon } from "../../components/StudioIcons";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
 import { mediaHealthState } from "./mediaHealthState";
-import { useNearViewportGate } from "./nearViewport";
+import { useNearViewportGate, useVideoDecodeSlot } from "./nearViewport";
 import { canPreviewReviewPlayback } from "./mediaPlaybackProjection";
 import "./media-library.css";
 import "./media-health-adoption.css";
@@ -271,29 +271,43 @@ function playbackForItem(
   return reviewFallback;
 }
 
-function MediaLibraryRow({
+const MediaLibraryRow = memo(function MediaLibraryRow({
   item,
   selected,
   roles,
-  preview,
+  host,
+  projectId,
+  playbackByMedia,
+  showThumbnail,
   takeLabel,
   onSelect,
 }: {
   item: MediaInventoryItem;
   selected: boolean;
   roles: MediaRoleStore | null;
-  preview: PlaybackEntry | undefined;
+  host: HostConnection;
+  projectId: string;
+  playbackByMedia: Record<string, PlaybackEntry>;
+  showThumbnail: boolean;
   takeLabel?: string;
-  onSelect: () => void;
+  onSelect: (item: MediaInventoryItem) => void;
 }) {
   // Viewport-gated preview：屏幕外的行保持静态占位，列表不再一次挂载
   // 上百个 <video> decoder surface（模式与 MirrorOrderMediaCard 一致）。
   const [rowRef, nearViewport] = useNearViewportGate<HTMLButtonElement>(true, "160px 0px");
+  const playback = useMemo(
+    () => playbackForItem(host, projectId, item, playbackByMedia[item.media_id]),
+    [host, projectId, item, playbackByMedia],
+  );
+  const preview = showThumbnail ? playback : undefined;
+  const [decodeSlotGranted, markDecodeSettled] = useVideoDecodeSlot(
+    Boolean(preview && nearViewport), `${preview?.sourceStart ?? 0}:${preview?.url ?? ""}`,
+  );
   const role = roleFor(item, roles);
   const auxiliary = isAuxiliary(role);
   const camera = effectiveCamera(role.camera_override, item.inferred_camera);
   const manualCamera = Boolean(role.camera_override?.trim());
-  const healthState = mediaHealthState({ indexed: item.indexed, state: item.state, playable: Boolean(preview) });
+  const healthState = mediaHealthState({ indexed: item.indexed, state: item.state, playable: Boolean(playback) });
   const roleLabel = ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位";
   const rowLabel = [
     item.display_name,
@@ -308,17 +322,20 @@ function MediaLibraryRow({
       ref={rowRef}
       type="button"
       className={`media-library-row ${selected ? "is-selected" : ""}`}
-      onClick={onSelect}
+      onClick={() => onSelect(item)}
       aria-pressed={selected}
       aria-label={rowLabel}
     >
       <span className="media-library-thumb" data-camera-tone={camera.tone} aria-hidden="true">
-        {preview && nearViewport ? (
+        {preview && nearViewport && decodeSlotGranted ? (
           <video
             src={preview.url}
             muted
             preload="metadata"
             playsInline
+            onLoadedData={() => { if (preview.sourceStart <= 0) markDecodeSettled(); }}
+            onSeeked={markDecodeSettled}
+            onError={markDecodeSettled}
             onLoadedMetadata={(event) => {
               if (preview.sourceStart > 0) {
                 try { event.currentTarget.currentTime = preview.sourceStart; } catch { /* metadata may still be settling */ }
@@ -340,7 +357,7 @@ function MediaLibraryRow({
       <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><MediaHealthIndicator state={healthState} /></span>
     </button>
   );
-}
+});
 
 export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, onOpenTakes }: Props) {
   const client = useMemo(() => new MediaRoleClient(baseUrl), [baseUrl]);
@@ -379,13 +396,15 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
     };
   }, []);
 
-  async function reload(preferredId = selectedId): Promise<void> {
+  async function reload(preferredId = selectedId, forceReview = true): Promise<void> {
     const token = ++reloadToken.current;
     setBusy(true);
     try {
       // Inventory is the playback authority. Review is only a compatibility
       // fallback for older Host snapshots and supplies a known source start.
-      const reviewPromise = host.reviewModel(projectId).catch(() => null);
+      const reviewPromise = forceReview
+        ? host.refreshReviewModel(projectId).catch(() => null)
+        : host.reviewModel(projectId).catch(() => null);
       const [nextInventory, nextRoles, review] = await Promise.all([client.inventory(projectId), client.roles(projectId), reviewPromise]);
       if (token !== reloadToken.current) return;
       setInventory(nextInventory);
@@ -420,7 +439,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
     setBulkResult(storedBulkResult(projectId));
     setViewState(storedMediaViewState(projectId));
     setSelectedIds(storedMediaSelection(projectId));
-    void reload("");
+    void reload("", false);
     return () => { reloadToken.current += 1; };
   }, [client, host, projectId]);
 
@@ -543,8 +562,14 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
     return counts;
   }, [cameraFilter, inventory, query, roles, sceneFilter]);
 
-  const visibleLimit = viewMode === "grid" ? 160 : 500;
-  const visible = filtered.slice(0, visibleLimit);
+  const pageSize = viewMode === "grid" ? 48 : 80;
+  const pageScope = JSON.stringify([projectId, viewMode, query, filter, cameraFilter, sceneFilter]);
+  const [page, setPage] = useState({ scope: "", limit: 0 });
+  const visibleLimit = page.scope === pageScope ? page.limit : pageSize;
+  const visible = useMemo(() => filtered.slice(0, visibleLimit), [filtered, visibleLimit]);
+  function loadMore(): void {
+    setPage({ scope: pageScope, limit: visibleLimit + pageSize });
+  }
 
   async function copyVisibleInventory(): Promise<void> {
     if (!visible.length) return;
@@ -683,12 +708,12 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
     });
   }
 
-  function select(item: MediaInventoryItem): void {
+  const select = useCallback((item: MediaInventoryItem): void => {
     setSelectedId(item.media_id);
     setDraft(defaultDraft(item, roles));
     setPlaybackFailedMediaId("");
     setPlaybackRetry(0);
-  }
+  }, [roles]);
 
   function patch(patchValue: Partial<MediaRole>): void {
     setDraft((current) => ({ ...current, ...patchValue }));
@@ -878,14 +903,18 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
       </div>
 
       <div className="media-library-layout">
-        <div className={`media-library-list is-${viewMode}`} role="list" aria-label={viewMode === "grid" ? "素材缩略图" : "素材列表"}>
+        <div className={`media-library-list is-${viewMode}`} role="list" aria-label={viewMode === "grid" ? "素材缩略图" : "素材列表"}
+          onScroll={(event) => {
+            const list = event.currentTarget;
+            if (visible.length < filtered.length && list.scrollTop + list.clientHeight >= list.scrollHeight - 160) loadMore();
+          }}>
           {visible.map((item) => (
             <div className="media-library-row-wrap" key={item.media_id} role="listitem">
               <input aria-label={`选择 ${item.display_name}`} type="checkbox" checked={selectedIds.has(item.media_id)} onChange={() => setSelectedIds((current) => { const next = new Set(current); if (next.has(item.media_id)) next.delete(item.media_id); else next.add(item.media_id); return next; })} />
-              <MediaLibraryRow item={item} selected={selectedId === item.media_id} roles={roles} preview={playbackForItem(host, projectId, item, playbackByMedia[item.media_id])} takeLabel={takeLabelByClip[item.media_id] ?? (item.clip_id?.trim() ? takeLabelByClip[item.clip_id.trim()] : undefined)} onSelect={() => select(item)} />
+              <MediaLibraryRow item={item} selected={selectedId === item.media_id} roles={roles} host={host} projectId={projectId} playbackByMedia={playbackByMedia} showThumbnail={viewMode === "grid"} takeLabel={takeLabelByClip[item.media_id] ?? (item.clip_id?.trim() ? takeLabelByClip[item.clip_id.trim()] : undefined)} onSelect={select} />
             </div>
           ))}
-          {filtered.length > visible.length ? <p className="production-note">当前显示前 {visible.length} 条；继续缩小搜索范围以定位其它素材。</p> : null}
+          {filtered.length > visible.length ? <button className="secondary" type="button" onClick={loadMore}>加载更多素材（{visible.length} / {filtered.length}）</button> : null}
           {!visible.length ? <p className="empty-copy">当前筛选下没有素材。</p> : null}
         </div>
 

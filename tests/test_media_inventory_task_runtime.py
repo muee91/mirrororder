@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from script_organizer import media_identity, media_inventory_task_runtime, tasks_v2
 from script_organizer.media_identity import DeviceMediaStore, media_id_for_path, provisional_media_id
@@ -18,6 +20,98 @@ def _project(tmp_path: Path) -> SimpleNamespace:
         index={"clips": [], "groups": []},
         config=SimpleNamespace(output_dir=output, camera_patterns={}),
     )
+
+
+def test_http_read_caches_track_review_roles_index_and_live_bindings(tmp_path: Path, monkeypatch) -> None:
+    from script_organizer import review_read_model, tasks, web_server
+
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    output = tmp_path / "output"
+    output.mkdir()
+    media = tmp_path / "take.mov"
+    media.write_bytes(b"synthetic")
+    clip = {"media_id": "M_take", "clip_id": "c1", "duration": 2, "camera": "A"}
+    group = {"group_id": "g1", "members": [clip]}
+    index = {"clips": [clip], "groups": [group]}
+    index_path = output / "material_index.json"
+    index_path.write_text(json.dumps(index))
+    config = SimpleNamespace(output_dir=output, name="demo", input_kind="media_directory", camera_patterns={})
+    project = web_server.ProjectService("demo", config)
+    project.workspace_id = "ws_demo"
+    device = DeviceMediaStore()
+    device._save({"projects": {"demo": {"bindings": {"M_take": str(media)}}}})
+    project._device_media_store = device
+    service = SimpleNamespace(project=lambda _id: project)
+
+    # Install the actual route adapters and restore their process-wide hooks after this test.
+    monkeypatch.setattr(web_server, "make_handler", web_server.make_handler)
+    for runtime in (review_read_model, media_inventory_task_runtime):
+        monkeypatch.setattr(runtime, "_INSTALLED", runtime._INSTALLED)
+    for name in ("scan", "probe_roots", "remove_project"):
+        monkeypatch.setattr(DeviceMediaStore, name, getattr(DeviceMediaStore, name))
+    monkeypatch.setattr(tasks.TaskManager, "_run", tasks.TaskManager._run)
+    monkeypatch.setattr(tasks, "TASK_TYPES", set(tasks.TASK_TYPES))
+    review_read_model.install_review_read_model_runtime()
+    media_inventory_task_runtime.install_media_inventory_task_runtime()
+    handler_class = web_server.make_handler(service, tmp_path)
+    encode = Mock(wraps=web_server._json_bytes)
+    monkeypatch.setattr(web_server, "_json_bytes", encode)
+
+    def get(route):
+        handler = object.__new__(handler_class)
+        handler.client_address = ("127.0.0.1", 5000)
+        handler.rfile = BytesIO(f"GET /api/v1/projects/demo/{route} HTTP/1.0\r\n\r\n".encode())
+        handler.wfile = BytesIO()
+        handler.handle_one_request()
+        headers, _, body = handler.wfile.getvalue().partition(b"\r\n\r\n")
+        assert b"200 OK" in headers and b"Cache-Control: no-store" in headers, body
+        return json.loads(body)
+
+    review = get("review-model")
+    inventory = get("media-inventory")
+    assert review["take_groups"][0]["angles"][0]["playback"]["state"] == "verified"
+    assert inventory["items"][0]["state"] == "verified"
+    count = encode.call_count
+    assert get("review-model") == review
+    assert get("media-inventory") == inventory
+    assert encode.call_count == count
+
+    project.review.save({"groups": {"g1": {"state": "keep"}}, "revision": 1})
+    assert get("review-model")["review_state"]["legacy_review"]["groups"]["g1"]["state"] == "keep"
+    MediaRoleStore(output).apply_many({
+        "actor": "editor", "expected_revision": 0, "updates": [{"media_id": "M_take", "camera_override": "B"}],
+    })
+    assert get("media-inventory")["items"][0]["label"]["camera_override"] == "B"
+    clip["duration"] = 12
+    index_path.write_text(json.dumps(index))
+    assert get("media-inventory")["items"][0]["duration_seconds"] == 12
+
+    media.unlink()
+    assert get("review-model")["take_groups"][0]["angles"][0]["playback"]["state"] == "missing"
+    assert get("media-inventory")["items"][0]["state"] == "missing"
+    media.write_bytes(b"synthetic")
+    assert get("review-model")["take_groups"][0]["angles"][0]["playback"]["state"] == "verified"
+    assert get("media-inventory")["items"][0]["state"] == "verified"
+
+    # Keep a connection open so the committed identity change lives in the WAL.
+    database = web_server.WorkspaceDatabase(project.workspace_id)
+    database.sync_take_index("demo", name="demo", input_kind=config.input_kind, config_path="", index=index)
+    with database.connection() as connection:
+        connection.execute("SELECT COUNT(*) FROM identities").fetchone()
+        assert get("review-model")["take_groups"][0]["people"]["faces"] == []
+        database.upsert_identity("demo", identity_id="actor", kind="face", label="演员")
+        database.add_identity_observation("demo", "g1", identity_id="actor", kind="face")
+        assert get("review-model")["take_groups"][0]["people"]["faces"][0]["label"] == "演员"
+        count = encode.call_count
+        database.path.chmod(database.path.stat().st_mode)
+        get("review-model")
+        assert encode.call_count == count
+
+    del project._device_media_store
+    count = encode.call_count
+    get("review-model")
+    get("review-model")
+    assert encode.call_count == count + 2
 
 
 def test_scan_cancellation_reads_history_at_bounded_rate_and_stays_responsive(monkeypatch) -> None:

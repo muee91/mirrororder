@@ -14,6 +14,7 @@ import threading
 import time
 import unicodedata
 import urllib.parse
+from collections.abc import Callable, Hashable
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -86,6 +87,58 @@ def _read_json(path: Path, fallback: object) -> object:
 
 def _json_bytes(payload: object) -> bytes:
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+
+def _file_signature(path: Path) -> tuple[int, int, int, int] | None:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino
+
+
+def _json_directory_signature(output_dir: Path) -> tuple:
+    stamp = output_dir.stat().st_mtime_ns
+    files = []
+    with os.scandir(output_dir) as entries:
+        for entry in entries:
+            if entry.name.endswith(".json") and entry.is_file():
+                stat = entry.stat()
+                files.append((entry.name, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino))
+    return str(output_dir), stamp, tuple(sorted(files))
+
+
+class _JsonResponseCache:
+    """Share encoded responses across requests to one service and route."""
+
+    def __init__(self) -> None:
+        self._entries: dict[Hashable, bytes] = {}
+        self._lock = threading.Lock()
+
+    def render(self, key: Callable[[], Hashable | None], build: Callable[[], object]) -> bytes:
+        try:
+            before = key()
+        except OSError:
+            before = None
+        if before is None:
+            return _json_bytes(build())
+        with self._lock:
+            cached = self._entries.get(before)
+        if cached is not None:
+            return cached
+
+        body = _json_bytes(build())
+        # A writer may have published a different input while the projection was built.
+        try:
+            if before != key():
+                return body
+        except OSError:
+            return body
+        with self._lock:
+            if before not in self._entries and len(self._entries) >= 16:
+                del self._entries[next(iter(self._entries))]
+            self._entries[before] = body
+        return body
 
 
 def _fcpxml_locator_for_clip(project: Any, clip: dict[str, Any]) -> str:
@@ -193,58 +246,51 @@ class ProjectService:
         self.segments: dict[str, dict[str, Any]] = {}
         self.analysis_revision = ""
         self._data_signature: tuple[tuple[str, int, int], ...] = ()
+        self._data_file_identities: tuple[tuple[int, int, int], ...] = ()
+        self._reload_lock = threading.RLock()
         self.reload()
 
     def _signature(self) -> tuple[tuple[str, int, int], ...]:
-        snapshot = self.config.output_dir / "analysis_snapshot.json"
-        try:
-            stat = snapshot.stat()
-            snapshot_payload = _read_json(snapshot, {})
-            if (
-                isinstance(snapshot_payload, dict)
-                and isinstance(snapshot_payload.get("index"), dict)
-                and isinstance(snapshot_payload.get("script"), dict)
-                and isinstance(snapshot_payload.get("matches"), dict)
-            ):
-                return (("analysis_snapshot.json", stat.st_size, stat.st_mtime_ns),)
-        except OSError:
-            pass
-        result = []
-        for name in ("material_index.json", "script.json", "matches.json"):
-            path = self.config.output_dir / name
-            try:
-                stat = path.stat()
-                result.append((name, stat.st_size, stat.st_mtime_ns))
-            except OSError:
-                result.append((name, -1, -1))
-        return tuple(result)
+        return self._source_signatures()[0]
+
+    def _source_signatures(self) -> tuple[tuple[tuple[str, int, int], ...], tuple[tuple[int, int, int], ...]]:
+        from .audit_engine import _analysis_signatures
+
+        return _analysis_signatures(self.config.output_dir)
 
     def reload(self) -> None:
-        snapshot = _read_json(self.config.output_dir / "analysis_snapshot.json", {})
-        if (
-            isinstance(snapshot, dict)
-            and isinstance(snapshot.get("index"), dict)
-            and isinstance(snapshot.get("script"), dict)
-            and isinstance(snapshot.get("matches"), dict)
-        ):
-            self.index = snapshot["index"]
-            self.script = snapshot["script"]
-            self.matches = snapshot["matches"]
-        else:
-            self.index = _read_json(self.config.output_dir / "material_index.json", {})
-            self.script = _read_json(self.config.output_dir / "script.json", {})
-            self.matches = _read_json(self.config.output_dir / "matches.json", {})
-        self.clips = {item.get("clip_id"): item for item in self.index.get("clips", []) if isinstance(item, dict)}
-        self.groups = {item.get("group_id"): item for item in self.index.get("groups", []) if isinstance(item, dict)}
-        self.segments = {item.get("segment_id"): item for item in self.script.get("segments", []) if isinstance(item, dict)}
-        self._data_signature = self._signature()
-        self.analysis_revision = hashlib.sha1(repr(self._data_signature).encode("utf-8")).hexdigest()[:16]
+        with self._reload_lock:
+            # A concurrent publish must not label older in-memory data with the new revision.
+            signature, identities = self._source_signatures()
+            snapshot = {}
+            if signature[0][0] == "analysis_snapshot.json":
+                snapshot = _read_json(self.config.output_dir / "analysis_snapshot.json", {})
+            if (
+                isinstance(snapshot, dict)
+                and isinstance(snapshot.get("index"), dict)
+                and isinstance(snapshot.get("script"), dict)
+                and isinstance(snapshot.get("matches"), dict)
+            ):
+                self.index = snapshot["index"]
+                self.script = snapshot["script"]
+                self.matches = snapshot["matches"]
+            else:
+                self.index = _read_json(self.config.output_dir / "material_index.json", {})
+                self.script = _read_json(self.config.output_dir / "script.json", {})
+                self.matches = _read_json(self.config.output_dir / "matches.json", {})
+            self.clips = {item.get("clip_id"): item for item in self.index.get("clips", []) if isinstance(item, dict)}
+            self.groups = {item.get("group_id"): item for item in self.index.get("groups", []) if isinstance(item, dict)}
+            self.segments = {item.get("segment_id"): item for item in self.script.get("segments", []) if isinstance(item, dict)}
+            self._data_signature = signature
+            self._data_file_identities = identities
+            self.analysis_revision = hashlib.sha1(repr(signature).encode("utf-8")).hexdigest()[:16]
 
     def reload_if_changed(self) -> bool:
-        if self._signature() == self._data_signature:
-            return False
-        self.reload()
-        return True
+        with self._reload_lock:
+            if self._source_signatures() == (self._data_signature, self._data_file_identities):
+                return False
+            self.reload()
+            return True
 
     @staticmethod
     def _search_text(value: object) -> str:
@@ -817,7 +863,14 @@ def make_handler(service: WorkspaceService, web_root: Path):
             status: HTTPStatus = HTTPStatus.OK,
             headers: dict[str, str] | None = None,
         ) -> None:
-            body = _json_bytes(payload)
+            self._send_json_bytes(_json_bytes(payload), status, headers)
+
+        def _send_json_bytes(
+            self,
+            body: bytes,
+            status: HTTPStatus = HTTPStatus.OK,
+            headers: dict[str, str] | None = None,
+        ) -> None:
             try:
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json; charset=utf-8")

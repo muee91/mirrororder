@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter, OrderedDict
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from .audit_engine import _analysis_revision, _mapping_for_group
@@ -64,21 +66,36 @@ def _source_revision(
     ).hexdigest()[:20]
 
 
+@lru_cache(maxsize=128)
+def _cached_revision_fields(store_type: type, location: Path, file_version: tuple[int, ...]) -> dict[str, Any]:
+    payload = store_type(location).load()
+    return {"revision": payload.get("revision"), "updated_at": payload.get("updated_at")}
+
+
+def _store_revision_fields(store_type: type, location: Path) -> dict[str, Any]:
+    """Keep just the normalized revision fields, never the entire store."""
+    store = store_type(location)
+    try:
+        stat = store.path.stat()
+    except FileNotFoundError:
+        return {}
+    except OSError:
+        return store.load()
+    version = (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino)
+    return _cached_revision_fields(store_type, location, version)
+
+
 def coverage_revision(project: Any) -> str:
     """Cheap source fingerprint for polling without building the full graph."""
     project.reload_if_changed()
-    review = ReviewStore(project.config.output_dir / "review.json").load()
-    editorial = EditorialStore(project.config.output_dir).load()
-    audit = AuditStore(project.config.output_dir).load()
-    automation = AutomationStore(project.config.output_dir).load()
-    supervisor = ScriptSupervisorStore(project.config.output_dir).load()
+    output_dir = project.config.output_dir
     return _source_revision(
-        _analysis_revision(project.config.output_dir),
-        review,
-        editorial,
-        audit,
-        automation,
-        supervisor,
+        _analysis_revision(output_dir),
+        _store_revision_fields(ReviewStore, output_dir / "review.json"),
+        _store_revision_fields(EditorialStore, output_dir),
+        _store_revision_fields(AuditStore, output_dir),
+        _store_revision_fields(AutomationStore, output_dir),
+        _store_revision_fields(ScriptSupervisorStore, output_dir),
     )
 
 

@@ -97,7 +97,7 @@ def install_media_role_runtime() -> None:
 
     def state_with_media_roles(project: Any) -> dict[str, Any]:
         payload = original_state(project)
-        roles = MediaRoleStore(project.config.output_dir).load()
+        roles = coverage_graph._store_revision_fields(MediaRoleStore, project.config.output_dir)
         payload["media_role_revision"] = int(roles.get("revision", 0) or 0)
         payload["media_role_updated_at"] = str(roles.get("updated_at", "") or "")
         return payload
@@ -182,7 +182,8 @@ def install_media_role_runtime() -> None:
 
     def coverage_revision_with_media_roles(project: Any) -> str:
         base = original_coverage_revision(project)
-        role_revision = int(MediaRoleStore(project.config.output_dir).load().get("revision", 0) or 0)
+        fields = coverage_graph._store_revision_fields(MediaRoleStore, project.config.output_dir)
+        role_revision = int(fields.get("revision", 0) or 0)
         return revision_with_media_roles(base, role_revision)
 
     coverage_graph.build_coverage_graph = coverage_with_production_evidence

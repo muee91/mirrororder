@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -128,6 +129,106 @@ def test_completed_sync_projects_tracks_by_camera_and_concatenates_days(tmp_path
     assert tracks["A"]["clips"][0]["name"] == "A001.MP4"
     assert tracks["A"]["clips"][1]["timeline_start"] > tracks["A"]["clips"][0]["timeline_start"]
     assert payload["duration_seconds"] > 10
+
+
+def test_sync_timeline_uses_refreshed_project_index(tmp_path: Path, monkeypatch) -> None:
+    from script_organizer import sync_timeline_runtime
+
+    project = _project(tmp_path)
+    _write_sync_artifacts(project)
+    task = _task("completed", created_at="2026-01-01T00:00:00+00:00", task_id="done")
+    read_json = sync_timeline_runtime._read_json
+    reads = []
+
+    def record_read(path):
+        reads.append(path.name)
+        return read_json(path)
+
+    def refresh_index():
+        project.index = {"clips": [{
+            "source_asset_id": "day_day1_asset_0", "clip_id": "refreshed", "media_id": "M_1",
+        }]}
+
+    monkeypatch.setattr(sync_timeline_runtime, "_read_json", record_read)
+    project.reload_if_changed = refresh_index
+    result = build_sync_timeline(project, [task])
+    assert result["tracks"][0]["clips"][0]["media_clip_id"] == "refreshed"
+    assert "material_index.json" not in reads
+
+    project.reload_if_changed = lambda: None
+    project.index = {}
+    assert build_sync_timeline(project, [task])["ready"]
+    assert reads.count("material_index.json") == 1
+
+
+def test_sync_timeline_get_invalidates_encoded_response(tmp_path: Path, monkeypatch) -> None:
+    from script_organizer import assembly_runtime, sync_timeline_runtime, web_server
+
+    project = _project(tmp_path)
+    _write_sync_artifacts(project)
+    output = project.config.output_dir
+    task = _task("completed", created_at="2026-01-01T00:00:00+00:00", task_id="done")
+    task_history = [task]
+    service = SimpleNamespace(project=lambda _: project, tasks=SimpleNamespace(list=lambda _: task_history))
+    for owner, name in (
+        (assembly_runtime, "_INSTALLED"), (web_server, "make_handler"),
+        (web_server.ProjectService, "state"), (web_server.WorkspaceService, "capabilities"),
+    ):
+        monkeypatch.setattr(owner, name, getattr(owner, name))
+    assembly_runtime.install_assembly_runtime()
+    handler = web_server.make_handler(service, tmp_path)
+    reads = []
+    read_json = sync_timeline_runtime._read_json
+
+    def record_read(path):
+        reads.append(path.name)
+        return read_json(path)
+
+    monkeypatch.setattr(sync_timeline_runtime, "_read_json", record_read)
+
+    def get():
+        packets = []
+        request = b"GET /api/v1/projects/p1/sync-timeline HTTP/1.0\r\n\r\n"
+        connection = SimpleNamespace(makefile=lambda *_: BytesIO(request), sendall=packets.append)
+        handler(connection, ("127.0.0.1", 8123), None)
+        headers, body = b"".join(packets).split(b"\r\n\r\n", 1)
+        assert headers.startswith(b"HTTP/1.0 200 ")
+        assert f"Content-Length: {len(body)}".encode() in headers
+        return json.loads(body)
+
+    first = get()
+    assert first["ready"]
+    assert get() == first
+    assert reads.count("sync_report.json") == 1
+
+    (output / "sync" / "manual_offsets.json").write_text(json.dumps({
+        "contract": "sync_manual_offsets.v1", "revision": 1, "sync_task_id": "done",
+        "history": [{"clip_id": "d1a", "frames": 3}],
+    }))
+    assert get()["offset_revision"] == 1
+    positions = output / ".multicam-sync" / "work" / "positions_day1_compressed.tsv"
+    positions.write_text(positions.read_text().replace("A001.MP4", "A003.MP4"))
+    assert get()["tracks"][0]["clips"][0]["name"] == "A003.MP4"
+    (output / "sync" / "sync_report.json").write_text("{}")
+    assert get()["phase"] == "invalid"
+    task.update(status="running", progress={"done": 2, "total": 4})
+    assert get()["task"]["progress"] == {"done": 2, "total": 4}
+    task["progress"]["done"] = 3
+    assert get()["task"]["progress"]["done"] == 3
+
+    older = _task("completed", created_at="2025-12-31T00:00:00+00:00", task_id="older")
+    task_history.append(older)
+    master = output / "sync" / "masters" / "older.json"
+    master.parent.mkdir()
+    snapshot = {"timeline": {"ready": True, "project_id": "p1", "task": older}, "read_at_ms": 1}
+    master.write_text(json.dumps(snapshot))
+    assert get()["previous_master"]["read_at_ms"] == 1
+    snapshot["read_at_ms"] = 2
+    master.write_text(json.dumps(snapshot))
+    assert get()["previous_master"]["read_at_ms"] == 2
+
+    monkeypatch.setattr(assembly_runtime, "build_sync_timeline", lambda *_: {"patched": True})
+    assert get() == {"patched": True}
 
 
 def test_sync_preview_rejects_partial_multi_day_positions(tmp_path: Path) -> None:

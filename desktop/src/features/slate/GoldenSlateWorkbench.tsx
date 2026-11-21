@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefCallback } from "react";
 import { DesktopClient } from "../../api/desktop";
 import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModelPayload, type ReviewTakeGroup, errorMessage } from "../../api/host";
 import { ProductionClient, type AssistantSelection, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord } from "../../api/production";
@@ -339,6 +339,132 @@ function primaryAttachment(draft: Draft, camera: SlateCameraColumn, cameraColumn
   return rows[0] ? { item: rows[0], count: rows.length } : null;
 }
 
+type DraftRowProps = {
+  draft: Draft;
+  rowNumber: number;
+  selected: boolean;
+  selectedClip?: string;
+  cameraColumns: readonly SlateCameraColumn[];
+  revealRow?: RefCallback<HTMLTableRowElement>;
+  onEditStart: () => void;
+  onEditEnd: () => void;
+  onSelect: (recordId: string) => void;
+  onPatch: (recordId: string, patch: Partial<Draft>) => void;
+  mediaCell: (draft: Draft, camera: SlateCameraColumn, selectedClip?: string) => ReactNode;
+};
+
+const DraftSlateRow = memo(function DraftSlateRow({
+  draft, rowNumber, selected, selectedClip, cameraColumns, revealRow, onEditStart, onEditEnd, onSelect, onPatch, mediaCell,
+}: DraftRowProps) {
+  return (
+    <SlateRow
+      row={{
+        recordId: draft.record_id, rowNumber, selected, dirty: draft.dirty, derivedSource: draft.derivedSource,
+        episode: draft.episode, scene: draft.scene, shot: draft.shot, takeNumber: draft.take_number, status: draft.status,
+        mappedScenePlaceholder: !draft.scene && draft.script_scene_id ? prettySceneId(draft.script_scene_id) : "",
+      }}
+      rowRef={revealRow}
+      cameraColumns={cameraColumns}
+      onEditStart={onEditStart}
+      onEditEnd={onEditEnd}
+      onSelect={() => onSelect(draft.record_id)}
+      onPatch={(patch) => onPatch(draft.record_id, patch)}
+      renderMedia={(camera) => mediaCell(draft, camera, selectedClip)}
+    />
+  );
+});
+
+const ROW_HEIGHT = 105;
+const OVERSCAN = 6;
+const FALLBACK_VIEWPORT_HEIGHT = 720;
+
+function VirtualizedSlateTbody({ rows, columns, active, revealId, renderRow }: {
+  rows: Draft[];
+  columns: number;
+  active: boolean;
+  revealId?: string;
+  renderRow: (draft: Draft) => ReactNode;
+}) {
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const [viewport, setViewport] = useState({ first: 0, last: Math.ceil(FALLBACK_VIEWPORT_HEIGHT / ROW_HEIGHT), rowHeight: ROW_HEIGHT });
+  const rowHeightRef = useRef(ROW_HEIGHT);
+  const syncWindow = useCallback((scroller: HTMLElement) => {
+    const rowHeight = rowHeightRef.current;
+    const height = scroller.clientHeight || FALLBACK_VIEWPORT_HEIGHT;
+    const first = Math.max(0, Math.floor(scroller.scrollTop / rowHeight));
+    const last = Math.ceil((Math.max(0, scroller.scrollTop) + height) / rowHeight);
+    const body = bodyRef.current;
+    const editor = document.activeElement;
+    if (editor instanceof HTMLInputElement && body?.contains(editor)) {
+      // Removing a focused input need not dispatch blur. Finish its pinned edit
+      // before eviction, using the committed window and its leading spacer.
+      const row = editor.closest("tr")!;
+      const index = Number(body.dataset.startIndex) + row.sectionRowIndex - 1;
+      if (index < first - OVERSCAN || index >= last + OVERSCAN) editor.blur();
+    }
+    setViewport(current => current.first === first && current.last === last && current.rowHeight === rowHeight
+      ? current : { first, last, rowHeight });
+  }, []);
+
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const scroller = body?.closest<HTMLElement>(".golden-slate-section-scroll");
+    if (!active || !scroller || !body) return;
+    let frame: number | undefined;
+    let needsMeasurement = true;
+    const update = () => {
+      frame = undefined;
+      if (needsMeasurement) {
+        needsMeasurement = false;
+        const mounted = body.querySelectorAll("tr.slate-row");
+        if (mounted.length) {
+          const first = mounted[0].getBoundingClientRect();
+          const last = mounted[mounted.length - 1].getBoundingClientRect();
+          const average = (last.bottom - first.top) / mounted.length;
+          if (average > 0) rowHeightRef.current = average;
+        }
+      }
+      syncWindow(scroller);
+    };
+    const schedule = () => { if (frame === undefined) frame = requestAnimationFrame(update); };
+    const resized = () => { needsMeasurement = true; schedule(); };
+    update();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resized) : undefined;
+    observer?.observe(scroller);
+    observer?.observe(body);
+    scroller.addEventListener("scroll", schedule, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", schedule);
+      observer?.disconnect();
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
+  }, [active, syncWindow]);
+
+  // A source-sheet link can target an editor thousands of rows outside the DOM.
+  useLayoutEffect(() => {
+    if (!active || !revealId) return;
+    const scroller = bodyRef.current?.closest<HTMLElement>(".golden-slate-section-scroll");
+    const index = rows.findIndex(row => row.record_id === revealId);
+    if (!scroller || index < 0) return;
+    if (index < viewport.first - OVERSCAN || index >= viewport.last + OVERSCAN) {
+      scroller.scrollTop = index * rowHeightRef.current;
+      syncWindow(scroller);
+    }
+  }, [active, revealId, rows, syncWindow, viewport]);
+
+  const startIndex = Math.max(0, Math.min(rows.length - 1, viewport.first) - OVERSCAN);
+  const endIndex = Math.min(rows.length, viewport.last + OVERSCAN);
+  function spacer(count: number) {
+    return <tr className="slate-virtual-spacer" aria-hidden="true"><td colSpan={columns}><div style={{ height: count * viewport.rowHeight }} /></td></tr>;
+  }
+  return (
+    <tbody ref={bodyRef} data-start-index={startIndex}>
+      {spacer(startIndex)}
+      {rows.slice(startIndex, endIndex).map(renderRow)}
+      {spacer(rows.length - endIndex)}
+    </tbody>
+  );
+}
 
 
 export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSession, active = true, focus, onSelection, onOpenTake, onRepair, onInspectSelection, intervalLedger, enableNativeIntervalLedger=false }: Props) {
@@ -371,7 +497,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     renderDraftView(next);
   }, [canUseSlate, draftSession]);
 
-  function setDrafts(update: (current: Draft[]) => Draft[]): void {
+  const setDrafts = useCallback((update: (current: Draft[]) => Draft[]): void => {
     if (!canUseSlate()) return;
     const current = draftViewRef.current;
     const rows = update(current.rows);
@@ -388,7 +514,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       });
     }
     publishDraftView({ ...current, rows, pending: nextPending });
-  }
+  }, [canUseSlate, publishDraftView]);
   // Keep the actual unsaved values live for Save, but do not move an editor
   // between table parents until focus leaves the row (or Enter completes it).
   const [editLayout, setEditLayout] = useState<Map<string, { index: number; placed: boolean }> | null>(null);
@@ -415,7 +541,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const appliedFocus = useRef<ProductionSelectionContext | null>(null);
   const [locatedRange, setLocatedRange] = useState<{ recordId: string; clipId: string; start: number } | null>(null);
   const playerRef = useRef<HTMLVideoElement | null>(null);
-  const [sourceEditorFocus, setSourceEditorFocus] = useState<{recordId:string;field:"scene"|"shot"|"take"} | null>(null);
+  const [sourceEditorFocus, setSourceEditorFocus] = useState<{ recordId: string; field?: "scene" | "shot" | "take" } | null>(null);
   const productionRows = useMemo(() => {
     const groups = new Map<string, Draft>();
     const ambiguous = new Set<string>();
@@ -445,17 +571,18 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     setPlaybackRetry(0);
     setInspectorOpen(true);
     setSlateSurface("takes");
-    setSourceEditorFocus(target.field ? {recordId:row.record_id,field:target.field} : null);
+    setSourceEditorFocus({ recordId: row.record_id, field: target.field });
   }, [productionRows, review]);
 
-  useLayoutEffect(() => {
-    if (!sourceEditorFocus || intervalSurface) return;
-    const row = slateRef.current?.querySelector<HTMLElement>(`[data-record-id="${CSS.escape(sourceEditorFocus.recordId)}"]`);
-    const index = { scene: 1, shot: 2, take: 3 }[sourceEditorFocus.field];
-    row?.querySelectorAll<HTMLInputElement>("input")[index]?.focus({ preventScroll: true });
-    row?.scrollIntoView({ block: "nearest" });
+  const revealRow = useCallback((row: HTMLTableRowElement | null) => {
+    if (!row || !sourceEditorFocus) return;
+    if (sourceEditorFocus.field) {
+      const index = { scene: 1, shot: 2, take: 3 }[sourceEditorFocus.field];
+      row.querySelectorAll<HTMLInputElement>("input")[index]?.focus({ preventScroll: true });
+    }
+    row.scrollIntoView?.({ block: "nearest" });
     setSourceEditorFocus(null);
-  }, [sourceEditorFocus, intervalSurface]);
+  }, [sourceEditorFocus]);
 
   useEffect(() => {
     const syncOperator = (event: Event) => {
@@ -475,7 +602,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     const beforeRead = draftViewRef.current.board;
     setMessage("正在读取多机位电子场记…");
     try {
-      const [nextReview, nextBoard] = await Promise.all([host.reviewModel(projectId), production.scriptSupervisor(projectId)]);
+      const [nextReview, nextBoard] = await Promise.all([host.refreshReviewModel(projectId), production.scriptSupervisor(projectId)]);
       if (!canUseSlate() || draftViewRef.current.board !== beforeRead) return;
       const fresh = restoreDrafts(nextBoard, nextReview, draftViewRef.current.pending);
       const nextDrafts = fresh.rows;
@@ -534,9 +661,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     setSelectedClipId(clip);
     setLocatedRange(focus.sourceRange?.basis === "source" && attachment
       ? { recordId: row.record_id, clipId: clip, start: focus.sourceRange.start } : null);
-    requestAnimationFrame(() => {
-      slateRef.current?.querySelector(`[data-record-id="${CSS.escape(row.record_id)}"]`)?.scrollIntoView({ block: "nearest" });
-    });
+    setSourceEditorFocus({ recordId: row.record_id });
   }, [focus, board, drafts, projectId, active]);
 
   const cameraColumns = useMemo(() => {
@@ -708,9 +833,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     setSelectedClipId(selected.preferred_clip_id || (selected.attachments[0] ? attachmentKey(selected.attachments[0]) : ""));
   }, [selected, selectedClipId]);
 
-  function patchRecord(recordId: string, patch: Partial<Draft>): void {
+  const patchRecord = useCallback((recordId: string, patch: Partial<Draft>): void => {
     setDrafts((current) => current.map((row) => row.record_id === recordId ? { ...row, ...patch, dirty: true, derived: false, derivedSource: "" } : row));
-  }
+  }, [setDrafts]);
 
   function patchAttachment(recordId: string, key: string, patch: Partial<SlateAttachment>): void {
     setDrafts((current) => current.map((row) => row.record_id === recordId ? {
@@ -734,19 +859,19 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     if (selectedClipId === key) setSelectedClipId("");
   }
 
-  function selectRecord(recordId: string): void {
-    const row = drafts.find((item) => item.record_id === recordId) ?? null;
+  const selectRecord = useCallback((recordId: string): void => {
+    const row = draftViewRef.current.rows.find((item) => item.record_id === recordId);
     setSelectedRecordId(recordId);
     setSelectedClipId(row?.preferred_clip_id || (row?.attachments[0] ? attachmentKey(row.attachments[0]) : ""));
     setPlaybackFailedClipId("");
     setPlaybackRetry(0);
-  }
+  }, []);
 
-  function selectClip(clipId: string): void {
+  const selectClip = useCallback(function selectClip(clipId: string): void {
     setSelectedClipId(clipId);
     setPlaybackFailedClipId("");
     setPlaybackRetry(0);
-  }
+  }, []);
 
   function addBlank(seed?: Partial<Draft>): Draft {
     const row = blankDraft(seed);
@@ -1157,7 +1282,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     return () => globalThis.removeEventListener("keydown", keydown);
   }, [takePickerOpen, intervalSurface, active]);
 
-  function mediaCell(draft: Draft, camera: SlateCameraColumn) {
+  const previewsActive = active && !intervalSurface;
+  const mediaCell = useCallback((draft: Draft, camera: SlateCameraColumn, selectedClip?: string) => {
+    if (!previewsActive) return null;
     const row = primaryAttachment(draft, camera, cameraColumns);
     if (!row) {
       if (camera === "AUX") return <span className="golden-slate-empty-media">—</span>;
@@ -1167,39 +1294,20 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     const model = angle ? mediaCardFromAngle(angle, row.item) : mediaCardFromAttachment(row.item);
     model.duplicateCount = row.count;
     const key = attachmentKey(row.item);
-    return <MirrorOrderMediaCard model={model} compact selected={draft.record_id === selectedRecordId && key === selectedClipId} preferred={draft.preferred_clip_id === key} onSelect={() => { selectRecord(draft.record_id); selectClip(key); }} />;
-  }
+    return <MirrorOrderMediaCard model={model} compact selected={key === selectedClip} preferred={draft.preferred_clip_id === key} onSelect={() => { selectRecord(draft.record_id); selectClip(key); }} />;
+  }, [previewsActive, cameraColumns, angleIndex, selectRecord, selectClip]);
 
-  function renderRows(rows: Draft[]) {
-    return rows.map((draft) => {
-      const displayIndex = displayIndexByRecord.get(draft.record_id) ?? -1;
-      const rowNumber = displayIndex >= 0 ? displayIndex + 1 : 0;
-      const mappedScenePlaceholder = !draft.scene && draft.script_scene_id ? prettySceneId(draft.script_scene_id) : "";
-      return (
-        <SlateRow
-          key={draft.record_id}
-          row={{
-            recordId: draft.record_id,
-            rowNumber,
-            selected: draft.record_id === selectedRecordId,
-            dirty: draft.dirty,
-            derivedSource: draft.derivedSource,
-            episode: draft.episode,
-            scene: draft.scene,
-            mappedScenePlaceholder,
-            shot: draft.shot,
-            takeNumber: draft.take_number,
-            status: draft.status,
-          }}
-          onEditStart={() => setEditLayout((current) => current ?? new Map(displayedDrafts.map((row, index) => [row.record_id, { index, placed: isPlacedDraft(row) }])))}
-          onEditEnd={() => setEditLayout(null)}
-          onSelect={() => selectRecord(draft.record_id)}
-          onPatch={(patch) => patchRecord(draft.record_id, patch)}
-          cameraColumns={cameraColumns}
-          renderMedia={(camera) => mediaCell(draft, camera)}
-        />
-      );
-    });
+  const startEdit = useCallback(() => {
+    setEditLayout(current => current ?? new Map(orderRows(draftViewRef.current.rows, orderMode)
+      .map((row, index) => [row.record_id, { index, placed: isPlacedDraft(row) }])));
+  }, [orderMode]);
+  const endEdit = useCallback(() => setEditLayout(null), []);
+  function renderRow(draft: Draft) {
+    const selected = draft.record_id === selectedRecordId;
+    return <DraftSlateRow key={draft.record_id} draft={draft} rowNumber={(displayIndexByRecord.get(draft.record_id) ?? -1) + 1}
+      selected={selected} selectedClip={selected ? selectedClipId : undefined} cameraColumns={cameraColumns} mediaCell={mediaCell}
+      revealRow={previewsActive && sourceEditorFocus?.recordId === draft.record_id ? revealRow : undefined}
+      onSelect={selectRecord} onPatch={patchRecord} onEditStart={startEdit} onEditEnd={endEdit} />;
   }
 
   function section(title: string, rows: Draft[], tone: "placed" | "unplaced") {
@@ -1210,7 +1318,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         <div className="golden-slate-section-scroll">
           <table className="golden-slate-table">
             <thead><SlateTableHead cameraColumns={cameraColumns} /></thead>
-            <tbody>{renderRows(rows)}</tbody>
+            {rows.length <= 60 ? <tbody>{rows.map(renderRow)}</tbody> : (
+              <VirtualizedSlateTbody rows={rows} columns={6 + cameraColumns.length} active={previewsActive}
+                revealId={sourceEditorFocus?.recordId} renderRow={renderRow} />
+            )}
           </table>
         </div>
       </section>
@@ -1331,7 +1442,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                   </header>}
                   {playbackUrl && !selectedPlaybackFailed ? (
                     <video ref={playerRef} key={`${selectedPlaybackKey}-${playbackRetry}-${playbackStart}`}
-                      src={playbackUrl} controls preload="auto" playsInline
+                      src={playbackUrl} controls preload={previewsActive ? "auto" : "none"} playsInline
                       onSeeked={publishPlaybackLocation} onPause={publishPlaybackLocation}
                       onError={() => { setPlaybackFailedClipId(selectedPlaybackKey); void classifyPlaybackFailure(playbackUrl).then(setPlaybackFailureDetail); }}
                       onLoadedMetadata={(event) => {
@@ -1382,7 +1493,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                     const model = angle ? mediaCardFromAngle(angle, attachment) : mediaCardFromAttachment(attachment);
                     return (
                       <div className="golden-angle-editor" key={`${attachment.clip_id}-${attachment.media_id}`}>
-                        <MirrorOrderMediaCard model={model} selected={key === selectedClipId} preferred={selected.preferred_clip_id === key} showPreview onSelect={() => selectClip(key)} onPrefer={() => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === key ? "" : key })} />
+                        <MirrorOrderMediaCard model={model} selected={key === selectedClipId} preferred={selected.preferred_clip_id === key} showPreview={previewsActive && inspectorOpen} onSelect={() => selectClip(key)} onPrefer={() => patchRecord(selected.record_id, { preferred_clip_id: selected.preferred_clip_id === key ? "" : key })} />
                         <div className="golden-angle-fields">
                           <label><span>机位</span><input value={attachment.camera} onChange={(event) => patchAttachment(selected.record_id, key, { camera: event.target.value })} /></label>
                           <label><span>景别</span><select value={attachment.shot_type || "unknown"} onChange={(event) => patchAttachment(selected.record_id, key, { shot_type: event.target.value })}>{SHOT_OPTIONS.map((shot) => <option value={shot} key={shot}>{SHOT_LABELS[shot] ?? shot}</option>)}</select></label>

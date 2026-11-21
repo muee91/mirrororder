@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -525,6 +526,59 @@ def _snapshot_path(config: Any, task_id: str) -> Path | None:
     return config.output_dir / "sync" / "masters" / f"{task_id}.json"
 
 
+_BOUND_READ_TRACKS = _read_tracks
+
+
+def sync_timeline_cache_key(project_id: str, project: Any, tasks: list[object]) -> tuple[Any, ...] | None:
+    from .web_server import _file_signature
+
+    output = getattr(project.config, "output_dir", None)
+    if _read_tracks is not _BOUND_READ_TRACKS or not isinstance(output, Path) or not output.is_dir():
+        return None
+    # An in-memory index without a reload contract can change without a filesystem revision.
+    if getattr(project, "index", None) and not (
+        callable(getattr(project, "reload_if_changed", None)) and getattr(project, "analysis_revision", "")
+    ):
+        return None
+    latest = _latest_sync_task(tasks)
+    completed = _latest_sync_task(row for row in tasks if isinstance(row, dict) and row.get("status") == "completed")
+    selected_tasks = [latest] if latest is completed else [latest, completed]
+    task_signature = json.dumps(
+        [(_safe_task(task), task.get("result")) for task in selected_tasks if task],
+        sort_keys=True, separators=(",", ":"),
+    )
+
+    sync = output / "sync"
+    work = output / ".multicam-sync" / "work"
+    paths = [
+        output / "analysis_snapshot.json", output / "material_index.json", output / "matches.json",
+        output / "script.json", output / "sync_manual_offsets.json", sync, sync / "masters", work,
+        sync / "sync_report.json", sync / "synchronized.fcpxml", _offsets_path(project.config),
+    ]
+    if completed:
+        previous = _snapshot_path(project.config, _text(completed.get("task_id")))
+        if previous:
+            paths.append(previous)
+    try:
+        entries = os.scandir(work)
+    except FileNotFoundError:
+        pass
+    else:
+        with entries:
+            for entry in entries:
+                if entry.name.startswith("positions_"):
+                    # A nonstandard day containing separators can refer to a nested table.
+                    if entry.is_dir():
+                        return None
+                    if entry.name.endswith("_compressed.tsv"):
+                        paths.append(Path(entry.path))
+    return (
+        project_id, str(output), bool(getattr(project.config, "is_media_directory", False)),
+        getattr(project, "analysis_revision", ""), task_signature,
+        tuple((path, _file_signature(path)) for path in sorted(paths)),
+    )
+
+
 def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]:
     config = project.config
     project_id = _text(getattr(project, "project_id", ""))
@@ -547,7 +601,12 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
     report_path = config.output_dir / "sync" / "sync_report.json"
     sync_file = config.output_dir / "sync" / "synchronized.fcpxml"
     report = _read_json(report_path)
-    media_index = _read_json(Path(config.output_dir) / "material_index.json")
+    reload_if_changed = getattr(project, "reload_if_changed", None)
+    if callable(reload_if_changed):
+        reload_if_changed()
+    media_index = getattr(project, "index", None)
+    if not isinstance(media_index, dict) or not media_index:
+        media_index = _read_json(Path(config.output_dir) / "material_index.json")
     phase, ready, message = _status_for(latest_task, report, sync_file, bool(media_index.get("clips") or media_index.get("groups")))
     tracks: list[dict[str, Any]] = []
     duration_seconds = 0.0

@@ -1,8 +1,8 @@
 import interact from "interactjs";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { MulticamSyncTimeline, MulticamSyncTrack } from "../../api/syncTimeline";
+import type { MulticamSyncClip, MulticamSyncTimeline, MulticamSyncTrack, SyncRecordingPlacement } from "../../api/syncTimeline";
 import type { FrameRate } from "../../api/timeline";
-import { activeClip, boundedWindow, cameraColor, clamp, firstClipFrame, indexClips, parseTimecode, pointerFrame, timecode, toFrame, toSeconds, visibleClips, zoomWindow, type FrameWindow } from "./syncTimelineNavigation";
+import { activeClip, boundedWindow, cameraColor, clamp, firstClipFrame, indexClips, parseTimecode, pointerFrame, timecode, toFrame, toSeconds, visibleClips, zoomWindow, type ClipIndex, type FrameWindow } from "./syncTimelineNavigation";
 import { framePosition, navigationKey, revealFrame, rulerTicks } from "./timelineViewport";
 import { bindTimelineViewportInput } from "./timelineViewportInput";
 
@@ -21,29 +21,94 @@ interface Props {
 const LEVELS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536];
 const label = (frame: number, rate: FrameRate, precise: boolean) => precise ? timecode(frame, rate) : `${toSeconds(frame, rate).toFixed(3)}s`;
 
+interface PositionedClip {
+  clip: MulticamSyncClip;
+  key: string;
+  left: number;
+  right: number;
+  coalesced?: boolean;
+}
+
+const CLIP_BUCKET_WIDTH = 0.35;
+
+function coalesceClips(clips: PositionedClip[], activeKey: string, focusedKey: string) {
+  if (clips.length <= 260) return clips;
+  function groupByBucket(keepWideClips: boolean) {
+    const buttons: PositionedClip[] = [];
+    let group: PositionedClip | undefined;
+    let groupBucket = -1;
+    let longestWidth = 0;
+    for (const item of clips) {
+      const width = item.right - item.left;
+      if (item.key === activeKey || item.key === focusedKey || (keepWideClips && width >= CLIP_BUCKET_WIDTH)) {
+        buttons.push(item);
+        if (keepWideClips) group = undefined;
+        continue;
+      }
+      const bucket = Math.floor(item.left / CLIP_BUCKET_WIDTH);
+      if (!group || bucket !== groupBucket) {
+        group = { ...item };
+        groupBucket = bucket;
+        longestWidth = width;
+        buttons.push(group);
+      } else {
+        group.right = Math.max(group.right, item.right);
+        group.coalesced = true;
+        if (!keepWideClips && width > longestWidth) {
+          group.clip = item.clip;
+          group.key = item.key;
+          longestWidth = width;
+        }
+      }
+    }
+    return buttons;
+  }
+  const buttons = groupByBucket(true);
+  // A very dense mix of long and short clips can still overflow one button per visual bucket.
+  return buttons.length > 300 ? groupByBucket(false) : buttons;
+}
+
+const TrackTickMarks = memo(function TrackTickMarks({ ticks, view }: { ticks: number[]; view: FrameWindow }) {
+  return <div className="sync-lane-ticks" aria-hidden="true">{ticks.map(frame => <i key={frame} style={{ left: `${(frame - view.start) / view.span * 100}%` }} />)}</div>;
+});
+
+const TrackClipLayer = memo(function TrackClipLayer({ track, index, view, rate, activeClipKey, onSeek }: {
+  track: MulticamSyncTrack; index: ClipIndex; view: FrameWindow; rate: FrameRate; activeClipKey: string; onSeek: Props["onSeek"];
+}) {
+  const positions = useMemo(() => {
+    const start = toSeconds(view.start, rate), end = toSeconds(view.start + view.span, rate);
+    const percent = (seconds: number) => clamp((seconds * rate.numerator / rate.denominator - view.start) / view.span * 100, 0, 100);
+    return visibleClips(index, start, end).map(clip => ({
+      clip, key: `${clip.clip_id}:${clip.timeline_start}`, left: percent(clip.timeline_start), right: percent(clip.timeline_start + clip.duration),
+    }));
+  }, [index, view, rate]);
+  // A keyboard-focused button stays mounted even when playback moves into a different bucket.
+  const [focusedKey, setFocusedKey] = useState("");
+  return coalesceClips(positions, activeClipKey, focusedKey).map(({ clip, key, left, right, coalesced }) => {
+    const selected = activeClipKey === key;
+    return <button type="button" key={key} draggable={false}
+      className={`multicam-sync-clip${coalesced ? " is-coalesced" : ""}${selected ? " is-selected" : ""}`} aria-pressed={selected}
+      style={{ left: `${left}%`, width: `${right - left}%` }}
+      title={`${clip.name}\n${clip.day} · ${timecode(toFrame(clip.timeline_start, rate), rate)} · ${clip.timecode || "无原始时码"}`}
+      onFocus={() => setFocusedKey(key)} onBlur={() => setFocusedKey("")}
+      onClick={event => { if (event.detail === 0) onSeek(firstClipFrame(clip.timeline_start, rate), track.track_id); }}>
+      <span>{clip.name}</span></button>;
+  });
+});
+
 const Track = memo(function Track({ track, view, rate, cursor, selected, onSeek, ticks }: {
   track: MulticamSyncTrack; view: FrameWindow; rate: FrameRate; cursor: number; selected: boolean; onSeek: Props["onSeek"]; ticks: number[];
 }) {
   const index = useMemo(() => indexClips(track.clips), [track.clips]);
-  const start = toSeconds(view.start, rate), end = toSeconds(view.start + view.span, rate);
-  const visible = useMemo(() => visibleClips(index, start, end), [index, start, end]);
   const active = selected ? activeClip(index, toSeconds(cursor, rate)) : undefined;
-  const buttons = useMemo(() => visible.map(clip => {
-    const left = clamp((clip.timeline_start * rate.numerator / rate.denominator - view.start) / view.span * 100, 0, 100);
-    const right = clamp(((clip.timeline_start + clip.duration) * rate.numerator / rate.denominator - view.start) / view.span * 100, 0, 100);
-    return <button type="button" key={`${clip.clip_id}:${clip.timeline_start}`} draggable={false}
-      className={`multicam-sync-clip${active === clip ? " is-selected" : ""}`} aria-pressed={active === clip}
-      style={{ left: `${left}%`, width: `${right - left}%` }}
-      title={`${clip.name}\n${clip.day} · ${timecode(toFrame(clip.timeline_start, rate), rate)} · ${clip.timecode || "无原始时码"}`}
-      onClick={event => { if (event.detail === 0) onSeek(firstClipFrame(clip.timeline_start, rate), track.track_id); }}>
-      <span>{clip.name}</span></button>;
-  }), [visible, view, rate, active, onSeek, track.track_id]);
+  const activeClipKey = active ? `${active.clip_id}:${active.timeline_start}` : "";
   const x = framePosition(cursor, view) * 100;
   return <div className="multicam-sync-track" data-track-id={track.track_id} style={{ "--camera-color": cameraColor(track.camera) } as CSSProperties}>
     <div className="multicam-sync-track-label"><strong>{track.camera}</strong><span title={`${track.clip_count} 个片段`}>{track.clip_count} 段</span></div>
     <div className="multicam-sync-track-lane" aria-label={`${track.label} 同步轨道`}>
-      <div className="sync-lane-ticks" aria-hidden="true">{ticks.map(frame => <i key={frame} style={{ left: `${(frame - view.start) / view.span * 100}%` }} />)}</div>
-      {buttons}{x >= 0 && x <= 100 ? <span className="multicam-sync-playhead-line" style={{ left: `${x}%` }} aria-hidden="true" /> : null}
+      <TrackTickMarks ticks={ticks} view={view} />
+      <TrackClipLayer track={track} index={index} view={view} rate={rate} activeClipKey={activeClipKey} onSeek={onSeek} />
+      {x >= 0 && x <= 100 ? <span className="multicam-sync-playhead-line" style={{ left: `${x}%` }} aria-hidden="true" /> : null}
     </div>
   </div>;
 });
@@ -60,11 +125,11 @@ const Overview = memo(function Overview({ timeline }: { timeline: MulticamSyncTi
       if (!context) return;
       context.scale(ratio, ratio);
       const row = height / Math.max(1, timeline.tracks.length);
-      for (const track of timeline.tracks) {
+      timeline.tracks.forEach((track, trackIndex) => {
         context.fillStyle = cameraColor(track.camera);
         for (const clip of track.clips) context.fillRect(clip.timeline_start / timeline.duration_seconds * width,
-          timeline.tracks.indexOf(track) * row, Math.max(0.5, clip.duration / timeline.duration_seconds * width), Math.max(1, row - 1));
-      }
+          trackIndex * row, Math.max(0.5, clip.duration / timeline.duration_seconds * width), Math.max(1, row - 1));
+      });
     };
     draw();
     const observer = new ResizeObserver(draw); observer.observe(canvas);
@@ -73,16 +138,40 @@ const Overview = memo(function Overview({ timeline }: { timeline: MulticamSyncTi
   return <canvas ref={ref} className="multicam-sync-overview-map" aria-hidden="true" />;
 });
 
-const WavTrack = memo(function WavTrack({ timeline, view, cursor, ticks, onSeek, onOpenRecordings }: {
-  timeline: MulticamSyncTimeline; view: FrameWindow; cursor: number; ticks: number[];
-  onSeek: Props["onSeek"]; onOpenRecordings?: () => void;
+const WavClipLayer = memo(function WavClipLayer({ visible, view, activePlacementKey, onPick }: {
+  visible: SyncRecordingPlacement[]; view: FrameWindow; activePlacementKey: number; onPick: (frame: number) => void;
 }) {
-  const placements = timeline.recordings?.placements ?? [];
-  const visible = useMemo(() => placements.filter((item) => {
-    const end = item.at + Math.max(1, item.frames);
-    return end > view.start && item.at < view.start + view.span;
-  }), [placements, view]);
-  if (!placements.length) return null;
+  return visible.map((item) => {
+    const spanFrames = Math.max(1, item.frames);
+    const left = clamp((item.at - view.start) / view.span * 100, 0, 100);
+    const right = clamp((item.at + spanFrames - view.start) / view.span * 100, 0, 100);
+    const active = activePlacementKey >= item.at && activePlacementKey < item.at + spanFrames;
+    return <button type="button" key={`${item.media_id}:${item.at}`} draggable={false}
+      className={`multicam-sync-clip is-wav-clip${active ? " is-selected" : ""}`}
+      style={{ left: `${left}%`, width: `${Math.max(0.4, right - left)}%` }}
+      title={`同期 WAV · ${item.name} · 母版第 ${item.at} 帧`}
+      onClick={() => onPick(item.at)}><span>{item.name}</span></button>;
+  });
+});
+
+// All overlapping WAV highlights stay the same until a placement starts or ends.
+function lastPlacementBoundary(boundaries: number[], cursor: number) {
+  let low = 0, high = boundaries.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (boundaries[middle] <= cursor) low = middle + 1;
+    else high = middle;
+  }
+  return boundaries[low - 1] ?? -Infinity;
+}
+
+const WavTrack = memo(function WavTrack({ placements, view, cursor, ticks, onPick }: {
+  placements: SyncRecordingPlacement[]; view: FrameWindow; cursor: number; ticks: number[]; onPick: (frame: number) => void;
+}) {
+  const visible = useMemo(() => placements.filter(item => item.at + Math.max(1, item.frames) > view.start && item.at < view.start + view.span),
+    [placements, view]);
+  const boundaries = useMemo(() => visible.flatMap(item => [item.at, item.at + Math.max(1, item.frames)]).sort((a, b) => a - b), [visible]);
+  const activePlacementKey = lastPlacementBoundary(boundaries, cursor);
   const x = framePosition(cursor, view) * 100;
   return (
     <div className="multicam-sync-track is-wav-track" data-track-role="sync-wav">
@@ -91,29 +180,8 @@ const WavTrack = memo(function WavTrack({ timeline, view, cursor, ticks, onSeek,
         <span title={`${placements.length} 段同期声已上轨`}>{placements.length} 段</span>
       </div>
       <div className="multicam-sync-track-lane is-wav-lane" aria-label="同期录音波形轨">
-        <div className="sync-lane-ticks" aria-hidden="true">{ticks.map(frame => <i key={frame} style={{ left: `${(frame - view.start) / view.span * 100}%` }} />)}</div>
-        {visible.map((item) => {
-          const spanFrames = Math.max(1, item.frames);
-          const left = clamp((item.at - view.start) / view.span * 100, 0, 100);
-          const right = clamp((item.at + spanFrames - view.start) / view.span * 100, 0, 100);
-          const active = cursor >= item.at && cursor < item.at + spanFrames;
-          return (
-            <button
-              type="button"
-              key={`${item.media_id}:${item.at}`}
-              draggable={false}
-              className={`multicam-sync-clip is-wav-clip${active ? " is-selected" : ""}`}
-              style={{ left: `${left}%`, width: `${Math.max(0.4, right - left)}%` }}
-              title={`同期 WAV · ${item.name} · 母版第 ${item.at} 帧`}
-              onClick={() => {
-                onSeek(item.at);
-                onOpenRecordings?.();
-              }}
-            >
-              <span>{item.name}</span>
-            </button>
-          );
-        })}
+        <TrackTickMarks ticks={ticks} view={view} />
+        <WavClipLayer visible={visible} view={view} activePlacementKey={activePlacementKey} onPick={onPick} />
         {x >= 0 && x <= 100 ? <span className="multicam-sync-playhead-line" style={{ left: `${x}%` }} aria-hidden="true" /> : null}
       </div>
     </div>
@@ -132,13 +200,17 @@ export function SyncTimelineViewport({ timeline, rate, frameAccurate, cursor, tr
   const surfaceRef = useRef<HTMLDivElement>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ mode: "seek" | "pan"; x: number; view: FrameWindow; left: number; width: number; track?: string } | null>(null);
-  const latest = useRef({ view, cursor, onSeek, total }); latest.current = { view, cursor, onSeek, total };
+  const latest = useRef({ view, cursor, onSeek, total, onOpenRecordings }); latest.current = { view, cursor, onSeek, total, onOpenRecordings };
   const minSpan = Math.max(2, Math.floor(width / 12));
   const zoom = total / view.span;
   const zoomValue = LEVELS.find(level => Math.abs(level - zoom) <= level * 0.00001) ?? zoom;
   const seek = useCallback((frame: number, camera?: string) => {
     latest.current.onSeek(clamp(Math.round(frame), 0, latest.current.total - 1), camera);
   }, []);
+  const pickRecording = useCallback((frame: number) => {
+    seek(frame);
+    latest.current.onOpenRecordings?.();
+  }, [seek]);
   useEffect(() => { if (!editing.current) setDraft(timecode(cursor, rate)); }, [cursor, rate]);
   useEffect(() => {
     const current = latest.current.view;
@@ -273,7 +345,8 @@ export function SyncTimelineViewport({ timeline, rate, frameAccurate, cursor, tr
         </div>
       </div>
       {timeline.tracks.map(track => <Track key={track.track_id} track={track} view={view} rate={rate} cursor={cursor} selected={track.track_id === trackId} onSeek={seek} ticks={tickFrames} />)}
-      <WavTrack timeline={timeline} view={view} cursor={cursor} ticks={tickFrames} onSeek={seek} onOpenRecordings={onOpenRecordings} />
+      {timeline.recordings?.placements?.length ? <WavTrack placements={timeline.recordings.placements} view={view}
+        cursor={cursor} ticks={tickFrames} onPick={pickRecording} /> : null}
     </div>
   </div>;
 }

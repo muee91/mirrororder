@@ -74,9 +74,93 @@ async function mixedOrder() {
 }
 const visibleIds = () => [...host.querySelectorAll<HTMLTableRowElement>('.slate-row')].map(r => r.dataset.recordId);
 const numbers = () => [...host.querySelectorAll('.slate-row .col-index strong')].map(n => n.textContent);
+it('bypasses the shared review cache when the editor explicitly refreshes the slate', async () => {
+  await clickButton('刷新场记');
+  expect(HostConnection.prototype.reviewModel).toHaveBeenLastCalledWith('synthetic', { force: true });
+});
+
 async function clickButton(label: string) {
   await act(async () => [...host.querySelectorAll('button')].find(b => b.textContent === label)!.click());
 }
+
+async function largeBoard(count: number, active = true, revealId?: string) {
+  board.records = Object.fromEntries(Array.from({ length: count }, (_, index) => {
+    const id = `record-${index}`;
+    return [id, record(id, '')];
+  }));
+  await act(async () => root.render(<GoldenSlateWorkbench key={count} baseUrl="http://synthetic.test" projectId="synthetic"
+    active={active} focus={revealId ? { projectId: 'synthetic', recordId: revealId } : undefined} />));
+}
+it('mounts 60 rows normally and windows larger sections, preserving numbering and draft edits across scrolls', async () => {
+  await largeBoard(60);
+  expect(visibleIds()).toHaveLength(60);
+  expect(host.querySelector('.slate-virtual-spacer')).toBeNull();
+
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => frames.push(callback));
+  await largeBoard(200);
+  expect(visibleIds()).toHaveLength(13);
+  const scroller = host.querySelector<HTMLElement>('.golden-slate-section-scroll')!;
+  const spacers = () => [...scroller.querySelectorAll<HTMLTableCellElement>('.slate-virtual-spacer td')];
+  expect(spacers().map(cell => cell.colSpan)).toEqual([10, 10]);
+  expect((spacers()[1].firstElementChild as HTMLElement).style.height).toBe(`${187 * 105}px`);
+
+  async function scroll(index: number) {
+    scroller.scrollTop = index * 105;
+    scroller.dispatchEvent(new Event('scroll'));
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(frames).toHaveLength(1);
+    await act(async () => frames.shift()!(0));
+  }
+  await scroll(100);
+  expect(visibleIds()[0]).toBe('record-94');
+  expect(numbers()[0]).toBe('095');
+  expect(row('record-0')).toBeNull();
+  await focus(scene('record-100'));
+  await type(scene('record-100'), '42');
+  await scroll(0);
+  expect(row('record-100')).toBeNull();
+  await scroll(100);
+  expect(scene('record-100').value).toBe('42');
+  expect(upsert).not.toHaveBeenCalled();
+});
+
+it('disconnects hidden section measurements, refines row size on resize, and reveals a distant requested record', async () => {
+  let resize!: () => void;
+  const observe = vi.fn(), disconnect = vi.fn();
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback: () => void) { resize = callback; }
+    observe = observe;
+    disconnect = disconnect;
+  });
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => frames.push(callback));
+  await largeBoard(150);
+  const scroller = host.querySelector<HTMLElement>('.golden-slate-section-scroll')!;
+  expect(observe).toHaveBeenCalledWith(scroller);
+  const rowRects = vi.spyOn(HTMLTableRowElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLTableRowElement) {
+    return DOMRect.fromRect({ y: this.sectionRowIndex * 100, height: 100 });
+  });
+  try {
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 500 });
+    resize();
+    await act(async () => frames.shift()!(0));
+    expect(visibleIds()).toHaveLength(11);
+    expect((scroller.querySelector('.slate-virtual-spacer:last-child td > div') as HTMLElement).style.height).toBe('13900px');
+    await largeBoard(150, false);
+    expect(disconnect).toHaveBeenCalledOnce();
+    scroller.scrollTop = 3000;
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(frames).toHaveLength(0);
+    expect(visibleIds()[0]).toBe('record-0');
+    await largeBoard(150, true, 'record-140');
+    expect(row('record-140')?.getAttribute('aria-current')).toBe('true');
+    expect(numbers()).toContain('141');
+    expect(visibleIds()).toHaveLength(16);
+  } finally {
+    rowRects.mockRestore();
+  }
+});
 it('defaults to shooting order, numbers rows in visible order, and inherits the actual preceding row', async () => {
   await mixedOrder();
   expect(visibleIds()).toEqual(['a', 'b', 'c']);

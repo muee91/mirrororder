@@ -386,7 +386,7 @@ async function invokeWithTimeout<T>(command: string, args: Record<string, unknow
   }
 }
 
-const REVIEW_MODEL_TTL_MS = 1_200;
+const REVIEW_MODEL_TTL_MS = 15_000;
 
 const reviewModelCache = new Map<string, { expiresAt: number; promise: Promise<ReviewModelPayload> }>();
 const reviewModelRefreshInFlight = new Map<string, Promise<ReviewModelPayload>>();

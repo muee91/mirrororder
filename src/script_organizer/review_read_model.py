@@ -7,9 +7,10 @@ from urllib.parse import quote
 
 from .automation_store import AutomationStore, COMPLETED_STATUSES
 from .identity_library import IdentityLibrary
+from .media_identity import DeviceMediaStore
 from .review_store import effective_group_entry, effective_group_state, is_group_excluded
 from .script_supervisor_store import ScriptSupervisorStore
-from .workspace_db import WorkspaceDatabase
+from .workspace_db import WorkspaceDatabase, workspace_database_path
 
 CONTRACT_VERSION = "review.v1"
 _INSTALLED = False
@@ -668,6 +669,16 @@ def build_review_read_model(
     }
 
 
+def _database_file_signature(path: Path) -> tuple[int, ...] | None:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    # Opening a WorkspaceDatabase can chmod the file to its existing mode.
+    # That changes ctime on every build, even though SQLite did not change.
+    return stat.st_size, stat.st_mtime_ns, stat.st_ino, stat.st_mode, stat.st_uid, stat.st_gid
+
+
 def install_review_read_model_runtime() -> None:
     """Expose review.v1 without changing the existing review write authority."""
 
@@ -680,6 +691,28 @@ def install_review_read_model_runtime() -> None:
 
     def make_handler_with_review_model(service: Any, web_root: Path):
         BaseHandler = original_make_handler(service, web_root)
+        responses = web_server._JsonResponseCache()
+        bound_builder = build_review_read_model
+
+        def response_key(project_id: str, project: Any):
+            store = getattr(project, "_device_media_store", None)
+            if build_review_read_model is not bound_builder or not isinstance(store, DeviceMediaStore):
+                return None
+            workspace = str(getattr(project, "workspace_id", "") or "")
+            media_workspace = str(getattr(project, "_device_media_workspace_id", "") or workspace)
+            database_files = ()
+            if workspace.strip():
+                database = workspace_database_path(workspace)
+                database_files = (
+                    str(database),
+                    *(_database_file_signature(Path(f"{database}{suffix}")) for suffix in ("", "-wal", "-shm")),
+                )
+            return (
+                project_id, workspace, str(project.config.name), str(project.config.input_kind),
+                web_server._json_directory_signature(Path(project.config.output_dir)), database_files,
+                media_workspace, store.availability_signature(media_workspace, project_id),
+                getattr(project, "analysis_revision", ""), type(getattr(project, "review", None)).__name__,
+            )
 
         class Handler(BaseHandler):
             def _app_get(self, parsed):
@@ -691,7 +724,9 @@ def install_review_read_model_runtime() -> None:
                 ):
                     project_id = parts[3]
                     project = service.project(project_id)
-                    self._send_json(build_review_read_model(project))
+                    self._send_json_bytes(responses.render(
+                        lambda: response_key(project_id, project), lambda: build_review_read_model(project),
+                    ))
                     return
                 return super()._app_get(parsed)
 

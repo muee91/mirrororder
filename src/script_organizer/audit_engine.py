@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import tempfile
+import threading
 from collections import defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -68,33 +70,69 @@ def _normalize_text(value: object) -> str:
     return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", "", str(value or "")).casefold()
 
 
-def _analysis_revision(output_dir: Path) -> str:
+_SNAPSHOT_VALID_CACHE: dict[tuple[str, int, int], bool] = {}
+_SNAPSHOT_FILE_IDENTITIES: dict[tuple[str, int, int], tuple[int, int, int]] = {}
+_SNAPSHOT_VALID_LOCK = threading.Lock()
+
+
+def _file_identity(stat: os.stat_result) -> tuple[int, int, int]:
+    return stat.st_dev, stat.st_ino, stat.st_ctime_ns
+
+
+def _is_valid_analysis_snapshot(snapshot: Path, stat: os.stat_result) -> bool:
+    key = (str(snapshot.absolute()), stat.st_size, stat.st_mtime_ns)
+    identity = _file_identity(stat)
+    with _SNAPSHOT_VALID_LOCK:
+        if key in _SNAPSHOT_VALID_CACHE and _SNAPSHOT_FILE_IDENTITIES[key] == identity:
+            return _SNAPSHOT_VALID_CACHE[key]
+        try:
+            with snapshot.open(encoding="utf-8") as source:
+                try:
+                    payload = json.loads(source.read())
+                    valid = isinstance(payload, dict) and all(
+                        isinstance(payload.get(name), dict) for name in ("index", "script", "matches")
+                    )
+                except ValueError:
+                    valid = False
+                read_stat = os.fstat(source.fileno())
+        except OSError:
+            return False
+        if (read_stat.st_size, read_stat.st_mtime_ns, _file_identity(read_stat)) != (key[1], key[2], identity):
+            return valid
+        if key not in _SNAPSHOT_VALID_CACHE and len(_SNAPSHOT_VALID_CACHE) >= 128:
+            oldest = next(iter(_SNAPSHOT_VALID_CACHE))
+            del _SNAPSHOT_VALID_CACHE[oldest], _SNAPSHOT_FILE_IDENTITIES[oldest]
+        _SNAPSHOT_VALID_CACHE[key] = valid
+        _SNAPSHOT_FILE_IDENTITIES[key] = identity
+        return valid
+
+
+def _analysis_signatures(output_dir: Path) -> tuple[tuple[tuple[str, int, int], ...], tuple[tuple[int, int, int], ...]]:
+    """Keep the portable revision separate from device-local replacement detection."""
     snapshot = output_dir / "analysis_snapshot.json"
     try:
-        snapshot_payload = json.loads(snapshot.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        snapshot_payload = None
-    if (
-        isinstance(snapshot_payload, dict)
-        and isinstance(snapshot_payload.get("index"), dict)
-        and isinstance(snapshot_payload.get("script"), dict)
-        and isinstance(snapshot_payload.get("matches"), dict)
-    ):
-        try:
-            stat = snapshot.stat()
-            signature = (("analysis_snapshot.json", stat.st_size, stat.st_mtime_ns),)
-            return hashlib.sha1(repr(signature).encode("utf-8")).hexdigest()[:16]
-        except OSError:
-            pass
+        stat = snapshot.stat()
+        if _is_valid_analysis_snapshot(snapshot, stat):
+            return ((snapshot.name, stat.st_size, stat.st_mtime_ns),), (_file_identity(stat),)
+    except OSError:
+        pass
     signature = []
+    identities = []
     for name in ("material_index.json", "script.json", "matches.json"):
         path = output_dir / name
         try:
             stat = path.stat()
             signature.append((name, stat.st_size, stat.st_mtime_ns))
+            identities.append(_file_identity(stat))
         except OSError:
             signature.append((name, -1, -1))
-    return hashlib.sha1(repr(tuple(signature)).encode("utf-8")).hexdigest()[:16]
+            identities.append((-1, -1, -1))
+    return tuple(signature), tuple(identities)
+
+
+def _analysis_revision(output_dir: Path) -> str:
+    signature, _ = _analysis_signatures(output_dir)
+    return hashlib.sha1(repr(signature).encode("utf-8")).hexdigest()[:16]
 
 
 def _read_json(path: Path) -> dict[str, Any]:

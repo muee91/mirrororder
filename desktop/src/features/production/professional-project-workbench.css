@@ -180,7 +180,6 @@ html[data-mirrororder-theme="light"] .project-module-overflow.has-active > summa
   border: 1px solid var(--mo-border-default);
   border-radius: 10px;
   background: var(--mo-surface-elevated);
-  backdrop-filter: blur(18px);
   box-shadow: var(--mo-shadow-float);
 }
 .project-module-overflow-menu .project-module-link {

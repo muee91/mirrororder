@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from . import coverage_runtime
 from .assembly_timeline import ASSEMBLY_CONTRACT, build_assembly_timeline
 from .coverage_graph import coverage_revision
 from .coverage_runtime import _filters
@@ -10,11 +11,13 @@ from .sync_timeline_runtime import (
     apply_sync_manual_offset,
     build_sync_delivery_artifacts,
     build_sync_timeline,
+    sync_timeline_cache_key,
     undo_sync_manual_offset,
 )
 
 
 _INSTALLED = False
+_BOUND_BUILD_SYNC_TIMELINE = build_sync_timeline
 
 
 def install_assembly_runtime() -> None:
@@ -33,7 +36,10 @@ def install_assembly_runtime() -> None:
     def state_with_assembly(project: Any) -> dict[str, Any]:
         payload = original_state(project)
         try:
-            payload["assembly_source_revision"] = coverage_revision(project)
+            revision = payload.get("coverage_revision")
+            if not (isinstance(revision, str) and revision and coverage_revision is coverage_runtime.coverage_revision):
+                revision = coverage_revision(project)
+            payload["assembly_source_revision"] = revision
         except Exception:
             payload.setdefault("assembly_source_revision", "")
         return payload
@@ -51,6 +57,7 @@ def install_assembly_runtime() -> None:
 
     def make_handler_with_assembly(service: Any, web_root: Path):
         BaseHandler = original_make_handler(service, web_root)
+        sync_cache = web_server._JsonResponseCache()
 
         class Handler(BaseHandler):
             def _app_post(self, parsed):
@@ -111,8 +118,14 @@ def install_assembly_runtime() -> None:
                     and parts[4] == "sync-timeline"
                 ):
                     self._local_only()
-                    project = service.project(parts[3])
-                    self._send_json(build_sync_timeline(project, service.tasks.list(parts[3])))
+                    project_id = parts[3]
+                    project = service.project(project_id)
+                    tasks = service.tasks.list(project_id)
+                    self._send_json_bytes(sync_cache.render(
+                        lambda: sync_timeline_cache_key(project_id, project, tasks)
+                        if build_sync_timeline is _BOUND_BUILD_SYNC_TIMELINE else None,
+                        lambda: build_sync_timeline(project, tasks),
+                    ))
                     return
                 if (
                     len(parts) == 5

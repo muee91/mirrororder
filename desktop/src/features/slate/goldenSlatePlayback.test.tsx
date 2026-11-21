@@ -101,9 +101,12 @@ it('opens the same player when the inspector is collapsed, then pauses when it b
 });
 it('pauses and dismisses Quick Look when the workbench or production slate is hidden', async () => {
   await click('快速预览'); pause.mockClear();
+  expect(container.querySelector('.golden-slate-table .mo-media-thumb video')).not.toBeNull();
   await render(false);
   expect(pause).toHaveBeenCalled();
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(container.querySelector('.golden-slate-workbench .mo-media-thumb video')).toBeNull();
+  expect(container.querySelector('video[controls]')?.getAttribute('preload')).toBe('none');
   await render(); await click('快速预览'); pause.mockClear();
   await click('来源场记');
   expect(pause).toHaveBeenCalled();

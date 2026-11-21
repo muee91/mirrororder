@@ -310,6 +310,9 @@ def _safe_role(value: object) -> dict[str, Any]:
 def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleStore) -> dict[str, Any]:
     """Return a path-free inventory projection without touching media bytes."""
 
+    reload_if_changed = getattr(project, "reload_if_changed", None)
+    if callable(reload_if_changed):
+        reload_if_changed()
     workspace_id = str(getattr(project, "workspace_id", "") or "")
     project_id = str(project.project_id)
     device_state = device.project_snapshot(workspace_id, project_id)
@@ -481,6 +484,9 @@ def inventory_payload(project: Any, device: DeviceMediaStore, roles: MediaRoleSt
             "auxiliary_without_timecode_or_audio_is_valid": True,
         },
     }
+
+
+_BOUND_INVENTORY_PAYLOAD = inventory_payload
 
 
 def _store_scan_request(
@@ -734,6 +740,20 @@ def install_media_inventory_task_runtime() -> None:
 
     def make_handler_with_media_inventory(service: Any, web_root: Path):
         BaseHandler = original_make_handler(service, web_root)
+        responses = web_server._JsonResponseCache()
+
+        def response_key(project: Any, device: DeviceMediaStore):
+            if inventory_payload is not _BOUND_INVENTORY_PAYLOAD:
+                return None
+            output_dir = Path(project.config.output_dir)
+            workspace = str(getattr(project, "workspace_id", "") or "")
+            project_id = str(project.project_id)
+            return (
+                project_id, workspace, web_server._json_directory_signature(output_dir),
+                device.availability_signature(workspace, project_id),
+                web_server._file_signature(_snapshot_path(device, workspace, project_id)),
+                tuple((getattr(project.config, "camera_patterns", None) or {}).items()),
+            )
 
         class Handler(BaseHandler):
             def _app_get(self, parsed):
@@ -745,13 +765,11 @@ def install_media_inventory_task_runtime() -> None:
                 ):
                     self._local_only()
                     project = service.project(parts[3])
-                    self._send_json(
-                        inventory_payload(
-                            project,
-                            DeviceMediaStore(),
-                            MediaRoleStore(project.config.output_dir),
-                        )
-                    )
+                    device = DeviceMediaStore()
+                    self._send_json_bytes(responses.render(
+                        lambda: response_key(project, device),
+                        lambda: inventory_payload(project, device, MediaRoleStore(project.config.output_dir)),
+                    ))
                     return
                 return super()._app_get(parsed)
 

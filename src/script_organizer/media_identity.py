@@ -248,6 +248,31 @@ class DeviceMediaStore:
             pass
         return self._default()
 
+    @staticmethod
+    @lru_cache(maxsize=16)
+    def _bound_paths(
+        path: Path, workspace_id: str, project_id: str, store_signature: tuple[int, ...],
+    ) -> tuple[Path, ...]:
+        # The stat signature invalidates the path list when the store is replaced.
+        store = DeviceMediaStore(path, create=False)
+        with path.open(encoding="utf-8") as handle:
+            try:
+                payload = json.load(handle)
+            except ValueError:
+                payload = {}
+        snapshot = store.project_snapshot(workspace_id, project_id, payload if isinstance(payload, dict) else {})
+        return tuple(dict.fromkeys(Path(str(value)) for value in snapshot["bindings"].values() if value))
+
+    def availability_signature(self, workspace_id: str, project_id: str) -> tuple:
+        """Include live file presence just as state_from_snapshot does, without reading media."""
+        try:
+            stat = self.path.stat()
+        except FileNotFoundError:
+            return (str(self.path), None)
+        signature = (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino)
+        paths = self._bound_paths(self.path, workspace_id, project_id, signature)
+        return (str(self.path), signature, bytes(path.is_file() for path in paths))
+
     def _save(self, payload: dict[str, Any]) -> None:
         payload["version"] = max(3, int(payload.get("version", 3) or 3))
         payload["updated_at"] = _now()

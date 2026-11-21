@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindo
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 pub const DEFAULT_GLOBAL_SHORTCUT: &str = "CommandOrControl+Alt+J";
+pub const XIAOJING_WINDOW_URL: &str = "xiaojing.html";
 
 const MAIN_WINDOW: &str = "main";
 const XIAOJING_WINDOW: &str = "xiaojing";
@@ -94,7 +95,7 @@ fn ensure_xiaojing_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     let builder = WebviewWindowBuilder::new(
         app,
         XIAOJING_WINDOW,
-        WebviewUrl::App("index.html?window=xiaojing".into()),
+        WebviewUrl::App(XIAOJING_WINDOW_URL.into()),
     )
     .title("小镜")
     .inner_size(440.0, 700.0)
@@ -103,6 +104,7 @@ fn ensure_xiaojing_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     .always_on_top(always_on_top)
     .visible_on_all_workspaces(true)
     .shadow(true)
+    .background_color(tauri::window::Color(9, 11, 15, 255))
     .visible(false);
     #[cfg(target_os = "macos")]
     let builder = builder
@@ -235,9 +237,23 @@ fn setup_main_window_lifecycle(app: &AppHandle) {
     }
 }
 
+fn prewarm_xiaojing_window(app: &AppHandle) {
+    let app_handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(900));
+        let _ = with_window_transition(&app_handle, || {
+            if app_handle.get_webview_window(XIAOJING_WINDOW).is_none() {
+                ensure_xiaojing_window(&app_handle)?;
+            }
+            Ok(())
+        });
+    });
+}
+
 pub fn setup(app: &AppHandle) {
     setup_main_window_lifecycle(app);
     register_global_shortcut(app);
+    prewarm_xiaojing_window(app);
 }
 
 #[tauri::command]
@@ -286,8 +302,11 @@ pub async fn xiaojing_sync_context(
     let state = app.state::<AssistantWindowState>();
     let mut inner = state.lock_inner()?;
     inner.snapshot = Some(snapshot.clone());
-    app.emit_to(XIAOJING_WINDOW, CONTEXT_UPDATED, snapshot)
-        .map_err(|error| error.to_string())
+    if app.get_webview_window(XIAOJING_WINDOW).is_some() {
+        app.emit_to(XIAOJING_WINDOW, CONTEXT_UPDATED, snapshot)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -324,6 +343,11 @@ mod tests {
     use super::*;
     use serde_json::json;
     use tauri_plugin_global_shortcut::Shortcut;
+
+    #[test]
+    fn xiaojing_uses_dedicated_window_entry() {
+        assert_eq!(XIAOJING_WINDOW_URL, "xiaojing.html");
+    }
 
     #[test]
     fn assistant_window_defaults_to_pinned() {

@@ -141,6 +141,24 @@ describe("HostConnection", () => {
     expect(third).toEqual(first);
   });
 
+  it("shares review reads for fifteen seconds and fetches again at expiry", async () => {
+    const projectId = "p_ttl";
+    const browserFetch = vi.fn(async () => jsonResponse({ contract_version: "review.v1", project: { project_id: projectId } }));
+    vi.stubGlobal("fetch", browserFetch);
+    const now = vi.spyOn(Date, "now").mockReturnValue(100_000);
+    try {
+      await new HostConnection().reviewModel(projectId);
+      now.mockReturnValue(114_999);
+      await new HostConnection().reviewModel(projectId);
+      expect(browserFetch).toHaveBeenCalledTimes(1);
+      now.mockReturnValue(115_000);
+      await new HostConnection().reviewModel(projectId);
+      expect(browserFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it("hands cached review models out as copies so one surface cannot mutate another", async () => {
     const payload = {
       contract_version: "review.v1",

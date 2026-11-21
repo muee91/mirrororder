@@ -793,7 +793,7 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 .review-viewer-pane,
 .review-queue,
 .review-decision-stack .review-decision-panel { border-color: var(--mo-border-subtle); background: var(--mo-surface-raised); }
-.review-viewer-toolbar { background: var(--mo-surface-pane); border-bottom-color: var(--mo-border-subtle); }
+.review-viewer-toolbar { background: var(--mo-surface-app, #0b0f13); border-bottom-color: var(--mo-border-subtle); }
 .review-final-state { border-radius: 8px; background: var(--mo-surface-selected); }
 
 /* System surfaces: settings and status should feel like the same product. */
@@ -1025,8 +1025,7 @@ html[data-mirrororder-theme] button.workspace-context-backdrop:focus-visible {
   border-radius: 0;
   padding: 0;
   min-height: 100%;
-  background: rgba(7, 8, 10, 0.34);
-  backdrop-filter: blur(2px);
+  background: rgba(7, 8, 10, 0.42);
   box-shadow: none;
   outline: none;
 }
@@ -1107,17 +1106,16 @@ html[data-mirrororder-theme] .application-frame:not(.is-project-open) > .app-mai
   border-radius: 13px;
   overflow: hidden;
   background: var(--mo-surface-app);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 48px rgba(0, 0, 0, 0.48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 10px rgba(0, 0, 0, 0.24);
 }
 
 html[data-mirrororder-theme] .application-frame:not(.is-project-open) .app-global-topbar {
-  background: rgba(18, 21, 28, 0.72);
-  backdrop-filter: blur(12px);
+  background: rgba(18, 21, 28, 0.96);
   border-bottom: 1px solid var(--mo-border-subtle);
 }
 
 html[data-mirrororder-theme="light"] .application-frame:not(.is-project-open) .app-global-topbar {
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 /* Floating rounded studio stage inside an open project */
@@ -1145,7 +1143,7 @@ html[data-mirrororder-theme] .project-production-layout > .project-workbench-can
   border-radius: 13px;
   overflow: hidden;
   background: var(--mo-surface-app);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 50px rgba(0, 0, 0, 0.52);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 10px rgba(0, 0, 0, 0.24);
 }
 
 /* Recessed Spotlight search pill */
@@ -1181,25 +1179,23 @@ html[data-mirrororder-theme] .professional-project-toolbar .professional-assista
   box-shadow: 0 0 16px rgba(74, 144, 242, 0.25);
 }
 
-/* Floating glass right inspector drawer inside workspaces */
+/* Workspace inspector drawer */
 html[data-mirrororder-theme] .workspace-context-drawer {
   margin: 10px;
   height: calc(100% - 20px);
   max-height: calc(100% - 20px);
   border: 1px solid var(--mo-border-default);
   border-radius: 13px;
-  background: rgba(16, 19, 26, 0.94);
-  backdrop-filter: blur(20px);
+  background: rgba(16, 19, 26, 0.97);
   box-shadow: 0 28px 72px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 html[data-mirrororder-theme="light"] .workspace-context-drawer {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.97);
 }
 
 html[data-mirrororder-theme] .workspace-context-heading {
-  background: transparent;
-  backdrop-filter: blur(12px);
+  background: var(--mo-surface-elevated);
 }
 
 /* Luminous sapphire primary action buttons (linear/pro-studio bevel) */

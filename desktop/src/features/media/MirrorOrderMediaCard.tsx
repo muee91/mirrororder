@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PlaybackState, ReviewAngle } from "../../api/host";
 import type { SlateAttachment } from "../../api/production";
 import { canPreviewReviewPlayback } from "./mediaPlaybackProjection";
 import { cameraPresentation } from "./cameraPresentation";
+import { observeNearViewport, useVideoDecodeSlot } from "./nearViewport";
 import { StudioIcon } from "../../components/StudioIcons";
 import "./mirrororder-media-card.css";
 import "./camera-presentation.css";
@@ -102,7 +103,13 @@ function sourceRoleLabel(value?: string): string {
   return SOURCE_ROLE_LABELS[value] ?? value;
 }
 
-export function MirrorOrderMediaCard({
+const compactPreviewOptions = { rootMargin: "48px 96px" };
+function observeCompactPreview(element: Element, listener: (visible: boolean) => void): () => void {
+  return observeNearViewport(element, listener, compactPreviewOptions.rootMargin,
+    (dispatch) => new IntersectionObserver(dispatch, compactPreviewOptions));
+}
+
+export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
   model,
   selected = false,
   preferred = false,
@@ -129,35 +136,32 @@ export function MirrorOrderMediaCard({
       setCompactPreviewActive(true);
       return;
     }
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.some((entry) => entry.isIntersecting || entry.intersectionRatio > 0);
-      setCompactPreviewActive(visible);
-    }, { rootMargin: "48px 96px" });
-    observer.observe(element);
-    return () => observer.disconnect();
+    return observeCompactPreview(element, setCompactPreviewActive);
   }, [compact]);
 
   const unavailable = model.availabilityState === "missing" || model.available === false;
   const unknown = model.availabilityState === "unknown";
-  const previewEnabled = Boolean((showPreview || (compact && compactPreviewActive)) && model.playbackUrl && !unavailable && !unknown);
+  const previewWanted = Boolean((showPreview || (compact && compactPreviewActive)) && model.playbackUrl && !unavailable && !unknown);
+  const [decodeSlotGranted, markDecodeSettled] = useVideoDecodeSlot(previewWanted, `${model.sourceStart ?? 0}:${model.playbackUrl ?? ""}`);
+  const previewEnabled = previewWanted && decodeSlotGranted;
   const label = useMemo(() => [camera.label, model.name, shotLabel(model.shotType)].filter(Boolean).join(" · "), [camera.label, model.name, model.shotType]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setPreviewReady(false);
-  }, [model.playbackUrl, model.sourceStart, previewEnabled]);
-
-  useEffect(() => {
     const video = videoRef.current;
     if (!video || !previewEnabled) return;
     const start = Number(model.sourceStart ?? 0);
     const target = Number.isFinite(start) && start >= 0 ? start : 0;
-    const markReady = () => setPreviewReady(true);
+    const markReady = () => {
+      setPreviewReady(true);
+      markDecodeSettled();
+    };
     const seek = () => {
       if (target <= 0) {
         if (video.readyState >= 2) markReady();
         return;
       }
-      if (Math.abs(video.currentTime - target) <= 0.04 && video.readyState >= 2) {
+      if (!video.seeking && Math.abs(video.currentTime - target) <= 0.04 && video.readyState >= 2) {
         markReady();
         return;
       }
@@ -173,7 +177,7 @@ export function MirrorOrderMediaCard({
       video.removeEventListener("loadeddata", loadedData);
       video.removeEventListener("seeked", markReady);
     };
-  }, [model.sourceStart, previewEnabled]);
+  }, [model.playbackUrl, model.sourceStart, previewEnabled, markDecodeSettled]);
 
   const supportText = unavailable ? "设备缺失" : unknown ? "状态未知" : (!compact ? sourceRoleLabel(model.sourceRole) : "");
 
@@ -183,7 +187,7 @@ export function MirrorOrderMediaCard({
         {previewEnabled ? (
           <>
             <span className="mo-media-preview-fallback"><StudioIcon name="film" size={18} /></span>
-            <video ref={videoRef} className={previewReady ? "is-ready" : ""} src={model.playbackUrl} preload="metadata" muted playsInline tabIndex={-1} />
+            <video ref={videoRef} className={previewReady ? "is-ready" : ""} src={model.playbackUrl} preload="metadata" muted playsInline tabIndex={-1} onError={markDecodeSettled} />
           </>
         ) : (
           <span className={unavailable ? "is-missing" : unknown ? "is-unknown" : "mo-media-preview-fallback"}>
@@ -223,4 +227,4 @@ export function MirrorOrderMediaCard({
       ) : null}
     </div>
   );
-}
+});

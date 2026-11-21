@@ -26,8 +26,11 @@
   letter-spacing: 0;
 }
 
+.xj-hud * { box-sizing: border-box; }
 .xj-hud :is(h1, h2, h3, p) { margin: 0; }
 .xj-hud :is(select, textarea, button) { font: inherit; }
+.xj-hud button:enabled { cursor: pointer; }
+.xj-hud button:disabled { cursor: default; opacity: .48; }
 .xj-hud button,
 .xj-hud button.secondary {
   min-width: 0;
