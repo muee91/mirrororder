@@ -40,7 +40,7 @@ export function WorkspaceLauncher({
 
   return (
     <main className="startup-shell">
-      <header className="startup-masthead">
+      <header className="startup-masthead" data-tauri-drag-region="deep">
         <div className="startup-brand">
           <img className="startup-logo" src={logo} alt="" />
           <strong>镜序</strong>

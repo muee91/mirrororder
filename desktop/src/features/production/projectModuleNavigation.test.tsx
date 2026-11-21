@@ -33,7 +33,7 @@ describe("independent production module routing", () => {
     expect(modulesForProject("fcpxml").some((group) => group.id === "delivery")).toBe(false);
   });
 
-  it("shows a clear selected task and disabled future steps instead of a dashboard of active dead ends", () => {
+  it("renders the five stable workbenches with a clear selected task and lock state", () => {
     const markup = renderToStaticMarkup(createElement(ProjectModuleNavigation, {
       inputKind: "media-directory",
       selected: "sync-task",
@@ -44,19 +44,19 @@ describe("independent production module routing", () => {
     const root = document.createElement("div");
     root.innerHTML = markup;
     const nav = [...root.querySelectorAll<HTMLButtonElement>("button.project-module-link")];
-    expect(nav).toHaveLength(10);
-    expect(root.querySelectorAll(".project-module-group .project-module-link")).toHaveLength(7);
-    expect(root.querySelectorAll(".project-module-overflow-menu .project-module-link")).toHaveLength(3);
-    expect(root.querySelector(".project-module-overflow > summary")?.textContent).toContain("更多工位");
-    expect(nav.filter((button) => !button.disabled).map((button) => button.textContent)).toEqual(
-      expect.arrayContaining([expect.stringContaining("同步任务"), expect.stringContaining("素材库")]),
-    );
-    expect(nav.find((button) => button.textContent?.includes("工程交付"))?.disabled).toBe(true);
-    expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步任务");
-    expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步中");
+    expect(nav).toHaveLength(5);
+    expect([...nav].map((button) => button.textContent?.trim())).toEqual(["同步", "场记", "剧本", "素材", "审阅"]);
+    expect(root.querySelector(".project-module-overflow")).toBeNull();
+    expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步");
+    expect(root.querySelector('[aria-current="page"] .project-module-running')).toBeTruthy();
+    expect(nav.find((button) => button.textContent?.includes("同步"))?.disabled).toBe(false);
+    expect(nav.find((button) => button.textContent?.includes("素材"))?.disabled).toBe(false);
+    expect(nav.find((button) => button.textContent?.includes("场记"))?.disabled).toBe(true);
+    expect(nav.find((button) => button.textContent?.includes("剧本"))?.disabled).toBe(true);
+    expect(nav.find((button) => button.textContent?.includes("审阅"))?.disabled).toBe(true);
   });
 
-  it("highlights the overflow trigger with the active secondary module label", () => {
+  it("maps secondary pages to their unified workbench active state", () => {
     const markup = renderToStaticMarkup(createElement(ProjectModuleNavigation, {
       inputKind: "media-directory",
       selected: "timeline",
@@ -66,7 +66,8 @@ describe("independent production module routing", () => {
     }));
     const root = document.createElement("div");
     root.innerHTML = markup;
-    expect(root.querySelector(".project-module-overflow")?.classList.contains("has-active")).toBe(true);
-    expect(root.querySelector(".project-module-overflow > summary")?.textContent).toContain("选片组接");
+    expect(root.querySelectorAll("button.project-module-link")).toHaveLength(5);
+    expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("审阅");
+    expect(root.querySelector(".project-module-overflow")).toBeNull();
   });
 });

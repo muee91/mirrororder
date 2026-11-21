@@ -337,8 +337,12 @@ const MediaLibraryRow = memo(function MediaLibraryRow({
             onSeeked={markDecodeSettled}
             onError={markDecodeSettled}
             onLoadedMetadata={(event) => {
+              const video = event.currentTarget;
               if (preview.sourceStart > 0) {
-                try { event.currentTarget.currentTime = preview.sourceStart; } catch { /* metadata may still be settling */ }
+                try { video.currentTime = preview.sourceStart; } catch { /* metadata may still be settling */ }
+              } else if (preview.sourceStart <= 0 && video.readyState < 2) {
+                const probeTime = Number.isFinite(video.duration) && video.duration > 0.12 ? 0.04 : 0.001;
+                try { video.currentTime = probeTime; } catch { /* metadata may not be seekable yet */ }
               }
             }}
             onMouseEnter={(event) => { void event.currentTarget.play().catch(() => undefined); }}

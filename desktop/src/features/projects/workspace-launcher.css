@@ -18,6 +18,8 @@
   backdrop-filter: blur(12px);
 }
 
+html[data-macos-overlay="true"] .startup-masthead { padding-inline-start: 78px; }
+
 .startup-brand { display: flex; align-items: center; gap: 10px; }
 .startup-logo { display: block; width: 30px; height: 30px; object-fit: contain; }
 .startup-brand strong { font-size: 15px; font-weight: 680; letter-spacing: -0.01em; }

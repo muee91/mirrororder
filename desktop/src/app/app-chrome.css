@@ -1,16 +1,16 @@
 /* Current application chrome for MirrorOrder Production.
- * This layer intentionally owns only the Global Sidebar + Global Topbar.
+ * This layer intentionally owns the persistent icon rail and quiet context bar.
  * Domain workbenches keep their own pane geometry; Design System v2 loaded after
  * this file remains authoritative for semantic tokens, focus and component grammar.
  */
 
 .mirrororder-redesign-shell .application-frame {
-  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-columns: 54px minmax(0, 1fr);
   background: var(--mo-surface-app, #0b0f13);
 }
 
 .mirrororder-redesign-shell .application-frame.is-project-open {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 54px minmax(0, 1fr);
 }
 
 .is-project-open .app-main-column {
@@ -41,6 +41,18 @@
   width: 28px;
   height: 28px;
   flex-basis: 28px;
+}
+
+.project-rail-divider {
+  width: 42px;
+  height: 1px;
+  margin: 2px 0 3px;
+  background: var(--mo-border-subtle, #202830);
+}
+
+.project-library-redesign .project-sidebar-spacer {
+  flex: 1 1 auto;
+  min-height: 12px;
 }
 
 .project-library-redesign .project-library-brand-copy strong {
@@ -303,7 +315,7 @@
 
 /* Global topbar: context first, controls visually quiet. */
 .app-main-column {
-  grid-template-rows: 50px minmax(0, 1fr);
+  grid-template-rows: 38px minmax(0, 1fr);
 }
 
 .app-global-topbar {
@@ -311,6 +323,11 @@
   gap: 12px;
   border-bottom-color: var(--mo-border-subtle, #202830);
   background: var(--mo-surface-pane, #10151a);
+}
+
+:is(.app-global-topbar, .professional-project-toolbar) :is(button, summary, details, input, a, select) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .app-global-context {
@@ -349,10 +366,6 @@
   color: var(--mo-text-primary, #e2e8ed);
 }
 
-.app-topbar-status-dot.is-active {
-  box-shadow: none;
-}
-
 .app-workspace-chip {
   min-height: 28px;
   max-width: 184px;
@@ -360,7 +373,7 @@
   border: 0;
   border-radius: var(--mo-radius-control, 5px);
   background: transparent;
-  color: var(--mo-text-secondary, #a6b1ba);
+  color: var(--mo-text-muted, #778590);
   font-size: 10px;
   font-weight: 600;
 }
@@ -417,24 +430,8 @@
   color: var(--mo-text-primary, #e2e8ed);
 }
 
-@media (max-width: 1180px) {
-  .mirrororder-redesign-shell .application-frame {
-    grid-template-columns: 208px minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 1040px) {
-  .mirrororder-redesign-shell .application-frame {
-    grid-template-columns: 196px minmax(0, 1fr);
-  }
-
-  .project-library-redesign {
-    padding-inline: 6px;
-  }
-
-  .app-global-context > span {
-    display: none;
-  }
+  .app-global-context > span { display: none; }
 }
 
 .app-project-surface { width: 100%; height: 100%; min-width: 0; min-height: 0; }
@@ -511,3 +508,107 @@
   background: var(--mo-surface-selected);
 }
 .professional-project-system .app-workspace-chip { max-width: clamp(98px, 13vw, 168px); }
+
+/* Option B owns one slim rail for the library and an open project. Keep the
+ * same icon-over-label hit area in both states so the canvas never jumps. */
+.mirrororder-redesign-shell .global-sidebar {
+  width: 54px;
+  min-width: 54px;
+}
+
+.mirrororder-redesign-shell .project-library-redesign {
+  width: 54px;
+  min-width: 54px;
+  box-sizing: border-box;
+  padding: 8px 3px;
+  align-items: center;
+}
+
+.mirrororder-redesign-shell .project-library-redesign .project-library-brand {
+  width: 48px;
+  min-height: 44px;
+  margin: 0 0 7px;
+  padding: 3px 2px;
+  display: grid;
+  grid-template-rows: 22px 12px;
+  justify-items: center;
+  gap: 2px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.mirrororder-redesign-shell .project-library-redesign .project-library-brand-copy {
+  display: block;
+  overflow: hidden;
+  color: var(--mo-text-secondary, #a6b1ba);
+  font-size: 9.5px;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+.mirrororder-redesign-shell .project-library-redesign .project-library-brand-copy strong {
+  display: inline;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+.mirrororder-redesign-shell .project-library-redesign .project-library-brand-copy span { display: none; }
+.mirrororder-redesign-shell .project-library-redesign .mirror-mark {
+  width: 22px;
+  height: 22px;
+  flex-basis: 22px;
+}
+.mirrororder-redesign-shell .project-rail-divider {
+  width: 40px;
+  height: 1px;
+  margin: 0 0 7px;
+  background: var(--mo-border-subtle, #202830);
+}
+
+.mirrororder-redesign-shell .project-primary-nav,
+.mirrororder-redesign-shell .project-production-nav,
+.mirrororder-redesign-shell .project-system-nav {
+  width: 48px;
+  min-width: 48px;
+  align-items: center;
+  gap: 3px;
+}
+
+.mirrororder-redesign-shell .project-primary-nav button,
+.mirrororder-redesign-shell .project-production-nav button,
+.mirrororder-redesign-shell .project-system-nav button {
+  position: relative;
+  width: 48px;
+  min-height: 44px;
+  padding: 3px 2px;
+  grid-template-columns: 1fr;
+  grid-template-rows: 17px 12px;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 9.5px;
+  line-height: 12px;
+}
+.mirrororder-redesign-shell .project-primary-nav button::before,
+.mirrororder-redesign-shell .project-production-nav button::before,
+.mirrororder-redesign-shell .project-system-nav button::before {
+  position: absolute;
+  inset: 6px auto 6px 0;
+  width: 2.5px;
+  border-radius: 0 2px 2px 0;
+  background: transparent;
+  content: "";
+}
+.mirrororder-redesign-shell .project-primary-nav button.is-active::before,
+.mirrororder-redesign-shell .project-production-nav button.is-active::before,
+.mirrororder-redesign-shell .project-system-nav button.is-active::before { background: var(--mo-accent, #6fa7e8); }
+.mirrororder-redesign-shell .project-primary-nav button > span,
+.mirrororder-redesign-shell .project-production-nav button > span,
+.mirrororder-redesign-shell .project-system-nav button > span { display: block; }
+.mirrororder-redesign-shell .project-production-nav .project-module-navigation { width: 48px; min-width: 48px; padding: 0; }
+.mirrororder-redesign-shell .project-sidebar-spacer { flex: 1 1 auto; min-height: 10px; }
+.mirrororder-redesign-shell .project-system-nav { margin-top: auto; }
+.mirrororder-redesign-shell .project-system-badge { position: absolute; top: 2px; right: 2px; min-width: 12px; height: 12px; padding: 0; border-radius: 50%; font-size: 10px; }
+.mirrororder-redesign-shell .project-system-badge.is-error { color: var(--mo-danger, #d88989); }
+.mirrororder-redesign-shell .project-system-badge .project-activity-spinner { display: none; }

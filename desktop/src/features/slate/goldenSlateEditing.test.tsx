@@ -12,11 +12,13 @@ let host: HTMLDivElement, root: ReturnType<typeof createRoot>;
 const record = (id: string, scene: string): SlateRecord => ({record_id:id,scene,episode:1,shot:'1',take_number:id.charCodeAt(0)-96,status:'unmarked',source_group_id:'',script_scene_id:'',attachments:[],actor:'test',updated_at:'',note:'',preferred_clip_id:''});
 let board: SlateBoard;
 const upsert = vi.spyOn(SlateRecordClient.prototype,'upsert');
+const parseSlate = vi.spyOn(ProductionClient.prototype,'parseSlate');
 beforeEach(async()=>{
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true); localStorage.clear(); localStorage.setItem('mirrororder.productionActor','test');
   board={version:2,contract:'script_supervisor.v2',revision:3,updated_at:'',records:{a:record('a','1'),b:record('b',''),c:record('c','')},entries:{},semantics:{}};
   vi.spyOn(HostConnection.prototype,'reviewModel').mockResolvedValue({episodes:[],take_groups:[]} as unknown as ReviewModelPayload);
   vi.spyOn(ProductionClient.prototype,'scriptSupervisor').mockResolvedValue(board);
+  parseSlate.mockReset().mockResolvedValue({result:{episode:1,scene:'12',shot:'B',take_number:2,status:'usable',note:'可用',range_hint:'',angle_shots:{}}} as any);
   upsert.mockReset().mockImplementation(async(_project,write)=>({...board,revision:4,records:{...board.records,[write.recordId]:{...board.records[write.recordId],...write.record}}}));
   host=document.createElement('div'); document.body.append(host); root=createRoot(host);
   await act(async()=>root.render(<GoldenSlateWorkbench baseUrl="http://synthetic.test" projectId="synthetic"/>));
@@ -27,6 +29,42 @@ const scene=(id:string)=>row(id).querySelectorAll<HTMLInputElement>('input')[1];
 async function type(input:HTMLInputElement,value:string){await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));});}
 async function focus(input:HTMLInputElement){await act(async()=>input.focus());}
 async function enter(input:HTMLInputElement,isComposing=false){await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing,bubbles:true,cancelable:true})));}
+it('keeps Quick Entry 2 inline in the open Inspector and focuses it with slash', async () => {
+  const inspector = host.querySelector('.golden-slate-inspector')!;
+  const quick = inspector.querySelector<HTMLInputElement>('.golden-slate-quick input');
+  expect(quick).not.toBeNull();
+  expect(quick?.placeholder).toContain('看画面快录');
+  await act(async () => host.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })));
+  expect(document.activeElement).toBe(quick);
+});
+
+it('opens collapsed Quick Entry 2 as a focused floating island, applies Enter, and dismisses with Escape', async () => {
+  await clickButton('检视');
+  expect(host.querySelector('.golden-slate-inspector')?.hasAttribute('hidden')).toBe(true);
+  expect(host.querySelector('.golden-slate-quick')).toBeNull();
+
+  await clickButton('快录 /');
+  let floating = host.querySelector<HTMLInputElement>('.golden-slate-quick-floating input');
+  expect(floating).not.toBeNull();
+  expect(document.activeElement).toBe(floating);
+
+  await act(async () => floating!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  expect(host.querySelector('.golden-slate-quick-floating')).toBeNull();
+  expect(document.activeElement?.textContent).toBe('快录 /');
+
+  await act(async () => host.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })));
+  floating = host.querySelector<HTMLInputElement>('.golden-slate-quick-floating input');
+  expect(floating).not.toBeNull();
+  expect(document.activeElement).toBe(floating);
+  await type(floating!, '12场 B近 可用');
+  await enter(floating!);
+  expect(parseSlate).toHaveBeenCalledWith('synthetic', '12场 B近 可用', expect.anything());
+  expect(scene('b').value).toBe('12');
+
+  await act(async () => host.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  expect(host.querySelector('.golden-slate-quick-floating')).toBeNull();
+});
+
 it('retains the same focused DOM input while an unplaced row crosses buckets, then commits grouping on Enter',async()=>{
   await clickButton('拍摄顺序');
   const input=scene('b'), originalRow=row('b');await focus(input);

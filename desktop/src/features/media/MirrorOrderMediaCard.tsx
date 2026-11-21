@@ -158,7 +158,13 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
     };
     const seek = () => {
       if (target <= 0) {
-        if (video.readyState >= 2) markReady();
+        if (video.readyState >= 2) {
+          markReady();
+          return;
+        }
+        // WKWebView can stop at metadata until a seek requests the first frame.
+        const probeTime = Number.isFinite(video.duration) && video.duration > 0.12 ? 0.04 : 0.001;
+        try { video.currentTime = probeTime; } catch { /* metadata may not be seekable yet */ }
         return;
       }
       if (!video.seeking && Math.abs(video.currentTime - target) <= 0.04 && video.readyState >= 2) {

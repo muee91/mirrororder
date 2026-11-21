@@ -2,7 +2,7 @@ import { FinderProjectOpen } from "./FinderProjectOpen";
 import "./finder-project-open.css";
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DesktopClient } from "../api/desktop";
 import {
   HostConnection,
@@ -150,8 +150,13 @@ export function App() {
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [pageRequest, setPageRequest] = useState<ProjectPageRequest | null>(null);
+  const [activeProjectPage, setActiveProjectPage] = useState<ProductionPage | null>(null);
+  const [projectSyncStatus, setProjectSyncStatus] = useState<{ projectId: string; ready: boolean; phase: string } | null>(null);
   const [externalXiaoJingAction, setExternalXiaoJingAction] = useState<(XiaoJingMainAction & { nonce: number }) | null>(null);
   const [appearance, setAppearance] = useState(() => readDesktopAppearance());
+  const handleSyncStatusChange = useCallback((ready: boolean, phase: string) => {
+    if (selectedProject) setProjectSyncStatus({ projectId: selectedProject.project_id, ready, phase });
+  }, [selectedProject?.project_id]);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "");
   const [noticeVisible, setNoticeVisible] = useState(false);
@@ -285,6 +290,8 @@ export function App() {
       setSnapshot(next);
       setSelectedProject(rememberedProject);
       setPageRequest(null);
+      setActiveProjectPage(rememberedProject ? rememberedPage : null);
+      setProjectSyncStatus(null);
       setSurface(rememberedProject ? "production" : "projects");
       setResumeEnabledForSession(true);
       setState("connected");
@@ -299,6 +306,8 @@ export function App() {
       setSnapshot(null);
       setSelectedProject(null);
       setPageRequest(null);
+      setActiveProjectPage(null);
+      setProjectSyncStatus(null);
       setResumeEnabledForSession(false);
       setState("error");
       setMessage(`无法恢复上次工作区：${errorMessage(error)}`);
@@ -334,6 +343,8 @@ export function App() {
       setSnapshot(next);
       setSelectedProject(targetProject);
       setPageRequest(null);
+      setActiveProjectPage(null);
+      setProjectSyncStatus(null);
       setSurface(targetProject ? "production" : "projects");
       setResumeEnabledForSession(true);
       setState("connected");
@@ -355,6 +366,8 @@ export function App() {
         setSnapshot(recovered);
         setSelectedProject(project);
         setPageRequest(project ? previousPageRequest : null);
+        setActiveProjectPage(null);
+        setProjectSyncStatus(null);
         setSurface(previousSurface === "production" && !project ? "projects" : previousSurface);
         setState("connected");
         setMessage(`未能切换工作区：${errorMessage(error)} · 当前工作现场保持打开`);
@@ -363,6 +376,8 @@ export function App() {
         setSnapshot(null);
         setSelectedProject(null);
         setPageRequest(null);
+        setActiveProjectPage(null);
+        setProjectSyncStatus(null);
         setResumeEnabledForSession(false);
         setState("error");
         setMessage(`${errorMessage(error)}${previousSnapshot ? " · 原工作区连接未确认，已断开" : ""}`);
@@ -427,6 +442,8 @@ export function App() {
       setSnapshot(next);
       setSelectedProject(project);
       setPageRequest(null);
+      setActiveProjectPage(null);
+      setProjectSyncStatus(null);
       setSurface(sameWorkspace ? previousSurface : "projects");
       setResumeEnabledForSession(false);
       setState("connected");
@@ -445,6 +462,8 @@ export function App() {
         setSnapshot(recovered);
         setSelectedProject(project);
         setPageRequest(project ? previousPageRequest : null);
+        setActiveProjectPage(null);
+        setProjectSyncStatus(null);
         setSurface(previousSurface === "production" && !project ? "projects" : previousSurface);
         setState("connected");
         setMessage(`未能连接新的本机服务：${errorMessage(error)} · 当前工作现场保持打开`);
@@ -453,6 +472,8 @@ export function App() {
         setSnapshot(null);
         setSelectedProject(null);
         setPageRequest(null);
+        setActiveProjectPage(null);
+        setProjectSyncStatus(null);
         setResumeEnabledForSession(false);
         setState("error");
         setMessage(`${errorMessage(error)}${previousSnapshot ? " · 原工作区连接未确认，已断开" : ""}`);
@@ -478,6 +499,8 @@ export function App() {
       setSnapshot(null);
       setSelectedProject(null);
       setPageRequest(null);
+      setActiveProjectPage(null);
+      setProjectSyncStatus(null);
       setResumeEnabledForSession(false);
       setState("error");
       setMessage("本机服务已切换到其他工作区，请重新连接原工作区。");
@@ -503,6 +526,8 @@ export function App() {
   function selectProject(project: ProjectSummary): void {
     setSelectedProject(project);
     setPageRequest(null);
+    setActiveProjectPage(null);
+    setProjectSyncStatus(null);
     setExternalXiaoJingAction(null);
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
@@ -512,6 +537,7 @@ export function App() {
     pageRequestNonce.current += 1;
     setSelectedProject(project);
     setPageRequest({ projectId: project.project_id, page, nonce: pageRequestNonce.current });
+    setActiveProjectPage(page);
     setExternalXiaoJingAction(null);
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
@@ -520,6 +546,8 @@ export function App() {
   function openTeamProject(project: ProjectSummary): void {
     setSelectedProject(project);
     setPageRequest(null);
+    setActiveProjectPage(null);
+    setProjectSyncStatus(null);
     setExternalXiaoJingAction(null);
     setSurface("team");
     if (resumeEnabledForSession) rememberProject(project.project_id);
@@ -719,7 +747,10 @@ export function App() {
   }
 
   const isProjectOpen = surface === "production" && selectedProject !== null;
-  const runningProjects = Object.values(projectActivities).filter((activity) => activity.state === "active").length;
+  const projectRailOpen = surface !== "projects" && selectedProject !== null;
+  const activeProjectSyncStatus = selectedProject && projectSyncStatus?.projectId === selectedProject.project_id
+    ? projectSyncStatus
+    : null;
   const currentTitle = surface === "home"
     ? "首页"
       : surface === "projects"
@@ -738,8 +769,10 @@ export function App() {
   const workspaceMenu = (
     <details className="app-workspace-menu">
       <summary className="app-workspace-chip">
-        <span className={`status-dot status-${state}`} aria-hidden="true" />
-        <span>{snapshot.workspace.workspace}</span>
+        <span>
+          {snapshot.workspace.workspace}
+          {state !== "connected" && <small> · {connectionLabel(state)}</small>}
+        </span>
         <small aria-hidden="true"><StudioIcon name="chevron-down" size={11.5} /></small>
       </summary>
       <div className="app-workspace-menu-popover">
@@ -819,7 +852,7 @@ export function App() {
   return (<>
     <main className="app-shell production-app-shell mirrororder-redesign-shell">
       <section className={`workspace-shell application-frame${isProjectOpen ? " is-project-open" : ""}`}>
-        {!isProjectOpen && <aside className="global-sidebar">
+        <aside className="global-sidebar" data-tauri-drag-region>
           <ProjectLibrary
             baseUrl={snapshot.baseUrl}
             workspace={snapshot.workspace}
@@ -827,6 +860,10 @@ export function App() {
             activities={projectActivities}
             selectedProjectId={selectedProject?.project_id ?? null}
             primaryActive={primaryActive}
+            activeProjectPage={activeProjectPage}
+            projectOpen={projectRailOpen}
+            syncReady={activeProjectSyncStatus?.ready ?? false}
+            syncPhase={activeProjectSyncStatus?.phase ?? "idle"}
             revealLabel={revealLabel}
             onSelectProject={selectProject}
             onOpenProjects={openProjects}
@@ -843,11 +880,11 @@ export function App() {
             onDeleteProject={(project) => deleteProject(project)}
             onWorkspaceChanged={refreshWorkspace}
           />
-        </aside>}
+        </aside>
 
         <section className="app-main-column">
-          {!isProjectOpen && <header className="app-global-topbar">
-            <div className="app-global-context">
+          {!isProjectOpen && <header className="app-global-topbar" data-tauri-drag-region>
+            <div className="app-global-context" data-tauri-drag-region="deep">
               {surface === "projects" ? (
                 <>
                   <span>工作区</span>
@@ -860,11 +897,7 @@ export function App() {
                 </>
               )}
             </div>
-            <div className="app-global-actions">
-              <button type="button" className="app-topbar-status" onClick={() => setSurface("status")}>
-                <span className={`app-topbar-status-dot ${runningProjects ? "is-active" : ""}`} />
-                {runningProjects ? `${runningProjects} 个项目处理中` : "后台正常"}
-              </button>
+            <div className="app-global-actions" data-tauri-drag-region>
               {workspaceMenu}
             </div>
           </header>}
@@ -931,23 +964,16 @@ export function App() {
                 slateDraftSession={slateDraftSession}
                 active={surface === "production"}
                 projectNavigation={switchProject}
-                systemTools={<>
-                  <button type="button" className="secondary app-project-status" onClick={() => setSurface("status")}>
-                    <StudioIcon name="activity" size={13.5} />
-                    <span>{runningProjects ? `后台任务 ${runningProjects}` : "状态中心"}</span>
-                  </button>
-                  <button type="button" className="secondary" onClick={() => setSurface("settings")}>
-                    <StudioIcon name="settings" size={13.5} />
-                    <span>设置</span>
-                  </button>
-                  {workspaceMenu}
-                </>}
+                workspaceMenu={workspaceMenu}
                 pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
                 externalXiaoJingAction={externalXiaoJingAction?.project_id === selectedProject.project_id ? externalXiaoJingAction : null}
                 xiaojingWorkspace={xiaojingWorkspace}
                 onXiaoJingError={setMessage}
                 onOpenTeamReview={() => openTeamProject(selectedProject)}
                 workspaceId={snapshot.workspace.workspace_id}
+                showModuleRail={!isProjectOpen}
+                onPageChange={setActiveProjectPage}
+                onSyncStatusChange={handleSyncStatusChange}
                 onTaskChanged={() => void refreshActivities()}
                 onOpenStatus={() => setSurface("status")}
                 onOpenSettings={() => setSurface("settings")}

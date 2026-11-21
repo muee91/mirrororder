@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import mirrororderLogo from "../../assets/mirrororder-logo.svg";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import type { ProductionPage } from "../../app/resumeState";
 import { StudioIcon } from "../../components/StudioIcons";
+import { ProjectModuleNavigation } from "../production/ProjectModuleNavigation";
 import type { ProjectActivitySummary } from "./projectActivity";
 import { projectPresentation } from "./projectPresentation";
 import "./project-context-menu.css";
@@ -17,6 +18,9 @@ interface Props {
   selectedProjectId: string | null;
   primaryActive?: "home" | "projects" | "status" | "settings" | "team" | null;
   activeProjectPage?: ProductionPage | null;
+  projectOpen?: boolean;
+  syncReady?: boolean;
+  syncPhase?: string;
   revealLabel?: string;
   onSelectProject: (project: ProjectSummary) => void;
   onOpenProjects?: () => void;
@@ -40,11 +44,15 @@ interface ProjectMenuState {
   y: number;
 }
 
-type IconName = "projects" | "status" | "settings";
-
-function NavIcon({ name }: { name: IconName }) {
-  const iconName = name === "projects" ? "library" : name;
-  return <StudioIcon name={iconName} size={15.5} className="project-nav-icon" />;
+function clampMenuPosition(x: number, y: number): { x: number; y: number } {
+  const width = 204;
+  const height = 410;
+  const viewportWidth = globalThis.innerWidth || 1280;
+  const viewportHeight = globalThis.innerHeight || 800;
+  return {
+    x: Math.max(8, Math.min(x, viewportWidth - width - 8)),
+    y: Math.max(8, Math.min(y, viewportHeight - height - 8)),
+  };
 }
 
 export function ProjectLibrary({
@@ -53,6 +61,10 @@ export function ProjectLibrary({
   activities = {},
   selectedProjectId,
   primaryActive = null,
+  activeProjectPage = null,
+  projectOpen = false,
+  syncReady = false,
+  syncPhase = "idle",
   revealLabel = "Finder / Explorer",
   onSelectProject,
   onOpenProjects,
@@ -68,16 +80,22 @@ export function ProjectLibrary({
   onDeleteProject,
 }: Props) {
   const [menu, setMenu] = useState<ProjectMenuState | null>(null);
-  const selectedProject = useMemo(
-    () => workspace.projects.find((project) => project.project_id === selectedProjectId) ?? null,
-    [selectedProjectId, workspace.projects],
-  );
-  const switchProjects = useMemo(
-    () => workspace.projects.filter((project) => project.project_id !== selectedProjectId).slice(0, 3),
-    [selectedProjectId, workspace.projects],
-  );
-  const selectedPresentation = selectedProject ? projectPresentation(selectedProject, activities[selectedProject.project_id]) : null;
+  const selectedProject = workspace.projects.find((project) => project.project_id === selectedProjectId) ?? null;
+  const switchProjects = workspace.projects.filter((project) => project.project_id !== selectedProjectId).slice(0, 3);
+  const projectStatuses = switchProjects.map((project) => {
+    const activity = activities[project.project_id];
+    return projectPresentation(project, activity);
+  });
   const runningCount = Object.values(activities).filter((activity) => activity.state === "active").length;
+  const failedCount = workspace.projects.filter((project) => {
+    const error = typeof project.error === "string" ? project.error.trim() : project.error;
+    const errors = project.errors;
+    const hasErrors = Array.isArray(errors)
+      ? errors.length > 0
+      : Boolean(errors && typeof errors === "object" ? Object.keys(errors).length : errors);
+    return Boolean(error || hasErrors);
+  }).length;
+  const statusCount = runningCount + failedCount;
 
   useEffect(() => {
     if (!menu) return;
@@ -94,15 +112,7 @@ export function ProjectLibrary({
   }, [menu]);
 
   function openMenu(project: ProjectSummary, x: number, y: number): void {
-    const width = 204;
-    const height = 410;
-    const viewportWidth = globalThis.innerWidth || 1280;
-    const viewportHeight = globalThis.innerHeight || 800;
-    setMenu({
-      project,
-      x: Math.max(8, Math.min(x, viewportWidth - width - 8)),
-      y: Math.max(8, Math.min(y, viewportHeight - height - 8)),
-    });
+    setMenu({ project, ...clampMenuPosition(x, y) });
   }
 
   function run(action: () => void | Promise<void>): void {
@@ -110,92 +120,72 @@ export function ProjectLibrary({
     void Promise.resolve(action()).catch(() => undefined);
   }
 
+  function openSelectedMenu(event: React.MouseEvent<HTMLButtonElement>): void {
+    if (!selectedProject) return;
+    event.preventDefault();
+    openMenu(selectedProject, event.clientX, event.clientY);
+  }
+
+  function openSelectedMenuFromKeyboard(event: React.KeyboardEvent<HTMLButtonElement>): void {
+    if (!selectedProject || !((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu")) return;
+    event.preventDefault();
+    const box = event.currentTarget.getBoundingClientRect();
+    openMenu(selectedProject, box.right + 4, box.bottom);
+  }
+
   return (
-    <div className="project-library project-library-redesign professional-global-sidebar">
-      <button type="button" className="project-library-brand project-library-brand-button" onClick={onOpenProjects} aria-label="打开项目库">
+    <div className="project-library project-library-redesign professional-global-sidebar" data-project-open={projectOpen || undefined}>
+      <button
+        type="button"
+        className="project-library-brand project-library-brand-button"
+        data-tauri-drag-region="no-drag"
+        onClick={onOpenProjects}
+        onContextMenu={openSelectedMenu}
+        onKeyDown={openSelectedMenuFromKeyboard}
+        aria-label="项目"
+        title="项目"
+      >
         <img className="mirror-mark" src={mirrororderLogo} alt="" aria-hidden="true" />
-        <span className="project-library-brand-copy"><strong>镜序</strong><span>MirrorOrder</span></span>
+        <span className="project-library-brand-copy"><strong>项目</strong><span>MirrorOrder</span></span>
       </button>
 
-      <nav className="project-primary-nav" aria-label="主导航">
-        <button type="button" className={primaryActive === "projects" ? "is-active" : ""} onClick={onOpenProjects}><NavIcon name="projects" /><span>项目库</span><small>{workspace.projects.length}</small></button>
-      </nav>
+      <div className="project-rail-divider" aria-hidden="true" />
 
-      {selectedProject ? (
-        <section className="project-current-context professional-project-context">
-          <p className="project-nav-section-label">当前项目</p>
-          <button
-            type="button"
-            className={`project-current-card ${primaryActive === null ? "is-active-context" : ""}`}
-            onClick={() => onSelectProject(selectedProject)}
-            onContextMenu={(event) => { event.preventDefault(); openMenu(selectedProject, event.clientX, event.clientY); }}
-            onKeyDown={(event) => {
-              if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
-                event.preventDefault();
-                const box = event.currentTarget.getBoundingClientRect();
-                openMenu(selectedProject, box.right - 204, box.bottom + 4);
-              }
-            }}
-          >
-            <span className={`project-current-status status-${selectedPresentation?.statusTone ?? "idle"}`} aria-hidden="true" />
-            <span><strong>{selectedProject.name || selectedProject.project_id}</strong><small>{selectedPresentation?.sidebarSubtitle ?? "项目"}</small></span>
-          </button>
-          <p className="professional-project-context-note">制作区在项目画布顶部切换。</p>
-        </section>
+      {projectOpen && selectedProject ? (
+        <nav className="project-module-rail project-production-nav" aria-label="制作区域">
+          <ProjectModuleNavigation
+            inputKind={selectedProject.input_kind}
+            selected={activeProjectPage ?? (selectedProject.input_kind === "media-directory" ? "sync-task" : "timeline")}
+            syncReady={syncReady}
+            syncPhase={syncPhase}
+            onNavigate={(page) => onOpenProjectPage?.(selectedProject, page)}
+          />
+        </nav>
       ) : (
-        <section className="project-current-context is-empty">
-          <p className="project-nav-section-label">制作</p>
-          <div className="project-current-empty"><strong>尚未选择项目</strong><span>从“项目”进入制作工作区。</span></div>
-        </section>
+        <nav className="project-primary-nav" aria-label="主导航">
+          <button type="button" className={primaryActive === "projects" ? "is-active" : ""} aria-current={primaryActive === "projects" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenProjects} title="项目">
+            <StudioIcon name="library" size={16} className="project-nav-icon" />
+            <span>项目</span>
+          </button>
+        </nav>
       )}
 
       <div className="project-sidebar-spacer" />
 
-      {switchProjects.length ? (
-        <section className="project-recent-switcher">
-          <div className="project-nav-section-label"><span>切换项目</span><small>最近使用</small></div>
-          <div className="project-recent-list">
-            {switchProjects.map((project) => {
-              const activity = activities[project.project_id];
-              const presentation = projectPresentation(project, activity);
-              const taskActive = activity?.state === "active";
-              return (
-                <button
-                  type="button"
-                  key={project.project_id}
-                  onClick={() => onSelectProject(project)}
-                  onContextMenu={(event) => { event.preventDefault(); openMenu(project, event.clientX, event.clientY); }}
-                  onKeyDown={(event) => {
-                    if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
-                      event.preventDefault();
-                      const box = event.currentTarget.getBoundingClientRect();
-                      openMenu(project, box.right - 204, box.bottom + 4);
-                    }
-                  }}
-                >
-                  <span><strong>{project.name || project.project_id}</strong><small>{presentation.sidebarSubtitle}</small></span>
-                  {taskActive ? <span className="project-activity-spinner" /> : null}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      <div className="project-sidebar-workspace" aria-label="当前工作区">
-        <div className="project-sidebar-workspace-info">
-          <span className="project-sidebar-workspace-label">工作区</span>
-          <strong title={workspacePath || workspace.workspace}>{workspace.workspace || "未命名工作区"}</strong>
-          {workspacePath.trim() ? <code title={workspacePath}>{workspacePath}</code> : null}
-        </div>
-        {onSwitchWorkspace ? (
-          <button type="button" className="secondary project-sidebar-switch-btn" onClick={onSwitchWorkspace}>切换…</button>
-        ) : null}
-      </div>
-
       <nav className="project-system-nav" aria-label="系统导航">
-        <button type="button" className={primaryActive === "status" ? "is-active" : ""} onClick={onOpenStatusCenter}><NavIcon name="status" /><span>状态中心</span>{runningCount ? <small className="project-system-badge">{runningCount}</small> : null}</button>
-        <button type="button" className={primaryActive === "settings" ? "is-active" : ""} onClick={onOpenSettings}><NavIcon name="settings" /><span>设置</span></button>
+        <button type="button" data-tauri-drag-region="no-drag" disabled={!selectedProject || !onOpenTeamProject} onClick={() => selectedProject && onOpenTeamProject?.(selectedProject)} title="协作">
+          <StudioIcon name="team" size={16} className="project-nav-icon" />
+          <span>协作</span>
+        </button>
+        <button type="button" className={primaryActive === "status" ? "is-active" : ""} aria-current={primaryActive === "status" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenStatusCenter} title="状态">
+          <StudioIcon name="activity" size={16} className="project-nav-icon" />
+          <span>状态</span>
+          {statusCount > 0 ? <small className={`project-system-badge${failedCount > 0 ? " is-error" : ""}`} aria-label={`${runningCount ? `${runningCount} 个任务运行中` : ""}${failedCount ? `${runningCount ? "，" : ""}${failedCount} 个项目需处理` : ""}`}><span className="project-activity-spinner" aria-hidden="true" />{statusCount}</small> : null}
+        </button>
+        <button type="button" className={primaryActive === "settings" ? "is-active" : ""} aria-current={primaryActive === "settings" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenSettings} title="设置">
+          <StudioIcon name="settings" size={16} className="project-nav-icon" />
+          <span>设置</span>
+        </button>
       </nav>
 
       {menu ? (
@@ -217,6 +207,8 @@ export function ProjectLibrary({
           </details>
         </div>
       ) : null}
+      <span className="sr-only">{workspacePath || workspace.workspace} 最近使用 {projectStatuses.map((presentation) => presentation.sidebarSubtitle).join("、")}</span>
+      {onSwitchWorkspace ? <button type="button" className="sr-only" onClick={onSwitchWorkspace}>切换工作区</button> : null}
     </div>
   );
 }

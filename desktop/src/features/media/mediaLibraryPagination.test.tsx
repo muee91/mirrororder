@@ -43,6 +43,10 @@ it("pages the list and grid from their initial limits and admits grid thumbnails
     const videos = () => list.querySelectorAll("video");
     expect(videos()).toHaveLength(6);
     const first = videos()[0];
+    Object.defineProperties(first, { duration: { value: 4 }, readyState: { value: 1 } });
+    act(() => first.dispatchEvent(new Event("loadedmetadata")));
+    expect(first.currentTime).toBe(0.04);
+    expect(videos()).toHaveLength(6);
     act(() => first.dispatchEvent(new Event("loadeddata")));
     expect(videos()).toHaveLength(7);
     expect(videos()[0]).toBe(first);

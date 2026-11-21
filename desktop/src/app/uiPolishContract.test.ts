@@ -93,13 +93,15 @@ describe("Desktop UI polish contract", () => {
     expect(slateTheme).not.toContain('content: "刷新";');
   });
 
-  it("keeps operator editing in the global toolbar", () => {
+  it("keeps operator editing in the settings surface", () => {
+    const settings = read("../features/settings/SettingsStatusWorkbench.tsx");
     const project = read("../features/production/ProjectWorkbench.tsx");
     const library = read("../features/media/MediaLibraryWorkbench.tsx");
     const script = read("../features/script/ScriptWorkspace.tsx");
     const decision = read("../features/review/ReviewDecisionPanel.tsx");
 
-    expect(project).toContain("<CurrentOperatorControl");
+    expect(settings).toContain("<CurrentOperatorControl");
+    expect(project).not.toContain("<CurrentOperatorControl");
     expect(library).not.toContain("<CurrentOperatorControl");
     expect(script).not.toContain("review-actor-field");
     expect(decision).not.toContain("editorial-actor-field");

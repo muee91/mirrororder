@@ -125,6 +125,26 @@ describe("useNearViewportGate", () => {
     expect(FakeIntersectionObserver.instances).toHaveLength(3);
   });
 
+  it.each([
+    { duration: 4, readyState: 1, start: 0, expectedTime: 0.04 },
+    { duration: 0.08, readyState: 1, start: 0, expectedTime: 0.001 },
+    { duration: NaN, readyState: 1, start: 0, expectedTime: 0.001 },
+    { duration: 4, readyState: 2, start: 0, expectedTime: 0 },
+    { duration: 4, readyState: 1, start: 2, expectedTime: 2 },
+  ])("requests the thumbnail at $expectedTime when duration=$duration, readyState=$readyState and start=$start", ({ duration, readyState, start, expectedTime }) => {
+    root = createRoot(container);
+    act(() => root!.render(<MirrorOrderMediaCard showPreview model={{
+      id: "one", mediaId: "one", camera: "A", name: "Clip", playbackUrl: "/clip", sourceStart: start,
+    }} />));
+    const video = container.querySelector("video")!;
+    Object.defineProperties(video, { duration: { value: duration }, readyState: { value: readyState } });
+    act(() => video.dispatchEvent(new Event("loadedmetadata")));
+    expect(video.currentTime).toBe(expectedTime);
+    expect(video.classList.contains("is-ready")).toBe(readyState >= 2);
+    act(() => video.dispatchEvent(new Event("seeked")));
+    expect(video.classList.contains("is-ready")).toBe(true);
+  });
+
   it("admits six compact thumbnails and keeps each loaded frame mounted as the FIFO advances", () => {
     root = createRoot(container);
     act(() => root!.render(Array.from({ length: 9 }, (_, i) => (

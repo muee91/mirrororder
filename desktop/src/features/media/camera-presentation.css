@@ -77,3 +77,9 @@ html[data-mirrororder-theme="dark"] [data-camera-tone="a"] { --camera-ink: #6ee7
 html[data-mirrororder-theme="dark"] [data-camera-tone="b"] { --camera-ink: #f2b479; }
 html[data-mirrororder-theme="dark"] [data-camera-tone="c"] { --camera-ink: #c1b3f8; }
 html[data-mirrororder-theme="dark"] [data-camera-tone="aux"] { --camera-ink: #b8c4d4; }
+
+html[data-mirrororder-theme="dark"] .mo-media-camera-badge[data-camera-tone] {
+  border-color: color-mix(in srgb, var(--camera-rail) 32%, transparent);
+  background: rgba(12, 16, 22, 0.72);
+  font-weight: 650;
+}

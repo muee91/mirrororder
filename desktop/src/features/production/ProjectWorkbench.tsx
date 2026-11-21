@@ -11,7 +11,6 @@ import {
 import { EvidencePreview } from "./EvidencePreview";
 import { evidenceLocation, type EvidenceReference } from "./evidenceLocation";
 import { canonicalProductionPage, hasRememberedProjectPage, readProjectPage, rememberProjectPage, readSyncSubmissionIssue, rememberSyncSubmissionIssue, type ProductionPage } from "../../app/resumeState";
-import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { StudioIcon } from "../../components/StudioIcons";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
 import { diagnosticPage } from "../assistant/assistantPresentation";
@@ -46,7 +45,7 @@ interface Props {
   slateDraftSession?: SlateDraftSession;
   active?: boolean;
   projectNavigation?: ReactNode;
-  systemTools?: ReactNode;
+  workspaceMenu?: ReactNode;
   pageRequest?: { page: ProductionPage; nonce: number } | null;
   externalXiaoJingAction?: (XiaoJingMainAction & { nonce: number }) | null;
   xiaojingWorkspace?: Pick<XiaoJingContextSnapshot, "workspace_name" | "projects" | "appearance">;
@@ -56,6 +55,8 @@ interface Props {
   onOpenStatus?: () => void;
   onOpenSettings?: () => void;
   onPageChange?: (page: ProductionPage) => void;
+  onSyncStatusChange?: (ready: boolean, phase: string) => void;
+  showModuleRail?: boolean;
 }
 
 type ProductionArea = ProductionWorkspace;
@@ -187,9 +188,10 @@ function assistantSelectionSummary(selection: AssistantSelection): string {
 }
 
 export function ProjectWorkbench({
-  baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation, systemTools,
+  baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation, workspaceMenu,
   pageRequest = null, externalXiaoJingAction, xiaojingWorkspace, onXiaoJingError,
-  onOpenTeamReview, onTaskChanged, onOpenStatus, onOpenSettings, onPageChange,
+  onOpenTeamReview, onTaskChanged, onOpenStatus, onOpenSettings, onPageChange, onSyncStatusChange,
+  showModuleRail = true,
 }: Props) {
   const desktopHud = isTauri();
   const [page, setPage] = useState<ProductionPage>(() => {
@@ -390,6 +392,11 @@ export function ProjectWorkbench({
   }, [onPageChange, page, project.project_id]);
 
   useEffect(() => {
+    onSyncStatusChange?.(master.ready, syncTimeline.phase);
+  }, [master.ready, onSyncStatusChange, syncTimeline.phase]);
+
+
+  useEffect(() => {
     if (visiblePage === "slate") setSlateVisited(true);
   }, [visiblePage]);
 
@@ -500,46 +507,31 @@ export function ProjectWorkbench({
       data-sync-read-error={Boolean(readError || (!syncTimeline.ready && snapshot)) || undefined}
       aria-label={`项目工作台：${project.name || project.project_id}`}
     >
-      <header className="professional-project-toolbar">
-        <div className="professional-project-identity">
+      <header className="professional-project-toolbar" data-tauri-drag-region>
+        <div className="professional-project-identity" data-tauri-drag-region>
           {projectNavigation ?? <strong>{project.name || project.project_id}</strong>}
+          {workspaceMenu ? <span className="professional-project-workspace-menu" data-tauri-drag-region="no-drag">{workspaceMenu}</span> : null}
           {returnPage && returnPage !== visiblePage && visiblePage !== "media-binding" && !syncBlocked && <button type="button" className="secondary"
+            data-tauri-drag-region="no-drag"
             onClick={() => { navigate(returnPage); setReturnPage(null); }}>返回{pageLabel(returnPage)}</button>}
+          <span className="professional-project-context-subtitle" aria-live="polite">{pageLabel(visiblePage)}</span>
         </div>
-        <div className="professional-project-tools">
-          <SemanticSearchPalette active={active} baseUrl={baseUrl} projectId={project.project_id} onOpenEvidence={openEvidence} />
+        <div className="professional-project-tools" data-tauri-drag-region>
+          <span data-tauri-drag-region="no-drag">
+            <SemanticSearchPalette active={active} baseUrl={baseUrl} projectId={project.project_id} onOpenEvidence={openEvidence} />
+          </span>
           <button type="button" ref={assistantToggle} className={`professional-assistant-toggle${assistantOpen ? " is-active" : ""}`} aria-expanded={assistantOpen}
-            aria-keyshortcuts="Meta+J Control+J" onClick={toggleAssistant}>
+            aria-keyshortcuts="Meta+J Control+J" data-tauri-drag-region="no-drag" onClick={toggleAssistant}>
             <StudioIcon name="sparkle" size={13.5} />
             <span>小镜</span>
             <kbd aria-hidden="true">{shortcut}</kbd>
           </button>
-          <details className="professional-tools-menu" onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-          }}>
-            <summary>
-              <StudioIcon name="tools" size={13.5} />
-              <span>工具</span>
-            </summary>
-            <div className="professional-tools-popover">
-              <CurrentOperatorControl />
-              {!syncBlocked && onOpenTeamReview ? (
-                <button
-                  type="button"
-                  className="secondary professional-tools-popover-action professional-team-review"
-                  onClick={(event) => {
-                    const details = event.currentTarget.closest("details");
-                    if (details) details.open = false;
-                    onOpenTeamReview();
-                  }}
-                >
-                  <StudioIcon name="team" size={13.5} />
-                  <span>团队审阅</span>
-                </button>
-              ) : null}
-            </div>
-          </details>
-          {systemTools && <div className="professional-project-system">{systemTools}</div>}
+          {(syncTimeline.phase === "running" || readError || commandError) ? (
+            <span className={`professional-task-indicator${readError || commandError ? " is-error" : ""}`} role="status">
+              <span className="professional-task-indicator-dot" aria-hidden="true" />
+              {readError || commandError ? "任务需处理" : "同步中"}
+            </span>
+          ) : null}
         </div>
       </header>
 
@@ -548,8 +540,8 @@ export function ProjectWorkbench({
           {snapshot ? ` 正在显示 ${new Date(snapshot.readAt).toLocaleString()} 确认的母版。` : ` ${readError}`}</span>
         <button type="button" className="secondary" onClick={() => void refreshSyncTimeline()}>重新读取</button>
       </div>}
-      <div className="project-production-layout">
-        <nav className="project-module-rail" aria-label="制作区域">
+      <div className={`project-production-layout${showModuleRail ? "" : " without-module-rail"}`}>
+        {showModuleRail ? <nav className="project-module-rail" aria-label="制作区域">
           <ProjectModuleNavigation inputKind={project.input_kind}
             selected={visiblePage} syncReady={master.ready} syncPhase={syncTimeline.phase}
             onNavigate={(target) => {
@@ -557,9 +549,51 @@ export function ProjectWorkbench({
                 switchArea(areaForPage(target), target);
               }
             }} />
-        </nav>
+          <div className="project-module-system" aria-label="系统工具">
+            {onOpenTeamReview ? <button type="button" className="project-module-system-link" data-tauri-drag-region="no-drag" title="团队审阅" onClick={onOpenTeamReview}>
+              <StudioIcon name="team" size={16} /><span>协作</span>
+            </button> : null}
+            {onOpenStatus ? <button type="button" className="project-module-system-link" data-tauri-drag-region="no-drag" title="状态中心" onClick={onOpenStatus}>
+              <StudioIcon name="activity" size={16} /><span>状态</span>
+            </button> : null}
+            {onOpenSettings ? <button type="button" className="project-module-system-link" data-tauri-drag-region="no-drag" title="设置" onClick={onOpenSettings}>
+              <StudioIcon name="settings" size={16} /><span>设置</span>
+            </button> : null}
+          </div>
+        </nav> : null}
       <div className="project-workbench-canvas">
         <div className="project-workbench-main owns-chrome">
+          {visiblePage.startsWith("sync-") ? (
+            <nav className="workbench-subbar sync-workbench-subbar" aria-label="同步工作区">
+              {([
+                ["sync-task", "同步任务"],
+                ["sync-inspect", "同步核对"],
+                ["sync-delivery", "工程交付"],
+              ] as const).map(([target, label]) => {
+                const available = target === "sync-task" || master.ready;
+                return <button key={target} type="button" className="workbench-subbar-link" aria-current={visiblePage === target ? "page" : undefined}
+                  disabled={!available} title={!available ? "同步完成后开放" : undefined}
+                  onClick={() => navigate(target)}>{label}</button>;
+              })}
+            </nav>
+          ) : null}
+          {["media-library", "takes", "identity", "media-binding"].includes(visiblePage) ? (
+            <nav className="workbench-subbar material-workbench-subbar" aria-label="素材工作区">
+              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "media-library" ? "page" : undefined} onClick={() => navigate("media-library")}>全部文件</button>
+              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "takes" ? "page" : undefined} disabled={syncBlocked} onClick={() => navigate("takes")}>Take 镜次</button>
+              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "identity" ? "page" : undefined} disabled={syncBlocked} onClick={() => navigate("identity")}>演员与角色</button>
+              <button type="button" className="workbench-subbar-link workbench-subbar-link-trailing" aria-current={visiblePage === "media-binding" ? "page" : undefined} onClick={() => navigate("media-binding")}>换盘 / 本机重连</button>
+            </nav>
+          ) : null}
+          {visiblePage === "watch" || visiblePage === "timeline" ? (
+            <nav className="workbench-subbar review-workbench-subbar" aria-label="审阅工作区">
+              {visiblePage === "watch" ? (
+                <button type="button" className="workbench-subbar-link workbench-subbar-link-trailing" onClick={() => navigate("timeline")}>粗剪组接 ↗</button>
+              ) : (
+                <button type="button" className="workbench-subbar-link" onClick={() => navigate("watch")}>← 返回看片审阅</button>
+              )}
+            </nav>
+          ) : null}
           {active && visiblePage === "sync-task" ? (
             <SyncTaskWorkspace syncTimeline={syncTimeline} baseUrl={baseUrl} command={command}
               submissionError={commandError || submissionIssue}

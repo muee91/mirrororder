@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import type { ProductionPage } from "../../app/resumeState";
 import { StudioIcon, type StudioIconName } from "../../components/StudioIcons";
 
@@ -46,7 +45,24 @@ const EDITORIAL_GROUP: ProductionModuleGroup = {
   ],
 };
 
-const SECONDARY_MODULE_PAGES = new Set<ProductionPage>(["identity", "media-binding", "timeline"]);
+/**
+ * The production rail intentionally exposes five stable workbenches. The
+ * detailed pages remain addressable through each workbench's own subbar.
+ */
+const PRIMARY_MODULES: ReadonlyArray<{
+  id: "sync" | "slate" | "script" | "material" | "review";
+  label: string;
+  icon: StudioIconName;
+  target: ProductionPage;
+  pages: readonly ProductionPage[];
+  requiresSync: boolean;
+}> = [
+  { id: "sync", label: "同步", icon: "sync-task", target: "sync-task", pages: ["sync-task", "sync-inspect", "sync-delivery"], requiresSync: false },
+  { id: "slate", label: "场记", icon: "slate", target: "slate", pages: ["slate"], requiresSync: true },
+  { id: "script", label: "剧本", icon: "script", target: "script", pages: ["script"], requiresSync: true },
+  { id: "material", label: "素材", icon: "media-library", target: "media-library", pages: ["media-library", "takes", "identity", "media-binding"], requiresSync: false },
+  { id: "review", label: "审阅", icon: "watch", target: "watch", pages: ["watch", "timeline"], requiresSync: true },
+];
 
 export function modulesForProject(inputKind: string): readonly ProductionModuleGroup[] {
   return inputKind === "media-directory"
@@ -71,78 +87,38 @@ interface Props {
 
 export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPhase, onNavigate }: Props) {
   const selectedModule = selected === "takes" ? "media-library" : selected;
-  const overflowRef = useRef<HTMLDetailsElement>(null);
-  const allModules = modulesForProject(inputKind).flatMap((group) => group.modules);
-  const primaryGroups = [
-    ...(inputKind === "media-directory"
-      ? [{ id: "delivery", title: "同步与交付", modules: RAW_MEDIA_GROUP.modules }]
-      : []),
-    {
-      id: "organize",
-      title: "场记与找片",
-      modules: [
-        ...ORGANIZE_GROUP.modules.filter((item) => !SECONDARY_MODULE_PAGES.has(item.page)),
-        ...EDITORIAL_GROUP.modules.filter((item) => !SECONDARY_MODULE_PAGES.has(item.page)),
-      ],
-    },
-  ];
-  const overflowModules = allModules.filter((item) => SECONDARY_MODULE_PAGES.has(item.page));
-  const activeOverflow = overflowModules.find((item) => item.page === selectedModule) ?? null;
 
-  function renderModuleButton(item: ProductionModule, closeMenu = false) {
-    const available = canOpenProductionModule(item.page, inputKind, syncReady);
+  function renderPrimaryButton(item: (typeof PRIMARY_MODULES)[number]) {
+    const active = item.pages.includes(selectedModule);
+    const target = item.id === "sync" && syncReady ? "sync-inspect" : item.target;
+    const available = canOpenProductionModule(target, inputKind, syncReady);
     return (
       <button
         type="button"
-        className={`project-module-link${selectedModule === item.page ? " is-active" : ""}`}
-        key={item.page}
-        aria-current={selectedModule === item.page ? "page" : undefined}
+        data-tauri-drag-region="no-drag"
+        className={`project-module-link${active ? " is-active" : ""}`}
+        key={item.id}
+        aria-current={active ? "page" : undefined}
         disabled={!available}
-        title={available ? item.description : "同步完成后开放此模块"}
+        title={available ? item.label : "同步完成后开放此工作区"}
         onClick={() => {
-          if (closeMenu && overflowRef.current) overflowRef.current.open = false;
-          onNavigate(item.page);
+          if (canOpenProductionModule(target, inputKind, syncReady)) onNavigate(target);
         }}
       >
-        <StudioIcon name={item.page as StudioIconName} size={13.5} className="project-module-icon" />
+        <StudioIcon name={item.icon} size={16} className="project-module-icon" />
         <span className="project-module-link-title">{item.label}</span>
-        {item.page === "sync-task" && syncPhase === "running" && <span className="project-module-running">同步中</span>}
+        {item.id === "sync" && syncPhase === "running" && <span className="project-module-running" aria-label="同步中" />}
       </button>
     );
   }
 
   return (
-    <div className="project-module-navigation">
-      {primaryGroups.map((group) => (
-        <div className="project-module-group" role="group" aria-label={group.title} key={group.id}>
-          <span className="project-module-group-title" aria-hidden="true">{group.title}</span>
-          {group.modules.map((item) => renderModuleButton(item))}
+    <div className="project-module-navigation" role="list">
+      {PRIMARY_MODULES.map((item) => (
+        <div className="project-module-group" role="listitem" key={item.id}>
+          {renderPrimaryButton(item)}
         </div>
       ))}
-      {overflowModules.length ? (
-        <details
-          ref={overflowRef}
-          className={`project-module-overflow${activeOverflow ? " has-active" : ""}`}
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && event.currentTarget.open) {
-              event.stopPropagation();
-              event.currentTarget.open = false;
-              event.currentTarget.querySelector("summary")?.focus();
-            }
-          }}
-        >
-          <summary aria-label="更多制作工位">
-            <span>{activeOverflow ? activeOverflow.label : "更多工位"}</span>
-            <StudioIcon name="chevron-down" size={12} />
-          </summary>
-          <div className="project-module-overflow-menu" role="group" aria-label="进阶工位">
-            {overflowModules.map((item) => renderModuleButton(item, true))}
-          </div>
-        </details>
-      ) : null}
     </div>
   );
 }

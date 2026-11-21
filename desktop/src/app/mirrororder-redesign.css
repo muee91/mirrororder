@@ -421,24 +421,6 @@ textarea {
   background: var(--mo-surface-soft);
 }
 
-.app-topbar-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.app-topbar-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mo-success);
-}
-
-.app-topbar-status-dot.is-active {
-  background: var(--mo-accent);
-  box-shadow: 0 0 0 4px var(--mo-accent-soft);
-}
-
 .app-workspace-menu {
   position: relative;
 }
@@ -456,7 +438,7 @@ textarea {
   max-width: 190px;
   padding: 0 9px;
   display: grid;
-  grid-template-columns: 7px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   border: 1px solid var(--mo-border);
@@ -468,7 +450,7 @@ textarea {
   cursor: default;
 }
 
-.app-workspace-chip > span:nth-child(2) {
+.app-workspace-chip > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

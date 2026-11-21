@@ -1,3 +1,5 @@
+import { isTauri } from "@tauri-apps/api/core";
+
 export type DesktopAppearance = "system" | "light" | "dark";
 export type DesktopResolvedTheme = "light" | "dark";
 
@@ -92,8 +94,12 @@ function installSystemAppearanceListener(): void {
 }
 
 export function initializeDesktopAppearance(): DesktopAppearance {
+  const root = documentRoot();
+  if (root && typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) && isTauri()) {
+    root.dataset.macosOverlay = "true";
+  }
   const appearance = readDesktopAppearance();
-  applyDesktopAppearance(appearance);
+  applyDesktopAppearance(appearance, root);
   installSystemAppearanceListener();
   return appearance;
 }

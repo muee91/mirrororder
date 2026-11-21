@@ -6,6 +6,7 @@ import { DesktopClient, type DesktopStatusPayload, type FrontendSettings } from 
 import { HostConnection, type HostProcessStatus, errorMessage } from "../../api/host";
 import { PlatformClient, type PlatformInfo } from "../../api/platform";
 import { AssistantModelsPanel } from "../assistant/AssistantModelsPanel";
+import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { StudioIcon } from "../../components/StudioIcons";
 import { CollaborationPanel } from "./CollaborationPanel";
 import { DesktopAppearanceControl } from "./DesktopAppearanceControl";
@@ -194,6 +195,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
           </header>
           <div className="settings-preference-surface settings-general-card">
             <DesktopAppearanceControl />
+            <CurrentOperatorControl />
           </div>
         </section>
 
