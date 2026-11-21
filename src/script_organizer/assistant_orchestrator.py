@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -53,9 +54,11 @@ class AssistantOrchestrator:
         self.project_id = str(project_id or "")
         self.config = config
         self.task_manager = task_manager
-        self.store = AssistantStore(config.output_dir)
-        self.tools = AgentToolRegistry(self.workspace_id, self.project_id, config, task_manager)
         self.models = ModelRegistry()
+        self.store = AssistantStore(config.output_dir, secrets=self.models.private_values())
+        self.tools = AgentToolRegistry(
+            self.workspace_id, self.project_id, config, task_manager, assistant_store=self.store,
+        )
         self.language = AssistantLanguageModel(self.models.assistant)
 
     def _fingerprint(self) -> str:
@@ -205,23 +208,28 @@ class AssistantOrchestrator:
             "actions": ["focus"],
         }
 
-    def _supervisor_notes(self, limit: int = 48, *, group: str = "") -> list[dict[str, Any]]:
-        board = ScriptSupervisorStore(self.config.output_dir).load()
+    def _supervisor_notes(
+        self, limit: int = 48, *, group: str = "", entries: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        if entries is None:
+            entries = _as_dict(ScriptSupervisorStore(self.config.output_dir).load().get("entries"))
         rows = []
-        for group_id, raw in _as_dict(board.get("entries")).items():
+        for group_id, raw in entries.items():
             if group and group_id != group:
                 continue
             entry = _as_dict(raw)
             note = str(entry.get("note", "") or "").strip()
+            scene = str(entry.get("scene", "") or "")[:80]
+            shot = str(entry.get("shot", "") or "")[:80]
             status = str(entry.get("status", "unmarked") or "unmarked")
             usable_range = _as_dict(entry.get("usable_range"))
-            if not note and status == "unmarked" and not usable_range:
+            if not (note or scene or shot or usable_range) and status == "unmarked":
                 continue
             rows.append(
                 {
                     "group_id": str(group_id),
-                    "scene": str(entry.get("scene", "") or "")[:80],
-                    "shot": str(entry.get("shot", "") or "")[:80],
+                    "scene": scene,
+                    "shot": shot,
                     "take_number": entry.get("take_number"),
                     "status": status,
                     "note": note[:1200],
@@ -465,11 +473,11 @@ class AssistantOrchestrator:
 
         payload = {
             "source_fingerprint": fingerprint,
-            "summary": summary,
-            "items": items,
+            "summary": self.store.sanitize(summary),
+            "items": self.store.sanitize(items),
             "orchestration": orchestration,
         }
-        if previous.get("source_fingerprint") == fingerprint and previous.get("summary") == summary and previous.get("items") == items and not action_results and not plan:
+        if all(previous.get(key) == payload[key] for key in ("source_fingerprint", "summary", "items")) and not action_results and not plan:
             return previous
         return self.store.save(payload)
 
@@ -479,42 +487,29 @@ class AssistantOrchestrator:
             return self.cycle(trigger="read", allow_actions=False)
         return current
 
-    def answer(self, message: str, *, context: dict | None = None) -> dict[str, Any]:
-        if context is not None:
-            # Desktop selections always use the same evidence-aware answer, including
-            # callers that install the assistant layer before the semantic runtime.
-            from .semantic_runtime import answer_project_question
-            return answer_project_question(self, message, context=context)
-        text = str(message or "").strip()[:3000]
-        if not text:
-            raise ValueError("消息不能为空")
-        current = self.status()
-        current = self.store.append_message("user", text, source="user")
-        project = self.tools.inspect_project()
-        attention = self.tools.list_attention_groups(limit=30)
-        supervisor = self._supervisor_notes(limit=36)
-        if self.language.enabled:
-            system = (
-                "你是小镜，服务短剧后期制作。根据给出的项目事实和场记备注回答用户，优先帮助用户看片、归集、理解素材可用范围、发现素材问题和准备粗剪。"
-                "场记备注是人工生产证据，可以按语义解释，例如‘只要前半段’表示粗剪应优先考虑局部范围，但除非人工已填写精确范围，否则不得伪造具体秒数。"
-                "不要声称已经执行未发生的动作；不要把AI意见或场记备注说成人工最终创意结论；不要输出模型/运行时技术宣传。"
-                "多机位画面人物可能不是说话人。输出严格JSON：{\"answer\":\"中文回答\"}。"
-            )
-            raw = self.language.complete_json(
-                system=system,
-                context={
-                    "question": text,
-                    "project": project,
-                    "attention": attention[:16],
-                    "script_supervisor": supervisor,
-                    "assistant_summary": current.get("summary", ""),
-                },
-                temperature=0.2,
-            )
-            answer = str(_as_dict(raw).get("answer", "") or "").strip()
+    def _complete_answer(self, *, system: str, context: dict[str, Any], temperature: float) -> str:
+        context = self.store.sanitize(context)
+        complete = getattr(self.language, "complete_answer", None)
+        if callable(complete):
+            answer = complete(system=system, context=context, temperature=temperature)
         else:
-            answer = "当前没有可用的语言模型。我仍会保留场记事实、人工景别和可用范围，并用确定性规则参与Coverage与粗剪规划；启用语言模型后，我可以进一步理解备注语义并主动解释。"
-        if not answer:
-            answer = str(current.get("summary", "") or "当前没有新的高优先问题。")
-        saved = self.store.append_message("assistant", answer, source=self.models.assistant.source)
-        return {"answer": answer, "assistant": saved}
+            raw = self.language.complete_json(system=system, context=context, temperature=temperature)
+            answer = _as_dict(raw).get("answer")
+        return str(answer or "").strip()
+
+    def _answer_model_info(self, *, attempted: bool) -> dict[str, Any]:
+        status = _as_dict(getattr(self.language, "last_status", {})) if attempted else {}
+        reason = str(status.get("reason") or "")
+        if not self.language.enabled:
+            reason = "not_configured"
+        elif reason not in {
+            "", "not_configured", "local_model_not_downloaded", "local_server_unavailable",
+            "timeout", "network_error", "invalid_json", "invalid_response", "empty_response",
+        } and not re.fullmatch(r"http_[1-5][0-9]{2}", reason):
+            reason = ""
+        return self.store.sanitize({**self.models.assistant.public(), "fallback_reason": reason})
+
+    def answer(self, message: str, *, context: dict | None = None) -> dict[str, Any]:
+        from .semantic_runtime import answer_project_question
+
+        return answer_project_question(self, message, context=context)

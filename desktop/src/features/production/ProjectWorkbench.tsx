@@ -45,6 +45,7 @@ interface Props {
   onOpenTeamReview?: () => void;
   onTaskChanged?: () => void;
   onOpenStatus?: () => void;
+  onOpenSettings?: () => void;
   onPageChange?: (page: ProductionPage) => void;
 }
 
@@ -167,7 +168,16 @@ function normalizedContext(
   };
 }
 
-export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation, systemTools, pageRequest = null, onOpenTeamReview, onTaskChanged, onOpenStatus, onPageChange }: Props) {
+function assistantSelectionSummary(selection: AssistantSelection): string {
+  const { camera, clip_id, media_id, sync_clip_id, group_id, script_segment_id } = selection;
+  return [
+    camera ? `${camera} 机位` : (clip_id || media_id || sync_clip_id) && "素材已选",
+    group_id && "Take 已选",
+    script_segment_id && "剧本段落",
+  ].filter(Boolean).join(" · ");
+}
+
+export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation, systemTools, pageRequest = null, onOpenTeamReview, onTaskChanged, onOpenStatus, onOpenSettings, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => {
     const saved = safeProductionPage(readProjectPage(project.project_id));
     if (project.input_kind === "media-directory") {
@@ -176,6 +186,8 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
     return saved;
   });
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantVisited, setAssistantVisited] = useState(false);
+  const [assistantWide, setAssistantWide] = useState(false);
   const [selection, setSelection] = useState<ProductionSelectionContext>(() => ({ projectId: project.project_id }));
   const [navigationIntent, setNavigationIntent] = useState<ProductionNavigationIntent | null>(null);
   const [deliveryRequestNonce, setDeliveryRequestNonce] = useState(0);
@@ -188,7 +200,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
   const [submissionIssue, setSubmissionIssue] = useState(() => readSyncSubmissionIssue(workspaceId, project.project_id));
   const commanding = useRef(false);
   const assistantToggle = useRef<HTMLButtonElement>(null);
-  const assistantDraft = useMemo(() => ({ text: "", includeSelection: true }), [baseUrl, project.project_id]);
+  const assistantDraft = useMemo(() => ({ text: "", includeSelection: false }), [baseUrl, project.project_id]);
   const navigationNonce = useRef(0);
   const { syncTimeline, snapshot, readError, refreshSyncTimeline } = useMulticamSyncGate(baseUrl, project.project_id, project.input_kind);
   const master = syncTimeline.ready ? syncTimeline : snapshot?.timeline ?? syncTimeline;
@@ -199,7 +211,18 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
   const area = areaForPage(visiblePage);
   const currentSelection = selection.projectId === project.project_id ? selection : { projectId: project.project_id };
   const pageFocus = useMemo<{ current: AssistantSelection }>(() => ({ current: {} }), [project.project_id, visiblePage]);
-  const inspectSelection = useCallback((next: AssistantSelection) => { pageFocus.current = next; }, [pageFocus]);
+  const [focusSummary, setFocusSummary] = useState<{ pageFocus: typeof pageFocus; label: string } | null>(null);
+  const inspectSelection = useCallback((next: AssistantSelection) => {
+    const label = assistantSelectionSummary(next);
+    if (assistantSelectionSummary(pageFocus.current) !== label) setFocusSummary({ pageFocus, label });
+    pageFocus.current = next;
+  }, [pageFocus]);
+  const selectionContext = {
+    group_id: currentSelection.groupId, clip_id: currentSelection.clipId,
+    media_id: currentSelection.mediaId, script_segment_id: currentSelection.scriptSegmentId,
+  };
+  const selectionSummary = focusSummary?.pageFocus === pageFocus
+    ? focusSummary.label : assistantSelectionSummary(selectionContext);
   const currentIntent = navigationIntent?.projectId === project.project_id ? navigationIntent : null;
 
   const updateSelection = useCallback((values: ProductionSelectionValues): void => {
@@ -226,6 +249,12 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
     setAssistantOpen(false);
     assistantToggle.current?.focus();
   }
+
+  const toggleAssistant = useCallback(() => {
+    setAssistantVisited(true);
+    setAssistantOpen((value) => !value);
+    if (assistantOpen) assistantToggle.current?.focus();
+  }, [assistantOpen]);
 
   function nextIntent(
     workspace: ProductionWorkspace,
@@ -354,12 +383,25 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
     if (pageRequest) navigate(pageRequest.page);
   }, [pageRequest?.nonce]);
 
-  const assistantVisible = active && assistantOpen;
+  useEffect(() => {
+    if (!active) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.isComposing || event.altKey || event.repeat) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        toggleAssistant();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, toggleAssistant]);
 
+  const assistantVisible = active && assistantOpen;
+  const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘J" : "Ctrl+J";
 
   return (
     <section
-      className={`project-production-workbench professional-project-workbench ${assistantVisible ? "has-assistant-drawer" : ""}`}
+      className={`project-production-workbench professional-project-workbench${assistantVisible ? " has-assistant-drawer" : ""}${assistantVisible && assistantWide ? " has-assistant-wide" : ""}`}
       data-sync-read-error={Boolean(readError || (!syncTimeline.ready && snapshot)) || undefined}
       aria-label={`项目工作台：${project.name || project.project_id}`}
     >
@@ -372,9 +414,10 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
         <div className="professional-project-tools">
           <SemanticSearchPalette active={active} baseUrl={baseUrl} projectId={project.project_id} onOpenEvidence={openEvidence} />
           <button type="button" ref={assistantToggle} className={`professional-assistant-toggle${assistantOpen ? " is-active" : ""}`} aria-expanded={assistantOpen}
-            onClick={() => setAssistantOpen((value) => !value)}>
+            aria-keyshortcuts="Meta+J Control+J" onClick={toggleAssistant}>
             <StudioIcon name="sparkle" size={13.5} />
             <span>小镜</span>
+            <kbd aria-hidden="true">{shortcut}</kbd>
           </button>
           <details className="professional-tools-menu" onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
@@ -522,29 +565,37 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
           ) : null}
         </div>
 
-        {assistantVisible ? (
-          <aside className="assistant-context-drawer" aria-label="小镜上下文助手" onKeyDown={(event) => {
+        {assistantVisited ? (
+          <aside className="assistant-context-drawer" {...(assistantWide && { className: "assistant-context-drawer is-wide" })}
+            hidden={!assistantVisible} aria-label="小镜上下文助手" onKeyDown={(event) => {
             if (event.key === "Escape" && !event.nativeEvent.isComposing) { event.stopPropagation(); closeAssistant(); }
           }}>
             <div className="assistant-drawer-heading">
-            <div><p className="eyebrow">{AREAS[area].label} / {pageLabel(visiblePage)}</p><strong>小镜</strong></div>
-              <button type="button" className="secondary" onClick={closeAssistant} aria-label="关闭小镜">关闭</button>
+              <div><strong>小镜</strong><span>{pageLabel(visiblePage)}</span></div>
+              <div className="assistant-drawer-tools">
+                <button type="button" className="secondary" aria-pressed={assistantWide}
+                  onClick={() => setAssistantWide((value) => !value)}>{assistantWide ? "标准" : "加宽"}</button>
+                <button type="button" className="secondary" onClick={closeAssistant} aria-label="关闭小镜">关闭</button>
+              </div>
             </div>
             <AssistantWorkbench
               baseUrl={baseUrl}
               projectId={project.project_id}
+              active={assistantVisible}
+              currentPage={visiblePage}
+              selectionSummary={selectionSummary}
               draft={assistantDraft}
               readContext={(includeSelection) => ({
                 project_id: project.project_id,
                 page: visiblePage,
-                ...(includeSelection ? (Object.keys(pageFocus.current).length ? pageFocus.current : {
-                  group_id: currentSelection.groupId, clip_id: currentSelection.clipId,
-                  media_id: currentSelection.mediaId, script_segment_id: currentSelection.scriptSegmentId,
-                }) : {}),
+                ...(includeSelection ? (Object.keys(pageFocus.current).length ? pageFocus.current : selectionContext) : {}),
               })}
               onOpenEvidence={openEvidence}
               onOpenDiagnostic={(target) => { closeAssistant(); navigate(target); }}
-              onFocusTake={(groupId, destination, clipId) => {
+              onOpenSettings={onOpenSettings}
+              onOpenStatus={onOpenStatus}
+              onTaskSubmitted={onTaskChanged}
+              onFocusTake={syncBlocked ? undefined : (groupId, destination, clipId) => {
                 closeAssistant();
                 focusTake(groupId, destination ?? "material", clipId);
               }}

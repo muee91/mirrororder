@@ -165,6 +165,52 @@ export interface AssistantItem {
   [key: string]: unknown;
 }
 
+export interface AssistantEvidenceItem {
+  document_id?: string;
+  group_id?: string;
+  clip_id?: string;
+  media_id?: string;
+  source?: string;
+  source_label?: string;
+  start?: number;
+  end?: number;
+  snippet?: string;
+  metadata?: {
+    file_name?: string;
+    record_id?: string;
+    time_basis?: string;
+    camera?: string;
+    shot_type?: string;
+    shot_type_label?: string;
+    take_label?: string;
+    slate_status?: string;
+    segment_id?: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface AssistantSuggestedAction {
+  action: "submit_task" | "open_settings" | "open_status" | string;
+  task_type?: string;
+  targets?: { group_ids?: string[]; [key: string]: unknown };
+  label: string;
+  description?: string;
+}
+
+export interface AssistantDiagnosis {
+  summary: string;
+  destination: "sync-task" | "media-binding" | "sync-delivery";
+}
+
+export interface AssistantModelInfo {
+  enabled?: boolean;
+  model?: string;
+  local?: boolean;
+  source?: string;
+  fallback_reason?: string;
+  [key: string]: unknown;
+}
+
 export interface AssistantStatus {
   version: number;
   contract: string;
@@ -172,7 +218,16 @@ export interface AssistantStatus {
   updated_at: string;
   summary: string;
   items: AssistantItem[];
-  messages?: Array<{ role: string; text: string; context?: AssistantAnswer["context"] }>;
+  messages?: Array<{
+    role: string;
+    text: string;
+    context?: AssistantAnswer["context"];
+    created_at?: string;
+    evidence?: AssistantEvidenceItem[];
+    diagnosis?: AssistantDiagnosis;
+    answer_mode?: string;
+    suggested_actions?: AssistantSuggestedAction[];
+  }>;
   [key: string]: unknown;
 }
 
@@ -197,7 +252,12 @@ export interface AssistantAnswer {
   answer?: string;
   text?: string;
   context?: { label: string; selection: AssistantSelection };
-  diagnosis?: { summary: string; destination: "sync-task" | "media-binding" | "sync-delivery" };
+  diagnosis?: AssistantDiagnosis;
+  retrieval?: { results?: AssistantEvidenceItem[]; [key: string]: unknown };
+  answer_mode?: string;
+  model_info?: AssistantModelInfo;
+  suggested_actions?: AssistantSuggestedAction[];
+  suggested_scope_switch?: boolean;
   [key: string]: unknown;
 }
 
@@ -533,6 +593,10 @@ export class ProductionClient {
 
   assistant(projectId: string): Promise<AssistantStatus> {
     return requestJson<AssistantStatus>(this.baseUrl, `${projectPath(projectId)}/assistant`);
+  }
+
+  clearAssistant(projectId: string): Promise<AssistantStatus> {
+    return requestJson<AssistantStatus>(this.baseUrl, `${projectPath(projectId)}/assistant/clear`, { method: "POST" });
   }
 
   cycleAssistant(projectId: string, forcePlan = false): Promise<AssistantStatus> {

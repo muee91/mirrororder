@@ -847,6 +847,7 @@ export function App() {
                 workspaceId={snapshot.workspace.workspace_id}
                 onTaskChanged={() => void refreshActivities()}
                 onOpenStatus={() => setSurface("status")}
+                onOpenSettings={() => setSurface("settings")}
               />
             </div>}
           </section>

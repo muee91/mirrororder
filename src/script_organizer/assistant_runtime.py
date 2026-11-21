@@ -220,6 +220,10 @@ def install_assistant_runtime() -> None:
                 if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "assistant":
                     self._local_only()
                     project_id = parts[3]
+                    if parts[5] == "clear":
+                        project = service.project(project_id)
+                        self._send_json(AssistantStore(project.config.output_dir).clear_messages())
+                        return
                     body = web_server._body(self)
                     if parts[5] == "models":
                         saved = save_model_connections(body)
@@ -244,7 +248,9 @@ def install_assistant_runtime() -> None:
                         context = None
                         if "context" in body:
                             try:
-                                context = resolve_question_context(service.project(project_id), service.tasks.list(project_id), body["context"])
+                                context = resolve_question_context(
+                                    service.project(project_id), assistant.tools.task_snapshot(), body["context"],
+                                )
                             except ValueError as error:
                                 raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
                         self._send_json(assistant.answer(message, context=context))

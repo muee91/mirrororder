@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from http.client import HTTPException
 from typing import Any
 
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .model_connections import (
-    gemini_interactions_request,
+    _extract_gemini_interaction_text,
     load_model_connections,
     resolve_openai_endpoint,
 )
@@ -110,6 +112,14 @@ class ModelRegistry:
         self.assistant = AssistantModelConfig.from_env()
         self.embedding = SemanticEmbeddingConfig.from_env()
 
+    def private_values(self) -> tuple[str, ...]:
+        return tuple(
+            value
+            for config in (self.assistant, self.rescue, self.vision, self.embedding)
+            for value in (config.api_key, config.base_url)
+            if value
+        )
+
     @staticmethod
     def _route(
         *,
@@ -197,7 +207,7 @@ class ModelRegistry:
 
 
 class AssistantLanguageModel:
-    """Bounded JSON client used by the first-party assistant orchestrator.
+    """Bounded text and JSON client used by the first-party assistant orchestrator.
 
     This is deliberately not a free-form code agent. The caller supplies a
     strict system contract and validates every returned tool action before it is
@@ -208,6 +218,10 @@ class AssistantLanguageModel:
     def __init__(self, config: AssistantModelConfig | None = None):
         self.config = config or AssistantModelConfig.from_env()
         self._local_runtime: LocalVisionRuntime | None = None
+        self.last_status: dict[str, Any] = (
+            {"mode": "llm", "reason": ""} if self.enabled
+            else {"mode": "unconfigured", "reason": "not_configured"}
+        )
 
     @property
     def enabled(self) -> bool:
@@ -223,6 +237,7 @@ class AssistantLanguageModel:
         # 本地模型未下载时不能借问答路径静默触发 GB 级下载：
         # 拒绝本次推理（上层降级为无模型回答），下载只走设置里的显式准备。
         if not self._local_runtime.model_downloaded():
+            self.last_status = {"mode": "local_not_downloaded", "reason": "local_model_not_downloaded"}
             return ""
         return self._local_runtime.ensure_server().rstrip("/")
 
@@ -253,57 +268,117 @@ class AssistantLanguageModel:
                 return None
         return payload if isinstance(payload, dict) else None
 
-    def complete_json(
+    def _request_content(
         self,
         *,
         system: str,
         context: dict[str, Any],
-        temperature: float = 0.0,
-    ) -> dict[str, Any] | None:
-        base = self._base_url()
-        if not base:
+        temperature: float,
+    ) -> str | None:
+        if not self.enabled:
+            self.last_status = {"mode": "unconfigured", "reason": "not_configured"}
             return None
-        if self.config.provider == "gemini":
-            text = gemini_interactions_request(
-                base_url=base,
-                api_key=self.config.api_key,
-                model=self.config.model,
-                system_instruction=system,
-                input_payload=json.dumps(context, ensure_ascii=False),
-                timeout_seconds=self.config.timeout_seconds,
-            )
-            return self._parse_json(text) if text else None
-        url = resolve_openai_endpoint(base, "/chat/completions")
-        payload = {
-            "model": self.config.model,
-            "temperature": max(0.0, min(1.0, float(temperature))),
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
-            ],
-        }
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self.config.api_key:
-            headers["Authorization"] = "Bearer " + self.config.api_key
-        request = urllib.request.Request(
-            url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            method="POST",
-            headers=headers,
-        )
+        self.last_status = {"mode": "error", "reason": "local_server_unavailable"}
         try:
+            base = self._base_url()
+            if not base:
+                return None
+            request = self._request(base, system, context, temperature)
             with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
                 raw = json.loads(response.read().decode("utf-8"))
-            content = raw["choices"][0]["message"]["content"]
-        except (
-            OSError,
-            urllib.error.URLError,
-            urllib.error.HTTPError,
-            UnicodeDecodeError,
-            ValueError,
-            KeyError,
-            IndexError,
-            TypeError,
-        ):
+            if self.config.provider == "gemini":
+                content = _extract_gemini_interaction_text(raw)
+            else:
+                content = self._decode_content(raw["choices"][0]["message"]["content"])
+        except urllib.error.HTTPError as error:
+            reason = f"http_{error.code}" if type(error.code) is int and 100 <= error.code <= 599 else "network_error"
+        except TimeoutError:
+            reason = "timeout"
+        except urllib.error.URLError as error:
+            reason = "timeout" if isinstance(error.reason, TimeoutError) else "network_error"
+        except (OSError, HTTPException):
+            reason = "network_error"
+        except (ValueError, TypeError):
+            reason = "invalid_json"
+        except (KeyError, IndexError):
+            reason = "empty_response"
+        else:
+            if content.strip():
+                return content
+            reason = "empty_response"
+        self.last_status = {"mode": "error", "reason": reason}
+        return None
+
+    def _request(
+        self, base: str, system: str, context: dict[str, Any], temperature: float
+    ) -> urllib.request.Request:
+        prompt = json.dumps(context, ensure_ascii=False)
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        api_key = self.config.api_key
+        if self.config.provider == "gemini":
+            # Keep the Interactions payload while allowing transport errors to reach
+            # the assistant status code. The shared Gemini client returns None on errors.
+            if base.endswith("/interactions"):
+                url = base
+            else:
+                version = "" if base.endswith(("/v1", "/v1beta")) else "/v1beta"
+                url = base + version + "/interactions"
+            payload: dict[str, Any] = {
+                "model": self.config.model.removeprefix("models/"), "input": prompt, "store": False,
+            }
+            if system:
+                payload["system_instruction"] = system
+            if api_key:
+                headers["x-goog-api-key"] = api_key
+        else:
+            url = resolve_openai_endpoint(base, "/chat/completions")
+            payload = {
+                "model": self.config.model,
+                "temperature": max(0.0, min(1.0, float(temperature))),
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            }
+            if api_key:
+                headers["Authorization"] = "Bearer " + api_key
+        return urllib.request.Request(
+            url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), method="POST", headers=headers,
+        )
+
+    def complete_json(
+        self, *, system: str, context: dict[str, Any], temperature: float = 0.0
+    ) -> dict[str, Any] | None:
+        content = self._request_content(system=system, context=context, temperature=temperature)
+        if content is None:
             return None
-        return self._parse_json(self._decode_content(content))
+        payload = self._parse_json(content)
+        self.last_status = (
+            {"mode": "llm", "reason": ""} if payload is not None
+            else {"mode": "error", "reason": "invalid_json"}
+        )
+        return payload
+
+    def complete_answer(
+        self, *, system: str, context: dict[str, Any], temperature: float = 0.15
+    ) -> str | None:
+        content = self._request_content(system=system, context=context, temperature=temperature)
+        if content is None:
+            return None
+        text = content.strip()
+        fence = re.fullmatch(r"(`{3,}|~{3,})[^\n]*\n(.*?)\1", text, re.DOTALL)
+        if fence:
+            text = fence[2].strip()
+        if text.casefold().startswith(("<!doctype", "<html", "traceback")):
+            self.last_status = {"mode": "error", "reason": "invalid_response"}
+            return None
+        payload = self._parse_json(text)
+        if payload is not None:
+            answer = str(payload.get("answer") or "").strip()
+        elif text.startswith(("{", "[")):
+            self.last_status = {"mode": "error", "reason": "invalid_json"}
+            return None
+        else:
+            answer = text
+        self.last_status = (
+            {"mode": "llm", "reason": ""} if answer
+            else {"mode": "error", "reason": "empty_response"}
+        )
+        return answer or None

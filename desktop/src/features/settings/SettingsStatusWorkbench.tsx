@@ -184,7 +184,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
         </div>
       </header>
 
-      <p className="production-note settings-intro">管理当前设备的外观、本地 AI 与小镜模型路由；后台任务统一在状态中心处理。</p>
+      <p className="production-note settings-intro">模型路由适用范围：当前设备 · 与项目无关。后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
 
       <div className="settings-preference-stack">
         <section className="settings-preference-section" aria-labelledby="settings-general-title">
