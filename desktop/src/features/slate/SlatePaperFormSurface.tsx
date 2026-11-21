@@ -7,6 +7,7 @@ import {SyncAngleAnnotationPanel} from "./SyncAngleAnnotationPanel";
 import {SlateOriginalPlayback} from "./SlateOriginalPlayback";
 import {SlateFramingPicker} from "./SlateFramingPicker";
 import type {PaperRow,PaperDocument} from "../../api/paperIntake";
+import type {SlateRecord} from "../../api/production";
 import {SlateIntervalLedger,type SlateIntervalLedgerProps} from "./SlateIntervalLedger";
 import {SlateOriginalFormSheet,type SlateFormCellAction,type SlateFormRow,type SlateFormMedia} from "./SlateOriginalFormSheet";
 import {selectPaperFormTargets,toPaperFormRow} from "./slatePaperFormState";
@@ -24,8 +25,10 @@ const MANUAL_FIELDS=[
 ] as const;
 
 export type SheetFramingController={model:SlateFramingModel;set(request:SlateFramingSet):Promise<void>};
+export type ProductionSlateTarget={groupId:string;field?:"scene"|"shot"|"take";clipId?:string;mediaId?:string;sourceTime?:number};
+export type ProductionSlateRows=ReadonlyMap<string,Pick<SlateRecord,"episode"|"scene"|"shot"|"take_number"|"note">&{derived:boolean}>;
 
-export function SlatePaperFormSurface({formRows,formDocuments,onReview,ledger,title,framingControl,sheetFirst,baseUrl,projectId}:{title?:string;baseUrl?:string;projectId?:string;sheetFirst?:SheetFirstController;framingControl?:SheetFramingController;formRows:readonly PaperRow[];formDocuments?:readonly PaperDocument[];onReview:()=>void;ledger:SlateIntervalLedgerProps}){
+export function SlatePaperFormSurface({formRows,formDocuments,onReview,ledger,title,framingControl,sheetFirst,baseUrl,projectId,productionRows,onOpenProduction}:{title?:string;baseUrl?:string;projectId?:string;sheetFirst?:SheetFirstController;framingControl?:SheetFramingController;formRows:readonly PaperRow[];formDocuments?:readonly PaperDocument[];onReview:()=>void;ledger:SlateIntervalLedgerProps;productionRows?:ProductionSlateRows;onOpenProduction?:(target:ProductionSlateTarget)=>void}){
  const manualRequest=useRef("");
  const [manualFields,setManualFields]=useState<Record<string,string>>();
  const [saving,setSaving]=useState(false);
@@ -110,6 +113,11 @@ export function SlatePaperFormSurface({formRows,formDocuments,onReview,ledger,ti
       sequence:sync.length+orig.length+i,kind:"manual",cells:r.fields}));
    const originals=new Map(orig.map(r=>[r.id,r]));
    for(const row of sync){
+     const production=productionRows?.get(row.id);
+     if(production&&!production.derived){
+       row.cells={...row.cells,scene_raw:production.scene,shot_raw:production.shot,take_raw:production.take_number?.toString()??"",notes_raw:production.note};
+       if(production.episode&&production.scene.trim())row.confirmed={episode:production.episode,scene:production.scene};
+     }
      const source=projection?.paper_suggestions?.groups[row.id]?.source;
      const original=source&&originals.get(source.paper_row_id);
 
@@ -126,9 +134,16 @@ export function SlatePaperFormSurface({formRows,formDocuments,onReview,ledger,ti
           row.fieldReview[`${field}_raw`]={label,editable:true};
        }
      }
+     if(onOpenProduction&&production){
+       row.fieldReview??={};
+       for(const field of ["scene","shot","take"] as const){
+         const key=`${field}_raw` as const;
+         if(!row.fieldReview[key])row.fieldReview[key]={label:row.cells[key]?`手工 ${row.cells[key]}`:"待标记",editable:true};
+       }
+     }
    }
    return [...sync,...orig,...manual];
- },[formRows,formDocuments,projection,ledger.snapshot.rows,ledger.sourceTriage,framingControl?.model.tags,sheetFirst?.annotate]);
+ },[formRows,formDocuments,projection,ledger.snapshot.rows,ledger.sourceTriage,framingControl?.model.tags,sheetFirst?.annotate,productionRows,onOpenProduction]);
  const pdfPages=useMemo(()=>[...new Map(allRows.flatMap(r=>r.pdf?[[r.pdf.key,r.pdf] as const]:[])).values()].sort((a,b)=>a.page-b.page||a.key.localeCompare(b.key)),[allRows]);
  const genericPaper=allRows.some(row=>row.kind==="paper"&&!row.pdf);
  const hasDaily=allRows.some(row=>row.kind!=="paper");
@@ -255,7 +270,8 @@ export function SlatePaperFormSurface({formRows,formDocuments,onReview,ledger,ti
  }
  const none=intervals.length===0 || intervalId==="$source";
  return <section ref={sheet} aria-label="原场记表">
-   <div className="slate-browse-tools" aria-label="场记浏览与排序">
+   <div className="slate-browse-tools" role="group" aria-label="场记浏览、排序与查找">
+    <span className="slate-browse-label">浏览与查找</span>
     <label>浏览<select value={visibleMode} onChange={e=>chooseMode(e.target.value as BrowseMode)}>
       <option value="continuous">连续</option><option value="scene">按集场</option>{pdfPages.length>0&&<option value="pdf">PDF 原页</option>}{showTranscript&&<option value="transcript">未标原页的转录</option>}
     </select></label>
@@ -305,6 +321,9 @@ export function SlatePaperFormSurface({formRows,formDocuments,onReview,ledger,ti
      pendingCount={ledger.snapshot.rows.filter(r=>!r.interval?.current||!r.verified).length}
      canEditFraming={!!framingControl} activeSource={current?.camera&&sourceMode?{rowId:current.rowId,digest:current.digest,camera:current.camera}:undefined} onAddRow={sheetFirst?()=>{manualRequest.current=crypto.randomUUID().replaceAll("-","");setManualFields({});}:undefined} addRowBusy={saving}
      onCellAction={action=>{if(action.mode==="framing"&&allRows.find(row=>row.id===action.rowId)?.kind==="paper"){setFraming(action);return;}setFraming(undefined);activeAnchor.current=action.anchor;chooseInterval("");const target=getTargetField(action.field);
+       if(target&&onOpenProduction&&allRows.some(row=>row.id===action.rowId&&row.digest===action.digest&&row.kind==="sync")&&productionRows?.has(action.rowId)&&!projection?.paper_field_annotations?.[action.rowId]?.[target]){
+         onOpenProduction({groupId:action.rowId,field:target});return;
+       }
        const prior=target?projection?.paper_field_annotations?.[action.rowId]?.[target]:undefined;
        setManualCell(prior&&prior.state!=="needs_review"?prior.value??"":action.raw);setEditError("");setActive(action);}}/>
      {framing&&framingControl&&framingRow&&<div className="slate-framing-sheet-slot">
@@ -341,6 +360,12 @@ export function SlatePaperFormSurface({formRows,formDocuments,onReview,ledger,ti
       </section>
       <section className="slate-source-pane" aria-label="素材详情">
         <h3>素材详情</h3><p>{syncSource.file_name??syncSource.label}</p>
+        {syncSource.connection==="linked"&&productionRows?.has(current.rowId)&&onOpenProduction&&<button type="button" onClick={()=>{
+          const video=detail.current?.querySelector<HTMLVideoElement>(".sil-original-playback video");
+          const sourceTime=video&&video.readyState>=1&&Number.isFinite(video.currentTime)&&video.currentTime>=0?video.currentTime:undefined;
+          video?.pause();
+          onOpenProduction({groupId:current.rowId,clipId:syncSource.clip_id,mediaId:syncSource.media_id,sourceTime});
+        }}>在生产场记中标记</button>}
         <details><summary>技术信息</summary><small>片段 ID：{syncSource.clip_id}<br/>素材 ID：{syncSource.media_id}</small></details>
         {sheetFirst?.angle&&<SyncAngleAnnotationPanel key={JSON.stringify([current.rowId,syncSource.clip_id,syncSource.media_id,syncSource.camera,current.digest,syncSource.connection])}
           target={{group_id:current.rowId,clip_id:syncSource.clip_id,media_id:syncSource.media_id,camera:syncSource.camera}} run={sheetFirst.angle}/>}

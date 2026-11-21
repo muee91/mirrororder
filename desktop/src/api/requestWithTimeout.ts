@@ -15,10 +15,13 @@ export async function fetchWithTimeout(
   const tauriRuntime = isTauri();
   const controller = new AbortController();
   const requestInit: TauriRequestInit = { ...init };
+  const cancellation = init.signal;
+  const cancelRequest = () => controller.abort();
+  if (cancellation?.aborted) throw new HostConnectionError("Host 请求已取消");
+  cancellation?.addEventListener("abort", cancelRequest, { once: true });
+  if (!tauriRuntime || cancellation) requestInit.signal = controller.signal;
   if (tauriRuntime) {
     requestInit.connectTimeout = timeoutMs;
-  } else {
-    requestInit.signal = controller.signal;
   }
 
   let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -38,5 +41,6 @@ export async function fetchWithTimeout(
     throw new HostConnectionError(`Host 请求失败：${error instanceof Error ? error.message : String(error)}`, { cause: error });
   } finally {
     if (timer !== undefined) globalThis.clearTimeout(timer);
+    cancellation?.removeEventListener("abort", cancelRequest);
   }
 }

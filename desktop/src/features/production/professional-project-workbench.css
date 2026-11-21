@@ -216,7 +216,6 @@ html[data-mirrororder-theme="light"] .project-module-link[aria-current="page"] .
 .project-production-layout > .project-workbench-canvas {
   min-width: 0;
   min-height: 0;
-  height: 100%;
 }
 .professional-project-workbench .project-workbench-main {
   height: 100%;

@@ -113,7 +113,9 @@ async function collectMetrics(page) {
     const workbench = required(".professional-project-workbench");
     const main = required(".project-workbench-main");
     const row = required('[data-layout-test="slate-data-row"]');
-    const canvasRect = required(".project-workbench-canvas").getBoundingClientRect();
+    const canvas = required(".project-workbench-canvas");
+    const canvasRect = canvas.getBoundingClientRect();
+    const canvasStyle = getComputedStyle(canvas);
     const rowRect = row.getBoundingClientRect();
     const rowVisibleHeight = Math.max(0, Math.min(rowRect.bottom, canvasRect.bottom) - Math.max(rowRect.top, canvasRect.top));
 
@@ -123,6 +125,12 @@ async function collectMetrics(page) {
       layout: rect(".project-production-layout"),
       moduleNav: rect(".project-module-rail"),
       canvas: rect(".project-workbench-canvas"),
+      canvasMargin: {
+        top: parseFloat(canvasStyle.marginTop),
+        right: parseFloat(canvasStyle.marginRight),
+        bottom: parseFloat(canvasStyle.marginBottom),
+        left: parseFloat(canvasStyle.marginLeft),
+      },
       main: rect(".project-workbench-main"),
       material: rect(".material-workspace"),
       slate: rect('[data-layout-test="golden-slate"]'),
@@ -139,18 +147,21 @@ async function collectMetrics(page) {
 function assertLayout(name, viewport, metrics) {
   assert.equal(metrics.innerWidth, viewport.width, `${name}: browser viewport width drifted from the requested size`);
   assert.equal(metrics.gridRows.length, 2, `${name}: ProjectWorkbench must have exactly toolbar + canvas grid rows (${metrics.gridRows.join(" ")})`);
-  // The independent module rail sits beside the canvas on a wide viewport,
-  // and above it at compact widths. Both arrangements must fill the same
-  // project body without overlapping or stealing its usable height.
+  // The module navigation and the inset canvas must fill the same project
+  // body. Measure the canvas margins so the check also catches clipping at
+  // the edge of the layout, where the canvas content is otherwise hidden.
   approxEqual(metrics.layout.top, metrics.toolbar.bottom, 1.5, `${name}: module layout must follow project header`);
   approxEqual(metrics.layout.height, metrics.workbench.height - metrics.toolbar.height, 2,
     `${name}: module layout must consume the workbench body`);
   const verticalRail = Math.abs(metrics.moduleNav.right - metrics.canvas.left) <= 2
     && Math.abs(metrics.moduleNav.top - metrics.canvas.top) <= 2;
-  const horizontalRail = Math.abs(metrics.moduleNav.bottom - metrics.canvas.top) <= 2
-    && Math.abs(metrics.moduleNav.left - metrics.canvas.left) <= 2;
+  const horizontalRail = Math.abs(metrics.moduleNav.bottom + metrics.canvasMargin.top - metrics.canvas.top) <= 2
+    && Math.abs(metrics.moduleNav.left + metrics.canvasMargin.left - metrics.canvas.left) <= 2
+    && Math.abs(metrics.moduleNav.right - metrics.canvasMargin.right - metrics.canvas.right) <= 2;
   assert.ok(verticalRail || horizontalRail,
     `${name}: module rail must remain beside or immediately above the production canvas`);
+  approxEqual(metrics.canvas.bottom + metrics.canvasMargin.bottom, metrics.layout.bottom, 2,
+    `${name}: the inset canvas must fit within the bottom of the workbench`);
   assert.ok(metrics.canvas.height > viewport.height * 0.65, `${name}: production canvas collapsed to ${metrics.canvas.height}px`);
   assert.equal(metrics.mainOverflow, "hidden", `${name}: guard must exercise the production clipping boundary`);
 
@@ -217,6 +228,7 @@ try {
     try {
       await page.goto(`${baseUrl}/scripts/fixtures/project-workbench-layout.html`, { waitUntil: "networkidle" });
       await page.waitForSelector('[data-layout-test="slate-data-row"]', { state: "attached" });
+      await page.locator(".professional-project-toolbar").getByRole("button", { name: "小镜", exact: true }).waitFor({ state: "visible" });
       const metrics = await collectMetrics(page);
       assertLayout(viewport.name, viewport, metrics);
       assert.equal(pageErrors.length, 0, `${viewport.name}: runtime exception: ${pageErrors.map((error) => error.message).join(" | ")}`);

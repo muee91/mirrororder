@@ -806,7 +806,6 @@ textarea {
 /* Project home becomes a grid management surface */
 /* Project secondary tools */
 .mirrororder-redesign-shell .project-production-workbench,
-.mirrororder-redesign-shell .project-workbench-canvas,
 .mirrororder-redesign-shell .project-workbench-main {
   height: 100%;
   min-height: 0;

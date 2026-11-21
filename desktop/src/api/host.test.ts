@@ -487,6 +487,24 @@ describe("HostConnection", () => {
     await expect(new HostConnection().connect()).rejects.toThrow("Host ping 返回异常状态：starting");
   });
 
+  it("refuses to connect to an OK endpoint that does not identify itself as the MirrorOrder Host", async () => {
+    const fetch = vi.fn(async () => jsonResponse({ status: "ok", service: "another-service" }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(new HostConnection().connect()).rejects.toThrow("未返回镜序 Host 身份");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a project list without a workspace identity", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/api/v1/ping")
+        ? jsonResponse({ status: "ok", service: "mirrororder-host" })
+        : jsonResponse({ ...workspace, workspace_id: "" }),
+    ));
+
+    await expect(new HostConnection().connect()).rejects.toThrow("缺少 workspace_id");
+  });
+
   it("does not allow browser preview to manage the Python process", async () => {
     const connection = new HostConnection();
     await expect(connection.startLocal("workspace.toml")).rejects.toThrow("浏览器预览无法启动本地 Python Host");
@@ -548,6 +566,21 @@ describe("HostConnection", () => {
       status: 503,
     });
     expect(browserFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("propagates a failed replacement after stopping the previous managed host", async () => {
+    const host = new HostConnection();
+    const start = vi.spyOn(host, "startLocal")
+      .mockRejectedValueOnce(new HostConnectionError("已有 Python Host 正在运行"))
+      .mockRejectedValueOnce(new HostConnectionError("replacement failed"));
+    const stop = vi.spyOn(host, "stopLocal").mockResolvedValue();
+    const connect = vi.spyOn(HostConnection.prototype, "connect");
+    await expect(host.startAndConnect("synthetic-new")).rejects.toThrow("replacement failed");
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(start.mock.invocationCallOrder[0]).toBeLessThan(stop.mock.invocationCallOrder[0]);
+    expect(stop.mock.invocationCallOrder[0]).toBeLessThan(start.mock.invocationCallOrder[1]);
+    expect(connect).not.toHaveBeenCalled();
   });
 
   it("does not use tauri-plugin-http AbortSignal cancellation for a managed Host read", async () => {

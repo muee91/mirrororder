@@ -85,6 +85,18 @@ def test_real_http_import_read_and_durable_prepare(tmp_path,monkeypatch):
         assert current['status']=='completed',current
         assert current['result']['status']=='proposal_prepared'
         assert interval.read_model()['candidates'][0]['scene']=='003'
+
+        # A replacement Host can answer for the same project ID and revision.
+        # Neither write operation may touch that project's records.
+        before = request('script-supervisor')
+        for action in ('upsert_record', 'delete_record'):
+            with pytest.raises(urllib.error.HTTPError) as rejected:
+                request('script-supervisor', {
+                    'action': action, 'record_id': 'r', 'expected_revision': before['revision'],
+                    'expected_workspace_id': 'previous-workspace', 'actor': 'test', 'record': {'scene': '99'},
+                })
+            assert rejected.value.code == 409
+        assert request('script-supervisor') == before
     finally:server.shutdown();server.server_close();thread.join()
 
 

@@ -1,5 +1,5 @@
 import type {PaperRow,PaperDocument} from "../../api/paperIntake";
-import {SlatePaperFormSurface,type SheetFramingController,type SheetFirstController} from "./SlatePaperFormSurface";
+import {SlatePaperFormSurface,type SheetFramingController,type SheetFirstController,type ProductionSlateRows,type ProductionSlateTarget} from "./SlatePaperFormSurface";
 import {PdfDraftClient} from "../../api/paperPdfDraft";
 import {useLayoutEffect,useRef,useState} from "react";
 import {MediaBindingWorkbench} from "../media/MediaBindingWorkbench";
@@ -7,7 +7,7 @@ import {SlateElectronicImport,type ElectronicSlateIngest} from "./SlateElectroni
 import {SlateIntervalLedger,type SlateIntervalLedgerProps} from "./SlateIntervalLedger";
 
 /** Reuses the project's existing scanner; merely opening it never selects or scans a folder. */
-export function SlateIntervalBoardSurface({baseUrl,projectId,projectName,importElectronic,formRows,formDocuments,framingControl,sheetFirst,...ledger}:{baseUrl:string;projectId:string;projectName?:string;importElectronic?:ElectronicSlateIngest;formRows?:readonly PaperRow[];formDocuments?:readonly PaperDocument[];framingControl?:SheetFramingController;sheetFirst?:SheetFirstController}&SlateIntervalLedgerProps) {
+export function SlateIntervalBoardSurface({baseUrl,projectId,projectName,importElectronic,formRows,formDocuments,framingControl,sheetFirst,productionRows,onOpenProduction,...ledger}:{baseUrl:string;projectId:string;projectName?:string;importElectronic?:ElectronicSlateIngest;formRows?:readonly PaperRow[];formDocuments?:readonly PaperDocument[];framingControl?:SheetFramingController;sheetFirst?:SheetFirstController;productionRows?:ProductionSlateRows;onOpenProduction?:(target:ProductionSlateTarget)=>void}&SlateIntervalLedgerProps) {
   const [repair,setRepair]=useState(false);
   const [review,setReview]=useState(false);
   const [returnState,setReturnState]=useState("");
@@ -49,7 +49,7 @@ export function SlateIntervalBoardSurface({baseUrl,projectId,projectName,importE
   return <>
     <div ref={surface} hidden={repair}>
       <div hidden={review}><SlatePaperFormSurface formRows={formRows??[]} formDocuments={formDocuments} title={projectName} framingControl={framingControl} sheetFirst={sheetFirst}
-        baseUrl={baseUrl} projectId={projectId} ledger={{...ledger,onOpenMediaBinding:open}} onReview={()=>setReview(true)}/>
+        baseUrl={baseUrl} projectId={projectId} productionRows={productionRows} onOpenProduction={onOpenProduction} ledger={{...ledger,onOpenMediaBinding:open}} onReview={()=>setReview(true)}/>
         {importElectronic&&<details className="slate-import-optional"><summary>导入电子场记（可选）</summary><SlateElectronicImport ingest={importElectronic} refresh={ledger.refresh}/>
           <button type="button" disabled={pdfBusy} onClick={()=>void registerSource()}>登记原 PDF 来源</button>
           {pdfStatus&&<p role="status">{pdfStatus}</p>}</details>}

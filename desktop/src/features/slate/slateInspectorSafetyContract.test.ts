@@ -13,7 +13,7 @@ describe("Slate inspector safety contract", () => {
     expect(slate).toContain("const selectedCanDelete = Boolean(selected && (selectedPersisted || !selected.derived))");
     expect(slate).toContain("if (!persisted && selected.derived)");
     expect(slate).toContain("自动派生场记来自 Review Take，不能在这里删除");
-    expect(slate).toContain("{selectedCanDelete ? <button");
+    expect(slate).toContain(": selectedCanDelete ? <button");
     expect(slate).toContain('selectedPersisted ? "删除人工场记…" : "移除草稿…"');
     expect(slate).not.toContain(">删除场记</button>");
   });

@@ -664,7 +664,13 @@ export class HostConnection {
     if (ping.status !== "ok") {
       throw new HostConnectionError(`Host ping 返回异常状态：${ping.status}`);
     }
+    if (ping.service !== "mirrororder-host") {
+      throw new HostConnectionError("当前地址未返回镜序 Host 身份");
+    }
     const workspace = await this.workspace();
+    if (typeof workspace.workspace_id !== "string" || !workspace.workspace_id.trim()) {
+      throw new HostConnectionError("Host workspace 响应缺少 workspace_id");
+    }
     if (!Array.isArray(workspace.projects)) {
       throw new HostConnectionError("Host workspace 响应缺少 projects 列表");
     }
@@ -720,6 +726,8 @@ export class HostConnection {
       launched = await this.startLocal(workspacePath, port);
     } catch (error) {
       if (error instanceof HostConnectionError && error.message.includes("已有 Python Host 正在运行")) {
+        // From here the caller's previous snapshot is disconnected. A failed
+        // replacement must never be recovered by restoring that cached object.
         await this.stopLocal();
         launched = await this.startLocal(workspacePath, port);
       } else {

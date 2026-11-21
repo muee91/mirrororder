@@ -16,6 +16,7 @@ import { SyncInspectionWorkbench } from "../editor/SyncInspectionWorkbench";
 import { SyncDeliveryWorkspace } from "../editor/SyncDeliveryWorkspace";
 import { ProjectModuleNavigation, canOpenProductionModule } from "./ProjectModuleNavigation";
 import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorkspace";
+import type { SlateDraftSession } from "../slate/slateDraftSession";
 import "../media/media.css";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
 import { ScriptWorkspace } from "../script/ScriptWorkspace";
@@ -36,6 +37,7 @@ interface Props {
   baseUrl: string;
   project: ProjectSummary;
   workspaceId?: string;
+  slateDraftSession?: SlateDraftSession;
   active?: boolean;
   projectNavigation?: ReactNode;
   systemTools?: ReactNode;
@@ -165,7 +167,7 @@ function normalizedContext(
   };
 }
 
-export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, active = true, projectNavigation, systemTools, pageRequest = null, onOpenTeamReview, onTaskChanged, onOpenStatus, onPageChange }: Props) {
+export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation, systemTools, pageRequest = null, onOpenTeamReview, onTaskChanged, onOpenStatus, onPageChange }: Props) {
   const [page, setPage] = useState<ProductionPage>(() => {
     const saved = safeProductionPage(readProjectPage(project.project_id));
     if (project.input_kind === "media-directory") {
@@ -433,6 +435,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, acti
             <MaterialWorkspace
               baseUrl={baseUrl}
               project={project}
+              slateDraftSession={slateDraftSession}
               active={active && area === "material"}
               keepSlate={slateVisited}
               showViewNavigation={false}

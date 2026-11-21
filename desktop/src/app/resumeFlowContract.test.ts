@@ -30,7 +30,7 @@ describe("editor-first resume flow", () => {
     const app = read("./App.tsx");
     const workbench = read("../features/production/ProjectWorkbench.tsx");
 
-    expect(app).toContain('key={`${snapshot.workspace.workspace_id}:${selectedProject.project_id}`}');
+    expect(app).toContain('key={JSON.stringify([snapshot.workspace.workspace_id, selectedProject.project_id, connectionLifetime.version])}');
     expect(workbench).toContain("rememberProjectPage(project.project_id, page)");
   });
 });

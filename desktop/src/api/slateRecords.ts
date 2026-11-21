@@ -8,11 +8,17 @@ function projectRoute(projectId: string): string {
   return `/api/v1/projects/${encodeURIComponent(value)}/script-supervisor`;
 }
 
-async function request(baseUrl: string, projectId: string, body: Record<string, unknown>): Promise<SlateBoard> {
+interface SlateWriteScope {
+  expectedWorkspaceId?: string;
+  signal?: AbortSignal;
+}
+
+async function request(baseUrl: string, projectId: string, body: Record<string, unknown>, scope: SlateWriteScope): Promise<SlateBoard> {
   const response = await fetchWithTimeout(`${baseUrl.replace(/\/+$/, "")}${projectRoute(projectId)}`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, expected_workspace_id: scope.expectedWorkspaceId }),
+    signal: scope.signal,
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`.trim();
@@ -38,7 +44,7 @@ export class SlateRecordClient {
 
   upsert(
     projectId: string,
-    write: {
+    write: SlateWriteScope & {
       recordId: string;
       expectedRevision: number;
       actor: string;
@@ -56,12 +62,12 @@ export class SlateRecordClient {
       expected_revision: write.expectedRevision,
       actor: actor.slice(0, 80),
       record: write.record,
-    });
+    }, write);
   }
 
   delete(
     projectId: string,
-    write: { recordId: string; expectedRevision: number; actor: string },
+    write: SlateWriteScope & { recordId: string; expectedRevision: number; actor: string },
   ): Promise<SlateBoard> {
     const recordId = write.recordId.trim();
     const actor = write.actor.trim();
@@ -76,6 +82,6 @@ export class SlateRecordClient {
       expected_revision: write.expectedRevision,
       actor: actor.slice(0, 80),
       delete: true,
-    });
+    }, write);
   }
 }

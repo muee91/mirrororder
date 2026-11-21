@@ -164,9 +164,14 @@ def install_script_supervisor_runtime() -> None:
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
                 if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"]:
-                    project_id = parts[3]; project = service.project(project_id)
+                    project_id = parts[3]
                     if parts[4] == "script-supervisor":
-                        self._local_only(); store = ScriptSupervisorStore(project.config.output_dir); body = web_server._body(self)
+                        self._local_only()
+                        body = web_server._body(self)
+                        if "expected_workspace_id" in body and body["expected_workspace_id"] != service.workspace.workspace_id:
+                            raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, "场记写入的工作区已变化，请重新连接")
+                        project = service.project(project_id)
+                        store = ScriptSupervisorStore(project.config.output_dir)
                         try:
                             if body.get("action") in {"upsert_record", "delete_record"} or "record" in body:
                                 saved = store.apply_record({**body, "delete": body.get("action") == "delete_record" or bool(body.get("delete"))})
@@ -195,7 +200,7 @@ def install_script_supervisor_runtime() -> None:
                             pass
                         return
                     if parts[4] == "script-supervisor-parse":
-                        self._local_only(); body = web_server._body(self)
+                        self._local_only(); project = service.project(project_id); body = web_server._body(self)
                         if body.get("operation") == "ingest":
                             from .paper_intake_store import PaperIntakeStore
                             from .scene_interval_store import IntervalConflict

@@ -7,6 +7,7 @@ import {
   HostConnectionError,
   defaultHostBaseUrl,
   errorMessage,
+  invalidateReviewModelCache,
   type HostConnectionState,
   type HostSnapshot,
   type ProjectSummary,
@@ -24,6 +25,7 @@ import { useProjectActivities } from "../features/projects/projectActivity";
 import { SettingsStatusWorkbench } from "../features/settings/SettingsStatusWorkbench";
 import { StatusCenterWorkbench } from "../features/status/StatusCenterWorkbench";
 import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
+import type { PendingSlateDrafts, SlateDraftSession } from "../features/slate/slateDraftSession";
 import {
   forgetWorkspaceResume,
   loadAppResume,
@@ -51,6 +53,22 @@ function connectionLabel(state: HostConnectionState): string {
 function projectById(snapshot: HostSnapshot, projectId: string | null | undefined): ProjectSummary | null {
   const id = projectId?.trim();
   return id ? snapshot.projects.find((item) => item.project_id === id) ?? null : null;
+}
+
+async function verifiedPreviousWorkspace(previous: HostSnapshot | null): Promise<HostSnapshot | null> {
+  if (!previous) return null;
+  try {
+    // A replacement may have stopped the old managed process or reused its
+    // port. A saved projection is never evidence that it is still connected.
+    const fresh = await new HostConnection(previous.baseUrl).connect();
+    if (fresh.workspace.workspace_id === previous.workspace.workspace_id) {
+      invalidateReviewModelCache(fresh.baseUrl);
+      return fresh;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -119,7 +137,7 @@ export function App() {
   const [workspacePath, setWorkspacePath] = useState(launchResume.workspacePath);
   const [activeWorkspacePath, setActiveWorkspacePath] = useState("");
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(() => loadRecentWorkspaces());
-  const [state, setState] = useState<HostConnectionState>("idle");
+  const [state, setState] = useState<HostConnectionState>(() => isTauri() && launchResume.workspacePath ? "starting" : "idle");
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [pageRequest, setPageRequest] = useState<ProjectPageRequest | null>(null);
@@ -128,7 +146,37 @@ export function App() {
   const [noticeVisible, setNoticeVisible] = useState(false);
   const [resumeEnabledForSession, setResumeEnabledForSession] = useState(false);
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
+  const [connectionLifetime, setConnectionLifetime] = useState(() => ({ version: 0, controller: new AbortController() }));
+  const activeConnectionLifetime = useRef(connectionLifetime);
+  const [slateDrafts] = useState(() => new Map<string, PendingSlateDrafts>());
+  const workspaceId = snapshot?.workspace.workspace_id;
+  const projectId = selectedProject?.project_id;
   const pageRequestNonce = useRef(0);
+
+  const slateDraftSession = useMemo<SlateDraftSession | undefined>(() => {
+    if (!workspaceId || !projectId) return undefined;
+    const key = JSON.stringify([workspaceId, projectId]);
+    return {
+      workspaceId,
+      signal: connectionLifetime.controller.signal,
+      read: () => slateDrafts.get(key),
+      write: (drafts) => {
+        if (drafts.size) slateDrafts.set(key, drafts);
+        else slateDrafts.delete(key);
+      },
+    };
+  }, [connectionLifetime, projectId, slateDrafts, workspaceId]);
+
+  function beginWorkspaceConnection(): AbortSignal {
+    // Invalidate in-flight Slate commands before replacing the Host, even
+    // before React commits the launcher and its unmounts.
+    const current = activeConnectionLifetime.current;
+    current.controller.abort();
+    const next = { version: current.version + 1, controller: new AbortController() };
+    activeConnectionLifetime.current = next;
+    setConnectionLifetime(next);
+    return next.controller.signal;
+  }
 
   // baseUrl and workspacePath are editable advanced-control drafts. Once a
   // workspace is open, snapshot.baseUrl and activeWorkspacePath are the active
@@ -169,12 +217,13 @@ export function App() {
   useEffect(() => {
     if (!isTauri() || !launchResume.workspacePath) return;
     let active = true;
+    const attempt = beginWorkspaceConnection();
     setState("starting");
     setMessage("正在恢复上次工作区…");
     const task = resumeTaskRef.current ?? new HostConnection(defaultHostBaseUrl).startAndConnect(launchResume.workspacePath);
     resumeTaskRef.current = task;
     void task.then((next) => {
-      if (!active) return;
+      if (!active || attempt.aborted) return;
       const rememberedProject = projectById(next, launchResume.projectId);
       const rememberedPage = rememberedProject ? readProjectPage(rememberedProject.project_id) : "slate";
       setBaseUrl(next.baseUrl);
@@ -192,7 +241,7 @@ export function App() {
         ? `已恢复 · ${rememberedProject.name || rememberedProject.project_id} · ${pageTitle(rememberedPage)}`
         : `工作区已恢复 · ${next.projects.length} 个项目`);
     }).catch((error: unknown) => {
-      if (!active) return;
+      if (!active || attempt.aborted) return;
       setActiveWorkspacePath("");
       setSnapshot(null);
       setSelectedProject(null);
@@ -214,14 +263,18 @@ export function App() {
     }
     const previousSnapshot = snapshot;
     const previousProject = selectedProject;
-    const previousPath = workspacePath;
+    const previousPath = activeWorkspacePath;
+    const previousPageRequest = pageRequest;
     const previousSurface = surface;
+    const attempt = beginWorkspaceConnection();
     setWorkspacePath(normalizedPath);
     setState("starting");
     setMessage(resolved.targetProjectId ? "已定位到项目所属工作区，正在打开…" : "正在打开工作区…");
     try {
       const next = await new HostConnection(defaultHostBaseUrl).startAndConnect(normalizedPath);
+      if (attempt.aborted) return;
       const targetProject = resolved.targetProjectId ? projectById(next, resolved.targetProjectId) : null;
+      invalidateReviewModelCache(next.baseUrl);
       setBaseUrl(next.baseUrl);
       setWorkspacePath(normalizedPath);
       setActiveWorkspacePath(normalizedPath);
@@ -238,11 +291,18 @@ export function App() {
         ? `已打开工程 · ${targetProject.name || targetProject.project_id}`
         : `工作区已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
-      if (previousSnapshot) {
+      if (attempt.aborted) return;
+      const recovered = await verifiedPreviousWorkspace(previousSnapshot);
+      if (attempt.aborted) return;
+      if (recovered) {
+        const project = projectById(recovered, previousProject?.project_id);
+        setBaseUrl(recovered.baseUrl);
         setWorkspacePath(previousPath);
-        setSnapshot(previousSnapshot);
-        setSelectedProject(previousProject);
-        setSurface(previousSurface);
+        setActiveWorkspacePath(previousPath);
+        setSnapshot(recovered);
+        setSelectedProject(project);
+        setPageRequest(project ? previousPageRequest : null);
+        setSurface(previousSurface === "production" && !project ? "projects" : previousSurface);
         setState("connected");
         setMessage(`未能切换工作区：${errorMessage(error)} · 当前工作现场保持打开`);
       } else {
@@ -252,7 +312,7 @@ export function App() {
         setPageRequest(null);
         setResumeEnabledForSession(false);
         setState("error");
-        setMessage(errorMessage(error));
+        setMessage(`${errorMessage(error)}${previousSnapshot ? " · 原工作区连接未确认，已断开" : ""}`);
       }
     }
   }
@@ -298,13 +358,16 @@ export function App() {
     const previousProject = selectedProject;
     const previousPageRequest = pageRequest;
     const previousSurface = surface;
+    const attempt = beginWorkspaceConnection();
     setState("connecting");
     setMessage("正在连接已有的本机服务…");
     try {
       const next = await connection.connect();
+      if (attempt.aborted) return;
       const sameWorkspace = previousSnapshot?.workspace.workspace_id === next.workspace.workspace_id;
       const project = sameWorkspace && selectedProject ? projectById(next, selectedProject.project_id) : null;
       const connectedWorkspacePath = sameWorkspace ? activeWorkspacePath : "";
+      invalidateReviewModelCache(next.baseUrl);
       setBaseUrl(next.baseUrl);
       setWorkspacePath(connectedWorkspacePath);
       setActiveWorkspacePath(connectedWorkspacePath);
@@ -320,11 +383,16 @@ export function App() {
           ? `工作区已就绪 · ${next.projects.length} 个项目`
           : `工作区已就绪 · ${next.projects.length} 个项目 · 本机路径未知`);
     } catch (error) {
-      if (previousSnapshot) {
-        setSnapshot(previousSnapshot);
-        setSelectedProject(previousProject);
-        setPageRequest(previousPageRequest);
-        setSurface(previousSurface);
+      if (attempt.aborted) return;
+      const recovered = await verifiedPreviousWorkspace(previousSnapshot);
+      if (attempt.aborted) return;
+      if (recovered) {
+        const project = projectById(recovered, previousProject?.project_id);
+        setBaseUrl(recovered.baseUrl);
+        setSnapshot(recovered);
+        setSelectedProject(project);
+        setPageRequest(project ? previousPageRequest : null);
+        setSurface(previousSurface === "production" && !project ? "projects" : previousSurface);
         setState("connected");
         setMessage(`未能连接新的本机服务：${errorMessage(error)} · 当前工作现场保持打开`);
       } else {
@@ -334,12 +402,14 @@ export function App() {
         setPageRequest(null);
         setResumeEnabledForSession(false);
         setState("error");
-        setMessage(errorMessage(error));
+        setMessage(`${errorMessage(error)}${previousSnapshot ? " · 原工作区连接未确认，已断开" : ""}`);
       }
     }
   }
 
   async function refreshWorkspace(preferredProjectId?: string, openProject = false): Promise<void> {
+    const binding = connectionLifetime.controller.signal;
+    if (binding.aborted) return;
     const activeBaseUrl = snapshot?.baseUrl ?? baseUrl;
     let activeConnection: HostConnection;
     try {
@@ -348,6 +418,18 @@ export function App() {
       throw new HostConnectionError("当前工作现场的本机服务地址无效");
     }
     const next = await activeConnection.connect();
+    if (binding.aborted) return;
+    if (snapshot && next.workspace.workspace_id !== snapshot.workspace.workspace_id) {
+      beginWorkspaceConnection();
+      setActiveWorkspacePath("");
+      setSnapshot(null);
+      setSelectedProject(null);
+      setPageRequest(null);
+      setResumeEnabledForSession(false);
+      setState("error");
+      setMessage("本机服务已切换到其他工作区，请重新连接原工作区。");
+      return;
+    }
     const preferred = projectById(next, preferredProjectId);
     if (openProject && !preferred) {
       throw new HostConnectionError("项目已保存，刷新后的工作区尚未找到该项目。");
@@ -494,7 +576,9 @@ export function App() {
   const primaryActive = surface === "production" ? null : surface;
   const revealLabel = platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器";
 
-  if (!snapshot) {
+  // Unmount writable project controls before a managed Host can be replaced.
+  // Recovery keeps this barrier until a fresh workspace identity is verified.
+  if (!snapshot || state === "starting" || state === "connecting") {
     return <WorkspaceLauncher
       state={state}
       recovering={recovering}
@@ -549,7 +633,7 @@ export function App() {
         </div>
         <div className="app-workspace-menu-actions">
           <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id).catch((error) => setMessage(errorMessage(error)))}>刷新工作区</button>
-          <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri() || state === "starting"}>切换工作区…</button>
+          <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri()}>切换工作区…</button>
           <button type="button" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>在 {revealLabel} 中显示</button>
         </div>
         {recentWorkspaces.filter((item) => item !== activeWorkspacePath).length > 0 ? (
@@ -560,7 +644,6 @@ export function App() {
                 key={item}
                 type="button"
                 className="secondary app-workspace-recent-item"
-                disabled={state === "starting"}
                 title={item}
                 onClick={() => void openWorkspacePath(item)}
               >
@@ -573,9 +656,9 @@ export function App() {
         <details className="workspace-advanced app-workspace-advanced">
           <summary>高级连接</summary>
           <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
-          <button type="button" className="secondary" onClick={() => void openWorkspacePath(workspacePath)} disabled={state === "starting" || !workspacePath.trim()}>打开此路径</button>
+          <button type="button" className="secondary" onClick={() => void openWorkspacePath(workspacePath)} disabled={!workspacePath.trim()}>打开此路径</button>
           <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
-          <button type="button" className="secondary" onClick={() => void connect()} disabled={state === "connecting"}>连接已运行服务</button>
+          <button type="button" className="secondary" onClick={() => void connect()}>连接已运行服务</button>
           {resumeEnabledForSession ? <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动恢复</button> : null}
         </details>
       </div>
@@ -726,9 +809,10 @@ export function App() {
             ) : null}
             {selectedProject && <div className="app-project-surface" hidden={surface !== "production"}>
               <ProjectWorkbench
-                key={`${snapshot.workspace.workspace_id}:${selectedProject.project_id}`}
+                key={JSON.stringify([snapshot.workspace.workspace_id, selectedProject.project_id, connectionLifetime.version])}
                 baseUrl={snapshot.baseUrl}
                 project={selectedProject}
+                slateDraftSession={slateDraftSession}
                 active={surface === "production"}
                 projectNavigation={switchProject}
                 systemTools={<>

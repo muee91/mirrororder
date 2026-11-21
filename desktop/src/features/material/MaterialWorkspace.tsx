@@ -9,6 +9,7 @@ import { IdentityWorkbench } from "../identity/IdentityWorkbench";
 import { MediaBindingWorkbench } from "../media/MediaBindingWorkbench";
 import { MediaLibraryWorkbench } from "../media/MediaLibraryWorkbench";
 import { GoldenSlateWorkbench } from "../slate/GoldenSlateWorkbench";
+import type { SlateDraftSession } from "../slate/slateDraftSession";
 import { SlatePlaybackShortcuts } from "../slate/SlatePlaybackShortcuts";
 import { MaterialTakeView } from "./MaterialTakeView";
 import "./material-workspace.css";
@@ -18,6 +19,7 @@ export type MaterialView = "slate" | "library" | "takes" | "people" | "repair";
 interface Props {
   baseUrl: string;
   project: ProjectSummary;
+  slateDraftSession?: SlateDraftSession;
   view: MaterialView;
   showViewNavigation?: boolean;
   active?: boolean;
@@ -50,6 +52,7 @@ const MATERIAL_VIEWS: Array<{ view: Exclude<MaterialView, "repair">; label: stri
 export function MaterialWorkspace({
   baseUrl,
   project,
+  slateDraftSession,
   view,
   showViewNavigation = true,
   active = true,
@@ -101,6 +104,7 @@ export function MaterialWorkspace({
               baseUrl={baseUrl}
               projectId={project.project_id}
               projectName={project.name}
+              draftSession={slateDraftSession}
               active={active && view === "slate"}
               focus={slateFocus}
               onSelection={onSlateSelection}

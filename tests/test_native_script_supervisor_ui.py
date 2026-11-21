@@ -27,11 +27,12 @@ def test_desktop_slate_uses_existing_python_supervisor_contract() -> None:
 def test_slate_quick_entry_is_sparse_revision_safe_and_continuous() -> None:
     ui = source("desktop/src/features/slate/GoldenSlateWorkbench.tsx")
 
-    assert "function recordPayload(draft: Draft): Partial<SlateRecord>" in ui
+    assert "record: recordPayload(draft)" in ui
+    assert "...(draft.usable_range ? { usable_range: draft.usable_range } : {})" in ui
     assert "expectedRevision: revision" in ui
     assert "actor," in ui
-    assert "未覆盖其他人的修改" in ui
-    assert "请刷新后重试" in ui
+    assert "draftConflicts.size" in ui
+    assert "请刷新后核对草稿" in ui
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s"' in ui
     assert '(event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n"' in ui
     assert "同场下一条" in ui

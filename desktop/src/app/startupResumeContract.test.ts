@@ -44,10 +44,13 @@ describe("startup and production resume product contract", () => {
     expect(openBlock.indexOf("startAndConnect(normalizedPath)")).toBeLessThan(openBlock.indexOf("rememberWorkspace(normalizedPath)"));
   });
 
-  it("preserves the existing production canvas when a workspace switch fails", () => {
+  it("restores a production canvas only after freshly verifying its workspace", () => {
     const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     expect(source).toContain("const previousSnapshot = snapshot");
-    expect(source).toContain("setSnapshot(previousSnapshot)");
+    expect(source).toContain("await verifiedPreviousWorkspace(previousSnapshot)");
+    expect(source).toContain("fresh.workspace.workspace_id === previous.workspace.workspace_id");
+    expect(source).toContain("setSnapshot(recovered)");
+    expect(source).toContain('if (!snapshot || state === "starting" || state === "connecting")');
     expect(source).toContain("当前工作现场保持打开");
   });
 
@@ -87,10 +90,11 @@ describe("startup and production resume product contract", () => {
     const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     const connectBlock = source.slice(source.indexOf("async function connect()"), source.indexOf("async function refreshWorkspace"));
     expect(connectBlock).toContain("const previousSnapshot = snapshot");
-    expect(connectBlock).toContain("setSnapshot(previousSnapshot)");
-    expect(connectBlock).toContain("setSelectedProject(previousProject)");
-    expect(connectBlock).toContain("setPageRequest(previousPageRequest)");
-    expect(connectBlock).toContain("setSurface(previousSurface)");
+    expect(connectBlock).toContain("await verifiedPreviousWorkspace(previousSnapshot)");
+    expect(connectBlock).toContain("setSnapshot(recovered)");
+    expect(connectBlock).toContain("projectById(recovered, previousProject?.project_id)");
+    expect(connectBlock).toContain("setPageRequest(project ? previousPageRequest : null)");
+    expect(connectBlock).toContain('setSurface(previousSurface === "production" && !project ? "projects" : previousSurface)');
     expect(connectBlock).toContain('setState("connected")');
     expect(connectBlock).toContain("当前工作现场保持打开");
   });

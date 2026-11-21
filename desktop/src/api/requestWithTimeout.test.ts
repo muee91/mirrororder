@@ -40,4 +40,16 @@ describe("fetchWithTimeout", () => {
     await assertion;
     expect(mockedTauriFetch.mock.calls[0]?.[1]).toMatchObject({ connectTimeout: 25 });
   });
+
+  it.each([false, true])("propagates workspace cancellation to the transport (Tauri: %s)", async (tauriRuntime) => {
+    mockedIsTauri.mockReturnValue(tauriRuntime);
+    const transport = tauriRuntime ? mockedTauriFetch : vi.mocked(fetch);
+    transport.mockImplementation((_input, init) => new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new Error("connection ended")), { once: true });
+    }));
+    const workspace = new AbortController();
+    const pending = fetchWithTimeout("http://127.0.0.1:8765/slate", { signal: workspace.signal });
+    workspace.abort();
+    await expect(pending).rejects.toThrow("connection ended");
+  });
 });

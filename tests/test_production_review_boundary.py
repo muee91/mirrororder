@@ -64,7 +64,8 @@ def test_native_navigation_starts_at_workspace_home_and_has_independent_producti
     assert 'setSurface("team")' in app
     assert 'aria-label="当前项目制作导航"' not in library
     assert "制作区在项目画布顶部切换。" in library
-    assert '>小镜</button>' in workbench
+    assert "professional-assistant-toggle" in workbench
+    assert "setAssistantOpen((value) => !value)" in workbench
 
 
 def test_native_slate_remains_human_evidence_not_editorial_authority() -> None:

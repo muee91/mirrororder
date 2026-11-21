@@ -119,7 +119,8 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
     assert 'page === "coverage"' in resume and 'return "script"' in resume
     assert 'page === "attention" || page === "overview"' in resume and 'return "watch"' in resume
     assert 'page === "rough-cut" || page === "assembly" || page === "delivery"' in resume and 'return "timeline"' in resume
-    assert ">小镜</button>" in workbench
+    assert "professional-assistant-toggle" in workbench
+    assert "aria-expanded={assistantOpen}" in workbench
     assert "CoverageWorkbench" not in workbench
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
