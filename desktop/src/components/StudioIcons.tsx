@@ -25,7 +25,14 @@ export type StudioIconName =
   | "media-binding"
   | "watch"
   | "timeline"
-  | "takes";
+  | "takes"
+  | "pin"
+  | "trash"
+  | "minimize"
+  | "close"
+  | "play"
+  | "arrow-up"
+  | "arrow-up-right";
 
 interface Props {
   name: StudioIconName;
@@ -156,6 +163,13 @@ const ICON_PATHS: Record<StudioIconName, readonly string[]> = {
     "M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13z",
     "M10 9.5l5 2.5-5 2.5v-5z",
   ],
+  pin: ["M16 3l5 5-3 1-4 4v4l-2 2-7-7 2-2h4l4-4z", "M8.5 15.5 3 21"],
+  trash: ["M4 7h16m-9-3h2a1 1 0 0 1 1 1v2m-8 0 1 13h10l1-13M10 10v7m4-7v7"],
+  minimize: ["M6 12h12"],
+  close: ["m6 6 12 12M18 6 6 18"],
+  play: ["m9 5 11 7-11 7z"],
+  "arrow-up": ["M12 19V5m-6 6 6-6 6 6"],
+  "arrow-up-right": ["M6 18 18 6m-9 0h9v9"],
 };
 
 export function StudioIcon({ name, size = 14, className, style }: Props) {

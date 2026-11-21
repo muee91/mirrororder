@@ -58,6 +58,43 @@ describe("ProjectActionClient", () => {
     await expect(new ProjectActionClient("http://127.0.0.1:8765").localLocation("p1")).rejects.toBeInstanceOf(HostConnectionError);
   });
 
+  it("requests an original media path using device-local identifiers", async () => {
+    const location = {
+      contract: "project_media_location.v1",
+      project_id: "p/1",
+      clip_id: "clip-1",
+      media_id: "media-1",
+      file_path: "/tmp/A001.mov",
+      exists: true,
+      device_paths_exposed: true,
+      scope: "device_local_response",
+    };
+    const browserFetch = vi.fn<typeof fetch>(async () => jsonResponse(location));
+    vi.stubGlobal("fetch", browserFetch);
+
+    const client = new ProjectActionClient("http://127.0.0.1:8765");
+    await expect(client.mediaLocation("p/1", { clipId: "clip-1", mediaId: "media-1", groupId: "take-1" })).resolves.toEqual(location);
+
+    const [url, init] = browserFetch.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/v1\/projects\/p%2F1\/media-location$/);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ clip_id: "clip-1", media_id: "media-1", group_id: "take-1" });
+  });
+
+  it.each([
+    { scope: "project", device_paths_exposed: true },
+    { scope: "device_local_response", device_paths_exposed: false },
+  ])("rejects media location with scope $scope and device_paths_exposed $device_paths_exposed", async (boundary) => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      contract: "project_media_location.v1",
+      file_path: "/tmp/A001.mov",
+      ...boundary,
+    })));
+
+    const client = new ProjectActionClient("http://127.0.0.1:8765");
+    await expect(client.mediaLocation("p1", { clipId: "clip-1" })).rejects.toBeInstanceOf(HostConnectionError);
+  });
+
   it("submits external project import through the local project-package endpoint", async () => {
     const browserFetch = vi.fn<typeof fetch>(async () => jsonResponse({
       contract: "project_package_import.v1",

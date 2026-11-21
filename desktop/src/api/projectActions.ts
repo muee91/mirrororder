@@ -12,6 +12,17 @@ export interface ProjectLocalLocation {
   scope: "device_local_response" | string;
 }
 
+export interface ProjectMediaLocalLocation {
+  contract: "project_media_location.v1";
+  project_id: string;
+  clip_id: string;
+  media_id: string;
+  file_path: string;
+  exists: boolean;
+  device_paths_exposed: true;
+  scope: "device_local_response";
+}
+
 export interface ProjectPackageInspection {
   format: string;
   schema_version: number;
@@ -93,6 +104,20 @@ export class ProjectActionClient {
     const payload = await requestJson<ProjectLocalLocation>(this.baseUrl, `${projectPath(projectId)}/local-location`);
     if (payload.scope !== "device_local_response" || payload.device_paths_exposed !== true) {
       throw new HostConnectionError("项目定位返回了非 device-local 契约");
+    }
+    return payload;
+  }
+
+  async mediaLocation(
+    projectId: string,
+    target: { clipId?: string; mediaId?: string; groupId?: string },
+  ): Promise<ProjectMediaLocalLocation> {
+    const payload = await requestJson<ProjectMediaLocalLocation>(this.baseUrl, `${projectPath(projectId)}/media-location`, {
+      method: "POST",
+      body: JSON.stringify({ clip_id: target.clipId, media_id: target.mediaId, group_id: target.groupId }),
+    });
+    if (payload.scope !== "device_local_response" || payload.device_paths_exposed !== true) {
+      throw new HostConnectionError("原片定位返回了非 device-local 契约");
     }
     return payload;
   }

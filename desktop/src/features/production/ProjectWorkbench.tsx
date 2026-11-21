@@ -1,14 +1,20 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { errorMessage, type ProjectSummary } from "../../api/host";
 import { DesktopClient } from "../../api/desktop";
 import type { AssistantSelection } from "../../api/production";
 import { ProjectTaskClient, canRetryTask } from "../../api/tasks";
+import {
+  listenXiaoJingVisibilityChanged, readXiaoJingWindowState, syncXiaoJingContext, toggleXiaoJingWindow,
+  type XiaoJingContextSnapshot, type XiaoJingMainAction,
+} from "../../api/xiaojingWindow";
 import { EvidencePreview } from "./EvidencePreview";
 import { evidenceLocation, type EvidenceReference } from "./evidenceLocation";
 import { canonicalProductionPage, hasRememberedProjectPage, readProjectPage, rememberProjectPage, readSyncSubmissionIssue, rememberSyncSubmissionIssue, type ProductionPage } from "../../app/resumeState";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { StudioIcon } from "../../components/StudioIcons";
 import { AssistantWorkbench } from "../assistant/AssistantWorkbench";
+import { diagnosticPage } from "../assistant/assistantPresentation";
 import { SemanticSearchPalette } from "../search/SemanticSearchPalette";
 import { TimelineWorkbench } from "../editor/TimelineWorkbench";
 import { SyncTaskWorkspace } from "../editor/MulticamSyncTimeline";
@@ -42,6 +48,9 @@ interface Props {
   projectNavigation?: ReactNode;
   systemTools?: ReactNode;
   pageRequest?: { page: ProductionPage; nonce: number } | null;
+  externalXiaoJingAction?: (XiaoJingMainAction & { nonce: number }) | null;
+  xiaojingWorkspace?: Pick<XiaoJingContextSnapshot, "workspace_name" | "projects" | "appearance">;
+  onXiaoJingError?: (message: string) => void;
   onOpenTeamReview?: () => void;
   onTaskChanged?: () => void;
   onOpenStatus?: () => void;
@@ -177,7 +186,12 @@ function assistantSelectionSummary(selection: AssistantSelection): string {
   ].filter(Boolean).join(" · ");
 }
 
-export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation, systemTools, pageRequest = null, onOpenTeamReview, onTaskChanged, onOpenStatus, onOpenSettings, onPageChange }: Props) {
+export function ProjectWorkbench({
+  baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation, systemTools,
+  pageRequest = null, externalXiaoJingAction, xiaojingWorkspace, onXiaoJingError,
+  onOpenTeamReview, onTaskChanged, onOpenStatus, onOpenSettings, onPageChange,
+}: Props) {
+  const desktopHud = isTauri();
   const [page, setPage] = useState<ProductionPage>(() => {
     const saved = safeProductionPage(readProjectPage(project.project_id));
     if (project.input_kind === "media-directory") {
@@ -186,7 +200,6 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
     return saved;
   });
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantVisited, setAssistantVisited] = useState(false);
   const [assistantWide, setAssistantWide] = useState(false);
   const [selection, setSelection] = useState<ProductionSelectionContext>(() => ({ projectId: project.project_id }));
   const [navigationIntent, setNavigationIntent] = useState<ProductionNavigationIntent | null>(null);
@@ -202,6 +215,9 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
   const assistantToggle = useRef<HTMLButtonElement>(null);
   const assistantDraft = useMemo(() => ({ text: "", includeSelection: false }), [baseUrl, project.project_id]);
   const navigationNonce = useRef(0);
+  const handledPageRequest = useRef<number | undefined>(undefined);
+  const handledXiaoJingAction = useRef<number | undefined>(undefined);
+  const scheduleContextSync = useRef<(() => void) | null>(null);
   const { syncTimeline, snapshot, readError, refreshSyncTimeline } = useMulticamSyncGate(baseUrl, project.project_id, project.input_kind);
   const master = syncTimeline.ready ? syncTimeline : snapshot?.timeline ?? syncTimeline;
   const syncBlocked = project.input_kind === "media-directory" && !master.ready;
@@ -210,17 +226,18 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
 
   const area = areaForPage(visiblePage);
   const currentSelection = selection.projectId === project.project_id ? selection : { projectId: project.project_id };
-  const pageFocus = useMemo<{ current: AssistantSelection }>(() => ({ current: {} }), [project.project_id, visiblePage]);
+  const pageFocus = useMemo<{ current: AssistantSelection | null }>(() => ({ current: null }), [project.project_id, visiblePage]);
   const [focusSummary, setFocusSummary] = useState<{ pageFocus: typeof pageFocus; label: string } | null>(null);
   const inspectSelection = useCallback((next: AssistantSelection) => {
     const label = assistantSelectionSummary(next);
-    if (assistantSelectionSummary(pageFocus.current) !== label) setFocusSummary({ pageFocus, label });
+    if (!pageFocus.current || assistantSelectionSummary(pageFocus.current) !== label) setFocusSummary({ pageFocus, label });
     pageFocus.current = next;
+    scheduleContextSync.current?.();
   }, [pageFocus]);
-  const selectionContext = {
+  const selectionContext = useMemo<AssistantSelection>(() => ({
     group_id: currentSelection.groupId, clip_id: currentSelection.clipId,
     media_id: currentSelection.mediaId, script_segment_id: currentSelection.scriptSegmentId,
-  };
+  }), [currentSelection.groupId, currentSelection.clipId, currentSelection.mediaId, currentSelection.scriptSegmentId]);
   const selectionSummary = focusSummary?.pageFocus === pageFocus
     ? focusSummary.label : assistantSelectionSummary(selectionContext);
   const currentIntent = navigationIntent?.projectId === project.project_id ? navigationIntent : null;
@@ -251,10 +268,13 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
   }
 
   const toggleAssistant = useCallback(() => {
-    setAssistantVisited(true);
+    if (desktopHud) {
+      void toggleXiaoJingWindow().catch((error) => onXiaoJingError?.(`无法切换小镜窗口：${errorMessage(error)}`));
+      return;
+    }
     setAssistantOpen((value) => !value);
     if (assistantOpen) assistantToggle.current?.focus();
-  }, [assistantOpen]);
+  }, [assistantOpen, desktopHud, onXiaoJingError]);
 
   function nextIntent(
     workspace: ProductionWorkspace,
@@ -380,13 +400,88 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
   }, [workspaceId, project.project_id, syncTimeline.task?.task_id, submissionIssue]);
 
   useEffect(() => {
-    if (pageRequest) navigate(pageRequest.page);
-  }, [pageRequest?.nonce]);
+    if (!active || !pageRequest || handledPageRequest.current === pageRequest.nonce) return;
+    if (syncTimeline.phase === "loading" && !["sync-task", "media-library", "media-binding"].includes(pageRequest.page)) return;
+    handledPageRequest.current = pageRequest.nonce;
+    navigate(pageRequest.page);
+  }, [active, pageRequest?.nonce, syncTimeline.phase]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!desktopHud || !active || !externalXiaoJingAction || handledXiaoJingAction.current === externalXiaoJingAction.nonce) return;
+    const action = externalXiaoJingAction;
+    if (action.project_id && action.project_id !== project.project_id) return;
+    const diagnostic = action.kind === "open_diagnostic" ? diagnosticPage(action.page) : undefined;
+    if (syncTimeline.phase === "loading" && (action.kind === "focus_take" || diagnostic === "sync-delivery")) return;
+    handledXiaoJingAction.current = action.nonce;
+    if (diagnostic) navigate(diagnostic);
+    if (action.kind === "focus_take" && action.group_id) {
+      if (syncBlocked) {
+        onXiaoJingError?.("同步完成后可在主窗口定位 Take。");
+        return;
+      }
+      const destination = action.destination === "script" || action.destination === "review" || action.destination === "timeline"
+        ? action.destination : "material";
+      focusTake(action.group_id, destination, action.clip_id);
+    }
+  }, [active, desktopHud, externalXiaoJingAction, project.project_id, syncBlocked, syncTimeline.phase]);
+
+  useEffect(() => {
+    if (!active || !desktopHud) return;
+    let sent = "";
+    let timer: number | undefined;
+    function publish() {
+      timer = undefined;
+      const contextSelection = pageFocus.current ?? selectionContext;
+      const serialized = JSON.stringify(contextSelection);
+      if (serialized === sent) return;
+      sent = serialized;
+      void syncXiaoJingContext({
+        base_url: baseUrl,
+        workspace_id: workspaceId,
+        workspace_name: xiaojingWorkspace?.workspace_name ?? "",
+        projects: xiaojingWorkspace?.projects ?? [{ project_id: project.project_id, name: project.name, input_kind: project.input_kind }],
+        project_id: project.project_id,
+        project_name: project.name,
+        current_page: visiblePage,
+        selection: contextSelection,
+        selection_summary: assistantSelectionSummary(contextSelection),
+        appearance: xiaojingWorkspace?.appearance ?? "system",
+      }).catch((error) => console.error("无法同步小镜上下文", error));
+    }
+    publish();
+    // Sample the latest monitor position without invoking IPC on every
+    // playback frame or introducing a React render for each playhead update.
+    scheduleContextSync.current = () => { timer ??= window.setTimeout(publish, 100); };
+    return () => {
+      scheduleContextSync.current = null;
+      window.clearTimeout(timer);
+    };
+  }, [active, baseUrl, desktopHud, pageFocus, project, selectionContext, visiblePage, workspaceId, xiaojingWorkspace]);
+
+  useEffect(() => {
+    if (!active || !desktopHud) return;
+    let current = true;
+    let receivedVisibility = false;
+    let stop: (() => void) | undefined;
+    void listenXiaoJingVisibilityChanged((visible) => {
+      if (!current) return;
+      receivedVisibility = true;
+      setAssistantOpen(visible);
+    }).then((unlisten) => {
+      if (current) stop = unlisten;
+      else unlisten();
+    }).catch((error) => console.error("无法监听小镜窗口状态", error)).then(async () => {
+      if (!current) return;
+      const state = await readXiaoJingWindowState();
+      if (current && !receivedVisibility) setAssistantOpen(state.visible);
+    }).catch((error) => console.error("无法读取小镜窗口状态", error));
+    return () => { current = false; stop?.(); };
+  }, [active, desktopHud]);
+
+  useEffect(() => {
+    if (!active || desktopHud) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.isComposing || event.altKey || event.repeat) return;
+      if (event.defaultPrevented || event.isComposing || event.altKey || event.repeat) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
         toggleAssistant();
@@ -394,14 +489,14 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, toggleAssistant]);
+  }, [active, desktopHud, toggleAssistant]);
 
   const assistantVisible = active && assistantOpen;
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘J" : "Ctrl+J";
 
   return (
     <section
-      className={`project-production-workbench professional-project-workbench${assistantVisible ? " has-assistant-drawer" : ""}${assistantVisible && assistantWide ? " has-assistant-wide" : ""}`}
+      className={`project-production-workbench professional-project-workbench${!desktopHud && assistantVisible ? " has-assistant-drawer" : ""}${!desktopHud && assistantVisible && assistantWide ? " has-assistant-wide" : ""}`}
       data-sync-read-error={Boolean(readError || (!syncTimeline.ready && snapshot)) || undefined}
       aria-label={`项目工作台：${project.name || project.project_id}`}
     >
@@ -565,9 +660,9 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
           ) : null}
         </div>
 
-        {assistantVisited ? (
+        {!desktopHud && assistantVisible ? (
           <aside className="assistant-context-drawer" {...(assistantWide && { className: "assistant-context-drawer is-wide" })}
-            hidden={!assistantVisible} aria-label="小镜上下文助手" onKeyDown={(event) => {
+            aria-label="小镜上下文助手" onKeyDown={(event) => {
             if (event.key === "Escape" && !event.nativeEvent.isComposing) { event.stopPropagation(); closeAssistant(); }
           }}>
             <div className="assistant-drawer-heading">
@@ -588,7 +683,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
               readContext={(includeSelection) => ({
                 project_id: project.project_id,
                 page: visiblePage,
-                ...(includeSelection ? (Object.keys(pageFocus.current).length ? pageFocus.current : selectionContext) : {}),
+                ...(includeSelection ? (pageFocus.current ?? selectionContext) : {}),
               })}
               onOpenEvidence={openEvidence}
               onOpenDiagnostic={(target) => { closeAssistant(); navigate(target); }}

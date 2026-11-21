@@ -18,6 +18,11 @@ import { PlatformClient, type PlatformInfo } from "../api/platform";
 import { StudioIcon } from "../components/StudioIcons";
 import { ProjectActionClient } from "../api/projectActions";
 import { TeamGatewayClient, teamWorkbenchUrl } from "../api/team";
+import {
+  listenXiaoJingMainAction, syncXiaoJingContext, toggleXiaoJingWindow,
+  type XiaoJingContextSnapshot, type XiaoJingMainAction,
+} from "../api/xiaojingWindow";
+import { diagnosticPage } from "../features/assistant/assistantPresentation";
 import { ProjectWorkbench } from "../features/production/ProjectWorkbench";
 import { ProjectHome } from "../features/projects/ProjectHome";
 import { ProjectLibrary } from "../features/projects/ProjectLibrary";
@@ -28,6 +33,7 @@ import { SettingsStatusWorkbench } from "../features/settings/SettingsStatusWork
 import { StatusCenterWorkbench } from "../features/status/StatusCenterWorkbench";
 import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
 import type { PendingSlateDrafts, SlateDraftSession } from "../features/slate/slateDraftSession";
+import { desktopAppearanceEventName, readDesktopAppearance } from "./desktopAppearance";
 import {
   forgetWorkspaceResume,
   loadAppResume,
@@ -126,6 +132,7 @@ function pageTitle(page: ProductionPage): string {
 }
 
 export function App() {
+  const desktopHud = isTauri();
   const [launchResume] = useState(() => {
     const raw = loadAppResume();
     const resolved = normalizeWorkspaceSelection(raw.workspacePath);
@@ -143,6 +150,8 @@ export function App() {
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [pageRequest, setPageRequest] = useState<ProjectPageRequest | null>(null);
+  const [externalXiaoJingAction, setExternalXiaoJingAction] = useState<(XiaoJingMainAction & { nonce: number }) | null>(null);
+  const [appearance, setAppearance] = useState(() => readDesktopAppearance());
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "");
   const [noticeVisible, setNoticeVisible] = useState(false);
@@ -154,6 +163,12 @@ export function App() {
   const workspaceId = snapshot?.workspace.workspace_id;
   const projectId = selectedProject?.project_id;
   const pageRequestNonce = useRef(0);
+  const activeSnapshot = state === "starting" || state === "connecting" ? null : snapshot;
+  const xiaojingWorkspace = useMemo<Pick<XiaoJingContextSnapshot, "workspace_name" | "projects" | "appearance">>(() => ({
+    workspace_name: activeSnapshot?.workspace.workspace ?? "",
+    projects: activeSnapshot?.projects.map(({ project_id, name, input_kind }) => ({ project_id, name, input_kind })) ?? [],
+    appearance,
+  }), [activeSnapshot, appearance]);
 
   const slateDraftSession = useMemo<SlateDraftSession | undefined>(() => {
     if (!workspaceId || !projectId) return undefined;
@@ -177,6 +192,7 @@ export function App() {
     const next = { version: current.version + 1, controller: new AbortController() };
     activeConnectionLifetime.current = next;
     setConnectionLifetime(next);
+    setExternalXiaoJingAction(null);
     return next.controller.signal;
   }
 
@@ -202,6 +218,41 @@ export function App() {
     if (!isTauri()) return;
     void platform.info().then(setPlatformInfo).catch(() => setPlatformInfo(null));
   }, [platform]);
+
+  useEffect(() => {
+    if (!desktopHud) return;
+    const sync = () => setAppearance(readDesktopAppearance());
+    const event = desktopAppearanceEventName();
+    window.addEventListener(event, sync);
+    return () => window.removeEventListener(event, sync);
+  }, [desktopHud]);
+
+  useEffect(() => {
+    if (!desktopHud || (activeSnapshot && surface === "production" && selectedProject)) return;
+    void syncXiaoJingContext({
+      ...xiaojingWorkspace,
+      base_url: activeSnapshot?.baseUrl ?? "",
+      workspace_id: activeSnapshot?.workspace.workspace_id ?? "",
+      project_id: activeSnapshot ? selectedProject?.project_id ?? "" : "",
+      project_name: activeSnapshot ? selectedProject?.name ?? "" : "",
+      current_page: "",
+      selection: {},
+      selection_summary: "",
+    }).catch((error) => console.error("无法同步小镜上下文", error));
+  }, [activeSnapshot, desktopHud, selectedProject, surface, xiaojingWorkspace]);
+
+  useEffect(() => {
+    if (!desktopHud) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.altKey || event.repeat) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        void toggleXiaoJingWindow().catch((error) => setMessage(`无法切换小镜窗口：${errorMessage(error)}`));
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [desktopHud]);
 
   useEffect(() => {
     if (!snapshot || !message) {
@@ -452,6 +503,7 @@ export function App() {
   function selectProject(project: ProjectSummary): void {
     setSelectedProject(project);
     setPageRequest(null);
+    setExternalXiaoJingAction(null);
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
   }
@@ -460,6 +512,7 @@ export function App() {
     pageRequestNonce.current += 1;
     setSelectedProject(project);
     setPageRequest({ projectId: project.project_id, page, nonce: pageRequestNonce.current });
+    setExternalXiaoJingAction(null);
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
   }
@@ -467,6 +520,7 @@ export function App() {
   function openTeamProject(project: ProjectSummary): void {
     setSelectedProject(project);
     setPageRequest(null);
+    setExternalXiaoJingAction(null);
     setSurface("team");
     if (resumeEnabledForSession) rememberProject(project.project_id);
   }
@@ -552,6 +606,7 @@ export function App() {
 
   function openProjects(): void {
     setPageRequest(null);
+    setExternalXiaoJingAction(null);
     setSurface("projects");
   }
 
@@ -572,6 +627,51 @@ export function App() {
     setResumeEnabledForSession(false);
     setMessage("已关闭下次自动恢复；当前工作现场保持打开。");
   }
+
+  const handleXiaoJingAction = useRef<(action: XiaoJingMainAction) => void>(() => undefined);
+  handleXiaoJingAction.current = (action) => {
+    switch (action.kind) {
+      case "task_submitted":
+        void refreshActivities();
+        return;
+      case "open_settings":
+        setSurface("settings");
+        return;
+      case "open_status":
+        setSurface("status");
+        return;
+      case "select_project":
+      case "open_diagnostic":
+      case "focus_take": {
+        if (!activeSnapshot) return;
+        const target = projectById(activeSnapshot, action.project_id ?? selectedProject?.project_id);
+        if (!target) {
+          setMessage("小镜所指的项目不在当前工作区。");
+          return;
+        }
+        if (action.kind === "open_diagnostic") {
+          const page = diagnosticPage(action.page);
+          if (page) openProjectPage(target, page);
+          return;
+        }
+        selectProject(target);
+        if (action.kind === "focus_take") {
+          setExternalXiaoJingAction({ ...action, project_id: target.project_id, nonce: ++pageRequestNonce.current });
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!desktopHud) return;
+    let active = true;
+    let stop: (() => void) | undefined;
+    void listenXiaoJingMainAction((action) => { if (active) handleXiaoJingAction.current(action); }).then((unlisten) => {
+      if (active) stop = unlisten;
+      else unlisten();
+    }).catch((error) => { if (active) setMessage(`无法监听小镜窗口：${errorMessage(error)}`); });
+    return () => { active = false; stop?.(); };
+  }, [desktopHud]);
 
   const recovering = state === "starting" && Boolean(launchResume.workspacePath) && !snapshot;
   const recoveryFailed = state === "error" && Boolean(workspacePath.trim()) && !snapshot;
@@ -843,6 +943,9 @@ export function App() {
                   {workspaceMenu}
                 </>}
                 pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
+                externalXiaoJingAction={externalXiaoJingAction?.project_id === selectedProject.project_id ? externalXiaoJingAction : null}
+                xiaojingWorkspace={xiaojingWorkspace}
+                onXiaoJingError={setMessage}
                 onOpenTeamReview={() => openTeamProject(selectedProject)}
                 workspaceId={snapshot.workspace.workspace_id}
                 onTaskChanged={() => void refreshActivities()}

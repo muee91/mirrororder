@@ -14,8 +14,9 @@ export interface EvidenceReference {
 export function evidenceLocation(projectId: string, reference: EvidenceReference): ProductionSelectionContext {
   const { group_id, clip_id, media_id, source, start, end, metadata } = reference;
   const recordId = typeof metadata?.record_id === "string" ? metadata.record_id : undefined;
-  const basis = metadata?.time_basis === "take_relative" || source === "speech"
-    ? "take" : metadata?.time_basis === "source" || source === "slate" ? "source" : null;
+  const basis = metadata?.time_basis === "source" ? "source"
+    : metadata?.time_basis === "take_relative" || source === "speech" ? "take"
+    : source === "slate" ? "source" : null;
   const sourceRange: ProductionSelectionContext["sourceRange"] = basis && typeof start === "number" && Number.isFinite(start) && start >= 0
     ? { start, end: typeof end === "number" && Number.isFinite(end) && end > start ? end : undefined, basis }
     : undefined;

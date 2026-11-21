@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from script_organizer import assistant_runtime, tasks, web_server
+from script_organizer import assistant_runtime, project_location_runtime, tasks, web_server
 from script_organizer.assistant_context import resolve_question_context
 from script_organizer.agent_tools import AgentToolRegistry
 from script_organizer.assistant_orchestrator import AssistantOrchestrator
@@ -22,6 +22,7 @@ from script_organizer.automation_store import AutomationStore
 from script_organizer.config import ProjectConfig
 from script_organizer.device_runtime_settings import save_runtime_settings
 from script_organizer.editorial_store import EditorialStore
+from script_organizer.media_identity import DeviceMediaStore, media_id_for_path
 from script_organizer.model_connections import load_model_connections, save_model_connections
 from script_organizer.model_registry import AssistantLanguageModel, AssistantModelConfig, ModelRegistry
 from script_organizer.models import Clip
@@ -844,6 +845,129 @@ def test_clear_through_local_only_runtime_handler(question_assistant, monkeypatc
     assert cleared["messages"] == [] and cleared["revision"] == previous["revision"] + 1
     assert cleared["items"] == previous["items"] and cleared["summary"] == previous["summary"]
     assert assistant.store.load() == cleared
+
+
+@pytest.fixture
+def media_location_project(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    config = _config(tmp_path)
+    project = ProjectService("demo", config)
+    project.workspace_id = "ws"
+    index_path = config.output_dir / "material_index.json"
+    index = json.loads(index_path.read_text())
+    members = index["groups"][0]["members"]
+    source = tmp_path / "originals"
+    source.mkdir()
+    files = {}
+    for member in members:
+        original = source / member["name"]
+        original.write_bytes(member["clip_id"].encode())
+        member["media_id"] = media_id_for_path(original)
+        files[member["clip_id"]] = (member["media_id"], original.resolve())
+    index["clips"] = members.copy()
+    DeviceMediaStore().scan("ws", "demo", index, [str(source)])
+    index["clips"] = members[:1]
+    index_path.write_text(json.dumps(index))
+    service = SimpleNamespace(workspace=SimpleNamespace(workspace_id="ws"), project=lambda _: project)
+    return service, files
+
+
+@pytest.mark.parametrize(("kind", "clip_id"), [
+    ("clip", "CA"), ("group_clip", "CB"), ("media", "CA"), ("media", "CB"), ("group", "CA"),
+])
+def test_project_media_local_location_resolves_original(media_location_project, kind, clip_id):
+    service, files = media_location_project
+    media_id, original = files[clip_id]
+    targets = {
+        "clip": {"clip_id": clip_id},
+        "group_clip": {"clip_id": clip_id, "group_id": "G1"},
+        "media": {"media_id": media_id},
+        "group": {"group_id": "G1"},
+    }
+
+    payload = project_location_runtime.project_media_local_location(service, "demo", **targets[kind])
+
+    assert payload == {
+        "contract": "project_media_location.v1",
+        "project_id": "demo",
+        "clip_id": clip_id,
+        "media_id": media_id,
+        "file_path": str(original),
+        "exists": True,
+        "device_paths_exposed": True,
+        "scope": "device_local_response",
+    }
+
+
+def test_project_media_local_location_falls_back_to_a_device_binding(media_location_project, monkeypatch):
+    service, files = media_location_project
+    project = service.project("demo")
+    monkeypatch.setattr(project, "resolve_media_path", lambda _: "")
+    media_id, original = files["CB"]
+    index_path = project.config.output_dir / "material_index.json"
+    index_path.write_text('{"clips": [], "groups": []}')
+
+    payload = project_location_runtime.project_media_local_location(service, "demo", media_id=media_id)
+
+    assert payload["clip_id"] == "" and payload["media_id"] == media_id
+    assert payload["exists"] is True and payload["file_path"] == str(original)
+
+
+def test_project_media_local_location_rejects_a_registry_path_outside_the_project(tmp_path):
+    registry = SimpleNamespace(
+        config=SimpleNamespace(config_path=tmp_path / "workspace.toml", registry_path=tmp_path / "projects" / "registry.json"),
+        get=lambda _: {"config_path": "another-workspace/demo/project.toml"},
+    )
+    current = SimpleNamespace(registry=registry, project=lambda _: pytest.fail("project ownership must be checked first"))
+
+    with pytest.raises(project_location_runtime.UnsafeProjectLocation):
+        project_location_runtime.project_media_local_location(SimpleNamespace(current=current), "demo", clip_id="CA")
+
+
+@pytest.mark.parametrize(("client_ip", "gateway", "body", "expected"), [
+    ("127.0.0.1", False, b'{"clip_id":"CA"}', HTTPStatus.OK),
+    ("127.0.0.1", False, b'{"clip_id":" "}', HTTPStatus.BAD_REQUEST),
+    ("127.0.0.1", False, b'{"group_id":"missing"}', HTTPStatus.NOT_FOUND),
+    ("192.0.2.1", False, b'{', HTTPStatus.FORBIDDEN),
+    ("192.0.2.1", True, b'{', HTTPStatus.FORBIDDEN),
+])
+def test_media_location_http_is_loopback_only(media_location_project, monkeypatch, tmp_path, client_ip, gateway, body, expected):
+    service, files = media_location_project
+    output = service.project("demo").config.output_dir
+    artifacts = [output / name for name in ("assistant.json", "review.json", "editorial.json")]
+    before = [path.read_bytes() if path.exists() else None for path in artifacts]
+    monkeypatch.setattr(project_location_runtime, "_INSTALLED", project_location_runtime._INSTALLED)
+    monkeypatch.setattr(web_server, "make_handler", web_server.make_handler)
+    project_location_runtime.install_project_location_runtime()
+    path = "/api/v1/projects/demo/media-location"
+    if gateway:
+        paired = SimpleNamespace(
+            current=service,
+            security=SimpleNamespace(allow=lambda *_: True),
+            select=lambda _: service,
+        )
+        handler_class = web_server.make_gateway_handler(paired, tmp_path)
+        path = "/api/v1/workspaces/ws/projects/demo/media-location"
+    else:
+        handler_class = web_server.make_handler(service, tmp_path)
+    headers = f"POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {len(body)}\r\n\r\n"
+    handler = object.__new__(handler_class)
+    handler.client_address = (client_ip, 4000)
+    handler.rfile = io.BytesIO(headers.encode() + body)
+    handler.wfile = io.BytesIO()
+
+    handler.handle_one_request()
+
+    response_headers, _, response_body = handler.wfile.getvalue().partition(b"\r\n\r\n")
+    assert int(response_headers.split(b" ", 2)[1]) == expected
+    payload = json.loads(response_body)
+    assert b"Cache-Control: no-store" in response_headers
+    if expected == HTTPStatus.OK:
+        assert payload["scope"] == "device_local_response" and payload["device_paths_exposed"] is True
+        assert payload["file_path"] == str(files["CA"][1])
+    else:
+        assert "file_path" not in payload
+    assert [path.read_bytes() if path.exists() else None for path in artifacts] == before
 
 
 @pytest.mark.parametrize("source", ["audit", "slate"])

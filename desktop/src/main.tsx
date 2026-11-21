@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { initializeDesktopAppearance } from "./app/desktopAppearance";
@@ -16,10 +16,15 @@ import "./design-system-v2.css";
 
 initializeDesktopAppearance();
 
+const isXiaoJingWindow = new URLSearchParams(window.location.search).get("window") === "xiaojing";
+const XiaoJingFloatingWindow = lazy(() => import("./features/assistant/XiaoJingFloatingWindow")
+  .then(({ XiaoJingFloatingWindow }) => ({ default: XiaoJingFloatingWindow })));
+if (isXiaoJingWindow) document.title = "小镜";
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      {isXiaoJingWindow ? <Suspense><XiaoJingFloatingWindow /></Suspense> : <App />}
     </ErrorBoundary>
   </StrictMode>,
 );

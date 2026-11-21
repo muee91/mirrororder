@@ -1,3 +1,4 @@
+mod assistant_window;
 mod document_open;
 mod gateway;
 mod host;
@@ -16,11 +17,25 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(document_open::DocumentQueue::default())
         .manage(gateway::GatewayManager::default())
         .manage(host::HostManager::default())
         .manage(timeline::TimelineManager::default())
+        .manage(assistant_window::AssistantWindowState::default())
+        .setup(|app| {
+            assistant_window::setup(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            assistant_window::xiaojing_toggle,
+            assistant_window::xiaojing_show,
+            assistant_window::xiaojing_hide,
+            assistant_window::xiaojing_set_always_on_top,
+            assistant_window::xiaojing_window_state,
+            assistant_window::xiaojing_sync_context,
+            assistant_window::xiaojing_get_context,
+            assistant_window::xiaojing_dispatch_action,
             document_open::peek_document_open,
             document_open::finish_document_open,
             gateway::start_team_gateway,
