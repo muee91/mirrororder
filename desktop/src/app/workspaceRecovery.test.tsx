@@ -61,7 +61,10 @@ async function enterScene(id: string, value: string) {
 async function reopenOriginal() {
   pick.mockResolvedValueOnce('synthetic-old/projects/p1/project.toml');
   start.mockResolvedValueOnce(original);
-  await click('选择工作区文件…');
+  const advanced = container.querySelector<HTMLDetailsElement>('.startup-advanced');
+  if (!advanced) throw new Error('missing advanced workspace controls');
+  advanced.open = true;
+  await click('选择 workspace.toml…');
 }
 beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true); localStorage.clear();

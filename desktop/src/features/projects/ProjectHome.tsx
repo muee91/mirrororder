@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import { HostConnection, errorMessage } from "../../api/host";
-import { collectProjectPackage, projectTransferAvailable, saveProjectCopy } from "../../app/projectTransferActions";
+import { projectTransferAvailable, saveProjectCopy } from "../../app/projectTransferActions";
 import { reviewProjectSummary, type ReviewProjectSummary } from "../review/reviewAttention";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
@@ -137,19 +137,6 @@ export function ProjectHome({
     }
   }
 
-  async function collectProject(project: ProjectSummary): Promise<void> {
-    if (transferBusy) return;
-    setTransferBusy(true);
-    try {
-      const message = await collectProjectPackage(baseUrl, project);
-      if (message) setActionMessage(message);
-    } catch (error) {
-      setActionMessage(`收集项目失败：${errorMessage(error)}`);
-    } finally {
-      setTransferBusy(false);
-    }
-  }
-
   return (
     <section className="project-home-canvas">
       <header className="project-home-heading">
@@ -280,8 +267,8 @@ export function ProjectHome({
             </article>
             <article className="project-onboarding-card">
               <span className="project-onboarding-step">03 · 跨电脑交接</span>
-              <h3>导入 .mirrorpkg 工程包</h3>
-              <p>如果是另一台剪辑机导出的便携工程包，点击右上角 <strong>「打开项目」</strong> 导入，再在「本机素材」中按指纹一键重连硬盘原片。</p>
+              <h3>导入 .mirrorproj 工程</h3>
+              <p>如果是另一台剪辑机用「另存项目」生成的便携工程，点击右上角 <strong>「打开项目」</strong> 导入，再在「本机素材」中按指纹一键重连硬盘原片。</p>
             </article>
           </div>
         </div>
@@ -302,7 +289,6 @@ export function ProjectHome({
               <button type="button" role="menuitem" onClick={() => run(() => onCopyShareLink(menu.project))}>复制局域网协作链接</button>
               <button type="button" role="menuitem" onClick={() => run(() => onRevealProject(menu.project))}>在 {revealLabel} 中显示</button>
               <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => saveProjectAs(menu.project))}>另存项目…</button>
-              <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => collectProject(menu.project))}>收集项目…</button>
               <button type="button" role="menuitem" className="project-context-danger" onClick={() => run(() => onDeleteProject(menu.project))}>永久删除项目…</button>
             </div>
           </details>

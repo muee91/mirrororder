@@ -11,6 +11,8 @@ interface Props {
   workspacePath: string;
   serviceAddress: string;
   message: string;
+  recentWorkspaces?: readonly string[];
+  onOpenRecent?: (path: string) => void;
   onWorkspacePathChange: (path: string) => void;
   onServiceAddressChange: (address: string) => void;
   onChooseWorkspace: (directory: boolean) => void;
@@ -21,6 +23,7 @@ interface Props {
 
 export function WorkspaceLauncher({
   state, recovering, recoveryFailed, native, workspacePath, serviceAddress, message,
+  recentWorkspaces = [], onOpenRecent,
   onWorkspacePathChange, onServiceAddressChange, onChooseWorkspace, onOpenPath, onConnect, onClearRecovery,
 }: Props) {
   const titleId = useId();
@@ -30,7 +33,7 @@ export function WorkspaceLauncher({
   const description = recovering
     ? "正在连接本机服务，准备恢复上次打开的项目。"
     : recoveryFailed
-      ? "重新选择上次的工作区文件夹，也可以从工作区文件打开其他项目。"
+      ? "重新定位原工作区，或选择其他工作区。"
       : "选择保存镜序项目、场记和同步任务的文件夹。";
   const hasFeedback = Boolean(message.trim());
   const showsPath = Boolean(workspacePath.trim()) && (recovering || recoveryFailed);
@@ -52,17 +55,28 @@ export function WorkspaceLauncher({
               <p>{description}</p>
               <button className="startup-choose" type="button" disabled={!native || busy}
                 onClick={() => onChooseWorkspace(true)}>
-                {recoveryFailed ? "重新选择文件夹…" : "选择工作区文件夹…"}
+                {recoveryFailed ? "重新选择工作区…" : "选择工作区…"}
               </button>
             </div>
 
-            <div className="startup-file">
-              <h2>从工作区文件打开</h2>
-              <p>如果已有 <code>workspace.toml</code>，可以直接选择此文件。</p>
-              <button type="button" className="secondary" disabled={!native || busy}
-                onClick={() => onChooseWorkspace(false)}>选择工作区文件…</button>
-            </div>
           </div>
+
+          {onOpenRecent && recentWorkspaces.length > 0 && (
+            <section className="startup-recent" aria-label="最近打开的工作区">
+              <h2>最近打开</h2>
+              <ul>
+                {recentWorkspaces.slice(0, 4).map(path => {
+                  const pieces = path.split(/[\\/]/).filter(Boolean);
+                  const label = pieces.at(-1)?.toLowerCase() === "workspace.toml" ? pieces.at(-2) : pieces.at(-1);
+                  const unavailable = recoveryFailed && path === workspacePath;
+                  return <li key={path}>
+                    <button type="button" className="secondary" disabled={!native || busy} title={path}
+                      onClick={() => onOpenRecent(path)}>{label || path}{unavailable ? "（暂不可用）" : ""}</button>
+                  </li>;
+                })}
+              </ul>
+            </section>
+          )}
 
           {(hasFeedback || showsPath) && (
             <div className="startup-feedback" data-failed={failed || undefined} role={failed ? "alert" : "status"}>
@@ -78,6 +92,10 @@ export function WorkspaceLauncher({
           <details className="startup-advanced">
             <summary>手动打开与连接</summary>
             <div className="startup-advanced-body">
+              <div className="startup-file">
+                <button type="button" className="secondary" disabled={!native || busy}
+                  onClick={() => onChooseWorkspace(false)}>选择 workspace.toml…</button>
+              </div>
               <form onSubmit={(event) => {
                 event.preventDefault();
                 if (native && !busy && workspacePath.trim()) onOpenPath();

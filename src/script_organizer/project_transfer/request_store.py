@@ -43,7 +43,7 @@ class ProjectTransferRequestStore:
 
     def create(self, kind: str, payload: dict[str, Any]) -> str:
         operation = str(kind or "").strip()
-        if operation not in {"import_project", "save_project_as", "collect_project"}:
+        if operation not in {"import_project", "save_project_as"}:
             raise ProjectTransferRequestError("不支持的 project transfer request")
         request_id = uuid4().hex
         value = {

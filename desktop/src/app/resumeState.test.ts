@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   forgetWorkspaceResume,
   loadAppResume,
+  loadRecentWorkspaces,
   readProjectPage,
   rememberProject,
   rememberProjectPage,
@@ -32,6 +33,16 @@ describe("production resume state", () => {
     rememberProject("project-a", storage);
     rememberWorkspace("/workspace/b", storage);
     expect(loadAppResume(storage)).toEqual({ workspacePath: "/workspace/b", projectId: "" });
+  });
+
+  it("reuses the last successful history and coalesces the workspace directory and manifest", () => {
+    const storage = new MemoryStorage();
+    storage.setItem("mirrororder.desktop.resume", JSON.stringify({ workspacePath: "/制作盘/短剧/workspace.toml", projectId: "a" }));
+    expect(loadRecentWorkspaces(storage)).toEqual(["/制作盘/短剧/workspace.toml"]);
+    rememberWorkspace("/另一盘/项目", storage);
+    expect(loadRecentWorkspaces(storage)).toEqual(["/另一盘/项目", "/制作盘/短剧/workspace.toml"]);
+    rememberWorkspace("/制作盘/短剧", storage);
+    expect(loadRecentWorkspaces(storage)).toEqual(["/制作盘/短剧", "/另一盘/项目"]);
   });
 
   it("defaults to the script-supervisor canvas and migrates legacy editor pages", () => {

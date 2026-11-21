@@ -109,11 +109,11 @@ export class ProjectActionClient {
     return response.package;
   }
 
-  async importPackage(path: string): Promise<ProjectImportSubmission> {
+  async importPackage(path: string, options: { expectedWorkspaceId?: string; expectedProjectId?: string } = {}): Promise<ProjectImportSubmission> {
     const response = await requestJson<ProjectImportSubmission>(
       this.baseUrl,
       "/api/v1/project-packages/import",
-      { method: "POST", body: JSON.stringify({ path: localPath(path, "导入项目") }) },
+      { method: "POST", body: JSON.stringify({ path: localPath(path, "导入项目"), expected_workspace_id: options.expectedWorkspaceId, expected_project_id: options.expectedProjectId }) },
     );
     if (response.package.scope !== "device_local_response" || response.package.device_path_exposed !== true) {
       throw new HostConnectionError("项目导入返回了非 device-local 契约");
@@ -133,21 +133,6 @@ export class ProjectActionClient {
         name: options.name?.trim() || undefined,
         project_id: options.projectId?.trim() || undefined,
         include_cache: Boolean(options.includeCache),
-      }),
-    });
-  }
-
-  collectProject(
-    projectId: string,
-    destination: string,
-    options: { includeCache?: boolean; includeMedia?: boolean } = {},
-  ): Promise<ProjectTransferSubmission> {
-    return requestJson(this.baseUrl, `${projectPath(projectId)}/collect`, {
-      method: "POST",
-      body: JSON.stringify({
-        destination: localPath(destination, "收集项目"),
-        include_cache: Boolean(options.includeCache),
-        include_media: Boolean(options.includeMedia),
       }),
     });
   }

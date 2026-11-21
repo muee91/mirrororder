@@ -52,13 +52,7 @@ html[data-mirrororder-theme="light"] .startup-home {
   background: rgba(255, 255, 255, 0.94);
 }
 
-.startup-entry {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
-}
-
-.startup-primary,
-.startup-file {
+.startup-primary {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -75,22 +69,19 @@ html[data-mirrororder-theme="light"] .startup-home {
   line-height: 1.18;
   letter-spacing: -.025em;
 }
-.startup-primary p,
-.startup-file p {
+.startup-primary p {
   margin: 10px 0 22px;
   color: var(--mo-text-secondary);
   font-size: 14px;
   line-height: 1.7;
 }
-.startup-file {
-  border-inline-start: 1px solid var(--mo-border-subtle);
-  border-start-end-radius: var(--mo-radius-overlay);
-  background: var(--mo-surface-raised);
-}
-.startup-file h2 { margin: 0; font-size: 17px; font-weight: 640; }
-.startup-file code { color: var(--mo-text-primary); font: 12px var(--mo-font-mono); }
-.startup-primary button,
-.startup-file button { min-height: 40px; padding-inline: 14px; font-size: 14px; }
+.startup-primary button { min-height: 40px; padding-inline: 14px; font-size: 14px; }
+.startup-file { grid-column: 1 / -1; }
+.startup-recent { border-top: 1px solid var(--mo-border-subtle); padding: 14px 32px 18px; }
+.startup-recent h2 { font-size: 13px; margin: 0 0 9px; color: var(--mo-text-secondary); }
+.startup-recent ul { display: flex; gap: 7px; flex-wrap: wrap; list-style: none; padding: 0; margin: 0; }
+.startup-recent li { max-width: 100%; }
+.startup-recent button { max-width: 100%; overflow-wrap: anywhere; }
 .startup-primary .startup-choose:not(:disabled) {
   color: var(--mo-action-text);
   border-color: var(--mo-action-fill);
@@ -166,11 +157,9 @@ html[data-mirrororder-theme="light"] .startup-home {
 .startup-advanced-body form button { flex: none; min-height: 36px; white-space: nowrap; font-size: 12px; }
 
 @media (max-width: 760px) {
-  .startup-entry,
   .startup-advanced-body { grid-template-columns: minmax(0, 1fr); }
-  .startup-file { border-inline-start: 0; border-top: 1px solid var(--mo-border-subtle); border-radius: 0; }
-  .startup-primary,
-  .startup-file { padding: 24px; }
+  .startup-primary { padding: 24px; }
+  .startup-recent { padding-inline: 24px; }
   .startup-advanced > summary,
   .startup-advanced-body,
   .startup-feedback { padding-inline: 24px; }

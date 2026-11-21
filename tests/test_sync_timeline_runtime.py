@@ -488,3 +488,22 @@ def test_sync_inspection_does_not_invent_a_frame_rate_when_master_is_unproven(tm
     assert payload['ready'] is True
     assert payload['timebase']['status'] == 'unknown'
     assert 'numerator' not in payload['timebase']
+
+
+def test_versioned_portable_master_reopens_without_local_execution_history(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write_sync_artifacts(project, days=("day1", "day2"))
+    report_path = project.config.output_dir / "sync" / "sync_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["sync_task_id"] = "original-device-completed-task"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    payload = build_sync_timeline(project, [])
+    assert payload["ready"] is True
+    assert payload["task"] is None
+    assert payload["cameras"] == ["A", "B"]
+
+    positions = project.config.output_dir / ".multicam-sync" / "work" / "positions_day2_compressed.tsv"
+    positions.unlink()
+    invalid = build_sync_timeline(project, [])
+    assert invalid["ready"] is False
+    assert invalid["phase"] == "invalid"

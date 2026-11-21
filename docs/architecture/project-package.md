@@ -1,6 +1,6 @@
 # MirrorOrder Project Package Contract v1
 
-这份文档定义镜序制作项目的**可持久化与传输边界**：什么构成一个项目、`project.toml` 如何版本化、哪些数据可随项目移动、哪些数据必须留在设备本地，以及 `.mirrorproj` / `.mirrorpkg` 如何安全导入、另存与收集。它不改变 Review / Editorial / Timeline 等领域 authority，只规定这些 authority 落在“同一个项目”中的物理边界。
+这份文档定义镜序制作项目的**可持久化与传输边界**：什么构成一个项目、`project.toml` 如何版本化、哪些数据可随项目移动、哪些数据必须留在设备本地，以及 `.mirrorproj` 如何安全打开、导入与另存。它不改变 Review / Editorial / Timeline 等领域 authority，只规定这些 authority 落在“同一个项目”中的物理边界。
 
 ## 1. 产品概念与当前物理布局
 
@@ -94,8 +94,6 @@ PID / 本机日志 / secrets / runtime 临时文件
 
 因此一个 `.mirrorproj` 可以被复制到另一台电脑，而不要求原始媒体跟着移动；另一台设备只需重新建立自己的 media binding。
 
-`.mirrorpkg` 在可选收集媒体时也遵守同一规则：归档清单只记录 `media_id`、归档内相对路径、文件名和字节数，不写入原设备 binding 的绝对路径。
-
 ## 5. Project Package 数据分层
 
 Project Package 是项目物理边界，不是一个新的 domain store。数据按现有 authority 分层：
@@ -129,7 +127,7 @@ Project Package 是项目物理边界，不是一个新的 domain store。数据
 - `matches.json`；
 - 其它确定性派生索引。
 
-它们可以随项目复制/归档以减少重复计算，但不能反向覆盖人工 authority。
+它们可以随项目复制以减少重复计算，但不能反向覆盖人工 authority。
 
 ### Cache / output
 
@@ -140,8 +138,7 @@ Project Package 是项目物理边界，不是一个新的 domain store。数据
 
 - 外部 `.mirrorproj` 导入默认复制项目内容，包括 cache；
 - “另存项目”默认不复制 cache，但保留 output 与其中的项目 authority；
-- “收集项目”默认不包含 cache，但保留项目目录其它文件；
-- `output/tasks.json` 在 Import / Save As / Collect 中统一排除，因为 durable task history 属于原 Host / runner 的 operational state，不是可移植项目 authority；
+- `output/tasks.json` 在 Import / Save As 中统一排除，因为 durable task history 属于原 Host / runner 的 operational state，不是可移植项目 authority；
 - cache 以后可以作为显式选项，不改变 authority 定义。
 
 ## 6. 打开外部 `.mirrorproj`
@@ -190,71 +187,15 @@ Desktop 的“打开项目…”是**导入到当前 workspace**，不是把外�
 
 外部 Save As 的目标**不会自动注册回当前 workspace**。它是一个新的可移动项目包；需要使用时可通过“打开项目…”导入。
 
-## 8. `.mirrorpkg` 收集归档 v1
+## 8. Finder 与跨电脑交接
 
-`.mirrorpkg` 现在正式定义为**归档/交换文件**，不是工作中直接编辑的项目目录。当前实现使用 ZIP64 容器，结构：
+`.mirrorproj` 是唯一可编辑、可交接的项目格式。macOS 安装包只关联此格式。Finder 打开在工作区恢复或选择后验证工程，再由用户明确导入；同编号冲突只允许明确打开工作区里的版本，不覆盖。如果不想导入，可在提示中取消。
 
-```text
-<name>.mirrorpkg
-├── mirrorpkg.json
-├── project/
-│   ├── project.toml
-│   ├── inputs/
-│   ├── output/
-│   └── ...
-└── media/                  # 可选
-    └── <media_id>/
-        └── <original-name>
-```
-
-`mirrorpkg.json` 当前声明：
-
-```json
-{
-  "format": "mirrororder-project-archive",
-  "schema_version": 1,
-  "project": {
-    "format": "mirrororder-project",
-    "schema_version": 1,
-    "project_id": "demo",
-    "name": "Demo",
-    "root": "project/"
-  },
-  "includes": {
-    "cache": false,
-    "media": true
-  },
-  "media": [
-    {
-      "media_id": "M_...",
-      "archive_path": "media/M_.../A001.mov",
-      "name": "A001.mov",
-      "bytes": 123
-    }
-  ],
-  "device_binding_paths_included": false
-}
-```
-
-### 默认收集
-
-默认包含项目目录除 `cache/` 与 `output/tasks.json` 外的可移植项目文件，不包含原始媒体。
-
-### 可选收集媒体
-
-用户显式选择“含原始媒体”后，任务通过当前设备的 `DeviceMediaStore` 解析 `media_id`，把项目素材索引中的物理媒体复制进 `media/<media_id>/...`。正式 `M_...` 身份必须通过内容指纹校验；legacy `MP_...` provisional identity 必须已在当前设备人工确认。任务不得因为历史来源路径“当前仍存在”就绕过身份校验。归档清单只保存 archive-relative path；原本机路径只在任务运行时读取。
-
-如果用户要求含媒体，但当前设备未定位或无法验证全部所需 `media_id`，任务 fail fast，不生成一个假装完整的归档。
-
-### 原子与取消
-
-`.mirrorpkg` 先写到目标目录的临时文件，进行空间预检，并在文件复制循环中响应取消。ZIP 写完后再次复核项目文件与已选媒体的 size / mtime；若源在收集过程中变化，本次归档失败且不发布。只有源快照稳定且最终取消检查通过后才 `os.replace` 为正式目标。
-
-`.mirrorpkg` 当前**不能直接作为实时项目打开/编辑，也还没有实现从 `.mirrorpkg` 解包导入**。要继续编辑，应使用 `.mirrorproj`；`.mirrorpkg` 是收集、备份与交换边界。
+跨电脑交接使用「另存项目」，把 `.mirrorproj` 目录包交给另一台电脑，再用「打开项目」导入。外部原片默认维持原位置；新设备按媒体指纹重连。本轮不提供旧 `.mirrorpkg` 的打开、写出或导入，亦不会改动任何已存在的归档文件。
 
 ## 9. Durable task 与设备路径边界
 
-Project transfer 的源/目标绝对路径是 device-local 信息，但导入/另存/收集又可能持续很久，需要 durable task。为同时满足两条约束：
+Project transfer 的源/目标绝对路径是 device-local 信息，但导入/另存又可能持续很久，需要 durable task。为同时满足两条约束：
 
 ```text
 Desktop local action
@@ -271,7 +212,6 @@ scope：
 
 - `project_package_import`：device scope，因为导入开始前目标 project 尚不存在；
 - `project_save_as`：project scope；
-- `project_collect`：project scope。
 
 所有操作都使用现有 Status Center 的任务列表、取消、失败与重试语义，不创建平行进度控制器。
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -9,7 +8,6 @@ from uuid import uuid4
 from .operations import (
     ProjectTransferCancelled,
     ProjectTransferError,
-    collect_project_archive,
     copy_project_package,
     inspect_project_package,
 )
@@ -18,7 +16,6 @@ from .request_store import ProjectTransferRequestStore
 _INSTALLED = False
 _DEVICE_IMPORT_TASK = "project_package_import"
 _PROJECT_SAVE_TASK = "project_save_as"
-_PROJECT_COLLECT_TASK = "project_collect"
 
 
 def _current_service(service: Any) -> Any:
@@ -52,49 +49,6 @@ def _workspace_id(current: Any) -> str:
     return str(getattr(workspace, "workspace_id", "") or "")
 
 
-def _collect_media_files(config: Any, workspace_id: str, project_id: str) -> list[tuple[str, Path]]:
-    from ..media_identity import DeviceMediaStore
-
-    try:
-        index = json.loads((config.output_dir / "material_index.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise ProjectTransferError("收集原始媒体前需要有效 material_index.json") from error
-    if not isinstance(index, dict) or not isinstance(index.get("clips"), list):
-        raise ProjectTransferError("收集原始媒体前需要有效素材索引")
-    store = DeviceMediaStore()
-    snapshot = store.project_snapshot(workspace_id, project_id)
-    result: list[tuple[str, Path]] = []
-    seen: set[str] = set()
-    missing: list[str] = []
-    for raw in index["clips"]:
-        if not isinstance(raw, dict):
-            continue
-        media_id = str(raw.get("media_id", "") or "").strip()
-        if not media_id or media_id in seen:
-            continue
-        seen.add(media_id)
-        # DeviceMediaStore is the media-identity authority here: M_ identities
-        # are content-verified and MP_ identities require an explicit local
-        # confirmation. Do not add a path-exists fallback or the archive could
-        # silently collect replaced media under the wrong identity.
-        resolved = store.resolve_from_snapshot(snapshot, raw)
-        if not resolved or not Path(resolved).is_file():
-            missing.append(media_id)
-            continue
-        # 与 operations._inventory 的 fail-closed 语义一致：符号链接媒体不打包。
-        if Path(resolved).is_symlink():
-            missing.append(media_id)
-            continue
-        result.append((media_id, Path(resolved).resolve()))
-    if missing:
-        preview = "、".join(missing[:8])
-        suffix = f" 等 {len(missing)} 条" if len(missing) > 8 else ""
-        raise ProjectTransferError(f"当前设备未定位全部收集媒体：{preview}{suffix}")
-    if not result:
-        raise ProjectTransferError("当前项目没有可按 media_id 收集的本机媒体")
-    return result
-
-
 def _device_import_run(manager: Any, task_id: str, task: dict[str, Any]) -> None:
     from ..workspace import WorkspaceConfig, WorkspaceRegistry
 
@@ -114,6 +68,9 @@ def _device_import_run(manager: Any, task_id: str, task: dict[str, Any]) -> None
         registry = WorkspaceRegistry(workspace)
         inspection = inspect_project_package(source_path, require_external_suffix=True)
         project_id = inspection.manifest.project_id
+        expected_project = str(request.get("expected_project_id", "") or "")
+        if expected_project and expected_project != project_id:
+            raise ProjectTransferError("源项目身份已变更，未导入")
         if not project_id:
             raise ProjectTransferError("外部项目缺少稳定 project.id，不能导入")
         if any(item.get("project_id") == project_id for item in registry.list()):
@@ -170,51 +127,21 @@ def _project_transfer_run(manager: Any, project_id: str, task_id: str, task: dic
         if manager._cancel_requested(config, task_id):
             manager._update(config, task_id, status="cancelled", stage="cancelled", message="项目传输已取消")
             return
-        task_type = str(task.get("type", "") or "")
         request_id = _request_id((task.get("targets") or {}).get("request_id"))
-        expected = "save_project_as" if task_type == _PROJECT_SAVE_TASK else "collect_project"
-        request = store.load(request_id, expected_kind=expected)
+        request = store.load(request_id, expected_kind="save_project_as")
         if str(request.get("project_id", "") or "") != project_id:
             raise ProjectTransferError("project transfer request 与项目身份不一致")
 
-        if task_type == _PROJECT_SAVE_TASK:
-            manager._update(config, task_id, stage="save_as", message="正在另存项目包")
-            result = copy_project_package(
-                config.project_dir,
-                str(request.get("destination", "") or ""),
-                include_cache=bool(request.get("include_cache", False)),
-                new_project_id=str(request.get("new_project_id", "") or ""),
-                new_name=str(request.get("new_name", "") or ""),
-                cancelled=lambda: manager._cancel_requested(config, task_id),
-            )
-            result["operation"] = "save_project_as"
-        elif task_type == _PROJECT_COLLECT_TASK:
-            include_media = bool(request.get("include_media", False))
-            manager._update(
-                config,
-                task_id,
-                stage="collect",
-                message="正在收集项目" + ("与本机媒体" if include_media else ""),
-            )
-            media_files = (
-                _collect_media_files(
-                    config,
-                    str(request.get("workspace_id", "") or ""),
-                    project_id,
-                )
-                if include_media
-                else []
-            )
-            result = collect_project_archive(
-                config.project_dir,
-                str(request.get("destination", "") or ""),
-                include_cache=bool(request.get("include_cache", False)),
-                media_files=media_files,
-                cancelled=lambda: manager._cancel_requested(config, task_id),
-            )
-            result["operation"] = "collect_project"
-        else:
-            raise ProjectTransferError("不支持的 project transfer task")
+        manager._update(config, task_id, stage="save_as", message="正在另存项目包")
+        result = copy_project_package(
+            config.project_dir,
+            str(request.get("destination", "") or ""),
+            include_cache=bool(request.get("include_cache", False)),
+            new_project_id=str(request.get("new_project_id", "") or ""),
+            new_name=str(request.get("new_name", "") or ""),
+            cancelled=lambda: manager._cancel_requested(config, task_id),
+        )
+        result["operation"] = "save_project_as"
         store.remove(request_id)
         manager._update(
             config,
@@ -251,7 +178,7 @@ def install_project_transfer_runtime() -> None:
     from ..workspace import project_id_for
 
     device_tasks.DEVICE_TASK_TYPES.add(_DEVICE_IMPORT_TASK)
-    task_runtime.TASK_TYPES.update({_PROJECT_SAVE_TASK, _PROJECT_COLLECT_TASK})
+    task_runtime.TASK_TYPES.add(_PROJECT_SAVE_TASK)
 
     original_device_targets = device_tasks._targets
     original_device_run = device_tasks.DeviceTaskManager._run
@@ -273,7 +200,7 @@ def install_project_transfer_runtime() -> None:
     def project_run_with_transfer(manager: Any, project_id: str, task_id: str) -> None:
         config = manager.project_loader(project_id)
         task = manager._task(manager._load(config), task_id)
-        if task.get("type") not in {_PROJECT_SAVE_TASK, _PROJECT_COLLECT_TASK}:
+        if task.get("type") != _PROJECT_SAVE_TASK:
             return original_project_run(manager, project_id, task_id)
         _project_transfer_run(manager, project_id, task_id, task)
 
@@ -309,11 +236,17 @@ def install_project_transfer_runtime() -> None:
                 if parts == ["api", "v1", "project-packages", "import"]:
                     self._local_only()
                     payload = web_server._body(self)
+                    expected_workspace = str(payload.get("expected_workspace_id", "") or "").strip()
+                    if expected_workspace and expected_workspace != _workspace_id(current):
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, "工作区已切换；未提交工程导入")
                     try:
                         inspection = inspect_project_package(
                             str(payload.get("path", "") or ""),
                             require_external_suffix=True,
                         )
+                        expected_project = str(payload.get("expected_project_id", "") or "").strip()
+                        if expected_project and expected_project != inspection.manifest.project_id:
+                            raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, "源项目身份已变更，请重新检查")
                         if not inspection.manifest.project_id:
                             raise ProjectTransferError("外部项目缺少稳定 project.id，不能导入")
                         if any(
@@ -327,6 +260,7 @@ def install_project_transfer_runtime() -> None:
                             {
                                 "workspace_config_path": str(_workspace_config_path(current)),
                                 "source_path": str(inspection.root),
+                                "expected_project_id": inspection.manifest.project_id,
                             },
                         )
                         manager = device_tasks.get_device_task_manager()
@@ -355,7 +289,7 @@ def install_project_transfer_runtime() -> None:
                 if (
                     len(parts) == 5
                     and parts[:3] == ["api", "v1", "projects"]
-                    and parts[4] in {"save-as", "collect"}
+                    and parts[4] == "save-as"
                 ):
                     self._local_only()
                     project_id = parts[3]
@@ -367,33 +301,20 @@ def install_project_transfer_runtime() -> None:
                     destination = str(payload.get("destination", "") or "").strip()
                     if not destination:
                         raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, "需要目标路径")
-                    if parts[4] == "save-as":
-                        new_name = str(payload.get("name", "") or "").strip() or f"{config.name} 副本"
-                        requested_id = str(payload.get("project_id", "") or "").strip()
-                        new_project_id = project_id_for(requested_id or f"{new_name}-{uuid4().hex[:8]}")
-                        request_id = _request_store().create(
-                            "save_project_as",
-                            {
-                                "project_id": project_id,
-                                "destination": destination,
-                                "new_project_id": new_project_id,
-                                "new_name": new_name,
-                                "include_cache": bool(payload.get("include_cache", False)),
-                            },
-                        )
-                        task_type = _PROJECT_SAVE_TASK
-                    else:
-                        request_id = _request_store().create(
-                            "collect_project",
-                            {
-                                "workspace_id": _workspace_id(current),
-                                "project_id": project_id,
-                                "destination": destination,
-                                "include_cache": bool(payload.get("include_cache", False)),
-                                "include_media": bool(payload.get("include_media", False)),
-                            },
-                        )
-                        task_type = _PROJECT_COLLECT_TASK
+                    new_name = str(payload.get("name", "") or "").strip() or f"{config.name} 副本"
+                    requested_id = str(payload.get("project_id", "") or "").strip()
+                    new_project_id = project_id_for(requested_id or f"{new_name}-{uuid4().hex[:8]}")
+                    request_id = _request_store().create(
+                        "save_project_as",
+                        {
+                            "project_id": project_id,
+                            "destination": destination,
+                            "new_project_id": new_project_id,
+                            "new_name": new_name,
+                            "include_cache": bool(payload.get("include_cache", False)),
+                        },
+                    )
+                    task_type = _PROJECT_SAVE_TASK
                     try:
                         task = current.tasks.submit(
                             project_id,

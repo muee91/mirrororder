@@ -17,7 +17,8 @@ def test_desktop_shell_fills_available_canvas() -> None:
     workbench = read("desktop/src/features/production/ProjectWorkbench.tsx")
 
     assert 'className="app-shell production-app-shell mirrororder-redesign-shell"' in app
-    assert 'return <WorkspaceLauncher' in app
+    assert 'return <><WorkspaceLauncher' in app
+    assert app.count('{finderProject}') == 2
     assert 'className="startup-shell"' in launcher
     assert 'workspace-shell application-frame${isProjectOpen ? " is-project-open" : ""}' in app
     assert 'className="app-main-column"' in app

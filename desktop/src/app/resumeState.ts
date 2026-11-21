@@ -72,16 +72,29 @@ export function loadAppResume(storage: StorageLike | null = browserStorage()): A
   }
 }
 
+function distinctRecentWorkspaces(values: readonly unknown[]): string[] {
+  const seen = new Set<string>();
+  return values.map(normalized).filter(path => {
+    if (!path) return false;
+    const key = path.replace(/[\\/]+$/, "").replace(/[\\/]workspace\.toml$/i, "").normalize("NFC");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 6);
+}
+
 export function loadRecentWorkspaces(storage: StorageLike | null = browserStorage()): string[] {
   if (!storage) return [];
+  const lastSuccessfulWorkspace = loadAppResume(storage).workspacePath;
   try {
     const raw = storage.getItem(RECENT_WORKSPACES_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return [...new Set(parsed.map((item) => normalized(item)).filter(Boolean))].slice(0, 6);
+    const parsed = raw ? JSON.parse(raw) as unknown : null;
+    return distinctRecentWorkspaces([
+      ...(Array.isArray(parsed) ? parsed : []),
+      lastSuccessfulWorkspace,
+    ]);
   } catch {
-    return [];
+    return distinctRecentWorkspaces([lastSuccessfulWorkspace]);
   }
 }
 
@@ -89,7 +102,7 @@ export function rememberRecentWorkspace(workspacePath: string, storage: StorageL
   const nextPath = workspacePath.trim();
   const existing = loadRecentWorkspaces(storage);
   if (!nextPath || !storage) return existing;
-  const next = [nextPath, ...existing.filter((item) => item !== nextPath)].slice(0, 6);
+  const next = distinctRecentWorkspaces([nextPath, ...existing]);
   try {
     storage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(next));
   } catch {
@@ -104,11 +117,11 @@ export function rememberWorkspace(workspacePath: string, storage: StorageLike | 
   if (!nextPath) return;
   try {
     const current = loadAppResume(storage);
+    rememberRecentWorkspace(nextPath, storage);
     storage.setItem(APP_RESUME_KEY, JSON.stringify({
       workspacePath: nextPath,
       projectId: current.workspacePath === nextPath ? current.projectId : "",
     } satisfies AppResumeState));
-    rememberRecentWorkspace(nextPath, storage);
   } catch {
     // Device-local convenience only; it must never block production work.
   }

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -9,7 +8,6 @@ import pytest
 from script_organizer.project_package import load_project_package_manifest
 from script_organizer.project_transfer.operations import (
     ProjectTransferError,
-    collect_project_archive,
     copy_project_package,
     inspect_project_package,
 )
@@ -110,52 +108,22 @@ def test_copy_refuses_to_publish_if_source_changes_during_transfer(tmp_path, mon
         operations.copy_project_package(source, tmp_path / "unstable")
     assert not (tmp_path / "unstable.mirrorproj").exists()
 
-def test_collect_archive_keeps_device_binding_paths_out_of_metadata(tmp_path):
+def test_export_does_not_overwrite_empty_directory_created_after_preflight(tmp_path, monkeypatch):
+    from script_organizer.project_transfer import operations
+
     source = _project(tmp_path)
-    media = tmp_path / "A001.mov"
-    media.write_bytes(b"media")
+    target = tmp_path / "剪辑副本.mirrorproj"
+    verify = operations._assert_staged_portability
 
-    result = collect_project_archive(
-        source,
-        tmp_path / "Archive",
-        include_cache=False,
-        media_files=[("M_abc", media)],
-    )
+    def create_competing_directory(staging):
+        verify(staging)
+        target.mkdir()
 
-    archive_path = tmp_path / "Archive.mirrorpkg"
-    assert result["media_files"] == 1
-    with zipfile.ZipFile(archive_path) as archive:
-        names = set(archive.namelist())
-        assert "project/project.toml" in names
-        assert "project/output/review.json" in names
-        assert "project/output/tasks.json" not in names
-        assert "project/cache/big.tmp" not in names
-        assert "media/M_abc/A001.mov" in names
-        meta = json.loads(archive.read("mirrorpkg.json"))
-        assert meta["device_binding_paths_included"] is False
-        assert str(media) not in json.dumps(meta, ensure_ascii=False)
-
-
-def test_collect_rejects_unsafe_media_identity(tmp_path):
-    source = _project(tmp_path)
-    media = tmp_path / "A001.mov"
-    media.write_bytes(b"media")
-    with pytest.raises(ProjectTransferError, match="身份无效"):
-        collect_project_archive(source, tmp_path / "Archive", media_files=[("../escape", media)])
-
-
-def test_collect_rejects_symlinked_media(tmp_path):
-    """fail-closed：符号链接媒体不得被静默跟随打包（is_symlink 必须在 resolve 前判）。"""
-    source = _project(tmp_path)
-    real_media = tmp_path / "real" / "A001.mov"
-    real_media.parent.mkdir(parents=True)
-    real_media.write_bytes(b"media")
-    link = tmp_path / "A001-link.mov"
-    link.symlink_to(real_media)
-
-    with pytest.raises(ProjectTransferError, match="不可读取"):
-        collect_project_archive(source, tmp_path / "Archive", media_files=[("M_abc", link)])
-    assert not (tmp_path / "Archive.mirrorpkg").exists()
+    monkeypatch.setattr(operations, "_assert_staged_portability", create_competing_directory)
+    with pytest.raises(ProjectTransferError, match="目标已存在"):
+        copy_project_package(source, target)
+    assert target.is_dir() and list(target.iterdir()) == []
+    assert not list(tmp_path.glob(".mirrororder-transfer-*"))
 
 
 def test_cancel_does_not_publish_partial_target(tmp_path):
@@ -191,50 +159,18 @@ def test_internal_import_copy_keeps_managed_workspace_layout(tmp_path):
 
 def test_request_store_keeps_absolute_paths_device_local(tmp_path):
     store = ProjectTransferRequestStore(tmp_path / "requests")
-    request_id = store.create("collect_project", {"destination": "/private/archive.mirrorpkg"})
+    request_id = store.create("save_project_as", {"destination": "/private/Copy.mirrorproj"})
 
     assert len(request_id) == 32
-    assert store.load(request_id, expected_kind="collect_project")["destination"].endswith(".mirrorpkg")
+    assert store.load(request_id, expected_kind="save_project_as")["destination"].endswith(".mirrorproj")
     path = tmp_path / "requests" / f"{request_id}.json"
-    assert "/private/archive.mirrorpkg" in path.read_text(encoding="utf-8")
+    assert "/private/Copy.mirrorproj" in path.read_text(encoding="utf-8")
 
     store.remove(request_id)
     assert not path.exists()
     with pytest.raises(ProjectTransferRequestError):
         store.load(request_id)
 
-
-
-def test_collect_media_files_uses_device_media_authority_without_path_fallback(tmp_path, monkeypatch):
-    import sys
-    from types import ModuleType, SimpleNamespace
-    from script_organizer.project_transfer import runtime
-
-    project = tmp_path / "project"
-    output = project / "output"
-    output.mkdir(parents=True)
-    stale = tmp_path / "stale.mov"
-    stale.write_bytes(b"wrong bytes")
-    (output / "material_index.json").write_text(
-        json.dumps({"clips": [{"media_id": "MP_provisional", "source_media_path": str(stale)}]}),
-        encoding="utf-8",
-    )
-
-    fake = ModuleType("script_organizer.media_identity")
-
-    class DeviceMediaStore:
-        def project_snapshot(self, workspace_id, project_id):
-            return {"bindings": {}, "confirmed_provisional": {}}
-
-        @staticmethod
-        def resolve_from_snapshot(snapshot, item):
-            return ""
-
-    fake.DeviceMediaStore = DeviceMediaStore
-    monkeypatch.setitem(sys.modules, "script_organizer.media_identity", fake)
-
-    with pytest.raises(ProjectTransferError, match="未定位全部收集媒体"):
-        runtime._collect_media_files(SimpleNamespace(output_dir=output), "ws", "demo")
 
 
 def test_request_store_restricts_directory_permissions_when_supported(tmp_path):
@@ -490,41 +426,6 @@ def test_import_copy_round_trip_stays_portable(tmp_path):
         assert not _DEVICE_PATH_PATTERN.search(text), path
 
 
-def test_collect_archive_contains_no_device_paths(tmp_path):
-    from script_organizer.project_transfer.operations import _DEVICE_PATH_PATTERN
-
-    source = _transfer_project(tmp_path)
-    media_a = tmp_path / "A001.mp4"
-    media_a.write_bytes(b"\x00\x01media-bytes")
-    media_b = tmp_path / "B001.mov"
-    media_b.write_bytes(b"\x00\x02media-bytes")
-
-    result = collect_project_archive(
-        source,
-        tmp_path / "Archive",
-        include_cache=False,
-        media_files=[("M_aaa", media_a), ("M_bbb", media_b)],
-    )
-
-    assert result["projected_artifacts"] >= 3
-    with zipfile.ZipFile(tmp_path / "Archive.mirrorpkg") as archive:
-        for name in archive.namelist():
-            if name.startswith("media/"):
-                continue
-            data = archive.read(name)
-            try:
-                text = data.decode("utf-8")
-            except UnicodeDecodeError:
-                continue
-            assert not _DEVICE_PATH_PATTERN.search(text), name
-        document = archive.read("project/inputs/source.fcpxml").decode("utf-8")
-        assert document.count('src=""') == 4
-        assert "file://" not in document
-        index = json.loads(archive.read("project/output/material_index.json"))
-        assert index["clips"][1]["media_id"] == "M_bbb"
-        assert index["clips"][1]["media_path"] == ""
-
-
 def test_export_strips_device_locator_without_requiring_media_map(tmp_path):
     source = _transfer_project(tmp_path)
     document = (source / "inputs" / "source.fcpxml").read_text(encoding="utf-8")
@@ -540,3 +441,51 @@ def test_export_strips_device_locator_without_requiring_media_map(tmp_path):
     assert exported.count('src=""') == 5
     assert "/Volumes/" not in exported
     assert result["projected_artifacts"] >= 3
+
+def test_copy_materializes_only_checked_sync_master_and_omits_device_layout(tmp_path):
+    import hashlib
+
+    source = _project(tmp_path)
+    built = tmp_path / "media" / "交付" / ("同步-" + "b" * 32) / "synchronized.fcpxml"
+    built.parent.mkdir(parents=True)
+    original_xml = b'<fcpxml><resources><asset src="file:///tmp/ABC/A001.mp4" /></resources></fcpxml>'
+    built.write_bytes(original_xml)
+    output = source / "output"
+    sync = output / "sync"
+    sync.mkdir()
+    (sync / "synchronized.fcpxml").symlink_to(built)
+    (sync / "sync_report.json").write_text(json.dumps({
+        "status": "completed", "sync_task_id": "saved-task", "fcpxml": str(built),
+        "camera_detection": {"contract_version": "camera_detection.v2"},
+    }), encoding="utf-8")
+    (output / "material_index.json").write_text(json.dumps({
+        "analysis_source": {"fcpxml_sha256": hashlib.sha256(original_xml).hexdigest()},
+        "clips": [],
+    }), encoding="utf-8")
+    runtime = output / ".multicam-sync"
+    work = runtime / "work"
+    work.mkdir(parents=True)
+    (runtime / "media-layout").symlink_to(built.parent)
+    (runtime / "config.json").write_text(json.dumps({"input_dir": str(built.parent)}), encoding="utf-8")
+    (work / "fingerprint.f32").write_bytes(b"cached")
+    (work / "positions_day1_compressed.tsv").write_text("track-pos", encoding="utf-8")
+
+    target = tmp_path / "交接 剪辑.mirrorproj"
+    copy_project_package(source, target, include_cache=False)
+    published = target / "output/sync/synchronized.fcpxml"
+    assert published.is_file() and not published.is_symlink()
+    assert b'/tmp/ABC' not in published.read_bytes()
+    assert not (target / "output/.multicam-sync/media-layout").exists()
+    assert not (target / "output/.multicam-sync/config.json").exists()
+    assert not (target / "output/.multicam-sync/work/fingerprint.f32").exists()
+    assert (target / "output/.multicam-sync/work/positions_day1_compressed.tsv").is_file()
+    assert built.read_bytes() == original_xml
+
+    # Importing an external project never gets the trusted engine-link exception.
+    with pytest.raises(ProjectTransferError, match="符号链接"):
+        copy_project_package(source, tmp_path / "unsafe-import", require_external_source=True)
+    built.write_bytes(b"<fcpxml>changed</fcpxml>")
+    bad = tmp_path / "changed.mirrorproj"
+    with pytest.raises(ProjectTransferError, match="同步 XML 指纹不匹配"):
+        copy_project_package(source, bad, include_cache=False)
+    assert not bad.exists()

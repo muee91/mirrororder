@@ -1,5 +1,25 @@
 {
   "bundle": {
-    "targets": ["app", "dmg"]
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "mirrorproj"
+        ],
+        "name": "镜序工程",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "com.mirrororder.project",
+          "conformsTo": [
+            "com.apple.package",
+            "public.directory"
+          ]
+        }
+      }
+    ]
   }
 }

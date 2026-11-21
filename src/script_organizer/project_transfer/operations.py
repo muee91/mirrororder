@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 import urllib.parse
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -22,26 +24,23 @@ from ..project_package import (
     load_project_package_manifest,
 )
 from ..source_descriptor import redact_device_media_paths
-from ..media_identity import media_id_for_path
 
-MIRROR_PACKAGE_ARCHIVE_EXTENSION = ".mirrorpkg"
-MIRROR_PACKAGE_ARCHIVE_FORMAT = "mirrororder-project-archive"
-MIRROR_PACKAGE_ARCHIVE_SCHEMA_VERSION = 1
 _COPY_CHUNK_BYTES = 1024 * 1024
 _PROJECT_KEY_LINE = re.compile(r"^\s*(format|schema_version|id|name)\s*=")
-_NON_PORTABLE_PROJECT_FILES = {"output/tasks.json"}
-_MEDIA_ID = re.compile(r"^(?:M|MP)_[A-Za-z0-9._-]{1,160}$")
+_NON_PORTABLE_PROJECT_FILES = {"output/tasks.json", "output/.multicam-sync/config.json"}
+_LOCAL_SYNC_LAYOUT = ("output", ".multicam-sync", "media-layout")
+_LOCAL_SYNC_WORK = ("output", ".multicam-sync", "work")
 # Shared packages must not carry device bindings (INVARIANTS): /Volumes/...,
 # /Users/..., /home/... and Windows drive paths are device-local.
 _DEVICE_PATH_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9])/(?:Users|Volumes|home)/[^\s\"'<>\\]+"
+    r"(?<![A-Za-z0-9])/(?:Users|Volumes|home|tmp|private/tmp|private/var/folders|var/folders)/[^\s\"'<>\\]+"
     r"|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s\"'<>]+"
 )
 # A JSON string value that *starts* with a device path is machine provenance
 # (media_path, legacy_source, source_fcpxml, ...) and is safe to blank; human
 # notes that merely mention a path are left untouched.
 _DEVICE_PATH_VALUE_PREFIX = re.compile(
-    r"^(?:file://(?:localhost)?/+)?(?:/Users/|/Volumes/|/home/|[A-Za-z]:[\\/])"
+    r"^(?:file://(?:localhost)?/+)?(?:/Users/|/Volumes/|/home/|/tmp/|/private/tmp/|/private/var/folders/|/var/folders/|[A-Za-z]:[\\/])"
 )
 _MEDIA_INDEX_RELATIVE = "output/material_index.json"
 _ANALYSIS_SNAPSHOT_RELATIVE = "output/analysis_snapshot.json"
@@ -126,10 +125,38 @@ def inspect_project_package(
     return ProjectPackageInspection(root=root, manifest=manifest)
 
 
+def _verified_sync_xml(root: Path, link: Path) -> Path:
+    """Materialize only the sync engine's published XML, never arbitrary source links."""
+    try:
+        report = json.loads((root / "output" / "sync" / "sync_report.json").read_text(encoding="utf-8"))
+        index = json.loads((root / _MEDIA_INDEX_RELATIVE).read_text(encoding="utf-8"))
+        target = link.resolve(strict=True)
+        reported = Path(report["fcpxml"]).resolve(strict=True)
+        expected = index["analysis_source"]["fcpxml_sha256"]
+        if (
+            target != reported
+            or target.name != "synchronized.fcpxml"
+            or not re.fullmatch(r"同步-[0-9a-f]{32}", target.parent.name)
+            or target.parent.parent.name != "交付"
+            or report["status"] != "completed"
+            or not target.is_file()
+            or target.stat().st_size > 64 * 1024 * 1024
+            or not re.fullmatch(r"[0-9a-f]{64}", expected)
+        ):
+            raise ValueError("同步 XML 来源不符合发布契约")
+        with target.open("rb") as handle:
+            if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
+                raise ValueError("同步 XML 指纹不匹配")
+        return target
+    except (OSError, KeyError, TypeError, ValueError) as error:
+        raise ProjectTransferError(f"同步原片引用不可信，不能另存：{error}") from error
+
+
 def _inventory(
     root: Path,
     *,
     include_cache: bool,
+    allow_published_sync_link: bool = False,
     cancelled: Callable[[], bool] | None = None,
 ) -> tuple[list[TransferFile], int]:
     files: list[TransferFile] = []
@@ -143,6 +170,8 @@ def _inventory(
             relative = child.relative_to(root)
             if relative.parts and relative.parts[0] == "cache" and not include_cache:
                 continue
+            if relative.parts == _LOCAL_SYNC_LAYOUT:
+                continue  # Recreated from device-local media bindings; never copy staged symlinks.
             if child.is_symlink():
                 raise ProjectTransferError(f"项目包不能包含符号链接目录：{relative.as_posix()}")
             safe_directories.append(name)
@@ -154,8 +183,12 @@ def _inventory(
                 continue
             if relative.as_posix() in _NON_PORTABLE_PROJECT_FILES:
                 continue
+            if relative.parts[:-1] == _LOCAL_SYNC_WORK and source.suffix.lower() == ".f32":
+                continue  # Derived sync audio fingerprints are device-side cache.
             if source.is_symlink():
-                raise ProjectTransferError(f"项目包不能包含符号链接文件：{relative.as_posix()}")
+                if not allow_published_sync_link or relative.as_posix() != "output/sync/synchronized.fcpxml":
+                    raise ProjectTransferError(f"项目包不能包含符号链接文件：{relative.as_posix()}")
+                source = _verified_sync_xml(root, source)
             if not source.is_file():
                 raise ProjectTransferError(f"项目包包含不支持的特殊文件：{relative.as_posix()}")
             stat = source.stat()
@@ -198,6 +231,8 @@ def _check_destination(
     target = Path(destination).expanduser()
     if extension and target.suffix.lower() != extension:
         target = target.with_name(target.name + extension)
+    if target.is_symlink():
+        raise ProjectTransferError(f"目标已存在：{target}")
     target = target.resolve()
     if target.exists():
         raise ProjectTransferError(f"目标已存在：{target}")
@@ -210,6 +245,36 @@ def _check_destination(
     else:
         raise ProjectTransferError("目标不能位于源项目内部")
     return target
+
+
+def _publish_new_directory(staging: Path, destination: Path) -> None:
+    """Publish atomically without replacing a directory created during the copy."""
+    if os.name == "nt":
+        try:
+            os.rename(staging, destination)  # Windows rename fails if destination exists.
+        except FileExistsError as error:
+            raise ProjectTransferError(f"目标已存在：{destination}") from error
+        return
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    source_bytes, destination_bytes = os.fsencode(staging), os.fsencode(destination)
+    if sys.platform == "darwin":
+        rename = libc.renamex_np
+        rename.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        rename.restype = ctypes.c_int
+        result = rename(source_bytes, destination_bytes, 0x00000004)  # RENAME_EXCL
+    elif sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
+        rename = libc.renameat2
+        rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        rename.restype = ctypes.c_int
+        result = rename(-100, source_bytes, -100, destination_bytes, 1)  # AT_FDCWD, RENAME_NOREPLACE
+    else:
+        raise ProjectTransferError("当前平台不支持安全发布项目目录")
+    if result:
+        code = ctypes.get_errno()
+        if code in {errno.EEXIST, errno.ENOTEMPTY}:
+            raise ProjectTransferError(f"目标已存在：{destination}")
+        raise OSError(code, os.strerror(code), str(destination))
 
 
 def _disk_preflight(parent: Path, required_bytes: int) -> None:
@@ -331,7 +396,7 @@ def _strip_document_device_locators(text: str) -> tuple[str, int]:
     不发明新的伪 relative locator：fcpxml_reader 对空 src 有显式守护
     （``_asset_media_path`` 返回 ""；``media_ids[asset_id] = media_identity(p)
     if p else ""``），空 src 是 importer 认可的"无 locator"状态。跨设备
-    media truth 只保留在 material_index 的 media_id 与 mirrorpkg media
+    media truth 只保留在 material_index 的 media_id
     manifest；重分析身份经 material_index 的 previous-index reconciliation
     恢复（见 ``_reconcile_previous_clip_identity``），DeviceMediaStore 绑定
     仍是设备侧唯一 authority。剥除规则是"一切绝对 file locator"——任何
@@ -554,7 +619,12 @@ def copy_project_package(
     destination_extension: str | None = PROJECT_PACKAGE_EXTENSION,
 ) -> dict[str, object]:
     inspection = inspect_project_package(source, require_external_suffix=require_external_source)
-    files, total = _inventory(inspection.root, include_cache=include_cache, cancelled=cancelled)
+    files, total = _inventory(
+        inspection.root,
+        include_cache=include_cache,
+        allow_published_sync_link=not require_external_source,
+        cancelled=cancelled,
+    )
     projection = _build_export_projection(files)
     target = _check_destination(inspection.root, destination, extension=destination_extension)
     _disk_preflight(target.parent, total)
@@ -580,7 +650,7 @@ def copy_project_package(
             )
         copied_manifest = load_project_package_manifest(staging)
         _cancelled(cancelled)
-        os.replace(staging, target)
+        _publish_new_directory(staging, target)
         return {
             "package_path": str(target),
             "project_id": copied_manifest.project_id,
@@ -594,178 +664,4 @@ def copy_project_package(
         }
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
-        raise
-
-
-def _zip_copy(
-    archive: zipfile.ZipFile,
-    source: Path,
-    arcname: str,
-    *,
-    compress_type: int,
-    cancelled: Callable[[], bool] | None = None,
-) -> None:
-    info = zipfile.ZipInfo.from_file(source, arcname)
-    info.compress_type = compress_type
-    with source.open("rb") as reader, archive.open(info, "w", force_zip64=True) as writer:
-        while True:
-            _cancelled(cancelled)
-            chunk = reader.read(_COPY_CHUNK_BYTES)
-            if not chunk:
-                break
-            writer.write(chunk)
-
-
-def collect_project_archive(
-    source: str | Path,
-    destination: str | Path,
-    *,
-    include_cache: bool = False,
-    media_files: Sequence[tuple[str, str | Path]] = (),
-    cancelled: Callable[[], bool] | None = None,
-) -> dict[str, object]:
-    inspection = inspect_project_package(source)
-    files, project_bytes = _inventory(
-        inspection.root,
-        include_cache=include_cache,
-        cancelled=cancelled,
-    )
-    target = _check_destination(
-        inspection.root,
-        destination,
-        extension=MIRROR_PACKAGE_ARCHIVE_EXTENSION,
-    )
-
-    normalized_media: list[tuple[str, Path, int, int, str]] = []
-    seen_media: set[str] = set()
-    media_bytes = 0
-    for media_id, raw_path in media_files:
-        _cancelled(cancelled)
-        identity = str(media_id or "").strip()
-        if not identity:
-            continue
-        if not _MEDIA_ID.fullmatch(identity):
-            raise ProjectTransferError(f"收集媒体身份无效：{identity[:80]}")
-        if identity in seen_media:
-            continue
-        # is_symlink() must run on the unresolved path: resolve() follows
-        # links, so checking afterwards can never reject a symlinked source.
-        candidate = Path(raw_path).expanduser()
-        if candidate.is_symlink() or not candidate.is_file():
-            raise ProjectTransferError(f"收集媒体不可读取：{identity}")
-        path = candidate.resolve()
-        if re.fullmatch(r"M_[0-9a-f]{24}", identity):
-            actual = media_id_for_path(path)
-            if actual != identity:
-                raise ProjectTransferError(f"收集媒体身份与文件内容不一致：{identity}")
-        seen_media.add(identity)
-        stat = path.stat()
-        size = stat.st_size
-        safe_name = path.name.replace("/", "_").replace("\\", "_") or identity
-        normalized_media.append((identity, path, size, stat.st_mtime_ns, safe_name))
-        media_bytes += size
-
-    required = project_bytes + media_bytes
-    _disk_preflight(target.parent, required)
-    projection = _build_export_projection(files)
-    fd, temporary = tempfile.mkstemp(
-        prefix=target.name + ".",
-        suffix=".tmp",
-        dir=target.parent,
-    )
-    os.close(fd)
-    temp_path = Path(temporary)
-    try:
-        media_manifest = [
-            {
-                "media_id": media_id,
-                "archive_path": f"media/{media_id}/{safe_name}",
-                "name": safe_name,
-                "bytes": size,
-            }
-            for media_id, _path, size, _mtime_ns, safe_name in normalized_media
-        ]
-        package_meta = {
-            "format": MIRROR_PACKAGE_ARCHIVE_FORMAT,
-            "schema_version": MIRROR_PACKAGE_ARCHIVE_SCHEMA_VERSION,
-            "project": {
-                "format": inspection.manifest.format,
-                "schema_version": inspection.manifest.schema_version,
-                "project_id": inspection.manifest.project_id,
-                "name": inspection.manifest.name,
-                "root": "project/",
-            },
-            "includes": {
-                "cache": bool(include_cache),
-                "media": bool(normalized_media),
-            },
-            "media": media_manifest,
-            "device_binding_paths_included": False,
-        }
-        with zipfile.ZipFile(temp_path, "w", allowZip64=True) as archive:
-            archive.writestr(
-                "mirrorpkg.json",
-                json.dumps(package_meta, ensure_ascii=False, indent=2).encode("utf-8"),
-                compress_type=zipfile.ZIP_DEFLATED,
-            )
-            for item in files:
-                _cancelled(cancelled)
-                relative = item.relative.as_posix()
-                arcname = f"project/{relative}"
-                data = projection.get(relative)
-                if data is None:
-                    _zip_copy(
-                        archive,
-                        item.source,
-                        arcname,
-                        compress_type=zipfile.ZIP_DEFLATED,
-                        cancelled=cancelled,
-                    )
-                else:
-                    info = zipfile.ZipInfo.from_file(item.source, arcname)
-                    info.compress_type = zipfile.ZIP_DEFLATED
-                    archive.writestr(info, data)
-            for media_id, path, _size, _mtime_ns, safe_name in normalized_media:
-                _cancelled(cancelled)
-                _zip_copy(
-                    archive,
-                    path,
-                    f"media/{media_id}/{safe_name}",
-                    compress_type=zipfile.ZIP_STORED,
-                    cancelled=cancelled,
-                )
-        _verify_inventory(files)
-        for media_id, path, size, mtime_ns, _safe_name in normalized_media:
-            try:
-                stat = path.stat()
-            except OSError as error:
-                raise ProjectTransferError(f"收集媒体在传输过程中发生变化：{media_id}") from error
-            if stat.st_size != size or stat.st_mtime_ns != mtime_ns:
-                raise ProjectTransferError(f"收集媒体在传输过程中发生变化：{media_id}")
-        with zipfile.ZipFile(temp_path) as verify:
-            for name in verify.namelist():
-                if name != "mirrorpkg.json" and not name.startswith("project/"):
-                    continue
-                if name != "mirrorpkg.json" and not _is_portable_text_candidate(name):
-                    continue
-                _assert_package_text_portable(name, verify.read(name))
-        _cancelled(cancelled)
-        os.replace(temp_path, target)
-        return {
-            "archive_path": str(target),
-            "project_id": inspection.manifest.project_id,
-            "name": inspection.manifest.name,
-            "project_files": len(files),
-            "project_bytes": project_bytes,
-            "media_files": len(normalized_media),
-            "media_bytes": media_bytes,
-            "cache_included": bool(include_cache),
-            "device_binding_paths_included": False,
-            "projected_artifacts": len(projection),
-        }
-    except Exception:
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
         raise

@@ -1,3 +1,5 @@
+import { FinderProjectOpen } from "./FinderProjectOpen";
+import "./finder-project-open.css";
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -576,10 +578,22 @@ export function App() {
   const primaryActive = surface === "production" ? null : surface;
   const revealLabel = platformInfo?.os === "windows" ? "Explorer" : platformInfo?.os === "macos" ? "Finder" : "文件管理器";
 
+  const finderProject = <FinderProjectOpen
+    destination={snapshot && state === "connected" && activeWorkspacePath ? {
+      id: snapshot.workspace.workspace_id,
+      name: snapshot.workspace.workspace,
+      baseUrl: snapshot.baseUrl,
+      projects: snapshot.projects,
+    } : null}
+    signal={connectionLifetime.controller.signal}
+    onOpen={(project) => refreshWorkspace(project, true)}
+    onNotice={setMessage}
+  />;
+
   // Unmount writable project controls before a managed Host can be replaced.
   // Recovery keeps this barrier until a fresh workspace identity is verified.
   if (!snapshot || state === "starting" || state === "connecting") {
-    return <WorkspaceLauncher
+    return <><WorkspaceLauncher
       state={state}
       recovering={recovering}
       recoveryFailed={recoveryFailed}
@@ -591,6 +605,8 @@ export function App() {
       onServiceAddressChange={setBaseUrl}
       onChooseWorkspace={(directory) => void chooseWorkspace(directory)}
       onOpenPath={() => void openWorkspacePath(workspacePath)}
+      recentWorkspaces={recentWorkspaces}
+      onOpenRecent={(path) => void openWorkspacePath(path)}
       onConnect={() => void connect()}
       onClearRecovery={() => {
         forgetWorkspaceResume();
@@ -599,7 +615,7 @@ export function App() {
         setState("idle");
         setMessage("已清除自动恢复记录。");
       }}
-    />;
+    />{finderProject}</>;
   }
 
   const isProjectOpen = surface === "production" && selectedProject !== null;
@@ -700,7 +716,7 @@ export function App() {
     </>
   );
 
-  return (
+  return (<>
     <main className="app-shell production-app-shell mirrororder-redesign-shell">
       <section className={`workspace-shell application-frame${isProjectOpen ? " is-project-open" : ""}`}>
         {!isProjectOpen && <aside className="global-sidebar">
@@ -845,6 +861,6 @@ export function App() {
           {message}
         </div>
       ) : null}
-    </main>
-  );
+    </main>{finderProject}
+  </>);
 }

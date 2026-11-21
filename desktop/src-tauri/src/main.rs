@@ -1,3 +1,4 @@
+mod document_open;
 mod gateway;
 mod host;
 mod scene_interval_ipc;
@@ -15,10 +16,13 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(document_open::DocumentQueue::default())
         .manage(gateway::GatewayManager::default())
         .manage(host::HostManager::default())
         .manage(timeline::TimelineManager::default())
         .invoke_handler(tauri::generate_handler![
+            document_open::peek_document_open,
+            document_open::finish_document_open,
             gateway::start_team_gateway,
             gateway::team_gateway_status,
             gateway::stop_team_gateway,
@@ -51,6 +55,10 @@ fn main() {
         .expect("error while building MirrorOrder Desktop");
 
     app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = &event {
+            document_open::receive(app_handle, urls);
+        }
         if should_shutdown_managed_services(&event) {
             let _ = host::shutdown(&app_handle.state::<host::HostManager>());
             let _ = gateway::shutdown(&app_handle.state::<gateway::GatewayManager>());

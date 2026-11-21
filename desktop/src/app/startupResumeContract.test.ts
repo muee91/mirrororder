@@ -6,12 +6,13 @@ describe("startup and production resume product contract", () => {
   it("keeps Host connection details out of the primary startup surface", () => {
     const source = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
     const launcher = readFileSync(fileURLToPath(new URL("../features/projects/WorkspaceLauncher.tsx", import.meta.url)), "utf8");
-    expect(source).toContain("return <WorkspaceLauncher");
+    expect(source).toContain("return <><WorkspaceLauncher");
+    expect(source).toContain(">{finderProject}</>");
     expect(launcher).toContain('className="startup-home"');
-    expect(launcher).toContain("选择工作区文件夹…");
-    expect(launcher).toContain("选择工作区文件…");
+    expect(launcher).toContain("选择工作区…");
     const advanced = launcher.slice(launcher.indexOf('<details className="startup-advanced">'));
     expect(advanced).toContain("<summary>手动打开与连接</summary>");
+    expect(advanced).toContain("选择 workspace.toml…");
     expect(advanced).toContain("本机服务地址");
     expect(advanced).toContain("工作区路径");
     expect(launcher).toContain('className="startup-logo" src={logo}');

@@ -96,6 +96,17 @@ def _status_for(
     media_index_ready: bool,
 ) -> tuple[str, bool, str]:
     if task is None:
+        # Portable projects intentionally omit device-local task history.
+        # A versioned completed sync report and materialized XML/index still
+        # describe a saved master; track rows are validated below.
+        if (
+            _text(report.get("sync_task_id"))
+            and _text(report.get("status")) == "completed"
+            and _as_dict(report.get("camera_detection")).get("contract_version") == "camera_detection.v2"
+            and sync_file.is_file()
+            and media_index_ready
+        ):
+            return ("completed", True, "已读取项目保存的多机位同步母版。")
         return (
             "required",
             False,
@@ -560,12 +571,12 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
     timebase = fcpxml_project_timebase(sync_file) if ready else {
         "status": "unknown", "source": "fcpxml_sequence", "reason": "sync_not_ready",
     }
-    task_id = _text(latest_task.get("task_id")) if latest_task else ""
+    task_id = _text(latest_task.get("task_id")) if latest_task else _text(report.get("sync_task_id"))
     offsets = _load_manual_offsets(config, task_id) if ready and task_id else {"revision": 0, "clip_offsets": {}, "recording_offsets": {}, "history": []}
     if ready and offsets["clip_offsets"]:
         tracks, shifted_duration = _apply_offsets_to_tracks(tracks, timebase, offsets["clip_offsets"])
         duration_seconds = max(duration_seconds, shifted_duration)
-    recordings = sync_recordings(report, task_id) if ready and latest_task else None
+    recordings = sync_recordings(report, task_id) if ready and task_id else None
     if ready and recordings and offsets["recording_offsets"]:
         recordings = _apply_offsets_to_recordings(recordings, offsets["recording_offsets"])
     previous = None

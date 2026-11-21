@@ -1,5 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { PlatformClient } from "../../api/platform";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { rememberSyncSubmissionIssue } from "../../app/resumeState";
 import {
@@ -141,10 +142,14 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onWorksp
     setImportBusy(true);
     setImportState("idle");
     try {
+      const { os } = await new PlatformClient().info();
+      // Finder exposes a registered directory package as a document on macOS.
+      // Other desktops continue to pick the physical .mirrorproj directory.
       const selected = await openDialog({
-        directory: true,
+        directory: os !== "macos",
         multiple: false,
         title: "打开镜序项目 (.mirrorproj)",
+        ...(os === "macos" ? { filters: [{ name: "镜序工程", extensions: ["mirrorproj"] }] } : {}),
       });
       if (typeof selected !== "string" || !selected.trim()) return;
       const submission = await projectActions.importPackage(selected);

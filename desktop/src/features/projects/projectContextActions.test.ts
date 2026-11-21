@@ -52,7 +52,8 @@ describe("project actions", () => {
     expect(home).not.toContain("new PlatformClient");
     expect(home).not.toContain("new DesktopClient");
     expect(transfers).toContain("new ProjectActionClient(baseUrl).saveProjectAs");
-    expect(transfers).toContain("new ProjectActionClient(baseUrl).collectProject");
+    expect(home).not.toContain("收集项目…");
+    expect(transfers).not.toContain(".mirrorpkg");
   });
 
   it("routes Project Home and sidebar actions through existing Desktop authorities", () => {
