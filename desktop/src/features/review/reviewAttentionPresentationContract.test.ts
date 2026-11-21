@@ -29,11 +29,12 @@ describe("review attention and decision presentation contract", () => {
     expect(review).toContain("attentionTiers.watch");
   });
 
-  it("moves overview signals to Project Home without creating another Review workbench", () => {
+  it("keeps Project Home lightweight without fanning out reviewModel reads or creating another Review workbench", () => {
     expect(attention).toContain("export function reviewProjectSummary");
-    expect(home).toContain("reviewProjectSummary(await host.reviewModel(project.project_id))");
-    expect(home).toContain("review.unmappedCount");
-    expect(home).toContain("review.scriptGapCount");
+    expect(home).toContain("projectPresentation(project, activity)");
+    expect(home).toContain("presentation.attention");
+    expect(home).not.toContain("host.reviewModel(");
+    expect(home).not.toContain("ReviewDecisionPanel");
   });
 
   it("keeps Take-level Final Editorial Decision in Review instead of the shared inspector", () => {

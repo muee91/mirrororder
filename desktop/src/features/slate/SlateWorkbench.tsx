@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection, type ReviewModelPayload, errorMessage } from "../../api/host";
+import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import { SlatePlacementPools } from "./SlatePlacementPools";
 
 interface Props {
@@ -9,9 +10,9 @@ interface Props {
 
 function storedActor(): string {
   try {
-    return globalThis.localStorage?.getItem("mirrororder.productionActor")?.trim() ?? "";
+    return globalThis.localStorage?.getItem("mirrororder.productionActor")?.trim() || readCurrentOperator();
   } catch {
-    return "";
+    return readCurrentOperator();
   }
 }
 

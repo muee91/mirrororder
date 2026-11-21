@@ -257,8 +257,8 @@ export function DeliveryWorkbench({ baseUrl, projectId }: Props) {
             {timelineSnapshotError ? <p className="production-warning">无法读取当前已保存剪辑：{timelineSnapshotError}</p> : null}
             {preflight?.blockers.map((blocker) => <p className="production-warning" key={`${blocker.code}-${blocker.message}`}>阻塞 · {blocker.message}</p>)}
             {preflight?.warnings.map((warning) => <p className="production-note" key={`${warning.code}-${warning.message}`}>注意 · {warning.message}</p>)}
-            {timelineSnapshot && !preflight?.blockers.length ? <p className="production-note">公共交付检查已通过。具体素材映射、源格式、多机位同步和素材范围仍会在真正写文件前做最终 fail-closed 校验。</p> : null}
-            {preflight?.blockers.length ? <p className="production-note">先回到“剪辑工作台”处理上述决定；交付不会使用 fallback 静默改写剪辑。</p> : null}
+            {timelineSnapshot && !preflight?.blockers.length ? <p className="production-note">交付前检查已通过。写出工程文件前会自动校验素材路径、帧率与多机位对应关系。</p> : null}
+            {preflight?.blockers.length ? <p className="production-note">先回到“剪辑工作台”处理上述决定；导出时不会静默改写剪辑顺序。</p> : null}
           </div>
 
           <div className="production-panel">

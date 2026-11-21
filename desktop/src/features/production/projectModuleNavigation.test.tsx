@@ -45,11 +45,28 @@ describe("independent production module routing", () => {
     root.innerHTML = markup;
     const nav = [...root.querySelectorAll<HTMLButtonElement>("button.project-module-link")];
     expect(nav).toHaveLength(10);
+    expect(root.querySelectorAll(".project-module-group .project-module-link")).toHaveLength(7);
+    expect(root.querySelectorAll(".project-module-overflow-menu .project-module-link")).toHaveLength(3);
+    expect(root.querySelector(".project-module-overflow > summary")?.textContent).toContain("更多工位");
     expect(nav.filter((button) => !button.disabled).map((button) => button.textContent)).toEqual(
       expect.arrayContaining([expect.stringContaining("同步任务"), expect.stringContaining("素材库")]),
     );
     expect(nav.find((button) => button.textContent?.includes("工程交付"))?.disabled).toBe(true);
     expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步任务");
     expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步中");
+  });
+
+  it("highlights the overflow trigger with the active secondary module label", () => {
+    const markup = renderToStaticMarkup(createElement(ProjectModuleNavigation, {
+      inputKind: "media-directory",
+      selected: "timeline",
+      syncReady: true,
+      syncPhase: "completed",
+      onNavigate: () => {},
+    }));
+    const root = document.createElement("div");
+    root.innerHTML = markup;
+    expect(root.querySelector(".project-module-overflow")?.classList.contains("has-active")).toBe(true);
+    expect(root.querySelector(".project-module-overflow > summary")?.textContent).toContain("选片组接");
   });
 });

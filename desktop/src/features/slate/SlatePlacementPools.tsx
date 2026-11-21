@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { HostConnection, HostConnectionError, type ReviewModelPayload, type ReviewTakeGroup, errorMessage } from "../../api/host";
+import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import { MediaRoleClient, type MediaInventoryItem } from "../../api/mediaRoles";
 import { TakeListRow } from "../material-script/TakeCard";
 import {
@@ -30,9 +31,9 @@ function needsRefresh(error: unknown): boolean {
 
 function currentActor(fallback = ""): string {
   try {
-    return globalThis.localStorage?.getItem("mirrororder.productionActor")?.trim() || fallback.trim();
+    return globalThis.localStorage?.getItem("mirrororder.productionActor")?.trim() || fallback.trim() || readCurrentOperator();
   } catch {
-    return fallback.trim();
+    return fallback.trim() || readCurrentOperator();
   }
 }
 

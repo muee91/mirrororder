@@ -49,7 +49,7 @@ describe("media library experience contract", () => {
     expect(workbench).toContain("event.currentTarget.pause()");
     expect(workbench).toContain("这条原片当前无法在 App 内播放");
     expect(workbench).toContain("这条素材尚未进入项目索引");
-    expect(workbench).toContain("已入索引，但缺少可播放的 clip identity");
+    expect(workbench).toContain("素材已索引，但暂缺播放标识");
   });
 
   it("copies the current visible inventory as a pre-edit handoff", () => {

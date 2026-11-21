@@ -1,6 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DesktopClient } from "../../api/desktop";
+import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { ProductionSelectionContext } from "../production/productionNavigation";
 import type {
@@ -56,9 +57,9 @@ const PROJECTION_OPTIONS: Array<{ value: ScriptProjectionMode; label: string }> 
 
 function storedActor(): string {
   try {
-    return globalThis.localStorage?.getItem(ACTOR_STORAGE_KEY)?.trim() ?? "";
+    return globalThis.localStorage?.getItem(ACTOR_STORAGE_KEY)?.trim() || readCurrentOperator();
   } catch {
-    return "";
+    return readCurrentOperator();
   }
 }
 
@@ -639,7 +640,7 @@ export function ScriptWorkspace({
         <span><strong>{episodeStats.mapped}</strong>已归集</span>
         <span><strong>{episodeStats.candidate}</strong>有候选</span>
         <span className={episodeStats.attention ? "needs-attention" : ""}><strong>{episodeStats.attention}</strong>需处理</span>
-        <small>“覆盖”只显示已观察 placement / candidate 状态，不把无证据解释为缺镜头。</small>
+        <small>覆盖视图按已归集与候选状态直观着色。</small>
       </div>
 
       {writeMessage ? <div className={`write-status write-${writeState}`}>{writeMessage}</div> : null}

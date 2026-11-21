@@ -184,7 +184,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
         </div>
       </header>
 
-      <p className="production-note settings-intro">这里管理当前设备的外观、本地 AI、小镜实际运行方式和团队审阅偏好。后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
+      <p className="production-note settings-intro">管理当前设备的外观、本地 AI 与小镜模型路由；后台任务统一在状态中心处理。</p>
 
       <div className="settings-preference-stack">
         <section className="settings-preference-section" aria-labelledby="settings-general-title">
@@ -204,16 +204,16 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
         <section className="settings-preference-section" aria-labelledby="settings-assistant-title">
           <header className="settings-section-heading">
             <div><p className="eyebrow">小镜</p><h3 id="settings-assistant-title">AI 能力</h3></div>
-            <span>当前设备 · 与项目无关 · 显示实际路由 · 高级设置可覆盖</span>
+            <span>显示实际路由 · 高级设置可覆盖</span>
           </header>
           <AssistantModelsPanel baseUrl={baseUrl} />
         </section>
 
-        <section className="settings-preference-section" aria-labelledby="settings-team-title">
-          <header className="settings-section-heading">
+        <details className="settings-preference-section settings-collapsible-section" aria-labelledby="settings-team-title">
+          <summary className="settings-section-heading settings-collapsible-summary">
             <div><p className="eyebrow">团队审阅</p><h3 id="settings-team-title">Team Web</h3></div>
-            <span>浏览器审阅界面与访问权限</span>
-          </header>
+            <span>浏览器审阅界面与访问权限 · 按需展开</span>
+          </summary>
           <div className="settings-team-grid">
             <div className="production-panel status-card frontend-settings-card">
               <div className="parse-heading"><div><h3>审阅界面</h3><p className="production-note">这些选项只控制 Team Web，不改变 Desktop 场记画布。</p></div><button type="button" disabled={saving || !settings || !settingsDirty} onClick={() => void saveSettings()}>{saving ? "保存中…" : "保存"}</button></div>
@@ -237,7 +237,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
             </div>
             <CollaborationPanel baseUrl={baseUrl} />
           </div>
-        </section>
+        </details>
 
         <details className="settings-advanced-diagnostics">
           <summary>

@@ -83,6 +83,15 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const [clipWaveform, setClipWaveform] = useState<WaveformPayload | null>(null);
   const [waveformState, setWaveformState] = useState<"idle" | "loading" | "missing" | "building" | "ready">("idle");
   const [waveformNote, setWaveformNote] = useState("");
+  const waveformPollRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const waveformTokenRef = useRef(0);
+  const cancelWaveformPoll = useCallback(() => {
+    waveformTokenRef.current += 1;
+    if (waveformPollRef.current !== null) {
+      globalThis.clearTimeout(waveformPollRef.current);
+      waveformPollRef.current = null;
+    }
+  }, []);
   const [presented, setPresented] = useState<{ source: string; seconds: number } | null>(null);
   const [frameCallbackSupported, setFrameCallbackSupported] = useState(true);
   const seeking = useRef(false);
@@ -162,11 +171,12 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   }
 
   useEffect(() => {
+    cancelWaveformPoll();
     if (inspector !== "clip" || !productionClient || !clip?.media_clip_id) {
       setClipWaveform(null);
       setWaveformState("idle");
       setWaveformNote("");
-      return;
+      return cancelWaveformPoll;
     }
     let cancelled = false;
     setWaveformState("loading");
@@ -187,17 +197,52 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
         setClipWaveform(null);
         setWaveformState("missing");
       });
-    return () => { cancelled = true; };
-  }, [inspector, productionClient, syncTimeline.project_id, clip?.media_clip_id]);
+    return () => {
+      cancelled = true;
+      cancelWaveformPoll();
+    };
+  }, [cancelWaveformPoll, inspector, productionClient, syncTimeline.project_id, clip?.media_clip_id]);
 
   async function requestClipWaveform(): Promise<void> {
     if (!productionClient || !clip?.media_clip_id || waveformState === "building") return;
+    cancelWaveformPoll();
+    const token = waveformTokenRef.current;
+    const projectId = syncTimeline.project_id;
+    const mediaClipId = clip.media_clip_id;
     setWaveformState("building");
-    setWaveformNote("已提交后台声波生成任务，稍后自动刷新…");
+    setWaveformNote("正在生成实时声波，完成后将自动显示…");
     try {
-      await productionClient.buildWaveform(syncTimeline.project_id, clip.media_clip_id, 256);
-      setWaveformNote("后台波形任务已排队，完成后点击「刷新波形」即可查看峰值。");
+      await productionClient.buildWaveform(projectId, mediaClipId, 256);
+      if (token !== waveformTokenRef.current) return;
+      const poll = (attempt: number) => {
+        if (token !== waveformTokenRef.current) return;
+        void productionClient.waveform(projectId, mediaClipId, 256)
+          .then((payload) => {
+            if (token !== waveformTokenRef.current) return;
+            if (payload.peaks?.length) {
+              setClipWaveform(payload);
+              setWaveformState("ready");
+              setWaveformNote("");
+              return;
+            }
+            if (attempt >= 25) {
+              setWaveformNote("声波仍在后台提取中，可点击「刷新波形」继续查看。");
+              return;
+            }
+            waveformPollRef.current = globalThis.setTimeout(() => poll(attempt + 1), 1200);
+          })
+          .catch(() => {
+            if (token !== waveformTokenRef.current) return;
+            if (attempt >= 25) {
+              setWaveformNote("声波仍在后台提取中，可点击「刷新波形」继续查看。");
+              return;
+            }
+            waveformPollRef.current = globalThis.setTimeout(() => poll(attempt + 1), 1200);
+          });
+      };
+      waveformPollRef.current = globalThis.setTimeout(() => poll(0), 1000);
     } catch (error) {
+      if (token !== waveformTokenRef.current) return;
       setWaveformState("missing");
       setWaveformNote(error instanceof Error ? error.message : "无法提交波形生成任务");
     }

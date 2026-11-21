@@ -68,6 +68,8 @@ beforeEach(async () => {
   } satisfies IntervalReadModel));
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(<GoldenSlateWorkbench baseUrl="http://127.0.0.1:8765" projectId="synthetic" onSelection={selection}/>));
+  expect(button('生产场记').getAttribute('aria-pressed')).toBe('true');
+  await click('来源场记');
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -101,6 +103,8 @@ it('carries the exact B source and playback time into existing slate interval pr
   expect(player.src).toContain('clip-B'); expect(player.currentTime).toBe(8.125);
   const scene = container.querySelectorAll<HTMLInputElement>('.slate-row input')[1]; await type(scene, '12');
   await click('保存当前行');
+  const advancedInterval = container.querySelector<HTMLDetailsElement>('.golden-slate-advanced-interval');
+  if (advancedInterval) advancedInterval.open = true;
   const range = container.querySelectorAll<HTMLInputElement>('.golden-slate-inspector .interval-inputs input');
   await type(range[0], '24'); await type(range[1], '48'); await click('准备此原素材区间');
   expect(prepare).toHaveBeenCalledOnce();
@@ -128,6 +132,7 @@ it('does not fall back to a clip with a different media identity', async () => {
   const staleSheet: SheetFirstModel = { ...sheet, sync_groups: [{ group_id: 'g1', sources: sources.map(source => source.camera === 'B' ? { ...source, media_id: `M_${'f'.repeat(24)}` } : source) }] };
   const staleLedger = { ...ledger, sheetFirst: { model: staleSheet, add } };
   await act(async () => root.render(<GoldenSlateWorkbench baseUrl="http://127.0.0.1:8765" projectId="synthetic" intervalLedger={staleLedger}/>));
+  await click('来源场记');
   await click('第 1 行 B机'); await click('在生产场记中标记');
   expect(button('来源场记').getAttribute('aria-pressed')).toBe('true');
   expect(upsert).not.toHaveBeenCalled(); expect(prepare).not.toHaveBeenCalled();

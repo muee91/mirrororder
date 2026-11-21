@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { HostConnectionError, errorMessage } from "../../api/host";
+import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import {
   EditorialClient,
   type EditorialDecision,
@@ -20,9 +21,9 @@ function storedActor(): string {
   try {
     return globalThis.localStorage?.getItem("mirrororder.desktop-v2.review-actor")?.trim()
       || globalThis.localStorage?.getItem("mirrororder.desktop.review-actor")?.trim()
-      || "";
+      || readCurrentOperator();
   } catch {
-    return "";
+    return readCurrentOperator();
   }
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSummary, ReviewTakeGroup } from "../../api/host";
+import { ProductionClient, type SlateBoard, type SlateRecord } from "../../api/production";
 import { mappingLabel, takeDisplayLabel } from "../material-script/TakeCard";
 import { TakeInspector } from "../material-script/TakeInspector";
 import { VirtualTakeList } from "../material-script/VirtualTakeList";
@@ -63,6 +64,13 @@ function queueDetail(take: ReviewTakeGroup): string {
   ].filter(Boolean).join(" · ");
 }
 
+const SLATE_STATUS_LABELS: Record<string, string> = {
+  usable: "可用",
+  partial: "部分可用",
+  ng: "NG",
+  unmarked: "未标",
+};
+
 export function ReviewWorkspace({
   baseUrl,
   project,
@@ -75,10 +83,20 @@ export function ReviewWorkspace({
   onOpenTimeline,
 }: Props) {
   const { connection, loadState, message, model, refresh } = useReviewModelSnapshot(baseUrl, project.project_id);
+  const [slateBoard, setSlateBoard] = useState<SlateBoard | null>(null);
   const [filter, setFilter] = useState<ReviewQueueFilter>("all");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(initialGroupId);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(initialClipId);
   const appliedFocusKey = useRef("");
+
+  useEffect(() => {
+    let active = true;
+    void new ProductionClient(baseUrl)
+      .scriptSupervisor(project.project_id)
+      .then((board) => { if (active) setSlateBoard(board); })
+      .catch(() => { if (active) setSlateBoard(null); });
+    return () => { active = false; };
+  }, [baseUrl, project.project_id]);
 
   const { counts, attentionTiers } = useMemo(() => {
     const next: Record<ReviewQueueFilter, number> = { all: 0, unreviewed: 0, attention: 0, best: 0, keep: 0, reject: 0 };
@@ -110,6 +128,12 @@ export function ReviewWorkspace({
   const selectedTake = selectedGroupId
     ? model?.take_groups.find((take) => take.group_id === selectedGroupId) ?? null
     : null;
+  const selectedSlateRecord: SlateRecord | null = useMemo(() => {
+    if (!selectedTake || !slateBoard?.records) return null;
+    const matches = Object.values(slateBoard.records).filter((item) => item.source_group_id === selectedTake.group_id);
+    if (!matches.length) return null;
+    return matches.sort((left, right) => String(right.updated_at || "").localeCompare(String(left.updated_at || "")))[0] ?? null;
+  }, [selectedTake, slateBoard]);
   const selectedIndex = selectedGroupId ? filteredTakes.findIndex((take) => take.group_id === selectedGroupId) : -1;
   const selectedAttention = selectedTake ? reviewTakeAttention(selectedTake) : null;
   const decidedCount = counts.best + counts.keep + counts.reject;
@@ -246,6 +270,23 @@ export function ReviewWorkspace({
                 writeSaving={false}
                 afterPlayback={selectedTake ? (
                   <div className="review-decision-stack">
+                    {selectedSlateRecord ? (
+                      <div className="review-slate-bridge" aria-label="现场场记参考">
+                        <strong>现场场记参考</strong>
+                        <span data-slate-status={selectedSlateRecord.status || "unmarked"}>
+                          {SLATE_STATUS_LABELS[selectedSlateRecord.status] ?? selectedSlateRecord.status}
+                        </span>
+                        <small>
+                          {[
+                            selectedSlateRecord.episode ? `第 ${selectedSlateRecord.episode} 集` : "",
+                            selectedSlateRecord.scene ? `${selectedSlateRecord.scene} 场` : "",
+                            selectedSlateRecord.shot ? `${selectedSlateRecord.shot} 镜` : "",
+                            selectedSlateRecord.take_number ? `${selectedSlateRecord.take_number} 次` : "",
+                            selectedSlateRecord.note ? selectedSlateRecord.note : "",
+                          ].filter(Boolean).join(" · ") || "已录入场记"}
+                        </small>
+                      </div>
+                    ) : null}
                     <ReviewDecisionPanel
                       baseUrl={baseUrl}
                       projectId={project.project_id}

@@ -16,6 +16,7 @@ interface Props {
   onInspect: () => void;
   onSyncTask: () => void;
   onRepair?: () => void;
+  onOpenAssembly?: () => void;
   canGenerate?: boolean;
 }
 
@@ -26,7 +27,7 @@ const TARGET_HELP: Record<string, string> = {
   jianying: "国内剪映专业版 FCPXML 兼容路径，Windows/macOS 均需验收",
 };
 
-export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSyncTask, onRepair, canGenerate = true }: Props) {
+export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSyncTask, onRepair, onOpenAssembly, canGenerate = true }: Props) {
   const [manifest, setManifest] = useState<SyncDeliveryArtifacts | null>(null);
   const [error, setError] = useState("");
   const [selectedTarget, setSelectedTarget] = useState("davinci");
@@ -215,7 +216,11 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSync
           <header>
             <div>
               <h3>增强交付包（场记彩色 Marker · 分场子序列 · 实际台词 SRT）</h3>
-              <p>写入独立版本号目录，不覆盖既有同步母版；含当前人工微调 r{syncTimeline.offset_revision ?? 0}。</p>
+              <p>
+                {(syncTimeline.offset_revision ?? 0) > 0
+                  ? `写入独立版本号目录，不覆盖既有同步母版；已包含人工同步微调（第 ${syncTimeline.offset_revision} 版）。`
+                  : "写入独立版本号目录，不覆盖既有同步母版。"}
+              </p>
             </div>
             <button type="button" disabled={!canGenerate || enrichedBusy} onClick={() => void createEnrichedPack()}>
               {enrichedBusy ? "生成中…" : "生成增强交付包"}
@@ -246,6 +251,13 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSync
             </div>
           ) : null}
         </section>
+
+        {onOpenAssembly ? (
+          <div className="sync-delivery-assembly-bridge">
+            <span>以上交付用于导出原始多机位同步母版；如需按剧本选片导出粗剪序列，可前往「选片组接」。</span>
+            <button type="button" className="secondary" onClick={onOpenAssembly}>前往选片组接</button>
+          </div>
+        ) : null}
       </div>
     </section>
   );

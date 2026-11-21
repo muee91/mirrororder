@@ -31,10 +31,10 @@ export function WorkspaceLauncher({
   const failed = state === "error";
   const title = recovering ? "恢复工作区" : recoveryFailed ? "重新定位工作区" : "打开工作区";
   const description = recovering
-    ? "正在连接本机服务，准备恢复上次打开的项目。"
+    ? "正在恢复上次打开的短剧工作区…"
     : recoveryFailed
-      ? "重新定位原工作区，或选择其他工作区。"
-      : "选择保存镜序项目、场记和同步任务的文件夹。";
+      ? "未找到原工作区，请重新选择工程目录或工作区。"
+      : "选择存放短剧工程的文件夹，或直接选中已有的测试工程目录。";
   const hasFeedback = Boolean(message.trim());
   const showsPath = Boolean(workspacePath.trim()) && (recovering || recoveryFailed);
 

@@ -12,6 +12,33 @@
 .settings-section-heading > div { display: grid; gap: 2px; }
 .settings-section-heading h3 { margin: 0; color: var(--mo-text-primary); font-size: 14.5px; font-weight: 650; letter-spacing: -0.01em; }
 .settings-section-heading > span { color: var(--mo-text-muted); font-size: 12px; text-align: right; }
+.settings-collapsible-summary {
+  position: relative;
+  padding-right: 36px;
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: 12px;
+  background: var(--mo-surface-pane);
+}
+.settings-collapsible-summary::-webkit-details-marker { display: none; }
+.settings-collapsible-summary::after {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  content: "›";
+  color: var(--mo-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  transform: translateY(-50%);
+  transition: transform .14s ease;
+}
+.settings-collapsible-section[open] > .settings-collapsible-summary {
+  margin-bottom: 12px;
+}
+.settings-collapsible-section[open] > .settings-collapsible-summary::after {
+  transform: translateY(-50%) rotate(90deg);
+}
 .settings-preference-surface,
 .settings-preference-section > .production-panel,
 .settings-team-grid > .production-panel { border: 1px solid var(--mo-border-subtle); border-radius: 12px; background: var(--mo-surface-pane); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }

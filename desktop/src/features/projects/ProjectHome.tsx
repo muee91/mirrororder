@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
-import { HostConnection, errorMessage } from "../../api/host";
+import { errorMessage } from "../../api/host";
 import { projectTransferAvailable, saveProjectCopy } from "../../app/projectTransferActions";
-import { reviewProjectSummary, type ReviewProjectSummary } from "../review/reviewAttention";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
 import { projectPresentation } from "./projectPresentation";
@@ -65,33 +64,11 @@ export function ProjectHome({
   const [menu, setMenu] = useState<HomeMenuState | null>(null);
   const [actionMessage, setActionMessage] = useState("");
   const [transferBusy, setTransferBusy] = useState(false);
-  const [reviewSummaries, setReviewSummaries] = useState<Record<string, ReviewProjectSummary>>({});
   const visible = useMemo(() => {
     const value = query.trim().toLowerCase();
     if (!value) return workspace.projects;
     return workspace.projects.filter((project) => `${project.name} ${project.project_id}`.toLowerCase().includes(value));
   }, [query, workspace.projects]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const host = new HostConnection(baseUrl);
-    void Promise.all(workspace.projects.map(async (project) => {
-      try {
-        const summary = reviewProjectSummary(await host.reviewModel(project.project_id));
-        return [project.project_id, summary] as const;
-      } catch {
-        return [project.project_id, null] as const;
-      }
-    })).then((rows) => {
-      if (cancelled) return;
-      const next: Record<string, ReviewProjectSummary> = {};
-      for (const [projectId, summary] of rows) {
-        if (summary) next[projectId] = summary;
-      }
-      setReviewSummaries(next);
-    });
-    return () => { cancelled = true; };
-  }, [baseUrl, workspace.projects]);
 
   useEffect(() => {
     if (!menu) return;
@@ -160,7 +137,7 @@ export function ProjectHome({
         </div>
         <div className="project-home-actions">
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目…" aria-label="搜索项目" />
-          <ProjectLifecyclePanel baseUrl={baseUrl} workspaceId={workspace.workspace_id} onWorkspaceChanged={onWorkspaceChanged} onStatusMessage={setActionMessage} />
+          <ProjectLifecyclePanel baseUrl={baseUrl} workspaceId={workspace.workspace_id} onOpenExistingFolder={onSwitchWorkspace} onWorkspaceChanged={onWorkspaceChanged} onStatusMessage={setActionMessage} />
         </div>
       </header>
 
@@ -168,9 +145,7 @@ export function ProjectHome({
         <div className="project-home-list project-home-grid" aria-label="项目列表">
           {visible.map((project) => {
             const activity = activities[project.project_id];
-            const review = reviewSummaries[project.project_id];
-            const presentation = projectPresentation(project, activity, review);
-            const reviewedDecisions = review ? review.bestCount + review.keepCount + review.rejectCount : 0;
+            const presentation = projectPresentation(project, activity);
             return (
               <article
                 className={`project-home-card status-${presentation.statusTone}`}
@@ -201,16 +176,12 @@ export function ProjectHome({
                   <div className="project-card-body">
                     <span className="project-home-project-copy">
                       <strong>{project.name || project.project_id}</strong>
-                      <small>{project.project_id}</small>
+                      <small title={project.project_id}>{presentation.sidebarSubtitle}</small>
                     </span>
                     <span className="project-home-stats">
                       <span><strong>{presentation.takes}</strong> Take</span>
                       <span><strong>{presentation.clips}</strong> 素材</span>
-                      {review?.unmappedCount ? <span className="needs-attention"><strong>{review.unmappedCount}</strong> 未归集</span> : null}
-                      {review?.scriptGapCount ? <span className="needs-attention"><strong>{review.scriptGapCount}</strong> 剧本缺口</span> : null}
-                      {review && !review.attentionCount && !review.unmappedCount && !review.scriptGapCount
-                        ? <span>{review.unreviewedCount ? `${review.unreviewedCount} 未决定` : `已决定 ${reviewedDecisions}`}</span>
-                        : null}
+                      {presentation.attention ? <span className="needs-attention"><strong>{presentation.attention}</strong> 需关注</span> : null}
                     </span>
                   </div>
                 </button>
@@ -238,14 +209,14 @@ export function ProjectHome({
       ) : (
         <div className="project-home-onboarding">
           <div className="project-home-empty-hero">
-            <strong>当前工作区还没有项目</strong>
-            <span>镜序以「工作区文件夹」为单位管理多部短剧项目。你可以切换到已有测试工程所在的工作区目录，或在这里新建一部剧。</span>
+            <strong>当前目录下还没有短剧项目</strong>
+            <span>镜序以目录为单位管理短剧项目。你可以直接打开已有测试工程所在的文件夹，或者在这里新建一部剧。</span>
           </div>
           <div className="project-onboarding-grid">
             <article className="project-onboarding-card is-highlighted">
               <span className="project-onboarding-step">01 · 打开已有工程</span>
-              <h3>切换工作区文件夹</h3>
-              <p>如果你之前在其他文件夹建过测试工程（包含 <code>projects/registry.json</code> 或 <code>workspace.toml</code>），直接选中那个文件夹即可立即恢复全部项目。</p>
+              <h3>选择已有工程目录</h3>
+              <p>如果测试工程或素材目录在硬盘上的其他位置，直接选中那个项目目录或上级工作区目录，即可立即打开。</p>
               {onSwitchWorkspace ? (
                 <button type="button" onClick={onSwitchWorkspace}>选择已有工程所在目录…</button>
               ) : null}
@@ -267,8 +238,8 @@ export function ProjectHome({
             </article>
             <article className="project-onboarding-card">
               <span className="project-onboarding-step">03 · 跨电脑交接</span>
-              <h3>导入 .mirrorproj 工程</h3>
-              <p>如果是另一台剪辑机用「另存项目」生成的便携工程，点击右上角 <strong>「打开项目」</strong> 导入，再在「本机素材」中按指纹一键重连硬盘原片。</p>
+              <h3>导入 .mirrorproj 工程包</h3>
+              <p>如果是另一台剪辑机用「另存项目」生成的便携工程包，点击右上角 <strong>「导入工程包…」</strong> 还原，再在「本机素材」中重连硬盘原片。</p>
             </article>
           </div>
         </div>

@@ -8,7 +8,8 @@ const OPERATOR_KEYS = [
   "mirrororder.desktop-v2.review-actor",
 ] as const;
 
-// 首次未设置时自动弹出一次引导；用户“暂不设置”或提交身份后不再打扰。
+export const DEFAULT_LOCAL_OPERATOR = "本机剪辑师";
+
 const OPERATOR_GUIDED_KEY = "mirrororder.operator-guided";
 
 function readOperatorGuided(): boolean {
@@ -23,7 +24,7 @@ function writeOperatorGuided(): void {
   try {
     globalThis.localStorage?.setItem(OPERATOR_GUIDED_KEY, "1");
   } catch {
-    // 引导标记丢失只意味着下次再弹一次，不影响可用性。
+    // Device-local convenience must not block the production app.
   }
 }
 
@@ -36,7 +37,7 @@ export function readCurrentOperator(): string {
   } catch {
     // Device-local convenience must not block the production app.
   }
-  return "";
+  return DEFAULT_LOCAL_OPERATOR;
 }
 
 export function writeCurrentOperator(value: string): string {
@@ -74,12 +75,7 @@ export function CurrentOperatorControl({ onChange }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!readCurrentOperator() && !readOperatorGuided()) setOpen(true);
-  }, []);
-
-  // 引导弹层悬在顶栏按钮下方，会挡住它后面的页面控件；任何点击弹层之外或按
-  // Escape 都要能收起并记住"已引导"，不能把用户困在弹层里。
+  // Keep popover dismissal when clicking outside or pressing Escape.
   const rootRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -102,6 +98,7 @@ export function CurrentOperatorControl({ onChange }: Props) {
     };
   }, [open]);
 
+  void readOperatorGuided;
   function commit(): void {
     const next = writeCurrentOperator(draft);
     setOperator(next);

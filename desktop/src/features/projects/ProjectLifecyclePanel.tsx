@@ -15,6 +15,7 @@ import { DeviceTaskClient } from "../../api/tasks";
 interface Props {
   baseUrl: string;
   workspaceId?: string;
+  onOpenExistingFolder?: () => void;
   onWorkspaceChanged: (preferredProjectId?: string) => Promise<void>;
   onStatusMessage?: (message: string) => void;
 }
@@ -30,7 +31,7 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
-export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onWorkspaceChanged, onStatusMessage }: Props) {
+export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenExistingFolder, onWorkspaceChanged, onStatusMessage }: Props) {
   const client = useMemo(() => new DesktopClient(baseUrl), [baseUrl]);
   const projectActions = useMemo(() => new ProjectActionClient(baseUrl), [baseUrl]);
   const deviceTasks = useMemo(() => new DeviceTaskClient(baseUrl), [baseUrl]);
@@ -250,15 +251,18 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onWorksp
   const importLabel = importBusy
     ? "正在导入…"
     : importState === "done"
-      ? "项目已导入"
+      ? "已导入工程包"
       : importState === "submitted"
         ? "导入已提交"
         : importState === "attention"
-          ? "重新打开项目…"
-          : "打开项目…";
+          ? "重新导入工程包…"
+          : "导入工程包…";
 
   return (
     <>
+      {onOpenExistingFolder ? (
+        <button type="button" className="secondary project-home-open-folder-button" disabled={importBusy || busy || !isTauri()} onClick={onOpenExistingFolder}>打开已有工程…</button>
+      ) : null}
       <button type="button" className="secondary project-home-open-package-button" disabled={importBusy || busy || !isTauri()} onClick={() => void importProject()}>{importLabel}</button>
       <button ref={trigger} type="button" className="project-new-button project-home-new-button" disabled={importBusy} onClick={() => setOpen(true)}>新建项目</button>
 

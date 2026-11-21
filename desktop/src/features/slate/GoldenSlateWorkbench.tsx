@@ -342,7 +342,7 @@ function primaryAttachment(draft: Draft, camera: SlateCameraColumn, cameraColumn
 
 
 export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSession, active = true, focus, onSelection, onOpenTake, onRepair, onInspectSelection, intervalLedger, enableNativeIntervalLedger=false }: Props) {
-  const [slateSurface, setSlateSurface] = useState<"intervals" | "takes">("intervals");
+  const [slateSurface, setSlateSurface] = useState<"intervals" | "takes">("takes");
   const nativeIntervalLedger=useNativeSlateIntervalLedger(baseUrl,projectId,enableNativeIntervalLedger);
   const ledger = intervalLedger?.projectId === projectId ? intervalLedger : nativeIntervalLedger.ledger;
   const ledgerSurface=Boolean(ledger || nativeIntervalLedger.available);
@@ -399,7 +399,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [message, setMessage] = useState("正在读取多机位电子场记…");
   const [busy, setBusy] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [orderMode, setOrderMode] = useState<SlateOrder>("script");
+  const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
   const [quickLookOpen, setQuickLookOpen] = useState(false);
   const quickLookFocusRef = useRef<HTMLElement | null>(null);
   const quickLookCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -1221,8 +1221,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
 
   return (<div className="slate-workbench-content" data-view-switch={ledgerSurface || undefined} ref={slateRef}>
     {ledgerSurface && <nav className="slate-interval-view-switch" aria-label="场记工作视图">
-      <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>来源场记</button>
       <button type="button" aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>生产场记</button>
+      <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>来源场记</button>
     </nav>}
     {ledger && <div hidden={!intervalSurface}><SlateIntervalBoardSurface key={JSON.stringify([baseUrl,projectId])} {...ledger} baseUrl={baseUrl} projectName={projectName} productionRows={productionRows} onOpenProduction={openProductionSource} catalog={(review?.episodes ?? []).flatMap((entry)=>entry.scenes.map((scene)=>({episode:entry.episode,scene_id:scene.scene_id,label:prettySceneId(scene.scene_id)})))}/></div>}
     {intervalSurface && !ledger && <section aria-label="电子场记板"><SlateOriginalFormSheet page={{title:projectName?.trim()||"",day:"",date:"",printedPage:""}} rows={[]} />
@@ -1366,7 +1366,12 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                 </div>}
                 {selectedAttachment?.clip_id ? <SlateSpeechEvidencePanel key={`${baseUrl}:${projectId}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}`} baseUrl={baseUrl} projectId={projectId} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} /> : null}
 
-                {selectedAttachment?.clip_id && selectedAttachment.media_id ? <SlateSourceIntervalPanel key={`${baseUrl}:${projectId}:${selected.record_id}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}:${board?.revision}:${paperSource?.row.paper_row_id}:${paperSource?.revision}`} paperSource={paperSource} baseUrl={baseUrl} projectId={projectId} recordId={selected.record_id} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} savedRecord={board?.records[selected.record_id]} boardRevision={board?.revision ?? -1} dirty={selected.dirty} /> : null}
+                {selectedAttachment?.clip_id && selectedAttachment.media_id ? (
+                  <details className="golden-slate-advanced-interval" open={Boolean(paperSource)}>
+                    <summary>高级：精确源帧区间核验（可选）</summary>
+                    <SlateSourceIntervalPanel key={`${baseUrl}:${projectId}:${selected.record_id}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}:${board?.revision}:${paperSource?.row.paper_row_id}:${paperSource?.revision}`} paperSource={paperSource} baseUrl={baseUrl} projectId={projectId} recordId={selected.record_id} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} savedRecord={board?.records[selected.record_id]} boardRevision={board?.revision ?? -1} dirty={selected.dirty} />
+                  </details>
+                ) : null}
 
                 {episodeCandidates.length ? <section className="golden-episode-candidates"><header><strong>第 {selected.episode} 集候选</strong><span>{episodeCandidates.length} Take</span></header>{episodeCandidates.map((take) => <TakeListRow key={take.group_id} take={take} onSelect={() => addTake(take)} />)}</section> : null}
 

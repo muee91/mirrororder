@@ -226,3 +226,20 @@ button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b121
 .golden-clapper-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--mo-border-subtle); border-radius: 7px; background: var(--mo-surface-pane); }
 .golden-clapper-bar button { min-height: 28px; white-space: nowrap; }
 .golden-clapper-bar span { font-size: 11px; color: var(--mo-text-muted); }
+
+.golden-slate-advanced-interval {
+  border: 1px solid var(--mo-border-subtle, #252e36);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--mo-surface-pane, #0f1419);
+}
+.golden-slate-advanced-interval > summary {
+  cursor: pointer;
+  color: var(--mo-text-secondary, #87939f);
+  font-size: 11px;
+  font-weight: 600;
+}
+.golden-slate-advanced-interval[open] > summary {
+  margin-bottom: 8px;
+  color: var(--mo-text-primary, #d7dee5);
+}

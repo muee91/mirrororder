@@ -573,7 +573,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         <button type="button" className={showHistory ? "is-active" : ""} aria-pressed={showHistory} onClick={() => setShowHistory((value) => !value)}><strong>{totals.history}</strong>{showHistory ? "隐藏历史记录" : "显示历史记录"}</button>
       </div>
 
-      <p className="status-center-note">这里只把每类工作的最新状态算作当前事项；仍在排队或运行的实例全部保留。后续尝试或当前设置已经取代的旧失败会进入历史，不再重复占据“需要处理”。已结束记录可以从这台设备的状态中心删除，底层任务审计仍保留。</p>
+      <p className="status-center-note">展示运行中与待处理的后台任务；已结束的历史记录可按需清理（底层任务审计仍保留）。</p>
 
       <div className="status-center-sections">
         {activeTasks.length ? (
@@ -595,7 +595,7 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         {showHistory ? (
           <section className="status-center-section is-recent">
             <header><div><span className="status-center-section-dot" /><strong>历史记录</strong></div><small>{historyTasks.length}</small></header>
-            <p className="status-center-section-note">包含已完成、已取消，以及被后续尝试或当前设置取代的旧失败。“历史已解除”表示当时确实失败，但按当前设置已经不需要处理；历史记录不提供重试入口，可按需删除。</p>
+            <p className="status-center-section-note">包含已完成、已取消，以及被后续尝试或当前设置已经取代的旧失败。“历史已解除”表示当时确实失败，但按当前设置已经不需要处理；历史记录不提供重试入口，可按需删除。</p>
             {historyTasks.length ? <div className="status-center-task-list">{historyTasks.map((context) => renderTask(context, true))}</div> : <div className="status-center-section-empty">当前没有历史任务记录。</div>}
           </section>
         ) : null}

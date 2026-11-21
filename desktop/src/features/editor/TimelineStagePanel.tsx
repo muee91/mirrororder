@@ -20,9 +20,24 @@ type StagePanelProps = Pick<TimelineWorkbenchProps,
 export function TimelineStagePanel(props: StagePanelProps) {
   const { snapshot, sequence, playhead, changePlayhead, persistence, maxEnd, selectedClipId, selectTimelineClip, review } = props;
   if (!snapshot || !sequence) return null;
+  const maxFrames = Math.max(1, maxEnd);
   return (
     <>
       <div className="timeline-toolbar production-panel editorial-toolbar">
+        <div className="timeline-playhead-scrubber">
+          <button type="button" className="secondary timeline-step-btn" onClick={() => changePlayhead(Math.max(0, playhead - 1))}>−1f</button>
+          <input
+            type="range"
+            className="timeline-playhead-slider"
+            min={0}
+            max={maxFrames}
+            value={Math.min(Math.max(0, playhead), maxFrames)}
+            aria-label="时间线播放头滑块"
+            onChange={(event) => changePlayhead(Number(event.target.value) || 0)}
+          />
+          <button type="button" className="secondary timeline-step-btn" onClick={() => changePlayhead(Math.min(maxFrames, playhead + 1))}>+1f</button>
+          <span className="timeline-playhead-readout">{frameLabel(playhead)}</span>
+        </div>
         <label>播放头 <input type="number" min={0} value={playhead} onChange={(event) => changePlayhead(Number(event.target.value) || 0)} /></label>
         <span>{sequence.frame_rate.numerator}/{sequence.frame_rate.denominator} fps · {snapshot.validation.length ? `${snapshot.validation.length} 个结构问题` : "结构检查通过"}{persistence?.used_backup ? " · 已从备份恢复" : persistence?.recovered_operations ? ` · 已恢复 ${persistence.recovered_operations} 步编辑` : ""}</span>
       </div>

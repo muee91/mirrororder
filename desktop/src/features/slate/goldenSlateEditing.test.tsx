@@ -28,12 +28,14 @@ async function type(input:HTMLInputElement,value:string){await act(async()=>{Obj
 async function focus(input:HTMLInputElement){await act(async()=>input.focus());}
 async function enter(input:HTMLInputElement,isComposing=false){await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing,bubbles:true,cancelable:true})));}
 it('retains the same focused DOM input while an unplaced row crosses buckets, then commits grouping on Enter',async()=>{
+  await clickButton('拍摄顺序');
   const input=scene('b'), originalRow=row('b');await focus(input);
   for(const value of ['1','12','123']){await type(input,value);expect(document.activeElement).toBe(input);expect(row('b')).toBe(originalRow);expect(input.closest('.is-unplaced')).not.toBeNull();}
   expect(upsert).not.toHaveBeenCalled();await enter(input);
   expect(scene('b').value).toBe('123');expect(row('b').closest('.is-placed')).not.toBeNull();expect(row('c').closest('.is-unplaced')).not.toBeNull();
 });
 it('keeps order and focus while clearing a placed row, supports another row and preserves selected inspector state',async()=>{
+  await clickButton('拍摄顺序');
   await act(async()=>row('a').click());const input=scene('a');await focus(input);await type(input,'');
   expect(document.activeElement).toBe(input);expect(row('a').closest('.is-placed')).not.toBeNull();
   await act(async()=>input.blur());expect(row('a').closest('.is-unplaced')).not.toBeNull();expect(row('a').getAttribute('aria-current')).toBe('true');
@@ -51,6 +53,7 @@ it('retains draft and visible error when the existing save fails',async()=>{
   expect(scene('b').value).toBe('12');expect(row('b').classList.contains('is-dirty')).toBe(true);expect(host.textContent).toContain('revision conflict');
 });
 it('keeps the row pinned when focus moves to another field in the same row', async () => {
+  await clickButton('拍摄顺序');
   const input = scene('b');
   await focus(input);
   await type(input, '42');
@@ -74,9 +77,8 @@ const numbers = () => [...host.querySelectorAll('.slate-row .col-index strong')]
 async function clickButton(label: string) {
   await act(async () => [...host.querySelectorAll('button')].find(b => b.textContent === label)!.click());
 }
-it('numbers shooting rows in visible order and inherits the actual preceding row', async () => {
+it('defaults to shooting order, numbers rows in visible order, and inherits the actual preceding row', async () => {
   await mixedOrder();
-  await clickButton('剧本归位');
   expect(visibleIds()).toEqual(['a', 'b', 'c']);
   expect(numbers()).toEqual(['001', '002', '003']);
   await act(async () => row('b').click());
@@ -85,8 +87,9 @@ it('numbers shooting rows in visible order and inherits the actual preceding row
   expect(visibleIds()).toEqual(['a', 'b', 'c']);
   expect(upsert).not.toHaveBeenCalled();
 });
-it('uses continuous visible numbering and inheritance across the placed/unplaced split', async () => {
+it('uses continuous visible numbering and inheritance across the placed/unplaced split in script order', async () => {
   await mixedOrder();
+  await clickButton('拍摄顺序');
   expect(visibleIds()).toEqual(['c', 'a', 'b']);
   expect(numbers()).toEqual(['001', '002', '003']);
   await act(async () => row('b').click());
@@ -95,7 +98,6 @@ it('uses continuous visible numbering and inheritance across the placed/unplaced
 });
 it('has no previous row for the first shooting row even when it follows another scene in script order', async () => {
   await mixedOrder();
-  await clickButton('剧本归位');
   await act(async () => row('a').click());
   await clickButton('同上');
   expect(scene('a').value).toBe('20');
@@ -113,7 +115,7 @@ it.each([
     d: { ...record('d', '30'), episode: 2, script_scene_id: 'SC_2_30', note: '原备注', usable_range: { start: 2, end: 4 } },
   };
   await act(async () => root.render(<GoldenSlateWorkbench key={mode} baseUrl="http://synthetic.test" projectId="synthetic"/>));
-  if (mode === '拍摄顺序') await clickButton('剧本归位');
+  if (mode === '剧本归位') await clickButton('拍摄顺序');
   expect(visibleIds()).toEqual(visible);
   expect(numbers()).toEqual(['001', '002', '003', '004']);
   await act(async () => row('d').click());
@@ -156,7 +158,7 @@ it('restores a deleted manual record’s derived Take and keeps unrelated local 
     expect(row('a')).not.toBeNull();
     await clickButton('删除人工场记…');
     expect(deleteRecord).toHaveBeenCalledExactlyOnceWith('synthetic', expect.objectContaining({ recordId: 'a', expectedRevision: 3, actor: 'test' }));
-    expect(visibleIds()).toEqual(['b', 'derived-g1']);
+    expect(visibleIds()).toEqual(['derived-g1', 'b']);
     expect(numbers()).toEqual(['001', '002']);
     expect(scene('b').value).toBe('55');
     expect(row('b').classList.contains('is-dirty')).toBe(true);
@@ -166,7 +168,7 @@ it('restores a deleted manual record’s derived Take and keeps unrelated local 
     await clickButton('空白');
     expect(visibleIds()).toHaveLength(3);
     await clickButton('移除草稿…');
-    expect(visibleIds()).toEqual(['b', 'derived-g1']);
+    expect(visibleIds()).toEqual(['derived-g1', 'b']);
     expect(deleteRecord).toHaveBeenCalledOnce();
     expect(upsert).not.toHaveBeenCalled();
   } finally {

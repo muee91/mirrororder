@@ -11,6 +11,7 @@ import {
   type MediaSourceRole,
 } from "../../api/mediaRoles";
 import { MediaHealthIndicator } from "../../components/StatusIndicators";
+import { StudioIcon } from "../../components/StudioIcons";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
 import { mediaHealthState } from "./mediaHealthState";
@@ -806,33 +807,62 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setViewState((current) => ({ ...current, query: event.target.value }))} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
         <div className="media-library-filters" aria-label="素材状态筛选">
           {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} aria-label={`按状态筛选：${filterLabel}`} aria-pressed={filter === value} key={value} onClick={() => setViewState((current) => ({ ...current, filter }))}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
-          <button type="button" className="secondary media-library-reset-filters" aria-label="清除所有素材筛选" onClick={resetMediaFilters} disabled={!hasActiveFilters}>清除筛选</button>
+          {hasActiveFilters ? <button type="button" className="secondary media-library-reset-filters" aria-label="清除所有素材筛选" onClick={resetMediaFilters}>清除筛选</button> : null}
         </div>
         <div className="media-library-view-toggle" aria-label="素材显示密度" aria-keyshortcuts="Meta+Shift+G Control+Shift+G">
           <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-label="切换到列表视图" aria-pressed={viewMode === "list"} onClick={() => setViewState((current) => ({ ...current, viewMode: "list" }))}>列表</button>
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-label="切换到缩略图视图" aria-pressed={viewMode === "grid"} onClick={() => setViewState((current) => ({ ...current, viewMode: "grid" }))}>缩略图</button>
         </div>
-        <div className="media-library-bulk" aria-label="批量设置机位"><button type="button" className="secondary media-library-copy-inventory" aria-label="复制当前筛选素材清单" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button><button type="button" className="secondary media-library-copy-selected" aria-label="复制已选素材清单" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button><button type="button" className="secondary media-library-refresh" aria-label="刷新素材清单" aria-keyshortcuts="Meta+Shift+R Control+Shift+R" disabled={busy} onClick={() => void reload()}>刷新素材</button><button type="button" className="secondary media-library-select-visible" aria-label={allVisibleSelected ? "取消全选当前结果" : "全选当前结果"} aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button><button type="button" className="secondary media-library-invert-selection" aria-label="反选当前筛选结果" disabled={!visibleIds.length} onClick={invertVisibleSelection}>反选当前结果</button><button type="button" className="secondary media-library-clear-selection" aria-label="清空已选素材" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>{bulkSelectionHasUnavailable ? <button type="button" className="secondary media-library-clear-unavailable" aria-label="移除清单中已不可用的素材选择" disabled={busy} onClick={clearUnavailableSelection}>移除不可用选择</button> : null}<span aria-live="polite">{selectedIds.size} 条已选 · 单次最多 {bulkSelectionLimit} 条{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}{bulkSelectionHasUnavailable ? ` · ${selectedUnavailableCount} 条已不在当前清单，请刷新后重新选择` : ""}</span><input aria-label="批量设置机位名称" value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" /><button type="button" className="secondary" aria-label="批量设置已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button><button type="button" className="secondary" aria-label="清除已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>{bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" aria-label="重新选中最近批量结果" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}</div>
+        <div className="media-library-utility-actions">
+          <button type="button" className="secondary media-library-refresh" aria-label="刷新素材清单" aria-keyshortcuts="Meta+Shift+R Control+Shift+R" disabled={busy} onClick={() => void reload()} title="刷新素材清单">
+            <StudioIcon name="refresh" size={13} />
+          </button>
+          <details className="media-library-more-menu" onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+          }}>
+            <summary>更多</summary>
+            <div className="media-library-more-popover">
+              <button type="button" className="secondary media-library-select-visible" aria-label={allVisibleSelected ? "取消全选当前结果" : "全选当前结果"} aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button>
+              <button type="button" className="secondary media-library-invert-selection" aria-label="反选当前筛选结果" disabled={!visibleIds.length} onClick={invertVisibleSelection}>反选当前结果</button>
+              <button type="button" className="secondary media-library-copy-inventory" aria-label="复制当前筛选素材清单" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button>
+              <button type="button" className="secondary media-library-copy-selected" aria-label="复制已选素材清单" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button>
+            </div>
+          </details>
+        </div>
       </div>
 
-      <div className="media-library-scene-readiness" aria-label="场景机位准备度">
-        <span className="media-library-scene-readiness-title">场景机位准备度</span>
-        {sceneReadiness.length ? (
-          <>
-            <span className="is-ready">{readySceneCount} 场已具备多机位</span>
-            {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
-            <div className="media-library-scene-readiness-list" aria-label="按场景聚焦素材">
-              <button type="button" className={sceneFilter === "all" ? "is-active" : ""} aria-label="按场景筛选：全部场景" aria-pressed={sceneFilter === "all"} onClick={() => setViewState((current) => ({ ...current, sceneFilter: "all" }))}>全部场景</button>
-              {(showAllScenes ? sceneReadiness : sceneReadiness.slice(0, 8)).map((scene) => (
-                <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} aria-label={`按场景筛选：${scene.sceneId}`} aria-pressed={sceneFilter === scene.sceneId} onClick={() => setViewState((current) => ({ ...current, sceneFilter: scene.sceneId }))}>
-                  场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
-                </button>
-              ))}
-              {sceneReadiness.length > 8 ? <button type="button" className="media-library-scene-more" aria-expanded={showAllScenes} onClick={() => setViewState((current) => ({ ...current, showAllScenes: !current.showAllScenes }))}>{showAllScenes ? "收起场景" : `展开全部 ${sceneReadiness.length} 场`}</button> : null}
-            </div>
-          </>
-        ) : <span>先给同步机位素材补充场景归属，系统会提示是否具备至少两个机位。</span>}
-      </div>
+      {selectedIds.size > 0 || Boolean(bulkResult) ? (
+        <div className="media-library-bulk" aria-label="批量设置机位">
+          <span aria-live="polite">{selectedIds.size} 条已选 · 单次最多 {bulkSelectionLimit} 条{selectedOutsideFilter ? ` · ${selectedOutsideFilter} 条在当前筛选外` : ""}{bulkSelectionOverLimit ? ` · 超过单次上限 ${bulkSelectionLimit} 条` : ""}{bulkSelectionHasUnavailable ? ` · ${selectedUnavailableCount} 条已不在当前清单，请刷新后重新选择` : ""}</span>
+          {selectedIds.size > 0 ? (
+            <>
+              <input aria-label="批量设置机位名称" value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" />
+              <button type="button" className="secondary" aria-label="批量设置已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button>
+              <button type="button" className="secondary" aria-label="清除已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>
+              <button type="button" className="secondary media-library-clear-selection" aria-label="清空已选素材" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>
+            </>
+          ) : null}
+          {bulkSelectionHasUnavailable ? <button type="button" className="secondary media-library-clear-unavailable" aria-label="移除清单中已不可用的素材选择" disabled={busy} onClick={clearUnavailableSelection}>移除不可用选择</button> : null}
+          {bulkResult ? <output className="media-library-bulk-result" aria-live="polite">最近批量结果：{bulkResult.actionLabel} {bulkResult.count} 条 · {bulkResult.camera} · r{bulkResult.revision}{bulkResult.mediaIds.length ? <button type="button" className="secondary" aria-label="重新选中最近批量结果" onClick={restoreLastBulkSelection} disabled={busy}>重新选中</button> : null}</output> : null}
+        </div>
+      ) : null}
+
+      {sceneReadiness.length ? (
+        <div className="media-library-scene-readiness" aria-label="场景机位准备度" title="按场景检查是否具备至少两个机位">
+          <span className="media-library-scene-readiness-title">场景机位准备度</span>
+          <span className="is-ready">{readySceneCount} 场已具备多机位（至少两个机位）</span>
+          {pendingSceneCount ? <span className="is-pending">{pendingSceneCount} 场待补机位</span> : null}
+          <div className="media-library-scene-readiness-list" aria-label="按场景聚焦素材">
+            <button type="button" className={sceneFilter === "all" ? "is-active" : ""} aria-label="按场景筛选：全部场景" aria-pressed={sceneFilter === "all"} onClick={() => setViewState((current) => ({ ...current, sceneFilter: "all" }))}>全部场景</button>
+            {(showAllScenes ? sceneReadiness : sceneReadiness.slice(0, 8)).map((scene) => (
+              <button type="button" key={scene.sceneId} className={`${scene.ready ? "is-ready" : "is-pending"}${sceneFilter === scene.sceneId ? " is-active" : ""}`} aria-label={`按场景筛选：${scene.sceneId}`} aria-pressed={sceneFilter === scene.sceneId} onClick={() => setViewState((current) => ({ ...current, sceneFilter: scene.sceneId }))}>
+                场 {scene.sceneId} · {scene.cameras.length ? scene.cameras.join("/") : "机位待确认"} · {scene.mediaCount} 条
+              </button>
+            ))}
+            {sceneReadiness.length > 8 ? <button type="button" className="media-library-scene-more" aria-expanded={showAllScenes} onClick={() => setViewState((current) => ({ ...current, showAllScenes: !current.showAllScenes }))}>{showAllScenes ? "收起场景" : `展开全部 ${sceneReadiness.length} 场`}</button> : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="media-library-camera-strip" aria-label="按机位筛选">
         <span className="media-library-camera-strip-label">机位</span>
@@ -842,6 +872,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
             <strong>{camera.label}</strong><small>{camera.count}</small>
           </button>
         ))}
+        {onOpenMediaBinding ? (
+          <button type="button" className="secondary media-library-relink-link" onClick={onOpenMediaBinding}>硬盘重连</button>
+        ) : null}
       </div>
 
       <div className="media-library-layout">
@@ -890,7 +923,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
                   ) : !selectedItem.indexed ? (
                     <div className="media-library-player-state" aria-live="polite"><strong>这条素材尚未进入项目索引</strong><span>未入索引素材不会绕过本机素材身份校验直接按路径播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" aria-label="打开素材恢复" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : (
-                    <div className="media-library-player-state" aria-live="polite"><strong>已入索引，但缺少可播放的 clip identity</strong><span>{playbackProjectionLoaded ? "当前数据来自较旧的索引结构；Review fallback 也没有这条素材。刷新或重新整理项目后再试。" : "当前 Host 没有返回 opaque clip_id。刷新或重新整理项目后再试；素材清单和人工机位仍可继续编辑。"}</span><button type="button" className="secondary" aria-label="重新读取当前素材" disabled={busy} onClick={() => void reload(selectedItem.media_id)}>重新读取</button></div>
+                    <div className="media-library-player-state" aria-live="polite"><strong>素材已索引，但暂缺播放标识</strong><span>{playbackProjectionLoaded ? "当前数据来自较旧的索引结构，请在同步后刷新列表或重新整理素材索引。" : "当前服务未返回可播放标识，刷新列表或重新同步素材索引后再试；机位与标签仍可正常编辑。"}</span><button type="button" className="secondary" aria-label="重新读取当前素材" disabled={busy} onClick={() => void reload(selectedItem.media_id)}>重新读取</button></div>
                   )}
                 </div>
               </section>

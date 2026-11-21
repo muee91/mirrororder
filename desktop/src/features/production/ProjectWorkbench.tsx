@@ -376,19 +376,29 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
             <StudioIcon name="sparkle" size={13.5} />
             <span>小镜</span>
           </button>
-          {!syncBlocked && onOpenTeamReview ? (
-            <button type="button" className="secondary professional-team-review" onClick={onOpenTeamReview}>
-              <StudioIcon name="team" size={13.5} />
-              <span>团队审阅</span>
-            </button>
-          ) : null}
-          <details className="professional-tools-menu">
+          <details className="professional-tools-menu" onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+          }}>
             <summary>
               <StudioIcon name="tools" size={13.5} />
               <span>工具</span>
             </summary>
             <div className="professional-tools-popover">
               <CurrentOperatorControl />
+              {!syncBlocked && onOpenTeamReview ? (
+                <button
+                  type="button"
+                  className="secondary professional-tools-popover-action professional-team-review"
+                  onClick={(event) => {
+                    const details = event.currentTarget.closest("details");
+                    if (details) details.open = false;
+                    onOpenTeamReview();
+                  }}
+                >
+                  <StudioIcon name="team" size={13.5} />
+                  <span>团队审阅</span>
+                </button>
+              ) : null}
             </div>
           </details>
           {systemTools && <div className="professional-project-system">{systemTools}</div>}
@@ -428,7 +438,7 @@ export function ProjectWorkbench({ baseUrl, project, workspaceId = baseUrl, slat
           ) : null}
           {active && visiblePage === "sync-delivery" && master.ready ? (
             <SyncDeliveryWorkspace baseUrl={baseUrl} syncTimeline={master} canGenerate={syncTimeline.ready && !readError} onRepair={() => navigate("media-binding")}
-              onInspect={() => navigate("sync-inspect")} onSyncTask={() => navigate("sync-task")} />
+              onInspect={() => navigate("sync-inspect")} onSyncTask={() => navigate("sync-task")} onOpenAssembly={() => navigate("timeline")} />
           ) : null}
 
           {((active && area === "material") || slateVisited) ? (
