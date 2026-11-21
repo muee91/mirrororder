@@ -73,7 +73,23 @@ fn packaged_manifest(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn development_core_root() -> Option<PathBuf> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
     valid_core_root(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
+}
+
+fn effective_packaged_core_root(
+    packaged: PathBuf,
+    dev_root: Option<PathBuf>,
+    use_staged_core: bool,
+) -> PathBuf {
+    if cfg!(debug_assertions) && !use_staged_core {
+        if let Some(root) = dev_root {
+            return root;
+        }
+    }
+    packaged
 }
 
 fn packaged_python_candidates(root: &Path) -> Vec<PathBuf> {
@@ -153,6 +169,10 @@ pub fn resolve_python_runtime(app: &AppHandle) -> Result<PythonRuntimeLayout, St
             "安装包缺少 mirrororder-tools/bin 下的 ffmpeg/ffprobe。制作运行时必须自带这两个硬依赖。"
                 .to_string()
         })?;
+        let use_staged_core = env::var_os("MIRRORORDER_USE_STAGED_CORE")
+            .is_some_and(|value| !value.is_empty() && value != "0");
+        let core_root =
+            effective_packaged_core_root(core_root, development_core_root(), use_staged_core);
         return Ok(PythonRuntimeLayout {
             origin: RuntimeOrigin::PackagedResource,
             source_dir: core_root.join("src"),
@@ -211,8 +231,48 @@ pub fn path_with_tools(tool_bin: Option<&Path>) -> Result<Option<OsString>, Stri
 
 #[cfg(test)]
 mod tests {
-    use super::{packaged_python_candidates, path_with_tools, valid_core_root, valid_tool_bin};
-    use std::{env, fs, path::Path};
+    use super::{
+        effective_packaged_core_root, packaged_python_candidates, path_with_tools, valid_core_root,
+        valid_tool_bin,
+    };
+    use std::{
+        env, fs,
+        path::{Path, PathBuf},
+    };
+
+    #[test]
+    fn default_core_prefers_workspace_only_in_debug() {
+        let packaged = PathBuf::from("packaged");
+        let dev_root = PathBuf::from("workspace");
+        let selected =
+            effective_packaged_core_root(packaged.clone(), Some(dev_root.clone()), false);
+        let expected = if cfg!(debug_assertions) { dev_root } else { packaged };
+        assert_eq!(selected, expected);
+    }
+
+    #[test]
+    fn staged_core_opt_in_selects_packaged_core() {
+        let packaged = PathBuf::from("packaged");
+        assert_eq!(
+            effective_packaged_core_root(packaged.clone(), Some(PathBuf::from("workspace")), true),
+            packaged
+        );
+    }
+
+    #[test]
+    fn missing_workspace_selects_packaged_core() {
+        let packaged = PathBuf::from("packaged");
+        assert_eq!(
+            effective_packaged_core_root(packaged.clone(), None, false),
+            packaged
+        );
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn release_has_no_implicit_development_core() {
+        assert_eq!(super::development_core_root(), None);
+    }
 
     #[test]
     fn core_root_requires_python_core_and_multicam_engine() {
