@@ -154,9 +154,9 @@ export function App() {
   const [projectSyncStatus, setProjectSyncStatus] = useState<{ projectId: string; ready: boolean; phase: string } | null>(null);
   const [externalXiaoJingAction, setExternalXiaoJingAction] = useState<(XiaoJingMainAction & { nonce: number }) | null>(null);
   const [appearance, setAppearance] = useState(() => readDesktopAppearance());
-  const handleSyncStatusChange = useCallback((ready: boolean, phase: string) => {
-    if (selectedProject) setProjectSyncStatus({ projectId: selectedProject.project_id, ready, phase });
-  }, [selectedProject?.project_id]);
+  const handleSyncStatusChange = useCallback((projectId: string, ready: boolean, phase: string) => {
+    if (projectId.trim()) setProjectSyncStatus({ projectId, ready, phase });
+  }, []);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "");
   const [noticeVisible, setNoticeVisible] = useState(false);

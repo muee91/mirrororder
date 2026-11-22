@@ -54,7 +54,7 @@ interface Props {
   onOpenStatus?: () => void;
   onOpenSettings?: () => void;
   onPageChange?: (page: ProductionPage) => void;
-  onSyncStatusChange?: (ready: boolean, phase: string) => void;
+  onSyncStatusChange?: (projectId: string, ready: boolean, phase: string) => void;
   showModuleRail?: boolean;
 }
 
@@ -391,8 +391,8 @@ export function ProjectWorkbench({
   }, [onPageChange, page, project.project_id]);
 
   useEffect(() => {
-    onSyncStatusChange?.(master.ready, syncTimeline.phase);
-  }, [master.ready, onSyncStatusChange, syncTimeline.phase]);
+    onSyncStatusChange?.(project.project_id, master.ready, syncTimeline.phase);
+  }, [master.ready, onSyncStatusChange, project.project_id, syncTimeline.phase]);
 
 
   useEffect(() => {

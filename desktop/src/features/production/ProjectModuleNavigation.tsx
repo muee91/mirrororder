@@ -92,6 +92,16 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
     const active = selectedModule !== null && item.pages.includes(selectedModule);
     const target = item.id === "sync" && syncReady ? "sync-inspect" : item.target;
     const available = canOpenProductionModule(target, inputKind, syncReady);
+    const accessibleLabel = {
+      // Keep the sync workbench name stable while its first page changes from
+      // the task view to verification. The parenthesized state still tells
+      // assistive technology which page will open before the first read.
+      sync: syncReady ? "同步核对" : "同步核对（当前为同步任务）",
+      slate: "交互场记",
+      script: "剧本关联",
+      material: "素材库",
+      review: "看片审阅",
+    }[item.id];
     return (
       <button
         type="button"
@@ -99,6 +109,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
         className={`project-module-link${active ? " is-active" : ""}`}
         key={item.id}
         aria-current={active ? "page" : undefined}
+        aria-label={accessibleLabel}
         disabled={!available}
         title={available ? item.label : "同步完成后开放此工作区"}
         onClick={() => {

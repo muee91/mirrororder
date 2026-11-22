@@ -23,6 +23,12 @@ interface Props {
 const IMPORT_POLL_MS = 750;
 const IMPORT_POLL_LIMIT = 120;
 
+function sourceMessage(inputKind: "fcpxml" | "media-directory"): string {
+  return inputKind === "fcpxml"
+    ? "选择 FCPXML 文件，并按需指定剧本。"
+    : "选择原始视频和同期录音所在的目录。";
+}
+
 function rootsFromText(value: string): string[] {
   return [...new Set(value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))];
 }
@@ -43,7 +49,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
   const [mediaRoots, setMediaRoots] = useState("");
   const [prepareAfterCreate, setPrepareAfterCreate] = useState(true);
   const [preflight, setPreflight] = useState<ProjectPreflight | null>(null);
-  const [message, setMessage] = useState("选择原始视频和同期录音所在的目录。");
+  const [message, setMessage] = useState(() => sourceMessage("media-directory"));
   const [busy, setBusy] = useState(false);
   const [createdId, setCreatedId] = useState("");
   const [acceptedWarnings, setAcceptedWarnings] = useState("");
@@ -73,7 +79,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
     setInputKind("media-directory");
     setPrepareAfterCreate(true);
     setPreflight(null);
-    setMessage("选择原始视频和同期录音所在的目录。");
+    setMessage(sourceMessage("media-directory"));
   }
 
   async function chooseFile(kind: "script" | "fcpxml"): Promise<void> {
@@ -278,8 +284,8 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
 
             <div className="project-lifecycle-body">
               <div className="lifecycle-kind" aria-label="项目来源">
-                <button type="button" aria-pressed={inputKind === "media-directory"} className={inputKind === "media-directory" ? "is-active" : ""} onClick={() => { setInputKind("media-directory"); setPreflight(null); }}>原始素材</button>
-                <button type="button" aria-pressed={inputKind === "fcpxml"} className={inputKind === "fcpxml" ? "is-active" : ""} onClick={() => { setInputKind("fcpxml"); setPreflight(null); }}>已有 FCPXML</button>
+                <button type="button" aria-pressed={inputKind === "media-directory"} className={inputKind === "media-directory" ? "is-active" : ""} onClick={() => { setInputKind("media-directory"); setPreflight(null); setMessage(sourceMessage("media-directory")); }}>原始素材</button>
+                <button type="button" aria-pressed={inputKind === "fcpxml"} className={inputKind === "fcpxml" ? "is-active" : ""} onClick={() => { setInputKind("fcpxml"); setPreflight(null); setMessage(sourceMessage("fcpxml")); }}>已有 FCPXML</button>
               </div>
 
               <label><span>项目名称</span><input autoFocus value={name} onChange={(event) => { setName(event.target.value); setPreflight(null); }} placeholder="输入项目名称" /></label>

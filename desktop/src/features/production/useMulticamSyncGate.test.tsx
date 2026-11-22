@@ -42,20 +42,20 @@ describe("useMulticamSyncGate", () => {
     vi.useRealTimers();
   });
 
-  it("skips fresh focus reads and retains the exact state on unchanged reads", async () => {
+  it("refreshes on every focus and retains the exact state on unchanged reads", async () => {
     const read = vi.spyOn(SyncTimelineClient.prototype, "read").mockImplementation(async id => master(id));
     await act(async () => root.render(<Probe projectId="one" />));
     const initial = gate;
     const count = renders;
     await act(async () => vi.advanceTimersByTimeAsync(9_999));
     await focus();
-    expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledTimes(2);
     await act(async () => vi.advanceTimersByTimeAsync(1));
     await focus();
     await focus();
-    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenCalledTimes(4);
     await act(async () => gate.refreshSyncTimeline());
-    expect(read).toHaveBeenCalledTimes(3);
+    expect(read).toHaveBeenCalledTimes(5);
     expect(renders).toBe(count);
     expect(gate.snapshot).toBe(initial.snapshot);
     expect(gate.syncTimeline).toBe(initial.syncTimeline);
@@ -63,6 +63,7 @@ describe("useMulticamSyncGate", () => {
     expect(gate.syncTimeline).not.toBe(initial.syncTimeline);
     read.mockResolvedValue({ ...master("one"), offset_revision: 1 });
     await act(async () => gate.refreshSyncTimeline());
+    expect(read).toHaveBeenCalledTimes(7);
     expect(gate.syncTimeline.offset_revision).toBe(1);
   });
 

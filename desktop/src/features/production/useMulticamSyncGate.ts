@@ -3,7 +3,6 @@ import { errorMessage } from "../../api/host";
 import { SyncTimelineClient, type MulticamSyncTimeline } from "../../api/syncTimeline";
 
 const POLL_MS = 1800;
-const FOCUS_FRESH_MS = 10_000;
 
 function timelineSignature(timeline: MulticamSyncTimeline): string {
   const { task, recordings, previous_master } = timeline;
@@ -114,9 +113,9 @@ export function useMulticamSyncGate(baseUrl: string, projectId: string, inputKin
   useEffect(() => {
     if (inputKind !== "media-directory") return;
     const refreshOnFocus = () => {
-      const current = stateRef.current;
-      if (current.scope === scope && current.timeline.ready && !current.readError
-          && Date.now() - lastFetchedAtRef.current < FOCUS_FRESH_MS) return;
+      // Returning to the app is an explicit request for current task state.
+      // Do not suppress it just because the previous read was recent: a host
+      // may have gone offline while the window was inactive.
       void refreshSyncTimeline();
     };
     globalThis.addEventListener("focus", refreshOnFocus);

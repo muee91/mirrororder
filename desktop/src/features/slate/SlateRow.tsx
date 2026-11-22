@@ -119,6 +119,7 @@ export function SlateTableHead({ cameraColumns = SLATE_CAMERA_COLUMNS, columnWid
         {resizable ? <span
           className="slate-col-resizer"
           role="separator"
+          aria-hidden="true"
           aria-orientation="vertical"
           aria-label={`调整${columnLabel(key, camera)}列宽`}
           onDoubleClick={(event) => { event.stopPropagation(); onResetColumnWidth?.(key); }}
