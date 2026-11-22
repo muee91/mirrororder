@@ -71,6 +71,10 @@ function newRecordId(): string {
   return `slate-${id.replaceAll("-", "").toLowerCase()}`;
 }
 
+function closeGoldenSlateMenu(button: HTMLButtonElement): void {
+  button.closest("details")?.removeAttribute("open");
+}
+
 function attachmentKey(attachment: SlateAttachment): string {
   return attachment.clip_id || attachment.media_id;
 }
@@ -1466,34 +1470,51 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>来源场记</button>
           </nav>}
           <span className="golden-slate-count" aria-label="场记行数">{displayedDrafts.length} 条</span>
-          <div className="golden-slate-actions golden-slate-browse" role="group" aria-label="场记排序与视图">
-            <button
-              type="button"
-              className={`secondary ${orderMode === "shooting" ? "is-active" : ""}`}
-              aria-pressed={orderMode === "shooting"}
-              title="在真实拍摄顺序与剧本归位顺序间切换"
-              onClick={() => { setEditLayout(null); setOrderMode((mode) => mode === "shooting" ? "script" : "shooting"); }}
-            >拍摄顺序</button>
-            <button
-              type="button"
-              className={`secondary ${quickLookOpen ? "is-active" : ""}`}
-              aria-pressed={quickLookOpen}
-              disabled={!playbackUrl}
-              title="浮窗快速预览当前选中行素材"
-              onClick={toggleQuickLook}
-            >快速预览</button>
-            <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>检视</button>
-            <button type="button" className="secondary" onClick={focusQuickEntry} aria-label="备注与快录" title="聚焦当前行备注/快录 (/)">备注 /</button>
-            <button type="button" className="secondary" onClick={nextSameScene}>同场下一条</button>
-            <button type="button" className="secondary" onClick={inheritPrevious}>同上</button>
-            <button type="button" onClick={() => addBlank()}>空白</button>
-          </div>
+          <button
+            type="button"
+            className={`secondary golden-slate-order-toggle ${orderMode === "shooting" ? "is-active" : ""}`}
+            aria-pressed={orderMode === "shooting"}
+            title={orderMode === "shooting" ? "当前按拍摄顺序排列，点击切换到剧本顺序" : "当前按剧本顺序排列，点击切换到拍摄顺序"}
+            onClick={() => { setEditLayout(null); setOrderMode((mode) => mode === "shooting" ? "script" : "shooting"); }}
+          >{orderMode === "shooting" ? "拍摄顺序" : "剧本顺序"}</button>
+          <details className="golden-slate-menu golden-slate-menu-left" onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
+          }} onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
+            }
+          }}>
+            <summary>＋ 记一条</summary>
+            <div className="golden-slate-menu-popover" role="group" aria-label="新增场记">
+              <button type="button" className="secondary" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); nextSameScene(); }}>同场下一条</button>
+              <button type="button" className="secondary" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); inheritPrevious(); }}>同上</button>
+              <button type="button" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); addBlank(); }}>空白</button>
+              <button ref={takePickerTriggerRef} type="button" className="secondary" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setTakePickerOpen((value) => !value); }}>从 Take 加入</button>
+            </div>
+          </details>
         </div>
         <div className="golden-slate-actions golden-slate-subbar-right" role="group" aria-label="场记辅助操作">
-          {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={() => setHideNgRows((value) => !value)}>隐藏 NG ({ngCount})</button> : null}
-          {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={() => setShowAuxColumn((value) => !value)} title="显示或隐藏空的 AUX 列">AUX 列</button> : null}
-          <button ref={takePickerTriggerRef} type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>从 Take 加入</button>
-          <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="刷新场记">刷新场记</button>
+          <details className="golden-slate-menu golden-slate-menu-right" onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
+          }} onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
+            }
+          }}>
+            <summary>视图与工具</summary>
+            <div className="golden-slate-menu-popover" role="group" aria-label="视图与工具">
+              <button type="button" className={`secondary ${quickLookOpen ? "is-active" : ""}`} aria-pressed={quickLookOpen} disabled={!playbackUrl} title="浮窗快速预览当前选中行素材" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); toggleQuickLook(); }}>快速预览</button>
+              <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setInspectorOpen((value) => !value); }} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>检视</button>
+              <button type="button" className="secondary" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); focusQuickEntry(); }} aria-label="备注与快录" title="聚焦当前行备注/快录 (/)" >备注 /</button>
+              {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setHideNgRows((value) => !value); }}>隐藏 NG ({ngCount})</button> : null}
+              {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setShowAuxColumn((value) => !value); }} title="显示或隐藏空的 AUX 列">显示其他机位 (AUX)</button> : null}
+              <button type="button" className="icon-action" disabled={busy} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); void reload(selectedRecordId); }} aria-label="刷新场记" title="刷新场记">刷新场记</button>
+            </div>
+          </details>
           <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} onSelect={setPaperSource} />
           <span className="golden-slate-message" aria-live="polite">{message}</span>
           <span

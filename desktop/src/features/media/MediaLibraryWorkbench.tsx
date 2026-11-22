@@ -829,7 +829,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
       <div className="media-library-toolbar">
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setViewState((current) => ({ ...current, query: event.target.value }))} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
         <div className="media-library-filters" aria-label="素材状态筛选">
-          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => <button type="button" className={filter === value ? "is-active" : ""} aria-label={`按状态筛选：${filterLabel}`} aria-pressed={filter === value} key={value} onClick={() => setViewState((current) => ({ ...current, filter }))}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>)}
+          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => value === "all" || statusFilterCounts[value] > 0 || filter === value ? (
+            <button type="button" className={filter === value ? "is-active" : ""} aria-label={`按状态筛选：${filterLabel}`} aria-pressed={filter === value} key={value} onClick={() => setViewState((current) => ({ ...current, filter: value }))}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>
+          ) : null)}
           {hasActiveFilters ? <button type="button" className="secondary media-library-reset-filters" aria-label="清除所有素材筛选" onClick={resetMediaFilters}>清除筛选</button> : null}
         </div>
         <div className="media-library-view-toggle" aria-label="素材显示密度" aria-keyshortcuts="Meta+Shift+G Control+Shift+G">

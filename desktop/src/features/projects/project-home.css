@@ -235,6 +235,11 @@
   background: color-mix(in srgb, var(--mo-warning) 10%, transparent);
   color: var(--mo-warning);
 }
+.project-home-stats-hint {
+  color: var(--mo-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
 .project-home-state { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 3px 9px; border-radius: 999px; background: var(--mo-surface-pane); border: 1px solid var(--mo-border-subtle); color: var(--mo-text-secondary); font-size: 11px; font-weight: 600; }
 .project-home-state.status-attention { color: var(--mo-warning); }
 .project-home-state.status-error { color: var(--mo-danger); }

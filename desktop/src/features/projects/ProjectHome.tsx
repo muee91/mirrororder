@@ -147,6 +147,10 @@ export function ProjectHome({
           {visible.map((project) => {
             const activity = activities[project.project_id];
             const presentation = projectPresentation(project, activity);
+            const sidebarSubtitle = presentation.sidebarSubtitle === presentation.statusLabel
+              ? project.input_kind === "media-directory" ? "点击查看同步与素材" : "点击打开工程"
+              : presentation.sidebarSubtitle;
+            const hasProjectStats = presentation.takes > 0 || presentation.clips > 0 || presentation.attention > 0;
             return (
               <article
                 className={`project-home-card status-${presentation.statusTone}`}
@@ -177,13 +181,17 @@ export function ProjectHome({
                   <div className="project-card-body">
                     <span className="project-home-project-copy">
                       <strong>{project.name || project.project_id}</strong>
-                      <small title={project.project_id}>{presentation.sidebarSubtitle}</small>
+                      <small title={project.project_id}>{sidebarSubtitle}</small>
                     </span>
-                    <span className="project-home-stats">
-                      <span><strong>{presentation.takes}</strong> Take</span>
-                      <span><strong>{presentation.clips}</strong> 素材</span>
-                      {presentation.attention ? <span className="needs-attention"><strong>{presentation.attention}</strong> 需关注</span> : null}
-                    </span>
+                    {hasProjectStats ? (
+                      <span className="project-home-stats">
+                        <span><strong>{presentation.takes}</strong> Take</span>
+                        <span><strong>{presentation.clips}</strong> 素材</span>
+                        {presentation.attention ? <span className="needs-attention"><strong>{presentation.attention}</strong> 需关注</span> : null}
+                      </span>
+                    ) : (
+                      <span className="project-home-stats-hint">打开后查看进度与素材</span>
+                    )}
                   </div>
                 </button>
                 <button
