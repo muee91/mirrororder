@@ -63,7 +63,8 @@ const SHOT_LABELS: Record<string, string> = {
   insert: "插入镜头",
 };
 const SHOT_OPTIONS = Object.keys(SHOT_LABELS);
-const QUICK_SLATE_TAGS = ["保条 ★", "临场改词", "情绪爆发", "补拍特写", "OS", "空镜", "穿帮", "虚焦"] as const;
+const QUICK_SLATE_TAGS = ["保条 ★", "临场改词", "情绪爆发", "补拍特写", "OS", "空镜", "穿帮", "虚焦", "误录"] as const;
+const SLATE_COLUMN_WIDTHS_STORAGE_KEY = "mirrororder.slateColumnWidths.v1";
 
 function newRecordId(): string {
   const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -350,17 +351,18 @@ type DraftRowProps = {
   onEditEnd: () => void;
   onSelect: (recordId: string) => void;
   onPatch: (recordId: string, patch: Partial<Draft>) => void;
+  onQuickParse: (recordId: string, text: string) => void | Promise<void>;
   mediaCell: (draft: Draft, camera: SlateCameraColumn, selectedClip?: string) => ReactNode;
 };
 
 const DraftSlateRow = memo(function DraftSlateRow({
-  draft, rowNumber, selected, selectedClip, cameraColumns, revealRow, onEditStart, onEditEnd, onSelect, onPatch, mediaCell,
+  draft, rowNumber, selected, selectedClip, cameraColumns, revealRow, onEditStart, onEditEnd, onSelect, onPatch, onQuickParse, mediaCell,
 }: DraftRowProps) {
   return (
     <SlateRow
       row={{
         recordId: draft.record_id, rowNumber, selected, dirty: draft.dirty, derivedSource: draft.derivedSource,
-        episode: draft.episode, scene: draft.scene, shot: draft.shot, takeNumber: draft.take_number, status: draft.status,
+        episode: draft.episode, scene: draft.scene, shot: draft.shot, takeNumber: draft.take_number, status: draft.status, note: draft.note,
         mappedScenePlaceholder: !draft.scene && draft.script_scene_id ? prettySceneId(draft.script_scene_id) : "",
       }}
       rowRef={revealRow}
@@ -369,6 +371,7 @@ const DraftSlateRow = memo(function DraftSlateRow({
       onEditEnd={onEditEnd}
       onSelect={() => onSelect(draft.record_id)}
       onPatch={(patch) => onPatch(draft.record_id, patch)}
+      onQuickParse={(text) => onQuickParse(draft.record_id, text)}
       renderMedia={(camera) => mediaCell(draft, camera, selectedClip)}
     />
   );
@@ -521,20 +524,16 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [selectedRecordId, setSelectedRecordId] = useState("");
   const [selectedClipId, setSelectedClipId] = useState("");
   const [actor, setActor] = useState(readCurrentOperator);
-  const [quickText, setQuickText] = useState("");
   const [message, setMessage] = useState("正在读取多机位电子场记…");
   const [busy, setBusy] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [floatingQuickOpen, setFloatingQuickOpen] = useState(false);
+  const [showAuxColumn, setShowAuxColumn] = useState(false);
+  const [hideNgRows, setHideNgRows] = useState(false);
   const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
   const [quickLookOpen, setQuickLookOpen] = useState(false);
   const quickLookFocusRef = useRef<HTMLElement | null>(null);
   const quickLookCloseRef = useRef<HTMLButtonElement | null>(null);
   const quickLookInspectorRef = useRef(true);
-  const inlineQuickInputRef = useRef<HTMLInputElement | null>(null);
-  const floatingQuickInputRef = useRef<HTMLInputElement | null>(null);
-  const quickTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const quickRestoreFocusRef = useRef<HTMLElement | null>(null);
   const [videoGeometry, setVideoGeometry] = useState<{ key: string; aspect: number } | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const [takePickerOpen, setTakePickerOpen] = useState(false);
@@ -546,7 +545,19 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const appliedFocus = useRef<ProductionSelectionContext | null>(null);
   const [locatedRange, setLocatedRange] = useState<{ recordId: string; clipId: string; start: number } | null>(null);
   const playerRef = useRef<HTMLVideoElement | null>(null);
-  const [sourceEditorFocus, setSourceEditorFocus] = useState<{ recordId: string; field?: "scene" | "shot" | "take" } | null>(null);
+  const [sourceEditorFocus, setSourceEditorFocus] = useState<{ recordId: string; field?: "scene" | "shot" | "take" | "note" } | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    try {
+      const raw = localStorage.getItem(SLATE_COLUMN_WIDTHS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+      return Object.fromEntries(Object.entries(parsed).filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value > 0)) as Record<string, number>;
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SLATE_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths)); } catch { /* local persistence is best effort */ }
+  }, [columnWidths]);
   const productionRows = useMemo(() => {
     const groups = new Map<string, Draft>();
     const ambiguous = new Set<string>();
@@ -582,8 +593,12 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const revealRow = useCallback((row: HTMLTableRowElement | null) => {
     if (!row || !sourceEditorFocus) return;
     if (sourceEditorFocus.field) {
-      const index = { scene: 1, shot: 2, take: 3 }[sourceEditorFocus.field];
-      row.querySelectorAll<HTMLInputElement>("input")[index]?.focus({ preventScroll: true });
+      if (sourceEditorFocus.field === "note") {
+        row.querySelector<HTMLInputElement>("td.col-note input")?.focus({ preventScroll: true });
+      } else {
+        const index = { scene: 1, shot: 2, take: 3 }[sourceEditorFocus.field];
+        row.querySelectorAll<HTMLInputElement>("input")[index]?.focus({ preventScroll: true });
+      }
     }
     row.scrollIntoView?.({ block: "nearest" });
     setSourceEditorFocus(null);
@@ -669,6 +684,18 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     setSourceEditorFocus({ recordId: row.record_id });
   }, [focus, board, drafts, projectId, active]);
 
+  const hasAuxMedia = useMemo(() => {
+    const attachmentNeedsAux = drafts.some((draft) => draft.attachments.some((attachment) => {
+      const key = cameraKey(attachment.camera);
+      return key === "AUX" || attachment.source_role !== "sync_camera" || !/^[A-Z]$/.test(key);
+    }));
+    const angleNeedsAux = (review?.take_groups ?? []).some((take) => take.angles.some((angle) => {
+      const key = cameraKey(angle.camera);
+      const sourceRole = angle.coverage_role || "sync_camera";
+      return key === "AUX" || sourceRole !== "sync_camera" || !/^[A-Z]$/.test(key);
+    }));
+    return attachmentNeedsAux || angleNeedsAux;
+  }, [drafts, review]);
   const cameraColumns = useMemo(() => {
     const cameras = new Set<string>(SLATE_CAMERA_COLUMNS.filter(camera => camera !== "AUX"));
     for (const take of review?.take_groups ?? []) {
@@ -677,14 +704,14 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         if (/^[A-Z]$/.test(camera)) cameras.add(camera);
       }
     }
-    for (const record of Object.values(board?.records ?? {})) {
-      for (const attachment of record.attachments ?? []) {
+    for (const draft of drafts) {
+      for (const attachment of draft.attachments ?? []) {
         const camera = cameraKey(attachment.camera);
         if (attachment.source_role === "sync_camera" && /^[A-Z]$/.test(camera)) cameras.add(camera);
       }
     }
-    return [...cameras].sort().concat("AUX");
-  }, [board, review]);
+    return [...cameras].sort().concat(hasAuxMedia || showAuxColumn ? ["AUX"] : []);
+  }, [drafts, hasAuxMedia, review, showAuxColumn]);
   const selected = drafts.find((row) => row.record_id === selectedRecordId) ?? null;
   const selectedTake = selected?.source_group_id ? review?.take_groups.find((take) => take.group_id === selected.source_group_id) ?? null : null;
   const selectedAttachment = selected?.attachments.find((item) => attachmentKey(item) === selectedClipId) ?? null;
@@ -708,6 +735,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       ?? angleIndex.byIdentity.get(JSON.stringify([selectedAttachment.clip_id, selectedAttachment.media_id]))
       ?? null
     : angleIndex.byClip.get(selectedClipId) ?? null;
+  const selectedFilename = selectedAttachment?.display_name || selectedAngle?.name || "";
   const selectedPlaybackKey = selectedAngle?.clip_id || selectedClipId;
   const clipId = selectedAttachment?.clip_id || selectedAngle?.clip_id || undefined;
   const mediaId = selectedAttachment?.media_id || selectedAngle?.media_id || undefined;
@@ -800,8 +828,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   }, [board, pending]);
   const selectedConflict = Boolean(selected && draftConflicts.has(selected.record_id));
   const selectedServerRecord = selectedConflict && selected ? board?.records[selected.record_id] : undefined;
+  const ngCount = useMemo(() => drafts.filter((row) => row.status === "ng").length, [drafts]);
   const displayedDrafts = useMemo(() => {
-    const ordered = orderRows(drafts, orderMode);
+    const ordered = orderRows(hideNgRows ? drafts.filter((row) => row.status !== "ng") : drafts, orderMode);
     if (!editLayout) return ordered;
     ordered.sort((a, b) => (editLayout.get(a.record_id)?.index ?? Number.MAX_SAFE_INTEGER)
       - (editLayout.get(b.record_id)?.index ?? Number.MAX_SAFE_INTEGER));
@@ -809,7 +838,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     // added while an editor has pinned the existing layout.
     const placed = (row: Draft) => editLayout.get(row.record_id)?.placed ?? isPlacedDraft(row);
     return orderMode === "shooting" ? ordered : [...ordered.filter(placed), ...ordered.filter(row => !placed(row))];
-  }, [drafts, editLayout, orderMode]);
+  }, [drafts, editLayout, hideNgRows, orderMode]);
   const displayIndexByRecord = useMemo(
     () => new Map(displayedDrafts.map((row, index) => [row.record_id, index])),
     [displayedDrafts],
@@ -841,6 +870,18 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const patchRecord = useCallback((recordId: string, patch: Partial<Draft>): void => {
     setDrafts((current) => current.map((row) => row.record_id === recordId ? { ...row, ...patch, dirty: true, derived: false, derivedSource: "" } : row));
   }, [setDrafts]);
+
+  const resizeColumn = useCallback((columnKey: string, width: number): void => {
+    setColumnWidths((current) => ({ ...current, [columnKey]: width }));
+  }, []);
+
+  const resetColumnWidth = useCallback((columnKey: string): void => {
+    setColumnWidths((current) => {
+      const next = { ...current };
+      delete next[columnKey];
+      return next;
+    });
+  }, []);
 
   function patchAttachment(recordId: string, key: string, patch: Partial<SlateAttachment>): void {
     setDrafts((current) => current.map((row) => row.record_id === recordId ? {
@@ -883,7 +924,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     setDrafts((current) => [...current, row]);
     setSelectedRecordId(row.record_id);
     setSelectedClipId("");
-    setQuickText("");
     setMessage("已新增空白场记；保存后才写入项目。");
     return row;
   }
@@ -1191,67 +1231,52 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     await deleteSelected();
   }
 
-  async function applyQuickEntry(): Promise<void> {
-    if (!canUseSlate() || !selected || !quickText.trim() || busy) return;
+  const applyQuickEntryForRow = useCallback(async (recordId: string, rawText: string): Promise<void> => {
+    const target = draftViewRef.current.rows.find((row) => row.record_id === recordId);
+    if (!canUseSlate() || !target || !rawText.trim() || busy) return;
     setBusy(true);
     setMessage("正在解析场记原话…");
     try {
-      const payload = await production.parseSlate(projectId, quickText, parsePrevious(selected));
+      const payload = await production.parseSlate(projectId, rawText, parsePrevious(target));
       const parsed: SlateParseResult = payload.result;
-      const attachments = selected.attachments.map((attachment) => {
+      const attachments = target.attachments.map((attachment) => {
         const shot = parsed.angle_shots[cameraKey(attachment.camera)];
         return shot ? { ...attachment, shot_type: shot } : attachment;
       });
-      patchRecord(selected.record_id, {
-        episode: parsed.episode ?? selected.episode,
-        scene: parsed.scene || selected.scene,
-        shot: parsed.shot || selected.shot,
-        take_number: parsed.take_number ?? selected.take_number,
-        status: parsed.status !== "unmarked" ? parsed.status : selected.status,
-        note: parsed.note || selected.note,
+      patchRecord(recordId, {
+        episode: parsed.episode ?? target.episode,
+        scene: parsed.scene || target.scene,
+        shot: parsed.shot || target.shot,
+        take_number: parsed.take_number ?? target.take_number,
+        status: parsed.status !== "unmarked" ? parsed.status : target.status,
+        note: parsed.note || rawText,
         attachments,
       });
-      setQuickText("");
       setMessage(`已填入解析结果${parsed.range_hint ? ` · 范围原话：${parsed.range_hint}` : ""}；仍需保存。`);
     } catch (error) { setMessage(errorMessage(error)); }
     finally { setBusy(false); }
-  }
-
-  function focusQuickInput(input: HTMLInputElement | null): void {
-    if (!input) return;
-    if (input.isConnected) input.focus({ preventScroll: true });
-  }
+  }, [busy, canUseSlate, patchRecord, production, projectId]);
 
   function focusQuickEntry(): void {
-    if (inspectorOpen) {
-      focusQuickInput(inlineQuickInputRef.current);
+    const targetId = selectedRecordId || displayedDrafts[0]?.record_id;
+    if (!targetId) return;
+    if (!selectedRecordId) selectRecord(targetId);
+    const row = [...(slateRef.current?.querySelectorAll<HTMLTableRowElement>("tr.slate-row") ?? [])]
+      .find((candidate) => candidate.dataset.recordId === targetId);
+    const input = row?.querySelector<HTMLInputElement>("td.col-note input");
+    if (input) {
+      input.focus({ preventScroll: true });
       return;
     }
-    if (!floatingQuickOpen) {
-      quickRestoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setFloatingQuickOpen(true);
-    } else {
-      focusQuickInput(floatingQuickInputRef.current);
-    }
-  }
-
-  function closeFloatingQuickEntry(): void {
-    setFloatingQuickOpen(false);
-    const restore = quickRestoreFocusRef.current?.isConnected
-      ? quickRestoreFocusRef.current
-      : quickTriggerRef.current;
-    restore?.focus({ preventScroll: true });
-    quickRestoreFocusRef.current = null;
+    setSourceEditorFocus({ recordId: targetId, field: "note" });
   }
 
   useEffect(() => {
-    if (!floatingQuickOpen || inspectorOpen) return;
-    focusQuickInput(floatingQuickInputRef.current);
-  }, [floatingQuickOpen, inspectorOpen]);
-
-  useEffect(() => {
-    setFloatingQuickOpen(false);
-  }, [inspectorOpen]);
+    if (!hideNgRows || selected?.status !== "ng") return;
+    const fallback = displayedDrafts.find((row) => row.status !== "ng");
+    if (fallback) selectRecord(fallback.record_id);
+    else setSelectedRecordId("");
+  }, [displayedDrafts, hideNgRows, selectRecord, selected?.status]);
 
   function setIO(kind: "in" | "out"): void {
     if (!selected) return;
@@ -1270,17 +1295,38 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     }
   }
 
-  function appendNoteTag(tag: string): void {
-    if (!selected) return;
-    const current = selected.note.trim();
-    if (current.includes(tag)) return;
-    const next = current ? `${current} · ${tag}` : tag;
-    patchRecord(selected.record_id, { note: next });
+  function appendNoteTagValue(current: string, tag: string): string {
+    const trimmed = current.trim();
+    return trimmed.includes(tag) ? trimmed : trimmed ? `${trimmed} · ${tag}` : tag;
   }
 
-  const shortcutActionsRef = useRef({ canUseSlate, saveAll, addBlank, nextSameScene, setIO, patchRecord, selected, playbackUrl, quickLookOpen, closeQuickLook, toggleQuickLook, floatingQuickOpen, focusQuickEntry, closeFloatingQuickEntry });
+  function appendNoteTag(tag: string): void {
+    if (!selected) return;
+    const next = appendNoteTagValue(selected.note, tag);
+    if (next !== selected.note.trim()) patchRecord(selected.record_id, { note: next });
+  }
+
+  function markSelectedMisrecorded(): void {
+    if (!selected) return;
+    patchRecord(selected.record_id, { status: "ng", note: appendNoteTagValue(selected.note, "误录") });
+    setMessage("已标为 NG · 误录；未删原文件，仍需保存。");
+  }
+
+  const stepSelection = useCallback((delta: -1 | 1): void => {
+    const visible = displayedDrafts;
+    const index = visible.findIndex((row) => row.record_id === selectedRecordId);
+    const next = visible[index < 0 ? (delta > 0 ? 0 : visible.length - 1) : index + delta];
+    if (!next) return;
+    selectRecord(next.record_id);
+    const mounted = [...(slateRef.current?.querySelectorAll<HTMLTableRowElement>("tr.slate-row") ?? [])]
+      .find((row) => row.dataset.recordId === next.record_id);
+    if (mounted) mounted.scrollIntoView?.({ block: "nearest" });
+    else setSourceEditorFocus({ recordId: next.record_id });
+  }, [displayedDrafts, selectedRecordId, selectRecord]);
+
+  const shortcutActionsRef = useRef({ canUseSlate, saveAll, addBlank, nextSameScene, setIO, patchRecord, selected, playbackUrl, quickLookOpen, closeQuickLook, toggleQuickLook, focusQuickEntry, stepSelection });
   useEffect(() => {
-    shortcutActionsRef.current = { canUseSlate, saveAll, addBlank, nextSameScene, setIO, patchRecord, selected, playbackUrl, quickLookOpen, closeQuickLook, toggleQuickLook, floatingQuickOpen, focusQuickEntry, closeFloatingQuickEntry };
+    shortcutActionsRef.current = { canUseSlate, saveAll, addBlank, nextSameScene, setIO, patchRecord, selected, playbackUrl, quickLookOpen, closeQuickLook, toggleQuickLook, focusQuickEntry, stepSelection };
   });
 
   useEffect(() => {
@@ -1291,11 +1337,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         event.preventDefault();
         setTakePickerOpen(false);
         setTakeSearch("");
-        return;
-      }
-      if (event.key === "Escape" && shortcutActionsRef.current.floatingQuickOpen) {
-        event.preventDefault();
-        shortcutActionsRef.current.closeFloatingQuickEntry();
         return;
       }
       if (event.key === "Escape" && shortcutActionsRef.current.quickLookOpen) {
@@ -1314,6 +1355,11 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") { event.preventDefault(); shortcutActionsRef.current.addBlank(); return; }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d") { event.preventDefault(); shortcutActionsRef.current.nextSameScene(); return; }
       if (!editing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          event.preventDefault();
+          shortcutActionsRef.current.stepSelection(event.key === "ArrowUp" ? -1 : 1);
+          return;
+        }
         if (event.key.toLowerCase() === "i") { event.preventDefault(); shortcutActionsRef.current.setIO("in"); return; }
         if (event.key.toLowerCase() === "o") { event.preventDefault(); shortcutActionsRef.current.setIO("out"); return; }
         const currentSelected = shortcutActionsRef.current.selected;
@@ -1358,7 +1404,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     return <DraftSlateRow key={draft.record_id} draft={draft} rowNumber={(displayIndexByRecord.get(draft.record_id) ?? -1) + 1}
       selected={selected} selectedClip={selected ? selectedClipId : undefined} cameraColumns={cameraColumns} mediaCell={mediaCell}
       revealRow={previewsActive && sourceEditorFocus?.recordId === draft.record_id ? revealRow : undefined}
-      onSelect={selectRecord} onPatch={patchRecord} onEditStart={startEdit} onEditEnd={endEdit} />;
+      onSelect={selectRecord} onPatch={patchRecord} onQuickParse={applyQuickEntryForRow} onEditStart={startEdit} onEditEnd={endEdit} />;
   }
 
   function section(title: string, rows: Draft[], tone: "placed" | "unplaced", showHeader = true) {
@@ -1368,9 +1414,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         {showHeader ? <header><span className="section-dot" /><strong>{title}</strong><small>{rows.length} 条</small></header> : null}
         <div className="golden-slate-section-scroll">
           <table className="golden-slate-table">
-            <thead><SlateTableHead cameraColumns={cameraColumns} /></thead>
+            <thead><SlateTableHead cameraColumns={cameraColumns} columnWidths={columnWidths} onResizeColumn={resizeColumn} onResetColumnWidth={resetColumnWidth} /></thead>
             {rows.length <= 60 ? <tbody>{rows.map(renderRow)}</tbody> : (
-              <VirtualizedSlateTbody rows={rows} columns={6 + cameraColumns.length} active={previewsActive}
+              <VirtualizedSlateTbody rows={rows} columns={7 + cameraColumns.length} active={previewsActive}
                 revealId={sourceEditorFocus?.recordId} renderRow={renderRow} />
             )}
           </table>
@@ -1422,10 +1468,15 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
               onClick={toggleQuickLook}
             >快速预览</button>
             <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>检视</button>
-            <button ref={quickTriggerRef} type="button" className="icon-action quick-entry-trigger" onClick={focusQuickEntry} aria-label="快录" title="快录（/）">快录 /</button>
+            <button type="button" className="secondary" onClick={focusQuickEntry} aria-label="备注与快录" title="聚焦当前行备注/快录 (/)">备注 /</button>
+            <button type="button" className="secondary" onClick={nextSameScene}>同场下一条</button>
+            <button type="button" className="secondary" onClick={inheritPrevious}>同上</button>
+            <button type="button" onClick={() => addBlank()}>空白</button>
           </div>
         </div>
         <div className="golden-slate-actions golden-slate-subbar-right" role="group" aria-label="场记辅助操作">
+          {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={() => setHideNgRows((value) => !value)}>隐藏 NG ({ngCount})</button> : null}
+          {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={() => setShowAuxColumn((value) => !value)} title="显示或隐藏空的 AUX 列">AUX 列</button> : null}
           <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>从 Take 加入</button>
           <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="刷新场记">刷新场记</button>
           <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} onSelect={setPaperSource} />
@@ -1468,15 +1519,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           ) : placedDrafts.length ? section("已按剧本归位", placedDrafts, "placed") : unplacedDrafts.length ? section("待标记 · 保持 XML 顺序", unplacedDrafts, "unplaced") : (
             <div className="golden-slate-empty"><strong>从 Take 加入第一条多机位场记</strong><span>A / B / C 会落在同一行；场号、镜号、次号只记录一次。</span><div><button type="button" onClick={() => setTakePickerOpen(true)}>从 Take 加入</button><button type="button" className="secondary" onClick={() => addBlank()}>新建空白场记</button></div></div>
           )}
-          {!inspectorOpen && floatingQuickOpen ? (
-            <section className="golden-slate-quick golden-slate-quick-floating" aria-label="快录">
-              <input ref={floatingQuickInputRef} value={quickText} onChange={(event) => setQuickText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void applyQuickEntry(); } if (event.key === "Escape") { event.preventDefault(); closeFloatingQuickEntry(); } }} placeholder="看画面快录：EP3 12场 B近 可用 / 同场下一条 C中" />
-              <button type="button" className="quick-fill" disabled={!selected || busy || !quickText.trim()} onClick={() => void applyQuickEntry()}>填入</button>
-              <button type="button" className="secondary" onClick={nextSameScene}>同场下一条</button>
-              <button type="button" className="secondary" onClick={inheritPrevious}>同上</button>
-              <button type="button" onClick={() => addBlank()}>空白</button>
-            </section>
-          ) : null}
         </div>
 
           <aside className="golden-slate-inspector" hidden={!inspectorOpen}>
@@ -1504,14 +1546,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                   ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                   {quickLookOpen && <footer><span>{selected.note || selectedTake?.transcript.text || "快捷键：1 可用 · 2 部分 · 3 NG · ⌘D 连拍下一条"}</span></footer>}
                 </div>
-                <div className="golden-inspector-head golden-inspector-meta"><div><span>EP {selected.episode ?? "—"} / 场 {selected.scene || selected.script_scene_id || "—"} / 镜 {selected.shot || "—"} / 次 {selected.take_number ?? "—"}</span></div>{selected.dirty ? <em>未保存</em> : null}</div>
-                {inspectorOpen ? <section className="golden-slate-quick golden-slate-quick-inline" aria-label="快录">
-                  <input ref={inlineQuickInputRef} value={quickText} onChange={(event) => setQuickText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void applyQuickEntry(); } }} placeholder="看画面快录：EP3 12场 B近 可用 / 同场下一条 C中" />
-                  <button type="button" className="quick-fill" disabled={!selected || busy || !quickText.trim()} onClick={() => void applyQuickEntry()}>填入</button>
-                  <button type="button" className="secondary" onClick={nextSameScene}>同场下一条</button>
-                  <button type="button" className="secondary" onClick={inheritPrevious}>同上</button>
-                  <button type="button" onClick={() => addBlank()}>空白</button>
-                </section> : null}
+                <div className="golden-inspector-head golden-inspector-meta"><div><span>EP {selected.episode ?? "—"} / 场 {selected.scene || selected.script_scene_id || "—"} / 镜 {selected.shot || "—"} / 次 {selected.take_number ?? "—"}</span>{selectedFilename ? <span className="golden-inspector-filename" title={selectedFilename}>{selectedFilename}</span> : null}</div>{selected.dirty ? <em>未保存</em> : null}</div>
                 {clipId ? (
                   <div className="golden-clapper-bar">
                     <button
@@ -1570,6 +1605,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                       + {tag}
                     </button>
                   ))}
+                  <button type="button" className="secondary" onClick={markSelectedMisrecorded}>标为误录</button>
                 </div>
                 <label className="golden-inspector-field"><span>备注</span><textarea rows={4} value={selected.note} onChange={(event) => patchRecord(selected.record_id, { note: event.target.value })} placeholder="场记原话、可用范围描述、连续性提醒…" /></label>
                 <div className="golden-inspector-link"><span>关联</span><strong>{selectedTake ? `Take ${selectedTake.take_index}` : selected.source_group_id ? "关联 Take" : "独立场记"}</strong>{selected.script_scene_id ? <small>剧本场景 · {selected.script_scene_id}</small> : null}<small>{selectedTake?.transcript.text || "没有 Take 转写证据"}</small></div>

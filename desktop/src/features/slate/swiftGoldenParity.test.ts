@@ -81,7 +81,7 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain('aria-label="刷新场记"');
     expect(slate).not.toContain("quick-mic");
     expect(css).not.toContain(".quick-mic");
-    expect(css).toContain("grid-template-columns: minmax(180px,1fr) auto auto auto auto");
+    expect(css).toContain(".golden-slate-table .col-note");
     expect(slate).toContain("shortcutActionsRef");
     expect(slate).toContain('globalThis.addEventListener("keydown", keydown)');
     expect(slate).toContain('if (event.key === "Escape" && takePickerOpen)');

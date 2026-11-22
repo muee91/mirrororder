@@ -239,7 +239,6 @@ input:not([type="checkbox"]):not([type="radio"]), textarea, select {
 /* Slate remains a production ledger, not a card dashboard. */
 .golden-slate-workbench { color: var(--mo-text-primary); background: var(--mo-surface-app); }
 .golden-slate-subbar,
-.golden-slate-quick,
 .golden-slate-section > header,
 .golden-slate-inspector,
 .golden-slate-footer,
@@ -253,8 +252,6 @@ input:not([type="checkbox"]):not([type="radio"]), textarea, select {
 .golden-inspector-head em { font-size: var(--mo-font-xs); }
 .golden-slate-actions input,
 .golden-slate-actions button,
-.golden-slate-quick input,
-.golden-slate-quick button,
 .golden-slate-subbar button { font-size: var(--mo-font-sm); }
 
 .golden-slate-table { font-size: var(--mo-font-sm); }
@@ -773,8 +770,6 @@ input[type="radio"] {
   padding: 0 14px;
   background: var(--mo-surface-pane);
 }
-.golden-slate-quick { height: 34px; border-bottom-color: var(--mo-border-subtle); padding: 0 10px; background: var(--mo-surface-raised); }
-.golden-slate-quick input { font-size: 12px; }
 .golden-slate-table th { border-right: 0; border-color: var(--mo-border-subtle); background: var(--mo-surface-raised); color: var(--mo-text-muted); }
 .golden-slate-table td { border-right: 0; border-color: var(--mo-border-subtle); background: var(--mo-surface-pane); }
 .golden-slate-table tr:hover td { background: var(--mo-surface-hover); }
@@ -931,7 +926,6 @@ input[type="radio"] {
 html[data-mirrororder-theme="dark"] .golden-slate-workbench,
 html[data-mirrororder-theme="dark"] .golden-slate-table td { color: var(--mo-text-primary); background: var(--mo-surface-pane); }
 html[data-mirrororder-theme="dark"] .golden-slate-subbar,
-html[data-mirrororder-theme="dark"] .golden-slate-quick,
 html[data-mirrororder-theme="dark"] .golden-slate-section > header,
 html[data-mirrororder-theme="dark"] .golden-inspector-meta { border-color: transparent; background: transparent; }
 html[data-mirrororder-theme="dark"] .golden-slate-inspector { border-color: var(--mo-border-subtle); background: var(--mo-surface-pane); }
@@ -947,7 +941,6 @@ html[data-mirrororder-theme="dark"] .golden-slate-empty-media { border-color: va
 html[data-mirrororder-theme="light"] .golden-slate-workbench,
 html[data-mirrororder-theme="light"] .golden-slate-table td { color: var(--mo-text-primary); background: var(--mo-surface-pane); }
 html[data-mirrororder-theme="light"] .golden-slate-subbar,
-html[data-mirrororder-theme="light"] .golden-slate-quick,
 html[data-mirrororder-theme="light"] .golden-slate-section > header,
 html[data-mirrororder-theme="light"] .golden-inspector-meta { border-color: transparent; background: transparent; }
 html[data-mirrororder-theme="light"] .golden-slate-inspector { border-color: var(--mo-border-subtle); background: var(--mo-surface-pane); }
@@ -1425,22 +1418,6 @@ html[data-mirrororder-theme] .golden-slate-subbar .slate-paper-intake > button:h
   color: var(--mo-text-primary);
   background: var(--mo-surface-hover);
 }
-html[data-mirrororder-theme] .golden-slate-quick input {
-  border: 0;
-  border-bottom: 1px solid var(--mo-border-default);
-  border-radius: 0;
-  color: var(--mo-text-primary);
-  background: transparent;
-}
-html[data-mirrororder-theme] .golden-slate-quick input:focus {
-  border-bottom-color: var(--mo-accent);
-  background: transparent;
-}
-html[data-mirrororder-theme="light"] .golden-slate-quick-floating {
-  border-color: var(--mo-border-default);
-  background: var(--mo-surface-elevated);
-}
-
 html[data-macos-overlay="true"] .professional-project-toolbar,
 html[data-macos-overlay="true"] .app-global-topbar {
   padding-inline-start: 28px;

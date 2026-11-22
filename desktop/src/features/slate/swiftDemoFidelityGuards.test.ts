@@ -40,7 +40,7 @@ describe("Swift Demo fidelity guards", () => {
     expect(experience).toContain(".assistant-context-drawer");
     expect(slate).not.toContain("quick-mic");
     expect(slateCss).not.toContain(".quick-mic");
-    expect(slateCss).toContain("grid-template-columns: minmax(180px,1fr) auto auto auto auto");
+    expect(slateCss).toContain(".golden-slate-table .col-note");
   });
 
   it("keeps Material and Script readable at the Swift usability floor without reviving shared-workbench styling", () => {

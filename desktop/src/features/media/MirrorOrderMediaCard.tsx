@@ -103,6 +103,15 @@ function sourceRoleLabel(value?: string): string {
   return SOURCE_ROLE_LABELS[value] ?? value;
 }
 
+export function formatCompactMediaName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  const stem = trimmed.replace(/\.(mov|mp4|mxf|wav|m4v|r3d|braw|avi|mkv|mpg|mpeg)$/i, "");
+  const withoutDates = stem.replace(/[_-](\d{6}|\d{8,14})(?=[_A-Za-z-]|$)/g, "…").replace(/…+/g, "…");
+  if (withoutDates.length <= 15) return withoutDates;
+  return `${withoutDates.slice(0, 8)}…${withoutDates.slice(-5)}`;
+}
+
 const compactPreviewOptions = { rootMargin: "48px 96px" };
 function observeCompactPreview(element: Element, listener: (visible: boolean) => void): () => void {
   return observeNearViewport(element, listener, compactPreviewOptions.rootMargin,
@@ -204,7 +213,7 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
       </div>
       <div className="mo-media-copy">
         <div className="mo-media-topline">
-          <span className="mo-media-name" title={model.name}>{model.name}</span>
+          <span className="mo-media-name" title={model.name}>{compact ? formatCompactMediaName(model.name) : model.name}</span>
           <span className="mo-media-count-slot">{model.duplicateCount && model.duplicateCount > 1 ? `×${model.duplicateCount}` : ""}</span>
         </div>
         <span className={`mo-media-shot ${!model.shotType || model.shotType === "unknown" ? "is-unknown" : ""}`}>{shotLabel(model.shotType)}</span>

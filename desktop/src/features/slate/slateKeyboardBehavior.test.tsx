@@ -91,6 +91,7 @@ describe("SlateRow keyboard selection", () => {
     shot: "2",
     takeNumber: null,
     status: "unmarked" as SlateRecord["status"] extends infer S ? S : never,
+    note: "",
   };
 
   it("selects the row via Enter/Space on the row itself, not from inner inputs", () => {

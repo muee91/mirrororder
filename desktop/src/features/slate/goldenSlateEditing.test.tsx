@@ -29,40 +29,45 @@ const scene=(id:string)=>row(id).querySelectorAll<HTMLInputElement>('input')[1];
 async function type(input:HTMLInputElement,value:string){await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));});}
 async function focus(input:HTMLInputElement){await act(async()=>input.focus());}
 async function enter(input:HTMLInputElement,isComposing=false){await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing,bubbles:true,cancelable:true})));}
-it('keeps Quick Entry 2 inline in the open Inspector and focuses it with slash', async () => {
-  const inspector = host.querySelector('.golden-slate-inspector')!;
-  const quick = inspector.querySelector<HTMLInputElement>('.golden-slate-quick input');
-  expect(quick).not.toBeNull();
-  expect(quick?.placeholder).toContain('看画面快录');
+it('uses the integrated note column, hides empty AUX, and focuses the selected note with slash', async () => {
+  expect(host.querySelector('.golden-slate-quick')).toBeNull();
+  expect(host.querySelector<HTMLTableRowElement>('.slate-row')?.dataset.slateColumns).not.toContain('camera-AUX');
+  expect(host.querySelector<HTMLInputElement>('.slate-row.is-selected td.col-note input')).not.toBeNull();
+  await largeBoard(200);
+  expect([...host.querySelectorAll<HTMLTableCellElement>('.slate-virtual-spacer td')].map((cell) => cell.colSpan)).toEqual([10, 10]);
   await act(async () => host.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })));
-  expect(document.activeElement).toBe(quick);
+  expect(document.activeElement).toBe(host.querySelector<HTMLInputElement>('.slate-row.is-selected td.col-note input'));
 });
 
-it('opens collapsed Quick Entry 2 as a focused floating island, applies Enter, and dismisses with Escape', async () => {
-  await clickButton('检视');
-  expect(host.querySelector('.golden-slate-inspector')?.hasAttribute('hidden')).toBe(true);
-  expect(host.querySelector('.golden-slate-quick')).toBeNull();
+it('commits plain notes without parsing and parses structured cues from the same note cell', async () => {
+  const input = row('b').querySelector<HTMLInputElement>('td.col-note input')!;
+  await focus(input);
+  await type(input, '结尾笑场');
+  await enter(input);
+  expect(parseSlate).not.toHaveBeenCalled();
+  expect(row('b').querySelector<HTMLInputElement>('td.col-note input')?.value).toBe('结尾笑场');
 
-  await clickButton('快录 /');
-  let floating = host.querySelector<HTMLInputElement>('.golden-slate-quick-floating input');
-  expect(floating).not.toBeNull();
-  expect(document.activeElement).toBe(floating);
-
-  await act(async () => floating!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
-  expect(host.querySelector('.golden-slate-quick-floating')).toBeNull();
-  expect(document.activeElement?.textContent).toBe('快录 /');
-
-  await act(async () => host.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true })));
-  floating = host.querySelector<HTMLInputElement>('.golden-slate-quick-floating input');
-  expect(floating).not.toBeNull();
-  expect(document.activeElement).toBe(floating);
-  await type(floating!, '12场 B近 可用');
-  await enter(floating!);
+  await type(row('b').querySelector<HTMLInputElement>('td.col-note input')!, '12场 B近 可用');
+  await enter(row('b').querySelector<HTMLInputElement>('td.col-note input')!);
   expect(parseSlate).toHaveBeenCalledWith('synthetic', '12场 B近 可用', expect.anything());
   expect(scene('b').value).toBe('12');
+  expect(row('b').querySelector<HTMLSelectElement>('.col-status select')?.value).toBe('usable');
+  expect(row('b').querySelector<HTMLInputElement>('td.col-note input')?.value).toBe('可用');
+});
 
-  await act(async () => host.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
-  expect(host.querySelector('.golden-slate-quick-floating')).toBeNull();
+it('steps visible rows, marks misrecorded NG, and hides and restores NG rows', async () => {
+  await act(async () => row('a').click());
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })));
+  expect(row('b').getAttribute('aria-current')).toBe('true');
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })));
+  expect(row('a').getAttribute('aria-current')).toBe('true');
+  await clickButton('标为误录');
+  expect(row('a').querySelector<HTMLSelectElement>('.col-status select')?.value).toBe('ng');
+  expect(row('a').querySelector<HTMLInputElement>('td.col-note input')?.value).toContain('误录');
+  await clickButton('隐藏 NG (1)');
+  expect(row('a')).toBeNull();
+  await clickButton('隐藏 NG (1)');
+  expect(row('a')).not.toBeNull();
 });
 
 it('retains the same focused DOM input while an unplaced row crosses buckets, then commits grouping on Enter',async()=>{
