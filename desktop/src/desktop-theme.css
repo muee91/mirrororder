@@ -22,9 +22,9 @@ html[data-mirrororder-theme="light"] .project-library-section-heading,
 html[data-mirrororder-theme="light"] .project-library-global-tools { border-color: #d9e0e6; }
 html[data-mirrororder-theme="light"] .workspace-control[open] > summary,
 html[data-mirrororder-theme="light"] .workspace-control-body { background: #f0f3f5; }
-html[data-mirrororder-theme="light"] .workspace-control-body input,
-html[data-mirrororder-theme="light"] .workspace-advanced input,
-html[data-mirrororder-theme="light"] input,
+html[data-mirrororder-theme="light"] .workspace-control-body input:not([type="checkbox"]):not([type="radio"]),
+html[data-mirrororder-theme="light"] .workspace-advanced input:not([type="checkbox"]):not([type="radio"]),
+html[data-mirrororder-theme="light"] input:not([type="checkbox"]):not([type="radio"]),
 html[data-mirrororder-theme="light"] textarea,
 html[data-mirrororder-theme="light"] select { border-color: #cfd7df; color: #27313a; background: #fff; }
 html[data-mirrororder-theme="light"] button.secondary { border-color: #cfd7df; color: #46535f; background: #f2f5f7; }
@@ -101,9 +101,9 @@ html[data-mirrororder-theme="dark"] .project-library-section-heading,
 html[data-mirrororder-theme="dark"] .project-library-global-tools { border-color: #222930; }
 html[data-mirrororder-theme="dark"] .workspace-control[open] > summary { border-color: #222930; background: #12181d; }
 html[data-mirrororder-theme="dark"] .workspace-control-body { background: #10151a; }
-html[data-mirrororder-theme="dark"] .workspace-control-body input,
-html[data-mirrororder-theme="dark"] .workspace-advanced input,
-html[data-mirrororder-theme="dark"] input,
+html[data-mirrororder-theme="dark"] .workspace-control-body input:not([type="checkbox"]):not([type="radio"]),
+html[data-mirrororder-theme="dark"] .workspace-advanced input:not([type="checkbox"]):not([type="radio"]),
+html[data-mirrororder-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
 html[data-mirrororder-theme="dark"] textarea,
 html[data-mirrororder-theme="dark"] select { border-color: #303944; color: #d8dfe5; background: #0e1317; }
 html[data-mirrororder-theme="dark"] button.secondary { border-color: #343e48; color: #d1d8de; background: #171d23; }

@@ -1,5 +1,10 @@
 .review-workspace-toolbar {
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.review-primary-canvas {
+  min-width: 0;
 }
 
 .review-queue-summary {

@@ -18,6 +18,13 @@
   flex-wrap: wrap;
 }
 
+.identity-workbench .identity-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
 .identity-workbench .identity-toolbar-status {
   min-width: 0;
   flex: 1 1 220px;
@@ -187,6 +194,7 @@
 
 .identity-merge-suggestions {
   grid-column: 1 / -1;
+  margin: 8px 14px 0;
   border: 1px solid color-mix(in srgb, var(--mo-warning, #d0aa54) 42%, var(--mo-border-default, #29333d));
   border-radius: 6px;
   padding: 9px 12px;

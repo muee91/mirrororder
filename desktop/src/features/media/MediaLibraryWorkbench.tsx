@@ -906,9 +906,6 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
             <strong>{camera.label}</strong><small>{camera.count}</small>
           </button>
         ))}
-        {onOpenMediaBinding ? (
-          <button type="button" className="secondary media-library-relink-link" onClick={onOpenMediaBinding}>硬盘重连</button>
-        ) : null}
       </div>
 
       <div className="media-library-layout">
@@ -992,10 +989,6 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           ) : <p className="empty-copy">选择一条素材即可监看并整理机位。</p>}
         </aside>
       </div>
-
-      {onOpenMediaBinding ? (
-        <div className="media-binding-disclosure"><button type="button" className="secondary" aria-label="打开素材恢复" onClick={onOpenMediaBinding}>素材离线或换盘？打开素材恢复</button></div>
-      ) : null}
     </section>
   );
 }

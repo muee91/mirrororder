@@ -178,7 +178,8 @@
   justify-content: space-between;
   gap: 6px 14px;
   min-height: 36px;
-  padding: 4px 12px;
+  margin: 0;
+  padding: 4px 14px;
   border-bottom: 1px solid var(--mo-border-subtle);
 }
 .sync-master-heading, .multicam-sync-inspection-meta { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -191,6 +192,9 @@
 }
 .multicam-sync-inspection-meta { flex-wrap: wrap; gap: 6px; }
 .multicam-sync-inspection-meta > button, .sync-monitor-pair > select {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   min-height: 30px;
   padding: 4px 10px;
   border-radius: var(--sync-monitor-control);

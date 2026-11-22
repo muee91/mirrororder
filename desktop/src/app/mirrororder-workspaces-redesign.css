@@ -174,6 +174,43 @@
   box-shadow: inset 3px 0 0 var(--mo-accent);
 }
 
+.mirrororder-redesign-shell .media-library-list.is-list .media-library-row-wrap {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  background: transparent;
+}
+.mirrororder-redesign-shell .media-library-list.is-list .media-library-row-wrap:last-of-type { border-bottom: 0; }
+.mirrororder-redesign-shell .media-library-list.is-list .media-library-row-wrap:hover { background: var(--mo-surface-hover); }
+.mirrororder-redesign-shell .media-library-list.is-list .media-library-row-wrap:has(> .media-library-row.is-selected) {
+  background: var(--mo-accent-soft);
+  box-shadow: inset 3px 0 0 var(--mo-accent);
+}
+.mirrororder-redesign-shell .media-library-list.is-list .media-library-row {
+  border-bottom: 0;
+  background: transparent;
+}
+.mirrororder-redesign-shell .media-library-list.is-list .media-library-row:hover,
+.mirrororder-redesign-shell .media-library-list.is-list .media-library-row.is-selected {
+  background: transparent;
+  box-shadow: none;
+}
+.mirrororder-redesign-shell .media-library-list.is-grid .media-library-row-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.mirrororder-redesign-shell .media-library-list.is-grid .media-library-row-wrap > input[type="checkbox"] {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 4;
+  margin: 0;
+  background: color-mix(in srgb, var(--mo-surface-pane) 90%, transparent);
+}
+
 .mirrororder-redesign-shell .media-library-row .media-library-name strong,
 .mirrororder-redesign-shell .media-library-row .media-library-role strong { color: var(--mo-text); }
 .mirrororder-redesign-shell .media-library-row small { color: var(--mo-text-3); }
@@ -205,16 +242,6 @@
   background: var(--mo-accent);
   color: #fff;
   font-weight: 650;
-}
-
-.mirrororder-redesign-shell .media-binding-disclosure {
-  min-height: 42px;
-  padding: 6px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  border-top: 1px solid var(--mo-border);
-  background: var(--mo-surface-soft);
 }
 
 /* Identity */
@@ -466,7 +493,8 @@
   padding: 0 10px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  white-space: nowrap;
   border-radius: 6px;
   font-size: 10px;
 }

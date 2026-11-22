@@ -17,6 +17,6 @@ describe("Media Library responsive operator workflow", () => {
     const styles = source("./media-library.css");
     expect(styles).toContain("flex-wrap: wrap");
     expect(styles).toContain(".media-library-bulk > span[aria-live]");
-    expect(styles).toContain(".media-library-bulk { width: 100%; margin-left: 0; }");
+    expect(styles).toContain(".media-library-bulk { width: auto; margin: 8px 14px 0; }");
   });
 });

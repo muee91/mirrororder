@@ -39,7 +39,7 @@ input, textarea, select { outline: none; }
 .workspace-control[open] > summary { border-bottom: 1px solid #222930; background: #12181d; }
 .workspace-control-body { display: grid; gap: 8px; padding: 10px; background: #10151a; }
 .workspace-control-body label, .workspace-advanced label { display: grid; gap: 4px; color: #687581; font-size: 10px; }
-.workspace-control-body input, .workspace-advanced input { width: 100%; min-width: 0; border: 1px solid #2e3740; border-radius: 6px; padding: 6px 7px; color: #cfd6dc; background: #0b1014; font-size: 10px; }
+.workspace-control-body input:not([type="checkbox"]):not([type="radio"]), .workspace-advanced input:not([type="checkbox"]):not([type="radio"]) { width: 100%; min-width: 0; border: 1px solid #2e3740; border-radius: 6px; padding: 6px 7px; color: #cfd6dc; background: #0b1014; font-size: 10px; }
 .workspace-control-actions { display: flex; gap: 6px; }
 .workspace-control-actions button, .workspace-advanced button { flex: 1; padding: 5px 6px; font-size: 10px; }
 .workspace-advanced { border-top: 1px solid #252d35; padding-top: 7px; }
@@ -75,7 +75,7 @@ input, textarea, select { outline: none; }
   .workspace-control { border-color: #d9e0e6; }
   .workspace-control[open] > summary { border-color: #d9e0e6; background: #e9edf1; }
   .workspace-control-body { background: #f0f3f5; }
-  .workspace-control-body input, .workspace-advanced input { border-color: #cfd7df; color: #27313a; background: #fff; }
+  .workspace-control-body input:not([type="checkbox"]):not([type="radio"]), .workspace-advanced input:not([type="checkbox"]):not([type="radio"]) { border-color: #cfd7df; color: #27313a; background: #fff; }
   .app-notice { border-color: #d2d9df; color: #66727d; background: rgba(255, 255, 255, .94); }
   .primary-empty h2, .primary-empty strong { color: #2a3540; }
 }

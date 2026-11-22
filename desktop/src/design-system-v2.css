@@ -131,7 +131,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
-input, textarea, select {
+input:not([type="checkbox"]):not([type="radio"]), textarea, select {
   border-color: var(--mo-border-default);
   border-radius: var(--mo-radius-control);
   color: var(--mo-text-primary);
@@ -205,11 +205,11 @@ input, textarea, select {
 .workspace-advanced > summary,
 .workspace-control-actions button,
 .workspace-advanced button,
-.workspace-control-body input,
-.workspace-advanced input { font-size: var(--mo-font-xs); }
+.workspace-control-body input:not([type="checkbox"]):not([type="radio"]),
+.workspace-advanced input:not([type="checkbox"]):not([type="radio"]) { font-size: var(--mo-font-xs); }
 .workspace-control > summary { min-height: 40px; }
-.workspace-control-body input,
-.workspace-advanced input { min-height: var(--mo-control-sm); }
+.workspace-control-body input:not([type="checkbox"]):not([type="radio"]),
+.workspace-advanced input:not([type="checkbox"]):not([type="radio"]) { min-height: var(--mo-control-sm); }
 
 .count-pill { font-size: var(--mo-font-xs); }
 
@@ -389,7 +389,7 @@ button.secondary:hover:not(:disabled) {
   background: var(--mo-surface-hover);
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   border-color: var(--mo-border-default);
@@ -689,8 +689,12 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 .material-take-filters button,
 .media-library-filters button,
 .media-library-view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
   min-height: 30px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 4px;
   padding-inline: 10px;
   color: var(--mo-text-muted);
@@ -703,7 +707,8 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 .media-library-view-toggle button.is-active {
   color: var(--mo-text-primary);
   background: var(--mo-surface-selected);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .14);
+  border-color: color-mix(in srgb, var(--mo-accent) 24%, var(--mo-border-default));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .12);
 }
 
 .script-search,
@@ -720,9 +725,9 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 
 .script-episode-bar,
 .script-coverage-summary { border-color: var(--mo-border-subtle); }
-.script-episode-bar { margin: 10px 14px 0; border-radius: 6px; background: var(--mo-surface-pane); box-shadow: var(--mo-shadow-panel); }
+.script-episode-bar { margin: 10px 14px 0; border-radius: 6px; background: var(--mo-surface-pane); box-shadow: var(--mo-shadow-panel); padding-inline: 10px; }
 .script-episode-bar:has(.episode-strip:empty) { display: none; }
-.script-coverage-summary { margin-inline: 14px; }
+.script-coverage-summary { margin-inline: 14px; padding-inline: 10px; }
 
 /* Material, media and inspector hierarchy */
 .material-view-canvas { padding: 0 14px 22px; overflow: auto; }
@@ -750,6 +755,15 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 .identity-toolbar { margin: 10px 14px 0; }
 .identity-grid { margin: 10px 14px 14px; gap: 10px; }
 .identity-grid > * { padding: 14px; }
+
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
 
 /* Slate ledger: the table remains dense, but its shell reads as a modern edit surface. */
 .golden-slate-workbench { background: var(--mo-surface-app); }
@@ -903,6 +917,14 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
   .identity-grid { margin-inline: 14px; }
 }
 
+@media (max-width: 900px) {
+  .media-library-toolbar,
+  .media-library-layout,
+  .media-library-camera-strip,
+  .media-library-bulk,
+  .media-library-scene-readiness { margin-inline: 14px; }
+}
+
 /* Resolved-theme authority for the Slate ledger. The legacy theme sheet uses
  * root-prefixed selectors, so these rules keep the OpenDesign direction intact
  * for explicit Light/Dark choices without touching the canonical renderer. */
@@ -1004,7 +1026,7 @@ html[data-mirrororder-theme] .project-recent-list small,
 html[data-mirrororder-theme] .project-nav-section-label,
 html[data-mirrororder-theme] .app-global-context > span { color: var(--mo-text-muted); }
 html[data-mirrororder-theme] button.secondary,
-html[data-mirrororder-theme] input,
+html[data-mirrororder-theme] input:not([type="checkbox"]):not([type="radio"]),
 html[data-mirrororder-theme] select,
 html[data-mirrororder-theme] textarea {
   border-color: var(--mo-border-default);
@@ -1021,8 +1043,18 @@ html[data-mirrororder-theme] .media-library-filters button.is-active,
 html[data-mirrororder-theme] .media-library-view-toggle button.is-active {
   border-color: color-mix(in srgb, var(--mo-accent) 34%, var(--mo-border-default));
   color: var(--mo-text-primary);
-  background: var(--mo-accent-soft);
-  box-shadow: inset 0 -2px 0 var(--mo-accent);
+  background: var(--mo-surface-selected);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .12);
+}
+html[data-mirrororder-theme="dark"] .media-library-relink.is-warning {
+  border-color: rgba(214, 183, 101, 0.45);
+  color: var(--mo-warning, #d6b765);
+  background: rgba(214, 183, 101, 0.12);
+}
+html[data-mirrororder-theme="light"] .media-library-relink.is-warning {
+  border-color: rgba(180, 118, 12, 0.4);
+  color: #9a5b00;
+  background: rgba(245, 194, 73, 0.16);
 }
 html[data-mirrororder-theme] .project-context-menu,
 html[data-mirrororder-theme] .app-workspace-menu-popover,

@@ -119,6 +119,23 @@ describe("media library experience contract", () => {
     expect(workbench).toContain('className="media-library-row-wrap" key={item.media_id} role="listitem"');
   });
 
+  it("keeps one global reconnect action and contextual recovery actions only", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain("media-library-relink");
+    expect(workbench.match(/media-library-relink/g) ?? []).toHaveLength(1);
+    expect(workbench).not.toContain("硬盘重连");
+    expect(workbench).not.toContain("media-binding-disclosure");
+  });
+
+  it("keeps checkbox geometry and list selection owned by the media row shell", () => {
+    const styles = source("./media-library.css");
+    expect(styles).toContain("appearance: none");
+    expect(styles).toContain("grid-template-columns: 38px minmax(0, 1fr)");
+    expect(styles).toContain(":has(> .media-library-row.is-selected)");
+    expect(styles).toContain(".media-library-camera-strip");
+    expect(styles).toContain("margin: 8px 14px 0");
+  });
+
   it("exposes scene list expansion state to assistive technology", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("className=\"media-library-scene-more\" aria-expanded={showAllScenes}");
