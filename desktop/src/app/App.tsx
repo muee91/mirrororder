@@ -158,10 +158,11 @@ export function App() {
     if (projectId.trim()) setProjectSyncStatus({ projectId, ready, phase });
   }, []);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
-  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次工作区…" : "");
+  const [message, setMessage] = useState(launchResume.workspacePath ? "准备恢复上次项目库…" : "");
   const [noticeVisible, setNoticeVisible] = useState(false);
   const [resumeEnabledForSession, setResumeEnabledForSession] = useState(false);
   const resumeTaskRef = useRef<Promise<HostSnapshot> | null>(null);
+  const defaultLibraryInitRef = useRef(false);
   const [connectionLifetime, setConnectionLifetime] = useState(() => ({ version: 0, controller: new AbortController() }));
   const activeConnectionLifetime = useRef(connectionLifetime);
   const [slateDrafts] = useState(() => new Map<string, PendingSlateDrafts>());
@@ -277,7 +278,7 @@ export function App() {
     let active = true;
     const attempt = beginWorkspaceConnection();
     setState("starting");
-    setMessage("正在恢复上次工作区…");
+    setMessage("正在恢复上次项目库…");
     const task = resumeTaskRef.current ?? new HostConnection(defaultHostBaseUrl).startAndConnect(launchResume.workspacePath);
     resumeTaskRef.current = task;
     void task.then((next) => {
@@ -299,7 +300,7 @@ export function App() {
       setRecentWorkspaces(loadRecentWorkspaces());
       setMessage(rememberedProject
         ? `已恢复 · ${rememberedProject.name || rememberedProject.project_id} · ${pageTitle(rememberedPage)}`
-        : `工作区已恢复 · ${next.projects.length} 个项目`);
+        : `项目库已恢复 · ${next.projects.length} 个项目`);
     }).catch((error: unknown) => {
       if (!active || attempt.aborted) return;
       setActiveWorkspacePath("");
@@ -310,17 +311,24 @@ export function App() {
       setProjectSyncStatus(null);
       setResumeEnabledForSession(false);
       setState("error");
-      setMessage(`无法恢复上次工作区：${errorMessage(error)}`);
+      setMessage(`无法恢复上次项目库：${errorMessage(error)}`);
     });
     return () => { active = false; };
   }, [launchResume.projectId, launchResume.workspacePath]);
+
+  useEffect(() => {
+    if (isTauri() && !launchResume.workspacePath && recentWorkspaces.length === 0 && !snapshot && !defaultLibraryInitRef.current) {
+      defaultLibraryInitRef.current = true;
+      void openDefaultProjectLibrary();
+    }
+  }, [launchResume.workspacePath, recentWorkspaces.length, snapshot]);
 
   async function openWorkspacePath(path: string): Promise<void> {
     const resolved = normalizeWorkspaceSelection(path);
     const normalizedPath = resolved.workspacePath;
     if (!normalizedPath) {
       setState("error");
-      setMessage("先选择工作区目录或文件。");
+      setMessage("先选择项目库目录或文件。");
       return;
     }
     const previousSnapshot = snapshot;
@@ -331,7 +339,7 @@ export function App() {
     const attempt = beginWorkspaceConnection();
     setWorkspacePath(normalizedPath);
     setState("starting");
-    setMessage(resolved.targetProjectId ? "已定位到项目所属工作区，正在打开…" : "正在打开工作区…");
+    setMessage(resolved.targetProjectId ? "已定位到项目所属项目库，正在打开…" : "正在打开项目库…");
     try {
       const next = await new HostConnection(defaultHostBaseUrl).startAndConnect(normalizedPath);
       if (attempt.aborted) return;
@@ -353,7 +361,7 @@ export function App() {
       setRecentWorkspaces(loadRecentWorkspaces());
       setMessage(targetProject
         ? `已打开工程 · ${targetProject.name || targetProject.project_id}`
-        : `工作区已就绪 · ${next.projects.length} 个项目`);
+        : `项目库已就绪 · ${next.projects.length} 个项目`);
     } catch (error) {
       if (attempt.aborted) return;
       const recovered = await verifiedPreviousWorkspace(previousSnapshot);
@@ -370,7 +378,7 @@ export function App() {
         setProjectSyncStatus(null);
         setSurface(previousSurface === "production" && !project ? "projects" : previousSurface);
         setState("connected");
-        setMessage(`未能切换工作区：${errorMessage(error)} · 当前工作现场保持打开`);
+        setMessage(`未能切换项目库：${errorMessage(error)} · 当前工作现场保持打开`);
       } else {
         setActiveWorkspacePath("");
         setSnapshot(null);
@@ -380,33 +388,49 @@ export function App() {
         setProjectSyncStatus(null);
         setResumeEnabledForSession(false);
         setState("error");
-        setMessage(`${errorMessage(error)}${previousSnapshot ? " · 原工作区连接未确认，已断开" : ""}`);
+        setMessage(`${errorMessage(error)}${previousSnapshot ? " · 原项目库连接未确认，已断开" : ""}`);
       }
+    }
+  }
+
+  async function openDefaultProjectLibrary(): Promise<void> {
+    const previousSnapshot = snapshot;
+    const attempt = beginWorkspaceConnection();
+    setState("starting");
+    setMessage("正在打开本机项目库…");
+    try {
+      const defaultPath = await HostConnection.ensureDefaultProjectLibrary();
+      if (attempt.aborted) return;
+      await openWorkspacePath(defaultPath);
+    } catch (error) {
+      if (attempt.aborted) return;
+      setState(previousSnapshot ? "connected" : "error");
+      setMessage(`无法打开本机项目库：${errorMessage(error)}${previousSnapshot ? " · 当前工作现场保持打开" : ""}`);
     }
   }
 
   async function chooseWorkspace(directory: boolean): Promise<void> {
     if (!isTauri()) {
-      setMessage("浏览器预览不能打开系统目录选择器；可在工作区菜单的高级连接中手动填写路径。");
+      setMessage("浏览器预览不能打开系统目录选择器；可在项目库菜单的高级连接中手动填写路径。");
       return;
     }
     try {
       const selected = await openDialog({
         directory,
         multiple: false,
-        title: directory ? "打开镜序工作区" : "打开镜序工作区文件",
+        title: directory ? "打开镜序项目库文件夹" : "打开项目库配置文件",
       });
       if (typeof selected === "string" && selected.trim()) await openWorkspacePath(selected);
     } catch (error) {
       if (!snapshot) setState("error");
-      setMessage(`选择工作区失败：${errorMessage(error)}`);
+      setMessage(`选择项目库失败：${errorMessage(error)}`);
     }
   }
 
   async function revealWorkspace(): Promise<void> {
     const target = snapshot ? activeWorkspacePath : workspacePath;
     if (!target.trim()) {
-      setMessage("当前工作区没有可定位的本机路径。");
+      setMessage("当前项目库没有可定位的本机路径。");
       return;
     }
     try {
@@ -450,8 +474,8 @@ export function App() {
       setMessage(project
         ? `已重新连接 · ${project.name || project.project_id}`
         : connectedWorkspacePath
-          ? `工作区已就绪 · ${next.projects.length} 个项目`
-          : `工作区已就绪 · ${next.projects.length} 个项目 · 本机路径未知`);
+          ? `项目库已就绪 · ${next.projects.length} 个项目`
+          : `项目库已就绪 · ${next.projects.length} 个项目 · 本机路径未知`);
     } catch (error) {
       if (attempt.aborted) return;
       const recovered = await verifiedPreviousWorkspace(previousSnapshot);
@@ -476,7 +500,7 @@ export function App() {
         setProjectSyncStatus(null);
         setResumeEnabledForSession(false);
         setState("error");
-        setMessage(`${errorMessage(error)}${previousSnapshot ? " · 原工作区连接未确认，已断开" : ""}`);
+        setMessage(`${errorMessage(error)}${previousSnapshot ? " · 原项目库连接未确认，已断开" : ""}`);
       }
     }
   }
@@ -503,12 +527,12 @@ export function App() {
       setProjectSyncStatus(null);
       setResumeEnabledForSession(false);
       setState("error");
-      setMessage("本机服务已切换到其他工作区，请重新连接原工作区。");
+      setMessage("本机服务已切换到其他项目库，请重新连接原项目库。");
       return;
     }
     const preferred = projectById(next, preferredProjectId);
     if (openProject && !preferred) {
-      throw new HostConnectionError("项目已保存，刷新后的工作区尚未找到该项目。");
+      throw new HostConnectionError("项目已保存，刷新后的项目库尚未找到该项目。");
     }
     const existing = selectedProject ? projectById(next, selectedProject.project_id) : null;
     const project = preferred ?? existing;
@@ -520,7 +544,7 @@ export function App() {
     }
     if (project && resumeEnabledForSession) rememberProject(project.project_id);
     setState("connected");
-    setMessage(project ? `项目已刷新 · ${project.name || project.project_id}` : `工作区已刷新 · ${next.projects.length} 个项目`);
+    setMessage(project ? `项目已刷新 · ${project.name || project.project_id}` : `项目库已刷新 · ${next.projects.length} 个项目`);
   }
 
   function selectProject(project: ProjectSummary): void {
@@ -615,7 +639,7 @@ export function App() {
   async function deleteProject(project: ProjectSummary): Promise<void> {
     if (!snapshot) return;
     const title = project.name || project.project_id;
-    const confirmed = globalThis.confirm(`永久删除项目“${title}”？\n\n会删除工作区内生成的项目目录、分析缓存和项目记录；原始媒体、剧本与 FCPXML 不会删除。`);
+    const confirmed = globalThis.confirm(`永久删除项目“${title}”？\n\n会删除项目库内生成的项目目录、分析缓存和项目记录；原始媒体、剧本与 FCPXML 不会删除。`);
     if (!confirmed) return;
     try {
       await new DesktopClient(snapshot.baseUrl).deleteProject(project.project_id);
@@ -674,7 +698,7 @@ export function App() {
         if (!activeSnapshot) return;
         const target = projectById(activeSnapshot, action.project_id ?? selectedProject?.project_id);
         if (!target) {
-          setMessage("小镜所指的项目不在当前工作区。");
+          setMessage("小镜所指的项目不在当前项目库。");
           return;
         }
         if (action.kind === "open_diagnostic") {
@@ -732,6 +756,7 @@ export function App() {
       onWorkspacePathChange={setWorkspacePath}
       onServiceAddressChange={setBaseUrl}
       onChooseWorkspace={(directory) => void chooseWorkspace(directory)}
+      onOpenDefaultLibrary={() => void openDefaultProjectLibrary()}
       onOpenPath={() => void openWorkspacePath(workspacePath)}
       recentWorkspaces={recentWorkspaces}
       onOpenRecent={(path) => void openWorkspacePath(path)}
@@ -766,20 +791,24 @@ export function App() {
     ? selectedProject.name || selectedProject.project_id
     : snapshot.workspace.workspace;
 
+  const displayLibraryPath = (path: string) => path.replace(/[\\/]workspace\.toml$/i, "") || path;
+  const displayLibraryName = (path: string) => displayLibraryPath(path).split(/[\\/]/).filter(Boolean).pop() || path;
+
   const workspaceMenuBody = (
     <>
       <div className="app-workspace-menu-heading">
         <span><strong>{snapshot.workspace.workspace}</strong><small>{connectionLabel(state)}</small></span>
-        {activeWorkspacePath.trim() ? <code title={activeWorkspacePath}>{activeWorkspacePath}</code> : null}
+        {activeWorkspacePath.trim() ? <code title={activeWorkspacePath}>{displayLibraryPath(activeWorkspacePath)}</code> : null}
       </div>
       <div className="app-workspace-menu-actions">
-        <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id).catch((error) => setMessage(errorMessage(error)))}>刷新工作区</button>
-        <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri()}>切换工作区…</button>
+        <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id).catch((error) => setMessage(errorMessage(error)))}>刷新项目库</button>
+        <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri()}>切换项目库…</button>
+        <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void openDefaultProjectLibrary()}>切回本机项目库</button>
         <button type="button" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>在 {revealLabel} 中显示</button>
       </div>
       {recentWorkspaces.filter((item) => item !== activeWorkspacePath).length > 0 ? (
         <div className="app-workspace-recent">
-          <span className="app-workspace-recent-label">最近工作区</span>
+          <span className="app-workspace-recent-label">最近项目库</span>
           {recentWorkspaces.filter((item) => item !== activeWorkspacePath).slice(0, 4).map((item) => (
             <button
               key={item}
@@ -788,15 +817,15 @@ export function App() {
               title={item}
               onClick={() => void openWorkspacePath(item)}
             >
-              <strong>{item.split(/[\\/]/).filter(Boolean).pop() || item}</strong>
-              <code>{item}</code>
+              <strong>{displayLibraryName(item)}</strong>
+              <code>{displayLibraryPath(item)}</code>
             </button>
           ))}
         </div>
       ) : null}
       <details className="workspace-advanced app-workspace-advanced">
         <summary>高级连接</summary>
-        <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
+        <label><span>项目库路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
         <button type="button" className="secondary" onClick={() => void openWorkspacePath(workspacePath)} disabled={!workspacePath.trim()}>打开此路径</button>
         <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
         <button type="button" className="secondary" onClick={() => void connect()}>连接已运行服务</button>
@@ -900,7 +929,7 @@ export function App() {
                 </>
               ) : surface === "projects" ? (
                 <>
-                  <span>工作区</span>
+                  <span>项目库</span>
                   <strong>{contextLabel}</strong>
                 </>
               ) : (

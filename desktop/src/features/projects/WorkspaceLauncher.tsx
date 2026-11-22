@@ -16,6 +16,7 @@ interface Props {
   onWorkspacePathChange: (path: string) => void;
   onServiceAddressChange: (address: string) => void;
   onChooseWorkspace: (directory: boolean) => void;
+  onOpenDefaultLibrary?: () => void;
   onOpenPath: () => void;
   onConnect: () => void;
   onClearRecovery: () => void;
@@ -24,19 +25,20 @@ interface Props {
 export function WorkspaceLauncher({
   state, recovering, recoveryFailed, native, workspacePath, serviceAddress, message,
   recentWorkspaces = [], onOpenRecent,
-  onWorkspacePathChange, onServiceAddressChange, onChooseWorkspace, onOpenPath, onConnect, onClearRecovery,
+  onWorkspacePathChange, onServiceAddressChange, onChooseWorkspace, onOpenDefaultLibrary, onOpenPath, onConnect, onClearRecovery,
 }: Props) {
   const titleId = useId();
   const busy = state === "starting" || state === "connecting";
   const failed = state === "error";
-  const title = recovering ? "恢复工作区" : recoveryFailed ? "重新定位工作区" : "打开工作区";
+  const title = recovering ? "恢复项目库" : recoveryFailed ? "重新定位项目库" : "镜序项目库";
   const description = recovering
-    ? "正在恢复上次打开的短剧工作区…"
+    ? "正在恢复上次打开的项目库…"
     : recoveryFailed
-      ? "未找到原工作区，请重新选择工程目录或工作区。"
-      : "选择存放短剧工程的文件夹，或直接选中已有的测试工程目录。";
+      ? "未找到原项目库文件夹，可重新定位或直接进入本机项目库。"
+      : "使用本机项目库管理全部短剧工程，或打开硬盘上已有的项目库文件夹。";
   const hasFeedback = Boolean(message.trim());
   const showsPath = Boolean(workspacePath.trim()) && (recovering || recoveryFailed);
+  const displayWorkspacePath = workspacePath.replace(/[\\/]workspace\.toml$/i, "") || workspacePath;
 
   return (
     <main className="startup-shell">
@@ -53,16 +55,35 @@ export function WorkspaceLauncher({
             <div className="startup-primary">
               <h1 id={titleId}>{title}</h1>
               <p>{description}</p>
-              <button className="startup-choose" type="button" disabled={!native || busy}
-                onClick={() => onChooseWorkspace(true)}>
-                {recoveryFailed ? "重新选择工作区…" : "选择工作区…"}
-              </button>
+              <div className="startup-primary-actions">
+                {recoveryFailed ? (
+                  <>
+                    <button className="startup-choose" type="button" disabled={!native || busy}
+                      onClick={() => onChooseWorkspace(true)}>
+                      重新定位项目库…
+                    </button>
+                    {onOpenDefaultLibrary ? (
+                      <button type="button" className="secondary" disabled={!native || busy} onClick={onOpenDefaultLibrary}>进入本机项目库</button>
+                    ) : null}
+                  </>
+                ) : onOpenDefaultLibrary ? (
+                  <>
+                    <button className="startup-choose" type="button" disabled={!native || busy} onClick={onOpenDefaultLibrary}>进入本机项目库</button>
+                    <button type="button" className="secondary" disabled={!native || busy} onClick={() => onChooseWorkspace(true)}>打开其他项目库…</button>
+                  </>
+                ) : (
+                  <button className="startup-choose" type="button" disabled={!native || busy}
+                    onClick={() => onChooseWorkspace(true)}>
+                    打开项目库文件夹…
+                  </button>
+                )}
+              </div>
             </div>
 
           </div>
 
           {onOpenRecent && recentWorkspaces.length > 0 && (
-            <section className="startup-recent" aria-label="最近打开的工作区">
+            <section className="startup-recent" aria-label="最近打开的项目库">
               <h2>最近打开</h2>
               <ul>
                 {recentWorkspaces.slice(0, 4).map(path => {
@@ -83,7 +104,7 @@ export function WorkspaceLauncher({
               {hasFeedback && <p>{message}</p>}
               {showsPath && <p className="startup-location">
                 <span>{recovering ? "正在恢复" : "上次位置"}</span>
-                <code title={workspacePath}>{workspacePath}</code>
+                <code title={workspacePath}>{displayWorkspacePath}</code>
               </p>}
               {recoveryFailed && <button type="button" className="secondary" onClick={onClearRecovery}>清除恢复记录</button>}
             </div>
@@ -94,16 +115,16 @@ export function WorkspaceLauncher({
             <div className="startup-advanced-body">
               <div className="startup-file">
                 <button type="button" className="secondary" disabled={!native || busy}
-                  onClick={() => onChooseWorkspace(false)}>选择 workspace.toml…</button>
+                  onClick={() => onChooseWorkspace(false)}>选择项目库配置文件…</button>
               </div>
               <form onSubmit={(event) => {
                 event.preventDefault();
                 if (native && !busy && workspacePath.trim()) onOpenPath();
               }}>
                 <label>
-                  <span>工作区路径</span>
+                  <span>项目库路径</span>
                   <input value={workspacePath} onChange={(event) => onWorkspacePathChange(event.target.value)}
-                    placeholder="文件夹或 workspace.toml" spellCheck={false} autoComplete="off" />
+                    placeholder="输入项目库文件夹路径" spellCheck={false} autoComplete="off" />
                 </label>
                 <button type="submit" className="secondary" disabled={!native || busy || !workspacePath.trim()}>打开路径</button>
               </form>

@@ -2,12 +2,13 @@ use crate::runtime::{packaged_python_home, path_with_tools, python_path_with_sou
 use crate::service_health::probe_service;
 use serde::Serialize;
 use std::{
+    io::Write,
     net::TcpListener,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -40,6 +41,58 @@ pub struct HostProcessStatus {
     pid: Option<u32>,
     base_url: Option<String>,
     workspace_path: Option<String>,
+}
+
+fn escape_toml_string(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+pub fn initialize_project_library_dir(dir: &Path, display_name: &str) -> Result<PathBuf, String> {
+    if dir.exists() && !dir.is_dir() {
+        return Err(format!("项目库路径不是文件夹：{}", dir.display()));
+    }
+    std::fs::create_dir_all(dir)
+        .map_err(|error| format!("无法创建项目库目录 {}：{error}", dir.display()))?;
+    std::fs::create_dir_all(dir.join("projects")).map_err(|error| {
+        format!("无法创建项目库 projects 目录 {}：{error}", dir.join("projects").display())
+    })?;
+
+    let manifest = dir.join("workspace.toml");
+    if !manifest.exists() {
+        let content = format!(
+            "[workspace]\nname = \"{}\"\nregistry = \"./projects/registry.json\"\nweb_directory = \"./web\"\n",
+            escape_toml_string(display_name)
+        );
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let temporary = dir.join(format!(".workspace.toml.tmp-{}-{suffix}", std::process::id()));
+        let write_result = (|| -> Result<(), String> {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)
+                .map_err(|error| format!("无法创建项目库清单临时文件：{error}"))?;
+            file.write_all(content.as_bytes())
+                .map_err(|error| format!("无法写入项目库清单：{error}"))?;
+            file.sync_all()
+                .map_err(|error| format!("无法持久化项目库清单：{error}"))?;
+            if manifest.exists() {
+                return Ok(());
+            }
+            std::fs::rename(&temporary, &manifest)
+                .map_err(|error| format!("无法安装项目库清单：{error}"))?;
+            Ok(())
+        })();
+        if let Err(error) = write_result {
+            let _ = std::fs::remove_file(&temporary);
+            return Err(error);
+        }
+        let _ = std::fs::remove_file(&temporary);
+    }
+
+    Ok(dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()))
 }
 
 fn normalize_workspace_path(value: &str) -> Result<PathBuf, String> {
@@ -299,6 +352,20 @@ fn stop_managed_host(mut host: ManagedHost) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn ensure_default_project_library(app: AppHandle) -> Result<String, String> {
+    let target = app
+        .path()
+        .video_dir()
+        .ok()
+        .map(|path| path.join("镜序项目库"))
+        .or_else(|| app.path().document_dir().ok().map(|path| path.join("镜序项目库")))
+        .or_else(|| app.path().app_data_dir().ok().map(|path| path.join("project-library")))
+        .ok_or_else(|| "无法解析本机默认项目库目录".to_string())?;
+    initialize_project_library_dir(&target, "本机项目库")
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
 impl Drop for HostManager {
     fn drop(&mut self) {
         if let Ok(slot) = self.child.get_mut() {
@@ -476,8 +543,8 @@ pub fn shutdown(manager: &HostManager) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_loopback_port_available, is_same_workspace_host_command, shutdown, validate_port,
-        HostManager, ManagedHost,
+        ensure_loopback_port_available, initialize_project_library_dir,
+        is_same_workspace_host_command, shutdown, validate_port, HostManager, ManagedHost,
     };
     use std::{
         net::TcpListener,
@@ -486,6 +553,49 @@ mod tests {
         thread,
         time::Duration,
     };
+
+    fn temporary_library_path(label: &str) -> PathBuf {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("mirrororder-{label}-{}-{suffix}", std::process::id()))
+    }
+
+    #[test]
+    fn initializes_a_fresh_project_library() {
+        let dir = temporary_library_path("project-library");
+        let result = initialize_project_library_dir(&dir, "本机\\项目库\"一").unwrap();
+        assert!(result.is_dir());
+        assert!(dir.join("projects").is_dir());
+        let manifest = std::fs::read_to_string(dir.join("workspace.toml")).unwrap();
+        assert!(manifest.contains("name = \"本机\\\\项目库\\\"一\""));
+        assert!(manifest.contains("registry = \"./projects/registry.json\""));
+        assert!(manifest.contains("web_directory = \"./web\""));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn preserves_an_existing_project_library_manifest() {
+        let dir = temporary_library_path("project-library-existing");
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = dir.join("workspace.toml");
+        let original = "[workspace]\nname = \"已有项目库\"\ncustom = true\n";
+        std::fs::write(&manifest, original).unwrap();
+        initialize_project_library_dir(&dir, "新名称").unwrap();
+        assert_eq!(std::fs::read_to_string(manifest).unwrap(), original);
+        assert!(dir.join("projects").is_dir());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn rejects_a_regular_file_as_the_project_library_path() {
+        let path = temporary_library_path("project-library-file");
+        std::fs::write(&path, "not a directory").unwrap();
+        let error = initialize_project_library_dir(&path, "本机项目库").unwrap_err();
+        assert!(error.contains("不是文件夹"));
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn rejects_zero_port() {

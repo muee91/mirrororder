@@ -42,6 +42,7 @@ fn main() {
             gateway::team_gateway_status,
             gateway::stop_team_gateway,
             host::start_python_host,
+            host::ensure_default_project_library,
             scene_interval_ipc::scene_interval_review,
             scene_interval_ipc::slate_thumbnail_cancel,
             paper_source_ipc::paper_source_preview,

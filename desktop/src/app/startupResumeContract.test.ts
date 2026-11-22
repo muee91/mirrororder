@@ -9,12 +9,15 @@ describe("startup and production resume product contract", () => {
     expect(source).toContain("return <><WorkspaceLauncher");
     expect(source).toContain(">{finderProject}</>");
     expect(launcher).toContain('className="startup-home"');
-    expect(launcher).toContain("选择工作区…");
+    expect(launcher).toContain("进入本机项目库");
+    expect(launcher).toContain("打开其他项目库…");
     const advanced = launcher.slice(launcher.indexOf('<details className="startup-advanced">'));
     expect(advanced).toContain("<summary>手动打开与连接</summary>");
-    expect(advanced).toContain("选择 workspace.toml…");
+    expect(advanced).toContain("选择项目库配置文件…");
     expect(advanced).toContain("本机服务地址");
-    expect(advanced).toContain("工作区路径");
+    expect(advanced).toContain("项目库路径");
+    expect(launcher).not.toContain("选择 workspace.toml");
+    expect(launcher).not.toContain("测试工程");
     expect(launcher).toContain('className="startup-logo" src={logo}');
     expect(source).toContain("高级连接");
     expect(source).not.toContain('<section className="connection-panel">');

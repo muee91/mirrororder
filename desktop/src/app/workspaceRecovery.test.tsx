@@ -64,7 +64,7 @@ async function reopenOriginal() {
   const advanced = container.querySelector<HTMLDetailsElement>('.startup-advanced');
   if (!advanced) throw new Error('missing advanced workspace controls');
   advanced.open = true;
-  await click('选择 workspace.toml…');
+  await click('选择项目库配置文件…');
 }
 beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true); localStorage.clear();
@@ -95,8 +95,8 @@ afterEach(async () => {
 
 it('renders recovery on the first frame when a workspace is remembered', () => {
   const firstRender = renderToStaticMarkup(<App/>);
-  expect(firstRender).toContain('>恢复工作区</h1>');
-  expect(firstRender).not.toContain('>打开工作区</h1>');
+  expect(firstRender).toContain('>恢复项目库</h1>');
+  expect(firstRender).not.toContain('>镜序项目库</h1>');
 });
 
 it('removes the old canvas and stops queued saves even when the first response arrives after replacement', async () => {
@@ -112,7 +112,7 @@ it('removes the old canvas and stops queued saves even when the first response a
   const oldAfterFirstWrite = { ...board, revision: 4, records: { ...board.records, a: record('a', '11') } };
   let finishSwitch!: (snapshot: HostSnapshot) => void;
   start.mockReturnValueOnce(new Promise(resolve => { finishSwitch = resolve; }));
-  await click('切换工作区…');
+  await click('切换项目库…');
   expect(oldWriteSignal?.aborted).toBe(true);
   expect(canvas()).toBeNull();
   expect(button('保存 2')).toBeUndefined();
@@ -130,7 +130,7 @@ it('removes the old canvas and stops queued saves even when the first response a
   board = oldAfterFirstWrite;
   pick.mockResolvedValueOnce('synthetic-old/projects/p1');
   start.mockResolvedValueOnce(original);
-  await click('切换工作区…');
+  await click('切换项目库…');
   expect(scene('a')?.value).toBe('11');
   expect(scene('b')?.value).toBe('22');
   expect(button('保存 1')).toBeDefined();
@@ -141,7 +141,7 @@ it('keeps drafts inaccessible while the stopped Host is offline and restores the
   await enterScene('a', '11');
   start.mockRejectedValueOnce(new Error('replacement failed'));
   connect.mockRejectedValueOnce(new Error('old host stopped'));
-  await click('切换工作区…');
+  await click('切换项目库…');
   expect(connect).toHaveBeenCalledTimes(1);
   expect(canvas()).toBeNull();
   expect(container.querySelector('[role="alert"]')?.textContent).toContain('replacement failed');
@@ -156,7 +156,7 @@ it('refuses to restore old project controls when the same port now serves a diff
   await enterScene('a', '11');
   start.mockRejectedValueOnce(new Error('new projection failed'));
   connect.mockResolvedValueOnce(replacement);
-  await click('切换工作区…');
+  await click('切换项目库…');
   expect(connect).toHaveBeenCalledTimes(1);
   expect(canvas()).toBeNull();
   expect(button('保存 1')).toBeUndefined();
@@ -170,7 +170,7 @@ it('restores only a freshly verified old workspace and uses its current project 
   const projects = [{ ...original.projects[0], name: 'Fresh old project' }];
   board = { ...board, revision: 4, records: { ...board.records, b: record('b', 'refreshed') } };
   connect.mockResolvedValueOnce({ ...original, projects, workspace: { ...original.workspace, projects } });
-  await click('切换工作区…');
+  await click('切换项目库…');
   expect(connect).toHaveBeenCalledTimes(1);
   expect(canvas()?.getAttribute('aria-label')).toContain('Fresh old project');
   expect(container.textContent).toContain('当前工作现场保持打开');
@@ -186,7 +186,7 @@ it('holds a conflicting draft until the user explicitly chooses a version', asyn
   board = { ...board, revision: 4, records: { ...board.records, a: { ...record('a', '3'), note: 'newer server note' } } };
   start.mockRejectedValueOnce(new Error('invalid new workspace'));
   connect.mockResolvedValueOnce(original);
-  await click('切换工作区…');
+  await click('切换项目库…');
   expect(scene('a')?.value).toBe('11');
   expect(container.textContent).toContain('newer server note');
   expect(button('保存 1').disabled).toBe(true);
@@ -202,9 +202,9 @@ it('holds a conflicting draft until the user explicitly chooses a version', asyn
 it('disconnects if Refresh discovers that the open port changed its workspace identity', async () => {
   await enterScene('a', '11');
   connect.mockResolvedValueOnce(replacement);
-  await click('刷新工作区');
+  await click('刷新项目库');
   expect(canvas()).toBeNull();
-  expect(container.querySelector('[role="alert"]')?.textContent).toContain('其他工作区');
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('其他项目库');
   await reopenOriginal();
   expect(scene('a')?.value).toBe('11');
 });

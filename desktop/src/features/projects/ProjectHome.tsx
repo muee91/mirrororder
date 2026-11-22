@@ -64,6 +64,7 @@ export function ProjectHome({
   const [menu, setMenu] = useState<HomeMenuState | null>(null);
   const [actionMessage, setActionMessage] = useState("");
   const [transferBusy, setTransferBusy] = useState(false);
+  const displayWorkspacePath = workspacePath.replace(/[\\/]workspace\.toml$/i, "") || workspacePath;
   const visible = useMemo(() => {
     const value = query.trim().toLowerCase();
     if (!value) return workspace.projects;
@@ -108,7 +109,7 @@ export function ProjectHome({
       const message = await saveProjectCopy(baseUrl, project);
       if (message) setActionMessage(message);
     } catch (error) {
-      setActionMessage(`另存项目失败：${errorMessage(error)}`);
+      setActionMessage(`另存工程包失败：${errorMessage(error)}`);
     } finally {
       setTransferBusy(false);
     }
@@ -125,11 +126,11 @@ export function ProjectHome({
           <div className="project-home-meta-row">
             {workspacePath.trim() ? (
               onRevealWorkspace ? (
-                <button type="button" className="project-home-path-link" title={`在 ${revealLabel} 中打开：${workspacePath}`} onClick={onRevealWorkspace}>
-                  <code>{workspacePath}</code>
+                <button type="button" className="project-home-path-link" title={`在 ${revealLabel} 中打开：${displayWorkspacePath}`} onClick={onRevealWorkspace}>
+                  <code>{displayWorkspacePath}</code>
                 </button>
               ) : (
-                <code className="project-home-path-text" title={workspacePath}>{workspacePath}</code>
+                <code className="project-home-path-text" title={displayWorkspacePath}>{displayWorkspacePath}</code>
               )
             ) : null}
             {actionMessage ? <span className="project-home-status-msg" role="status">{actionMessage}</span> : null}
@@ -209,16 +210,16 @@ export function ProjectHome({
       ) : (
         <div className="project-home-onboarding">
           <div className="project-home-empty-hero">
-            <strong>当前目录下还没有短剧项目</strong>
-            <span>镜序以目录为单位管理短剧项目。你可以直接打开已有测试工程所在的文件夹，或者在这里新建一部剧。</span>
+            <strong>当前项目库还没有短剧项目</strong>
+            <span>你可以新建一部短剧、导入便携工程包（.mirrorproj），或切换到硬盘上已有的项目库文件夹。</span>
           </div>
           <div className="project-onboarding-grid">
             <article className="project-onboarding-card is-highlighted">
-              <span className="project-onboarding-step">01 · 打开已有工程</span>
-              <h3>选择已有工程目录</h3>
-              <p>如果测试工程或素材目录在硬盘上的其他位置，直接选中那个项目目录或上级工作区目录，即可立即打开。</p>
+              <span className="project-onboarding-step">01 · 打开已有项目库</span>
+              <h3>选择已有项目库文件夹</h3>
+              <p>如果已有项目库或短剧工程目录在硬盘其他位置，直接选中那个项目库文件夹即可打开。</p>
               {onSwitchWorkspace ? (
-                <button type="button" onClick={onSwitchWorkspace}>选择已有工程所在目录…</button>
+                <button type="button" onClick={onSwitchWorkspace}>选择已有项目库…</button>
               ) : null}
               {onOpenWorkspacePath && recentWorkspaces.filter((item) => item !== workspacePath).length > 0 ? (
                 <div className="project-onboarding-recent">
@@ -239,7 +240,7 @@ export function ProjectHome({
             <article className="project-onboarding-card">
               <span className="project-onboarding-step">03 · 跨电脑交接</span>
               <h3>导入 .mirrorproj 工程包</h3>
-              <p>如果是另一台剪辑机用「另存项目」生成的便携工程包，点击右上角 <strong>「导入工程包…」</strong> 还原，再在「本机素材」中重连硬盘原片。</p>
+              <p>如果是另一台剪辑机导出的便携工程包，点击右上角 <strong>「导入工程包…」</strong> 还原，再在「本机素材」中重连硬盘原片。</p>
             </article>
           </div>
         </div>
@@ -253,13 +254,13 @@ export function ProjectHome({
           <button type="button" role="menuitem" title="本机素材 / 换素材盘" onClick={() => run(() => onOpenMediaBinding(menu.project))}>连接素材</button>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenProjectPage?.(menu.project, menu.project.input_kind === "media-directory" ? "sync-task" : "timeline"))}>{menu.project.input_kind === "media-directory" ? "打开同步任务" : "打开选片组接"}</button>
           <button type="button" role="menuitem" title="重新整理项目" onClick={() => run(() => onPrepareProject(menu.project))}>完整整理项目</button>
+          <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => saveProjectAs(menu.project))}>另存为工程包 (.mirrorproj)…</button>
           <details className="project-context-advanced">
             <summary>高级操作</summary>
             <div className="project-context-advanced-list">
               <button type="button" role="menuitem" onClick={() => run(() => onOpenTeamProject(menu.project))}>团队审阅</button>
               <button type="button" role="menuitem" onClick={() => run(() => onCopyShareLink(menu.project))}>复制局域网协作链接</button>
               <button type="button" role="menuitem" onClick={() => run(() => onRevealProject(menu.project))}>在 {revealLabel} 中显示</button>
-              <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => saveProjectAs(menu.project))}>另存项目…</button>
               <button type="button" role="menuitem" className="project-context-danger" onClick={() => run(() => onDeleteProject(menu.project))}>永久删除项目…</button>
             </div>
           </details>

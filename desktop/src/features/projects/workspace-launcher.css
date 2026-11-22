@@ -53,6 +53,9 @@ html[data-mirrororder-theme="light"] .startup-shell {
 html[data-mirrororder-theme="light"] .startup-home {
   background: rgba(255, 255, 255, 0.94);
 }
+html[data-mirrororder-theme="light"] .startup-masthead {
+  background: rgba(255, 255, 255, 0.78);
+}
 
 .startup-primary {
   min-width: 0;
@@ -77,6 +80,7 @@ html[data-mirrororder-theme="light"] .startup-home {
   font-size: 14px;
   line-height: 1.7;
 }
+.startup-primary-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .startup-primary button { min-height: 40px; padding-inline: 14px; font-size: 14px; }
 .startup-file { grid-column: 1 / -1; }
 .startup-recent { border-top: 1px solid var(--mo-border-subtle); padding: 14px 32px 18px; }

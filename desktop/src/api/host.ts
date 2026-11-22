@@ -472,6 +472,22 @@ export class HostConnection {
     this.baseUrl = normalizeBaseUrl(baseUrl);
   }
 
+  static async ensureDefaultProjectLibrary(): Promise<string> {
+    if (!isTauri()) {
+      throw new HostConnectionError("浏览器预览无法自动初始化本机项目库");
+    }
+    try {
+      const path = await invoke<string>("ensure_default_project_library");
+      if (typeof path !== "string" || !path.trim()) {
+        throw new HostConnectionError("本机默认项目库返回了空路径");
+      }
+      return path.trim();
+    } catch (error) {
+      if (error instanceof HostConnectionError) throw error;
+      throw new HostConnectionError(`初始化本机项目库失败：${String(error)}`, { cause: error });
+    }
+  }
+
   ping(): Promise<HostPing> {
     return requestJson<HostPing>(this.baseUrl, "/api/v1/ping");
   }
