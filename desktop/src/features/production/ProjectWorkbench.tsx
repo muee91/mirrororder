@@ -24,6 +24,7 @@ import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorksp
 import type { SlateDraftSession } from "../slate/slateDraftSession";
 import "../media/media.css";
 import { ReviewWorkspace } from "../review/ReviewWorkspace";
+import { useShowRoughCutPreference } from "../../app/desktopPreferences";
 import { ScriptWorkspace } from "../script/ScriptWorkspace";
 import "../script/script-workspace.css";
 import type {
@@ -192,6 +193,7 @@ export function ProjectWorkbench({
   onOpenTeamReview, onTaskChanged, onOpenStatus, onOpenSettings, onPageChange, onSyncStatusChange,
   showModuleRail = true,
 }: Props) {
+  const [showRoughCut] = useShowRoughCutPreference();
   const desktopHud = isTauri();
   const [page, setPage] = useState<ProductionPage>(() => {
     const saved = safeProductionPage(readProjectPage(project.project_id));
@@ -541,8 +543,8 @@ export function ProjectWorkbench({
           ) : visiblePage === "watch" || visiblePage === "timeline" ? (
             <nav className="workbench-subbar review-workbench-subbar" aria-label="审阅工作区" data-tauri-drag-region="no-drag">
               <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "watch" ? "page" : undefined} onClick={() => navigate("watch")}>看片审阅</button>
-              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "timeline" ? "page" : undefined} onClick={() => navigate("timeline")}>粗剪组接</button>
-              {onOpenTeamReview ? <button type="button" className="workbench-subbar-link" onClick={onOpenTeamReview}>团队协作</button> : null}
+              {showRoughCut || visiblePage === "timeline" ? <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "timeline" ? "page" : undefined} onClick={() => navigate("timeline")}>粗剪组接</button> : null}
+              {onOpenTeamReview ? <button type="button" className="workbench-subbar-link" onClick={onOpenTeamReview}>局域网共享</button> : null}
             </nav>
           ) : (
             <span className="professional-project-context-subtitle" aria-live="polite">{pageLabel(visiblePage)}</span>
@@ -702,6 +704,7 @@ export function ProjectWorkbench({
               onOpenMaterial={(groupId, clipId) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId)}
               onOpenScript={(groupId, clipId) => focusTake(groupId, "script", clipId, currentSelection.scriptSegmentId)}
               onOpenTimeline={(groupId, clipId) => focusTake(groupId, "timeline", clipId, currentSelection.scriptSegmentId)}
+              showRoughCut={showRoughCut}
             />
           ) : null}
         </div>

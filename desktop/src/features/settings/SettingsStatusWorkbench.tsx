@@ -8,6 +8,7 @@ import { PlatformClient, type PlatformInfo } from "../../api/platform";
 import { AssistantModelsPanel } from "../assistant/AssistantModelsPanel";
 import { CurrentOperatorControl } from "../../components/CurrentOperatorControl";
 import { StudioIcon } from "../../components/StudioIcons";
+import { useShowRoughCutPreference } from "../../app/desktopPreferences";
 import { CollaborationPanel } from "./CollaborationPanel";
 import { DesktopAppearanceControl } from "./DesktopAppearanceControl";
 import { LocalRuntimePanel } from "./LocalRuntimePanel";
@@ -48,6 +49,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   const [diagnosticMessage, setDiagnosticMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showRoughCut, setShowRoughCut] = useShowRoughCutPreference();
 
   function patchSettings(patch: Partial<FrontendSettings>): void {
     if (saving) return;
@@ -196,6 +198,13 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
           <div className="settings-preference-surface settings-general-card">
             <DesktopAppearanceControl />
             <CurrentOperatorControl />
+            <label className="settings-optional-toggle">
+              <input type="checkbox" checked={showRoughCut} onChange={(event) => setShowRoughCut(event.target.checked)} />
+              <span className="settings-optional-toggle-copy">
+                <strong>显示内置粗剪顺片</strong>
+                <small>默认隐藏；开启后在审阅页顶栏显示「粗剪组接」入口。</small>
+              </span>
+            </label>
           </div>
         </section>
 

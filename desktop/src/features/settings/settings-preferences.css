@@ -43,6 +43,11 @@
 .settings-preference-section > .production-panel,
 .settings-team-grid > .production-panel { border: 1px solid var(--mo-border-subtle); border-radius: 12px; background: var(--mo-surface-pane); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
 .settings-general-card { overflow: hidden; }
+.settings-optional-toggle { display: flex; align-items: flex-start; gap: 10px; border-top: 1px solid var(--mo-border-subtle); padding: 14px 18px; cursor: pointer; }
+.settings-optional-toggle input { flex: 0 0 auto; width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--mo-accent); }
+.settings-optional-toggle-copy { display: grid; gap: 3px; min-width: 0; }
+.settings-optional-toggle-copy strong { color: var(--mo-text-primary); font-size: 13px; font-weight: 620; }
+.settings-optional-toggle-copy small { color: var(--mo-text-muted); font-size: 11.5px; line-height: 1.45; }
 .settings-team-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .settings-team-grid .frontend-settings-card,
 .settings-team-grid .collaboration-card { width: 100%; }

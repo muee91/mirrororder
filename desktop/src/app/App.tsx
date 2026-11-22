@@ -34,6 +34,7 @@ import { StatusCenterWorkbench } from "../features/status/StatusCenterWorkbench"
 import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
 import type { PendingSlateDrafts, SlateDraftSession } from "../features/slate/slateDraftSession";
 import { desktopAppearanceEventName, readDesktopAppearance } from "./desktopAppearance";
+import { useShowRoughCutPreference } from "./desktopPreferences";
 import {
   forgetWorkspaceResume,
   loadAppResume,
@@ -154,6 +155,7 @@ export function App() {
   const [projectSyncStatus, setProjectSyncStatus] = useState<{ projectId: string; ready: boolean; phase: string } | null>(null);
   const [externalXiaoJingAction, setExternalXiaoJingAction] = useState<(XiaoJingMainAction & { nonce: number }) | null>(null);
   const [appearance, setAppearance] = useState(() => readDesktopAppearance());
+  const [showRoughCut] = useShowRoughCutPreference();
   const handleSyncStatusChange = useCallback((projectId: string, ready: boolean, phase: string) => {
     if (projectId.trim()) setProjectSyncStatus({ projectId, ready, phase });
   }, []);
@@ -923,8 +925,8 @@ export function App() {
                   <div className="app-global-project-switcher" data-tauri-drag-region="no-drag">{switchProject}</div>
                   <nav className="workbench-subbar review-workbench-subbar" aria-label="审阅工作区" data-tauri-drag-region="no-drag">
                     <button type="button" className="workbench-subbar-link" onClick={() => openProjectPage(selectedProject, "watch")}>看片审阅</button>
-                    <button type="button" className="workbench-subbar-link" onClick={() => openProjectPage(selectedProject, "timeline")}>粗剪组接</button>
-                    <button type="button" className="workbench-subbar-link" aria-current="page">团队协作</button>
+                    {showRoughCut ? <button type="button" className="workbench-subbar-link" onClick={() => openProjectPage(selectedProject, "timeline")}>粗剪组接</button> : null}
+                    <button type="button" className="workbench-subbar-link" aria-current="page">局域网共享</button>
                   </nav>
                 </>
               ) : surface === "projects" ? (
