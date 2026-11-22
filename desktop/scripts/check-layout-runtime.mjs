@@ -55,11 +55,6 @@ function goldenSlateStubPlugin() {
             ),
             h(
               "div",
-              { className: "golden-slate-quick" },
-              h("input", { "aria-label": "快速场记", placeholder: "输入场、镜、Take" }),
-            ),
-            h(
-              "div",
               { className: "golden-slate-body" },
               h(
                 "div",

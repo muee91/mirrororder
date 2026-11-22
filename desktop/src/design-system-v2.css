@@ -1405,15 +1405,23 @@ html[data-mirrororder-theme] .project-production-layout.without-module-rail > .p
   grid-column: 1;
 }
 
-html[data-mirrororder-theme] .golden-slate-subbar button,
+html[data-mirrororder-theme] .golden-slate-subbar .golden-slate-actions > button,
+html[data-mirrororder-theme] .golden-slate-subbar .slate-interval-view-switch > button,
 html[data-mirrororder-theme] .golden-slate-subbar .slate-paper-intake > button {
   border-color: transparent;
   color: var(--mo-text-secondary);
   background: transparent;
 }
-html[data-mirrororder-theme] .golden-slate-subbar button:hover:not(:disabled),
-html[data-mirrororder-theme] .golden-slate-subbar button.is-active,
+html[data-mirrororder-theme] .golden-slate-subbar .golden-slate-actions > button:hover:not(:disabled),
+html[data-mirrororder-theme] .golden-slate-subbar .slate-interval-view-switch > button:hover:not(:disabled),
 html[data-mirrororder-theme] .golden-slate-subbar .slate-paper-intake > button:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-hover);
+}
+html[data-mirrororder-theme] .golden-slate-subbar .golden-slate-actions > button.is-active,
+html[data-mirrororder-theme] .golden-slate-subbar .slate-interval-view-switch > button.is-active,
+html[data-mirrororder-theme] .golden-slate-subbar .slate-paper-intake > button.is-active {
   border-color: transparent;
   color: var(--mo-text-primary);
   background: var(--mo-surface-hover);

@@ -12,9 +12,7 @@ html[data-mirrororder-theme="light"] .golden-slate-toolbar,
 html[data-mirrororder-theme="light"] .golden-slate-inspector,
 html[data-mirrororder-theme="light"] .golden-inspector-head,
 html[data-mirrororder-theme="light"] .golden-slate-section > header { background: #fff; }
-html[data-mirrororder-theme="light"] .golden-slate-quick { background: #f2f4f6; }
 html[data-mirrororder-theme="light"] .golden-slate-toolbar,
-html[data-mirrororder-theme="light"] .golden-slate-quick,
 html[data-mirrororder-theme="light"] .golden-slate-inspector,
 html[data-mirrororder-theme="light"] .golden-inspector-head,
 html[data-mirrororder-theme="light"] .golden-slate-review-tools,
@@ -75,10 +73,8 @@ html[data-mirrororder-theme="dark"] .golden-slate-workbench { color: #dbe2e7; ba
 html[data-mirrororder-theme="dark"] .golden-slate-toolbar,
 html[data-mirrororder-theme="dark"] .golden-inspector-head,
 html[data-mirrororder-theme="dark"] .golden-slate-section > header { background: #11171c; }
-html[data-mirrororder-theme="dark"] .golden-slate-quick { background: #171d22; }
 html[data-mirrororder-theme="dark"] .golden-slate-inspector { border-color: #2a323a; background: #0f151a; }
 html[data-mirrororder-theme="dark"] .golden-slate-toolbar,
-html[data-mirrororder-theme="dark"] .golden-slate-quick,
 html[data-mirrororder-theme="dark"] .golden-slate-review-tools { border-color: #252d35; }
 html[data-mirrororder-theme="dark"] .golden-inspector-head { border-color: #28313a; }
 html[data-mirrororder-theme="dark"] .golden-slate-section { border-color: #29313a; }
@@ -121,4 +117,4 @@ html[data-mirrororder-theme="dark"] .golden-slate-review-tools { background: #0e
 
 /* Toolbar utilities are real text controls, not placeholder glyphs. */
 .golden-slate-actions .icon-action[title*="Inspector"],
-.golden-slate-actions .icon-action[title="刷新场记"] { min-width: 66px; padding-inline: 8px; font-size: 10px; font-weight: 650; line-height: 1; }
+.golden-slate-actions .icon-action[title="刷新场记"] { min-width: auto; padding-inline: 8px; font-size: var(--mo-font-sm, 12px); font-weight: 650; line-height: 1; }

@@ -538,6 +538,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [dropActive, setDropActive] = useState(false);
   const [takePickerOpen, setTakePickerOpen] = useState(false);
   const [takeSearch, setTakeSearch] = useState("");
+  const takePickerRef = useRef<HTMLElement | null>(null);
+  const takePickerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [playbackFailedClipId, setPlaybackFailedClipId] = useState("");
   const [playbackRetry, setPlaybackRetry] = useState(0);
   const [playbackFailureDetail, setPlaybackFailureDetail] = useState<PlaybackFailure | null>(null);
@@ -1379,6 +1381,19 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     return () => globalThis.removeEventListener("keydown", keydown);
   }, [takePickerOpen, intervalSurface, active]);
 
+  useEffect(() => {
+    if (!takePickerOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (takePickerRef.current?.contains(target) || takePickerTriggerRef.current?.contains(target)) return;
+      setTakePickerOpen(false);
+      setTakeSearch("");
+    };
+    window.addEventListener("mousedown", onMouseDown);
+    return () => window.removeEventListener("mousedown", onMouseDown);
+  }, [takePickerOpen]);
+
   const previewsActive = active && !intervalSurface;
   const mediaCell = useCallback((draft: Draft, camera: SlateCameraColumn, selectedClip?: string) => {
     if (!previewsActive) return null;
@@ -1477,7 +1492,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         <div className="golden-slate-actions golden-slate-subbar-right" role="group" aria-label="场记辅助操作">
           {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={() => setHideNgRows((value) => !value)}>隐藏 NG ({ngCount})</button> : null}
           {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={() => setShowAuxColumn((value) => !value)} title="显示或隐藏空的 AUX 列">AUX 列</button> : null}
-          <button type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>从 Take 加入</button>
+          <button ref={takePickerTriggerRef} type="button" className="secondary" onClick={() => setTakePickerOpen((value) => !value)}>从 Take 加入</button>
           <button type="button" className="icon-action" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="刷新场记">刷新场记</button>
           <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} onSelect={setPaperSource} />
           <span className="golden-slate-message" aria-live="polite">{message}</span>
@@ -1493,7 +1508,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       </header>
 
       {takePickerOpen ? (
-        <section className="golden-take-picker" aria-label="加入 Take / 镜头">
+        <section ref={takePickerRef} className="golden-take-picker" aria-label="加入 Take / 镜头">
           <header><strong>加入 Take / 镜头</strong><input autoFocus value={takeSearch} onChange={(event) => setTakeSearch(event.target.value)} placeholder="搜索 Take / 机位 / 文件名 / 对白" /><button type="button" className="secondary" onClick={() => { setTakePickerOpen(false); setTakeSearch(""); }}>关闭</button></header>
           <div className="golden-take-picker-list">
             {takeCandidates.map((take) => (

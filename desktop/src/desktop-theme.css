@@ -76,7 +76,6 @@ html[data-mirrororder-theme="light"] .episode-filter button.is-active,
 html[data-mirrororder-theme="light"] .episode-strip button.is-active { color: #fff; background: #17202a; }
 
 html[data-mirrororder-theme="light"] .golden-slate-toolbar,
-html[data-mirrororder-theme="light"] .golden-slate-quick,
 html[data-mirrororder-theme="light"] .golden-slate-inspector { border-color: #d7dee4; background: #f3f5f7; }
 html[data-mirrororder-theme="light"] .golden-slate-table th { border-color: #d7dee4; color: #65727d; background: #e9edf1; }
 html[data-mirrororder-theme="light"] .golden-slate-table td { border-color: #e0e5e9; background: #fff; }
@@ -153,7 +152,6 @@ html[data-mirrororder-theme="dark"] .episode-filter button.is-active,
 html[data-mirrororder-theme="dark"] .episode-strip button.is-active { color: #11151a; background: #eef2f6; }
 
 html[data-mirrororder-theme="dark"] .golden-slate-toolbar { border-color: #252d35; background: #11171c; }
-html[data-mirrororder-theme="dark"] .golden-slate-quick { border-color: #252d35; background: #0e1419; }
 html[data-mirrororder-theme="dark"] .golden-slate-inspector { border-color: #2a323a; background: #10161b; }
 html[data-mirrororder-theme="dark"] .golden-slate-table th { border-color: #323b44; color: #8e9aa4; background: #141a20; }
 html[data-mirrororder-theme="dark"] .golden-slate-table td { border-color: #20272e; background: #0d1216; }

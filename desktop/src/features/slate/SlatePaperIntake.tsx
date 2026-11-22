@@ -9,9 +9,22 @@ export function SlatePaperIntake({baseUrl,projectId,onSelect}:{baseUrl:string;pr
  const client=useMemo(()=>new PaperIntakeClient(baseUrl),[baseUrl]);
  const [open,setOpen]=useState(false),[model,setModel]=useState<PaperModel|null>(null),[content,setContent]=useState(''),[format,setFormat]=useState<'json'|'csv'>('json'),[selected,setSelected]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [editing,setEditing]=useState(true),[focusSource,setFocusSource]=useState(0);
+ const triggerRef=useRef<HTMLButtonElement>(null);
  const sourceRef=useRef<HTMLSelectElement>(null);
  const photoInputRef=useRef<HTMLInputElement>(null);
  useEffect(()=>{if(focusSource)sourceRef.current?.focus()},[focusSource]);
+ useEffect(()=>{
+  if(!open)return;
+  const onKeyDown=(event:KeyboardEvent)=>{
+   if(event.key!=="Escape"||event.isComposing)return;
+   event.preventDefault();
+   event.stopPropagation();
+   setOpen(false);
+   triggerRef.current?.focus();
+  };
+  window.addEventListener('keydown',onKeyDown);
+  return()=>window.removeEventListener('keydown',onKeyDown);
+ },[open]);
  const mounted=useRef(true),lock=useRef(false),generation=useRef(0);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;generation.current++}},[]);
  async function load(){if(lock.current)return;lock.current=true;setBusy(true);setError('');const gen=++generation.current;try{const next=await client.request(projectId);if(mounted.current&&gen===generation.current)setModel(next)}catch(e){if(mounted.current){setError(String(e instanceof Error?e.message:e));setModel(null)}}finally{lock.current=false;if(mounted.current)setBusy(false)}}
@@ -19,7 +32,8 @@ export function SlatePaperIntake({baseUrl,projectId,onSelect}:{baseUrl:string;pr
  async function ingest(){if(lock.current||!model)return;const invalid=validatePaperInput(content,format);if(invalid){setError(invalid);return}lock.current=true;setBusy(true);setError('');setNotice('');try{const next=await client.request(projectId,{content,format,expected_revision:model.revision});if(mounted.current){setModel(next);setEditing(false);setFocusSource(n=>n+1);setNotice(next.import_status==='already_imported'?'相同转录内容已导入，没有重复新增。':'转录原文已保存，仍需逐行核对；没有写入正式场记。')}}catch(e){if(mounted.current){setError(String(e instanceof Error?e.message:e));setModel(null)}}finally{lock.current=false;if(mounted.current)setBusy(false)}}
  const row=model?.rows.find(r=>r.paper_row_id===selected);
  useEffect(()=>{onSelect?.(row&&model?{row,revision:model.revision}:null)},[row,model,onSelect]);
- return <section className="slate-paper-intake"><button type="button" aria-expanded={open} onClick={()=>{setOpen(!open);if(!open&&!model)void load()}}>纸面/照片场记</button>{open?<div className="paper-intake-body">
+ return <section className="slate-paper-intake"><button ref={triggerRef} type="button" aria-haspopup="dialog" aria-expanded={open} className={open?"is-active":undefined} onClick={()=>{setOpen(!open);if(!open&&!model)void load()}}>纸面/照片场记</button>{open?<><div className="paper-intake-backdrop" aria-hidden="true" onClick={()=>setOpen(false)} /><div className="paper-intake-body" role="dialog" aria-label="纸面与照片场记">
+ <header className="paper-intake-head"><strong>纸面 / 照片场记</strong><button type="button" className="secondary paper-intake-close" onClick={()=>setOpen(false)}>关闭</button></header>
  <SlatePdfDraft key={projectId} projectId={projectId} baseUrl={baseUrl} onImported={()=>void load()}/>
  {model?<div className="paper-source-bar"><label>来源行<select ref={sourceRef} value={selected} onChange={e=>setSelected(e.target.value)}><option value="">使用当前人工场记（不选纸面来源）</option>{model.rows.map(r=><option key={r.paper_row_id} value={r.paper_row_id}>文档 {model.documents.findIndex(d=>d.document_id===r.document_id)+1} · 页 {r.page||'未填'} / 行 {r.row||'未填'} · 场 {r.normalized_fields.scene||'待核对'}</option>)}</select></label><button type="button" disabled={busy} onClick={()=>void load()}>刷新来源</button><small>共 {model.summary.total_rows} 行 · 待核对 {model.summary.review_required} 行 · 可准备候选 {model.summary.candidate_ready} 行</small></div>:<button type="button" disabled={busy} onClick={()=>void load()}>刷新来源</button>}
  {error?<p role="alert">{error}</p>:null}{busy||notice?<p role="status">{busy?'正在处理场记来源…':notice}</p>:null}
@@ -30,5 +44,5 @@ export function SlatePaperIntake({baseUrl,projectId,onSelect}:{baseUrl:string;pr
  <div className="paper-paste-actions"><input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={e=>{const file=e.target.files?.[0];if(file)void extractPhoto(file)}}/><button type="button" className="secondary" disabled={busy} onClick={()=>photoInputRef.current?.click()}>上传手写场记照片（AI 提取候选）</button><button type="button" disabled={busy||!model||!!validatePaperInput(content,format)} onClick={()=>void ingest()}>导入转录原文</button></div></div></details>
  {model?<><small>可准备候选不代表已匹配；原 PDF 尚未在本机验证。</small>
  {row?<div>{model.documents.find(d=>d.document_id===row.document_id)?<SlatePaperOriginal key={`${projectId}:${row.paper_row_id}:${model.revision}`} projectId={projectId} row={row} document={model.documents.find(d=>d.document_id===row.document_id)!} revision={model.revision}/>:null}{model.documents.find(d=>d.document_id===row.document_id)?<PaperSourceMatch baseUrl={baseUrl} key={`match:${projectId}:${row.paper_row_id}:${model.revision}`} projectId={projectId} row={row} document={model.documents.find(d=>d.document_id===row.document_id)!} revision={model.revision}/>:null}<details className="paper-raw"><summary>查看原始转录单元格</summary><dl tabIndex={0} aria-label="原始转录单元格">{row.raw_cells.map((c,i)=><div key={i}><dt>{c.cell}</dt><dd>{typeof c.raw==='string'?c.raw:JSON.stringify(c.raw)}</dd></div>)}</dl></details><p>{row.candidate_ready?'已选择此转录行。请在现有检视区选择真实原片附件，再准备区间；尚未确认。':'此行有来源或转录疑点，需核对后再准备区间。'}</p>{row.review_reasons.length?<details><summary>查看核对原因</summary><ul>{row.review_reasons.map(r=><li key={r}>{r==='paper_scene_shorthand_requires_review'?'纸面场号是简写符号，需核对明确场号。':r}</li>)}</ul></details>:null}</div>:null}</>:null}
- </div>:null}</section>;
+ </div></>:null}</section>;
 }
