@@ -192,9 +192,10 @@ html[data-mirrororder-theme] .golden-slate-menu-popover button:disabled {
 .golden-inspector-link small { color: #74818c; font-size: 10px; line-height: 1.45; }
 .golden-inspector-actions { display: flex; gap: 6px; margin: 6px 0 8px; }
 .golden-inspector-actions button { flex: 1 1 auto; min-height: 28px; font-size: 11px; }
-.golden-inspector-navigation { flex-wrap: wrap; gap: 2px 10px; margin: 4px 0 8px; border-top: 1px solid var(--mo-border-subtle, #28313a); border-bottom: 1px solid var(--mo-border-subtle, #28313a); padding: 6px 0; }
-.golden-inspector-navigation button { flex: 0 0 auto; border: 0; padding: 2px 0; color: #8caed1; background: transparent; font-size: 11px; }
-.golden-inspector-navigation button:hover:not(:disabled) { color: #d8e8fb; background: transparent; }
+.golden-inspector-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 4px 0 8px; border-top: 1px solid var(--mo-border-subtle, #28313a); border-bottom: 1px solid var(--mo-border-subtle, #28313a); padding: 6px 0; }
+.golden-inspector-navigation button { min-width: 0; min-height: 26px; border: 0; border-radius: 4px; padding: 3px 4px; color: var(--mo-accent, #8caed1); background: transparent; font-size: 11px; line-height: 1.25; white-space: nowrap; }
+.golden-inspector-navigation button:hover:not(:disabled) { color: var(--mo-text-primary, #d8e8fb); background: var(--mo-surface-hover, rgba(74, 144, 242, .12)); }
+.golden-inspector-navigation button:focus-visible { outline: 2px solid var(--mo-focus-ring, #7aa2d6); outline-offset: 1px; }
 button.danger-subtle { border-color: #533636; color: #d58b8b; background: #1b1212; }
 
 .golden-slate-review-tools { border-top: 1px solid #252d35; background: transparent; }

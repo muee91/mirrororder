@@ -675,8 +675,12 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   }, [active]);
 
   useEffect(() => {
-    if (!focus?.recordId || !board || focus === appliedFocus.current || focus.projectId !== projectId || !active) return;
-    const row = drafts.find((draft) => draft.record_id === focus.recordId);
+    if (!focus || !board || focus === appliedFocus.current || focus.projectId !== projectId || !active) return;
+    const row = drafts.find((draft) => {
+      if (focus.recordId && draft.record_id === focus.recordId) return true;
+      if (focus.groupId && draft.source_group_id === focus.groupId) return true;
+      return Boolean(focus.clipId && draft.attachments.some((attachment) => attachment.clip_id === focus.clipId));
+    });
     if (!row) return;
     appliedFocus.current = focus;
     const attachment = row.attachments.find((item) => (!focus.clipId || focus.clipId === item.clip_id)
@@ -721,6 +725,11 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   }, [drafts, hasAuxMedia, review, showAuxColumn]);
   const selected = drafts.find((row) => row.record_id === selectedRecordId) ?? null;
   const selectedTake = selected?.source_group_id ? review?.take_groups.find((take) => take.group_id === selected.source_group_id) ?? null : null;
+  const inspectorLinkage = selected && (
+    Boolean(selectedTake)
+    || Boolean(selected.script_scene_id.trim())
+    || Boolean(selectedTake?.transcript.text.trim())
+  );
   const selectedAttachment = selected?.attachments.find((item) => attachmentKey(item) === selectedClipId) ?? null;
   // 1500-Take 渲染预算：displayOrder/索引只随输入重建，行渲染一律 O(1) 查表。
   const angleIndex = useMemo(() => {
@@ -1654,7 +1663,14 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                   </div>
                 </details>
 
-                <div className="golden-inspector-link"><span>关联</span><strong>{selectedTake ? `Take ${selectedTake.take_index}` : selected.source_group_id ? "关联 Take" : "独立场记"}</strong>{selected.script_scene_id ? <small>剧本场景 · {selected.script_scene_id}</small> : null}{selectedTake?.transcript.text ? <small>{selectedTake.transcript.text}</small> : null}</div>
+                {inspectorLinkage ? (
+                  <div className="golden-inspector-link">
+                    <span>关联</span>
+                    {selectedTake ? <strong>Take {selectedTake.take_index}</strong> : null}
+                    {selected.script_scene_id.trim() ? <small>剧本场景 · {selected.script_scene_id}</small> : null}
+                    {selectedTake?.transcript.text.trim() ? <small>{selectedTake.transcript.text.trim()}</small> : null}
+                  </div>
+                ) : null}
                 {selectedConflict && <section className="golden-inspector-link" aria-label="场记草稿冲突">
                   <strong>{selectedServerRecord ? "服务端已更新这条场记" : "服务端已删除或替换原场记"}</strong>
                   {selectedServerRecord && <details>

@@ -662,6 +662,16 @@ export function ProjectWorkbench({
               playbackFocus={currentSelection}
               onSelectionChange={(groupId, clipId, scriptSegmentId) => updateSelection({ groupId, clipId, scriptSegmentId })}
               onOpenMaterial={(groupId, clipId) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId)}
+              onOpenSlate={(groupId, clipId, scriptSegmentId) => {
+                focusTake(groupId, "material", clipId, scriptSegmentId);
+                setSlateFocus({
+                  projectId: project.project_id,
+                  groupId,
+                  clipId: clipId ?? undefined,
+                  scriptSegmentId: scriptSegmentId ?? undefined,
+                });
+                navigate("slate");
+              }}
               onOpenReview={(groupId, clipId, scriptSegmentId) => focusTake(groupId, "review", clipId, scriptSegmentId)}
               onOpenTimeline={(groupId, clipId, scriptSegmentId) => focusTake(groupId, "timeline", clipId, scriptSegmentId)}
             />

@@ -93,8 +93,8 @@ export function TaskStatusIndicator({
   );
 }
 
-export function SlateStatusIndicator({ state }: { state: SlateIndicatorState }) {
-  const text = SLATE_LABELS[state];
+export function SlateStatusIndicator({ state, label }: { state: SlateIndicatorState; label?: string }) {
+  const text = label || SLATE_LABELS[state];
   return (
     <span className="mo-slate-status-indicator" data-state={state} role="status" aria-label={`场记状态：${text}`}>
       <span className="mo-slate-status-dot" aria-hidden="true" />

@@ -1,7 +1,9 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DesktopClient } from "../../api/desktop";
+import { ProductionClient, type SlateBoard, type SlateRecord } from "../../api/production";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
+import { SlateStatusIndicator } from "../../components/StatusIndicators";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { ProductionSelectionContext } from "../production/productionNavigation";
 import type {
@@ -45,6 +47,7 @@ interface Props {
   playbackFocus?: ProductionSelectionContext;
   onSelectionChange?: (groupId: string | null, clipId: string | null, scriptSegmentId: string | null) => void;
   onOpenMaterial?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
+  onOpenSlate?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
   onOpenReview?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
   onOpenTimeline?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
 }
@@ -118,6 +121,56 @@ function takeSearchText(take: ReviewTakeGroup): string {
   ].join(" ").toLocaleLowerCase("zh-CN");
 }
 
+function slateRecordForTake(board: SlateBoard | null, take: ReviewTakeGroup): SlateRecord | null {
+  if (!board) return null;
+  const angles = new Set(take.angles.map((angle) => angle.clip_id).filter(Boolean));
+  return Object.values(board.records).find((record) => (
+    record.source_group_id === take.group_id
+    || record.attachments.some((attachment) => angles.has(attachment.clip_id))
+  )) ?? null;
+}
+
+function slateCoordinates(record: SlateRecord): string {
+  return `场 ${record.scene || record.script_scene_id || "—"} · 镜 ${record.shot || "—"} · 次 ${record.take_number ?? "—"}`;
+}
+
+function slateStatusLabel(record: SlateRecord): string {
+  return { usable: "可用", partial: "部分可用", ng: "NG", unmarked: "未标" }[record.status];
+}
+
+function ScriptSlateLinkage({
+  record,
+  groupId,
+  clipId,
+  scriptSegmentId,
+  onOpenSlate,
+}: {
+  record: SlateRecord;
+  groupId: string;
+  clipId?: string | null;
+  scriptSegmentId?: string | null;
+  onOpenSlate?: Props["onOpenSlate"];
+}) {
+  return (
+    <div className="script-slate-linkage" aria-label="关联场记">
+      <div className="script-slate-linkage-copy">
+        <span className="script-slate-linkage-coordinates">{slateCoordinates(record)}</span>
+        <SlateStatusIndicator state={record.status} label={slateStatusLabel(record)} />
+        {record.note.trim() ? <small title={record.note}>{record.note.trim()}</small> : null}
+      </div>
+      {onOpenSlate ? (
+        <button
+          type="button"
+          className="secondary script-slate-linkage-action"
+          onClick={() => onOpenSlate(groupId, clipId, scriptSegmentId)}
+        >
+          在场记中打开
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function ScriptWorkspace({
   baseUrl,
   project,
@@ -127,10 +180,12 @@ export function ScriptWorkspace({
   playbackFocus,
   onSelectionChange,
   onOpenMaterial,
+  onOpenSlate,
   onOpenReview,
   onOpenTimeline,
 }: Props) {
   const { connection, loadState, message, model, refresh } = useReviewModelSnapshot(baseUrl, project.project_id);
+  const [slateBoard, setSlateBoard] = useState<SlateBoard | null>(null);
   const roughPlacement = useMemo(() => new RoughPlacementClient(baseUrl), [baseUrl]);
   const [activeEpisode, setActiveEpisode] = useState<number | null>(null);
   const [projectionMode, setProjectionMode] = useState<ScriptProjectionMode>("script");
@@ -156,6 +211,15 @@ export function ScriptWorkspace({
   const [auditionAutoAdvance, setAuditionAutoAdvance] = useState(true);
   const auditionVideoRef = useRef<HTMLVideoElement | null>(null);
   const appliedFocusKey = useRef("");
+
+  useEffect(() => {
+    let active = true;
+    void new ProductionClient(baseUrl)
+      .scriptSupervisor(project.project_id)
+      .then((board) => { if (active) setSlateBoard(board); })
+      .catch(() => { if (active) setSlateBoard(null); });
+    return () => { active = false; };
+  }, [baseUrl, project.project_id]);
 
   // The top-level operator control is shared by every workspace. Keep the
   // Script placement and assignment-decision writes in sync when that control
@@ -195,6 +259,7 @@ export function ScriptWorkspace({
   const activeAuditionAngle = activeAuditionTake?.angles.find((angle) => Boolean(angle.playback?.url)) ?? activeAuditionTake?.angles[0] ?? null;
   const activeAuditionUrl = activeAuditionAngle?.playback?.url ?? "";
   const activeAuditionStart = activeAuditionAngle?.playback?.source_start ?? activeAuditionAngle?.source_start ?? 0;
+  const activeAuditionSlate = activeAuditionTake ? slateRecordForTake(slateBoard, activeAuditionTake) : null;
 
   useEffect(() => {
     if (!model) return;
@@ -652,7 +717,7 @@ export function ScriptWorkspace({
         <span><strong>{episodeStats.mapped}</strong>已归集</span>
         <span><strong>{episodeStats.candidate}</strong>有候选</span>
         <span className={episodeStats.attention ? "needs-attention" : ""}><strong>{episodeStats.attention}</strong>需处理</span>
-        <small>按剧本顺序查找实拍素材；选中段落后可点击「匹配素材」或直接拖入 Take。</small>
+        <small>App 内校准剧本与实拍对应关系（联动场记）；校准后在「审阅」提供纯净找片面板。</small>
       </div>
 
       {writeMessage ? <div className={`write-status write-${writeState}`}>{writeMessage}</div> : null}
@@ -775,6 +840,15 @@ export function ScriptWorkspace({
                           <span>实际对白</span>
                           <p>{activeAuditionTake.transcript.text || "尚未转写实际对白"}</p>
                         </div>
+                        {activeAuditionSlate ? (
+                          <ScriptSlateLinkage
+                            record={activeAuditionSlate}
+                            groupId={activeAuditionTake.group_id}
+                            clipId={activeAuditionAngle?.clip_id ?? null}
+                            scriptSegmentId={selectedBlock.segment_id}
+                            onOpenSlate={onOpenSlate}
+                          />
+                        ) : null}
                         <div className="script-audition-controls">
                           <button type="button" className="secondary" disabled={auditionTakes.length <= 1} onClick={() => setAuditionIndex((idx) => (idx - 1 + auditionTakes.length) % auditionTakes.length)}>上一条</button>
                           <button type="button" className="secondary" disabled={auditionTakes.length <= 1} onClick={() => setAuditionIndex((idx) => (idx + 1) % auditionTakes.length)}>下一条</button>
@@ -846,6 +920,18 @@ export function ScriptWorkspace({
                   <button type="button" className="secondary" onClick={() => onOpenReview?.(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>在审阅中打开</button>
                   <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>到时间线</button>
                 </div>
+                {(() => {
+                  const record = slateRecordForTake(slateBoard, selectedTake);
+                  return record ? (
+                    <ScriptSlateLinkage
+                      record={record}
+                      groupId={selectedTake.group_id}
+                      clipId={selectedClipId}
+                      scriptSegmentId={selectedScriptSegmentId}
+                      onOpenSlate={onOpenSlate}
+                    />
+                  ) : null;
+                })()}
                 {selectedBlock && !selectedTakeMappedHere ? (
                   <div className="script-detail-placement-action">
                     <span>当前 Take 尚未归集到所选剧本段。</span>
