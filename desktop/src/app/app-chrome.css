@@ -279,6 +279,7 @@
 
 .app-workspace-recent {
   display: grid;
+  min-width: 0;
   gap: 4px;
   margin-top: 8px;
   padding-top: 8px;
@@ -293,19 +294,33 @@
 
 .app-workspace-recent-item {
   display: grid;
-  gap: 1px;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  gap: 2px;
   text-align: left;
   padding: 6px 8px;
   min-height: 0;
 }
 
 .app-workspace-recent-item strong {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--mo-text-primary);
   font-size: 11.5px;
   font-weight: 600;
 }
 
 .app-workspace-recent-item code {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   color: var(--mo-text-muted);
   font-size: 10px;
   overflow: hidden;
@@ -393,10 +408,18 @@
 .app-workspace-menu-popover {
   top: calc(100% + 6px);
   width: 306px;
+  max-width: min(320px, calc(100vw - 88px));
+  box-sizing: border-box;
+  overflow: hidden;
   padding: 9px;
   border-color: var(--mo-border-default, #29333d);
   border-radius: var(--mo-radius-overlay, 8px);
   background: var(--mo-surface-raised, #151b20);
+}
+
+.professional-project-identity .app-workspace-menu-popover {
+  left: 0;
+  right: auto;
 }
 
 .app-workspace-menu-heading {
@@ -439,9 +462,6 @@
 .app-project-switcher {
   position: relative;
   min-width: 0;
-  margin-inline-start: 4px;
-  padding-inline-start: 8px;
-  border-inline-start: 1px solid var(--mo-border-subtle);
 }
 .app-project-switcher > summary {
   display: flex;

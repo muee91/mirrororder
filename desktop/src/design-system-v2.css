@@ -551,11 +551,26 @@ textarea::placeholder { color: var(--mo-text-muted); }
 .app-workspace-menu-popover {
   top: calc(100% + 8px);
   width: 336px;
+  max-width: min(336px, calc(100vw - 88px));
+  box-sizing: border-box;
+  overflow: hidden;
   padding: 12px;
   border-color: var(--mo-border-default);
   border-radius: 7px;
   background: var(--mo-surface-elevated);
   box-shadow: var(--mo-shadow-float);
+}
+
+html[data-mirrororder-theme] .app-workspace-recent-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  gap: 2px;
+  padding: 6px 8px;
+  text-align: left;
 }
 
 html[data-mirrororder-theme="light"] .professional-project-tools .project-search-trigger kbd {
@@ -1031,13 +1046,9 @@ html[data-mirrororder-theme] button.workspace-context-backdrop:focus-visible {
   outline: none;
 }
 
-html[data-macos-overlay="true"] .professional-project-toolbar,
-html[data-macos-overlay="true"] .app-global-topbar {
-  padding-inline-start: 28px;
-}
-
 /* Project toolbar controls */
-html[data-mirrororder-theme] .professional-project-toolbar button.secondary,
+html[data-mirrororder-theme] .professional-project-toolbar .professional-project-identity > button.secondary,
+html[data-mirrororder-theme] .professional-project-toolbar .professional-project-tools > button.secondary,
 html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigger,
 html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle {
   display: inline-flex;
@@ -1054,7 +1065,8 @@ html[data-mirrororder-theme] .professional-project-toolbar .professional-assista
   font-weight: 560;
 }
 
-html[data-mirrororder-theme] .professional-project-toolbar button.secondary:hover:not(:disabled),
+html[data-mirrororder-theme] .professional-project-toolbar .professional-project-identity > button.secondary:hover:not(:disabled),
+html[data-mirrororder-theme] .professional-project-toolbar .professional-project-tools > button.secondary:hover:not(:disabled),
 html[data-mirrororder-theme] .professional-project-toolbar .project-search-trigger:hover:not(:disabled),
 html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle:hover:not(:disabled),
 html[data-mirrororder-theme] .professional-project-toolbar .professional-assistant-toggle.is-active {
@@ -1117,10 +1129,6 @@ html[data-mirrororder-theme] .professional-project-toolbar {
   padding: 3px 12px;
   min-height: 38px;
 }
-
-html[data-macos-overlay="true"] .global-sidebar { padding-top: 38px; }
-html[data-macos-overlay="true"] .professional-project-toolbar,
-html[data-macos-overlay="true"] .app-global-topbar { padding-inline-start: 28px; }
 
 html[data-mirrororder-theme] .project-module-rail {
   border-bottom: 0;
@@ -1206,7 +1214,8 @@ html[data-mirrororder-theme] .mirrororder-redesign-shell .application-frame {
 html[data-mirrororder-theme] .mirrororder-redesign-shell .global-sidebar {
   width: 54px;
   min-width: 54px;
-  padding: 0;
+  padding-inline: 0;
+  padding-bottom: 0;
   border-right: 1px solid var(--mo-border-subtle);
   background: var(--mo-frame-obsidian);
   box-shadow: none;
@@ -1217,6 +1226,18 @@ html[data-mirrororder-theme] .mirrororder-redesign-shell .project-library-redesi
   padding: 8px 3px;
   align-items: center;
   gap: 3px;
+}
+
+html[data-macos-overlay="true"] .global-sidebar,
+html[data-macos-overlay="true"][data-mirrororder-theme] .mirrororder-redesign-shell .global-sidebar {
+  padding-top: 38px;
+}
+
+html[data-macos-overlay="true"] .professional-project-toolbar,
+html[data-macos-overlay="true"][data-mirrororder-theme] .professional-project-toolbar,
+html[data-macos-overlay="true"] .app-global-topbar,
+html[data-macos-overlay="true"][data-mirrororder-theme] .app-global-topbar {
+  padding-inline-start: 34px;
 }
 
 

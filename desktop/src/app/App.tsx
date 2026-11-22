@@ -814,39 +814,33 @@ export function App() {
     </details>
   );
   const switchProject = selectedProject && (
-    <>
-      <button type="button" className="secondary app-project-library-link" onClick={openProjects}>
-        <StudioIcon name="back" size={13.5} />
-        <span>项目库</span>
-      </button>
-      <details className="app-project-switcher" onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-      }} onKeyDown={(event) => {
-        if (event.key === "Escape" && event.currentTarget.open) {
-          event.stopPropagation();
-          event.currentTarget.open = false;
-          event.currentTarget.querySelector("summary")?.focus();
-        }
-      }}>
-        <summary aria-label={`切换项目 · ${selectedProject.name || selectedProject.project_id}`}>
-          <span>{selectedProject.name || selectedProject.project_id}</span>
-        </summary>
-        <div className="app-project-switcher-list">
-          {snapshot.projects.map((project) => (
-            <button key={project.project_id} type="button" className="secondary"
-              aria-current={project.project_id === selectedProject.project_id ? "true" : undefined}
-              onClick={(event) => {
-                const menu = event.currentTarget.closest("details");
-                if (menu) {
-                  menu.open = false;
-                  menu.querySelector("summary")?.focus();
-                }
-                selectProject(project);
-              }}>{project.name || project.project_id}</button>
-          ))}
-        </div>
-      </details>
-    </>
+    <details className="app-project-switcher" onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+    }} onKeyDown={(event) => {
+      if (event.key === "Escape" && event.currentTarget.open) {
+        event.stopPropagation();
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector("summary")?.focus();
+      }
+    }}>
+      <summary aria-label={`切换项目 · ${selectedProject.name || selectedProject.project_id}`}>
+        <span>{selectedProject.name || selectedProject.project_id}</span>
+      </summary>
+      <div className="app-project-switcher-list">
+        {snapshot.projects.map((project) => (
+          <button key={project.project_id} type="button" className="secondary"
+            aria-current={project.project_id === selectedProject.project_id ? "true" : undefined}
+            onClick={(event) => {
+              const menu = event.currentTarget.closest("details");
+              if (menu) {
+                menu.open = false;
+                menu.querySelector("summary")?.focus();
+              }
+              selectProject(project);
+            }}>{project.name || project.project_id}</button>
+        ))}
+      </div>
+    </details>
   );
 
   return (<>

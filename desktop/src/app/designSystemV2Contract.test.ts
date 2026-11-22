@@ -110,6 +110,8 @@ describe("MirrorOrder Design System v2 contract", () => {
 
   it("keeps global chrome quiet, compact and row-oriented", () => {
     const chrome = read("./app-chrome.css");
+    const v2 = read("../design-system-v2.css");
+    const project = read("../features/production/professional-project-workbench.css");
 
     expect(chrome).toContain("grid-template-columns: 54px minmax(0, 1fr)");
     expect(chrome).toContain(".application-frame.is-project-open {\n  grid-template-columns: 54px minmax(0, 1fr)");
@@ -119,6 +121,17 @@ describe("MirrorOrder Design System v2 contract", () => {
     expect(chrome).toContain(".app-global-actions button");
     expect(chrome).toContain("border: 0");
     expect(chrome).toContain(".professional-project-context-note");
+    expect(chrome).toContain(".professional-project-identity .app-workspace-menu-popover {\n  left: 0;\n  right: auto;\n}");
+    expect(chrome).toContain(".app-workspace-recent-item");
+    expect(chrome).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(project).toContain(".professional-project-context-subtitle");
+    const sidebarResetMatch = v2.match(/html\[data-mirrororder-theme\]\s*\.mirrororder-redesign-shell\s*\.global-sidebar\s*\{[^}]*width:\s*54px;[^}]*\}/);
+    expect(sidebarResetMatch?.[0]).toBeTruthy();
+    expect(sidebarResetMatch?.[0]).not.toMatch(/\bpadding:\s*0\b/);
+    const sidebarResetIndex = v2.lastIndexOf("html[data-mirrororder-theme] .mirrororder-redesign-shell .global-sidebar");
+    const overlayRailIndex = v2.indexOf("html[data-macos-overlay=\"true\"] .global-sidebar");
+    expect(overlayRailIndex).toBeGreaterThan(sidebarResetIndex);
+    expect(v2.slice(overlayRailIndex)).toContain("padding-top: 38px;");
     expect(chrome).not.toMatch(/font-size:\s*(?:7|8|9)px/);
   });
 });
