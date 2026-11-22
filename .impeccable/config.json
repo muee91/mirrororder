@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "desktop/src/features/review/review-workspace.css"
+        ],
+        "createdAt": "2026-11-22T18:21:30.938Z",
+        "reason": "semantic decision-state badge uses a narrow colored edge, not a card side-tab"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "desktop/src/features/editor/timeline.css"
+        ],
+        "createdAt": "2026-11-22T18:21:45.502Z",
+        "reason": "timeline clips use full rectangular borders for track readability, not a side-tab"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "desktop/src/features/editor/editor-productization.css"
+        ],
+        "createdAt": "2026-11-22T18:21:45.572Z",
+        "reason": "focus context uses a small status dot, not a card side-tab"
+      }
+    ]
+  }
+}
