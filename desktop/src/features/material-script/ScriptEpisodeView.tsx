@@ -1,6 +1,7 @@
 import type { ReviewEpisode, ReviewModelPayload, ReviewScriptBlock } from "../../api/host";
 import { candidateTakeIds, mappedTakeIds } from "./model";
 import { ScriptBlock, type ScriptProjectionMode } from "./ScriptBlock";
+import { isPlaceableScriptBlock } from "../script/scriptSemantics";
 
 export { dragGroupId, scriptDomId } from "./ScriptBlock";
 
@@ -32,7 +33,7 @@ export function ScriptEpisodeView({
   return (
     <div className="script-episode">
       {episode.scenes.map((scene) => {
-        const placeable = scene.script_blocks.filter((block) => block.type !== "scene_heading");
+        const placeable = scene.script_blocks.filter(isPlaceableScriptBlock);
         const mappedBlocks = placeable.filter((block) => mappedTakeIds(model, block.segment_id).length > 0).length;
         return (
           <section className="script-scene" key={scene.scene_id}>

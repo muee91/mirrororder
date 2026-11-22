@@ -63,6 +63,25 @@ def test_script_parser_supports_multiple_scenes_and_unknown(tmp_path):
     assert document.segments[-1].scene_id == "19-02"
 
 
+def test_script_parser_marks_cast_lists_as_non_placeable_context(tmp_path):
+    path = tmp_path / "script.txt"
+    path.write_text("第一集\n1-1 客厅\n人物：王强，李雪\n王强：你好\n角色：继续", encoding="utf-8")
+    document = parse_script(path)
+    assert document.segments[1].type == "character"
+    assert document.segments[1].speaker == ""
+    assert document.segments[2].type == "dialogue"
+    assert document.segments[3].type == "dialogue"
+    assert document.segments[3].speaker == "角色"
+
+
+def test_script_parser_accepts_episode_titles_in_bookmarks(tmp_path):
+    path = tmp_path / "script.txt"
+    path.write_text("第一集《低调回村》\n1-1 村口\n△许长安下车。", encoding="utf-8")
+    document = parse_script(path)
+    assert document.segments[0].episode == 1
+    assert document.segments[0].type == "scene_heading"
+
+
 def test_script_parser_does_not_drop_unknown_scene(tmp_path):
     path = tmp_path / "script.docx"
     _write_docx(path, ["第1集", "李梦：你好"])

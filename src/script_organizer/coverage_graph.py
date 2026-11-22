@@ -13,6 +13,7 @@ from .automation_store import AutomationStore
 from .editorial_store import EditorialStore
 from .review_store import ReviewStore
 from .script_supervisor_store import ScriptSupervisorStore
+from .script_semantics import is_placeable_script_segment
 
 
 COVERAGE_CONTRACT = "coverage.v1"
@@ -128,13 +129,15 @@ def _scene_index(script: dict[str, Any]) -> tuple[OrderedDict[str, dict[str, Any
                 "script_orders": [],
             },
         )
-        scene["segment_ids"].append(segment_id)
-        scene["script_orders"].append(_int(segment.get("order"), 0))
         if str(segment.get("type", "") or "") == "scene_heading":
             heading = str(segment.get("raw_text", "") or segment.get("text", "") or "").strip()
             if heading:
                 scene["heading"] = heading[:500]
         segment_scene[segment_id] = scene_key
+        if not is_placeable_script_segment(segment):
+            continue
+        scene["segment_ids"].append(segment_id)
+        scene["script_orders"].append(_int(segment.get("order"), 0))
     return scenes, segment_scene
 
 

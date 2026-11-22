@@ -1,5 +1,6 @@
 import type { DragEvent, KeyboardEvent } from "react";
 import type { ReviewScriptBlock } from "../../api/host";
+import { isPlaceableScriptBlock } from "../script/scriptSemantics";
 import { DRAG_TAKE_MIME } from "./TakeCard";
 import "./script-block.css";
 
@@ -34,6 +35,7 @@ const BLOCK_TYPE_LABELS: Record<string, string> = {
   scene_heading: "场头",
   transition: "转场",
   parenthetical: "旁注",
+  character: "人物",
 };
 
 export function scriptBlockTypeLabel(block: ReviewScriptBlock): string {
@@ -54,7 +56,7 @@ export function ScriptBlock({
   onDropPlacement,
   onClickPlacement,
 }: ScriptBlockProps) {
-  const canPlace = block.type !== "scene_heading";
+  const canPlace = isPlaceableScriptBlock(block);
   const relatedTakeIds = [...mappedTakeIds, ...candidateTakeIds.filter((id) => !mappedTakeIds.includes(id))];
   const showCoverage = canPlace && (projectionMode !== "script" || selected || relatedTakeIds.length > 0);
 
@@ -99,6 +101,7 @@ export function ScriptBlock({
               {candidateTakeIds.length ? <span className="has-candidate">候选 {candidateTakeIds.length}</span> : null}
             </div>
           ) : null}
+          {!canPlace && block.type !== "scene_heading" ? <span className="script-block-structural-status">无需归集</span> : null}
           {placementGroupId && selected && canPlace ? (
             <button type="button" className="place-current" onClick={() => onClickPlacement(block)}>
               归集当前 Take

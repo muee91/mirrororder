@@ -78,7 +78,7 @@ def _episode(text: str) -> int | None:
     # explicit so a dialogue line such as ``第一集人物...`` is not treated as
     # an episode heading by accident.
     match = re.match(
-        r"^(?:第\s*)?([0-9零〇一二两三四五六七八九十百]+)\s*(?:集|话|回)(?:(?:\s*[:：\-—.、]\s*|\s+).*)?$",
+        r"^(?:第\s*)?([0-9零〇一二两三四五六七八九十百]+)\s*(?:集|话|回)(?:(?:\s*[:：\-—.、]\s*|\s+).*|[《「『【（(].+[》」』】）)])?$",
         text,
         re.IGNORECASE,
     )
@@ -96,6 +96,9 @@ def _scene(text: str) -> str | None:
 
 
 def _classify(text: str) -> tuple[str, str, str]:
+    cast_list = re.match(r"^(?:人物(?:表|列表|名单)?|角色(?:表|列表|名单))\s*[：:]\s*(.+)$", text)
+    if cast_list:
+        return "character", "", cast_list.group(1).strip()
     match = re.match(r"^([^：:]{1,24})[：:]\s*(.+)$", text)
     if match and not text.startswith(("时间", "地点", "场景")):
         return "dialogue", match.group(1).strip(), match.group(2).strip()

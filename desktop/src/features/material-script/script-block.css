@@ -11,6 +11,7 @@
 .script-block-actions { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .script-block-actions button { border-color: color-mix(in srgb, var(--mo-accent, #6fa7e8) 40%, var(--mo-border-default, #303a44)); padding: 3px 7px; color: var(--mo-accent-strong, #cfe2f5); background: var(--mo-surface-control, #171d23); font-size: var(--mo-font-xs, 10px); }
 .script-block-actions .place-current { color: var(--mo-success, #c4dccd); }
+.script-block-structural-status { color: var(--mo-text-muted, #7e8a97); font-size: var(--mo-font-xs, 10px); }
 .script-block-meta code { color: var(--mo-text-muted, #687583); }
 .drop-hint { display: inline-block; margin-top: 6px; border-left: 2px solid var(--mo-accent, #6fa7e8); padding: 3px 6px; color: var(--mo-text-secondary, #c7d1db); background: var(--mo-accent-soft, #25313b); font-size: var(--mo-font-xs, 10px); }
 

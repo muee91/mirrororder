@@ -95,6 +95,8 @@ describe("slate intake pools", () => {
           heading: "室内",
           script_blocks: [
             { type: "scene_heading", segment_id: "heading" },
+            { type: "character", segment_id: "cast" },
+            { type: "dialogue", speaker: "人物", segment_id: "legacy-cast" },
             { type: "dialogue", segment_id: "seg-1" },
             { type: "action", segment_id: "seg-2" },
             { type: "dialogue", segment_id: "seg-3" },

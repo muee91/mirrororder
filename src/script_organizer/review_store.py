@@ -9,6 +9,8 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from .script_semantics import is_placeable_script_segment
+
 try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows fallback
@@ -317,7 +319,7 @@ class ReviewStore:
             known_segments = {
                 str(item.get("segment_id", "") or "")
                 for item in script.get("segments", [])
-                if isinstance(item, dict) and str(item.get("type", "") or "") != "scene_heading"
+                if isinstance(item, dict) and is_placeable_script_segment(item)
             }
             missing = [segment_id for segment_id in segment_ids if segment_id not in known_segments]
             if missing:

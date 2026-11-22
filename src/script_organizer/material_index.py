@@ -26,6 +26,7 @@ from .models import Candidate, Clip, MulticamGroup
 from .known_text_alignment import align_known_text
 from .review_store import ReviewStore
 from .script_parser import ScriptDocument, parse_script
+from .script_semantics import is_placeable_script_segment
 from .source_descriptor import redact_device_media_paths, shared_source_descriptor
 from .media_identity import resolve_fcpxml_clips
 from .transcript import TranscriptStore, transcribe_with_faster_whisper
@@ -200,15 +201,15 @@ def _candidates_from_payload(items: object, group_id: str) -> list[Candidate] | 
 
 
 def _without_scene_headings(candidate: Candidate, segment_by_id: dict[str, object]) -> Candidate:
-    """Keep scene headings as metadata, never as material coverage."""
+    """Keep structural script rows as metadata, never as material coverage."""
     ids = candidate.script_segment_ids or ((candidate.script_segment_id,) if candidate.script_segment_id else ())
     filtered_ids = tuple(
         segment_id
         for segment_id in ids
-        if getattr(segment_by_id.get(segment_id), "type", "") != "scene_heading"
+        if is_placeable_script_segment(segment_by_id.get(segment_id))
     )
     script_segment_id = candidate.script_segment_id
-    if script_segment_id and getattr(segment_by_id.get(script_segment_id), "type", "") == "scene_heading":
+    if script_segment_id and not is_placeable_script_segment(segment_by_id.get(script_segment_id)):
         script_segment_id = filtered_ids[-1] if filtered_ids else None
     return replace(candidate, script_segment_id=script_segment_id, script_segment_ids=filtered_ids)
 
@@ -478,7 +479,7 @@ def _script_gap_metadata(script_segments: list, matches: dict[str, list[Candidat
 
     by_scene: defaultdict[tuple[int, str], list] = defaultdict(list)
     for segment in script_segments:
-        if segment.type != "scene_heading":
+        if is_placeable_script_segment(segment):
             by_scene[(segment.episode, segment.scene_id)].append(segment)
 
     gaps: list[dict[str, Any]] = []

@@ -9,6 +9,7 @@ from .coverage_graph import build_coverage_graph
 from .delivery_semantics import resolve_delivery_state
 from .editorial_store import EditorialStore
 from .review_store import ReviewStore, is_group_excluded
+from .script_semantics import is_placeable_script_segment
 
 
 ROUGH_CUT_CONTRACT = "rough_cut_plan.v1"
@@ -321,7 +322,7 @@ def build_rough_cut_plan(
         segment_plans: list[dict[str, Any]] = []
         for segment_id in _as_list(scene.get("script_segment_ids")):
             segment = _as_dict(segments.get(str(segment_id)))
-            if not segment or str(segment.get("type", "") or "") == "scene_heading":
+            if not segment or not is_placeable_script_segment(segment):
                 continue
             planned = _segment_plan(segment, coverage_groups, groups_by_id, review, editorial)
             segment_plans.append(planned)

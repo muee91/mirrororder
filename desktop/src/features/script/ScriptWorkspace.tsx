@@ -15,6 +15,7 @@ import { ScriptAssignmentDecision } from "./ScriptAssignmentDecision";
 import { ScriptEpisodeView, dragGroupId, scriptDomId } from "../material-script/ScriptEpisodeView";
 import type { ScriptProjectionMode } from "../material-script/ScriptBlock";
 import { mappingLabel, takeDisplayLabel } from "../material-script/TakeCard";
+import { isPlaceableScriptBlock } from "./scriptSemantics";
 import { TakeInspector } from "../material-script/TakeInspector";
 import { DRAG_TAKE_MIME, VirtualTakeList, episodeLabel } from "../material-script/VirtualTakeList";
 import {
@@ -79,10 +80,10 @@ function roughPreviewLabel(plan: RoughPlacementPayload["plans"][number]): string
 function firstPlaceableBlock(episode: ReviewEpisode | null): ReviewScriptBlock | null {
   if (!episode) return null;
   for (const scene of episode.scenes) {
-    const block = scene.script_blocks.find((item) => item.type !== "scene_heading");
+    const block = scene.script_blocks.find(isPlaceableScriptBlock);
     if (block) return block;
   }
-  return episode.scenes[0]?.script_blocks[0] ?? null;
+  return null;
 }
 
 function episodeHasSegment(episode: ReviewEpisode | null, segmentId: string | null): boolean {
@@ -256,7 +257,7 @@ export function ScriptWorkspace({
     const scenes = selectedEpisode.scenes.flatMap((scene) => {
       const sceneMatches = Boolean(needle && scene.heading.toLocaleLowerCase("zh-CN").includes(needle));
       const scriptBlocks = scene.script_blocks.filter((block) => {
-        const canPlace = block.type !== "scene_heading";
+        const canPlace = isPlaceableScriptBlock(block);
         const mapped = mappedTakeIds(model, block.segment_id);
         const issueProjection = projectionMode !== "issues" || (canPlace && (mapped.length === 0 || block.issues.length > 0));
         if (!issueProjection) return false;
@@ -273,7 +274,7 @@ export function ScriptWorkspace({
     if (!selectedEpisode || !model) return result;
     for (const scene of selectedEpisode.scenes) {
       for (const block of scene.script_blocks) {
-        if (block.type === "scene_heading") continue;
+        if (!isPlaceableScriptBlock(block)) continue;
         result.blocks += 1;
         const mapped = mappedTakeIds(model, block.segment_id).length;
         const candidates = candidateTakeIds(model, block.segment_id).length;

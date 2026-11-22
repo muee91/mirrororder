@@ -8,6 +8,7 @@ from difflib import SequenceMatcher
 
 from .config import ProjectConfig
 from .models import Candidate, MulticamGroup, ScriptSegment, Transcript
+from .script_semantics import is_placeable_script_segment
 from .transcript import slice_transcript
 
 
@@ -99,11 +100,12 @@ def _script_windows(segments: list[ScriptSegment]) -> list[tuple[ScriptSegment, 
             chunk = segments[index : index + width]
             if not chunk or any(item.type == "scene_heading" for item in chunk):
                 continue
-            if not any(item.type == "dialogue" for item in chunk):
+            placeable_chunk = tuple(item for item in chunk if is_placeable_script_segment(item))
+            if not placeable_chunk or not any(item.type == "dialogue" for item in placeable_chunk):
                 continue
-            text = "".join(item.text for item in chunk)
+            text = "".join(item.text for item in placeable_chunk)
             if text:
-                result.append((segment, tuple(chunk), text))
+                result.append((placeable_chunk[0], placeable_chunk, text))
     return result
 
 
@@ -393,7 +395,7 @@ def _merge_adjacent_candidates(
         script_range = tuple(
             segment.segment_id
             for segment in script_segments[first_position : last_position + 1]
-            if segment.type != "scene_heading"
+            if is_placeable_script_segment(segment)
         )
         cameras = list(dict.fromkeys(
             str(candidate.alignment.get("camera"))

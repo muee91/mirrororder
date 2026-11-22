@@ -1,5 +1,6 @@
 import type { MediaInventoryItem } from "../../api/mediaRoles";
 import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
+import { isPlaceableScriptBlock } from "../script/scriptSemantics";
 
 export const SLATE_TAKE_MIME = "application/x-mirrororder-slate-take";
 
@@ -28,7 +29,7 @@ export function buildSlateSceneTargets(review: ReviewModelPayload | null): Slate
       heading: scene.heading,
       segmentIds: Array.from(new Set(
         scene.script_blocks
-          .filter((block) => block.type !== "scene_heading")
+          .filter(isPlaceableScriptBlock)
           .map((block) => block.segment_id.trim())
           .filter(Boolean),
       )),

@@ -72,4 +72,30 @@ describe("ScriptBlock keyboard target ownership", () => {
     expect(onSelect).not.toHaveBeenCalled();
     expect(enter.defaultPrevented).toBe(false);
   });
+
+  it("does not offer material actions for a cast-list row", () => {
+    const onOpenContext = vi.fn();
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <ScriptBlock
+          block={{ ...block, speaker: "人物", raw_text: "人物：许长安，王婶" }}
+          mappedTakeIds={[]}
+          candidateTakeIds={[]}
+          selected={false}
+          projectionMode="script"
+          draggingGroupId="take-1"
+          placementGroupId="take-1"
+          onSelect={() => undefined}
+          onOpenContext={onOpenContext}
+          onShowTake={() => undefined}
+          onDropPlacement={() => undefined}
+          onClickPlacement={() => undefined}
+        />,
+      );
+    });
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.textContent).toContain("无需归集");
+    expect(onOpenContext).not.toHaveBeenCalled();
+  });
 });

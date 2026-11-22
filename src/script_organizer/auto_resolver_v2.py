@@ -11,6 +11,7 @@ from .config import ProjectConfig
 from .model_provider import ModelProvider
 from .review_store import ReviewStore
 from .vision_provider import VisionProvider
+from .script_semantics import is_placeable_script_segment
 
 
 def _read_json(path: Path, fallback: object) -> object:
@@ -154,7 +155,7 @@ def _vision_rows(row: dict[str, Any], segment_by_id: dict[str, dict[str, Any]]) 
     result = []
     for segment_id in [str(value) for value in row.get("context_segment_ids", []) if str(value) in segment_by_id][:12]:
         segment = segment_by_id[segment_id]
-        if str(segment.get("type", "")) == "scene_heading":
+        if not is_placeable_script_segment(segment):
             continue
         candidate_id = f"vision:{segment_id}"
         candidate = {"candidate_id": candidate_id, "script_segment_ids": [segment_id]}
