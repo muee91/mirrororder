@@ -45,7 +45,6 @@ interface Props {
   slateDraftSession?: SlateDraftSession;
   active?: boolean;
   projectNavigation?: ReactNode;
-  workspaceMenu?: ReactNode;
   pageRequest?: { page: ProductionPage; nonce: number } | null;
   externalXiaoJingAction?: (XiaoJingMainAction & { nonce: number }) | null;
   xiaojingWorkspace?: Pick<XiaoJingContextSnapshot, "workspace_name" | "projects" | "appearance">;
@@ -188,7 +187,7 @@ function assistantSelectionSummary(selection: AssistantSelection): string {
 }
 
 export function ProjectWorkbench({
-  baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation, workspaceMenu,
+  baseUrl, project, workspaceId = baseUrl, slateDraftSession, active = true, projectNavigation,
   pageRequest = null, externalXiaoJingAction, xiaojingWorkspace, onXiaoJingError,
   onOpenTeamReview, onTaskChanged, onOpenStatus, onOpenSettings, onPageChange, onSyncStatusChange,
   showModuleRail = true,
@@ -510,11 +509,38 @@ export function ProjectWorkbench({
       <header className="professional-project-toolbar" data-tauri-drag-region>
         <div className="professional-project-identity" data-tauri-drag-region>
           {projectNavigation ?? <strong>{project.name || project.project_id}</strong>}
-          {workspaceMenu ? <span className="professional-project-workspace-menu" data-tauri-drag-region="no-drag">{workspaceMenu}</span> : null}
+          {visiblePage.startsWith("sync-") ? (
+            <nav className="workbench-subbar sync-workbench-subbar" aria-label="同步工作区" data-tauri-drag-region="no-drag">
+              {([
+                ["sync-task", "同步任务"],
+                ["sync-inspect", "同步核对"],
+                ["sync-delivery", "工程交付"],
+              ] as const).map(([target, label]) => {
+                const available = target === "sync-task" || master.ready;
+                return <button key={target} type="button" className="workbench-subbar-link" aria-current={visiblePage === target ? "page" : undefined}
+                  disabled={!available} title={!available ? "同步完成后开放" : undefined}
+                  onClick={() => navigate(target)}>{label}</button>;
+              })}
+            </nav>
+          ) : ["media-library", "takes", "identity", "media-binding"].includes(visiblePage) ? (
+            <nav className="workbench-subbar material-workbench-subbar" aria-label="素材工作区" data-tauri-drag-region="no-drag">
+              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "media-library" ? "page" : undefined} onClick={() => navigate("media-library")}>全部文件</button>
+              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "identity" ? "page" : undefined} disabled={syncBlocked} onClick={() => navigate("identity")}>演员与角色</button>
+              {visiblePage === "takes" ? <button type="button" className="workbench-subbar-link" aria-current="page" onClick={() => navigate("takes")}>Take 镜次</button> : null}
+              {visiblePage === "media-binding" ? <button type="button" className="workbench-subbar-link" aria-current="page" onClick={() => navigate("media-binding")}>换盘重连</button> : null}
+            </nav>
+          ) : visiblePage === "watch" || visiblePage === "timeline" ? (
+            <nav className="workbench-subbar review-workbench-subbar" aria-label="审阅工作区" data-tauri-drag-region="no-drag">
+              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "watch" ? "page" : undefined} onClick={() => navigate("watch")}>看片审阅</button>
+              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "timeline" ? "page" : undefined} onClick={() => navigate("timeline")}>粗剪组接</button>
+              {onOpenTeamReview ? <button type="button" className="workbench-subbar-link" onClick={onOpenTeamReview}>团队协作</button> : null}
+            </nav>
+          ) : (
+            <span className="professional-project-context-subtitle" aria-live="polite">{pageLabel(visiblePage)}</span>
+          )}
           {returnPage && returnPage !== visiblePage && visiblePage !== "media-binding" && !syncBlocked && <button type="button" className="secondary"
             data-tauri-drag-region="no-drag"
             onClick={() => { navigate(returnPage); setReturnPage(null); }}>返回{pageLabel(returnPage)}</button>}
-          <span className="professional-project-context-subtitle" aria-live="polite">{pageLabel(visiblePage)}</span>
         </div>
         <div className="professional-project-tools" data-tauri-drag-region>
           <span data-tauri-drag-region="no-drag">
@@ -550,9 +576,6 @@ export function ProjectWorkbench({
               }
             }} />
           <div className="project-module-system" aria-label="系统工具">
-            {onOpenTeamReview ? <button type="button" className="project-module-system-link" data-tauri-drag-region="no-drag" title="团队审阅" onClick={onOpenTeamReview}>
-              <StudioIcon name="team" size={16} /><span>协作</span>
-            </button> : null}
             {onOpenStatus ? <button type="button" className="project-module-system-link" data-tauri-drag-region="no-drag" title="状态中心" onClick={onOpenStatus}>
               <StudioIcon name="activity" size={16} /><span>状态</span>
             </button> : null}
@@ -563,37 +586,6 @@ export function ProjectWorkbench({
         </nav> : null}
       <div className="project-workbench-canvas">
         <div className="project-workbench-main owns-chrome">
-          {visiblePage.startsWith("sync-") ? (
-            <nav className="workbench-subbar sync-workbench-subbar" aria-label="同步工作区">
-              {([
-                ["sync-task", "同步任务"],
-                ["sync-inspect", "同步核对"],
-                ["sync-delivery", "工程交付"],
-              ] as const).map(([target, label]) => {
-                const available = target === "sync-task" || master.ready;
-                return <button key={target} type="button" className="workbench-subbar-link" aria-current={visiblePage === target ? "page" : undefined}
-                  disabled={!available} title={!available ? "同步完成后开放" : undefined}
-                  onClick={() => navigate(target)}>{label}</button>;
-              })}
-            </nav>
-          ) : null}
-          {["media-library", "takes", "identity", "media-binding"].includes(visiblePage) ? (
-            <nav className="workbench-subbar material-workbench-subbar" aria-label="素材工作区">
-              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "media-library" ? "page" : undefined} onClick={() => navigate("media-library")}>全部文件</button>
-              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "takes" ? "page" : undefined} disabled={syncBlocked} onClick={() => navigate("takes")}>Take 镜次</button>
-              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "identity" ? "page" : undefined} disabled={syncBlocked} onClick={() => navigate("identity")}>演员与角色</button>
-              <button type="button" className="workbench-subbar-link workbench-subbar-link-trailing" aria-current={visiblePage === "media-binding" ? "page" : undefined} onClick={() => navigate("media-binding")}>换盘 / 本机重连</button>
-            </nav>
-          ) : null}
-          {visiblePage === "watch" || visiblePage === "timeline" ? (
-            <nav className="workbench-subbar review-workbench-subbar" aria-label="审阅工作区">
-              {visiblePage === "watch" ? (
-                <button type="button" className="workbench-subbar-link workbench-subbar-link-trailing" onClick={() => navigate("timeline")}>粗剪组接 ↗</button>
-              ) : (
-                <button type="button" className="workbench-subbar-link" onClick={() => navigate("watch")}>← 返回看片审阅</button>
-              )}
-            </nav>
-          ) : null}
           {active && visiblePage === "sync-task" ? (
             <SyncTaskWorkspace syncTimeline={syncTimeline} baseUrl={baseUrl} command={command}
               submissionError={commandError || submissionIssue}

@@ -12,7 +12,13 @@
 .sync-delivery-empty {
   width: min(100%, 1216px);
   margin-inline: auto;
-  padding: 32px clamp(24px, 4vw, 64px) 40px;
+  padding: 18px clamp(20px, 3vw, 48px) 32px;
+}
+.sync-delivery-intro {
+  margin: 0;
+  color: var(--mo-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 .sync-delivery-heading {
   display: flex;

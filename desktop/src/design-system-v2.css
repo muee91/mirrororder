@@ -1241,12 +1241,15 @@ html[data-macos-overlay="true"][data-mirrororder-theme] .app-global-topbar {
 }
 
 
-html[data-mirrororder-theme] .project-library-redesign .project-library-brand {
+html[data-mirrororder-theme] .project-library-redesign .project-primary-nav .project-library-brand.project-library-brand-button {
   width: 48px;
   min-height: 44px;
   margin: 0;
   padding: 3px 2px;
-  justify-content: center;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  justify-items: center;
+  align-items: center;
   border-radius: 4px;
 }
 

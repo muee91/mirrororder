@@ -574,7 +574,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
     <section className={`multicam-sync-inspection${showDelivery ? " is-embedded" : ""}`} aria-label="多机位同步时间线检查">
       <header className="multicam-sync-inspection-heading">
         <div className="sync-master-heading">
-          <h2>{showDelivery ? "同步母版" : "多机位监看"}</h2>
+          {showDelivery ? <h2>同步母版</h2> : null}
           <span>{syncTimeline.cameras.length} 机位 · {syncTimeline.clip_count.toLocaleString()} 个片段</span>
           {selectedTrack && <span className="sync-monitor-listening">监听 {selectedTrack.label}</span>}
         </div>
@@ -607,7 +607,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
             onClick={() => setInspector(current => current === "audio" ? null : "audio")}>同期录音 <span>{syncTimeline.recordings?.placements.length}</span></button>}
           {reviewGaps.length > 0 && <button type="button" className="sync-gap-toggle secondary" aria-pressed={compactView}
             title="只去除所有机位都停拍的间隙" onClick={toggleGaps}>去除共同间隙</button>}
-          {onOpenDelivery && <button type="button" onClick={onOpenDelivery}>进入工程交付</button>}
+          {showDelivery && onOpenDelivery && <button type="button" onClick={onOpenDelivery}>进入工程交付</button>}
         </div>
       </header>
 

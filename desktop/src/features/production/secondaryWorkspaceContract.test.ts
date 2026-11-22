@@ -24,6 +24,7 @@ describe("project production workspace contract", () => {
     expect(workbench).toContain("<SyncDeliveryWorkspace");
     expect(workbench).toContain('className="project-module-rail"');
     expect(workbench).toContain('className="workbench-subbar sync-workbench-subbar"');
+    expect(workbench).toContain('className="workbench-subbar review-workbench-subbar"');
     for (const label of ["素材", "剧本", "时间线", "审阅"]) expect(workbench).toContain(`label: "${label}"`);
     expect(workbench).toContain('className="professional-project-toolbar"');
     expect(workbench).toContain('aria-label="制作区域"');
@@ -35,7 +36,7 @@ describe("project production workspace contract", () => {
   it("does not retain CSS ownership for the retired project secondary-navigation row", () => {
     const css = read("./professional-project-workbench.css");
     expect(css).toContain("grid-template-columns: 54px minmax(0, 1fr)");
-    expect(css).toContain("min-height: 34px");
+    expect(css).toContain("min-height: 26px");
     expect(css).not.toContain(".professional-secondary-nav");
     expect(css).not.toContain(".professional-secondary-pages");
     expect(css).not.toContain(".professional-page-context");

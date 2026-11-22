@@ -36,6 +36,23 @@
   align-items: center;
   gap: 5px;
 }
+.media-library-relink {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.media-library-relink.is-warning {
+  border-color: rgba(214, 183, 101, 0.45);
+  color: var(--mo-warning, #d6b765);
+  background: rgba(214, 183, 101, 0.10);
+}
+.media-library-toolbar > .production-state {
+  grid-column: 1 / -1;
+  color: var(--mo-text-muted, #788591);
+  font-size: 11px;
+  line-height: 1.35;
+}
 .media-library-more-menu {
   position: relative;
 }

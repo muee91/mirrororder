@@ -18,6 +18,7 @@ interface Props {
   selectedProjectId: string | null;
   primaryActive?: "home" | "projects" | "status" | "settings" | "team" | null;
   activeProjectPage?: ProductionPage | null;
+  productionActive?: boolean;
   projectOpen?: boolean;
   syncReady?: boolean;
   syncPhase?: string;
@@ -62,6 +63,7 @@ export function ProjectLibrary({
   selectedProjectId,
   primaryActive = null,
   activeProjectPage = null,
+  productionActive = false,
   projectOpen = false,
   syncReady = false,
   syncPhase = "idle",
@@ -135,19 +137,22 @@ export function ProjectLibrary({
 
   return (
     <div className="project-library project-library-redesign professional-global-sidebar" data-project-open={projectOpen || undefined}>
-      <button
-        type="button"
-        className="project-library-brand project-library-brand-button"
-        data-tauri-drag-region="no-drag"
-        onClick={onOpenProjects}
-        onContextMenu={openSelectedMenu}
-        onKeyDown={openSelectedMenuFromKeyboard}
-        aria-label="项目"
-        title="项目"
-      >
-        <img className="mirror-mark" src={mirrororderLogo} alt="" aria-hidden="true" />
-        <span className="project-library-brand-copy"><strong>项目</strong><span>MirrorOrder</span></span>
-      </button>
+      <nav className="project-primary-nav" aria-label="主导航">
+        <button
+          type="button"
+          className={`project-library-brand project-library-brand-button${!projectOpen && primaryActive === "projects" ? " is-active" : ""}`}
+          aria-current={!projectOpen && primaryActive === "projects" ? "page" : undefined}
+          data-tauri-drag-region="no-drag"
+          onClick={onOpenProjects}
+          onContextMenu={openSelectedMenu}
+          onKeyDown={openSelectedMenuFromKeyboard}
+          aria-label="项目"
+          title="项目"
+        >
+          <img className="mirror-mark" src={mirrororderLogo} alt="" aria-hidden="true" />
+          <span className="project-library-brand-copy"><strong>项目</strong><span>MirrorOrder</span></span>
+        </button>
+      </nav>
 
       <div className="project-rail-divider" aria-hidden="true" />
 
@@ -155,28 +160,17 @@ export function ProjectLibrary({
         <nav className="project-module-rail project-production-nav" aria-label="制作区域">
           <ProjectModuleNavigation
             inputKind={selectedProject.input_kind}
-            selected={activeProjectPage ?? (selectedProject.input_kind === "media-directory" ? "sync-task" : "timeline")}
+            selected={productionActive ? (activeProjectPage ?? (selectedProject.input_kind === "media-directory" ? "sync-task" : "timeline")) : null}
             syncReady={syncReady}
             syncPhase={syncPhase}
             onNavigate={(page) => onOpenProjectPage?.(selectedProject, page)}
           />
         </nav>
-      ) : (
-        <nav className="project-primary-nav" aria-label="主导航">
-          <button type="button" className={primaryActive === "projects" ? "is-active" : ""} aria-current={primaryActive === "projects" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenProjects} title="项目">
-            <StudioIcon name="library" size={16} className="project-nav-icon" />
-            <span>项目</span>
-          </button>
-        </nav>
-      )}
+      ) : null}
 
       <div className="project-sidebar-spacer" />
 
       <nav className="project-system-nav" aria-label="系统导航">
-        <button type="button" data-tauri-drag-region="no-drag" disabled={!selectedProject || !onOpenTeamProject} onClick={() => selectedProject && onOpenTeamProject?.(selectedProject)} title="协作">
-          <StudioIcon name="team" size={16} className="project-nav-icon" />
-          <span>协作</span>
-        </button>
         <button type="button" className={primaryActive === "status" ? "is-active" : ""} aria-current={primaryActive === "status" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenStatusCenter} title="状态">
           <StudioIcon name="activity" size={16} className="project-nav-icon" />
           <span>状态</span>

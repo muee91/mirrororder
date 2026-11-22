@@ -766,6 +766,45 @@ export function App() {
     ? selectedProject.name || selectedProject.project_id
     : snapshot.workspace.workspace;
 
+  const workspaceMenuBody = (
+    <>
+      <div className="app-workspace-menu-heading">
+        <span><strong>{snapshot.workspace.workspace}</strong><small>{connectionLabel(state)}</small></span>
+        {activeWorkspacePath.trim() ? <code title={activeWorkspacePath}>{activeWorkspacePath}</code> : null}
+      </div>
+      <div className="app-workspace-menu-actions">
+        <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id).catch((error) => setMessage(errorMessage(error)))}>刷新工作区</button>
+        <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri()}>切换工作区…</button>
+        <button type="button" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>在 {revealLabel} 中显示</button>
+      </div>
+      {recentWorkspaces.filter((item) => item !== activeWorkspacePath).length > 0 ? (
+        <div className="app-workspace-recent">
+          <span className="app-workspace-recent-label">最近工作区</span>
+          {recentWorkspaces.filter((item) => item !== activeWorkspacePath).slice(0, 4).map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="secondary app-workspace-recent-item"
+              title={item}
+              onClick={() => void openWorkspacePath(item)}
+            >
+              <strong>{item.split(/[\\/]/).filter(Boolean).pop() || item}</strong>
+              <code>{item}</code>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <details className="workspace-advanced app-workspace-advanced">
+        <summary>高级连接</summary>
+        <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
+        <button type="button" className="secondary" onClick={() => void openWorkspacePath(workspacePath)} disabled={!workspacePath.trim()}>打开此路径</button>
+        <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
+        <button type="button" className="secondary" onClick={() => void connect()}>连接已运行服务</button>
+        {resumeEnabledForSession ? <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动恢复</button> : null}
+      </details>
+    </>
+  );
+
   const workspaceMenu = (
     <details className="app-workspace-menu">
       <summary className="app-workspace-chip">
@@ -776,40 +815,7 @@ export function App() {
         <small aria-hidden="true"><StudioIcon name="chevron-down" size={11.5} /></small>
       </summary>
       <div className="app-workspace-menu-popover">
-        <div className="app-workspace-menu-heading">
-          <span><strong>{snapshot.workspace.workspace}</strong><small>{connectionLabel(state)}</small></span>
-          {activeWorkspacePath.trim() ? <code title={activeWorkspacePath}>{activeWorkspacePath}</code> : null}
-        </div>
-        <div className="app-workspace-menu-actions">
-          <button type="button" className="secondary" onClick={() => void refreshWorkspace(selectedProject?.project_id).catch((error) => setMessage(errorMessage(error)))}>刷新工作区</button>
-          <button type="button" onClick={() => void chooseWorkspace(true)} disabled={!isTauri()}>切换工作区…</button>
-          <button type="button" onClick={() => void revealWorkspace()} disabled={!isTauri() || !activeWorkspacePath.trim()}>在 {revealLabel} 中显示</button>
-        </div>
-        {recentWorkspaces.filter((item) => item !== activeWorkspacePath).length > 0 ? (
-          <div className="app-workspace-recent">
-            <span className="app-workspace-recent-label">最近工作区</span>
-            {recentWorkspaces.filter((item) => item !== activeWorkspacePath).slice(0, 4).map((item) => (
-              <button
-                key={item}
-                type="button"
-                className="secondary app-workspace-recent-item"
-                title={item}
-                onClick={() => void openWorkspacePath(item)}
-              >
-                <strong>{item.split(/[\\/]/).filter(Boolean).pop() || item}</strong>
-                <code>{item}</code>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <details className="workspace-advanced app-workspace-advanced">
-          <summary>高级连接</summary>
-          <label><span>工作区路径</span><input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} spellCheck={false} /></label>
-          <button type="button" className="secondary" onClick={() => void openWorkspacePath(workspacePath)} disabled={!workspacePath.trim()}>打开此路径</button>
-          <label><span>本机服务地址</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} spellCheck={false} /></label>
-          <button type="button" className="secondary" onClick={() => void connect()}>连接已运行服务</button>
-          {resumeEnabledForSession ? <button type="button" className="secondary" onClick={disableAutomaticResume}>下次不自动恢复</button> : null}
-        </details>
+        {workspaceMenuBody}
       </div>
     </details>
   );
@@ -839,6 +845,9 @@ export function App() {
               selectProject(project);
             }}>{project.name || project.project_id}</button>
         ))}
+        <div className="app-project-switcher-workspace">
+          {workspaceMenuBody}
+        </div>
       </div>
     </details>
   );
@@ -854,7 +863,8 @@ export function App() {
             activities={projectActivities}
             selectedProjectId={selectedProject?.project_id ?? null}
             primaryActive={primaryActive}
-            activeProjectPage={activeProjectPage}
+            activeProjectPage={surface === "team" ? "watch" : activeProjectPage}
+            productionActive={surface === "production" || surface === "team"}
             projectOpen={projectRailOpen}
             syncReady={activeProjectSyncStatus?.ready ?? false}
             syncPhase={activeProjectSyncStatus?.phase ?? "idle"}
@@ -878,8 +888,17 @@ export function App() {
 
         <section className="app-main-column">
           {!isProjectOpen && <header className="app-global-topbar" data-tauri-drag-region>
-            <div className="app-global-context" data-tauri-drag-region="deep">
-              {surface === "projects" ? (
+            <div className={`app-global-context${surface === "team" && selectedProject ? " is-project-subbar" : ""}`} data-tauri-drag-region={surface === "team" && selectedProject ? undefined : "deep"}>
+              {surface === "team" && selectedProject ? (
+                <>
+                  <div className="app-global-project-switcher" data-tauri-drag-region="no-drag">{switchProject}</div>
+                  <nav className="workbench-subbar review-workbench-subbar" aria-label="审阅工作区" data-tauri-drag-region="no-drag">
+                    <button type="button" className="workbench-subbar-link" onClick={() => openProjectPage(selectedProject, "watch")}>看片审阅</button>
+                    <button type="button" className="workbench-subbar-link" onClick={() => openProjectPage(selectedProject, "timeline")}>粗剪组接</button>
+                    <button type="button" className="workbench-subbar-link" aria-current="page">团队协作</button>
+                  </nav>
+                </>
+              ) : surface === "projects" ? (
                 <>
                   <span>工作区</span>
                   <strong>{contextLabel}</strong>
@@ -892,7 +911,7 @@ export function App() {
               )}
             </div>
             <div className="app-global-actions" data-tauri-drag-region>
-              {workspaceMenu}
+              {surface === "team" && selectedProject ? null : workspaceMenu}
             </div>
           </header>}
 
@@ -958,7 +977,6 @@ export function App() {
                 slateDraftSession={slateDraftSession}
                 active={surface === "production"}
                 projectNavigation={switchProject}
-                workspaceMenu={workspaceMenu}
                 pageRequest={pageRequest?.projectId === selectedProject.project_id ? { page: pageRequest.page, nonce: pageRequest.nonce } : null}
                 externalXiaoJingAction={externalXiaoJingAction?.project_id === selectedProject.project_id ? externalXiaoJingAction : null}
                 xiaojingWorkspace={xiaojingWorkspace}

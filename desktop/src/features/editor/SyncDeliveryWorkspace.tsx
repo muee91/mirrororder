@@ -13,7 +13,7 @@ import "./sync-delivery-workspace.css";
 interface Props {
   baseUrl: string;
   syncTimeline: MulticamSyncTimeline;
-  onInspect: () => void;
+  onInspect?: () => void;
   onSyncTask: () => void;
   onRepair?: () => void;
   onOpenAssembly?: () => void;
@@ -27,7 +27,7 @@ const TARGET_HELP: Record<string, string> = {
   jianying: "国内剪映专业版 FCPXML 兼容路径，Windows/macOS 均需验收",
 };
 
-export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSyncTask, onRepair, onOpenAssembly, canGenerate = true }: Props) {
+export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRepair, onOpenAssembly, canGenerate = true }: Props) {
   const [manifest, setManifest] = useState<SyncDeliveryArtifacts | null>(null);
   const [error, setError] = useState("");
   const [selectedTarget, setSelectedTarget] = useState("davinci");
@@ -137,13 +137,7 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSync
   return (
     <section className="sync-delivery-workspace" aria-label="同步工程交付">
       <div className="sync-delivery-content">
-        <header className="sync-delivery-heading">
-          <div>
-            <h2>同步工程交付</h2>
-            <p>选择剪辑软件，查看对应的母版文件和导入要求。</p>
-          </div>
-          <button className="secondary" type="button" onClick={onInspect}>返回同步核对</button>
-        </header>
+        <p className="sync-delivery-intro">选择剪辑软件，查看对应的母版文件和导入要求。</p>
 
         <dl className="sync-delivery-summary">
           <div><dt>母版版本</dt><dd>{syncVersion ? <code title={syncVersion}>{syncVersion.slice(0, 12)}</code> : "待确认"}</dd></div>

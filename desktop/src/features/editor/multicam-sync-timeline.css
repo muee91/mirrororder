@@ -176,9 +176,9 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 16px;
-  min-height: 44px;
-  padding: 6px 14px;
+  gap: 6px 14px;
+  min-height: 36px;
+  padding: 4px 12px;
   border-bottom: 1px solid var(--mo-border-subtle);
 }
 .sync-master-heading, .multicam-sync-inspection-meta { display: flex; align-items: center; gap: 12px; min-width: 0; }

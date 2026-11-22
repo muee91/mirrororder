@@ -70,4 +70,19 @@ describe("independent production module routing", () => {
     expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("审阅");
     expect(root.querySelector(".project-module-overflow")).toBeNull();
   });
+
+  it("clears workbench highlights when non-production system surfaces are active", () => {
+    const markup = renderToStaticMarkup(createElement(ProjectModuleNavigation, {
+      inputKind: "media-directory",
+      selected: null,
+      syncReady: true,
+      syncPhase: "completed",
+      onNavigate: () => {},
+    }));
+    const root = document.createElement("div");
+    root.innerHTML = markup;
+    expect(root.querySelectorAll("button.project-module-link")).toHaveLength(5);
+    expect(root.querySelector('[aria-current="page"]')).toBeNull();
+    expect(root.querySelector(".is-active")).toBeNull();
+  });
 });

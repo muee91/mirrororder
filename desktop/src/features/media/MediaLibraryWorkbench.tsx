@@ -363,7 +363,7 @@ const MediaLibraryRow = memo(function MediaLibraryRow({
   );
 });
 
-export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, onOpenTakes }: Props) {
+export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }: Props) {
   const client = useMemo(() => new MediaRoleClient(baseUrl), [baseUrl]);
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const [inventory, setInventory] = useState<MediaInventory | null>(null);
@@ -812,25 +812,19 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
     patch({ source_role: value, sync_policy: value === "sync_camera" ? "auto" : "exclude" });
   }
 
+  const unindexedCount = inventory?.summary.unindexed ?? 0;
+
   return (
     <section className="media-library-workbench" aria-busy={busy}>
-      <header className="production-heading">
-        <div><p className="eyebrow">素材库</p><h2>素材清单</h2></div>
-        <div className="assistant-heading-actions"><span className="production-state" aria-live="polite">{message}</span></div>
-        {onOpenTakes && <button type="button" className="secondary" onClick={onOpenTakes}>浏览镜次</button>}
-      </header>
-
-      <div
-        className={`media-library-summary${inventory?.scan_required ? " is-stale" : ""}`}
-        aria-label={inventory?.scan_required ? "上次素材清单统计（当前需要重新扫描）" : "素材清单统计"}
-      >
-        {inventory?.scan_required ? <span className="media-library-stale-tag">上次清单 · 当前需要重新扫描，以下数字不是当前状态</span> : null}
-        <span><strong>{inventory?.summary.files ?? 0}</strong>素材</span>
-        <span><strong>{inventory?.summary.indexed ?? 0}</strong>可索引</span>
-        <span className={(inventory?.summary.unindexed ?? 0) ? "needs-attention" : ""}><strong>{inventory?.summary.unindexed ?? 0}</strong>待恢复</span>
-        <span><strong>{inventory?.summary.labeled ?? 0}</strong>人工标记</span>
-        <span><strong>{inventory?.summary.auxiliary ?? 0}</strong>辅助素材</span>
-      </div>
+      {inventory?.scan_required ? (
+        <div
+          className="media-library-summary is-stale"
+          role="status"
+          aria-label="上次素材清单统计（当前需要重新扫描）"
+        >
+          <span className="media-library-stale-tag">上次清单 · 当前需要重新扫描，以下数字不是当前状态</span>
+        </div>
+      ) : null}
 
       <div className="media-library-toolbar">
         <input ref={searchInputRef} type="search" value={query} onChange={(event) => setViewState((current) => ({ ...current, query: event.target.value }))} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
@@ -843,6 +837,16 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-label="切换到缩略图视图" aria-pressed={viewMode === "grid"} onClick={() => setViewState((current) => ({ ...current, viewMode: "grid" }))}>缩略图</button>
         </div>
         <div className="media-library-utility-actions">
+          {onOpenMediaBinding ? (
+            <button
+              type="button"
+              className={`secondary media-library-relink${unindexedCount > 0 ? " is-warning" : ""}`}
+              onClick={onOpenMediaBinding}
+              title="换盘或重连本机素材目录"
+            >
+              {unindexedCount > 0 ? `${unindexedCount} 缺失 · 重连` : "换盘重连"}
+            </button>
+          ) : null}
           <button type="button" className="secondary media-library-refresh" aria-label="刷新素材清单" aria-keyshortcuts="Meta+Shift+R Control+Shift+R" disabled={busy} onClick={() => void reload()} title="刷新素材清单">
             <StudioIcon name="refresh" size={13} />
           </button>
@@ -858,6 +862,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, 
             </div>
           </details>
         </div>
+        <span className="production-state" aria-live="polite">{message}</span>
       </div>
 
       {selectedIds.size > 0 || Boolean(bulkResult) ? (

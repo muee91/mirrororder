@@ -419,8 +419,7 @@ export function MediaBindingWorkbench({ baseUrl, projectId, entry }: Props) {
     <section className="phase3-workbench media-binding-workbench">
       <header className="production-heading media-binding-heading">
         <div>
-          <p className="eyebrow">当前设备</p>
-          <h2>本机素材</h2>
+          <strong>本机素材路径绑定</strong>
           <span>项目记住媒体身份；这里仅告诉当前设备 去哪里找到对应文件。</span>
         </div>
         <div className="media-binding-heading-actions">

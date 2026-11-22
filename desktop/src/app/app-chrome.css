@@ -349,6 +349,18 @@
   gap: 0;
 }
 
+.app-global-context.is-project-subbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-global-project-switcher {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .app-global-context > span {
   color: var(--mo-text-muted, #778590);
   font-size: 10px;
@@ -500,17 +512,29 @@
 .app-project-switcher-list {
   position: absolute;
   z-index: 45;
-  inset: calc(100% + 7px) auto auto 9px;
+  inset: calc(100% + 7px) auto auto 0;
+  left: 0;
+  right: auto;
   display: grid;
-  width: min(300px, 72vw);
-  max-height: min(460px, 68vh);
-  overflow: auto;
+  width: min(336px, calc(100vw - 88px));
+  max-height: min(520px, 76vh);
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
   gap: 3px;
   padding: 6px;
   border: 1px solid var(--mo-border-default);
   border-radius: var(--mo-radius-overlay);
   background: var(--mo-surface-elevated);
   box-shadow: var(--mo-shadow-float);
+}
+.app-project-switcher-workspace {
+  margin-top: 6px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid var(--mo-border-subtle);
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 .app-project-switcher-list > button {
   min-width: 0;
@@ -545,9 +569,10 @@
 }
 
 .mirrororder-redesign-shell .project-library-redesign .project-library-brand {
+  position: relative;
   width: 48px;
   min-height: 44px;
-  margin: 0 0 7px;
+  margin: 0;
   padding: 3px 2px;
   display: grid;
   grid-template-rows: 22px 12px;
@@ -580,7 +605,7 @@
 .mirrororder-redesign-shell .project-rail-divider {
   width: 40px;
   height: 1px;
-  margin: 0 0 7px;
+  margin: 4px 0 7px;
   background: var(--mo-border-subtle, #202830);
 }
 

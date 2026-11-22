@@ -79,7 +79,7 @@ export function canOpenProductionModule(page: ProductionPage, inputKind: string,
 
 interface Props {
   inputKind: string;
-  selected: ProductionPage;
+  selected: ProductionPage | null;
   syncReady: boolean;
   syncPhase: string;
   onNavigate: (page: ProductionPage) => void;
@@ -89,7 +89,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
   const selectedModule = selected === "takes" ? "media-library" : selected;
 
   function renderPrimaryButton(item: (typeof PRIMARY_MODULES)[number]) {
-    const active = item.pages.includes(selectedModule);
+    const active = selectedModule !== null && item.pages.includes(selectedModule);
     const target = item.id === "sync" && syncReady ? "sync-inspect" : item.target;
     const available = canOpenProductionModule(target, inputKind, syncReady);
     return (

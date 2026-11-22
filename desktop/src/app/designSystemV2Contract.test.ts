@@ -132,6 +132,9 @@ describe("MirrorOrder Design System v2 contract", () => {
     const overlayRailIndex = v2.indexOf("html[data-macos-overlay=\"true\"] .global-sidebar");
     expect(overlayRailIndex).toBeGreaterThan(sidebarResetIndex);
     expect(v2.slice(overlayRailIndex)).toContain("padding-top: 38px;");
+    const library = read("../features/projects/ProjectLibrary.tsx");
+    expect(library.match(/className="project-primary-nav"/g)).toHaveLength(1);
+    expect(library).not.toContain('title="协作"');
     expect(chrome).not.toMatch(/font-size:\s*(?:7|8|9)px/);
   });
 });
