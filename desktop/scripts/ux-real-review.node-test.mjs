@@ -175,16 +175,16 @@ test("decision conflict recovery requires a read retry and refreshes the real re
     window.localStorage.setItem("mirrororder.desktop-v2.review-actor", "当前剪辑师");
     window.dispatchEvent(new CustomEvent("mirrororder:operator-change", { detail: "当前剪辑师" }));
   });
-  await panel.getByRole("button", { name: "Best", exact: true }).click();
+  await panel.getByRole("button", { name: "首选", exact: true }).click();
   await panel.getByRole("alert").filter({ hasText: "最新状态读取失败" }).waitFor();
-  assert.equal(await panel.getByRole("button", { name: "Best", exact: true }).isDisabled(), true);
+  assert.equal(await panel.getByRole("button", { name: "首选", exact: true }).isDisabled(), true);
   assert.equal(await panel.getByText("当前 Take 尚未形成最终决定。", { exact: true }).count(), 0);
 
   await panel.getByRole("button", { name: "重新读取状态", exact: true }).click();
   await panel.locator("button.is-selected.state-keep").waitFor();
   await page.waitForFunction(() => document.querySelector(".review-queue-summary")?.textContent.includes("1 已决定"));
-  assert.equal(await panel.getByRole("button", { name: "Best", exact: true }).isDisabled(), false);
-  assert.equal(writes, 1, "conflicting Best must not be replayed after the read retry");
+  assert.equal(await panel.getByRole("button", { name: "首选", exact: true }).isDisabled(), false);
+  assert.equal(writes, 1, "conflicting 首选 must not be replayed after the read retry");
   assert.equal(recoveryReads, 2);
 });
 
