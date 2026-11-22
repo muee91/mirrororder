@@ -531,6 +531,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [message, setMessage] = useState("正在读取多机位电子场记…");
   const [busy, setBusy] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false);
   const [showAuxColumn, setShowAuxColumn] = useState(false);
   const [hideNgRows, setHideNgRows] = useState(false);
   const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
@@ -644,7 +645,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       setSelectedClipId(selected?.preferred_clip_id || (selected?.attachments[0] ? attachmentKey(selected.attachments[0]) : ""));
       setPlaybackFailedClipId("");
       setPlaybackRetry(0);
-      setMessage(`Slate r${nextBoard.revision} · ${nextDrafts.length} 条`);
+      setMessage("已刷新");
     } catch (error) {
       if (canUseSlate()) setMessage(`刷新失败：${errorMessage(error)}`);
     }
@@ -663,7 +664,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         const first = nextDrafts.find((row) => row.dirty) ?? nextDrafts.find((row) => !isPlacedDraft(row)) ?? nextDrafts[0] ?? null;
         setSelectedRecordId(first?.record_id ?? "");
         setSelectedClipId(first?.preferred_clip_id || (first?.attachments[0] ? attachmentKey(first.attachments[0]) : ""));
-        setMessage(`Slate r${nextBoard.revision} · ${nextDrafts.length} 条`);
+        setMessage("");
       })
       .catch((error) => { if (!cancelled) setMessage(errorMessage(error)); });
     return () => { cancelled = true; };
@@ -1139,7 +1140,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       const next = await saveDraft(selected, board.revision);
       if (!canUseSlate()) return;
       acceptSavedDrafts(next, new Map([[selected.record_id, selected]]));
-      setMessage(`已保存 · Slate r${next.revision}`);
+      setMessage("已保存");
     } catch (error) {
       if (canUseSlate()) setMessage(errorMessage(error).includes("revision") ? `${errorMessage(error)}；请刷新后核对草稿。` : errorMessage(error));
     } finally { if (canUseSlate()) setBusy(false); }
@@ -1160,7 +1161,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         if (!canUseSlate()) return;
         submitted.set(row.record_id, row);
       }
-      setMessage(`全部保存完成 · Slate r${nextBoard.revision}`);
+      setMessage("全部保存完成");
     } catch (error) {
       if (canUseSlate()) setMessage(`${errorMessage(error)}；顺序保存已停止，未执行的行保持未保存。`);
     } finally {
@@ -1218,7 +1219,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         publishDraftView(fresh);
         setSelectedRecordId(orderedNext[Math.min(Math.max(visualIndex, 0), Math.max(0, orderedNext.length - 1))]?.record_id ?? "");
       }
-      setMessage(`已删除人工场记记录 · Slate r${next.revision}；关联 Take 本身未删除。`);
+      setMessage("已删除人工场记记录（原素材未删除）");
     } catch (error) { if (canUseSlate()) setMessage(errorMessage(error)); }
     finally { if (canUseSlate()) setBusy(false); }
   }
@@ -1488,10 +1489,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           }}>
             <summary>＋ 记一条</summary>
             <div className="golden-slate-menu-popover" role="group" aria-label="新增场记">
-              <button type="button" className="secondary" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); nextSameScene(); }}>同场下一条</button>
-              <button type="button" className="secondary" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); inheritPrevious(); }}>同上</button>
+              <button type="button" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); nextSameScene(); }}>同场下一条</button>
+              <button type="button" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); inheritPrevious(); }}>同上</button>
               <button type="button" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); addBlank(); }}>空白</button>
-              <button ref={takePickerTriggerRef} type="button" className="secondary" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setTakePickerOpen((value) => !value); }}>从 Take 加入</button>
+              <button ref={takePickerTriggerRef} type="button" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setTakePickerOpen((value) => !value); }}>从 Take 加入</button>
             </div>
           </details>
         </div>
@@ -1507,12 +1508,11 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           }}>
             <summary>视图与工具</summary>
             <div className="golden-slate-menu-popover" role="group" aria-label="视图与工具">
-              <button type="button" className={`secondary ${quickLookOpen ? "is-active" : ""}`} aria-pressed={quickLookOpen} disabled={!playbackUrl} title="浮窗快速预览当前选中行素材" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); toggleQuickLook(); }}>快速预览</button>
-              <button type="button" className={`icon-action ${inspectorOpen ? "is-active" : ""}`} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setInspectorOpen((value) => !value); }} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "隐藏 Inspector" : "显示 Inspector"}>检视</button>
-              <button type="button" className="secondary" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); focusQuickEntry(); }} aria-label="备注与快录" title="聚焦当前行备注/快录 (/)" >备注 /</button>
+              <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setInspectorOpen((value) => !value); }} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>检视</button>
+              <button type="button" className={quickLookOpen ? "is-active" : ""} aria-pressed={quickLookOpen} disabled={!playbackUrl} title="大窗快速预览当前选中行素材" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); toggleQuickLook(); }}>快速预览</button>
               {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setHideNgRows((value) => !value); }}>隐藏 NG ({ngCount})</button> : null}
               {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setShowAuxColumn((value) => !value); }} title="显示或隐藏空的 AUX 列">显示其他机位 (AUX)</button> : null}
-              <button type="button" className="icon-action" disabled={busy} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); void reload(selectedRecordId); }} aria-label="刷新场记" title="刷新场记">刷新场记</button>
+              <button type="button" disabled={busy} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); void reload(selectedRecordId); }} aria-label="刷新场记" title="重新读取最新场记">刷新场记</button>
             </div>
           </details>
           <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} onSelect={setPaperSource} />
@@ -1582,20 +1582,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                   ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                   {quickLookOpen && <footer><span>{selected.note || selectedTake?.transcript.text || "快捷键：1 可用 · 2 部分 · 3 NG · ⌘D 连拍下一条"}</span></footer>}
                 </div>
-                <div className="golden-inspector-head golden-inspector-meta"><div><span>EP {selected.episode ?? "—"} / 场 {selected.scene || selected.script_scene_id || "—"} / 镜 {selected.shot || "—"} / 次 {selected.take_number ?? "—"}</span>{selectedFilename ? <span className="golden-inspector-filename" title={selectedFilename}>{selectedFilename}</span> : null}</div>{selected.dirty ? <em>未保存</em> : null}</div>
-                {clipId ? (
-                  <div className="golden-clapper-bar">
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={busy || clapperBusy}
-                      onClick={() => void detectClapperboardFrame()}
-                    >
-                      {clapperBusy ? "正在识别打板帧…" : "识别片头打板帧（AI 提案）"}
-                    </button>
-                    <span>仅回填草稿，需人工核对保存</span>
-                  </div>
-                ) : null}
+                <div className="golden-inspector-head golden-inspector-meta"><div><span>EP {selected.episode ?? "—"} · 场 {selected.scene || selected.script_scene_id || "—"} · 镜 {selected.shot || "—"} · 次 {selected.take_number ?? "—"}</span>{selectedFilename ? <span className="golden-inspector-filename" title={selectedFilename}>{selectedFilename}</span> : null}</div>{selected.dirty ? <em>未保存</em> : null}</div>
 
                 {selectedPlaybackFailed && onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}
                 {groupId && onOpenTake && <div className="golden-inspector-actions golden-inspector-navigation">
@@ -1603,14 +1590,16 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                   <button type="button" className="secondary" onClick={() => onOpenTake("script", currentLocation())}>在剧本中打开</button>
                   <button type="button" className="secondary" onClick={() => onOpenTake("review", currentLocation())}>看片审阅</button>
                 </div>}
-                {selectedAttachment?.clip_id ? <SlateSpeechEvidencePanel key={`${baseUrl}:${projectId}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}`} baseUrl={baseUrl} projectId={projectId} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} /> : null}
 
-                {selectedAttachment?.clip_id && selectedAttachment.media_id ? (
-                  <details className="golden-slate-advanced-interval" open={Boolean(paperSource)}>
-                    <summary>高级：精确源帧区间核验（可选）</summary>
-                    <SlateSourceIntervalPanel key={`${baseUrl}:${projectId}:${selected.record_id}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}:${board?.revision}:${paperSource?.row.paper_row_id}:${paperSource?.revision}`} paperSource={paperSource} baseUrl={baseUrl} projectId={projectId} recordId={selected.record_id} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} savedRecord={board?.records[selected.record_id]} boardRevision={board?.revision ?? -1} dirty={selected.dirty} />
-                  </details>
-                ) : null}
+                <label className="golden-inspector-field"><span>备注</span><textarea rows={3} value={selected.note} onChange={(event) => patchRecord(selected.record_id, { note: event.target.value })} placeholder="场记原话、可用范围、连续性提醒…" /></label>
+                <div className="golden-quick-tags" role="group" aria-label="快捷现场标签">
+                  {QUICK_SLATE_TAGS.map((tag) => (
+                    <button key={tag} type="button" className="secondary" onClick={() => appendNoteTag(tag)}>
+                      + {tag}
+                    </button>
+                  ))}
+                  <button type="button" className="secondary" onClick={markSelectedMisrecorded}>标为误录</button>
+                </div>
 
                 {episodeCandidates.length ? <section className="golden-episode-candidates"><header><strong>第 {selected.episode} 集候选</strong><span>{episodeCandidates.length} Take</span></header>{episodeCandidates.map((take) => <TakeListRow key={take.group_id} take={take} onSelect={() => addTake(take)} />)}</section> : null}
 
@@ -1634,17 +1623,38 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                   {!inspectorAttachments.length ? <button type="button" className="golden-inspector-add-take" onClick={() => setTakePickerOpen(true)}>＋ 加入 Take / 镜头</button> : null}
                 </section>
 
-                <div className="golden-io-row"><button type="button" className="secondary" onClick={() => setIO("in")}>I 设入点</button><label><span>入点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.start ?? ""} onChange={(event) => { const start = event.target.value ? Number(event.target.value) : 0; const end = selected.usable_range?.end ?? start + 0.04; patchRecord(selected.record_id, { usable_range: { start, end: Math.max(end, start + 0.04) } }); }} /></label><label><span>出点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.end ?? ""} onChange={(event) => { const end = event.target.value ? Number(event.target.value) : 0; const start = selected.usable_range?.start ?? 0; if (end > start) patchRecord(selected.record_id, { usable_range: { start, end } }); }} /></label><button type="button" className="secondary" onClick={() => setIO("out")}>O 设出点</button></div>
-                <div className="golden-quick-tags" role="group" aria-label="快捷现场标签">
-                  {QUICK_SLATE_TAGS.map((tag) => (
-                    <button key={tag} type="button" className="secondary" onClick={() => appendNoteTag(tag)}>
-                      + {tag}
-                    </button>
-                  ))}
-                  <button type="button" className="secondary" onClick={markSelectedMisrecorded}>标为误录</button>
-                </div>
-                <label className="golden-inspector-field"><span>备注</span><textarea rows={4} value={selected.note} onChange={(event) => patchRecord(selected.record_id, { note: event.target.value })} placeholder="场记原话、可用范围描述、连续性提醒…" /></label>
-                <div className="golden-inspector-link"><span>关联</span><strong>{selectedTake ? `Take ${selectedTake.take_index}` : selected.source_group_id ? "关联 Take" : "独立场记"}</strong>{selected.script_scene_id ? <small>剧本场景 · {selected.script_scene_id}</small> : null}<small>{selectedTake?.transcript.text || "没有 Take 转写证据"}</small></div>
+                <details
+                  className="golden-inspector-advanced"
+                  open={advancedToolsOpen || Boolean(paperSource)}
+                  onToggle={(event) => setAdvancedToolsOpen(event.currentTarget.open)}
+                >
+                  <summary>进阶工具（打板帧 · 语音转写 · 入出点）</summary>
+                  <div className="golden-inspector-advanced-body">
+                    {clipId ? (
+                      <div className="golden-clapper-bar">
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={busy || clapperBusy}
+                          onClick={() => void detectClapperboardFrame()}
+                        >
+                          {clapperBusy ? "正在识别打板帧…" : "识别片头打板帧（AI 提案）"}
+                        </button>
+                        <span>仅回填草稿，需人工核对保存</span>
+                      </div>
+                    ) : null}
+                    <div className="golden-io-row"><button type="button" className="secondary" onClick={() => setIO("in")}>I 设入点</button><label><span>入点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.start ?? ""} onChange={(event) => { const start = event.target.value ? Number(event.target.value) : 0; const end = selected.usable_range?.end ?? start + 0.04; patchRecord(selected.record_id, { usable_range: { start, end: Math.max(end, start + 0.04) } }); }} /></label><label><span>出点</span><input type="number" step="0.01" min="0" value={selected.usable_range?.end ?? ""} onChange={(event) => { const end = event.target.value ? Number(event.target.value) : 0; const start = selected.usable_range?.start ?? 0; if (end > start) patchRecord(selected.record_id, { usable_range: { start, end } }); }} /></label><button type="button" className="secondary" onClick={() => setIO("out")}>O 设出点</button></div>
+                    {(advancedToolsOpen || Boolean(paperSource)) && selectedAttachment?.clip_id ? <SlateSpeechEvidencePanel key={`${baseUrl}:${projectId}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}`} baseUrl={baseUrl} projectId={projectId} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} /> : null}
+                    {selectedAttachment?.clip_id && selectedAttachment.media_id ? (
+                      <details className="golden-slate-advanced-interval" open={Boolean(paperSource)}>
+                        <summary>精确源帧区间核验（可选）</summary>
+                        <SlateSourceIntervalPanel key={`${baseUrl}:${projectId}:${selected.record_id}:${selectedAttachment.clip_id}:${selectedAttachment.media_id}:${board?.revision}:${paperSource?.row.paper_row_id}:${paperSource?.revision}`} paperSource={paperSource} baseUrl={baseUrl} projectId={projectId} recordId={selected.record_id} clipId={selectedAttachment.clip_id} mediaId={selectedAttachment.media_id} savedRecord={board?.records[selected.record_id]} boardRevision={board?.revision ?? -1} dirty={selected.dirty} />
+                      </details>
+                    ) : null}
+                  </div>
+                </details>
+
+                <div className="golden-inspector-link"><span>关联</span><strong>{selectedTake ? `Take ${selectedTake.take_index}` : selected.source_group_id ? "关联 Take" : "独立场记"}</strong>{selected.script_scene_id ? <small>剧本场景 · {selected.script_scene_id}</small> : null}{selectedTake?.transcript.text ? <small>{selectedTake.transcript.text}</small> : null}</div>
                 {selectedConflict && <section className="golden-inspector-link" aria-label="场记草稿冲突">
                   <strong>{selectedServerRecord ? "服务端已更新这条场记" : "服务端已删除或替换原场记"}</strong>
                   {selectedServerRecord && <details>
