@@ -50,6 +50,10 @@ it("changes the active status filter and hides empty secondary filter pills", as
       "按状态筛选：辅助素材",
       "按状态筛选：已标记",
     ]);
+    const row = container.querySelector<HTMLButtonElement>(".media-library-row")!;
+    expect(row.dataset.cameraTone).toBe("unknown");
+    await act(async () => row.click());
+    expect(container.querySelector<HTMLDetailsElement>(".media-role-advanced-fields")?.open).toBe(false);
     const auxiliary = container.querySelector<HTMLButtonElement>('[aria-label="按状态筛选：辅助素材"]')!;
     await act(async () => auxiliary.click());
     expect(auxiliary.getAttribute("aria-pressed")).toBe("true");

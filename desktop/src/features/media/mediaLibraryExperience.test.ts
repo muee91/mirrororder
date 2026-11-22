@@ -104,6 +104,15 @@ describe("media library experience contract", () => {
     expect(styles).toContain("display: flex !important");
   });
 
+  it("keeps advanced role fields collapsed and aligns every row with its camera tone", () => {
+    const workbench = source("./MediaLibraryWorkbench.tsx");
+    expect(workbench).toContain('<details className="media-role-advanced-fields">');
+    expect(workbench).toContain("<summary>更多属性（用途 · 同步策略 · 备注）</summary>");
+    expect(workbench).not.toContain('<details className="media-role-advanced-fields" open');
+    expect(workbench).toContain('className={`media-library-row ${selected ? "is-selected" : ""}`}');
+    expect(workbench).toContain("data-camera-tone={camera.tone}");
+  });
+
   it("marks active media, scene, and camera filters for assistive technology", () => {
     const workbench = source("./MediaLibraryWorkbench.tsx");
     expect(workbench).toContain("aria-pressed={filter === value}");

@@ -322,6 +322,7 @@ const MediaLibraryRow = memo(function MediaLibraryRow({
       ref={rowRef}
       type="button"
       className={`media-library-row ${selected ? "is-selected" : ""}`}
+      data-camera-tone={camera.tone}
       onClick={() => onSelect(item)}
       aria-pressed={selected}
       aria-label={rowLabel}
@@ -358,7 +359,7 @@ const MediaLibraryRow = memo(function MediaLibraryRow({
       <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
       <span className="media-library-name"><strong>{item.display_name}</strong><small>{[item.folder_label || "素材", resolutionLabel(item.width, item.height), durationLabel(item.duration_seconds)].filter(Boolean).join(" · ")}</small></span>
       <span className="media-library-role"><strong>{roleLabel}</strong><small>{[role.scene_id ? `场 ${role.scene_id}` : "", takeLabel].filter(Boolean).join(" · ") || (auxiliary ? "不参与主机位同步" : "")}</small></span>
-      <span className="media-library-row-state"><em className={item.indexed ? "is-indexed" : "is-unindexed"}>{item.indexed ? "已入索引" : "待恢复"}</em><MediaHealthIndicator state={healthState} /></span>
+      <span className="media-library-row-state"><MediaHealthIndicator state={healthState} /></span>
     </button>
   );
 });
@@ -842,7 +843,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           {onOpenMediaBinding ? (
             <button
               type="button"
-              className={`secondary media-library-relink${unindexedCount > 0 ? " is-warning" : ""}`}
+              className={`media-library-relink${unindexedCount > 0 ? " is-warning" : ""}`}
               onClick={onOpenMediaBinding}
               title="换盘或重连本机素材目录"
             >
@@ -977,14 +978,17 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                 <label className="production-field"><span>自定义机位</span><input value={draft.camera_override || ""} onChange={(event) => patch({ camera_override: event.target.value })} placeholder={`自动识别：${effectiveCamera("", selectedItem.inferred_camera).label}`} /></label>
               </section>
 
-              <section className="media-role-fields">
-                <div className="media-role-section-heading"><div><p className="eyebrow">用途</p><h3>素材角色与同步</h3></div><span>独立于机位</span></div>
-                <label className="production-field"><span>素材角色</span><select value={draft.source_role || "sync_camera"} onChange={(event) => changeSourceRole(event.target.value)}><option value="sync_camera">同步机位</option><option value="aerial">航拍</option><option value="broll">空镜 / B-roll</option><option value="gopro">GoPro</option><option value="insert">细节 / Insert</option><option value="custom">自定义</option></select></label>
-                <label className="production-field"><span>同步策略</span><select value={draft.sync_policy || "auto"} onChange={(event) => patch({ sync_policy: event.target.value })}><option value="auto">参与同步</option><option value="exclude">不参与同步</option></select></label>
-                <label className="production-field"><span>场景归属</span><input value={draft.scene_id || ""} onChange={(event) => patch({ scene_id: event.target.value })} placeholder="例如 12-3" /></label>
-                <label className="production-field"><span>自定义标签</span><input value={draft.role_label || ""} onChange={(event) => patch({ role_label: event.target.value })} placeholder="例如 城市建立镜头" /></label>
-                <label className="production-field"><span>备注</span><textarea rows={4} value={draft.note || ""} onChange={(event) => patch({ note: event.target.value })} placeholder="场记或剪辑用途，例如：饭店外景建立镜头" /></label>
-              </section>
+              <details className="media-role-advanced-fields">
+                <summary>更多属性（用途 · 同步策略 · 备注）</summary>
+                <section className="media-role-fields">
+                  <div className="media-role-section-heading"><div><p className="eyebrow">用途</p><h3>素材角色与同步</h3></div><span>独立于机位</span></div>
+                  <label className="production-field"><span>素材角色</span><select value={draft.source_role || "sync_camera"} onChange={(event) => changeSourceRole(event.target.value)}><option value="sync_camera">同步机位</option><option value="aerial">航拍</option><option value="broll">空镜 / B-roll</option><option value="gopro">GoPro</option><option value="insert">细节 / Insert</option><option value="custom">自定义</option></select></label>
+                  <label className="production-field"><span>同步策略</span><select value={draft.sync_policy || "auto"} onChange={(event) => patch({ sync_policy: event.target.value })}><option value="auto">参与同步</option><option value="exclude">不参与同步</option></select></label>
+                  <label className="production-field"><span>场景归属</span><input value={draft.scene_id || ""} onChange={(event) => patch({ scene_id: event.target.value })} placeholder="例如 12-3" /></label>
+                  <label className="production-field"><span>自定义标签</span><input value={draft.role_label || ""} onChange={(event) => patch({ role_label: event.target.value })} placeholder="例如 城市建立镜头" /></label>
+                  <label className="production-field"><span>备注</span><textarea rows={4} value={draft.note || ""} onChange={(event) => patch({ note: event.target.value })} placeholder="场记或剪辑用途，例如：饭店外景建立镜头" /></label>
+                </section>
+              </details>
 
               <div className="media-role-savebar"><span>{actor.trim() ? `由 ${actor.trim()} 保存人工制作事实` : "填写操作者后才能保存人工修改"}</span><button type="button" aria-label="保存素材角色修改" disabled={busy || !actor.trim()} onClick={() => void save()}>保存修改</button></div>
             </>

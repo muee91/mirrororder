@@ -531,10 +531,12 @@ export function ProjectWorkbench({
             </div>
           ) : ["media-library", "takes", "identity", "media-binding"].includes(visiblePage) ? (
             <nav className="workbench-subbar material-workbench-subbar" aria-label="素材工作区" data-tauri-drag-region="no-drag">
-              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "media-library" ? "page" : undefined} onClick={() => navigate("media-library")}>全部文件</button>
-              <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "identity" ? "page" : undefined} disabled={syncBlocked} onClick={() => navigate("identity")}>演员与角色</button>
-              {visiblePage === "takes" ? <button type="button" className="workbench-subbar-link" aria-current="page" onClick={() => navigate("takes")}>Take 镜次</button> : null}
-              {visiblePage === "media-binding" ? <button type="button" className="workbench-subbar-link" aria-current="page" onClick={() => navigate("media-binding")}>换盘重连</button> : null}
+              {visiblePage === "media-library" ? <span className="professional-project-context-subtitle" aria-live="polite">素材库</span> : <>
+                <button type="button" className="workbench-subbar-link" onClick={() => navigate("media-library")}>← 返回素材库</button>
+                <span className="professional-project-context-subtitle" aria-live="polite">
+                  {visiblePage === "media-binding" ? "换盘重连" : visiblePage === "takes" ? "Take 镜次" : "演员与角色"}
+                </span>
+              </>}
             </nav>
           ) : visiblePage === "watch" || visiblePage === "timeline" ? (
             <nav className="workbench-subbar review-workbench-subbar" aria-label="审阅工作区" data-tauri-drag-region="no-drag">

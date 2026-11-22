@@ -47,6 +47,15 @@
         ],
         "createdAt": "2026-11-22T21:16:24.048Z",
         "reason": "user confirmed: the sync monitor requires a camera-colored top and left accent border for camera identity"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "desktop/src/features/media/media-library.css"
+        ],
+        "createdAt": "2026-11-22T21:36:21.544Z",
+        "reason": "user requested a camera identity rail for Phase 2 media rows"
       }
     ]
   }
