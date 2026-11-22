@@ -595,19 +595,34 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
                 {tracks.map(track => <option key={track.track_id} value={track.track_id}>{track.label}</option>)}
               </select>)}
             </div>}
-          {canShowAngles && <button type="button" className="secondary sync-gap-toggle" aria-pressed={portraitLayout}
-            title="竖屏短剧 9:16 排布（横向并排，放大人物面部）" onClick={() => setPortraitLayout(value => !value)}>竖屏 9:16</button>}
-          <button type="button" className="secondary sync-gap-toggle" aria-pressed={safeGuides}
-            title="显示短剧平台 UI 避让安全区参考线" onClick={() => setSafeGuides(value => !value)}>安全区</button>
+          <details className="sync-view-options"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open");
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.removeAttribute("open");
+              event.currentTarget.querySelector("summary")?.focus();
+            }}>
+            <summary>显示选项</summary>
+            <div className="sync-view-options-popover">
+              {canShowAngles && <button type="button" className="secondary sync-gap-toggle" aria-pressed={portraitLayout}
+                title="竖屏短剧 9:16 排布（横向并排，放大人物面部）" onClick={() => setPortraitLayout(value => !value)}>竖屏 9:16</button>}
+              <button type="button" className="secondary sync-gap-toggle" aria-pressed={safeGuides}
+                title="显示短剧平台 UI 避让安全区参考线" onClick={() => setSafeGuides(value => !value)}>安全区</button>
+              {reviewGaps.length > 0 && <button type="button" className="sync-gap-toggle secondary" aria-pressed={compactView}
+                title="只去除所有机位都停拍的间隙" onClick={toggleGaps}>去除共同间隙</button>}
+            </div>
+          </details>
           <button type="button" className="secondary sync-inspector-toggle" ref={clipInspectorButton}
             aria-expanded={inspector === "clip"} aria-controls={inspector === "clip" ? inspectorId : undefined}
             onClick={() => setInspector(current => current === "clip" ? null : "clip")}>片段检查器</button>
           {recordingsAvailable && <button type="button" className="secondary sync-inspector-toggle" ref={audioInspectorButton}
             aria-expanded={inspector === "audio"} aria-controls={inspector === "audio" ? inspectorId : undefined}
             onClick={() => setInspector(current => current === "audio" ? null : "audio")}>同期录音 <span>{syncTimeline.recordings?.placements.length}</span></button>}
-          {reviewGaps.length > 0 && <button type="button" className="sync-gap-toggle secondary" aria-pressed={compactView}
-            title="只去除所有机位都停拍的间隙" onClick={toggleGaps}>去除共同间隙</button>}
-          {showDelivery && onOpenDelivery && <button type="button" onClick={onOpenDelivery}>进入工程交付</button>}
+          {showDelivery && onOpenDelivery && <button type="button" className="sync-delivery-cta" onClick={onOpenDelivery}>导出到剪辑软件…</button>}
         </div>
       </header>
 

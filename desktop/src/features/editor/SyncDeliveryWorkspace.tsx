@@ -137,7 +137,7 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
   return (
     <section className="sync-delivery-workspace" aria-label="同步工程交付">
       <div className="sync-delivery-content">
-        <p className="sync-delivery-intro">选择剪辑软件，查看对应的母版文件和导入要求。</p>
+        <p className="sync-delivery-intro">选择你要导入的剪辑软件，获取同步好的多机位工程文件；可直接进软件开始精剪。</p>
 
         <dl className="sync-delivery-summary">
           <div><dt>母版版本</dt><dd>{syncVersion ? <code title={syncVersion}>{syncVersion.slice(0, 12)}</code> : "待确认"}</dd></div>
@@ -206,50 +206,56 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
           </section>
         </div> : !error && <p className="sync-delivery-loading" role="status">{manifest ? "当前版本暂无可列出的文件。" : "正在查找工程文件…"}</p>}
 
-        <section className="sync-enriched-pack" aria-label="剪辑增强交付包">
-          <header>
-            <div>
-              <h3>增强交付包（场记彩色 Marker · 分场子序列 · 实际台词 SRT）</h3>
-              <p>
-                {(syncTimeline.offset_revision ?? 0) > 0
-                  ? `写入独立版本号目录，不覆盖既有同步母版；已包含人工同步微调（第 ${syncTimeline.offset_revision} 版）。`
-                  : "写入独立版本号目录，不覆盖既有同步母版。"}
-              </p>
-            </div>
-            <button type="button" disabled={!canGenerate || enrichedBusy} onClick={() => void createEnrichedPack()}>
-              {enrichedBusy ? "生成中…" : "生成增强交付包"}
-            </button>
-          </header>
-          <div className="sync-enriched-options">
-            <label><input type="checkbox" checked={includeMarkers} onChange={(e) => setIncludeMarkers(e.target.checked)} />写入场记状态 / 保条 ★ / 偏移 Marker</label>
-            <label><input type="checkbox" checked={splitByScene} onChange={(e) => setSplitByScene(e.target.checked)} />按场次自动拆分子序列（FCPXML）</label>
-            <label><input type="checkbox" checked={exportSrt} onChange={(e) => setExportSrt(e.target.checked)} />附带帧精确实际台词 .srt 字幕轨</label>
-          </div>
-          {enrichedError ? <p className="sync-delivery-error" role="alert">{enrichedError}</p> : null}
-          {enrichedManifest ? (
-            <div className="sync-enriched-result" role="status">
-              <div className="sync-enriched-metrics">
-                <span><strong>{enrichedManifest.marker_count}</strong> 条 Marker</span>
-                <span><strong>{enrichedManifest.scene_sequences.length}</strong> 条分场序列</span>
-                <span><strong>{enrichedManifest.srt_cue_count}</strong> 条实际对白字幕</span>
-                <span>偏移版本 <code>r{enrichedManifest.offset_revision}</code></span>
+        <details className="sync-enriched-pack-details">
+          <summary>
+            <span className="sync-enriched-pack-summary-title">进阶：增强交付包</span>
+            <span className="sync-enriched-pack-summary-subtitle">附带场记彩色 Marker、分场子序列与实际台词 SRT · 按需展开</span>
+          </summary>
+          <section className="sync-enriched-pack" aria-label="剪辑增强交付包">
+            <header>
+              <div>
+                <h3>增强交付包（场记彩色 Marker · 分场子序列 · 实际台词 SRT）</h3>
+                <p>
+                  {(syncTimeline.offset_revision ?? 0) > 0
+                    ? `写入独立版本号目录，不覆盖既有同步母版；已包含人工同步微调（第 ${syncTimeline.offset_revision} 版）。`
+                    : "写入独立版本号目录，不覆盖既有同步母版。"}
+                </p>
               </div>
-              <div className="sync-delivery-actions">
-                <button type="button" disabled={!isTauri() || Boolean(busyTarget)} onClick={() => void revealArtifact(enrichedManifest.master_fcpxml, "enriched-master")}>
-                  显示带 Marker 母版 FCPXML
-                </button>
-                <button type="button" className="secondary" disabled={!isTauri() || Boolean(busyTarget)} onClick={() => void revealArtifact(enrichedManifest.bundle_dir, "enriched-dir")}>
-                  打开完整增强包目录
-                </button>
-              </div>
+              <button type="button" disabled={!canGenerate || enrichedBusy} onClick={() => void createEnrichedPack()}>
+                {enrichedBusy ? "生成中…" : "生成增强交付包"}
+              </button>
+            </header>
+            <div className="sync-enriched-options">
+              <label><input type="checkbox" checked={includeMarkers} onChange={(e) => setIncludeMarkers(e.target.checked)} />写入场记状态 / 保条 ★ / 偏移 Marker</label>
+              <label><input type="checkbox" checked={splitByScene} onChange={(e) => setSplitByScene(e.target.checked)} />按场次自动拆分子序列（FCPXML）</label>
+              <label><input type="checkbox" checked={exportSrt} onChange={(e) => setExportSrt(e.target.checked)} />附带帧精确实际台词 .srt 字幕轨</label>
             </div>
-          ) : null}
-        </section>
+            {enrichedError ? <p className="sync-delivery-error" role="alert">{enrichedError}</p> : null}
+            {enrichedManifest ? (
+              <div className="sync-enriched-result" role="status">
+                <div className="sync-enriched-metrics">
+                  <span><strong>{enrichedManifest.marker_count}</strong> 条 Marker</span>
+                  <span><strong>{enrichedManifest.scene_sequences.length}</strong> 条分场序列</span>
+                  <span><strong>{enrichedManifest.srt_cue_count}</strong> 条实际对白字幕</span>
+                  <span>偏移版本 <code>r{enrichedManifest.offset_revision}</code></span>
+                </div>
+                <div className="sync-delivery-actions">
+                  <button type="button" disabled={!isTauri() || Boolean(busyTarget)} onClick={() => void revealArtifact(enrichedManifest.master_fcpxml, "enriched-master")}>
+                    显示带 Marker 母版 FCPXML
+                  </button>
+                  <button type="button" className="secondary" disabled={!isTauri() || Boolean(busyTarget)} onClick={() => void revealArtifact(enrichedManifest.bundle_dir, "enriched-dir")}>
+                    打开完整增强包目录
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </details>
 
         {onOpenAssembly ? (
           <div className="sync-delivery-assembly-bridge">
-            <span>以上交付用于导出原始多机位同步母版；如需按剧本选片导出粗剪序列，可前往「选片组接」。</span>
-            <button type="button" className="secondary" onClick={onOpenAssembly}>前往选片组接</button>
+            <span>以上用于导出原始多机位同步工程；若已在镜序完成选片并需要按剧本生成粗剪顺片，可前往「粗剪组接」。</span>
+            <button type="button" className="secondary" onClick={onOpenAssembly}>前往粗剪组接</button>
           </div>
         ) : null}
       </div>

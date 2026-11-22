@@ -511,14 +511,18 @@ export function ProjectWorkbench({
           {projectNavigation ?? <strong>{project.name || project.project_id}</strong>}
           {visiblePage.startsWith("sync-") ? (
             <nav className="workbench-subbar sync-workbench-subbar" aria-label="同步工作区" data-tauri-drag-region="no-drag">
-              {([
-                ["sync-task", "同步任务"],
-                ["sync-inspect", "同步核对"],
-                ["sync-delivery", "工程交付"],
-              ] as const).map(([target, label]) => {
+              {(master.ready ? ([
+                ["sync-inspect", "同步核对", "核对多机位画面、同期声与时间轴偏移"],
+                ["sync-delivery", "导出工程", "导出到 DaVinci Resolve、Premiere Pro、Final Cut Pro 或剪映"],
+                ["sync-task", "同步进度", "查看同步任务状态、日志或重新同步"],
+              ] as const) : ([
+                ["sync-task", "同步进度", "查看同步任务状态、日志或重新同步"],
+                ["sync-inspect", "同步核对", "同步完成后开放"],
+                ["sync-delivery", "导出工程", "同步完成后开放"],
+              ] as const)).map(([target, label, title]) => {
                 const available = target === "sync-task" || master.ready;
                 return <button key={target} type="button" className="workbench-subbar-link" aria-current={visiblePage === target ? "page" : undefined}
-                  disabled={!available} title={!available ? "同步完成后开放" : undefined}
+                  disabled={!available} title={title}
                   onClick={() => navigate(target)}>{label}</button>;
               })}
             </nav>
@@ -596,7 +600,7 @@ export function ProjectWorkbench({
           ) : null}
           {active && visiblePage === "sync-inspect" && master.ready ? (
             <SyncInspectionWorkbench syncTimeline={master} baseUrl={syncTimeline.ready ? baseUrl : undefined} onInspectSelection={inspectSelection}
-              onMulticamSync={runMulticamSync} showDelivery={false}
+              onMulticamSync={runMulticamSync} showDelivery={true}
               onTimelineUpdated={() => void refreshSyncTimeline()}
               onOpenDelivery={() => navigate("sync-delivery")} />
           ) : null}

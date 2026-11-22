@@ -37,7 +37,7 @@ export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
               {showEditorial ? "返回同步母版" : "进入选片组接"}
             </button>
           ) : null}
-          {showEditorial ? <button type="button" onClick={onOpenDelivery}>交付 / 导出</button> : null}
+          {showEditorial ? <button type="button" onClick={onOpenDelivery}>导出粗剪顺片…</button> : null}
         </div>
       </header>
 

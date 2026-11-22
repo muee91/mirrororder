@@ -235,6 +235,79 @@
   border: 1px solid var(--mo-border-subtle);
   background: var(--mo-surface-control);
 }
+.sync-view-options {
+  position: relative;
+  flex: none;
+  color: var(--mo-text-primary);
+  font-size: 12px;
+}
+.sync-view-options > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: var(--sync-monitor-control);
+  color: var(--mo-text-secondary);
+  background: var(--mo-surface-control);
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+  white-space: nowrap;
+}
+.sync-view-options > summary::-webkit-details-marker { display: none; }
+.sync-view-options > summary::after { margin-inline-start: 7px; color: var(--mo-text-muted); content: "⌄"; }
+.sync-view-options[open] > summary,
+.sync-view-options > summary:hover { color: var(--mo-text-primary); background: var(--mo-surface-hover); }
+.sync-view-options > summary:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: 2px;
+}
+.sync-view-options-popover {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 154px;
+  padding: 6px;
+  border: 1px solid var(--mo-border-default);
+  border-radius: var(--mo-radius-control);
+  background: var(--mo-surface-raised);
+  box-shadow: var(--mo-shadow-popover, 0 8px 24px rgba(0, 0, 0, .22));
+  font-size: 11px;
+}
+.sync-view-options:not([open]) > .sync-view-options-popover { display: none; }
+.sync-view-options-popover > button {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 30px;
+  padding-inline: 8px;
+  border-radius: var(--mo-radius-control);
+  color: var(--mo-text-secondary);
+  font-size: 11px;
+  text-align: left;
+}
+.sync-view-options-popover > button:hover { color: var(--mo-text-primary); background: var(--mo-surface-hover); }
+.sync-view-options-popover > button:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: -2px;
+}
+.sync-delivery-cta {
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--mo-action-fill);
+  border-radius: var(--sync-monitor-control);
+  color: var(--mo-action-text);
+  background: var(--mo-action-fill);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.sync-delivery-cta:hover { filter: brightness(1.08); }
+.sync-delivery-cta:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: 2px;
+}
 .sync-inspection-desk {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
