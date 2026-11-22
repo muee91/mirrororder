@@ -63,7 +63,8 @@ def test_native_navigation_starts_at_workspace_home_and_has_independent_producti
     assert "openTeamProject(project: ProjectSummary)" in app
     assert 'setSurface("team")' in app
     assert 'aria-label="当前项目制作导航"' not in library
-    assert "制作区在项目画布顶部切换。" in library
+    assert "<ProjectModuleNavigation" in library
+    assert 'aria-label="制作区域"' in library
     assert "professional-assistant-toggle" in workbench
     assert "setAssistantOpen((value) => !value)" in workbench
 

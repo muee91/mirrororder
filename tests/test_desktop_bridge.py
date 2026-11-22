@@ -182,7 +182,8 @@ def test_desktop_project_navigation_matches_workspace_authority() -> None:
 
     assert 'aria-label="当前项目制作导航"' not in library
     assert 'onClick={() => openPage("watch")}' not in library
-    assert "制作区在项目画布顶部切换。" in library
+    assert "<ProjectModuleNavigation" in library
+    assert 'aria-label="制作区域"' in library
 
 
 def test_team_web_remains_a_separate_review_client() -> None:

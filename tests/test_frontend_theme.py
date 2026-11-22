@@ -83,7 +83,8 @@ def test_active_desktop_surface_uses_four_workspace_product_ia() -> None:
     assert 'aria-label="主导航"' in library
     assert 'aria-label="系统导航"' in library
     assert 'aria-label="当前项目制作导航"' not in library
-    assert "制作区在项目画布顶部切换。" in library
+    assert "<ProjectModuleNavigation" in library
+    assert 'aria-label="制作区域"' in library
     assert "最近项目" in workspace_home
 
     assert "MaterialWorkspace" in workbench
@@ -112,7 +113,8 @@ def test_active_work_has_one_global_status_center_not_settings_task_panel() -> N
     settings = (ROOT / "desktop" / "src" / "features" / "settings" / "SettingsStatusWorkbench.tsx").read_text(encoding="utf-8")
 
     assert "StatusCenterWorkbench" in app
-    assert "状态中心" in library
+    assert "onOpenStatusCenter" in library
+    assert 'title="查看后台同步、转写与导出任务"' in library
     assert "ProjectTaskClient" in status_center
     assert "TaskStatusPanel" not in settings
     assert "platform-capabilities" not in app

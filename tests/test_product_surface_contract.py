@@ -47,7 +47,7 @@ def test_desktop_uses_workspace_home_and_four_production_workspaces() -> None:
     assert "app-workspace-switch" not in app
     chrome = (ROOT / "desktop/src/app/app-chrome.css").read_text(encoding="utf-8")
     assert ".application-frame.is-project-open" in chrome
-    assert "grid-template-columns: 232px minmax(0, 1fr)" in chrome
+    assert "grid-template-columns: 54px minmax(0, 1fr)" in chrome
 
     assert "const AREAS: Record<ProductionArea, AreaDefinition>" in workbench
     assert 'className="professional-project-toolbar"' in workbench
@@ -95,7 +95,8 @@ def test_desktop_uses_workspace_home_and_four_production_workspaces() -> None:
     assert "professional-global-sidebar" in library
     assert 'aria-label="主导航"' in library
     assert 'aria-label="系统导航"' in library
-    assert "状态中心" in library
+    assert "onOpenStatusCenter" in library
+    assert 'title="查看后台同步、转写与导出任务"' in library
     assert ">设置<" in library
     assert 'aria-label="当前项目制作导航"' not in library
     assert 'onClick={() => openPage("watch")}' not in library
@@ -163,7 +164,8 @@ def test_production_tools_are_contextual_and_selection_survives_workspace_naviga
     assert "DeliveryWorkbench" in timeline
     assert "RoughCutWorkbench" not in workbench
     assert "AssemblyWorkbench" not in workbench
-    assert "制作区在项目画布顶部切换。" in library
+    assert "<ProjectModuleNavigation" in library
+    assert 'aria-label="制作区域"' in library
 
 
 def test_assistant_is_a_contextual_tool_not_a_project_tab() -> None:
@@ -184,8 +186,11 @@ def test_slate_is_dense_table_and_preserves_keyboard_flow() -> None:
     assert 'from "./SlateRow"' in slate
     assert "<SlateRow" in slate
     assert "<SlateTableHead" in slate
-    for column in ("集", "场号", "镜号", "次号", "状态"):
-        assert f">{column}<" in slate_row
+    assert '<th className="col-number">集</th>' in slate_row
+    assert 'header("scene", "col-text", "场号")' in slate_row
+    assert 'header("shot", "col-text", "镜号")' in slate_row
+    assert '<th className="col-number">次号</th>' in slate_row
+    assert 'header("status", "col-status", "状态")' in slate_row
     assert 'SLATE_CAMERA_COLUMNS = ["A", "B", "C", "AUX"]' in slate_row
     assert 'cameraColumns.map((camera)' in slate_row
     assert "辅助 / 特殊" in slate_row
@@ -230,7 +235,8 @@ def test_background_tasks_have_one_global_status_center_home() -> None:
 
     assert "StatusCenterWorkbench" in app
     assert 'setSurface("status")' in app
-    assert "状态中心" in library
+    assert "onOpenStatusCenter" in library
+    assert 'title="查看后台同步、转写与导出任务"' in library
     assert "ProjectTaskClient" in status_center
     assert "canCancelTask" in status_center
     assert "canRetryTask" in status_center
@@ -246,7 +252,7 @@ def test_settings_do_not_confuse_team_web_preferences_with_desktop_canvas() -> N
     settings = SETTINGS.read_text(encoding="utf-8")
 
     assert "团队审阅偏好" in settings
-    assert "这些选项只控制 Team Web，不改变 Desktop 场记画布" in settings
+    assert "这些选项仅控制局域网网页审阅端，不改变本机场记画布与工程数据。" in settings
     assert ">默认视图<" in settings
     assert ">默认工作台<" not in settings
     assert "DesktopAppearanceControl" in settings
@@ -283,7 +289,7 @@ def test_product_shell_keeps_runtime_connection_chrome_secondary_to_global_navig
     assert ">高级连接<" in app
     assert "connection-panel" not in app
     assert 'className="app-global-topbar"' in app
-    assert 'className="app-global-context"' in app
+    assert 'className={`app-global-context${' in app
     assert "app-workspace-switch" not in app
     assert "platform-capabilities" not in app
     assert "Python Core" not in app

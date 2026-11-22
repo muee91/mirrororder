@@ -61,7 +61,7 @@ def test_project_removal_copy_uses_user_language_and_matches_backend_boundary() 
     source = APP.read_text(encoding="utf-8")
 
     assert "永久删除项目" in source
-    assert "工作区内生成的项目目录、分析缓存和项目记录" in source
+    assert "项目库内生成的项目目录、分析缓存和项目记录" in source
     assert "原始媒体、剧本与 FCPXML 不会删除" in source
     assert "quarantine" not in source
     assert "Core 会" not in source

@@ -27,13 +27,17 @@ def test_small_mirror_is_button_only_on_team_web_and_reuses_rough_preview() -> N
     control = (ROOT / "web" / "assistant_control_ui.js").read_text(encoding="utf-8")
     projection = (ROOT / "web" / "assistant_projection_ui.js").read_text(encoding="utf-8")
     workbench = (ROOT / "desktop/src/features/assistant/AssistantWorkbench.tsx").read_text(encoding="utf-8")
+    conversation = (ROOT / "desktop/src/features/assistant/useAssistantConversation.ts").read_text(encoding="utf-8")
 
     assert "if (!APP_CLIENT)" in assistant and "nudge.hidden = true" in assistant
     assert "if (!APP_CLIENT)" in control and "nudge.hidden = true" in control
     assert "if (window.webkit?.messageHandlers?.mirrorOrder) return;" in projection
     assert "由制作 Host 计算 · Web 只展示结果" in projection
     assert "fetchJson(projectApi('/assistant')" in projection
-    assert "cycleAssistant" in workbench and "messageAssistant" in workbench
+    assert "useAssistantConversation" in workbench
+    assert "conversation.cycle()" in workbench
+    assert "connection.messageAssistant" in conversation
+    assert "connection.cycleAssistant" in conversation
 
 
 def test_native_slate_keeps_shot_type_as_per_attachment_fact() -> None:
