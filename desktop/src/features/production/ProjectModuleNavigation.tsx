@@ -57,10 +57,10 @@ const PRIMARY_MODULES: ReadonlyArray<{
   pages: readonly ProductionPage[];
   requiresSync: boolean;
 }> = [
+  { id: "material", label: "素材", icon: "media-library", target: "media-library", pages: ["media-library", "takes", "identity", "media-binding"], requiresSync: false },
   { id: "sync", label: "同步", icon: "sync-task", target: "sync-task", pages: ["sync-task", "sync-inspect", "sync-delivery"], requiresSync: false },
   { id: "slate", label: "场记", icon: "slate", target: "slate", pages: ["slate"], requiresSync: true },
   { id: "script", label: "剧本", icon: "script", target: "script", pages: ["script"], requiresSync: true },
-  { id: "material", label: "素材", icon: "media-library", target: "media-library", pages: ["media-library", "takes", "identity", "media-binding"], requiresSync: false },
   { id: "review", label: "审阅", icon: "watch", target: "watch", pages: ["watch", "timeline"], requiresSync: true },
 ];
 
@@ -113,7 +113,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
       <button
         type="button"
         data-tauri-drag-region="no-drag"
-        className={`project-module-link${active ? " is-active" : ""}${item.id === "review" ? " is-secondary-module" : ""}`}
+        className={`project-module-link${active ? " is-active" : ""}`}
         key={item.id}
         aria-current={active ? "page" : undefined}
         aria-label={accessibleLabel}
@@ -134,7 +134,6 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
     <div className="project-module-navigation" role="list">
       {PRIMARY_MODULES.map((item) => (
         <div className="project-module-group" role="listitem" key={item.id}>
-          {item.id === "review" ? <div className="project-module-divider" aria-hidden="true" /> : null}
           {renderPrimaryButton(item)}
         </div>
       ))}

@@ -29,6 +29,24 @@
         ],
         "createdAt": "2026-11-22T18:21:45.572Z",
         "reason": "focus context uses a small status dot, not a card side-tab"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "desktop/src/features/editor/multicam-sync-timeline.css"
+        ],
+        "createdAt": "2026-11-22T21:16:23.915Z",
+        "reason": "user confirmed: the sync monitor requires a camera-colored top and left accent border for camera identity"
+      },
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "desktop/src/features/editor/multicam-sync-timeline.css"
+        ],
+        "createdAt": "2026-11-22T21:16:24.048Z",
+        "reason": "user confirmed: the sync monitor requires a camera-colored top and left accent border for camera identity"
       }
     ]
   }

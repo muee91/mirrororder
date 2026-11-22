@@ -57,6 +57,11 @@ it("keeps advanced delivery collapsed and exposes the linear sync actions", () =
   }));
   const inspectionHost = document.createElement("div");
   inspectionHost.innerHTML = inspection;
-  expect(inspectionHost.textContent).toContain("显示选项");
   expect(inspectionHost.textContent).toContain("导出到剪辑软件…");
+  expect(inspectionHost.textContent).toContain("⋯");
+  expect(inspectionHost.textContent).toContain("手动微调偏移…");
+  expect(inspectionHost.textContent).not.toContain("双机对照");
+  expect(inspectionHost.textContent).not.toContain("竖屏 9:16");
+  expect(inspectionHost.textContent).not.toContain("安全区");
+  expect(inspectionHost.querySelector(".sync-debug-telemetry")?.hasAttribute("open") ?? false).toBe(false);
 });

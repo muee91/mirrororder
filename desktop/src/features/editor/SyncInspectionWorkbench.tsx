@@ -17,7 +17,7 @@ import {
   indexReviewGaps, timecode, toFrame, toMasterFrame, toReviewFrame, toSeconds,
 } from "./syncTimelineNavigation";
 const MILLISECOND_GRID = { numerator: 1000, denominator: 1 };
-type SplitView = { kind: "all" } | { kind: "compare"; left: string; right: string };
+type SplitView = { kind: "all" };
 type MonitorView = SplitView | { kind: "single"; trackId: string; previous: SplitView };
 
 interface Props {
@@ -26,6 +26,7 @@ interface Props {
   onMulticamSync?: () => void;
   showDelivery?: boolean;
   onOpenDelivery?: () => void;
+  onOpenSyncTask?: () => void;
   onInspectSelection?: (selection: AssistantSelection) => void;
   onTimelineUpdated?: () => void;
 }
@@ -56,7 +57,7 @@ function sourcePosition(clip: MulticamSyncClip | undefined, position: number): n
   return clip ? clamp(position - clip.timeline_start, 0, Math.max(0, clip.duration - 0.000001)) : 0;
 }
 
-export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync, showDelivery = true, onOpenDelivery, onInspectSelection, onTimelineUpdated }: Props) {
+export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync, showDelivery = true, onOpenDelivery, onOpenSyncTask, onInspectSelection, onTimelineUpdated }: Props) {
   const duration = Math.max(syncTimeline.duration_seconds, 0.1);
   const firstPosition = syncTimeline.tracks[0]?.clips[0]?.timeline_start ?? 0;
   const confirmedRate = useMemo(() => confirmedSyncRate(syncTimeline), [syncTimeline.timebase]);
@@ -112,8 +113,6 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const pictureHeight = clamp(previewHeight ?? preferredHeight, minPreviewHeight, maxPreviewHeight);
   const [trackId, setTrackId] = useState(syncTimeline.tracks[0]?.track_id ?? "");
   const [monitorView, setMonitorView] = useState<MonitorView>({ kind: "all" });
-  const [portraitLayout, setPortraitLayout] = useState(false);
-  const [safeGuides, setSafeGuides] = useState(false);
   const [playbackError, setPlaybackError] = useState("");
   const [artifacts, setArtifacts] = useState<SyncDeliveryArtifacts | null>(null);
   const [artifactError, setArtifactError] = useState("");
@@ -139,10 +138,9 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const playbackUrl = mediaUrl(clip);
   const playbackKey = clip && playbackUrl ? `${clip.clip_id}:${clip.timeline_start}:${playbackUrl}` : "";
   const sourceTime = sourcePosition(clip, position);
-  const canShowAngles = tracks.length > 1;
   const displayTracks = useMemo(() => {
     if (monitorView.kind === "all") return tracks;
-    const ids = monitorView.kind === "compare" ? [monitorView.left, monitorView.right] : [monitorView.trackId];
+    const ids = monitorView.kind === "single" ? [monitorView.trackId] : tracks.map(track => track.track_id);
     const visible = ids.flatMap(id => tracks.find(track => track.track_id === id) ?? []);
     return visible.length === ids.length ? visible : tracks;
   }, [monitorView, tracks]);
@@ -153,9 +151,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const reviewPresentedFrame = presentedFrame !== undefined && compactView ? toReviewFrame(presentedFrame, reviewGaps) : presentedFrame;
   // A timeline selection can listen to a camera outside the current monitor view.
   const mountedTracks = selectedTrack && !selectedVisible ? [...displayTracks, selectedTrack] : displayTracks;
-  const gridColumns = viewKind === "all" && portraitLayout
-    ? Math.max(1, Math.min(tracks.length, 4))
-    : viewKind === "all" && tracks.length >= 3
+  const gridColumns = viewKind === "all" && tracks.length >= 3
       ? tracks.length === 4 ? 2 : 3
       : Math.max(1, displayTracks.length);
   const [inspector, setInspector] = useState<"clip" | "audio" | null>(null);
@@ -437,27 +433,6 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
     return () => globalThis.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  function showComparison(): void {
-    const previous = monitorView.kind === "single" ? monitorView.previous : monitorView;
-    if (previous.kind === "compare" && tracks.some(track => track.track_id === previous.left)
-      && tracks.some(track => track.track_id === previous.right)) {
-      setMonitorView(previous);
-      return;
-    }
-    const other = tracks.find(track => track.track_id !== selectedTrackId);
-    if (other && selectedTrackId) setMonitorView({ kind: "compare", left: selectedTrackId, right: other.track_id });
-  }
-
-  function setComparisonAngle(side: "left" | "right", id: string): void {
-    setMonitorView(current => {
-      if (current.kind !== "compare") return current;
-      const other = side === "left" ? "right" : "left";
-      return id === current[other]
-        ? { kind: "compare", left: current.right, right: current.left }
-        : { ...current, [side]: id };
-    });
-  }
-
   useEffect(() => {
     if (!showDelivery || !baseUrl) return;
     let cancelled = false;
@@ -579,23 +554,8 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
           {selectedTrack && <span className="sync-monitor-listening">监听 {selectedTrack.label}</span>}
         </div>
         <div className="multicam-sync-inspection-meta">
-          {canShowAngles && <div className="sync-monitor-modes" role="group" aria-label="监看方式">
-            <button type="button" aria-pressed={viewKind === "all"} onClick={() => setMonitorView({ kind: "all" })}>
-              {viewKind === "all" ? "全部机位" : "返回全部机位"}
-            </button>
-            <button type="button" aria-pressed={viewKind === "compare"} onClick={showComparison}>双机对照</button>
-            <button type="button" aria-pressed={viewKind === "single"} onClick={() => setMonitorView({
-              kind: "single", trackId: selectedTrackId, previous: monitorView.kind === "single" ? monitorView.previous : monitorView,
-            })}>放大所选</button>
-          </div>}
-          {viewKind === "compare" && monitorView.kind === "compare" &&
-            <div className="sync-monitor-pair" role="group" aria-label="对照机位">
-              {(["left", "right"] as const).map(side => <select key={side} aria-label={side === "left" ? "左侧机位" : "右侧机位"}
-                value={monitorView[side]} onChange={event => setComparisonAngle(side, event.target.value)}>
-                {tracks.map(track => <option key={track.track_id} value={track.track_id}>{track.label}</option>)}
-              </select>)}
-            </div>}
-          <details className="sync-view-options"
+          {viewKind === "single" && <button type="button" className="secondary" onClick={() => setMonitorView({ kind: "all" })}>返回全部机位</button>}
+          <details className="sync-more-menu"
             onBlur={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open");
             }}
@@ -606,23 +566,20 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
               event.currentTarget.removeAttribute("open");
               event.currentTarget.querySelector("summary")?.focus();
             }}>
-            <summary>显示选项</summary>
-            <div className="sync-view-options-popover">
-              {canShowAngles && <button type="button" className="secondary sync-gap-toggle" aria-pressed={portraitLayout}
-                title="竖屏短剧 9:16 排布（横向并排，放大人物面部）" onClick={() => setPortraitLayout(value => !value)}>竖屏 9:16</button>}
-              <button type="button" className="secondary sync-gap-toggle" aria-pressed={safeGuides}
-                title="显示短剧平台 UI 避让安全区参考线" onClick={() => setSafeGuides(value => !value)}>安全区</button>
+            <summary aria-label="更多同步检查选项">⋯</summary>
+            <div className="sync-more-menu-popover">
+              <button type="button" className="secondary sync-inspector-toggle" ref={clipInspectorButton}
+                aria-expanded={inspector === "clip"} aria-controls={inspector === "clip" ? inspectorId : undefined}
+                onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); setInspector(current => current === "clip" ? null : "clip"); }}>手动微调偏移…</button>
+              {recordingsAvailable && <button type="button" className="secondary sync-inspector-toggle" ref={audioInspectorButton}
+                aria-expanded={inspector === "audio"} aria-controls={inspector === "audio" ? inspectorId : undefined}
+                onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); setInspector(current => current === "audio" ? null : "audio"); }}>同期录音监听</button>}
               {reviewGaps.length > 0 && <button type="button" className="sync-gap-toggle secondary" aria-pressed={compactView}
-                title="只去除所有机位都停拍的间隙" onClick={toggleGaps}>去除共同间隙</button>}
+                title="只去除所有机位都停拍的间隙" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); toggleGaps(); }}>{compactView ? "显示原始停拍间隙" : "自动收紧停拍间隙"}</button>}
+              {onOpenSyncTask && <button type="button" className="secondary" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); onOpenSyncTask(); }}>查看同步进度与重新同步</button>}
             </div>
           </details>
-          <button type="button" className="secondary sync-inspector-toggle" ref={clipInspectorButton}
-            aria-expanded={inspector === "clip"} aria-controls={inspector === "clip" ? inspectorId : undefined}
-            onClick={() => setInspector(current => current === "clip" ? null : "clip")}>片段检查器</button>
-          {recordingsAvailable && <button type="button" className="secondary sync-inspector-toggle" ref={audioInspectorButton}
-            aria-expanded={inspector === "audio"} aria-controls={inspector === "audio" ? inspectorId : undefined}
-            onClick={() => setInspector(current => current === "audio" ? null : "audio")}>同期录音 <span>{syncTimeline.recordings?.placements.length}</span></button>}
-          {showDelivery && onOpenDelivery && <button type="button" className="sync-delivery-cta" onClick={onOpenDelivery}>导出到剪辑软件…</button>}
+          {onOpenDelivery && <button type="button" className="sync-delivery-cta" onClick={onOpenDelivery}>导出到剪辑软件…</button>}
         </div>
       </header>
 
@@ -632,8 +589,8 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
         style={{ "--sync-preview-height": `${pictureHeight}px` } as CSSProperties}>
         <div className="multicam-sync-monitor">
           <div className="multicam-sync-viewers multicam-sync-angle-grid"
-            role="group" aria-label={{ all: "机位分屏", compare: "双机对照画面", single: "单机画面" }[viewKind]}
-            data-view={viewKind} data-portrait={portraitLayout ? "true" : undefined}
+            role="group" aria-label={{ all: "机位分屏", single: "单机画面" }[viewKind]}
+            data-view={viewKind}
             style={{ "--sync-grid-columns": gridColumns, "--sync-grid-narrow-columns": Math.min(2, gridColumns) } as CSSProperties}>
             {mountedTracks.map(track => {
               const active = track.track_id === selectedTrackId;
@@ -653,7 +610,6 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
                     : <span className="multicam-sync-angle-placeholder">
                         {item ? "尚未建立无歧义的素材身份" : "此处无片段"}
                       </span>}
-                  {safeGuides && <div className="sync-safe-guide" aria-hidden="true" />}
                 </div>
                 <button type="button" className="sync-camera-caption" aria-label={track.camera === "?" ? track.label : `${track.camera} 机`}
                   aria-pressed={active} disabled={!item} onClick={() => selectAngle(track.track_id)}
@@ -745,24 +701,60 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
           </header>
           {inspector === "clip" ? <div className="multicam-sync-details">
             {clip ? (
-              <dl>
+              <>
+              <dl className="sync-clip-summary">
                 <dt>文件</dt><dd>{clip.name}</dd>
                 <dt>机位 / 拍摄日</dt><dd>{clip.camera} / {clip.day}</dd>
-                <dt>母版起点</dt><dd>{secondsLabel(clip.timeline_start)}</dd>
                 <dt>片段时长</dt><dd>{secondsLabel(clip.duration)}</dd>
-                <dt>目标源内</dt><dd>{sourceTime.toFixed(6)}s</dd>
-                <dt>画面源内</dt><dd>{!selectedVisible ? "监听机位未显示" : displayedTime !== null ? `${displayedTime.toFixed(6)}s` : "等待画面"}</dd>
-                <dt>定位时间码</dt><dd>{confirmedRate ? timecode(reviewCursor, rate) : `${position.toFixed(3)}s`}</dd>
-                {compactView && <><dt>母版时间码</dt><dd>{timecode(cursor, rate)}</dd></>}
-                <dt>画面时间码</dt><dd data-testid="sync-presented-frame"
-                  data-frame={reviewPresentedFrame}>
-                  {!selectedVisible ? "监听机位未显示" : reviewPresentedFrame !== undefined
-                    ? confirmedRate ? timecode(reviewPresentedFrame, rate) : `${displayedTime?.toFixed(3)}s`
-                    : frameCallbackSupported ? "等待画面定位" : "当前系统未提供显示帧时间"}</dd>
-                <dt>原始时码</dt><dd>{clip.timecode || "未记录"}</dd>
-                <dt>媒体匹配</dt><dd>{clip.media_clip_id ? "已关联项目媒体身份" : "待核实"}</dd>
-                <dt>人工偏移</dt><dd>{clip.manual_offset_frames ? `${clip.manual_offset_frames > 0 ? "+" : ""}${clip.manual_offset_frames} 帧（r${syncTimeline.offset_revision ?? 0}）` : `0 帧（r${syncTimeline.offset_revision ?? 0}）`}</dd>
               </dl>
+              {baseUrl ? (
+                <section className="sync-offset-card" aria-label="帧级偏移修正">
+                  <div className="sync-offset-head">
+                    <strong>帧级偏移修正</strong>
+                    <span>修正版 r{syncTimeline.offset_revision ?? 0}</span>
+                  </div>
+                  <div className="sync-offset-nudge" role="group" aria-label="增减帧偏移">
+                    <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(v => v - 5)}>−5f</button>
+                    <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(v => v - 1)}>−1f</button>
+                    <span className="sync-offset-readout" data-dirty={nudgeDraft !== 0 || undefined}>{nudgeDraft > 0 ? `+${nudgeDraft}f` : `${nudgeDraft}f`}</span>
+                    <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(v => v + 1)}>+1f</button>
+                    <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(v => v + 5)}>+5f</button>
+                  </div>
+                  <label className="sync-offset-scope">
+                    <span>传播范围</span>
+                    <select value={nudgeScope} disabled={nudgeBusy} onChange={(e) => setNudgeScope(e.target.value as "single" | "following" | "track")}>
+                      <option value="single">仅当前片段</option>
+                      <option value="following">同机位此后全部（解决换电池漂移）</option>
+                      <option value="track">整条机位轨道统一偏移</option>
+                    </select>
+                  </label>
+                  <div className="sync-offset-actions">
+                    <button type="button" disabled={nudgeBusy || nudgeDraft === 0} onClick={() => void commitOffset("clip")}>
+                      {nudgeBusy ? "保存中…" : `保存为 r${(syncTimeline.offset_revision ?? 0) + 1}`}
+                    </button>
+                    {nudgeDraft !== 0 ? <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(0)}>清零</button> : null}
+                    {(syncTimeline.offset_revision ?? 0) > 0 ? <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => void undoLastOffset()}>撤销上一版</button> : null}
+                  </div>
+                  {nudgeMessage ? <p className="sync-offset-status" role="status">{nudgeMessage}</p> : null}
+                </section>
+              ) : null}
+              <details className="sync-debug-telemetry">
+                <summary>技术时间码详情</summary>
+                <dl>
+                  <dt>母版起点</dt><dd>{secondsLabel(clip.timeline_start)}</dd>
+                  <dt>目标源内</dt><dd>{sourceTime.toFixed(6)}s</dd>
+                  <dt>画面源内</dt><dd>{!selectedVisible ? "监听机位未显示" : displayedTime !== null ? `${displayedTime.toFixed(6)}s` : "等待画面"}</dd>
+                  <dt>定位时间码</dt><dd>{confirmedRate ? timecode(reviewCursor, rate) : `${position.toFixed(3)}s`}</dd>
+                  {compactView && <><dt>母版时间码</dt><dd>{timecode(cursor, rate)}</dd></>}
+                  <dt>画面时间码</dt><dd data-testid="sync-presented-frame" data-frame={reviewPresentedFrame}>
+                    {!selectedVisible ? "监听机位未显示" : reviewPresentedFrame !== undefined
+                      ? confirmedRate ? timecode(reviewPresentedFrame, rate) : `${displayedTime?.toFixed(3)}s`
+                      : frameCallbackSupported ? "等待画面定位" : "当前系统未提供显示帧时间"}</dd>
+                  <dt>原始时码</dt><dd>{clip.timecode || "未记录"}</dd>
+                  <dt>媒体匹配</dt><dd>{clip.media_clip_id ? "已关联项目媒体身份" : "待核实"}</dd>
+                </dl>
+              </details>
+              </>
             ) : <p>请在时间线选择片段，或移动播放头到有素材的位置。</p>}
             {baseUrl && clip ? (
               <section className="sync-waveform-card" aria-label="声波峰值对齐预览">
@@ -832,37 +824,6 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
                     ) : null}
                   </div>
                 )}
-              </section>
-            ) : null}
-            {baseUrl && clip ? (
-              <section className="sync-offset-card" aria-label="帧级偏移修正">
-                <div className="sync-offset-head">
-                  <strong>帧级偏移修正</strong>
-                  <span>修正版 r{syncTimeline.offset_revision ?? 0}</span>
-                </div>
-                <div className="sync-offset-nudge" role="group" aria-label="增减帧偏移">
-                  <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(v => v - 5)}>−5f</button>
-                  <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(v => v - 1)}>−1f</button>
-                  <span className="sync-offset-readout" data-dirty={nudgeDraft !== 0 || undefined}>{nudgeDraft > 0 ? `+${nudgeDraft}f` : `${nudgeDraft}f`}</span>
-                  <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(v => v + 1)}>+1f</button>
-                  <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(v => v + 5)}>+5f</button>
-                </div>
-                <label className="sync-offset-scope">
-                  <span>传播范围</span>
-                  <select value={nudgeScope} disabled={nudgeBusy} onChange={(e) => setNudgeScope(e.target.value as "single" | "following" | "track")}>
-                    <option value="single">仅当前片段</option>
-                    <option value="following">同机位此后全部（解决换电池漂移）</option>
-                    <option value="track">整条机位轨道统一偏移</option>
-                  </select>
-                </label>
-                <div className="sync-offset-actions">
-                  <button type="button" disabled={nudgeBusy || nudgeDraft === 0} onClick={() => void commitOffset("clip")}>
-                    {nudgeBusy ? "保存中…" : `保存为 r${(syncTimeline.offset_revision ?? 0) + 1}`}
-                  </button>
-                  {nudgeDraft !== 0 ? <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => setNudgeDraft(0)}>清零</button> : null}
-                  {(syncTimeline.offset_revision ?? 0) > 0 ? <button type="button" className="secondary" disabled={nudgeBusy} onClick={() => void undoLastOffset()}>撤销上一版</button> : null}
-                </div>
-                {nudgeMessage ? <p className="sync-offset-status" role="status">{nudgeMessage}</p> : null}
               </section>
             ) : null}
             <div className="sync-master-info">

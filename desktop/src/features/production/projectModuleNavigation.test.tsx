@@ -45,8 +45,8 @@ describe("independent production module routing", () => {
     root.innerHTML = markup;
     const nav = [...root.querySelectorAll<HTMLButtonElement>("button.project-module-link")];
     expect(nav).toHaveLength(5);
-    expect([...nav].map((button) => button.textContent?.trim())).toEqual(["同步", "场记", "剧本", "素材", "审阅"]);
-    expect([...nav].map((button) => button.getAttribute("aria-label"))).toEqual(["同步核对（当前为同步任务）", "交互场记", "剧本关联", "素材库", "看片审阅"]);
+    expect([...nav].map((button) => button.textContent?.trim())).toEqual(["素材", "同步", "场记", "剧本", "审阅"]);
+    expect([...nav].map((button) => button.getAttribute("aria-label"))).toEqual(["素材库", "同步核对（当前为同步任务）", "交互场记", "剧本关联", "看片审阅"]);
     expect(root.querySelector(".project-module-overflow")).toBeNull();
     expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步");
     expect(root.querySelector('[aria-current="page"] .project-module-running')).toBeTruthy();
@@ -67,7 +67,8 @@ describe("independent production module routing", () => {
     }));
     const root = document.createElement("div");
     root.innerHTML = markup;
-    expect(root.querySelector("button.project-module-link")?.getAttribute("aria-label")).toBe("同步核对");
+    expect([...root.querySelectorAll<HTMLButtonElement>("button.project-module-link")]
+      .find((button) => button.textContent?.includes("同步"))?.getAttribute("aria-label")).toBe("同步核对");
   });
 
   it("maps secondary pages to their unified workbench active state", () => {

@@ -1,7 +1,7 @@
 .mo-media-card {
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.055);
+  border: 1px solid color-mix(in srgb, var(--camera-rail, var(--mo-border-default)) 34%, var(--mo-border-default, rgba(255,255,255,0.12)));
   border-radius: 6px;
   background: var(--mo-surface-pane, #141a20);
   color: var(--mo-text-primary, #dfe6eb);
@@ -12,8 +12,8 @@
   position: absolute;
   z-index: 2;
   inset: 0 auto 0 0;
-  width: 1.5px;
-  opacity: 0.55;
+  width: 3px;
+  opacity: 0.92;
   background: var(--camera-rail, var(--mo-border-strong, #536170));
   pointer-events: none;
 }
@@ -105,15 +105,15 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
 }
 .mo-media-name {
   min-width: 0;
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
   color: var(--mo-text-primary, #dce3e8);
   font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
   font-weight: 620;
   line-height: 1.2;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .mo-media-card.is-inspector .mo-media-name { font-size: 11px; line-height: 1.25; }
 .mo-media-count-slot {
@@ -201,7 +201,7 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
 }
 
 /* Resolved Desktop theme: the shared Media Card owns its own Light/Dark colors. */
-html[data-mirrororder-theme="light"] .mo-media-card { border-color: #d2dae1; color: #26313a; background: #fff; }
+html[data-mirrororder-theme="light"] .mo-media-card { border-color: color-mix(in srgb, var(--camera-rail, var(--mo-border-default)) 34%, var(--mo-border-default, rgba(255,255,255,0.12))); color: #26313a; background: #fff; }
 html[data-mirrororder-theme="light"] .mo-media-card.is-selected { border-color: #3f86d9; background: #edf5ff; }
 html[data-mirrororder-theme="light"] .mo-media-thumb { background: #e9eef2; color: #697782; }
 html[data-mirrororder-theme="light"] .mo-media-preview-fallback { color: #6f7d88; background: #e9eef2; }

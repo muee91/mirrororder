@@ -308,6 +308,74 @@
   outline: 2px solid var(--mo-accent);
   outline-offset: 2px;
 }
+.sync-more-menu {
+  position: relative;
+  flex: none;
+  color: var(--mo-text-primary);
+  font-size: 12px;
+}
+.sync-more-menu > summary {
+  display: inline-grid;
+  min-width: 30px;
+  min-height: 30px;
+  place-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--mo-border-subtle);
+  border-radius: var(--sync-monitor-control);
+  color: var(--mo-text-secondary);
+  background: var(--mo-surface-control);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  list-style: none;
+}
+.sync-more-menu > summary::-webkit-details-marker { display: none; }
+.sync-more-menu > summary:hover,
+.sync-more-menu[open] > summary { color: var(--mo-text-primary); background: var(--mo-surface-hover); }
+.sync-more-menu > summary:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: 2px;
+}
+.sync-more-menu-popover {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 210px;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--mo-border-default);
+  border-radius: var(--mo-radius-control);
+  background: var(--mo-surface-raised);
+  box-shadow: var(--mo-shadow-popover, 0 8px 24px rgba(0, 0, 0, .22));
+  font-size: 11px;
+}
+.sync-more-menu:not([open]) > .sync-more-menu-popover { display: none; }
+.sync-more-menu-popover > button,
+html[data-mirrororder-theme] .sync-more-menu-popover > button {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--mo-radius-control);
+  color: var(--mo-text-secondary);
+  background: transparent;
+  box-shadow: none;
+  font-size: 11px;
+  text-align: left;
+}
+.sync-more-menu-popover > button:hover,
+html[data-mirrororder-theme] .sync-more-menu-popover > button:hover {
+  border-color: transparent;
+  color: var(--mo-text-primary);
+  background: var(--mo-surface-hover);
+}
+.sync-more-menu-popover > button:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: -2px;
+}
 .sync-inspection-desk {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -364,6 +432,23 @@
 }
 .multicam-sync-details dt { color: var(--mo-text-secondary); }
 .multicam-sync-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.sync-clip-summary { margin-bottom: 12px; }
+.sync-debug-telemetry {
+  margin-top: 12px;
+  border-top: 1px solid var(--mo-border-subtle);
+  padding-top: 10px;
+}
+.sync-debug-telemetry > summary {
+  color: var(--mo-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+.sync-debug-telemetry > summary:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: 2px;
+}
+.sync-debug-telemetry > dl { margin-bottom: 4px; }
 .sync-master-info {
   display: flex;
   flex-wrap: wrap;
@@ -404,12 +489,14 @@
   min-height: 0;
   border-radius: 3px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, .07);
+  border: 1px solid color-mix(in srgb, var(--camera-color) 44%, var(--mo-border-default, #29333d));
+  border-top: 3px solid var(--camera-color);
+  border-left: 3px solid var(--camera-color);
   background: var(--mo-monitor-matte, #0b0d10);
 }
 .sync-camera-cell[data-listening] {
   border-color: var(--camera-color);
-  box-shadow: inset 0 0 0 1px var(--camera-color), 0 0 18px color-mix(in srgb, var(--camera-color) 20%, transparent);
+  box-shadow: inset 0 0 0 1px var(--camera-color), 0 0 0 2px color-mix(in srgb, var(--camera-color) 82%, transparent), 0 0 18px color-mix(in srgb, var(--camera-color) 26%, transparent);
 }
 .sync-camera-cell[hidden], .multicam-sync-video[hidden] { display: none; }
 .sync-camera-picture { position: relative; min-width: 0; min-height: 0; overflow: hidden; }

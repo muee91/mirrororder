@@ -213,6 +213,8 @@ export function ProjectWorkbench({
   const [commandError, setCommandError] = useState("");
   const [submissionIssue, setSubmissionIssue] = useState(() => readSyncSubmissionIssue(workspaceId, project.project_id));
   const commanding = useRef(false);
+  const defaultSyncLanding = useRef(project.input_kind === "media-directory" && !hasRememberedProjectPage(project.project_id));
+  const explicitSyncTaskNavigation = useRef(false);
   const assistantToggle = useRef<HTMLButtonElement>(null);
   const assistantDraft = useMemo(() => ({ text: "", includeSelection: false }), [baseUrl, project.project_id]);
   const navigationNonce = useRef(0);
@@ -291,6 +293,7 @@ export function ProjectWorkbench({
   }
 
   function navigate(next: ProductionPage): void {
+    if (next === "sync-task" && defaultSyncLanding.current) explicitSyncTaskNavigation.current = true;
     if (next.startsWith("sync-") && project.input_kind !== "media-directory") {
       setPage("slate");
       return;
@@ -393,6 +396,11 @@ export function ProjectWorkbench({
   useEffect(() => {
     onSyncStatusChange?.(project.project_id, master.ready, syncTimeline.phase);
   }, [master.ready, onSyncStatusChange, project.project_id, syncTimeline.phase]);
+
+  useEffect(() => {
+    if (project.input_kind !== "media-directory" || !defaultSyncLanding.current || explicitSyncTaskNavigation.current) return;
+    if (master.ready && page === "sync-task") setPage("sync-inspect");
+  }, [master.ready, page, project.input_kind]);
 
 
   useEffect(() => {
@@ -510,22 +518,17 @@ export function ProjectWorkbench({
         <div className="professional-project-identity" data-tauri-drag-region>
           {projectNavigation ?? <strong>{project.name || project.project_id}</strong>}
           {visiblePage.startsWith("sync-") ? (
-            <nav className="workbench-subbar sync-workbench-subbar" aria-label="同步工作区" data-tauri-drag-region="no-drag">
-              {(master.ready ? ([
-                ["sync-inspect", "同步核对", "核对多机位画面、同期声与时间轴偏移"],
-                ["sync-delivery", "导出工程", "导出到 DaVinci Resolve、Premiere Pro、Final Cut Pro 或剪映"],
-                ["sync-task", "同步进度", "查看同步任务状态、日志或重新同步"],
-              ] as const) : ([
-                ["sync-task", "同步进度", "查看同步任务状态、日志或重新同步"],
-                ["sync-inspect", "同步核对", "同步完成后开放"],
-                ["sync-delivery", "导出工程", "同步完成后开放"],
-              ] as const)).map(([target, label, title]) => {
-                const available = target === "sync-task" || master.ready;
-                return <button key={target} type="button" className="workbench-subbar-link" aria-current={visiblePage === target ? "page" : undefined}
-                  disabled={!available} title={title}
-                  onClick={() => navigate(target)}>{label}</button>;
-              })}
-            </nav>
+            <div className="workbench-subbar sync-workbench-subbar" aria-label="同步工作区" data-tauri-drag-region="no-drag">
+              {visiblePage === "sync-inspect" ? <span className="professional-project-context-subtitle" aria-live="polite">多机位同步</span> : null}
+              {visiblePage === "sync-delivery" ? <>
+                <button type="button" className="workbench-subbar-link" onClick={() => navigate("sync-inspect")}>← 返回同步画面</button>
+                <span className="professional-project-context-subtitle" aria-live="polite">导出到剪辑软件</span>
+              </> : null}
+              {visiblePage === "sync-task" ? master.ready ? <>
+                <button type="button" className="workbench-subbar-link" onClick={() => navigate("sync-inspect")}>← 返回同步画面</button>
+                <span className="professional-project-context-subtitle" aria-live="polite">同步进度与重跑</span>
+              </> : <span className="professional-project-context-subtitle" aria-live="polite">多机位同步</span> : null}
+            </div>
           ) : ["media-library", "takes", "identity", "media-binding"].includes(visiblePage) ? (
             <nav className="workbench-subbar material-workbench-subbar" aria-label="素材工作区" data-tauri-drag-region="no-drag">
               <button type="button" className="workbench-subbar-link" aria-current={visiblePage === "media-library" ? "page" : undefined} onClick={() => navigate("media-library")}>全部文件</button>
@@ -600,9 +603,10 @@ export function ProjectWorkbench({
           ) : null}
           {active && visiblePage === "sync-inspect" && master.ready ? (
             <SyncInspectionWorkbench syncTimeline={master} baseUrl={syncTimeline.ready ? baseUrl : undefined} onInspectSelection={inspectSelection}
-              onMulticamSync={runMulticamSync} showDelivery={true}
+              onMulticamSync={runMulticamSync} showDelivery={false}
               onTimelineUpdated={() => void refreshSyncTimeline()}
-              onOpenDelivery={() => navigate("sync-delivery")} />
+              onOpenDelivery={() => navigate("sync-delivery")}
+              onOpenSyncTask={() => navigate("sync-task")} />
           ) : null}
           {active && visiblePage === "sync-delivery" && master.ready ? (
             <SyncDeliveryWorkspace baseUrl={baseUrl} syncTimeline={master} canGenerate={syncTimeline.ready && !readError} onRepair={() => navigate("media-binding")}
