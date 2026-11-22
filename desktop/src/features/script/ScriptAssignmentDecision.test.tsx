@@ -73,7 +73,7 @@ describe("ScriptAssignmentDecision", () => {
     await settle();
     expect(host.textContent).toContain("当前 Take 尚未形成剧本段最终决定");
 
-    const best = Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "Best");
+    const best = Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "首选");
     expect(best).toBeTruthy();
     await act(async () => best?.click());
     await settle();
@@ -86,8 +86,8 @@ describe("ScriptAssignmentDecision", () => {
       actor: "Editor",
       expectedRevision: 4,
     });
-    expect(host.textContent).toContain("剧本段最终：Best");
-    expect(host.textContent).toContain("当前剧本段最终 Best");
+    expect(host.textContent).toContain("剧本段最终：首选");
+    expect(host.textContent).toContain("当前剧本段最终 首选");
   });
 
   it("refreshes after a revision conflict instead of retrying the stale write", async () => {
@@ -98,13 +98,13 @@ describe("ScriptAssignmentDecision", () => {
       root.render(<ScriptAssignmentDecision baseUrl="http://127.0.0.1:8765" projectId="p1" groupId="group-1" segmentId="seg-1" actor="Editor" />);
     });
     await settle();
-    const reject = Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "Reject");
+    const reject = Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "废弃");
     await act(async () => reject?.click());
     await settle();
 
     expect(decision).toHaveBeenCalledTimes(1);
     expect(status).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain("已读取最新状态，请重新确认");
-    expect(host.textContent).toContain("当前剧本段最终 Keep");
+    expect(host.textContent).toContain("当前剧本段最终 保留");
   });
 });

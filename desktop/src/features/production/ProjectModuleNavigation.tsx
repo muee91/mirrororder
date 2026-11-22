@@ -102,16 +102,23 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
       material: "素材库",
       review: "看片审阅",
     }[item.id];
+    const title = {
+      sync: "多机位同步、听看核对与导出工程",
+      slate: "按拍摄顺序看片、记场镜备注与标误录",
+      script: "按剧本与台词检索实拍素材",
+      material: "查看源文件、机位归属与换盘重连",
+      review: "进阶：看片选片、粗剪顺片与团队协作",
+    }[item.id];
     return (
       <button
         type="button"
         data-tauri-drag-region="no-drag"
-        className={`project-module-link${active ? " is-active" : ""}`}
+        className={`project-module-link${active ? " is-active" : ""}${item.id === "review" ? " is-secondary-module" : ""}`}
         key={item.id}
         aria-current={active ? "page" : undefined}
         aria-label={accessibleLabel}
         disabled={!available}
-        title={available ? item.label : "同步完成后开放此工作区"}
+        title={available ? title : "同步完成后开放此工作区"}
         onClick={() => {
           if (canOpenProductionModule(target, inputKind, syncReady)) onNavigate(target);
         }}
@@ -127,6 +134,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
     <div className="project-module-navigation" role="list">
       {PRIMARY_MODULES.map((item) => (
         <div className="project-module-group" role="listitem" key={item.id}>
+          {item.id === "review" ? <div className="project-module-divider" aria-hidden="true" /> : null}
           {renderPrimaryButton(item)}
         </div>
       ))}

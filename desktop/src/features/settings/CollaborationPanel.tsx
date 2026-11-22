@@ -119,7 +119,7 @@ export function CollaborationPanel({ baseUrl }: Props) {
           ))}
         </div>
       </details>
-      <p className="production-note">这些权限只控制 Team Web 访问，不会授予本机最终 Editorial Decision、场记或时间线编辑权威。</p>
+      <p className="production-note">这些权限只控制网页审阅端访问，不会授予本机最终审阅决定、场记或时间线编辑权威。</p>
     </div>
   );
 }

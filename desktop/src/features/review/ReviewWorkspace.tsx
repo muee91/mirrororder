@@ -30,16 +30,16 @@ const FILTERS: Array<{ value: ReviewQueueFilter; label: string }> = [
   { value: "all", label: "全部" },
   { value: "unreviewed", label: "未决定" },
   { value: "attention", label: "需关注" },
-  { value: "best", label: "Best" },
-  { value: "keep", label: "Keep" },
-  { value: "reject", label: "Reject" },
+  { value: "best", label: "首选" },
+  { value: "keep", label: "保留" },
+  { value: "reject", label: "废弃" },
 ];
 
 const FINAL_LABELS: Record<ReviewFinalState, string> = {
   unreviewed: "未决定",
-  best: "Best",
-  keep: "Keep",
-  reject: "Reject",
+  best: "首选",
+  keep: "保留",
+  reject: "废弃",
 };
 
 type EditorialProjection = {
@@ -209,18 +209,28 @@ export function ReviewWorkspace({
     <section className="review-workspace">
       <header className="workspace-toolbar review-workspace-toolbar">
         <div className="status-filter" aria-label="看片筛选">
-          {FILTERS.map((option) => (
-            <button
-              type="button"
-              className={filter === option.value ? "is-active" : ""}
-              key={option.value}
-              onClick={() => setFilter(option.value)}
-              title={option.value === "attention" ? "只形成看片队列；问题仍回到所属工作区处理" : undefined}
-              aria-label={option.value === "attention" ? `需关注 ${counts.attention}：阻断 ${attentionTiers.blocking} · 证据过期 ${attentionTiers.stale} · 待关注 ${attentionTiers.watch}` : undefined}
-            >
-              {option.label} <span>{counts[option.value]}</span>
-            </button>
-          ))}
+          {FILTERS
+            .filter((option) => !["best", "keep", "reject"].includes(option.value) || counts[option.value] > 0 || filter === option.value)
+            .map((option) => {
+              const watchOnlyAttention = option.value === "attention"
+                && attentionTiers.blocking === 0
+                && attentionTiers.stale === 0
+                && counts.attention > 0;
+              return (
+                <button
+                  type="button"
+                  className={`${filter === option.value ? "is-active" : ""}${watchOnlyAttention ? " is-watch-only" : ""}`}
+                  key={option.value}
+                  onClick={() => setFilter(option.value)}
+                  title={watchOnlyAttention
+                    ? "当前无阻断错误；均为待关联剧本的常规提示"
+                    : option.value === "attention" ? "只形成看片队列；问题仍回到所属工作区处理" : undefined}
+                  aria-label={option.value === "attention" ? `需关注 ${counts.attention}：阻断 ${attentionTiers.blocking} · 证据过期 ${attentionTiers.stale} · 待关注 ${attentionTiers.watch}` : undefined}
+                >
+                  {option.label} <span>{counts[option.value]}</span>
+                </button>
+              );
+            })}
         </div>
         <div className="review-queue-summary" aria-label="审阅进度">
           {attentionTiers.blocking ? <span className="needs-attention"><strong>{attentionTiers.blocking}</strong> 阻断</span> : null}

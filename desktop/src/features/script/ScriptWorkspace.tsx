@@ -563,7 +563,18 @@ export function ScriptWorkspace({
       <header className="script-command-bar">
         <div className="script-projection-switch" aria-label="剧本显示模式">
           {PROJECTION_OPTIONS.map((option) => (
-            <button type="button" className={projectionMode === option.value ? "is-active" : ""} aria-pressed={projectionMode === option.value} key={option.value} onClick={() => setProjectionMode(option.value)}>
+            <button
+              type="button"
+              className={projectionMode === option.value ? "is-active" : ""}
+              aria-pressed={projectionMode === option.value}
+              key={option.value}
+              title={{
+                script: "按剧本正文查看已关联实拍素材",
+                coverage: "按已归集、有候选与未拍摄直观标色",
+                issues: "只显示缺拍或待处理的剧本段",
+              }[option.value]}
+              onClick={() => setProjectionMode(option.value)}
+            >
               {option.label}
             </button>
           ))}
@@ -577,8 +588,8 @@ export function ScriptWorkspace({
           aria-label="搜索剧本"
         />
         <div className="workspace-toolbar-actions">
-          <button type="button" className="secondary" disabled={!selectedBlock} onClick={() => selectedBlock && openBlockContext(selectedBlock)}>匹配素材</button>
-          <button type="button" className="secondary" onClick={() => { setDrawerView("batch"); setRoughPreview(null); setDrawerOpen(true); }}>批量归集</button>
+          <button type="button" className="secondary" disabled={!selectedBlock} title="为当前剧本段挑选对应实拍素材" onClick={() => selectedBlock && openBlockContext(selectedBlock)}>匹配素材</button>
+          <button type="button" className="secondary" title="按场次范围一次性归集多条素材" onClick={() => { setDrawerView("batch"); setRoughPreview(null); setDrawerOpen(true); }}>批量归集</button>
         </div>
       </header>
 
@@ -640,7 +651,7 @@ export function ScriptWorkspace({
         <span><strong>{episodeStats.mapped}</strong>已归集</span>
         <span><strong>{episodeStats.candidate}</strong>有候选</span>
         <span className={episodeStats.attention ? "needs-attention" : ""}><strong>{episodeStats.attention}</strong>需处理</span>
-        <small>覆盖视图按已归集与候选状态直观着色。</small>
+        <small>按剧本顺序查找实拍素材；选中段落后可点击「匹配素材」或直接拖入 Take。</small>
       </div>
 
       {writeMessage ? <div className={`write-status write-${writeState}`}>{writeMessage}</div> : null}

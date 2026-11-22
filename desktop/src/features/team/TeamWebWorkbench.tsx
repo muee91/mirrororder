@@ -145,7 +145,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
         <div>
           <p className="eyebrow">团队协作</p>
           <h2>共享审阅</h2>
-          <p>团队成员只看片并提交个人意见；最终 Best / Keep / Reject 仍由本机审阅决定。</p>
+          <p>团队成员只看片并提交个人意见；最终首选、保留或废弃仍由本机审阅决定。</p>
         </div>
         <div className="team-web-state">
           <span className={healthy ? "is-running" : "is-stopped"}>{healthy ? "可分享" : processRunning ? "需要处理" : "未开启"}</span>
@@ -173,7 +173,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
           <h3>团队能做什么</h3>
           <ul>
             <li>查看当前共享工作区中的项目与素材卡。</li>
-            <li>提交自己的 Best / Keep / Reject 个人意见。</li>
+            <li>提交自己的首选、保留或废弃意见。</li>
             <li>不能改剧本归集、场记、最终剪辑决定或交付文件。</li>
           </ul>
         </section>

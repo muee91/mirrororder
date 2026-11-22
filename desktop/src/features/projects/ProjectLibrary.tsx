@@ -171,12 +171,12 @@ export function ProjectLibrary({
       <div className="project-sidebar-spacer" />
 
       <nav className="project-system-nav" aria-label="系统导航">
-        <button type="button" className={primaryActive === "status" ? "is-active" : ""} aria-current={primaryActive === "status" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenStatusCenter} title="状态">
+        <button type="button" className={`${primaryActive === "status" ? "is-active " : ""}${statusCount > 0 ? "has-activity" : "is-idle"}`} aria-current={primaryActive === "status" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenStatusCenter} title="查看后台同步、转写与导出任务">
           <StudioIcon name="activity" size={16} className="project-nav-icon" />
           <span>状态</span>
           {statusCount > 0 ? <small className={`project-system-badge${failedCount > 0 ? " is-error" : ""}`} aria-label={`${runningCount ? `${runningCount} 个任务运行中` : ""}${failedCount ? `${runningCount ? "，" : ""}${failedCount} 个项目需处理` : ""}`}><span className="project-activity-spinner" aria-hidden="true" />{statusCount}</small> : null}
         </button>
-        <button type="button" className={primaryActive === "settings" ? "is-active" : ""} aria-current={primaryActive === "settings" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenSettings} title="设置">
+        <button type="button" className={primaryActive === "settings" ? "is-active" : ""} aria-current={primaryActive === "settings" ? "page" : undefined} data-tauri-drag-region="no-drag" onClick={onOpenSettings} title="外观主题、本机模型与协作设置">
           <StudioIcon name="settings" size={16} className="project-nav-icon" />
           <span>设置</span>
         </button>

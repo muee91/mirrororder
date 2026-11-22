@@ -11,9 +11,9 @@ import {
 import "./review-decision.css";
 
 const STATE_LABELS: Record<string, string> = {
-  best: "Best",
-  keep: "Keep",
-  reject: "Reject",
+  best: "首选",
+  keep: "保留",
+  reject: "废弃",
   unreviewed: "未决定",
 };
 

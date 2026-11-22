@@ -82,10 +82,10 @@ describe("ReviewDecisionPanel authority recovery", () => {
     await render();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("连接中断");
     expect(container.textContent).not.toContain("尚未形成最终决定");
-    expect(button("Best").disabled).toBe(true);
+    expect(button("首选").disabled).toBe(true);
     await click("重新读取状态");
-    expect(button("Keep").className).toContain("is-selected");
-    expect(button("Best").disabled).toBe(false);
+    expect(button("保留").className).toContain("is-selected");
+    expect(button("首选").disabled).toBe(false);
     expect(decision).not.toHaveBeenCalled();
   });
 
@@ -99,13 +99,13 @@ describe("ReviewDecisionPanel authority recovery", () => {
     status.mockReturnValueOnce(oldRead.promise).mockReturnValueOnce(newRead.promise);
     await render();
     await render(nextProps);
-    expect(button("Best").disabled).toBe(true);
+    expect(button("首选").disabled).toBe(true);
     await act(async () => newRead.resolve(snapshot(8, nextProps.groupId ?? "g1", "keep")));
     await act(async () => oldRead.resolve(snapshot(2, "g1", "reject")));
-    expect(button("Keep").className).toContain("is-selected");
+    expect(button("保留").className).toContain("is-selected");
     expect(container.textContent).not.toContain("决定人 2");
     decision.mockResolvedValueOnce(writeResponse(snapshot(9, nextProps.groupId ?? "g1", "best")));
-    await click("Best");
+    await click("首选");
     expect(decision).toHaveBeenCalledWith(nextProps.projectId ?? "p1", expect.objectContaining({
       groupId: nextProps.groupId ?? "g1", expectedRevision: 8, state: "best",
     }));
@@ -115,13 +115,13 @@ describe("ReviewDecisionPanel authority recovery", () => {
     const nextRead = deferred<EditorialStorePayload>();
     status.mockResolvedValueOnce(snapshot(4, "g1", "reject")).mockReturnValueOnce(nextRead.promise);
     await render();
-    expect(button("Reject").className).toContain("is-selected");
+    expect(button("废弃").className).toContain("is-selected");
     await render({ groupId: "g2" });
-    expect(button("Best").disabled).toBe(true);
+    expect(button("首选").disabled).toBe(true);
     expect(container.textContent).not.toContain("决定人 4");
     expect(container.textContent).not.toContain("尚未形成最终决定");
     await act(async () => nextRead.reject(new Error("断线")));
-    expect(button("Best").disabled).toBe(true);
+    expect(button("首选").disabled).toBe(true);
     expect(decision).not.toHaveBeenCalled();
   });
 
@@ -130,17 +130,17 @@ describe("ReviewDecisionPanel authority recovery", () => {
     status.mockResolvedValueOnce(snapshot(1)).mockResolvedValueOnce(snapshot(5, "g2", "keep"));
     decision.mockReturnValueOnce(oldWrite.promise);
     await render();
-    await click("Best");
+    await click("首选");
     await render({ groupId: "g2" });
     await act(async () => {
       if (outcome === "success") oldWrite.resolve(writeResponse(snapshot(2, "g1", "best")));
       else oldWrite.reject(new HostConnectionError("conflict", { status: 409 }));
     });
-    expect(button("Keep").className).toContain("is-selected");
-    expect(container.textContent).not.toContain("当前 Take 最终：Best");
+    expect(button("保留").className).toContain("is-selected");
+    expect(container.textContent).not.toContain("当前 Take 最终：首选");
     expect(status).toHaveBeenCalledTimes(2);
     expect(onDecisionChange).toHaveBeenCalledTimes(outcome === "success" ? 1 : 0);
-    expect(button("Best").disabled).toBe(false);
+    expect(button("首选").disabled).toBe(false);
   });
 
   it("does not refresh another project when a departed project's write succeeds", async () => {
@@ -148,10 +148,10 @@ describe("ReviewDecisionPanel authority recovery", () => {
     status.mockResolvedValueOnce(snapshot(1)).mockResolvedValueOnce(snapshot(9, "g1", "keep"));
     decision.mockReturnValueOnce(oldWrite.promise);
     await render();
-    await click("Best");
+    await click("首选");
     await render({ projectId: "p2" });
     await act(async () => oldWrite.resolve(writeResponse(snapshot(2, "g1", "best"))));
-    expect(button("Keep").className).toContain("is-selected");
+    expect(button("保留").className).toContain("is-selected");
     expect(onDecisionChange).not.toHaveBeenCalled();
   });
 
@@ -161,10 +161,10 @@ describe("ReviewDecisionPanel authority recovery", () => {
       .mockResolvedValueOnce(snapshot(9, "g1", "keep"));
     decision.mockRejectedValueOnce(new HostConnectionError("conflict", { status: 409 }));
     await render();
-    await click("Best");
+    await click("首选");
     await render({ projectId: "p2" });
     await act(async () => recovery.resolve(snapshot(5, "g1", "reject")));
-    expect(button("Keep").className).toContain("is-selected");
+    expect(button("保留").className).toContain("is-selected");
     expect(container.textContent).not.toContain("决定人 5");
     expect(onDecisionChange).not.toHaveBeenCalled();
   });
@@ -175,13 +175,13 @@ describe("ReviewDecisionPanel authority recovery", () => {
     decision.mockReturnValueOnce(pending.promise);
     await render();
     act(() => {
-      button("Best").click();
-      button("Reject").click();
+      button("首选").click();
+      button("废弃").click();
     });
     expect(decision).toHaveBeenCalledTimes(1);
-    expect(button("Best").disabled).toBe(true);
+    expect(button("首选").disabled).toBe(true);
     await act(async () => pending.resolve(writeResponse(snapshot(4, "g1", "best"))));
-    expect(button("Best").className).toContain("is-selected");
+    expect(button("首选").className).toContain("is-selected");
     expect(onDecisionChange).toHaveBeenCalledTimes(1);
   });
 
@@ -191,13 +191,13 @@ describe("ReviewDecisionPanel authority recovery", () => {
     decision.mockRejectedValueOnce(new HostConnectionError("conflict", { status: 409 }))
       .mockResolvedValueOnce(writeResponse(snapshot(5, "g1", "best")));
     await render();
-    await click("Best");
-    expect(button("Best").disabled).toBe(true);
+    await click("首选");
+    expect(button("首选").disabled).toBe(true);
     await act(async () => latest.resolve(snapshot(4, "g1", "reject")));
-    expect(button("Reject").className).toContain("is-selected");
+    expect(button("废弃").className).toContain("is-selected");
     expect(container.textContent).toContain("原操作未重试");
     expect(decision).toHaveBeenCalledTimes(1);
-    await click("Best");
+    await click("首选");
     expect(decision).toHaveBeenLastCalledWith("p1", expect.objectContaining({ expectedRevision: 4, state: "best" }));
   });
 
@@ -206,12 +206,12 @@ describe("ReviewDecisionPanel authority recovery", () => {
       .mockResolvedValueOnce(snapshot(7, "g1", "keep"));
     decision.mockRejectedValueOnce(new HostConnectionError("conflict", { status: 409 }));
     await render();
-    await click("Best");
+    await click("首选");
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("最新状态读取失败");
     expect(container.textContent).not.toContain("已读取最新团队状态");
-    expect(button("Best").disabled).toBe(true);
+    expect(button("首选").disabled).toBe(true);
     await click("重新读取状态");
-    expect(button("Keep").className).toContain("is-selected");
+    expect(button("保留").className).toContain("is-selected");
     expect(decision).toHaveBeenCalledTimes(1);
     expect(onDecisionChange).toHaveBeenCalledTimes(1);
   });
@@ -220,11 +220,11 @@ describe("ReviewDecisionPanel authority recovery", () => {
     status.mockResolvedValueOnce(snapshot(1)).mockResolvedValueOnce(snapshot(2, "g1", "best"));
     decision.mockRejectedValueOnce(new Error("请求超时"));
     await render();
-    await click("Best");
+    await click("首选");
     expect(container.textContent).toContain("无法确认本次决定是否保存");
-    expect(button("Best").disabled).toBe(true);
+    expect(button("首选").disabled).toBe(true);
     await click("重新读取状态");
-    expect(button("Best").className).toContain("is-selected");
+    expect(button("首选").className).toContain("is-selected");
     expect(decision).toHaveBeenCalledTimes(1);
     expect(onDecisionChange).toHaveBeenCalledTimes(1);
   });
@@ -234,10 +234,10 @@ describe("ReviewDecisionPanel authority recovery", () => {
     decision.mockResolvedValueOnce(writeResponse(snapshot(2, "g1", "keep")));
     onDecisionChange.mockRejectedValueOnce(new Error("queue unavailable"));
     await render();
-    await click("Keep");
-    expect(container.textContent).toContain("当前 Take 最终：Keep");
-    expect(button("Keep").className).toContain("is-selected");
-    expect(button("Best").disabled).toBe(false);
+    await click("保留");
+    expect(container.textContent).toContain("当前 Take 最终：保留");
+    expect(button("保留").className).toContain("is-selected");
+    expect(button("首选").disabled).toBe(false);
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 });

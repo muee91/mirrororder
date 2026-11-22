@@ -169,7 +169,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   return (
     <section className="phase3-workbench settings-status-workbench">
       <header className="production-heading settings-heading">
-        <div><p className="eyebrow">MirrorOrder Desktop</p><h2>设备设置</h2></div>
+        <div><p className="eyebrow">镜序设置</p><h2>设备设置</h2></div>
         <div className="assistant-heading-actions">
           {error ? <span className="production-state is-error" role="alert">{error}</span> : null}
           <button
@@ -190,7 +190,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
       <div className="settings-preference-stack">
         <section className="settings-preference-section" aria-labelledby="settings-general-title">
           <header className="settings-section-heading">
-            <div><p className="eyebrow">通用</p><h3 id="settings-general-title">Desktop</h3></div>
+            <div><p className="eyebrow">通用</p><h3 id="settings-general-title">外观与本机</h3></div>
             <span>仅当前设备</span>
           </header>
           <div className="settings-preference-surface settings-general-card">
@@ -213,12 +213,12 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
         <details className="settings-preference-section settings-collapsible-section" aria-labelledby="settings-team-title">
           <summary className="settings-section-heading settings-collapsible-summary">
-            <div><p className="eyebrow">团队审阅</p><h3 id="settings-team-title">Team Web</h3></div>
-            <span>浏览器审阅界面与访问权限 · 按需展开</span>
+            <div><p className="eyebrow">团队审阅</p><h3 id="settings-team-title">网页协作审阅</h3></div>
+            <span>局域网浏览器看片与访问权限 · 按需展开</span>
           </summary>
           <div className="settings-team-grid">
             <div className="production-panel status-card frontend-settings-card">
-              <div className="parse-heading"><div><h3>审阅界面</h3><p className="production-note">这些选项只控制 Team Web，不改变 Desktop 场记画布。</p></div><button type="button" disabled={saving || !settings || !settingsDirty} onClick={() => void saveSettings()}>{saving ? "保存中…" : "保存"}</button></div>
+              <div className="parse-heading"><div><h3>审阅界面</h3><p className="production-note">这些选项仅控制局域网网页审阅端，不改变本机场记画布与工程数据。</p></div><button type="button" disabled={saving || !settings || !settingsDirty} onClick={() => void saveSettings()}>{saving ? "保存中…" : "保存"}</button></div>
               {settings ? (
                 <>
                   <div className="settings-form-grid">
@@ -243,9 +243,9 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
         <details className="settings-advanced-diagnostics">
           <summary>
-            <div><strong>高级诊断</strong><span>工作区、运行环境、平台适配与当前设备</span></div>
-            <small>{status ? `${status.environment.platform} · Python ${status.environment.python.version}` : "尚未读取"}</small>
+            <div><strong>高级诊断</strong><span>运行环境、本机路径与平台诊断 · 按需展开</span></div>
           </summary>
+          <p className="production-note settings-diagnostics-runtime">{status ? `${status.environment.platform} · Python ${status.environment.python.version}` : "尚未读取"}</p>
           <button type="button" className="secondary" onClick={() => void copyDiagnostics()}>复制运行诊断</button>
           {diagnosticMessage && <p className="settings-diagnostic-result" role="status">{diagnosticMessage}</p>}
           <p className="production-note settings-diagnostics-note">这里用于排查安装和设备环境问题；任务进度与失败恢复仍以状态中心为准。</p>

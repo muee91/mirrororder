@@ -33,7 +33,7 @@ export function DesktopAppearanceControl() {
     <div className="desktop-appearance-control" aria-label="Desktop 外观">
       <div className="desktop-appearance-copy">
         <strong>外观</strong>
-        <span>控制当前 Desktop 应用；与 Team Web 的浏览器主题独立。</span>
+        <span>切换当前应用的深浅色外观，不影响局域网网页协作成员。</span>
       </div>
       <div className="desktop-appearance-options" role="group" aria-label="Desktop 外观模式">
         {OPTIONS.map((option) => (

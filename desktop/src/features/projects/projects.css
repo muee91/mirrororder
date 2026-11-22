@@ -41,7 +41,7 @@
 .project-lifecycle-body { display: grid; gap: 12px; max-height: calc(100vh - 150px); overflow-y: auto; padding: 16px 18px 18px; }
 .project-lifecycle-message { min-height: 15px; margin: 0; color: #75828e; font-size: 10px; line-height: 1.5; }
 .project-lifecycle-body label { display: grid; gap: 5px; color: #788590; font-size: 10px; }
-.project-lifecycle-body input:not([type="checkbox"]):not([type="radio"]), .project-lifecycle-body textarea { width: 100%; min-width: 0; border: 1px solid #303a44; border-radius: 7px; padding: 8px 9px; color: #dbe2e8; background: #0d1216; outline: none; }
+.project-lifecycle-body input:not([type="checkbox"]):not([type="radio"]), .project-lifecycle-body textarea { width: 100%; min-width: 0; border: 1px solid #303a44; border-radius: 7px; padding: 8px 9px; color: #dbe2e8; background: #0d1216; }
 .project-lifecycle-body input:not([type="checkbox"]):not([type="radio"]):focus, .project-lifecycle-body textarea:focus { border-color: #687888; }
 .project-lifecycle-body textarea { resize: vertical; }
 .lifecycle-kind { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -89,15 +89,30 @@ html[data-mirrororder-theme="dark"] .project-lifecycle-body textarea { border-co
 html[data-mirrororder-theme="dark"] .lifecycle-kind button { border-color: #303944; color: #87939e; background: #151b21; }
 html[data-mirrororder-theme="dark"] .lifecycle-kind button.is-active { color: #10151a; background: #e8edf2; }
 
-@media (prefers-color-scheme: light) {
-  .mirror-mark { border-color: #cfd8e0; background-color: #eef2f5; }
-  .project-library-brand strong { color: #24303a; }
-  .project-library-section-heading, .project-library-global-tools { border-color: #dce3e9; }
-  .project-new-button, .project-manage-button { border-color: #d2dbe3; color: #596672; background: #f5f7f9; }
-  .project-row { color: #34404a; }
-  .project-row:hover { background: #f5f7f9; }
-  .project-row.is-selected { border-color: #c9d3dc; color: #1e2932; background: #edf2f5; }
-  .project-list-empty { border-color: #d5dde4; }
-  .project-library-global-tools button:hover { color: #35414b; background: #f5f7f9; }
-  .project-library-global-tools button.is-active { border-color: #c4cfd8; color: #24303a; background: #edf2f5; }
+.project-system-nav button.is-idle:not(.is-active) {
+  color: var(--mo-text-muted, #687386);
+  font-size: var(--mo-font-xs, 10px);
 }
+.project-system-nav button.is-idle:not(.is-active) .project-nav-icon { color: var(--mo-text-muted, #687386); }
+.project-system-nav button.has-activity:not(.is-active) {
+  color: var(--mo-text-secondary, #a4aec0);
+  font-size: var(--mo-font-xs, 10px);
+}
+.project-system-nav button.is-idle:hover:not(:disabled),
+.project-system-nav button.has-activity:hover:not(:disabled) {
+  color: var(--mo-text-primary, #f2f5fa);
+  background: var(--mo-surface-hover, #222836);
+}
+
+html[data-mirrororder-theme="light"] .mirror-mark { border-color: var(--mo-border-default); background-color: var(--mo-surface-control); }
+html[data-mirrororder-theme="light"] .project-library-brand strong { color: var(--mo-text-primary); }
+html[data-mirrororder-theme="light"] .project-library-section-heading,
+html[data-mirrororder-theme="light"] .project-library-global-tools { border-color: var(--mo-border-subtle); }
+html[data-mirrororder-theme="light"] .project-new-button,
+html[data-mirrororder-theme="light"] .project-manage-button { border-color: var(--mo-border-default); color: var(--mo-text-secondary); background: var(--mo-surface-control); }
+html[data-mirrororder-theme="light"] .project-row { color: var(--mo-text-secondary); }
+html[data-mirrororder-theme="light"] .project-row:hover { background: var(--mo-surface-hover); }
+html[data-mirrororder-theme="light"] .project-row.is-selected { border-color: var(--mo-border-default); color: var(--mo-text-primary); background: var(--mo-surface-selected); }
+html[data-mirrororder-theme="light"] .project-list-empty { border-color: var(--mo-border-default); }
+html[data-mirrororder-theme="light"] .project-library-global-tools button:hover { color: var(--mo-text-primary); background: var(--mo-surface-hover); }
+html[data-mirrororder-theme="light"] .project-library-global-tools button.is-active { border-color: var(--mo-border-default); color: var(--mo-text-primary); background: var(--mo-surface-selected); }

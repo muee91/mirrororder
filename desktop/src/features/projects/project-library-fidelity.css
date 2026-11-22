@@ -1,14 +1,31 @@
 .project-row { grid-template-columns: minmax(0,1fr) auto; gap: 9px; min-height: 38px; padding: 7px 9px; border-radius: 6px; }
 .project-row-copy strong { font-size: 13px; font-weight: 600; }
 .project-row-copy small { font-size: 10px; }
-.project-row.is-selected { border-color: transparent; background: rgba(82,142,207,.12); }
-.project-row.is-active-task .project-row-copy small { color: #76a8df; }
+.project-row.is-selected { border-color: transparent; background: var(--mo-surface-selected, rgba(74, 144, 242, .18)); }
+.project-row.is-active-task .project-row-copy small { color: var(--mo-accent-strong, #6ba6ff); }
 .project-row .project-activity-spinner { width: 12px; height: 12px; }
 
-.golden-secondary-return > small { color: #788590; font-size: 10px; font-weight: 600; }
+.golden-secondary-return > small { color: var(--mo-text-muted, #687386); font-size: 10px; font-weight: 600; }
 
-@media (prefers-color-scheme: light) {
-  .project-row.is-selected { background: #e8f2fc; }
-  .project-row.is-active-task .project-row-copy small { color: #3979ba; }
-  .golden-secondary-return > small { color: #66737d; }
+.project-module-navigation .project-module-divider {
+  height: 1px;
+  margin: 4px 6px 1px;
+  background: var(--mo-border-subtle, rgba(255, 255, 255, .07));
+}
+.project-module-navigation .project-module-link {
+  font-size: var(--mo-font-xs, 10px);
+}
+.project-module-navigation .project-module-link.is-secondary-module {
+  color: var(--mo-text-muted, #687386);
+}
+.project-module-navigation .project-module-link.is-secondary-module .project-module-icon {
+  color: var(--mo-text-muted, #687386);
+}
+.project-module-navigation .project-module-link.is-secondary-module:hover:not(:disabled),
+.project-module-navigation .project-module-link.is-secondary-module[aria-current="page"] {
+  color: var(--mo-text-primary, #f2f5fa);
+  background: var(--mo-surface-selected, rgba(74, 144, 242, .18));
+}
+.project-module-navigation .project-module-link.is-secondary-module[aria-current="page"] .project-module-icon {
+  color: inherit;
 }
