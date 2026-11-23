@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { DesktopClient, type MediaBindingSummary } from "../../api/desktop";
-import type { MulticamSyncTimeline as SyncTimeline } from "../../api/syncTimeline";
+import { syncRecordingStatusLabel, type MulticamSyncTimeline as SyncTimeline } from "../../api/syncTimeline";
 import { SyncInspectionWorkbench } from "./SyncInspectionWorkbench";
 import "./multicam-sync-timeline.css";
 
@@ -9,6 +9,7 @@ interface Props {
   baseUrl?: string;
   onMulticamSync?: () => void;
   onInspect?: () => void;
+  onRebaseOffsets?: () => void;
   onCancel?: () => void;
   onRepair?: () => void;
   onOpenStatus?: () => void;
@@ -44,7 +45,26 @@ function activityLabel(value: string | undefined): string {
   return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString("zh-CN");
 }
 
-export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onInspect, onCancel, onRepair, onOpenStatus, command, submissionError }: Props) {
+function mediaTypeCounts(sources: MediaBindingSummary | null): { video: number; audio: number } | null {
+  if (!sources) return null;
+  if (sources.scan && Number.isFinite(sources.scan.video_files) && Number.isFinite(sources.scan.audio_files)) {
+    return {
+      video: Number(sources.scan.video_files),
+      audio: Number(sources.scan.audio_files),
+    };
+  }
+  if (!sources.items.length) return null;
+  let video = 0;
+  let audio = 0;
+  for (const item of sources.items) {
+    const name = item.name.toLocaleLowerCase("en-US");
+    if (/\.(wav|aif|aiff|m4a)$/.test(name)) audio += 1;
+    else video += 1;
+  }
+  return { video, audio };
+}
+
+export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onInspect, onRebaseOffsets, onCancel, onRepair, onOpenStatus, command, submissionError }: Props) {
   const [sources, setSources] = useState<MediaBindingSummary | null>(null);
   const [sourcesUnreadable, setSourcesUnreadable] = useState(false);
   useEffect(() => {
@@ -82,7 +102,11 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
     : submissionError && !running ? "同步提交失败" : stageLabel(phase, task?.stage ?? "");
   const footage = syncTimeline.ready ? `${syncTimeline.clip_count.toLocaleString()} 个片段` : "同步后统计";
   const cameras = syncTimeline.cameras.length ? syncTimeline.cameras.join(" / ") : "待识别";
-  const recordings = syncTimeline.recordings ? `${syncTimeline.recordings.placements.length} 段已上轨` : "同步后统计";
+  const recordingStatus = syncRecordingStatusLabel(syncTimeline);
+  const sourceMediaCounts = mediaTypeCounts(sources);
+  const preflightVideo = sourceMediaCounts ? `${sourceMediaCounts.video.toLocaleString()} 个文件` : sources ? "尚未扫描" : "读取中";
+  const preflightAudio = sourceMediaCounts ? `${sourceMediaCounts.audio.toLocaleString()} 个文件` : sources ? "尚未扫描" : "读取中";
+  const preflightCamera = sources ? "同步时识别" : "读取中";
 
   return (
     <section className="multicam-sync-gate" aria-label="多机位同步任务">
@@ -101,6 +125,9 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
             </button>
             {running && task && onCancel && <button type="button" className="secondary" disabled={Boolean(command) || task.cancel_requested}
               onClick={onCancel}>{task.cancel_requested || command === "cancel" ? "正在取消…" : "取消同步"}</button>}
+            {syncTimeline.stale_offset_revision ? <button type="button" className="secondary" disabled={Boolean(command)} onClick={onRebaseOffsets}>
+              应用上一版偏移 r{syncTimeline.stale_offset_revision}
+            </button> : null}
             {task && onOpenStatus && <button type="button" className="secondary" onClick={onOpenStatus}>任务详情</button>}
             {!complete && onInspect && <button type="button" className="secondary" onClick={onInspect}>查看上次有效母版</button>}
           </div>
@@ -111,9 +138,9 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
             <h2 id="sync-task-sources-title">素材来源</h2>
             <dl>
               <div><dt>原始目录</dt><dd>{sourceRoots}</dd></div>
-              <div><dt>视频</dt><dd>{footage}</dd></div>
-              <div><dt>机位</dt><dd>{cameras}</dd></div>
-              <div><dt>同期录音</dt><dd>{recordings}</dd></div>
+              <div><dt>视频</dt><dd>{syncTimeline.ready ? footage : preflightVideo}</dd></div>
+              <div><dt>机位</dt><dd>{syncTimeline.ready ? cameras : preflightCamera}</dd></div>
+              <div><dt>同期录音</dt><dd data-state={syncTimeline.ready ? recordingStatus.state : undefined}>{syncTimeline.ready ? recordingStatus.label : preflightAudio}</dd></div>
             </dl>
             {inaccessible > 0 && <p className="sync-task-warning" role="status">{inaccessible} 个原始目录不可访问</p>}
             {onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}

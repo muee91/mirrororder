@@ -5,7 +5,7 @@ import type { ProductionPage } from "../../app/resumeState";
 import { StudioIcon } from "../../components/StudioIcons";
 import { ProjectModuleNavigation } from "../production/ProjectModuleNavigation";
 import type { ProjectActivitySummary } from "./projectActivity";
-import { projectPresentation } from "./projectPresentation";
+import { projectFlowLabel, projectPresentation } from "./projectPresentation";
 import "./project-context-menu.css";
 import "./projects.css";
 import "./project-library-fidelity.css";
@@ -184,12 +184,12 @@ export function ProjectLibrary({
 
       {menu ? (
         <div className="project-context-menu" role="menu" aria-label={`${menu.project.name || menu.project.project_id} 项目操作`} style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
-          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small><small>连接 → 同步 → 整理</small></div>
+          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small><small>{projectFlowLabel(menu.project)}</small></div>
           <div className="project-context-group-label">开始制作</div>
           <button type="button" role="menuitem" onClick={() => run(() => onSelectProject(menu.project))}>打开项目</button>
           <button type="button" role="menuitem" title="本机素材 / 换素材盘" disabled={!onOpenMediaBinding} onClick={() => run(() => onOpenMediaBinding?.(menu.project))}>连接素材</button>
           <button type="button" role="menuitem" disabled={!onOpenProjectPage} onClick={() => run(() => onOpenProjectPage?.(menu.project, menu.project.input_kind === "media-directory" ? "sync-task" : "timeline"))}>{menu.project.input_kind === "media-directory" ? "打开同步任务" : "打开选片组接"}</button>
-          <button type="button" role="menuitem" title="重新整理项目" disabled={!onPrepareProject} onClick={() => run(() => onPrepareProject?.(menu.project))}>完整整理项目</button>
+          <button type="button" role="menuitem" title="重新整理素材、剧本与分析结果" disabled={!onPrepareProject} onClick={() => run(() => onPrepareProject?.(menu.project))}>后台整理素材与剧本</button>
           <details className="project-context-advanced">
             <summary>高级操作</summary>
             <div className="project-context-advanced-list">

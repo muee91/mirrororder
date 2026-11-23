@@ -40,6 +40,23 @@ def test_unknown_not_no_recordings_and_missing_root(tmp_path):
     assert missing['unreadable_entries']==1
 
 
+def test_float_wav_is_discovered_through_ffprobe(tmp_path):
+    if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
+        pytest.skip('real media tools required')
+    path = tmp_path / 'recording' / 'float.wav'
+    path.parent.mkdir()
+    subprocess.run([
+        'ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'anoisesrc=seed=7:sample_rate=48000',
+        '-t', '2', '-c:a', 'pcm_f32le', str(path),
+    ], check=True)
+    result = discover_recordings((tmp_path,), output=tmp_path / 'out', roles={}, check_cancelled=lambda: None)
+    candidate = result['candidates'][0]
+    assert candidate['status'] == 'unverified_candidate'
+    assert candidate['sample_rate'] == 48000
+    assert candidate['channels'] == 1
+    assert candidate['sample_count'] > 0
+
+
 def test_actual_sync_pipeline_preserves_old_revision_and_discovers_wav(tmp_path, monkeypatch):
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
         pytest.skip('real media tools required')

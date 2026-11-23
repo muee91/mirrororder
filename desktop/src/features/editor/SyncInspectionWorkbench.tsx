@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { ProductionClient, type AssistantSelection, type WaveformPayload } from "../../api/production";
 import {
   SyncTimelineClient,
+  syncRecordingStatusLabel,
   syncDeliveryFileLabel,
   type MulticamSyncClip,
   type MulticamSyncTimeline,
@@ -160,6 +161,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
   const audioInspectorButton = useRef<HTMLButtonElement>(null);
   const inspectorId = useId();
   const recordingsAvailable = Boolean(baseUrl && syncTimeline.recordings);
+  const recordingStatus = syncRecordingStatusLabel(syncTimeline);
 
   function closeInspector() {
     const trigger = inspector === "audio" ? audioInspectorButton : clipInspectorButton;
@@ -553,6 +555,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
           {showDelivery ? <h2>同步母版</h2> : null}
           <span>{syncTimeline.cameras.length} 机位 · {syncTimeline.clip_count.toLocaleString()} 个片段</span>
           {selectedTrack && <span className="sync-monitor-listening">监听 {selectedTrack.label}</span>}
+          <span className="sync-recording-status" data-state={recordingStatus.state}>{recordingStatus.label}</span>
         </div>
         <div className="multicam-sync-inspection-meta">
           {viewKind === "single" && <button type="button" className="secondary" onClick={() => setMonitorView({ kind: "all" })}>返回全部机位</button>}
@@ -833,6 +836,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
           </div> : baseUrl && syncTimeline.recordings && <SyncRecordingMonitor baseUrl={baseUrl} timeline={syncTimeline}
             cursor={cursor} rate={confirmedRate} playingVideo={playing} onFollowChange={setFollowingRecording}
             onSplitPanChange={setSplitPanAudition}
+            onTimelineUpdated={onTimelineUpdated}
             onStartVideo={() => { const video = videoRef.current; if (video?.paused) playVideo(video); }}
             onAudition={() => videoRef.current?.pause()} />}
         </aside>
@@ -852,7 +856,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
                 <button type="button" className="secondary"
                   disabled={!item.available || !isTauri() || Boolean(revealBusy)}
                   onClick={() => void reveal(item.local_path, item.target)}
-                >{revealBusy === item.target ? "打开中…" : item.available ? "显示工程文件" : syncDeliveryFileLabel(item)}</button>
+                >{revealBusy === item.target ? "打开中…" : item.available ? item.stale ? "显示旧版文件" : "显示工程文件" : syncDeliveryFileLabel(item)}</button>
               </div>
             ))}
           </div>

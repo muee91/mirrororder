@@ -51,6 +51,10 @@ export function writeCurrentOperator(value: string): string {
   return next;
 }
 
+export function requestCurrentOperator(): void {
+  globalThis.dispatchEvent(new CustomEvent("mirrororder:operator-open"));
+}
+
 interface Props {
   onChange?: (operator: string) => void;
 }
@@ -67,11 +71,19 @@ export function CurrentOperatorControl({ onChange }: Props) {
       setOperator(next);
       setDraft(next);
     };
+    const open = () => {
+      const next = readCurrentOperator();
+      setOperator(next);
+      setDraft(next);
+      setOpen(true);
+    };
     globalThis.addEventListener("mirrororder:operator-change", sync);
     globalThis.addEventListener("storage", sync);
+    globalThis.addEventListener("mirrororder:operator-open", open);
     return () => {
       globalThis.removeEventListener("mirrororder:operator-change", sync);
       globalThis.removeEventListener("storage", sync);
+      globalThis.removeEventListener("mirrororder:operator-open", open);
     };
   }, []);
 

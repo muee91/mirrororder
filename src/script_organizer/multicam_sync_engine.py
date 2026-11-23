@@ -638,8 +638,8 @@ def run_multicam_sync(
     update_progress(2, total_steps)
     recording_local_paths: dict = {}
     recording_inventory = discover_recordings(roots, output=config.output_dir, roles=media_roles, check_cancelled=check_cancelled, local_paths=recording_local_paths)
-    audio_diagnostics = recording_diagnostics(recording_inventory)
-    for diagnostic in audio_diagnostics:
+    inventory_diagnostics = recording_diagnostics(recording_inventory)
+    for diagnostic in inventory_diagnostics:
         emit(diagnostic["message"])
     positions = []
     for index, day in enumerate(days, start=1):
@@ -769,6 +769,7 @@ def run_multicam_sync(
         "project_promoted_to_fcpxml": False,
     }
     report["recording_inventory"] = recording_inventory
+    audio_diagnostics = inventory_diagnostics
     report["diagnostics"] = audio_diagnostics
     # A new video sync must not silently erase externally/manual confirmed audio.
     # Retain its old revision verbatim; the consumer must reject stale authority.
@@ -782,14 +783,18 @@ def run_multicam_sync(
     from .recording_auto_alignment import auto_align_recordings
     prior_alignment = report.get("recording_alignment")
     try:
-        alignment, audio_diagnostics = auto_align_recordings(
+        alignment, auto_diagnostics = auto_align_recordings(
             inventory=recording_inventory, local_paths=recording_local_paths,
             work=work, media_base=media_base, days=days, master=fcpxml, roots=roots,
             context=sync_context, prior=prior_alignment, check_cancelled=check_cancelled, log=emit,
         )
+        audio_diagnostics = auto_diagnostics + [
+                diagnostic for diagnostic in inventory_diagnostics
+                if diagnostic.get("code") not in {row.get("code") for row in auto_diagnostics}
+        ]
     except (OSError, ValueError, KeyError, StopIteration) as error:
         alignment = None
-        audio_diagnostics = [{"code": "waveform_alignment_unavailable", "message": "原录音波形自动对齐证据不足或解码失败，已保留旧摆位；不宣称完整录音交付。"}]
+        audio_diagnostics = [{"code": "waveform_alignment_unavailable", "message": "原录音波形自动对齐证据不足或解码失败，已保留旧摆位；不宣称完整录音交付。"}, *inventory_diagnostics]
         emit("录音自动对齐未完成：" + type(error).__name__)
     # A confirmation written while measuring must win; do not silently replace it.
     if report_path.exists():

@@ -64,6 +64,27 @@ export interface SyncRecordingPlacement {
   manual_offset_frames?: number;
 }
 
+export interface SyncRecordingCandidate {
+  media_id: string;
+  name: string;
+  status: string;
+  sample_rate?: number;
+  sample_count?: number;
+  channels?: number;
+  audio_role_hint?: { role?: string; sync_eligible?: boolean };
+  clock_hint?: Record<string, string | number>;
+}
+
+export interface SyncRecordingSummary {
+  status: "confirmed" | "partial" | "unconfirmed" | "not_scanned" | "no_candidates" | string;
+  candidate_count: number;
+  placed_count: number;
+  unplaced_count: number;
+  invalid_count: number;
+  sync_task_id?: string;
+  alignment_revision?: number;
+}
+
 export interface SyncManualOffsetEntry {
   revision: number;
   at: string;
@@ -86,6 +107,14 @@ export interface SyncManualOffsetWrite {
   expected_revision?: number;
   actor?: string;
   note?: string;
+}
+
+export interface SyncRecordingConfirmation {
+  media_id: string;
+  at: number;
+  source?: number;
+  frames?: number;
+  expected_revision?: number;
 }
 
 export interface SyncEnrichedDeliveryManifest {
@@ -115,8 +144,11 @@ export interface MulticamSyncTimeline {
     candidate_count: number;
     unplaced_count: number;
     invalid_count: number;
+    candidates?: SyncRecordingCandidate[];
     placements: SyncRecordingPlacement[];
+    alignment_revision?: number;
   } | null;
+  recording_summary?: SyncRecordingSummary;
   clip_count: number;
   duration_seconds: number;
   previous_master?: { timeline: MulticamSyncTimeline; read_at_ms: number } | null;
@@ -126,6 +158,24 @@ export interface MulticamSyncTimeline {
   review_gaps?: MulticamSyncGap[];
   offset_revision?: number;
   offset_history?: SyncManualOffsetEntry[];
+  stale_offset_revision?: number;
+  stale_offset_sync_task_id?: string;
+}
+
+export function syncRecordingStatusLabel(timeline: Pick<MulticamSyncTimeline, "recordings" | "recording_summary">): { label: string; state: string } {
+  const summary = timeline.recording_summary;
+  if (!summary) {
+    const count = timeline.recordings?.placements.length ?? 0;
+    return { label: count ? `${count} 段已上轨` : "同步后统计", state: count ? "confirmed" : "unknown" };
+  }
+  switch (summary.status) {
+    case "confirmed": return { label: `${summary.placed_count} 段已对齐`, state: "confirmed" };
+    case "partial": return { label: `${summary.placed_count}/${summary.candidate_count} 段已对齐`, state: "partial" };
+    case "unconfirmed": return { label: `${summary.candidate_count} 个待确认`, state: "unconfirmed" };
+    case "no_candidates": return { label: "未发现独立录音", state: "empty" };
+    case "not_scanned": return { label: "未纳入本次同步", state: "not-scanned" };
+    default: return { label: "状态待确认", state: "unknown" };
+  }
 }
 
 export interface SyncDeliveryArtifact {
@@ -134,7 +184,9 @@ export interface SyncDeliveryArtifact {
   format: string;
   filename: string;
   available: boolean;
-  unavailable_reason?: "" | "sync_not_ready" | "not_generated" | "media_roots_unbound" | "unexpected_location" | "file_missing";
+  unavailable_reason?: "" | "sync_not_ready" | "not_generated" | "not_supported" | "generation_failed" | "media_roots_unbound" | "unexpected_location" | "file_missing";
+  stale?: boolean;
+  stale_reason?: string;
   /** Device-local absolute path. This is supplied only by the localhost-only route. */
   local_path: string;
   task?: MulticamSyncTaskSummary;
@@ -142,10 +194,13 @@ export interface SyncDeliveryArtifact {
 }
 
 export function syncDeliveryFileLabel(artifact: SyncDeliveryArtifact): string {
+  if (artifact.stale) return "需要按当前修正版重新交付";
   if (artifact.available) return "已生成文件";
   switch (artifact.unavailable_reason) {
     case "sync_not_ready": return "等待同步完成";
     case "not_generated": return "尚未生成";
+    case "not_supported": return "当前版本未提供";
+    case "generation_failed": return "生成失败，需要处理";
     case "media_roots_unbound": return "本机素材目录未登记";
     case "unexpected_location": return "交付文件位置待确认";
     case "file_missing": return "交付文件未找到";
@@ -160,6 +215,10 @@ export interface SyncDeliveryArtifacts {
   paths_scope: "localhost_response_only";
   validation: string;
   sync_version?: string;
+  sync_task_id?: string;
+  offset_revision?: number;
+  delivery_state?: "current" | "stale" | string;
+  stale_reasons?: string[];
   artifacts: SyncDeliveryArtifact[];
 }
 
@@ -217,6 +276,19 @@ export class SyncTimelineClient {
     return await response.json() as MulticamSyncTimeline;
   }
 
+  async confirmRecordingPlacement(projectId: string, body: SyncRecordingConfirmation): Promise<MulticamSyncTimeline> {
+    const response = await fetchWithTimeout(`${this.baseUrl}${projectPath(projectId)}/sync-recordings/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      throw new HostConnectionError(payload?.error || `录音摆位保存失败（${response.status}）`, { status: response.status });
+    }
+    return await response.json() as MulticamSyncTimeline;
+  }
+
   async undoOffset(projectId: string, expectedRevision?: number): Promise<MulticamSyncTimeline> {
     const response = await fetchWithTimeout(`${this.baseUrl}${projectPath(projectId)}/sync-offsets/undo`, {
       method: "POST",
@@ -226,6 +298,19 @@ export class SyncTimelineClient {
     if (!response.ok) {
       const payload = await response.json().catch(() => null) as { error?: string } | null;
       throw new HostConnectionError(payload?.error || `撤销偏移失败（${response.status}）`, { status: response.status });
+    }
+    return await response.json() as MulticamSyncTimeline;
+  }
+
+  async rebaseOffsets(projectId: string, expectedStaleRevision?: number): Promise<MulticamSyncTimeline> {
+    const response = await fetchWithTimeout(`${this.baseUrl}${projectPath(projectId)}/sync-offsets/rebase`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(expectedStaleRevision !== undefined ? { expected_stale_revision: expectedStaleRevision } : {}),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      throw new HostConnectionError(payload?.error || `重应用偏移失败（${response.status}）`, { status: response.status });
     }
     return await response.json() as MulticamSyncTimeline;
   }

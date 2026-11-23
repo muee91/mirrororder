@@ -16,6 +16,12 @@ from .workspace_db import workspace_database_path
 ROLES = ("viewer", "reviewer", "manager")
 STATUSES = ("active", "disabled")
 _ROLE_ORDER = {role: index for index, role in enumerate(ROLES)}
+CAPABILITIES = ("read_review", "write_review", "manage_collaborators")
+_ROLE_CAPABILITIES = {
+    "viewer": frozenset({"read_review"}),
+    "reviewer": frozenset({"read_review", "write_review"}),
+    "manager": frozenset({"read_review", "write_review", "manage_collaborators"}),
+}
 _DEVICE_ID = re.compile(r"^[A-Za-z0-9._-]{12,120}$")
 _MAX_AUDIT_ROWS = 500
 _TOUCH_INTERVAL_SECONDS = 60
@@ -113,6 +119,7 @@ class CollaborationAccessStore:
     @staticmethod
     def _public_user(payload: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
         user_id = str(user.get("user_id", "") or "")
+        role = str(user.get("role", "viewer") or "viewer")
         devices = [
             device for device in payload.get("devices", {}).values()
             if isinstance(device, dict) and str(device.get("user_id", "") or "") == user_id
@@ -120,7 +127,8 @@ class CollaborationAccessStore:
         return {
             "user_id": user_id,
             "nickname": str(user.get("nickname", "") or ""),
-            "role": str(user.get("role", "viewer") or "viewer"),
+            "role": role,
+            "capabilities": sorted(_ROLE_CAPABILITIES.get(role, frozenset())),
             "status": str(user.get("status", "active") or "active"),
             "created_at": str(user.get("created_at", "") or ""),
             "updated_at": str(user.get("updated_at", "") or ""),
@@ -177,6 +185,8 @@ class CollaborationAccessStore:
                 changed = True
             else:
                 user = users[str(device["user_id"])]
+                if not local and str(user.get("status", "active") or "active") != "active":
+                    raise PermissionError("当前用户已被停用")
                 last_seen = _parse_time(device.get("last_seen_at"))
                 now = datetime.now(timezone.utc)
                 stale = last_seen is None or (now - last_seen).total_seconds() >= _TOUCH_INTERVAL_SECONDS
@@ -224,9 +234,21 @@ class CollaborationAccessStore:
 
     @staticmethod
     def require_role(user: dict[str, Any], role: str) -> None:
+        if role not in _ROLE_ORDER:
+            raise ValueError("角色无效")
         if str(user.get("status", "active") or "active") != "active":
             raise PermissionError("当前用户已被停用")
         if _ROLE_ORDER.get(str(user.get("role", "viewer") or "viewer"), -1) < _ROLE_ORDER[role]:
+            raise PermissionError("当前权限不足")
+
+    @staticmethod
+    def require_capability(user: dict[str, Any], capability: str) -> None:
+        if capability not in CAPABILITIES:
+            raise ValueError("能力无效")
+        if str(user.get("status", "active") or "active") != "active":
+            raise PermissionError("当前用户已被停用")
+        role = str(user.get("role", "viewer") or "viewer")
+        if capability not in _ROLE_CAPABILITIES.get(role, frozenset()):
             raise PermissionError("当前权限不足")
 
     def list_users(self) -> list[dict[str, Any]]:

@@ -492,6 +492,12 @@ describe("HostConnection", () => {
     });
   });
 
+  it("turns browser transport failures into readable Host guidance", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("Failed to fetch"); }));
+
+    await expect(new HostConnection().workspace()).rejects.toThrow("无法连接镜序 Host：网络连接失败");
+  });
+
   it("rejects a ping that does not report ok", async () => {
     vi.stubGlobal(
       "fetch",

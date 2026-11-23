@@ -14,6 +14,10 @@ export interface ProjectPresentation {
   sidebarSubtitle: string;
 }
 
+export function projectFlowLabel(project: Pick<ProjectSummary, "input_kind">): string {
+  return project.input_kind === "media-directory" ? "连接 → 同步 → 整理" : "导入 → 核对 → 组接";
+}
+
 function numberStat(project: ProjectSummary, ...keys: string[]): number {
   for (const key of keys) {
     const value = project.stats?.[key];

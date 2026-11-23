@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from .media_identity import DeviceMediaStore, media_id_for_path
-from .recording_waveform_solver import WaveformReference, solve_recording_waveform, solve_long_recording
+from .recording_waveform_solver import solve_long_recording, solve_recording_waveform
 from .timebase import fcpxml_project_timebase
 
 SR = 16000
@@ -48,6 +48,12 @@ def _audio_start(path: Path, check_cancelled) -> Fraction:
     return Fraction(audio['start_time']) - Fraction(video['start_time'])
 
 
+def _read_position_table(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as stream:
+        return list(csv.DictReader(stream, delimiter="\t"))
+
+
+
 def auto_align_recordings(*, inventory, local_paths, work: Path, media_base: Path,
                           days, master: Path, roots, context, prior, check_cancelled, log=lambda text: None):
     budget_start = monotonic()
@@ -59,10 +65,10 @@ def auto_align_recordings(*, inventory, local_paths, work: Path, media_base: Pat
         return pending('recording_roster_unknown')
     if not context or not all(context):
         return pending('missing_sync_revision_context')
+    if len(days) > 1 or len(inventory['candidates']) > 64:
+        return pending('recording_batch_requires_human_confirmation')
     if len(days) != 1:
         return pending('multi_day_waveform_alignment_not_supported')
-    if len(inventory['candidates']) > 64:
-        return pending('recording_batch_exceeds_bounded_route')
     day = days[0]
     def table(path):
         with path.open(newline='', encoding='utf-8') as stream:
@@ -122,7 +128,7 @@ def auto_align_recordings(*, inventory, local_paths, work: Path, media_base: Pat
         identity = row['media_id']; path = local_paths.get(identity)
         duration_s = Fraction(row.get('sample_count', 0), row.get('sample_rate', 1))
         if (row['status'] != 'unverified_candidate' or not path or not 1 <= row.get('channels',0) <= 2
-                or not 20 <= duration_s <= 4*3600 or monotonic()-budget_start > 300):
+                or not 4 <= duration_s <= 4*3600 or monotonic()-budget_start > 300):
             unresolved.append(identity)
             evidence.append({'media_id':identity,'status':'unresolved','reason':'duration_channel_or_budget_unsupported'})
             continue
@@ -131,6 +137,21 @@ def auto_align_recordings(*, inventory, local_paths, work: Path, media_base: Pat
         window_seconds = 8 if duration_s >= 40 else 4
         starts = [i*(measurement_count-window_seconds*SR)//4 for i in range(5)]
         def measure(window_starts):
+            if duration_s < 20:
+                data = _process(['ffmpeg', '-nostdin', '-v', 'error', '-i', str(path), '-map', '0:a:0',
+                    '-t', str(float(duration_s)), '-ac', '1', '-ar', str(SR), '-f', 'f32le', 'pipe:1'], check_cancelled)
+                original = _normalized(np.frombuffer(data, dtype='<f4'))
+                if original.size < 4 * SR:
+                    return {'status': 'unresolved', 'reason': 'original_window_boundary_unverified'}
+                starts = [0, max(0, (original.size - 4 * SR) // 2), max(0, original.size - 4 * SR)]
+                windows = [(start, original[start:start + 4 * SR]) for start in sorted(set(starts))]
+                candidates = build_recording_reference_candidates(reference_rows, windows, work/'recording-fingerprints',
+                                                                  sample_rate=SR, check_cancelled=check_cancelled)
+                if not candidates.complete:
+                    return {'status': 'unresolved', 'reason': candidates.reason}
+                result = solve_recording_waveform(original, candidates.references, SR)
+                result['candidate_search'] = candidates.metadata
+                return result
             windows = []
             for source_start in window_starts:
                 check_cancelled()

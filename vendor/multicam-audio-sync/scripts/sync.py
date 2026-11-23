@@ -57,11 +57,13 @@ def load_data():
     # SMPTE clock labels wrap at midnight. Keep file-number chronology within
     # each shooting day/camera before fitting its continuous recording clock.
     # A smaller rollback is a clock reset, not evidence of another midnight.
+    clock_resets = []
     for (day, cam), idx in df.groupby(["day", "cam"]).groups.items():
         if not clip.loc[idx].notna().all():
             continue
         previous = None
         shift = 0.0
+        invalid_clock = False
         for row_index, row in df.loc[idx].sort_values(["clipn", "file"]).iterrows():
             value = row["tc_s"]
             if np.isnan(value):
@@ -70,9 +72,16 @@ def load_data():
                 if previous >= 18 * 3600 and value <= 6 * 3600 and previous - value > 12 * 3600:
                     shift += 24 * 3600
                 else:
-                    raise RuntimeError(f"{day}/{cam} 时间码回拨，无法假定连续时钟：{row['file']}")
+                    invalid_clock = True
+                    break
             df.at[row_index, "tc_s"] = value + shift
             previous = value
+        if invalid_clock:
+            # A camera clock reset is not evidence that the media is out of
+            # order. Drop this camera's TC prior and let ordinal pairing plus
+            # audio correlation establish its local position.
+            df.loc[idx, "tc_s"] = np.nan
+            clock_resets.append(f"{day}/{cam}")
     # TC is a useful prior, not a hard prerequisite. When a camera has no
     # usable TC, use its deterministic clip order and cumulative durations as
     # a local coordinate; cross-camera audio correlation then solves the offset.
@@ -87,6 +96,8 @@ def load_data():
         for row_index, row in ordered.iterrows():
             df.at[row_index, "anchor_s"] = cursor
             cursor += float(row["dur"] or 0.0)
+    if clock_resets:
+        print("  设备时间码回拨，已降级为片段顺序 + 音频互相关：" + "、".join(clock_resets), flush=True)
     return df
 
 def load_audio(id_):

@@ -4,6 +4,7 @@ import { errorMessage, type ProjectSummary } from "../../api/host";
 import { DesktopClient } from "../../api/desktop";
 import type { AssistantSelection } from "../../api/production";
 import { ProjectTaskClient, canRetryTask } from "../../api/tasks";
+import { SyncTimelineClient } from "../../api/syncTimeline";
 import {
   listenXiaoJingVisibilityChanged, readXiaoJingWindowState, syncXiaoJingContext, toggleXiaoJingWindow,
   type XiaoJingContextSnapshot, type XiaoJingMainAction,
@@ -347,6 +348,20 @@ export function ProjectWorkbench({
     }
   }
 
+  async function rebaseSyncOffsets(): Promise<void> {
+    if (commanding.current || !syncTimeline.stale_offset_revision) return;
+    commanding.current = true;
+    setCommandError("");
+    try {
+      await new SyncTimelineClient(baseUrl).rebaseOffsets(project.project_id, syncTimeline.stale_offset_revision);
+      await refreshSyncTimeline();
+    } catch (error) {
+      setCommandError(errorMessage(error));
+    } finally {
+      commanding.current = false;
+    }
+  }
+
   function runMulticamSync(): void { void changeSyncTask("start", master.ready); }
 
   function focusTake(
@@ -601,6 +616,7 @@ export function ProjectWorkbench({
             <SyncTaskWorkspace syncTimeline={syncTimeline} baseUrl={baseUrl} command={command}
               submissionError={commandError || submissionIssue}
               onMulticamSync={() => void changeSyncTask("start")}
+              onRebaseOffsets={() => void rebaseSyncOffsets()}
               onCancel={() => void changeSyncTask("cancel")}
               onRepair={() => navigate("media-binding")} onOpenStatus={onOpenStatus}
               onInspect={master.ready ? () => navigate("sync-inspect") : undefined} />

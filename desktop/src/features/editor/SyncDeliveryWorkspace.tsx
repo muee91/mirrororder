@@ -194,7 +194,7 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
                 disabled={!isTauri() || Boolean(busyTarget)}
                 aria-label={`显示 ${item.label} 工程文件`}
                 onClick={() => void revealArtifact(item.local_path, item.target)}>
-                {busyTarget === item.target ? "打开中…" : "显示工程文件"}
+                {busyTarget === item.target ? "打开中…" : item.stale ? "显示旧版文件" : "显示工程文件"}
               </button> : item.target === "davinci" && <button type="button"
                 disabled={!canGenerate || !manifest.ready || !isTauri() || running || Boolean(busyTarget)}
                 onClick={() => void createResolveDelivery()}>

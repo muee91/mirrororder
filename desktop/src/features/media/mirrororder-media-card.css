@@ -106,14 +106,14 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
 .mo-media-name {
   min-width: 0;
   display: block;
-  overflow: hidden;
+  overflow: visible;
   color: var(--mo-text-primary, #dce3e8);
   font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
   font-weight: 620;
   line-height: 1.2;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .mo-media-card.is-inspector .mo-media-name { font-size: 11px; line-height: 1.25; }
 .mo-media-count-slot {

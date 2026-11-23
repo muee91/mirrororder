@@ -2,7 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { DesktopClient } from "../../api/desktop";
 import { ProductionClient, type SlateBoard, type SlateRecord } from "../../api/production";
-import { readCurrentOperator } from "../../components/CurrentOperatorControl";
+import { readCurrentOperator, requestCurrentOperator } from "../../components/CurrentOperatorControl";
 import { SlateStatusIndicator } from "../../components/StatusIndicators";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
@@ -482,6 +482,7 @@ export function ScriptWorkspace({
   ): Promise<void> {
     if (!model) return;
     if (!actor.trim()) {
+      requestCurrentOperator();
       setWriteState("error");
       setWriteMessage("先填写审核昵称，再写入人工归集。");
       return;
@@ -546,6 +547,7 @@ export function ScriptWorkspace({
   async function clearPlacement(): Promise<void> {
     if (!selectedTake || !model) return;
     if (!actor.trim()) {
+      requestCurrentOperator();
       setWriteState("error");
       setWriteMessage("先填写审核昵称，再清除人工归集。");
       return;
@@ -599,6 +601,7 @@ export function ScriptWorkspace({
 
   async function applyRoughPlacement(): Promise<void> {
     if (!model || !roughPreview || !actor.trim()) {
+      if (!actor.trim()) requestCurrentOperator();
       setWriteState("error");
       setWriteMessage("先预览批量归集并填写审核昵称。");
       return;
@@ -942,7 +945,7 @@ export function ScriptWorkspace({
                   <textarea value={roughText} onChange={(event) => { setRoughText(event.target.value); setRoughPreview(null); }} placeholder="1-10 第1集；11-20 第2集" rows={5} />
                   <div className="rough-placement-actions">
                     <button type="button" className="secondary" disabled={writeState === "saving" || !roughText.trim()} onClick={() => void previewRoughPlacement()}>预览</button>
-                    <button type="button" disabled={writeState === "saving" || !roughPreview || !actor.trim()} onClick={() => void applyRoughPlacement()}>确认归集</button>
+                    <button type="button" disabled={writeState === "saving" || !roughPreview} onClick={() => void applyRoughPlacement()}>确认归集</button>
                   </div>
                   {roughPreview ? <div className="rough-placement-preview">{roughPreview.plans.map((plan, index) => <span key={plan.take_start + "-" + plan.take_end + "-" + index}>{roughPreviewLabel(plan)}</span>)}</div> : null}
                 </section>

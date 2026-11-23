@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HostConnectionError, errorMessage } from "../../api/host";
+import { requestCurrentOperator } from "../../components/CurrentOperatorControl";
 import {
   EditorialClient,
   type EditorialState,
@@ -88,6 +89,7 @@ export function ScriptAssignmentDecision({
   async function decide(state: EditorialState): Promise<void> {
     if (!payload || loadState !== "ready" || writeInFlight.current) return;
     if (!actor.trim()) {
+      requestCurrentOperator();
       setMessage("最终决定需要操作者昵称。");
       return;
     }

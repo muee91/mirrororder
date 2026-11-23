@@ -18,9 +18,9 @@ describe("project actions", () => {
     expect(library).toContain("本机素材 / 换素材盘");
     expect(library).toContain('menu.project.input_kind === "media-directory" ? "sync-task" : "timeline"');
     expect(library).toContain("连接素材");
-    expect(library).toContain("完整整理项目");
+    expect(library).toContain("后台整理素材与剧本");
     expect(library).toContain("高级操作");
-    expect(library).toContain("重新整理项目");
+    expect(library).toContain("重新整理素材、剧本与分析结果");
     expect(library).toContain("永久删除项目…");
     expect(library).toContain("event.shiftKey");
     expect(library).toContain('event.key === "F10"');
@@ -36,9 +36,9 @@ describe("project actions", () => {
     expect(home).toContain("本机素材 / 换素材盘");
     expect(home).toContain('menu.project.input_kind === "media-directory" ? "sync-task" : "timeline"');
     expect(home).toContain("连接素材");
-    expect(home).toContain("完整整理项目");
+    expect(home).toContain("后台整理素材与剧本");
     expect(home).toContain("高级操作");
-    expect(home).toContain("重新整理项目");
+    expect(home).toContain("重新整理素材、剧本与分析结果");
     expect(home).toContain("永久删除项目…");
     expect(home).toContain("onOpenTeamProject");
     expect(home).toContain("onCopyShareLink");

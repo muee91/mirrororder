@@ -283,14 +283,218 @@ def sync_recordings(report: dict[str, Any], task_id: str) -> dict[str, Any] | No
                 "name": Path(_text(row.get("name")).replace(chr(92), "/")).name or media_id,
                 "at": at, "source": source, "frames": frames,
             })
-    candidates = [_as_dict(row) for row in _as_list(inventory.get("candidates"))]
+    candidates = []
+    for value in _as_list(inventory.get("candidates")):
+        row = _as_dict(value)
+        media_id = _text(row.get("media_id"))
+        if not re.fullmatch(r"M_[0-9a-f]{24}", media_id):
+            continue
+        candidate = {
+            "media_id": media_id,
+            "name": Path(_text(row.get("name")).replace(chr(92), "/")).name or media_id,
+            "status": _text(row.get("status")) or "unsupported_or_unreadable_audio",
+            "sample_rate": row.get("sample_rate"),
+            "sample_count": row.get("sample_count"),
+            "channels": row.get("channels"),
+            "audio_role_hint": _as_dict(row.get("audio_role_hint")),
+            "clock_hint": _as_dict(row.get("clock_hint")),
+        }
+        candidates.append(candidate)
     known = {row["media_id"] for row in placements}
     return {
         "candidate_count": len(candidates),
         "unplaced_count": sum(row.get("media_id") not in known for row in candidates),
         "invalid_count": sum(row.get("status") != "unverified_candidate" for row in candidates),
+        "candidates": candidates,
         "placements": placements,
+        "alignment_revision": int(_number(_as_dict(report.get("recording_alignment")).get("revision"), 0)),
     }
+
+
+def sync_recording_summary(report: dict[str, Any], task_id: str) -> dict[str, Any]:
+    """Expose whether independent audio has evidence in this sync revision."""
+    inventory = _as_dict(report.get("recording_inventory"))
+    if not inventory:
+        return {
+            "status": "not_scanned",
+            "candidate_count": 0,
+            "placed_count": 0,
+            "unplaced_count": 0,
+            "invalid_count": 0,
+        }
+
+    recordings = sync_recordings(report, task_id) or {
+        "candidate_count": 0,
+        "unplaced_count": 0,
+        "invalid_count": 0,
+        "placements": [],
+    }
+    candidate_count = int(recordings.get("candidate_count", 0) or 0)
+    placed_count = len(_as_list(recordings.get("placements")))
+    unplaced_count = int(recordings.get("unplaced_count", 0) or 0)
+    invalid_count = int(recordings.get("invalid_count", 0) or 0)
+    alignment = _as_dict(report.get("recording_alignment"))
+    alignment_current = (
+        alignment.get("status") == "confirmed"
+        and bool(task_id)
+        and _text(alignment.get("sync_task_id")) == task_id
+    )
+    if candidate_count == 0:
+        status = "no_candidates"
+    elif alignment_current and unplaced_count == 0 and invalid_count == 0:
+        status = "confirmed"
+    elif alignment_current:
+        status = "partial"
+    else:
+        status = "unconfirmed"
+    return {
+        "status": status,
+        "candidate_count": candidate_count,
+        "placed_count": placed_count,
+        "unplaced_count": unplaced_count,
+        "invalid_count": invalid_count,
+        "sync_task_id": _text(alignment.get("sync_task_id")),
+        "alignment_revision": int(_number(alignment.get("revision"), 0)),
+    }
+
+
+def confirm_sync_recording_placement(project: Any, tasks: Iterable[object], body: object = None) -> dict[str, Any]:
+    """Promote one human-confirmed original WAV placement into this sync revision.
+
+    The only input that becomes shared sync authority is the media identity and
+    the master playhead location confirmed by the operator. Device creation
+    time, filename timestamps and another NLE project remain evidence hints.
+    """
+    from .media_identity import DeviceMediaStore, _atomic_json
+
+    if not isinstance(body, dict):
+        raise ValueError("录音确认参数必须是对象")
+    timeline = build_sync_timeline(project, tasks)
+    if not timeline.get("ready"):
+        raise ValueError("同步母版尚未就绪，无法确认录音摆位")
+    task_id = _text(_as_dict(timeline.get("task")).get("task_id"))
+    if not task_id:
+        raise ValueError("缺少当前同步母版版本标识")
+    report_path = Path(project.config.output_dir) / "sync" / "sync_report.json"
+    report = _read_json(report_path)
+    inventory = _as_dict(report.get("recording_inventory"))
+    candidates = {
+        _text(row.get("media_id")): _as_dict(row)
+        for row in _as_list(inventory.get("candidates"))
+        if _text(row.get("media_id"))
+    }
+    media_id = _text(body.get("media_id"))
+    if not re.fullmatch(r"M_[0-9a-f]{24}", media_id):
+        raise ValueError("录音 media_id 无效")
+    candidate = candidates.get(media_id)
+    if not candidate or candidate.get("status") != "unverified_candidate":
+        raise ValueError("该 WAV 不是当前同步版本的可确认候选")
+    role = _as_dict(candidate.get("audio_role_hint"))
+    if role and role.get("sync_eligible") is False:
+        raise ValueError("该音频已标记为音乐或音效，不能放入同期声轨")
+
+    at = body.get("at")
+    source = body.get("source", 0)
+    if type(at) is not int or at < 0 or type(source) is not int or source < 0:
+        raise ValueError("录音摆位必须使用非负整数帧")
+    sample_rate = candidate.get("sample_rate")
+    sample_count = candidate.get("sample_count")
+    if type(sample_rate) is not int or sample_rate <= 0 or type(sample_count) is not int or sample_count <= 0:
+        raise ValueError("当前 WAV 缺少可用时长")
+    timebase = _as_dict(timeline.get("timebase"))
+    if timebase.get("status") != "confirmed":
+        raise ValueError("同步母版时间基尚未确认")
+    numerator = int(timebase.get("numerator", 0) or 0)
+    denominator = int(timebase.get("denominator", 0) or 0)
+    if numerator <= 0 or denominator <= 0:
+        raise ValueError("同步母版时间基无效")
+    from fractions import Fraction
+
+    frames = int(round(float(Fraction(sample_count, sample_rate) * Fraction(numerator, denominator))))
+    if body.get("frames") is not None and body.get("frames") != frames:
+        raise ValueError("录音时长与源文件不一致")
+    source_samples = int(round(float(Fraction(source, 1) * sample_rate * Fraction(denominator, numerator))))
+    if frames <= 0 or source_samples < 0 or source_samples >= sample_count:
+        raise ValueError("录音源内位置无效")
+    master_frames = int(round(max(0.0, _number(timeline.get("duration_seconds"))) * numerator / denominator))
+    if master_frames <= 0 or at + frames > master_frames:
+        raise ValueError("录音摆位超出同步母版范围")
+
+    alignment = _as_dict(report.get("recording_alignment"))
+    current_task = _text(alignment.get("sync_task_id"))
+    if current_task and current_task != task_id:
+        alignment = {}
+    expected = body.get("expected_revision")
+    revision = int(_number(alignment.get("revision"), 0))
+    if expected is not None and int(expected) != revision:
+        raise ValueError(f"录音摆位版本冲突（期望 r{expected}，当前 r{revision}），请刷新后重试")
+    name = Path(_text(candidate.get("name")).replace(chr(92), "/")).name or media_id
+    placements = []
+    replaced = False
+    for value in _as_list(alignment.get("placements")):
+        row = _as_dict(value)
+        if _text(row.get("media_id")) == media_id:
+            if not replaced:
+                placements.append({
+                    "media_id": media_id, "name": name, "track": "原录音_" + media_id,
+                    "at": at, "source": source, "frames": frames,
+                    "source_kind": "original", "timing_basis": "original_unretimed",
+                    "source_rate_ratio": [1, 1],
+                })
+                replaced = True
+            continue
+        if re.fullmatch(r"M_[0-9a-f]{24}", _text(row.get("media_id"))):
+            placements.append(row)
+    if not replaced:
+        placements.append({
+            "media_id": media_id, "name": name, "track": "原录音_" + media_id,
+            "at": at, "source": source, "frames": frames,
+            "source_kind": "original", "timing_basis": "original_unretimed",
+            "source_rate_ratio": [1, 1],
+        })
+    revision += 1
+    unresolved = sorted(set(_text(value) for value in _as_list(alignment.get("unresolved_media_ids")) if _text(value)) - {media_id})
+    confirmed_at = datetime.now(timezone.utc).isoformat()
+    next_alignment = {
+        "status": "confirmed",
+        "sync_task_id": task_id,
+        "confirmation_source": "human_confirmation.v1",
+        "method": "master_playhead_confirmation",
+        "revision": revision,
+        "placements": placements,
+        "unresolved_media_ids": unresolved,
+        "coverage": "partial" if len(placements) < len(candidates) else "discovered_candidates_only",
+        "evidence": [
+            *[value for value in _as_list(alignment.get("evidence")) if isinstance(value, dict)][-49:],
+            {
+                "media_id": media_id,
+                "confirmed_at": confirmed_at,
+                "at": at,
+                "source": source,
+                "frames": frames,
+                "device_clock_used": False,
+                "basis": "operator_master_playhead",
+            },
+        ],
+    }
+    workspace_id = _text(getattr(project, "workspace_id", ""))
+    if not workspace_id:
+        raise ValueError("缺少本机 workspace_id，无法绑定录音")
+    roots = tuple(getattr(project.config, "media_roots", ()) or ())
+    if not roots and getattr(project.config, "media_root", None):
+        roots = (project.config.media_root,)
+    if not roots:
+        raise ValueError("本机素材目录未登记")
+    store = DeviceMediaStore()
+    bound = store.resolve(workspace_id, _text(getattr(project, "project_id", "")), {"media_id": media_id, "name": name})
+    if not bound:
+        try:
+            store.bind_named_media(workspace_id, _text(getattr(project, "project_id", "")), media_id, name, roots)
+        except ValueError as error:
+            raise ValueError(f"无法在本机素材目录绑定该 WAV：{error}") from error
+    report["recording_alignment"] = next_alignment
+    _atomic_json(report_path, report)
+    return build_sync_timeline(project, tasks)
 
 
 def _offsets_path(config: Any) -> Path:
@@ -302,7 +506,15 @@ def _load_manual_offsets(config: Any, sync_task_id: str) -> dict[str, Any]:
     if not raw or raw.get("contract") != "sync_manual_offsets.v1":
         return {"revision": 0, "sync_task_id": sync_task_id, "clip_offsets": {}, "recording_offsets": {}, "history": []}
     if sync_task_id and _text(raw.get("sync_task_id")) != sync_task_id:
-        return {"revision": 0, "sync_task_id": sync_task_id, "clip_offsets": {}, "recording_offsets": {}, "history": []}
+        return {
+            "revision": 0,
+            "sync_task_id": sync_task_id,
+            "clip_offsets": {},
+            "recording_offsets": {},
+            "history": [],
+            "stale_revision": max(0, int(raw.get("revision", 0) or 0)),
+            "stale_sync_task_id": _text(raw.get("sync_task_id")),
+        }
     clip_offsets: dict[str, int] = {}
     for k, v in _as_dict(raw.get("clip_offsets")).items():
         if isinstance(v, int) and not isinstance(v, bool) and -15000 <= v <= 15000:
@@ -520,6 +732,67 @@ def undo_sync_manual_offset(project: Any, tasks: Iterable[object], body: object 
     return build_sync_timeline(project, tasks)
 
 
+def rebase_sync_manual_offsets(project: Any, tasks: Iterable[object], body: object = None) -> dict[str, Any]:
+    """Carry the previous sync revision forward only when every target identity remains present."""
+    from .media_identity import _atomic_json
+
+    task_history = list(tasks)
+    timeline = build_sync_timeline(project, task_history)
+    if not timeline.get("ready"):
+        raise ValueError("当前同步母版尚未就绪，无法重应用人工偏移")
+    current_task_id = _text(_as_dict(timeline.get("task")).get("task_id"))
+    raw = _read_json(_offsets_path(project.config))
+    if not raw or raw.get("contract") != "sync_manual_offsets.v1":
+        raise ValueError("没有可重应用的上一版人工偏移")
+    source_task_id = _text(raw.get("sync_task_id"))
+    if not source_task_id or source_task_id == current_task_id:
+        raise ValueError("当前同步版本没有待重应用的人工偏移")
+
+    clip_offsets = {
+        str(key): int(value)
+        for key, value in _as_dict(raw.get("clip_offsets")).items()
+        if isinstance(value, int) and not isinstance(value, bool) and value
+    }
+    recording_offsets = {
+        str(key): int(value)
+        for key, value in _as_dict(raw.get("recording_offsets")).items()
+        if isinstance(value, int) and not isinstance(value, bool) and value
+    }
+    current_clip_ids = {
+        _text(clip.get("clip_id"))
+        for track in _as_list(timeline.get("tracks"))
+        for clip in _as_list(_as_dict(track).get("clips"))
+        if _text(_as_dict(clip).get("clip_id"))
+    }
+    current_recording_ids = {
+        _text(row.get("media_id"))
+        for row in _as_list(_as_dict(timeline.get("recordings")).get("placements"))
+        if _text(_as_dict(row).get("media_id"))
+    }
+    missing_clips = sorted(set(clip_offsets) - current_clip_ids)
+    missing_recordings = sorted(set(recording_offsets) - current_recording_ids)
+    if missing_clips or missing_recordings:
+        missing = [f"片段 {value}" for value in missing_clips[:5]] + [f"录音 {value}" for value in missing_recordings[:5]]
+        raise ValueError("上一版人工偏移无法安全对应当前同步版本：" + "、".join(missing))
+
+    expected = body.get("expected_stale_revision") if isinstance(body, dict) else None
+    stale_revision = max(0, int(raw.get("revision", 0) or 0))
+    if expected is not None and int(expected) != stale_revision:
+        raise ValueError("上一版人工偏移已变化，请刷新后重试")
+    _atomic_json(
+        _offsets_path(project.config),
+        {
+            "contract": "sync_manual_offsets.v1",
+            "sync_task_id": current_task_id,
+            "revision": stale_revision,
+            "clip_offsets": clip_offsets,
+            "recording_offsets": recording_offsets,
+            "history": _as_list(raw.get("history"))[-50:],
+        },
+    )
+    return build_sync_timeline(project, task_history)
+
+
 def _snapshot_path(config: Any, task_id: str) -> Path | None:
     if not re.fullmatch(r"[a-zA-Z0-9_-]{1,96}", task_id):
         return None
@@ -594,6 +867,7 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
             "cameras": [],
             "clip_count": 0,
             "duration_seconds": 0,
+            "recording_summary": {"status": "not_scanned", "candidate_count": 0, "placed_count": 0, "unplaced_count": 0, "invalid_count": 0},
         }
 
     task_history = list(tasks)
@@ -624,9 +898,6 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
                 "同步产物缺少一个或多个拍摄日的可读轨道位置表；请重新执行多机位同步。",
             )
 
-    if ready and report.get("recording_inventory"):
-        message += " " + " ".join(str(row.get("message", "")) for row in report.get("diagnostics", []) if isinstance(row, dict))
-
     timebase = fcpxml_project_timebase(sync_file) if ready else {
         "status": "unknown", "source": "fcpxml_sequence", "reason": "sync_not_ready",
     }
@@ -636,6 +907,7 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
         tracks, shifted_duration = _apply_offsets_to_tracks(tracks, timebase, offsets["clip_offsets"])
         duration_seconds = max(duration_seconds, shifted_duration)
     recordings = sync_recordings(report, task_id) if ready and task_id else None
+    recording_summary = sync_recording_summary(report, task_id)
     if ready and recordings and offsets["recording_offsets"]:
         recordings = _apply_offsets_to_recordings(recordings, offsets["recording_offsets"])
     previous = None
@@ -656,6 +928,7 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
         "message": message,
         "task": _safe_task(latest_task),
         "recordings": recordings,
+        "recording_summary": recording_summary,
         "tracks": tracks,
         "cameras": cameras,
         "clip_count": sum(int(track.get("clip_count", 0) or 0) for track in tracks),
@@ -665,6 +938,8 @@ def build_sync_timeline(project: Any, tasks: Iterable[object]) -> dict[str, Any]
         "previous_master": previous,
         "offset_revision": offsets["revision"],
         "offset_history": offsets["history"][-10:],
+        "stale_offset_revision": offsets.get("stale_revision", 0),
+        "stale_offset_sync_task_id": offsets.get("stale_sync_task_id", ""),
     }
 
 
@@ -700,8 +975,10 @@ def build_sync_delivery_artifacts(project: Any, tasks: Iterable[object]) -> dict
     """
     config = project.config
     output = Path(config.output_dir)
+    task_history = list(tasks)
     report = _read_json(output / "sync" / "sync_report.json")
-    task = _latest_sync_task(tasks)
+    task = _latest_sync_task(task_history)
+    timeline = build_sync_timeline(project, task_history)
     index_ready = _media_index_ready(config)
     synced_file = output / "sync" / "synchronized.fcpxml"
     phase, ready, _message = _status_for(task, report, synced_file, index_ready)
@@ -711,6 +988,21 @@ def build_sync_delivery_artifacts(project: Any, tasks: Iterable[object]) -> dict
     if not roots and getattr(config, "media_root", None):
         roots = (config.media_root,)
     version = _text(report.get("delivery_version"))
+    sync_task_id = _text((timeline.get("task") or {}).get("task_id")) or _text(report.get("sync_task_id"))
+    offset_revision = int(timeline.get("offset_revision", 0) or 0)
+    recording_inventory = _as_dict(report.get("recording_inventory"))
+    recording_alignment = _as_dict(report.get("recording_alignment"))
+    recording_alignment_current = (
+        bool(recording_inventory)
+        and recording_alignment.get("status") == "confirmed"
+        and _text(recording_alignment.get("sync_task_id")) == sync_task_id
+    )
+    stale_reasons: list[str] = []
+    if offset_revision > 0:
+        stale_reasons.append(f"manual_offset_r{offset_revision}")
+    if recording_alignment_current:
+        stale_reasons.append("recording_alignment_after_sync_export")
+    standard_delivery_stale = bool(stale_reasons)
     export_dirs = {Path(root).resolve() / "交付" for root in roots}
     if version:
         export_dirs = {directory / f"同步-{version}" for directory in export_dirs} if re.fullmatch(r"[0-9a-f]{32}", version) else set()
@@ -749,6 +1041,8 @@ def build_sync_delivery_artifacts(project: Any, tasks: Iterable[object]) -> dict
             "format": format_name + (" · 视频/机内参考声，未写入独立录音" if report.get("recording_inventory") else ""),
             "filename": filename,
             "available": bool(local_path),
+            "stale": standard_delivery_stale,
+            "stale_reason": "、".join(stale_reasons),
             "local_path": local_path,
             "unavailable_reason": unavailable_reason,
         })
@@ -759,6 +1053,10 @@ def build_sync_delivery_artifacts(project: Any, tasks: Iterable[object]) -> dict
         "paths_scope": "localhost_response_only",
         "artifacts": files,
         "sync_version": version,
+        "sync_task_id": sync_task_id,
+        "offset_revision": offset_revision,
+        "delivery_state": "stale" if standard_delivery_stale else "current",
+        "stale_reasons": stale_reasons,
         "validation": "generated_files_only_nle_round_trip_not_verified",
     }
 
@@ -769,4 +1067,5 @@ __all__ = [
     "build_sync_delivery_artifacts",
     "apply_sync_manual_offset",
     "undo_sync_manual_offset",
+    "rebase_sync_manual_offsets",
 ]

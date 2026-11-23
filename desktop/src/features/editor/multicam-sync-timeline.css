@@ -190,6 +190,15 @@
   border-inline-start: 1px solid var(--mo-border-subtle);
   color: var(--mo-text-primary);
 }
+.sync-master-heading .sync-recording-status {
+  padding-inline-start: 10px;
+  border-inline-start: 1px solid var(--mo-border-subtle);
+  color: var(--mo-text-secondary);
+}
+.sync-master-heading .sync-recording-status[data-state="confirmed"] { color: var(--mo-success); }
+.sync-master-heading .sync-recording-status[data-state="partial"],
+.sync-master-heading .sync-recording-status[data-state="unconfirmed"] { color: var(--mo-warning); }
+.sync-master-heading .sync-recording-status[data-state="not-scanned"] { color: var(--mo-danger); }
 .multicam-sync-inspection-meta { flex-wrap: wrap; gap: 6px; }
 .multicam-sync-inspection-meta > button, .sync-monitor-pair > select {
   display: inline-flex;
@@ -754,6 +763,9 @@ html[data-mirrororder-theme] .sync-more-menu-popover > button:hover {
 .sync-recording-mode button:disabled { opacity: .5; }
 .sync-recording-status { color: var(--mo-text-secondary); overflow-wrap: anywhere; }
 .sync-recording-monitor > button { min-height: 32px; }
+.sync-recording-candidates { display: grid; gap: 8px; width: 100%; padding-top: 4px; border-top: 1px solid var(--mo-border-subtle); }
+.sync-recording-candidates button { min-height: 32px; }
+.sync-recording-candidates p { color: var(--mo-danger); }
 
 .sync-waveform-card {
   display: grid;

@@ -24,7 +24,7 @@ import { SlateRow, SlateTableHead, SLATE_CAMERA_COLUMNS, type SlateCameraColumn 
 import type { PendingSlateDrafts, SlateDraft as Draft, SlateDraftSession } from "./slateDraftSession";
 import { originalPlaybackUrl } from "./SlateOriginalPlayback";
 import type { ProductionSelectionContext, ProductionWorkspace } from "../production/productionNavigation";
-import { readCurrentOperator } from "../../components/CurrentOperatorControl";
+import { readCurrentOperator, requestCurrentOperator } from "../../components/CurrentOperatorControl";
 import { basenameLabel, clearPendingSlateFile, readPendingSlateFile } from "../../app/pendingSlateFile";
 import { closeDetailsMenu, handleDetailsMenuBlur, handleDetailsMenuToggle } from "../../components/detailsMenuDismiss";
 import "../media/camera-presentation.css";
@@ -537,6 +537,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [selectedClipId, setSelectedClipId] = useState("");
   const [actor, setActor] = useState(readCurrentOperator);
   const [message, setMessage] = useState("正在读取多机位电子场记…");
+  const [loadError, setLoadError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false);
@@ -642,6 +643,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   async function reload(preferredRecordId?: string): Promise<void> {
     if (!canUseSlate()) return;
     const beforeRead = draftViewRef.current.board;
+    setLoadError(false);
     setMessage("正在读取多机位电子场记…");
     try {
       const [nextReview, nextBoard] = await Promise.all([host.refreshReviewModel(projectId), production.scriptSupervisor(projectId)]);
@@ -661,8 +663,12 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       setPlaybackFailedClipId("");
       setPlaybackRetry(0);
       setMessage("已刷新");
+      setLoadError(false);
     } catch (error) {
-      if (canUseSlate()) setMessage(`刷新失败：${errorMessage(error)}`);
+      if (canUseSlate()) {
+        setLoadError(true);
+        setMessage(errorMessage(error));
+      }
     }
   }
 
@@ -680,8 +686,14 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         setSelectedRecordId(first?.record_id ?? "");
         setSelectedClipId(first?.preferred_clip_id || (first?.attachments[0] ? attachmentKey(first.attachments[0]) : ""));
         setMessage("");
+        setLoadError(false);
       })
-      .catch((error) => { if (!cancelled) setMessage(errorMessage(error)); });
+      .catch((error) => {
+        if (!cancelled) {
+          setLoadError(true);
+          setMessage(errorMessage(error));
+        }
+      });
     return () => { cancelled = true; };
   }, [host, production, projectId, canUseSlate, publishDraftView]);
 
@@ -1566,12 +1578,15 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           <span className="golden-slate-message" aria-live="polite">{message}</span>
           <span
             className="golden-slate-save-state"
-            data-state={busy ? "saving" : dirtyCount ? "dirty" : board ? "saved" : "idle"}
+            data-state={busy ? "saving" : loadError ? "error" : dirtyCount ? "dirty" : board ? "saved" : "idle"}
             aria-live="polite"
           >
-            {busy ? "保存中…" : draftConflicts.size ? `${draftConflicts.size} 条草稿需核对` : dirtyCount ? `未保存 ${dirtyCount}` : board ? "已保存" : "等待加载"}
+            {busy ? "保存中…" : loadError ? "读取失败" : draftConflicts.size ? `${draftConflicts.size} 条草稿需核对` : dirtyCount ? `未保存 ${dirtyCount}` : board ? "已保存" : "等待加载"}
           </span>
-          <button type="button" className={`golden-slate-save-button${dirtyCount > 0 ? " is-dirty" : ""}`} disabled={busy || !board || dirtyCount === 0 || draftConflicts.size > 0 || !actor.trim()} onClick={() => void saveAll()}>保存{dirtyCount ? ` ${dirtyCount}` : ""}</button>
+          <button type="button" className={`golden-slate-save-button${dirtyCount > 0 ? " is-dirty" : ""}`} disabled={busy || !board || dirtyCount === 0 || draftConflicts.size > 0} onClick={() => {
+            if (!actor.trim()) { requestCurrentOperator(); setMessage("保存场记前需要操作者昵称。"); return; }
+            void saveAll();
+          }}>保存{dirtyCount ? ` ${dirtyCount}` : ""}</button>
         </div>
       </header>
 
@@ -1608,7 +1623,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             section("真实拍摄顺序 · 全场记", displayedDrafts, "placed", false)
           ) : placedDrafts.length && unplacedDrafts.length ? (
             <div className="golden-slate-split-sections">{section("已填场号 · 按场次排列", placedDrafts, "placed")}{section("未填场号 · 按拍摄顺序", unplacedDrafts, "unplaced")}</div>
-          ) : placedDrafts.length ? section("已填场号 · 按场次排列", placedDrafts, "placed") : unplacedDrafts.length ? section("未填场号 · 按拍摄顺序", unplacedDrafts, "unplaced") : (
+          ) : placedDrafts.length ? section("已填场号 · 按场次排列", placedDrafts, "placed") : unplacedDrafts.length ? section("未填场号 · 按拍摄顺序", unplacedDrafts, "unplaced") : loadError ? (
+            <div className="golden-slate-empty golden-slate-load-error" role="alert">
+              <strong>场记读取失败</strong>
+              <span>{message}</span>
+              <button type="button" onClick={() => void reload(selectedRecordId)}>重新读取</button>
+            </div>
+          ) : (
             <div className="golden-slate-empty"><strong>从 Take 或场记 PDF / 照片开始</strong><span>A / B / C 机位落在同一行；场记 PDF 或照片可直接上传让 AI 提取草稿。</span><div><button type="button" onClick={() => setPaperIntakeOpen(true)}>导入场记 PDF / 照片</button><button type="button" className="secondary" onClick={() => setTakePickerOpen(true)}>从 Take 加入</button><button type="button" className="secondary" onClick={() => addBlank()}>新建空白场记</button></div></div>
           )}
         </div>
@@ -1727,7 +1748,10 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                   </details>}
                 </section>}
                 <div className="golden-inspector-actions">
-                  <button type="button" disabled={busy || !board || !selected.dirty || !actor.trim() || (selectedConflict && !selectedPersisted)} onClick={() => void saveSelected()}>
+                  <button type="button" disabled={busy || !board || !selected.dirty || (selectedConflict && !selectedPersisted)} onClick={() => {
+                    if (!actor.trim()) { requestCurrentOperator(); setMessage("保存场记前需要操作者昵称。"); return; }
+                    void saveSelected();
+                  }}>
                     {selectedConflict && selectedPersisted ? "用草稿覆盖…" : "保存当前行"}
                   </button>
                   {selectedConflict ? <button type="button" className="secondary" disabled={busy} onClick={discardConflictingDraft}>放弃此草稿…</button>

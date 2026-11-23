@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HostConnection } from "../../api/host";
-import type { MulticamSyncTimeline } from "../../api/syncTimeline";
+import { SyncTimelineClient, type MulticamSyncTimeline, type SyncRecordingCandidate } from "../../api/syncTimeline";
 import type { FrameRate } from "../../api/timeline";
 import { recordingForMasterFrame, recordingKey, recordingSecondsAtMasterFrame, shouldSeekRecording } from "./syncRecordingClock";
 
@@ -14,15 +14,20 @@ interface Props {
   onStartVideo?: () => void;
   onFollowChange?: (following: boolean) => void;
   onSplitPanChange?: (split: boolean) => void;
+  onTimelineUpdated?: () => void;
 }
 
-export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingVideo, onAudition, onStartVideo, onFollowChange, onSplitPanChange }: Props) {
+export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingVideo, onAudition, onStartVideo, onFollowChange, onSplitPanChange, onTimelineUpdated }: Props) {
   const recordings = timeline.recordings!;
+  const candidates = recordings.candidates ?? [];
   const [preferredKey, setPreferredKey] = useState("");
+  const [candidateKey, setCandidateKey] = useState("");
   const [followVideo, setFollowVideo] = useState(false);
   const [splitPan, setSplitPan] = useState(false);
   const [error, setError] = useState("");
   const [loadKey, setLoadKey] = useState(0);
+  const [confirming, setConfirming] = useState("");
+  const [confirmError, setConfirmError] = useState("");
   const followRef = useRef(false);
   const starting = useRef(false);
   const player = useRef<HTMLAudioElement | null>(null);
@@ -134,13 +139,32 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
     }
   }
 
+  async function confirmCandidate(candidate: SyncRecordingCandidate): Promise<void> {
+    if (!rate || confirming) return;
+    setConfirming(candidate.media_id);
+    setConfirmError("");
+    try {
+      await new SyncTimelineClient(baseUrl).confirmRecordingPlacement(timeline.project_id, {
+        media_id: candidate.media_id,
+        at: cursor,
+        source: 0,
+        expected_revision: recordings.alignment_revision ?? 0,
+      });
+      onTimelineUpdated?.();
+    } catch (reason) {
+      setConfirmError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setConfirming("");
+    }
+  }
+
   const hasRecordedTime = Boolean(rate);
   return <div className="sync-recording-monitor multicam-sync-details">
     <p>{recordings.candidate_count} 条已发现 · {recordings.unplaced_count} 条未上轨
       {recordings.invalid_count > 0 && " · " + recordings.invalid_count + " 条空文件或无法读取"}</p>
     {recordings.placements.length > 0 && <label>
       监听录音
-      <select aria-label="监听录音" value={placement ? recordingKey(placement) : ""} onChange={(event) => {
+        <select aria-label="监听录音" value={placement ? recordingKey(placement) : ""} onChange={(event) => {
         setError("");
         setPreferredKey(event.target.value);
       }}>
@@ -150,6 +174,23 @@ export function SyncRecordingMonitor({ baseUrl, timeline, cursor, rate, playingV
       </select>
     </label>}
     {recordings.placements.length === 0 && <p role="status">当前母版尚无可试听的同期声上轨片段。</p>}
+    {candidates.some(candidate => candidate.status === "unverified_candidate" && !recordings.placements.some(item => item.media_id === candidate.media_id)) && <section className="sync-recording-candidates" aria-label="待确认录音">
+      <label>
+        待确认录音
+        <select aria-label="待确认录音" value={candidateKey} onChange={(event) => setCandidateKey(event.target.value)}>
+          <option value="">选择待确认 WAV</option>
+          {candidates.filter(candidate => candidate.status === "unverified_candidate" && !recordings.placements.some(item => item.media_id === candidate.media_id)).map(candidate =>
+            <option key={candidate.media_id} value={`candidate:${candidate.media_id}`}>{candidate.name}</option>)}
+        </select>
+      </label>
+      {candidateKey.startsWith("candidate:") && (() => {
+        const candidate = candidates.find(item => `candidate:${item.media_id}` === candidateKey);
+        return candidate ? <button type="button" disabled={Boolean(confirming) || !rate} onClick={() => void confirmCandidate(candidate)}>
+          {confirming === candidate.media_id ? "保存中…" : "放到播放头"}
+        </button> : null;
+      })()}
+      {confirmError && <p role="alert">{confirmError}</p>}
+    </section>}
     {recordings.placements.length > 0 && <div className="sync-recording-mode" role="group" aria-label="同期录音试听模式">
       <button type="button" aria-pressed={!followVideo} onClick={() => setFollow(false, false)}>独立试听</button>
       <button type="button" aria-pressed={followVideo && !splitPan} disabled={!hasRecordedTime || !playback}

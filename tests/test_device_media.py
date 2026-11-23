@@ -52,6 +52,24 @@ def test_device_media_store_binds_verified_copy_without_shared_path_change(tmp_p
     assert index["clips"][0]["media_path"] == "/Volumes/OTHER/A001.mov"
 
 
+def test_media_scan_persists_video_and_audio_counts_for_lightweight_preflight(tmp_path: Path) -> None:
+    media = tmp_path / "media"
+    media.mkdir()
+    (media / "A001.mov").write_bytes(b"video" * 1000)
+    (media / "现场录音.wav").write_bytes(b"audio" * 1000)
+    index = {"clips": []}
+    store = DeviceMediaStore(tmp_path / "device" / "media-bindings.json")
+
+    result = store.scan("ws_preflight", "demo", index, [str(media)])
+    snapshot = store.summary("ws_preflight", "demo", index, verify_content=False)
+
+    assert result["scan"]["video_files"] == 1
+    assert result["scan"]["audio_files"] == 1
+    assert snapshot["scan"]["files_seen"] == 2
+    assert snapshot["scan"]["video_files"] == 1
+    assert snapshot["scan"]["audio_files"] == 1
+
+
 def test_snapshot_summary_reports_verified_binding_without_rehashing(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "source" / "A001.mov"
     source.parent.mkdir()

@@ -28,11 +28,11 @@ describe("SlateRow anatomy contract", () => {
     expect(looksLikeQuickSlateCommand("演员走位微调")).toBe(false);
   });
 
-  it("keeps compact media names deterministic while stripping extensions and redundant date blocks", () => {
+  it("keeps compact media names complete while stripping extensions", () => {
     expect(formatCompactMediaName("A001C123")).toBe("A001C123");
     expect(formatCompactMediaName("A001.MOV")).toBe("A001");
-    expect(formatCompactMediaName("A001C001_261110BR")).toBe("A001C001…BR");
-    expect(formatCompactMediaName("DJI_20261110142312_0042_D.MP4")).toBe("DJI…_0042_D");
+    expect(formatCompactMediaName("A001C001_261110BR")).toBe("A001C001_261110BR");
+    expect(formatCompactMediaName("DJI_20261110142312_0042_D.MP4")).toBe("DJI_20261110142312_0042_D");
     expect(formatCompactMediaName("  ")).toBe("");
   });
 

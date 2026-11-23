@@ -1070,6 +1070,25 @@ def test_collaboration_access_stays_host_local_and_records_roles(tmp_path, monke
         CollaborationAccessStore.require_role(disabled, "reviewer")
 
 
+def test_collaboration_roles_expose_capabilities_and_disabled_lan_access_fails(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "app-support"))
+    store = CollaborationAccessStore("workspace-capabilities")
+
+    manager = store.observe("web-local-manager-002", ip="127.0.0.1", local=True)
+    reviewer = store.observe("web-lan-reviewer-002", ip="192.168.1.49", local=False)
+    assert manager["capabilities"] == ["manage_collaborators", "read_review", "write_review"]
+    assert reviewer["capabilities"] == ["read_review", "write_review"]
+    CollaborationAccessStore.require_capability(manager, "manage_collaborators")
+    with pytest.raises(PermissionError):
+        CollaborationAccessStore.require_capability(reviewer, "manage_collaborators")
+
+    disabled = store.update_user(reviewer["user_id"], {"status": "disabled"})
+    with pytest.raises(PermissionError, match="停用"):
+        CollaborationAccessStore.require_capability(disabled, "read_review")
+    with pytest.raises(PermissionError, match="停用"):
+        store.observe("web-lan-reviewer-002", ip="192.168.1.49", local=False)
+
+
 def test_gateway_binds_review_actor_to_browser_identity(tmp_path, monkeypatch):
     monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "app-support"))
     workspace = _workspace(tmp_path).with_workspace_id("ws_people")

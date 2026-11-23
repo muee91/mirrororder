@@ -13,7 +13,7 @@ import {
 import { MediaHealthIndicator } from "../../components/StatusIndicators";
 import { closeDetailsMenu, handleDetailsMenuBlur, handleDetailsMenuToggle } from "../../components/detailsMenuDismiss";
 import { StudioIcon } from "../../components/StudioIcons";
-import { readCurrentOperator } from "../../components/CurrentOperatorControl";
+import { readCurrentOperator, requestCurrentOperator } from "../../components/CurrentOperatorControl";
 import { cameraFilterKey, effectiveCamera, isAudioMediaFile, type CameraPresentation, type CameraTone } from "./cameraPresentation";
 import { mediaHealthState } from "./mediaHealthState";
 import { useNearViewportGate, useVideoDecodeSlot } from "./nearViewport";
@@ -763,6 +763,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   async function save(): Promise<void> {
     if (!selectedItem || !roles) return;
     if (!actor.trim()) {
+      requestCurrentOperator();
       setMessage("保存人工素材角色前需要操作者昵称。");
       return;
     }
@@ -800,7 +801,12 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   }
 
   async function saveBulkCamera(cameraOverride = bulkCamera.trim().toUpperCase(), actionLabel = "设置"): Promise<void> {
-    if (!roles || !actor.trim() || !selectedIds.size || bulkSelectionOverLimit || bulkSelectionHasUnavailable || (actionLabel === "设置" && !cameraOverride)) return;
+    if (!roles || !selectedIds.size || bulkSelectionOverLimit || bulkSelectionHasUnavailable || (actionLabel === "设置" && !cameraOverride)) return;
+    if (!actor.trim()) {
+      requestCurrentOperator();
+      setMessage("保存人工素材角色前需要操作者昵称。");
+      return;
+    }
     const selectedItems = (inventory?.items ?? []).filter((item) => selectedIds.has(item.media_id));
     if (selectedItems.length !== selectedIds.size) return;
     const count = selectedItems.length;
@@ -910,8 +916,8 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           {selectedIds.size > 0 ? (
             <>
               <input aria-label="批量设置机位名称" value={bulkCamera} onChange={(event) => setBulkCamera(event.target.value)} placeholder="机位，例如 A" />
-              <button type="button" className="secondary" aria-label="批量设置已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button>
-              <button type="button" className="secondary" aria-label="清除已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !actor.trim() || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>
+              <button type="button" className="secondary" aria-label="批量设置已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !bulkCamera.trim() || !selectedIds.size} onClick={() => void saveBulkCamera()}>批量设置机位</button>
+              <button type="button" className="secondary" aria-label="清除已选素材机位" disabled={busy || bulkSelectionOverLimit || bulkSelectionHasUnavailable || !selectedIds.size} onClick={() => void saveBulkCamera("", "清除")}>清除已选机位</button>
               <button type="button" className="secondary media-library-clear-selection" aria-label="清空已选素材" disabled={!selectedIds.size || busy} onClick={() => setSelectedIds(new Set())}>清空已选</button>
             </>
           ) : null}
@@ -1030,7 +1036,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                 </section>
               </details>
 
-              <div className="media-role-savebar"><span>{actor.trim() ? `由 ${actor.trim()} 保存人工制作事实` : "填写操作者后才能保存人工修改"}</span><button type="button" aria-label="保存素材角色修改" disabled={busy || !actor.trim()} onClick={() => void save()}>保存修改</button></div>
+              <div className="media-role-savebar"><span>{actor.trim() ? `由 ${actor.trim()} 保存人工制作事实` : "填写操作者后才能保存人工修改"}</span><button type="button" aria-label="保存素材角色修改" disabled={busy} onClick={() => void save()}>保存修改</button></div>
             </>
           ) : <p className="empty-copy">选择一条素材即可监看并整理机位。</p>}
         </aside>

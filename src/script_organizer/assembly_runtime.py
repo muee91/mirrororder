@@ -11,6 +11,8 @@ from .sync_timeline_runtime import (
     apply_sync_manual_offset,
     build_sync_delivery_artifacts,
     build_sync_timeline,
+    confirm_sync_recording_placement,
+    rebase_sync_manual_offsets,
     sync_timeline_cache_key,
     undo_sync_manual_offset,
 )
@@ -92,6 +94,26 @@ def install_assembly_runtime() -> None:
                     project = service.project(parts[3])
                     try:
                         updated = undo_sync_manual_offset(project, service.tasks.list(parts[3]), body)
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                    self._send_json(updated)
+                    return
+                if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4:] == ["sync-offsets", "rebase"]:
+                    self._local_only()
+                    body = web_server._body(self)
+                    project = service.project(parts[3])
+                    try:
+                        updated = rebase_sync_manual_offsets(project, service.tasks.list(parts[3]), body)
+                    except ValueError as error:
+                        raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
+                    self._send_json(updated)
+                    return
+                if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4:] == ["sync-recordings", "confirm"]:
+                    self._local_only()
+                    body = web_server._body(self)
+                    project = service.project(parts[3])
+                    try:
+                        updated = confirm_sync_recording_placement(project, service.tasks.list(parts[3]), body)
                     except ValueError as error:
                         raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
                     self._send_json(updated)

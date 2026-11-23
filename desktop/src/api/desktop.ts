@@ -67,11 +67,13 @@ export type LocalRuntimeAction =
   | { action: "prepare_identity"; kind: "face" | "speaker" }
   | { action: "stop" };
 export type CollaborationRole = "viewer" | "reviewer" | "manager";
+export type CollaborationCapability = "read_review" | "write_review" | "manage_collaborators";
 export type CollaborationStatus = "active" | "disabled";
 export interface CollaborationUser {
   user_id: string;
   nickname: string;
   role: CollaborationRole;
+  capabilities?: CollaborationCapability[];
   status: CollaborationStatus;
   created_at: string;
   updated_at: string;
@@ -112,7 +114,16 @@ export interface MediaBindingSummary {
   version: number; device_id: string; device_name: string; state_path: string; roots: string[];
   total: number; resolved: number; missing: number; items: MediaBindingItem[]; pending_analysis?: boolean;
   unavailable_roots?: string[];
-  scan?: { files_seen: number; verified_matches: number; provisional_name_matches: number; provisional_name_candidates?: number };
+  scan?: {
+    files_seen: number;
+    video_files?: number;
+    audio_files?: number;
+    verified_matches: number;
+    ambiguous_content_candidates?: number;
+    provisional_name_matches: number;
+    provisional_name_candidates?: number;
+    updated_at?: string;
+  };
 }
 export interface MediaBindingPayload { contract: "media_binding.v1" | string; project_id: string; summary: MediaBindingSummary }
 export interface MediaInventoryScanPayload { contract: "media_inventory_scan.v1" | string; project_id: string; task: ProjectTask }

@@ -4,7 +4,7 @@ import { errorMessage } from "../../api/host";
 import { projectTransferAvailable, saveProjectCopy } from "../../app/projectTransferActions";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
-import { projectPresentation } from "./projectPresentation";
+import { projectFlowLabel, projectPresentation } from "./projectPresentation";
 import "./project-context-menu.css";
 import "./project-home.css";
 import "./project-library-fidelity.css";
@@ -181,7 +181,7 @@ export function ProjectHome({
                   <div className="project-card-body">
                     <span className="project-home-project-copy">
                       <strong>{project.name || project.project_id}</strong>
-                      <small title={project.project_id}>{sidebarSubtitle}</small>
+                      <small title={project.project_id}>{activity?.state === "active" && activity.message ? `${sidebarSubtitle} · ${activity.message}` : sidebarSubtitle}</small>
                     </span>
                     {hasProjectStats ? (
                       <span className="project-home-stats">
@@ -256,12 +256,12 @@ export function ProjectHome({
 
       {menu ? (
         <div className="project-context-menu" role="menu" aria-label={`${menu.project.name || menu.project.project_id} 项目操作`} style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
-          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small><small>连接 → 同步 → 整理</small></div>
+          <div className="project-context-heading"><strong>{menu.project.name || menu.project.project_id}</strong><small>{menu.project.project_id}</small><small>{projectFlowLabel(menu.project)}</small></div>
           <div className="project-context-group-label">开始制作</div>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenProject(menu.project))}>打开项目</button>
           <button type="button" role="menuitem" title="本机素材 / 换素材盘" onClick={() => run(() => onOpenMediaBinding(menu.project))}>连接素材</button>
           <button type="button" role="menuitem" onClick={() => run(() => onOpenProjectPage?.(menu.project, menu.project.input_kind === "media-directory" ? "sync-task" : "timeline"))}>{menu.project.input_kind === "media-directory" ? "打开同步任务" : "打开选片组接"}</button>
-          <button type="button" role="menuitem" title="重新整理项目" onClick={() => run(() => onPrepareProject(menu.project))}>完整整理项目</button>
+          <button type="button" role="menuitem" title="重新整理素材、剧本与分析结果" onClick={() => run(() => onPrepareProject(menu.project))}>后台整理素材与剧本</button>
           <button type="button" role="menuitem" disabled={transferBusy || !projectTransferAvailable()} onClick={() => run(() => saveProjectAs(menu.project))}>另存为工程包 (.mirrorproj)…</button>
           <details className="project-context-advanced">
             <summary>高级操作</summary>

@@ -14,6 +14,7 @@ from script_organizer.nle_delivery.delivery_markers import (
 from script_organizer.sync_timeline_runtime import (
     apply_sync_manual_offset,
     build_sync_timeline,
+    rebase_sync_manual_offsets,
     undo_sync_manual_offset,
 )
 
@@ -208,6 +209,36 @@ class SyncOffsetsAndEnrichedDeliveryTests(unittest.TestCase):
             srt_text = Path(manifest["dialogue_srt"]).read_text(encoding="utf-8")
             self.assertIn("别碰那份遗嘱", srt_text)
             self.assertIn("律师还没到场", srt_text)
+
+    def test_manual_offsets_can_rebase_to_a_new_sync_task_when_clip_ids_survive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project, tasks = _seed_sync_project(Path(tmp))
+            apply_sync_manual_offset(
+                project,
+                tasks,
+                {
+                    "target_kind": "clip",
+                    "scope": "single",
+                    "track_id": "video:A",
+                    "clip_id": "c_a1",
+                    "delta_frames": 2,
+                    "expected_revision": 0,
+                },
+            )
+            next_tasks = [{**tasks[0], "task_id": "sync_task_002"}]
+            report_path = project.config.output_dir / "sync" / "sync_report.json"
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            report["sync_task_id"] = "sync_task_002"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            stale = build_sync_timeline(project, next_tasks)
+            self.assertEqual(stale["offset_revision"], 0)
+            self.assertEqual(stale["stale_offset_revision"], 1)
+
+            rebased = rebase_sync_manual_offsets(project, next_tasks, {"expected_stale_revision": 1})
+            self.assertEqual(rebased["offset_revision"], 1)
+            self.assertEqual(rebased["stale_offset_revision"], 0)
+            a_track = next(track for track in rebased["tracks"] if track["camera"] == "A")
+            self.assertAlmostEqual(a_track["clips"][0]["timeline_start"], 0.08, places=4)
 
 
 if __name__ == "__main__":

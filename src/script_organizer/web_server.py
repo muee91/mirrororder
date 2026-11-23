@@ -1361,6 +1361,8 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
         def _authorize_app(self) -> None:
             if not gateway.security.allow(self.client_address[0], self._session()):
                 raise ApiError(HTTPStatus.UNAUTHORIZED, "需要先完成局域网配对")
+            if not self._is_local_client() and getattr(gateway.current, "collaborators", None) is not None:
+                self._browser_user()
 
         def _is_local_client(self) -> bool:
             return _is_loopback_source(self.client_address[0])
@@ -1408,7 +1410,14 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
         def _require_review_access(self) -> None:
             user = self._browser_user()
             try:
-                CollaborationAccessStore.require_role(user, "reviewer")
+                CollaborationAccessStore.require_capability(user, "write_review")
+            except PermissionError as error:
+                raise ApiError(HTTPStatus.FORBIDDEN, str(error)) from error
+
+        def _require_collaboration_management(self) -> None:
+            user = self._browser_user()
+            try:
+                CollaborationAccessStore.require_capability(user, "manage_collaborators")
             except PermissionError as error:
                 raise ApiError(HTTPStatus.FORBIDDEN, str(error)) from error
 
@@ -1476,6 +1485,7 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
                 return True
             if not self._is_local_client():
                 raise ApiError(HTTPStatus.FORBIDDEN, "用户管理只能在制作主机执行")
+            self._require_collaboration_management()
             if not rest:
                 self._send_json({"users": store.list_users()})
                 return True
@@ -1493,7 +1503,7 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
             try:
                 if rest == ["me"]:
                     user = self._browser_user()
-                    CollaborationAccessStore.require_role(user, "viewer")
+                    CollaborationAccessStore.require_capability(user, "read_review")
                     self._send_json({"user": store.rename(
                         self.headers.get("X-MirrorOrder-Device", "").strip(),
                         _body(self).get("nickname"),
@@ -1502,6 +1512,7 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
                 if len(rest) == 1 and rest[0]:
                     if not self._is_local_client():
                         raise ApiError(HTTPStatus.FORBIDDEN, "用户管理只能在制作主机执行")
+                    self._require_collaboration_management()
                     self._send_json({"user": store.update_user(rest[0], _body(self))})
                     return True
             except ValueError as error:

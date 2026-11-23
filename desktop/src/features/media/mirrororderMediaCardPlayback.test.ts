@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mediaCardFromAngle } from "./MirrorOrderMediaCard";
+import { formatCompactMediaName, mediaCardFromAngle } from "./MirrorOrderMediaCard";
 
 function angle(state: "verified" | "missing" | "unknown") {
   return {
@@ -23,5 +23,9 @@ describe("canonical media card playback state", () => {
     expect(mediaCardFromAngle(angle("missing")).playbackUrl).toBeUndefined();
     expect(mediaCardFromAngle(angle("unknown"))).toMatchObject({ availabilityState: "unknown", available: undefined });
     expect(mediaCardFromAngle(angle("unknown")).playbackUrl).toBeUndefined();
+  });
+
+  it("keeps the complete compact filename for the table card", () => {
+    expect(formatCompactMediaName("A001C002_261110SO.MP4")).toBe("A001C002_261110SO");
   });
 });

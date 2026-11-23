@@ -107,9 +107,7 @@ export function formatCompactMediaName(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "";
   const stem = trimmed.replace(/\.(mov|mp4|mxf|wav|m4v|r3d|braw|avi|mkv|mpg|mpeg)$/i, "");
-  const withoutDates = stem.replace(/[_-](\d{6}|\d{8,14})(?=[_A-Za-z-]|$)/g, "…").replace(/…+/g, "…");
-  if (withoutDates.length <= 15) return withoutDates;
-  return `${withoutDates.slice(0, 8)}…${withoutDates.slice(-5)}`;
+  return stem;
 }
 
 const compactPreviewOptions = { rootMargin: "48px 96px" };

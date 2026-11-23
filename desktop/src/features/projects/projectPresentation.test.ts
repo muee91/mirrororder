@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ProjectSummary } from "../../api/host";
 import type { ProjectActivitySummary } from "./projectActivity";
-import { projectPresentation } from "./projectPresentation";
+import { projectFlowLabel, projectPresentation } from "./projectPresentation";
 
 function project(stats: Record<string, unknown> = {}, patch: Partial<ProjectSummary> = {}): ProjectSummary {
   return {
@@ -20,6 +20,11 @@ function activity(state: ProjectActivitySummary["state"], label = ""): ProjectAc
 }
 
 describe("project presentation model", () => {
+  it("describes the actual flow for each project source type", () => {
+    expect(projectFlowLabel(project({}))).toBe("导入 → 核对 → 组接");
+    expect(projectFlowLabel(project({}, { input_kind: "media-directory" }))).toBe("连接 → 同步 → 整理");
+  });
+
   it("does not call an empty project ready", () => {
     const result = projectPresentation(project({ groups: 0, clips: 0 }));
     expect(result.statusTone).toBe("idle");

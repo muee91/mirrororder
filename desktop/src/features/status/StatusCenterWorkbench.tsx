@@ -256,12 +256,13 @@ function duration(task: ProjectTaskRecord): string {
   return `运行 ${hours} 小时 ${minutes % 60} 分钟`;
 }
 
-function taskTarget(task: ProjectTaskRecord): { label: string; page?: ProductionPage; settings?: boolean } {
+export function taskTarget(task: ProjectTaskRecord): { label: string; page?: ProductionPage; settings?: boolean } {
   if (task.scope === "device" || task.type === "local_vision_prepare" || task.type === "identity_runtime_prepare") {
     return { label: "本机智能设置", settings: true };
   }
   if (task.type === "media_inventory_scan") return { label: "本机素材", page: "media-binding" };
   if (["identity_index", "face", "speaker"].includes(task.type)) return { label: "人物", page: "identity" };
+  if (["multicam_sync", "multicam"].includes(task.type)) return { label: "打开同步任务", page: "sync-task" };
   if (["auto_resolve", "semantic_index", "incremental_analyze", "transcribe", "transcription", "evidence_extract", "perception", "analysis", "audit"].includes(task.type)) {
     return { label: "素材 / 剧本", page: "takes" };
   }

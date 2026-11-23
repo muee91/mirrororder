@@ -59,7 +59,7 @@ export function CollaborationPanel({ baseUrl }: Props) {
       <div className="parse-heading">
         <div>
           <p className="eyebrow">团队访问</p>
-          <h3>成员与权限</h3>
+          <h3>网页成员与权限</h3>
         </div>
         <button
           type="button"
@@ -82,7 +82,7 @@ export function CollaborationPanel({ baseUrl }: Props) {
               <small>{user.last_seen_at ? `最近访问 ${user.last_seen_at}` : "尚未访问"}{user.last_ip ? ` · ${user.last_ip}` : ""}</small>
             </div>
             <label>
-              <span>角色</span>
+              <span>协作角色</span>
               <select
                 value={user.role}
                 disabled={locked}
@@ -90,7 +90,7 @@ export function CollaborationPanel({ baseUrl }: Props) {
               >
                 <option value="viewer">查看者</option>
                 <option value="reviewer">审阅者</option>
-                <option value="manager">管理员</option>
+                <option value="manager">协作管理员</option>
               </select>
             </label>
             <label>

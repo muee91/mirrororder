@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from script_organizer.media_identity import DeviceMediaStore, media_id_for_path
 from script_organizer.nle_delivery.resolve_plan import build_resolve_plan
-from script_organizer.sync_timeline_runtime import build_sync_timeline, build_sync_delivery_artifacts
+from script_organizer.sync_timeline_runtime import build_sync_timeline, build_sync_delivery_artifacts, confirm_sync_recording_placement
 
 
 def _project(tmp_path: Path, *, media_directory: bool = True):
@@ -129,6 +129,105 @@ def test_completed_sync_projects_tracks_by_camera_and_concatenates_days(tmp_path
     assert tracks["A"]["clips"][0]["name"] == "A001.MP4"
     assert tracks["A"]["clips"][1]["timeline_start"] > tracks["A"]["clips"][0]["timeline_start"]
     assert payload["duration_seconds"] > 10
+
+
+def test_sync_timeline_reports_independent_audio_confirmation_for_current_revision(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write_sync_artifacts(project)
+    report_path = project.config.output_dir / "sync" / "sync_report.json"
+    recording_id = "M_" + "a" * 24
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["recording_inventory"] = {
+        "candidates": [{"media_id": recording_id, "status": "unverified_candidate"}],
+    }
+    report["recording_alignment"] = {
+        "status": "confirmed",
+        "sync_task_id": "done",
+        "placements": [{
+            "media_id": recording_id, "name": "take.wav", "at": 0, "source": 0, "frames": 100,
+        }],
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    task = _task("completed", created_at="2026-01-01T00:00:00+00:00", task_id="done")
+
+    confirmed = build_sync_timeline(project, [task])
+    assert confirmed["recording_summary"] == {
+        "status": "confirmed", "candidate_count": 1, "placed_count": 1,
+        "unplaced_count": 0, "invalid_count": 0, "sync_task_id": "done", "alignment_revision": 0,
+    }
+
+    report["recording_alignment"]["sync_task_id"] = "old-sync"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    unconfirmed = build_sync_timeline(project, [task])
+    assert unconfirmed["recording_summary"]["status"] == "unconfirmed"
+    assert unconfirmed["recording_summary"]["placed_count"] == 0
+
+
+def test_human_recording_confirmation_writes_mirrororder_authority_and_binds_original(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    project = _project(tmp_path)
+    project.workspace_id = "workspace"
+    project.config.media_root = tmp_path / "media"
+    project.config.media_root.mkdir()
+    recording = project.config.media_root / "take.wav"
+    recording.write_bytes(b"original-wav")
+    recording_id = media_id_for_path(recording)
+    _write_sync_artifacts(project)
+    (project.config.output_dir / "sync" / "synchronized.fcpxml").write_text(
+        '<fcpxml><resources><format id="f1" frameDuration="1/50s"/></resources><project><sequence format="f1"/></project></fcpxml>',
+        encoding="utf-8",
+    )
+    report_path = project.config.output_dir / "sync" / "sync_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["recording_inventory"] = {"candidates": [{
+        "media_id": recording_id, "name": recording.name, "status": "unverified_candidate",
+        "sample_rate": 50, "sample_count": 50, "channels": 1,
+    }]}
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    task = _task("completed", created_at="2026-01-01T00:00:00+00:00", task_id="done")
+
+    result = confirm_sync_recording_placement(project, [task], {"media_id": recording_id, "at": 10})
+
+    placement = result["recordings"]["placements"][0]
+    assert placement["media_id"] == recording_id
+    assert placement["at"] == 10 and placement["frames"] == 50
+    stored = json.loads(report_path.read_text(encoding="utf-8"))["recording_alignment"]
+    assert stored["confirmation_source"] == "human_confirmation.v1"
+    assert stored["revision"] == 1
+    assert stored["evidence"][-1]["device_clock_used"] is False
+    assert DeviceMediaStore().resolve("workspace", "p1", {"media_id": recording_id}) == str(recording.resolve())
+    with pytest.raises(ValueError, match="版本冲突"):
+        confirm_sync_recording_placement(project, [task], {"media_id": recording_id, "at": 20, "expected_revision": 0})
+
+
+def test_human_recording_confirmation_rejects_out_of_range_source_frame(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    project = _project(tmp_path)
+    project.workspace_id = "workspace"
+    project.config.media_root = tmp_path / "media"
+    project.config.media_root.mkdir()
+    recording = project.config.media_root / "take.wav"
+    recording.write_bytes(b"original-wav")
+    recording_id = media_id_for_path(recording)
+    _write_sync_artifacts(project)
+    (project.config.output_dir / "sync" / "synchronized.fcpxml").write_text(
+        '<fcpxml><resources><format id="f1" frameDuration="1/50s"/></resources>'
+        '<project><sequence format="f1"/></project></fcpxml>',
+        encoding="utf-8",
+    )
+    report_path = project.config.output_dir / "sync" / "sync_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["recording_inventory"] = {"candidates": [{
+        "media_id": recording_id, "name": recording.name, "status": "unverified_candidate",
+        "sample_rate": 50, "sample_count": 50, "channels": 1,
+    }]}
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    task = _task("completed", created_at="2026-01-01T00:00:00+00:00", task_id="done")
+
+    with pytest.raises(ValueError, match="录音源内位置无效"):
+        confirm_sync_recording_placement(project, [task], {
+            "media_id": recording_id, "at": 0, "source": 50, "expected_revision": 0,
+        })
 
 
 def test_sync_timeline_uses_refreshed_project_index(tmp_path: Path, monkeypatch) -> None:
@@ -555,6 +654,43 @@ def test_sync_artifact_manifest_does_not_expose_stale_or_foreign_paths(tmp_path:
     blocked = build_sync_delivery_artifacts(project, [task, cancelled])
     assert blocked["ready"] is False
     assert not any(item["available"] for item in blocked["artifacts"])
+
+
+def test_sync_artifact_manifest_marks_standard_files_stale_after_manual_offset(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    media_root = tmp_path / "original_media"
+    export_dir = media_root / "交付" / "同步-0123456789abcdef0123456789abcdef"
+    export_dir.mkdir(parents=True)
+    project.config.media_roots = (media_root,)
+    _write_sync_artifacts(project)
+    files = {
+        "fcpxml": "synchronized.fcpxml",
+        "capcut_fcpxml": "synchronized_capcut.fcpxml",
+        "premiere_xml": "synchronized_premiere.xml",
+    }
+    for filename in files.values():
+        (export_dir / filename).write_text("<stub />", encoding="utf-8")
+    report_path = project.config.output_dir / "sync" / "sync_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report.update({
+        "delivery_version": "0123456789abcdef0123456789abcdef",
+        "recording_inventory": {"candidates": [{"media_id": "M_recording"}]},
+        "recording_alignment": {"status": "confirmed", "sync_task_id": "exported"},
+        **{key: str(export_dir / filename) for key, filename in files.items()},
+    })
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    (project.config.output_dir / "sync" / "manual_offsets.json").write_text(
+        json.dumps({"contract": "sync_manual_offsets.v1", "revision": 1, "sync_task_id": "exported", "clip_offsets": {}, "recording_offsets": {}, "history": [{"revision": 1}]}),
+        encoding="utf-8",
+    )
+
+    manifest = build_sync_delivery_artifacts(project, [_task("completed", created_at="2026-11-17T10:00:00+00:00", task_id="exported")])
+
+    assert manifest["delivery_state"] == "stale"
+    assert manifest["offset_revision"] == 1
+    assert all(item["stale"] for item in manifest["artifacts"][1:])
+    assert all("manual_offset_r1" in item["stale_reason"] for item in manifest["artifacts"][1:])
+    assert all("recording_alignment_after_sync_export" in item["stale_reason"] for item in manifest["artifacts"][1:])
 
 
 

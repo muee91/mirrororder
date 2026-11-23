@@ -363,7 +363,8 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
   } catch (error) {
     if (error instanceof HostConnectionError) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    throw new HostConnectionError(`无法连接镜序 Host：${message}`, { cause: error });
+    const transportMessage = message === "Failed to fetch" ? "网络连接失败" : message;
+    throw new HostConnectionError(`无法连接镜序 Host：${transportMessage}`, { cause: error });
   } finally {
     if (timeout !== undefined) globalThis.clearTimeout(timeout);
   }

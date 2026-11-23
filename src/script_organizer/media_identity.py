@@ -285,6 +285,7 @@ class DeviceMediaStore:
             "bindings": {},
             "candidates": {},
             "confirmed_provisional": {},
+            "scan_summary": {},
             "updated_at": "",
         }
 
@@ -353,6 +354,7 @@ class DeviceMediaStore:
                 else {}
             ),
             "content_conflicts": [v for v in raw.get("content_conflicts",[]) if isinstance(v,str)] if isinstance(raw.get("content_conflicts",[]),list) else [],
+            "scan_summary": dict(raw.get("scan_summary", {})) if isinstance(raw.get("scan_summary", {}), dict) else {},
             "updated_at": str(raw.get("updated_at", "") or ""),
         }
 
@@ -467,7 +469,7 @@ class DeviceMediaStore:
                 "identity_conflict": str(item.get("media_id","")) in conflicted and not path,
             }
             (resolved if path else missing).append(row)
-        return {
+        result = {
             "version": 1,
             "device_id": payload.get("device_id", ""),
             "device_name": payload.get("device_name", ""),
@@ -481,6 +483,67 @@ class DeviceMediaStore:
             "pending_analysis": bool(project["roots"] and not inventory),
             "verification": "content" if verify_content else "snapshot",
         }
+        if project.get("scan_summary"):
+            result["scan"] = dict(project["scan_summary"])
+        return result
+
+    def bind_named_media(
+        self,
+        workspace_id: str,
+        project_id: str,
+        media_id: str,
+        name: str,
+        roots: Iterable[str],
+    ) -> str:
+        """Bind one verified media identity without rescanning every project file."""
+        key = str(media_id or "").strip()
+        filename = Path(str(name or "")).name
+        if not key.startswith("M_") or not filename or filename != str(name or ""):
+            raise ValueError("录音身份或文件名无效")
+        matches: list[Path] = []
+        seen: set[str] = set()
+        for raw_root in roots:
+            root = Path(str(raw_root)).expanduser()
+            if not root.is_dir():
+                continue
+            try:
+                candidates = root.rglob(filename)
+            except OSError:
+                continue
+            for path in candidates:
+                if not path.is_file() or path.name.startswith("._"):
+                    continue
+                try:
+                    canonical = str(path.resolve(strict=True))
+                except OSError:
+                    continue
+                if canonical in seen:
+                    continue
+                seen.add(canonical)
+                if media_id_for_path(path) == key:
+                    matches.append(Path(canonical))
+        if not matches:
+            raise ValueError("未找到内容身份匹配的本机文件")
+        if len(matches) > 1:
+            raise ValueError("同名文件存在多个内容身份匹配项")
+        path = str(matches[0])
+        with self._write_lock():
+            payload = self.load()
+            workspaces = payload.setdefault("workspaces", {})
+            workspace = workspaces.setdefault(workspace_id, {"projects": {}})
+            projects = workspace.setdefault("projects", {})
+            current = projects.get(project_id)
+            if not isinstance(current, dict):
+                current = self._empty_project()
+            next_project = {
+                **current,
+                "roots": list(dict.fromkeys([*current.get("roots", []), *(str(Path(root).expanduser().resolve()) for root in roots)])),
+                "bindings": {**(current.get("bindings", {}) if isinstance(current.get("bindings", {}), dict) else {}), key: path},
+                "updated_at": _now(),
+            }
+            projects[project_id] = next_project
+            self._save(payload)
+        return path
 
     def scan(
         self,
@@ -599,6 +662,16 @@ class DeviceMediaStore:
                 for key, value in existing_confirmed.items()
                 if str(key).startswith("MP_") and Path(str(value)).is_file()
             },
+            "scan_summary": {
+                "files_seen": len(files),
+                "video_files": sum(1 for path in files if path.suffix.lower() not in {".wav", ".aif", ".aiff", ".m4a"}),
+                "audio_files": sum(1 for path in files if path.suffix.lower() in {".wav", ".aif", ".aiff", ".m4a"}),
+                "verified_matches": matched_verified,
+                "provisional_name_matches": 0,
+                "provisional_name_candidates": provisional_candidates,
+                "ambiguous_content_candidates": len(content_conflicts),
+                "updated_at": _now(),
+            },
             "updated_at": _now(),
         }
         # 提交在锁内进行，并与最新状态合并：扫描期间发生的人工确认/加根
@@ -648,6 +721,8 @@ class DeviceMediaStore:
         summary = self.summary(workspace_id, project_id, index, verify_content=False)
         summary["scan"] = {
             "files_seen": len(files),
+            "video_files": sum(1 for path in files if path.suffix.lower() not in {".wav", ".aif", ".aiff", ".m4a"}),
+            "audio_files": sum(1 for path in files if path.suffix.lower() in {".wav", ".aif", ".aiff", ".m4a"}),
             "verified_matches": matched_verified,
             "ambiguous_content_candidates": len(content_conflicts),
             "provisional_name_matches": 0,

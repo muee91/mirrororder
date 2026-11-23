@@ -12,6 +12,7 @@ COMPAT_TASK_TYPES = {
     "transcribe",
     "evidence_extract",
     "identity_index",
+    "recording_alignment_ai_review",
 }
 
 from contextlib import contextmanager
@@ -508,6 +509,22 @@ class TaskManager(_impl.TaskManager):
                     result["analysis_deferred_reason"] = "当前设备没有可用项目源/同步产物；转写缓存已写入，可由Host后续分析"
             elif task_type == "identity_index":
                 result = self._run_identity_task(config, task)
+            elif task_type == "recording_alignment_ai_review":
+                from .recording_alignment_ai import run_recording_alignment_ai_review
+
+                with self._resource(config, task, "vision", "ai_review", "同期录音 AI 复核"):
+                    result = run_recording_alignment_ai_review(
+                        config,
+                        project_id=project_id,
+                        task=task,
+                        workspace_id=self.workspace_id,
+                        cancelled=lambda: self._cancel_requested(config, task_id),
+                        progress=lambda done, total: self._update(
+                            config,
+                            task_id,
+                            progress={"done": done, "total": total},
+                        ),
+                    )
             else:
                 self._update(config, task_id, stage="evidence")
                 result = self._extract_evidence(config, task)
