@@ -11,6 +11,7 @@ import {
   type MediaSourceRole,
 } from "../../api/mediaRoles";
 import { MediaHealthIndicator } from "../../components/StatusIndicators";
+import { closeDetailsMenu, handleDetailsMenuBlur, handleDetailsMenuToggle } from "../../components/detailsMenuDismiss";
 import { StudioIcon } from "../../components/StudioIcons";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
@@ -853,15 +854,13 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           <button type="button" className="secondary media-library-refresh" aria-label="刷新素材清单" aria-keyshortcuts="Meta+Shift+R Control+Shift+R" disabled={busy} onClick={() => void reload()} title="刷新素材清单">
             <StudioIcon name="refresh" size={13} />
           </button>
-          <details className="media-library-more-menu" onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-          }}>
+          <details className="media-library-more-menu" onToggle={handleDetailsMenuToggle} onBlur={handleDetailsMenuBlur}>
             <summary>更多</summary>
             <div className="media-library-more-popover">
-              <button type="button" className="secondary media-library-select-visible" aria-label={allVisibleSelected ? "取消全选当前结果" : "全选当前结果"} aria-pressed={allVisibleSelected} onClick={toggleVisibleSelection}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button>
-              <button type="button" className="secondary media-library-invert-selection" aria-label="反选当前筛选结果" disabled={!visibleIds.length} onClick={invertVisibleSelection}>反选当前结果</button>
-              <button type="button" className="secondary media-library-copy-inventory" aria-label="复制当前筛选素材清单" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={() => void copyVisibleInventory()}>复制当前清单</button>
-              <button type="button" className="secondary media-library-copy-selected" aria-label="复制已选素材清单" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" disabled={!selectedIds.size} onClick={() => void copySelectedInventory()}>复制已选清单</button>
+              <button type="button" className="secondary media-library-select-visible" aria-label={allVisibleSelected ? "取消全选当前结果" : "全选当前结果"} aria-pressed={allVisibleSelected} onClick={(event) => { closeDetailsMenu(event.currentTarget); toggleVisibleSelection(); }}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button>
+              <button type="button" className="secondary media-library-invert-selection" aria-label="反选当前筛选结果" disabled={!visibleIds.length} onClick={(event) => { closeDetailsMenu(event.currentTarget); invertVisibleSelection(); }}>反选当前结果</button>
+              <button type="button" className="secondary media-library-copy-inventory" aria-label="复制当前筛选素材清单" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={(event) => { closeDetailsMenu(event.currentTarget); void copyVisibleInventory(); }}>复制当前清单</button>
+              <button type="button" className="secondary media-library-copy-selected" aria-label="复制已选素材清单" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" disabled={!selectedIds.size} onClick={(event) => { closeDetailsMenu(event.currentTarget); void copySelectedInventory(); }}>复制已选清单</button>
             </div>
           </details>
         </div>

@@ -25,6 +25,7 @@ import type { PendingSlateDrafts, SlateDraft as Draft, SlateDraftSession } from 
 import { originalPlaybackUrl } from "./SlateOriginalPlayback";
 import type { ProductionSelectionContext, ProductionWorkspace } from "../production/productionNavigation";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
+import { closeDetailsMenu, handleDetailsMenuBlur, handleDetailsMenuToggle } from "../../components/detailsMenuDismiss";
 import "../media/camera-presentation.css";
 import "./golden-slate.css";
 import "./golden-slate-media-experience.css";
@@ -71,7 +72,7 @@ function newRecordId(): string {
 }
 
 function closeGoldenSlateMenu(button: HTMLButtonElement): void {
-  button.closest("details")?.removeAttribute("open");
+  closeDetailsMenu(button);
 }
 
 function attachmentKey(attachment: SlateAttachment): string {
@@ -1507,9 +1508,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             <button type="button" className={intervalSurface ? "is-active" : undefined} aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>原始片段</button>
           </nav>}
           <span className="golden-slate-count" aria-label="场记行数">{displayedDrafts.length} 条</span>
-          <details className="golden-slate-menu golden-slate-menu-left" onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
-          }} onKeyDown={(event) => {
+          <details className="golden-slate-menu golden-slate-menu-left" onToggle={handleDetailsMenuToggle} onBlur={handleDetailsMenuBlur} onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
               event.currentTarget.open = false;
@@ -1526,9 +1525,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           </details>
         </div>
         <div className="golden-slate-actions golden-slate-subbar-right" role="group" aria-label="场记辅助操作">
-          <details className="golden-slate-menu golden-slate-menu-right" onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
-          }} onKeyDown={(event) => {
+          <details className="golden-slate-menu golden-slate-menu-right" onToggle={handleDetailsMenuToggle} onBlur={handleDetailsMenuBlur} onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
               event.currentTarget.open = false;

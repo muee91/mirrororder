@@ -12,6 +12,7 @@ import { SyncRecordingMonitor } from "./SyncRecordingMonitor";
 import { PlatformClient } from "../../api/platform";
 import { SyncAnglePreview, type SyncPreviewClock } from "./SyncAnglePreview";
 import { SyncTimelineViewport } from "./SyncTimelineViewport";
+import { closeDetailsMenu, handleDetailsMenuBlur, handleDetailsMenuToggle } from "../../components/detailsMenuDismiss";
 import {
   activeClip, cameraColor, clamp, compactSyncTimeline, confirmedSyncRate, firstClipFrame, indexClips,
   indexReviewGaps, timecode, toFrame, toMasterFrame, toReviewFrame, toSeconds,
@@ -556,9 +557,8 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
         <div className="multicam-sync-inspection-meta">
           {viewKind === "single" && <button type="button" className="secondary" onClick={() => setMonitorView({ kind: "all" })}>返回全部机位</button>}
           <details className="sync-more-menu"
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open");
-            }}
+            onToggle={handleDetailsMenuToggle}
+            onBlur={handleDetailsMenuBlur}
             onKeyDown={(event) => {
               if (event.key !== "Escape") return;
               event.preventDefault();
@@ -570,13 +570,13 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
             <div className="sync-more-menu-popover">
               <button type="button" className="secondary sync-inspector-toggle" ref={clipInspectorButton}
                 aria-expanded={inspector === "clip"} aria-controls={inspector === "clip" ? inspectorId : undefined}
-                onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); setInspector(current => current === "clip" ? null : "clip"); }}>手动微调偏移…</button>
+                onClick={(event) => { closeDetailsMenu(event.currentTarget); setInspector(current => current === "clip" ? null : "clip"); }}>手动微调偏移…</button>
               {recordingsAvailable && <button type="button" className="secondary sync-inspector-toggle" ref={audioInspectorButton}
                 aria-expanded={inspector === "audio"} aria-controls={inspector === "audio" ? inspectorId : undefined}
-                onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); setInspector(current => current === "audio" ? null : "audio"); }}>同期录音监听</button>}
+                onClick={(event) => { closeDetailsMenu(event.currentTarget); setInspector(current => current === "audio" ? null : "audio"); }}>同期录音监听</button>}
               {reviewGaps.length > 0 && <button type="button" className="sync-gap-toggle secondary" aria-pressed={compactView}
-                title="只去除所有机位都停拍的间隙" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); toggleGaps(); }}>{compactView ? "显示原始停拍间隙" : "自动收紧停拍间隙"}</button>}
-              {onOpenSyncTask && <button type="button" className="secondary" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); onOpenSyncTask(); }}>查看同步进度与重新同步</button>}
+                title="只去除所有机位都停拍的间隙" onClick={(event) => { closeDetailsMenu(event.currentTarget); toggleGaps(); }}>{compactView ? "显示原始停拍间隙" : "自动收紧停拍间隙"}</button>}
+              {onOpenSyncTask && <button type="button" className="secondary" onClick={(event) => { closeDetailsMenu(event.currentTarget); onOpenSyncTask(); }}>查看同步进度与重新同步</button>}
             </div>
           </details>
           {onOpenDelivery && <button type="button" className="sync-delivery-cta" onClick={onOpenDelivery}>导出到剪辑软件…</button>}

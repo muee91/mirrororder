@@ -33,6 +33,7 @@ import { SettingsStatusWorkbench } from "../features/settings/SettingsStatusWork
 import { StatusCenterWorkbench } from "../features/status/StatusCenterWorkbench";
 import { TeamWebWorkbench } from "../features/team/TeamWebWorkbench";
 import type { PendingSlateDrafts, SlateDraftSession } from "../features/slate/slateDraftSession";
+import { handleDetailsMenuBlur, handleDetailsMenuToggle } from "../components/detailsMenuDismiss";
 import { desktopAppearanceEventName, readDesktopAppearance } from "./desktopAppearance";
 import { useShowRoughCutPreference } from "./desktopPreferences";
 import {
@@ -851,9 +852,7 @@ export function App() {
     </details>
   );
   const switchProject = selectedProject && (
-    <details className="app-project-switcher" onBlur={(event) => {
-      if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-    }} onKeyDown={(event) => {
+    <details className="app-project-switcher" onToggle={handleDetailsMenuToggle} onBlur={handleDetailsMenuBlur} onKeyDown={(event) => {
       if (event.key === "Escape" && event.currentTarget.open) {
         event.stopPropagation();
         event.currentTarget.open = false;
