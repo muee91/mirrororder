@@ -1525,23 +1525,14 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           </details>
         </div>
         <div className="golden-slate-actions golden-slate-subbar-right" role="group" aria-label="场记辅助操作">
-          <details className="golden-slate-menu golden-slate-menu-right" onToggle={handleDetailsMenuToggle} onBlur={handleDetailsMenuBlur} onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              event.currentTarget.open = false;
-              event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
-            }
-          }}>
-            <summary>工具</summary>
-            <div className="golden-slate-menu-popover" role="group" aria-label="视图与工具">
-              <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setInspectorOpen((value) => !value); }} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>右侧详情栏</button>
-              <button type="button" className={orderMode === "script" ? "is-active" : ""} aria-pressed={orderMode === "script"} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setEditLayout(null); setOrderMode((value) => value === "script" ? "shooting" : "script"); }}>按场号归类</button>
-              <button type="button" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setPaperIntakeOpen(true); }}>导入纸面/照片场记…</button>
-              {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setHideNgRows((value) => !value); }}>隐藏 NG ({ngCount})</button> : null}
-              {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setShowAuxColumn((value) => !value); }} title="显示或隐藏空的 AUX 列">显示其他机位 (AUX)</button> : null}
-              <button type="button" disabled={busy} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); void reload(selectedRecordId); }} aria-label="刷新场记" title="重新读取最新场记">刷新场记</button>
-            </div>
-          </details>
+          <div className="golden-slate-inline-tools" role="group" aria-label="视图与工具">
+            <button type="button" className={orderMode === "script" ? "is-active" : ""} aria-pressed={orderMode === "script"} title="按集 / 场号 / 镜号归类并检查漏填" onClick={() => { setEditLayout(null); setOrderMode((value) => value === "script" ? "shooting" : "script"); }}>按场号归类</button>
+            {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={() => setHideNgRows((value) => !value)}>隐藏 NG ({ngCount})</button> : null}
+            {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={() => setShowAuxColumn((value) => !value)} title="显示或隐藏空的 AUX 列">AUX 列</button> : null}
+            <button type="button" className={paperIntakeOpen ? "is-active" : ""} aria-haspopup="dialog" aria-expanded={paperIntakeOpen} title="上传手写场记照片或导入纸面场记" onClick={() => setPaperIntakeOpen(true)}>纸面场记</button>
+            <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>右侧详情栏</button>
+            <button type="button" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="重新读取最新场记">刷新场记</button>
+          </div>
           <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} open={paperIntakeOpen} onOpenChange={setPaperIntakeOpen} hideTrigger onSelect={setPaperSource} onApplyDraftCandidates={applyPaperDraftCandidates} />
           <span className="golden-slate-message" aria-live="polite">{message}</span>
           <span
