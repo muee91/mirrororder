@@ -121,7 +121,7 @@ describe("slate intake pools", () => {
   });
 
   it("keeps Slate intake pools on Slate while Script owns placement into script segments", () => {
-    const source = readFileSync(fileURLToPath(new URL("./GoldenSlateWorkbench.tsx", import.meta.url)), "utf8");
+    const source = readFileSync(fileURLToPath(new URL("./SlateWorkbench.tsx", import.meta.url)), "utf8");
     const placement = readFileSync(fileURLToPath(new URL("./SlatePlacementPools.tsx", import.meta.url)), "utf8");
     const scriptSource = readFileSync(fileURLToPath(new URL("../script/ScriptWorkspace.tsx", import.meta.url)), "utf8");
     for (const label of ["待归集", "已归集", "已排除", "孤立素材"]) expect(placement).toContain(label);

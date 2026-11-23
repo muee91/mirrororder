@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import {act} from 'react';import {createRoot} from 'react-dom/client';import {beforeEach,afterEach,it,expect,vi} from 'vitest';
 import {SlatePaperIntake} from './SlatePaperIntake';import {PaperIntakeClient,validatePaperInput,type PaperModel} from '../../api/paperIntake';
-let el:HTMLDivElement,root:ReturnType<typeof createRoot>;const request=vi.spyOn(PaperIntakeClient.prototype,'request');
+let el:HTMLDivElement,root:ReturnType<typeof createRoot>;const request=vi.spyOn(PaperIntakeClient.prototype,'request');const extractPhotoCandidates=vi.spyOn(PaperIntakeClient.prototype,'extractPhotoCandidates');
 const view:PaperModel={contract:'mirrororder.paper_intake.v1',project_id:'p',revision:3,documents:[{document_id:'d',row_count:1,original_document_verified:false}],rows:[{paper_row_id:'r',document_id:'d',page:'1',row:'2',raw_row:{scene:'003'},raw_cells:[{cell:'/scene',raw:'003'}],normalized_fields:{scene:'003'},review_reasons:[],candidate_ready:true,confirmed:false}],summary:{total_rows:1,candidate_ready:1,review_required:1,confirmed:0}};
-beforeEach(()=>{vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);request.mockReset().mockResolvedValue(view);el=document.createElement('div');document.body.append(el);root=createRoot(el)});afterEach(async()=>{await act(async()=>root.unmount());el.remove();vi.unstubAllGlobals()});
+beforeEach(()=>{vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);request.mockReset().mockResolvedValue(view);extractPhotoCandidates.mockReset();el=document.createElement('div');document.body.append(el);root=createRoot(el)});afterEach(async()=>{await act(async()=>root.unmount());el.remove();vi.unstubAllGlobals()});
 const button=(s:string)=>[...el.querySelectorAll('button')].find(b=>b.textContent===s)!;
 async function render(){await act(async()=>root.render(<SlatePaperIntake baseUrl="http://synthetic.test" projectId="p"/>))}
 async function input(value:string){await act(async()=>{const f=el.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(f,value);f.dispatchEvent(new Event('input',{bubbles:true}))})}
@@ -19,10 +19,32 @@ it('failed import keeps paste open and bytes, no source focus jump',async()=>{aw
 
 it('preserves a literal shorthand cell and tells the operator to review it',async()=>{
   request.mockResolvedValue({...view,rows:[{...view.rows[0],raw_row:{scene:'->'},raw_cells:[{cell:'/scene',raw:'->'}],normalized_fields:{scene:'->'},review_reasons:['paper_scene_shorthand_requires_review'],candidate_ready:false}],summary:{...view.summary,candidate_ready:0}});
-  await render();await act(async()=>button('纸面场记').click());
+  await render();await act(async()=>{button('纸面场记').click();await Promise.resolve()});
   await act(async()=>{const select=el.querySelector('.paper-source-bar select') as HTMLSelectElement;select.value='r';select.dispatchEvent(new Event('change',{bubbles:true}))});
   expect(el.querySelector('.paper-raw')?.textContent).toContain('->');
   expect(el.textContent).toContain('纸面场号是简写符号，需核对明确场号。');
   expect(el.textContent).toContain('可准备候选 0 行');
   expect(request).toHaveBeenCalledTimes(1);
+});
+
+it('uploads a photo and renders the editable Chinese candidate review table',async()=>{
+  vi.stubGlobal('FileReader',class { onload:(()=>void)|null=null;onerror:(()=>void)|null=null;readAsDataURL(){this.onload?.()}});
+  extractPhotoCandidates.mockResolvedValue({contract:'paper_vlm_candidates.v1',authority:false,provider:'synthetic',model:'vision',page:'1',candidate_count:1,candidates:[{page:'1',row:3,episode:2,scene:'12',shot:'3A',take:'T2',status:'usable',note:'门口',confidence:.91,authority:false}]});
+  await render();await act(async()=>button('纸面场记').click());
+  const input=el.querySelector('.paper-photo-hero input[type="file"]')!;const file=new File(['photo'],'slate.jpg',{type:'image/jpeg'});
+  Object.defineProperty(input,'files',{configurable:true,value:[file]});
+  await act(async()=>input.dispatchEvent(new Event('change',{bubbles:true})));
+  expect(extractPhotoCandidates).toHaveBeenCalledOnce();
+  expect(el.querySelector('.paper-candidates-review')).not.toBeNull();
+  expect(el.querySelector('thead')?.textContent).toContain('集');expect(el.querySelector('thead')?.textContent).toContain('场号');expect(el.querySelector('thead')?.textContent).toContain('镜号');expect(el.querySelector('thead')?.textContent).toContain('次号');expect(el.querySelector('thead')?.textContent).toContain('状态');expect(el.querySelector('thead')?.textContent).toContain('备注');
+});
+
+it('passes an edited photo candidate to draft intake without a backend write',async()=>{
+  vi.stubGlobal('FileReader',class { onload:(()=>void)|null=null;onerror:(()=>void)|null=null;readAsDataURL(){this.onload?.()}});
+  extractPhotoCandidates.mockResolvedValue({contract:'paper_vlm_candidates.v1',authority:false,provider:'synthetic',model:'vision',page:'1',candidate_count:1,candidates:[{page:'1',row:3,episode:2,scene:'12',shot:'3A',take:'T2',status:'usable',note:'门口',confidence:.91,authority:false}]});
+  const onApplyDraftCandidates=vi.fn();await act(async()=>root.render(<SlatePaperIntake baseUrl="http://synthetic.test" projectId="p" onApplyDraftCandidates={onApplyDraftCandidates}/>));
+  await act(async()=>{button('纸面场记').click();await Promise.resolve()});const input=el.querySelector('.paper-photo-hero input[type="file"]')!;const file=new File(['photo'],'slate.jpg',{type:'image/jpeg'});Object.defineProperty(input,'files',{configurable:true,value:[file]});await act(async()=>input.dispatchEvent(new Event('change',{bubbles:true})));
+  const scene=el.querySelector<HTMLInputElement>('input[aria-label="第 1 条候选场号"]')!;Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value')!.set!.call(scene,'12B');await act(async()=>scene.dispatchEvent(new Event('input',{bubbles:true})));
+  await act(async()=>button('填入场记草稿 (1)').click());
+  expect(onApplyDraftCandidates).toHaveBeenCalledOnce();expect(onApplyDraftCandidates).toHaveBeenCalledWith([expect.objectContaining({scene:'12B',authority:false})]);expect(request).toHaveBeenCalledTimes(1);expect(el.querySelector('.paper-intake-body')).toBeNull();
 });

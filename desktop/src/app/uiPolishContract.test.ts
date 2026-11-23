@@ -82,7 +82,7 @@ describe("Desktop UI polish contract", () => {
     const slate = read("../features/slate/GoldenSlateWorkbench.tsx");
     const slateTheme = read("../desktop-theme-slate.css");
 
-    expect(slate).toContain(">检视</button>");
+    expect(slate).toContain(">右侧详情栏</button>");
     expect(slate).toContain(">刷新场记</button>");
     expect(slate).toContain("aria-pressed={inspectorOpen}");
     expect(slate).not.toContain("<CurrentOperatorControl");

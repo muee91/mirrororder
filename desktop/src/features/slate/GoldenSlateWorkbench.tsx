@@ -10,7 +10,7 @@ import { TakeListRow } from "../material-script/TakeCard";
 import { MirrorOrderMediaCard, mediaCardFromAngle, mediaCardFromAttachment } from "../media/MirrorOrderMediaCard";
 import { canPreviewReviewPlayback } from "../media/mediaPlaybackProjection";
 import { classifyPlaybackFailure, type PlaybackFailure } from "../media/playbackFailure";
-import type { PaperRow } from "../../api/paperIntake";
+import type { PaperRow, PaperVlmCandidate } from "../../api/paperIntake";
 import { SlateOriginalFormSheet } from "./SlateOriginalFormSheet";
 import { SlateIntervalBoardSurface } from "./SlateIntervalBoardSurface";
 import type { ProductionSlateTarget } from "./SlatePaperFormSurface";
@@ -24,7 +24,6 @@ import { SlateRow, SlateTableHead, SLATE_CAMERA_COLUMNS, type SlateCameraColumn 
 import type { PendingSlateDrafts, SlateDraft as Draft, SlateDraftSession } from "./slateDraftSession";
 import { originalPlaybackUrl } from "./SlateOriginalPlayback";
 import type { ProductionSelectionContext, ProductionWorkspace } from "../production/productionNavigation";
-import { SlateWorkbench } from "./SlateWorkbench";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import "../media/camera-presentation.css";
 import "./golden-slate.css";
@@ -228,6 +227,13 @@ function blankDraft(seed?: Partial<Draft>): Draft {
     xmlOrder: Number.MAX_SAFE_INTEGER,
     ...seed,
   };
+}
+
+function parseTakeNumber(value: string): number | null {
+  const match = /(\d+)/.exec(value.trim());
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function buildDrafts(board: SlateBoard, review: ReviewModelPayload): Draft[] {
@@ -535,7 +541,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [showAuxColumn, setShowAuxColumn] = useState(false);
   const [hideNgRows, setHideNgRows] = useState(false);
   const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
-  const [reviewPoolsOpen, setReviewPoolsOpen] = useState(false);
+  const [paperIntakeOpen, setPaperIntakeOpen] = useState(false);
   const [quickLookOpen, setQuickLookOpen] = useState(false);
   const quickLookFocusRef = useRef<HTMLElement | null>(null);
   const quickLookCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -945,6 +951,26 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     return row;
   }
 
+  function applyPaperDraftCandidates(candidates: PaperVlmCandidate[]): void {
+    const created = candidates.map((candidate) => blankDraft({
+      episode: candidate.episode,
+      scene: candidate.scene,
+      shot: candidate.shot,
+      take_number: parseTakeNumber(candidate.take),
+      status: candidate.status,
+      note: candidate.note,
+    }));
+    if (!created.length) {
+      setPaperIntakeOpen(false);
+      return;
+    }
+    setDrafts((current) => [...current, ...created]);
+    setSelectedRecordId(created[0].record_id);
+    setSelectedClipId("");
+    setMessage("已填入 " + created.length + " 条未保存草稿；请核对后点击右上角「保存」。");
+    setPaperIntakeOpen(false);
+  }
+
   function nextSameScene(): void {
     addBlank({
       episode: selected?.episode ?? null,
@@ -1199,7 +1225,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     if (!canUseSlate() || !selected || !board || busy || selectedConflict) return;
     const persisted = Boolean(board.records[selected.record_id]);
     if (!persisted && selected.derived) {
-      setMessage("自动派生场记来自 Review Take，不能在这里删除；需要排除素材时请使用 Review 归集辅助。");
+      setMessage("自动派生场记来自 Review Take，不能在这里删除；请在审阅工作区处理排除。");
       return;
     }
     const visualIndex = displayedDrafts.findIndex((row) => row.record_id === selected.record_id);
@@ -1238,7 +1264,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
     if (!canUseSlate() || !selected || !board || busy || selectedConflict) return;
     const persisted = Boolean(board.records[selected.record_id]);
     if (!persisted && selected.derived) {
-      setMessage("自动派生场记来自 Review Take，不能在这里删除；需要排除素材时请使用 Review 归集辅助。");
+      setMessage("自动派生场记来自 Review Take，不能在这里删除；请在审阅工作区处理排除。");
       return;
     }
     const prompt = persisted
@@ -1511,16 +1537,15 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           }}>
             <summary>工具</summary>
             <div className="golden-slate-menu-popover" role="group" aria-label="视图与工具">
-              <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setInspectorOpen((value) => !value); }} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>检视</button>
+              <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setInspectorOpen((value) => !value); }} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>右侧详情栏</button>
               <button type="button" className={orderMode === "script" ? "is-active" : ""} aria-pressed={orderMode === "script"} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setEditLayout(null); setOrderMode((value) => value === "script" ? "shooting" : "script"); }}>按场号归类</button>
-              <button type="button" className={reviewPoolsOpen ? "is-active" : ""} aria-pressed={reviewPoolsOpen} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setReviewPoolsOpen((value) => !value); }}>Review 归集辅助</button>
-              <button type="button" className={quickLookOpen ? "is-active" : ""} aria-pressed={quickLookOpen} disabled={!playbackUrl} title="大窗快速预览当前选中行素材" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); toggleQuickLook(); }}>快速预览</button>
+              <button type="button" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setPaperIntakeOpen(true); }}>导入纸面/照片场记…</button>
               {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setHideNgRows((value) => !value); }}>隐藏 NG ({ngCount})</button> : null}
               {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setShowAuxColumn((value) => !value); }} title="显示或隐藏空的 AUX 列">显示其他机位 (AUX)</button> : null}
               <button type="button" disabled={busy} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); void reload(selectedRecordId); }} aria-label="刷新场记" title="重新读取最新场记">刷新场记</button>
             </div>
           </details>
-          <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} onSelect={setPaperSource} />
+          <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} open={paperIntakeOpen} onOpenChange={setPaperIntakeOpen} hideTrigger onSelect={setPaperSource} onApplyDraftCandidates={applyPaperDraftCandidates} />
           <span className="golden-slate-message" aria-live="polite">{message}</span>
           <span
             className="golden-slate-save-state"
@@ -1587,7 +1612,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                   ) : <div className="golden-player-empty">{selectedAttachment ? "当前设备没有可播放素材" : "选择一个机位素材"}</div>}
                   {quickLookOpen && <footer><span>{selected.note || selectedTake?.transcript.text || "快捷键：1 可用 · 2 部分 · 3 NG · ⌘D 连拍下一条"}</span></footer>}
                 </div>
-                <div className="golden-inspector-head golden-inspector-meta"><div><span>EP {selected.episode ?? "—"} · 场 {selected.scene || selected.script_scene_id || "—"} · 镜 {selected.shot || "—"} · 次 {selected.take_number ?? "—"}</span>{selectedFilename ? <span className="golden-inspector-filename" title={selectedFilename}>{selectedFilename}</span> : null}</div>{selected.dirty ? <em>未保存</em> : null}</div>
+                <div className="golden-inspector-head golden-inspector-meta"><div><span>EP {selected.episode ?? "—"} · 场 {selected.scene || selected.script_scene_id || "—"} · 镜 {selected.shot || "—"} · 次 {selected.take_number ?? "—"}</span>{selectedFilename ? <span className="golden-inspector-filename" title={selectedFilename}>{selectedFilename}</span> : null}</div><button type="button" className="secondary golden-inspector-quicklook" disabled={!playbackUrl} title="大窗快速预览当前选中素材" onClick={toggleQuickLook}>快速预览</button>{selected.dirty ? <em>未保存</em> : null}</div>
 
                 {selectedPlaybackFailed && onRepair && <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>}
                 {groupId && onOpenTake && <div className="golden-inspector-actions golden-inspector-navigation">
@@ -1687,12 +1712,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           </aside>
       </div>
 
-      {reviewPoolsOpen ? (
-        <section className="golden-slate-review-tools-panel" aria-label="Review 归集辅助">
-          <header><strong>Review 归集辅助</strong><button type="button" className="secondary" onClick={() => setReviewPoolsOpen(false)}>关闭</button></header>
-          <SlateWorkbench baseUrl={baseUrl} projectId={projectId} />
-        </section>
-      ) : null}
     </section></div>
   </div>);
 }

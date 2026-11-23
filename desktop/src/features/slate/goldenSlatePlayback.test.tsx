@@ -89,7 +89,7 @@ it('sizes the player from portrait metadata and preserves that geometry when exp
 it('opens the same player when the inspector is collapsed, then pauses when it becomes hidden again', async () => {
   const video = container.querySelector<HTMLVideoElement>('.golden-slate-player video')!;
   await metadata(video); video.currentTime = 22.125;
-  await click('检视');
+  await click('右侧详情栏');
   expect(pause).toHaveBeenCalled();
   await click('快速预览');
   expect(container.querySelector('[role="dialog"] video')).toBe(video);
