@@ -191,9 +191,29 @@
   color: var(--mo-text-primary);
 }
 .sync-master-heading .sync-recording-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
   padding-inline-start: 10px;
+  border: 1px solid transparent;
   border-inline-start: 1px solid var(--mo-border-subtle);
+  border-radius: var(--mo-radius-pill, 999px);
   color: var(--mo-text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+.sync-master-heading button.sync-recording-status {
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.sync-master-heading button.sync-recording-status:hover,
+.sync-master-heading button.sync-recording-status[aria-expanded="true"] {
+  border-color: var(--mo-border-default);
+  background: var(--mo-surface-selected);
+  color: var(--mo-text-primary);
 }
 .sync-master-heading .sync-recording-status[data-state="confirmed"] { color: var(--mo-success); }
 .sync-master-heading .sync-recording-status[data-state="partial"],
@@ -471,7 +491,8 @@ html[data-mirrororder-theme] .sync-more-menu-popover > button:hover {
 .sync-master-info button { font-size: 12px; }
 
 .multicam-sync-inspection-canvas { display: grid; grid-template-rows: var(--sync-preview-height, 300px) 8px minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
-.multicam-sync-monitor {
+.multicam-sync-monitor,
+.sync-monitor-pane {
   color-scheme: only dark;
   color: #edf0f5;
   position: relative;
@@ -498,14 +519,13 @@ html[data-mirrororder-theme] .sync-more-menu-popover > button:hover {
   min-height: 0;
   border-radius: 3px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--camera-color) 44%, var(--mo-border-default, #29333d));
-  border-top: 3px solid var(--camera-color);
-  border-left: 3px solid var(--camera-color);
+  border: 1px solid var(--mo-border-subtle);
+  border-top: 2px solid var(--camera-color);
   background: var(--mo-monitor-matte, #0b0d10);
 }
 .sync-camera-cell[data-listening] {
   border-color: var(--camera-color);
-  box-shadow: inset 0 0 0 1px var(--camera-color), 0 0 0 2px color-mix(in srgb, var(--camera-color) 82%, transparent), 0 0 18px color-mix(in srgb, var(--camera-color) 26%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--camera-color) 74%, transparent), 0 0 0 1px color-mix(in srgb, var(--camera-color) 58%, transparent), 0 8px 18px color-mix(in srgb, var(--camera-color) 15%, transparent);
 }
 .sync-camera-cell[hidden], .multicam-sync-video[hidden] { display: none; }
 .sync-camera-picture { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
@@ -918,4 +938,11 @@ html[data-mirrororder-theme] .sync-more-menu-popover > button:hover {
   margin: 0;
   font-size: 11px;
   color: var(--mo-text-secondary);
+}
+
+html[data-mirrororder-theme="light"] .sync-monitor-pane {
+  --mo-monitor-backdrop: #12171d;
+  --mo-monitor-matte: #171d24;
+  --mo-monitor-label: rgba(23, 29, 36, .94);
+  --mo-monitor-label-hover: #2d3742;
 }

@@ -171,7 +171,7 @@ export function syncRecordingStatusLabel(timeline: Pick<MulticamSyncTimeline, "r
   switch (summary.status) {
     case "confirmed": return { label: `${summary.placed_count} 段已对齐`, state: "confirmed" };
     case "partial": return { label: `${summary.placed_count}/${summary.candidate_count} 段已对齐`, state: "partial" };
-    case "unconfirmed": return { label: `${summary.candidate_count} 个待确认`, state: "unconfirmed" };
+    case "unconfirmed": return { label: `${summary.candidate_count} 条录音待对齐`, state: "unconfirmed" };
     case "no_candidates": return { label: "未发现独立录音", state: "empty" };
     case "not_scanned": return { label: "未纳入本次同步", state: "not-scanned" };
     default: return { label: "状态待确认", state: "unknown" };

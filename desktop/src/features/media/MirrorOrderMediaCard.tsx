@@ -151,7 +151,7 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
   const previewWanted = Boolean((showPreview || (compact && compactPreviewActive)) && model.playbackUrl && !unavailable && !unknown);
   const [decodeSlotGranted, markDecodeSettled] = useVideoDecodeSlot(previewWanted, `${model.sourceStart ?? 0}:${model.playbackUrl ?? ""}`);
   const previewEnabled = previewWanted && decodeSlotGranted;
-  const label = useMemo(() => [camera.label, model.name, shotLabel(model.shotType)].filter(Boolean).join(" · "), [camera.label, model.name, model.shotType]);
+  const label = useMemo(() => [camera.label, model.name, compact && (!model.shotType || model.shotType === "unknown") ? "" : shotLabel(model.shotType)].filter(Boolean).join(" · "), [camera.label, compact, model.name, model.shotType]);
 
   useLayoutEffect(() => {
     setPreviewReady(false);
@@ -214,7 +214,7 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
           <span className="mo-media-name" title={model.name}>{compact ? formatCompactMediaName(model.name) : model.name}</span>
           <span className="mo-media-count-slot">{model.duplicateCount && model.duplicateCount > 1 ? `×${model.duplicateCount}` : ""}</span>
         </div>
-        <span className={`mo-media-shot ${!model.shotType || model.shotType === "unknown" ? "is-unknown" : ""}`}>{shotLabel(model.shotType)}</span>
+        {(!compact || (model.shotType && model.shotType !== "unknown")) ? <span className={`mo-media-shot ${!model.shotType || model.shotType === "unknown" ? "is-unknown" : ""}`}>{shotLabel(model.shotType)}</span> : null}
         <div className="mo-media-meta">
           <span>{seconds(model.duration) || "时长—"}</span>
           <span className={`mo-media-preference-label ${preferred ? "is-preferred" : ""}`}>{preferred ? "首选" : ""}</span>

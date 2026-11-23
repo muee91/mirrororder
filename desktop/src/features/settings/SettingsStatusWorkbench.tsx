@@ -197,7 +197,10 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
           </header>
           <div className="settings-preference-surface settings-general-card">
             <DesktopAppearanceControl />
-            <CurrentOperatorControl />
+            <div className="settings-preference-row">
+              <div className="settings-preference-copy"><strong>本机操作者</strong><span>写入场记、审阅结论与机位修改时的署名</span></div>
+              <CurrentOperatorControl />
+            </div>
             <label className="settings-optional-toggle">
               <input type="checkbox" checked={showRoughCut} onChange={(event) => setShowRoughCut(event.target.checked)} />
               <span className="settings-optional-toggle-copy">
@@ -208,10 +211,6 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
           </div>
         </section>
 
-        <div className="settings-local-section" aria-label="本地 AI 与身份识别">
-          <LocalRuntimePanel baseUrl={baseUrl} />
-        </div>
-
         <section className="settings-preference-section" aria-labelledby="settings-assistant-title">
           <header className="settings-section-heading">
             <div><p className="eyebrow">小镜</p><h3 id="settings-assistant-title">AI 能力</h3></div>
@@ -219,6 +218,10 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
           </header>
           <AssistantModelsPanel baseUrl={baseUrl} />
         </section>
+
+        <div className="settings-local-section" aria-label="本地 AI 与身份识别">
+          <LocalRuntimePanel baseUrl={baseUrl} />
+        </div>
 
         <details className="settings-preference-section settings-collapsible-section" aria-labelledby="settings-team-title">
           <summary className="settings-section-heading settings-collapsible-summary">

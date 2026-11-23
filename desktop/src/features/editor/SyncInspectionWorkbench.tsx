@@ -555,7 +555,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
           {showDelivery ? <h2>同步母版</h2> : null}
           <span>{syncTimeline.cameras.length} 机位 · {syncTimeline.clip_count.toLocaleString()} 个片段</span>
           {selectedTrack && <span className="sync-monitor-listening">监听 {selectedTrack.label}</span>}
-          <span className="sync-recording-status" data-state={recordingStatus.state}>{recordingStatus.label}</span>
+          {recordingsAvailable ? <button type="button" className="sync-recording-status" data-state={recordingStatus.state} title="点击查看或对齐同期录音" aria-expanded={inspector === "audio"} onClick={() => setInspector((current) => current === "audio" ? null : "audio")}>{recordingStatus.label}</button> : <span className="sync-recording-status" data-state={recordingStatus.state}>{recordingStatus.label}</span>}
         </div>
         <div className="multicam-sync-inspection-meta">
           {viewKind === "single" && <button type="button" className="secondary" onClick={() => setMonitorView({ kind: "all" })}>返回全部机位</button>}
@@ -590,7 +590,7 @@ export function SyncInspectionWorkbench({ syncTimeline, baseUrl, onMulticamSync,
         style={{ "--sync-inspector-width": `${inspectorWidth}px` } as CSSProperties}>
       <div className="multicam-sync-inspection-canvas" ref={canvasRef}
         style={{ "--sync-preview-height": `${pictureHeight}px` } as CSSProperties}>
-        <div className="multicam-sync-monitor">
+        <div className="multicam-sync-monitor sync-monitor-pane">
           <div className="multicam-sync-viewers multicam-sync-angle-grid"
             role="group" aria-label={{ all: "机位分屏", single: "单机画面" }[viewKind]}
             data-view={viewKind}

@@ -77,21 +77,28 @@
   .collaboration-user label:last-child { grid-column: 2; }
 }
 
-@media (prefers-color-scheme: light) {
-  .status-card h3, .assistant-models > summary span { color: #26313a; }
-  .status-facts div, .baseline-gate-row, .collaboration-audit, .settings-advanced-diagnostics, .assistant-models[open] > summary { border-color: #dde3e9; }
-  .status-facts dd { color: #56616d; }
-  .status-capabilities span { border-color: #d7dfe6; color: #63707c; background: #f4f7f9; }
-  .status-capabilities span.is-ready { border-color: #b7d3c2; color: #37634a; background: #eef8f2; }
-  .status-capabilities span.is-missing { border-color: #e0bcbc; color: #8b4f4f; background: #fff3f3; }
-  .status-capabilities span.is-pending { border-color: #e2d4a7; color: #79651e; background: #fff9e7; }
-  .runtime-status-grid article, .collaboration-user, .assistant-model-role { border-color: #dce3e9; background: #fff; }
-  .runtime-status-grid strong, .collaboration-user-main strong, .assistant-model-heading strong { color: #45515c; }
-  .baseline-gate-row strong { color: #4d5964; }
-  .baseline-gate-row > span.is-ready { color: #37634a; background: #eef8f2; }
-  .baseline-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
-  .settings-advanced-diagnostics > summary strong { color: #46515b; }
-}
+html[data-mirrororder-theme="light"] .status-card h3,
+html[data-mirrororder-theme="light"] .assistant-models > summary span { color: #26313a; }
+html[data-mirrororder-theme="light"] .status-facts div,
+html[data-mirrororder-theme="light"] .baseline-gate-row,
+html[data-mirrororder-theme="light"] .collaboration-audit,
+html[data-mirrororder-theme="light"] .settings-advanced-diagnostics,
+html[data-mirrororder-theme="light"] .assistant-models[open] > summary { border-color: #dde3e9; }
+html[data-mirrororder-theme="light"] .status-facts dd { color: #56616d; }
+html[data-mirrororder-theme="light"] .status-capabilities span { border-color: #d7dfe6; color: #63707c; background: #f4f7f9; }
+html[data-mirrororder-theme="light"] .status-capabilities span.is-ready { border-color: #b7d3c2; color: #37634a; background: #eef8f2; }
+html[data-mirrororder-theme="light"] .status-capabilities span.is-missing { border-color: #e0bcbc; color: #8b4f4f; background: #fff3f3; }
+html[data-mirrororder-theme="light"] .status-capabilities span.is-pending { border-color: #e2d4a7; color: #79651e; background: #fff9e7; }
+html[data-mirrororder-theme="light"] .runtime-status-grid article,
+html[data-mirrororder-theme="light"] .collaboration-user,
+html[data-mirrororder-theme="light"] .assistant-model-role { border-color: #dce3e9; background: #fff; }
+html[data-mirrororder-theme="light"] .runtime-status-grid strong,
+html[data-mirrororder-theme="light"] .collaboration-user-main strong,
+html[data-mirrororder-theme="light"] .assistant-model-heading strong { color: #45515c; }
+html[data-mirrororder-theme="light"] .baseline-gate-row strong { color: #4d5964; }
+html[data-mirrororder-theme="light"] .baseline-gate-row > span.is-ready { color: #37634a; background: #eef8f2; }
+html[data-mirrororder-theme="light"] .baseline-gate-row > span.is-missing { color: #8b4f4f; background: #fff3f3; }
+html[data-mirrororder-theme="light"] .settings-advanced-diagnostics > summary strong { color: #46515b; }
 
 .model-preset-strip {
   display: flex;

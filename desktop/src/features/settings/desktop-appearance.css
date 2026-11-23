@@ -5,14 +5,14 @@
 .desktop-appearance-options { display: grid; grid-template-columns: repeat(3, minmax(72px, 1fr)); gap: 3px; border: 1px solid #29323b; border-radius: 7px; padding: 2px; background: #0b1014; }
 .desktop-appearance-control button { min-height: 28px; border: 0; border-radius: 5px; padding: 4px 9px; color: #788590; background: transparent; font-size: 10px; font-weight: 600; white-space: nowrap; }
 .desktop-appearance-control button:hover { color: #c8d0d7; background: #161d23; }
-.desktop-appearance-control button.is-active { color: #11161a; background: #e4e9ed; }
+.desktop-appearance-control button.is-active { color: var(--mo-text-primary); background: var(--mo-surface-selected); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.35); border: 1px solid var(--mo-border-default); }
 
 html[data-mirrororder-theme="light"] .desktop-appearance-copy strong { color: #26313a; }
 html[data-mirrororder-theme="light"] .desktop-appearance-copy span { color: #66737d; }
-html[data-mirrororder-theme="light"] .desktop-appearance-options { border-color: #d4dce3; background: #eef2f5; }
+html[data-mirrororder-theme="light"] .desktop-appearance-options { border-color: #d4dce3; background: #edf1f5; }
 html[data-mirrororder-theme="light"] .desktop-appearance-control button { color: #65717c; }
 html[data-mirrororder-theme="light"] .desktop-appearance-control button:hover { color: #26313a; background: #e5eaee; }
-html[data-mirrororder-theme="light"] .desktop-appearance-control button.is-active { color: #fff; background: #33414c; }
+html[data-mirrororder-theme="light"] .desktop-appearance-control button.is-active { color: #26313a; background: #ffffff; box-shadow: 0 1px 3px rgba(31, 50, 68, .14); border: 1px solid #d7dfe6; }
 
 @media (max-width: 1180px) {
   .desktop-appearance-control { grid-template-columns: minmax(0,1fr); gap: 9px; }
