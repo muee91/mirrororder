@@ -25,6 +25,7 @@ import type { PendingSlateDrafts, SlateDraft as Draft, SlateDraftSession } from 
 import { originalPlaybackUrl } from "./SlateOriginalPlayback";
 import type { ProductionSelectionContext, ProductionWorkspace } from "../production/productionNavigation";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
+import { basenameLabel, clearPendingSlateFile, readPendingSlateFile } from "../../app/pendingSlateFile";
 import { closeDetailsMenu, handleDetailsMenuBlur, handleDetailsMenuToggle } from "../../components/detailsMenuDismiss";
 import "../media/camera-presentation.css";
 import "./golden-slate.css";
@@ -543,16 +544,12 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [hideNgRows, setHideNgRows] = useState(false);
   const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
   const [paperIntakeOpen, setPaperIntakeOpen] = useState(false);
-  const [photoGuideDismissed, setPhotoGuideDismissed] = useState(() => {
-    try { return globalThis.localStorage?.getItem(`mirrororder.slate.photoGuideDismissed:${projectId}`) === "1"; } catch { return false; }
-  });
+  const [pendingSlatePath, setPendingSlatePath] = useState(() => readPendingSlateFile(projectId));
+  const [autoExtractPath, setAutoExtractPath] = useState("");
   useEffect(() => {
-    try { setPhotoGuideDismissed(globalThis.localStorage?.getItem(`mirrororder.slate.photoGuideDismissed:${projectId}`) === "1"); } catch { setPhotoGuideDismissed(false); }
+    setPendingSlatePath(readPendingSlateFile(projectId));
+    setAutoExtractPath("");
   }, [projectId]);
-  function dismissPhotoGuide(): void {
-    setPhotoGuideDismissed(true);
-    try { globalThis.localStorage?.setItem(`mirrororder.slate.photoGuideDismissed:${projectId}`, "1"); } catch { /* local convenience */ }
-  }
   const [quickLookOpen, setQuickLookOpen] = useState(false);
   const quickLookFocusRef = useRef<HTMLElement | null>(null);
   const quickLookCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -1538,9 +1535,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             className={`golden-slate-photo-import${paperIntakeOpen ? " is-active" : ""}`}
             aria-haspopup="dialog"
             aria-expanded={paperIntakeOpen}
-            title="上传手写场记照片（AI 提取）或导入纸面场记"
+            title="导入场记 PDF 或照片（AI 提取）"
             onClick={() => setPaperIntakeOpen(true)}
-          >照片导入</button>
+          >导入场记</button>
         </div>
         <div className="golden-slate-actions golden-slate-subbar-right" role="group" aria-label="场记辅助操作">
           <div className="golden-slate-inline-tools" role="group" aria-label="视图与工具">
@@ -1550,7 +1547,22 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>右侧详情栏</button>
             <button type="button" className="golden-slate-refresh-btn" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="重新读取最新场记">刷新</button>
           </div>
-          <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} open={paperIntakeOpen} onOpenChange={setPaperIntakeOpen} hideTrigger onSelect={setPaperSource} onApplyDraftCandidates={applyPaperDraftCandidates} />
+          <SlatePaperIntake
+            key={`${baseUrl}:${projectId}`}
+            baseUrl={baseUrl}
+            projectId={projectId}
+            open={paperIntakeOpen}
+            onOpenChange={setPaperIntakeOpen}
+            hideTrigger
+            onSelect={setPaperSource}
+            onApplyDraftCandidates={applyPaperDraftCandidates}
+            initialFilePath={autoExtractPath}
+            onConsumedInitialFile={() => {
+              clearPendingSlateFile(projectId);
+              setPendingSlatePath("");
+              setAutoExtractPath("");
+            }}
+          />
           <span className="golden-slate-message" aria-live="polite">{message}</span>
           <span
             className="golden-slate-save-state"
@@ -1581,17 +1593,14 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       ) : null}
 
       <div className="golden-slate-body">
-        <div className={`golden-slate-table-shell${drafts.length > 0 && placedDrafts.length === 0 && !photoGuideDismissed ? " has-photo-guide" : ""}`}>
+        <div className={`golden-slate-table-shell${pendingSlatePath ? " has-pending-file" : ""}`}>
           {dropActive ? <div className="golden-slate-drop-overlay">松开以加入当前场记</div> : null}
-          {drafts.length > 0 && placedDrafts.length === 0 && !photoGuideDismissed ? (
-            <div className="golden-slate-photo-guide" role="region" aria-label="照片场记导入引导">
-              <div className="golden-slate-photo-guide-copy">
-                <strong>有片场手写场记照片？</strong>
-                <span>直接上传让 AI 批量提取集·场·镜·次与备注，核对后一键填入草稿，不用逐行手敲。</span>
-              </div>
-              <div className="golden-slate-photo-guide-actions">
-                <button type="button" className="golden-slate-photo-guide-cta" onClick={() => setPaperIntakeOpen(true)}>上传场记照片…</button>
-                <button type="button" className="secondary" onClick={dismissPhotoGuide}>先手动录</button>
+          {pendingSlatePath ? (
+            <div className="golden-slate-pending-file" role="region" aria-label="待识别场记文件">
+              <span>新建项目时已附带场记：{basenameLabel(pendingSlatePath)}</span>
+              <div>
+                <button type="button" onClick={() => { setAutoExtractPath(pendingSlatePath); setPaperIntakeOpen(true); }}>AI 识别并核对</button>
+                <button type="button" className="secondary" onClick={() => { clearPendingSlateFile(projectId); setPendingSlatePath(""); setAutoExtractPath(""); }}>忽略</button>
               </div>
             </div>
           ) : null}
@@ -1600,7 +1609,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           ) : placedDrafts.length && unplacedDrafts.length ? (
             <div className="golden-slate-split-sections">{section("已填场号 · 按场次排列", placedDrafts, "placed")}{section("未填场号 · 按拍摄顺序", unplacedDrafts, "unplaced")}</div>
           ) : placedDrafts.length ? section("已填场号 · 按场次排列", placedDrafts, "placed") : unplacedDrafts.length ? section("未填场号 · 按拍摄顺序", unplacedDrafts, "unplaced") : (
-            <div className="golden-slate-empty"><strong>从 Take 或场记照片开始</strong><span>A / B / C 机位落在同一行；有纸质场记照片可直接上传让 AI 提取草稿。</span><div><button type="button" onClick={() => setPaperIntakeOpen(true)}>上传场记照片…</button><button type="button" className="secondary" onClick={() => setTakePickerOpen(true)}>从 Take 加入</button><button type="button" className="secondary" onClick={() => addBlank()}>新建空白场记</button></div></div>
+            <div className="golden-slate-empty"><strong>从 Take 或场记 PDF / 照片开始</strong><span>A / B / C 机位落在同一行；场记 PDF 或照片可直接上传让 AI 提取草稿。</span><div><button type="button" onClick={() => setPaperIntakeOpen(true)}>导入场记 PDF / 照片</button><button type="button" className="secondary" onClick={() => setTakePickerOpen(true)}>从 Take 加入</button><button type="button" className="secondary" onClick={() => addBlank()}>新建空白场记</button></div></div>
           )}
         </div>
 

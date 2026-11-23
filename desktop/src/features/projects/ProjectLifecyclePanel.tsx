@@ -3,6 +3,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { PlatformClient } from "../../api/platform";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { rememberSyncSubmissionIssue } from "../../app/resumeState";
+import { rememberPendingSlateFile } from "../../app/pendingSlateFile";
 import {
   DesktopClient,
   type ProjectCreatePayload,
@@ -45,6 +46,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
   const [name, setName] = useState("");
   const [inputKind, setInputKind] = useState<"fcpxml" | "media-directory">("media-directory");
   const [scriptPath, setScriptPath] = useState("");
+  const [slatePath, setSlatePath] = useState("");
   const [fcpxmlPath, setFcpxmlPath] = useState("");
   const [mediaRoots, setMediaRoots] = useState("");
   const [prepareAfterCreate, setPrepareAfterCreate] = useState(true);
@@ -72,6 +74,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
   function reset(): void {
     setName("");
     setScriptPath("");
+    setSlatePath("");
     setFcpxmlPath("");
     setMediaRoots("");
     setCreatedId("");
@@ -82,7 +85,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
     setMessage(sourceMessage("media-directory"));
   }
 
-  async function chooseFile(kind: "script" | "fcpxml"): Promise<void> {
+  async function chooseFile(kind: "script" | "fcpxml" | "slate"): Promise<void> {
     if (!isTauri()) {
       setMessage("浏览器预览不提供系统文件选择器；可以手动填写路径。");
       return;
@@ -91,14 +94,17 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
       const selected = await openDialog({
         directory: false,
         multiple: false,
-        title: kind === "script" ? "选择剧本" : "选择 FCPXML",
+        title: kind === "script" ? "选择剧本" : kind === "fcpxml" ? "选择 FCPXML" : "选择现场场记（PDF / 照片）",
         filters: kind === "script"
           ? [{ name: "剧本", extensions: ["docx", "txt", "md", "markdown"] }]
-          : [{ name: "Final Cut Pro XML", extensions: ["fcpxml", "fcpxmld"] }],
+          : kind === "fcpxml"
+            ? [{ name: "Final Cut Pro XML", extensions: ["fcpxml", "fcpxmld"] }]
+            : [{ name: "场记 PDF 或照片", extensions: ["pdf", "jpg", "jpeg", "png", "webp"] }],
       });
       if (typeof selected !== "string" || !selected.trim()) return;
       if (kind === "script") setScriptPath(selected);
-      else setFcpxmlPath(selected);
+      else if (kind === "fcpxml") setFcpxmlPath(selected);
+      else setSlatePath(selected);
       setPreflight(null);
     } catch (error) {
       setMessage(`文件选择失败：${errorMessage(error)}`);
@@ -223,6 +229,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
         const created = await client.createProject(values);
         savedId = created.project_id;
         setCreatedId(savedId);
+        if (slatePath.trim()) rememberPendingSlateFile(savedId, slatePath.trim());
 
         if (prepareAfterCreate) {
           try {
@@ -311,6 +318,14 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
                 <div className="lifecycle-path-row">
                   <input value={scriptPath} onChange={(event) => { setScriptPath(event.target.value); setPreflight(null); }} spellCheck={false} placeholder="选择剧本文件" />
                   <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("script")}>选择…</button>
+                </div>
+              </label>
+
+              <label>
+                <span>现场场记（PDF / 照片，可稍后导入）</span>
+                <div className="lifecycle-path-row">
+                  <input value={slatePath} onChange={(event) => setSlatePath(event.target.value)} spellCheck={false} placeholder="可选：选择片场场记 PDF 或照片，建好后进场记页一键识别" />
+                  <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("slate")}>选择…</button>
                 </div>
               </label>
 

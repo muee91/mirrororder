@@ -21,6 +21,8 @@ interface Props {
   hideTrigger?: boolean;
   onSelect?: (source: { row: PaperRow; revision: number } | null) => void;
   onApplyDraftCandidates?: (candidates: PaperVlmCandidate[]) => void;
+  initialFilePath?: string | null;
+  onConsumedInitialFile?: () => void;
 }
 
 const STATUS_LABELS: Record<PaperVlmCandidate['status'], string> = {
@@ -39,6 +41,8 @@ export function SlatePaperIntake({
   hideTrigger = false,
   onSelect,
   onApplyDraftCandidates,
+  initialFilePath,
+  onConsumedInitialFile,
 }: Props) {
   const client = useMemo(() => new PaperIntakeClient(baseUrl), [baseUrl]);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
@@ -60,6 +64,7 @@ export function SlatePaperIntake({
   const lock = useRef(false);
   const generation = useRef(0);
   const openLoadRef = useRef(false);
+  const autoRunPathRef = useRef('');
 
   useEffect(() => {
     if (focusSource) sourceRef.current?.focus();
@@ -122,16 +127,40 @@ export function SlatePaperIntake({
     }
   }, [open, model, client, projectId]);
 
+  function renderExtractedCandidates(result: Awaited<ReturnType<PaperIntakeClient['extractPhotoCandidates']>>): void {
+    if (result.candidates.length > 0) {
+      setCandidates(result.candidates.map((candidate) => ({ ...candidate, checked: true, authority: false as const })));
+      const draftRows = result.candidates.map((item) => ({
+        page: item.page,
+        row: String(item.row),
+        ...(item.episode !== null ? { episode: item.episode } : {}),
+        scene: item.scene,
+        shot: item.shot,
+        take: item.take,
+        status: item.status,
+        note: item.note,
+      }));
+      setFormat('json');
+      setContent(JSON.stringify(draftRows, null, 2));
+      setEditing(true);
+      setNotice('AI (' + result.provider + '/' + result.model + ') 已提取 ' + result.candidate_count + ' 条候选，请核对后填入未保存草稿。');
+    } else {
+      setNotice(result.warning || '未从场记文件识别到结构化场记行，请人工录入或换清晰文件重试。');
+    }
+  }
+
   async function extractPhoto(file: File) {
     if (lock.current) return;
-    if (file.size > 8 * 1024 * 1024) {
-      setError('图片超过 8 MB 大小上限，请压缩后再识别。');
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const maxBytes = isPdf ? 20 * 1024 * 1024 : 8 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setError(isPdf ? 'PDF 超过 20 MB 大小上限，请压缩后再识别。' : '图片超过 8 MB 大小上限，请压缩后再识别。');
       return;
     }
     lock.current = true;
     setBusy(true);
     setError('');
-    setNotice('正在调用多模态视觉模型提取手写场记候选…');
+    setNotice('正在调用多模态视觉模型提取场记候选…');
     try {
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -141,25 +170,7 @@ export function SlatePaperIntake({
       });
       const result = await client.extractPhotoCandidates(dataUrl, '1');
       if (!mounted.current) return;
-      if (result.candidates.length > 0) {
-        setCandidates(result.candidates.map((candidate) => ({ ...candidate, checked: true, authority: false as const })));
-        const draftRows = result.candidates.map((item) => ({
-          page: item.page,
-          row: String(item.row),
-          ...(item.episode !== null ? { episode: item.episode } : {}),
-          scene: item.scene,
-          shot: item.shot,
-          take: item.take,
-          status: item.status,
-          note: item.note,
-        }));
-        setFormat('json');
-        setContent(JSON.stringify(draftRows, null, 2));
-        setEditing(true);
-        setNotice('AI (' + result.provider + '/' + result.model + ') 已提取 ' + result.candidate_count + ' 条候选，请核对后填入未保存草稿。');
-      } else {
-        setNotice(result.warning || '未从照片识别到结构化场记行，请人工录入或换清晰照片重试。');
-      }
+      renderExtractedCandidates(result);
     } catch (e) {
       if (mounted.current) setError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -168,6 +179,35 @@ export function SlatePaperIntake({
       if (photoInputRef.current) photoInputRef.current.value = '';
     }
   }
+
+  async function extractFilePath(filePath: string): Promise<void> {
+    if (lock.current || !filePath.trim()) return;
+    lock.current = true;
+    setBusy(true);
+    setError('');
+    setNotice('正在调用多模态视觉模型提取场记候选…');
+    try {
+      const result = await client.extractFileCandidates(filePath.trim(), '1');
+      if (!mounted.current) return;
+      renderExtractedCandidates(result);
+    } catch (e) {
+      if (mounted.current) setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      lock.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const path = initialFilePath?.trim() || '';
+    if (!path) {
+      autoRunPathRef.current = '';
+      return;
+    }
+    if (!open || autoRunPathRef.current === path || lock.current) return;
+    autoRunPathRef.current = path;
+    void extractFilePath(path);
+  }, [open, initialFilePath, busy]);
 
   async function ingest() {
     if (lock.current || !model) return;
@@ -213,6 +253,7 @@ export function SlatePaperIntake({
     const checkedCandidates = candidates.filter((candidate) => candidate.checked).map(({ checked: _checked, ...candidate }) => ({ ...candidate, authority: false as const }));
     if (!checkedCandidates.length || !onApplyDraftCandidates) return;
     onApplyDraftCandidates(checkedCandidates);
+    onConsumedInitialFile?.();
     setCandidates([]);
     setNotice('');
     close();
@@ -240,11 +281,11 @@ export function SlatePaperIntake({
 
           <section className="paper-photo-hero" aria-label="照片场记导入">
             <div className="paper-photo-copy">
-              <h2>上传手写场记照片</h2>
-              <p>AI 提取场号、镜号、次号与备注后先在此核对，确认后填入未保存草稿（不会自动写入正式场记）。</p>
+              <h2>上传场记 PDF 或照片</h2>
+              <p>支持片场场记 PDF（文字版或扫描版）与手写照片。AI 提取集·场·镜·次与备注后先在此核对，确认后填入未保存草稿（不会自动保存）。</p>
             </div>
-            <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void extractPhoto(file); }} />
-            <button type="button" className="paper-photo-upload" disabled={busy} onClick={() => photoInputRef.current?.click()}>上传手写场记照片（AI 提取候选）</button>
+            <input ref={photoInputRef} type="file" accept=".pdf,application/pdf,image/jpeg,image/png,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void extractPhoto(file); }} />
+            <button type="button" className="paper-photo-upload" disabled={busy} onClick={() => photoInputRef.current?.click()}>选择场记 PDF / 照片（AI 提取）</button>
           </section>
 
           {candidates.length > 0 ? (

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 from unittest import mock
 
@@ -268,3 +269,41 @@ def test_negative_episode_sanitized_and_upstream_failure_surfaces_warning() -> N
     assert result["authority"] is False
     assert result["candidates"] == []
     assert "请求失败" in result["warning"]
+
+
+def test_digital_text_pdf_base64_sends_extracted_text_and_normalizes_rows() -> None:
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    document = canvas.Canvas(buffer)
+    document.drawString(40, 760, "EPISODE 3 SCENE 12 SHOT C5 TAKE 2 USABLE NOTE doorway")
+    document.save()
+    pdf_bytes = buffer.getvalue()
+    rows = [{"episode": 3, "scene": "12", "shot": "C5", "take": "2", "status": "usable", "confidence": 0.88}]
+    fake = _FakeResponse({"choices": [{"message": {"content": json.dumps(rows)}}]})
+    with mock.patch("urllib.request.urlopen", return_value=fake) as urlopen:
+        result = extract_paper_slate_photo_candidates(
+            {"file_base64": f"data:application/pdf;base64,{base64.b64encode(pdf_bytes).decode('ascii')}", "page_label": "PDF-1"},
+            config=_openai_config(),
+        )
+
+    sent = json.loads(urlopen.call_args.args[0].data)
+    assert sent["messages"][1]["content"].startswith("请从以下 PDF 场记文字提取")
+    assert "EPISODE 3 SCENE 12 SHOT C5 TAKE 2" in sent["messages"][1]["content"]
+    assert result["page"] == "PDF-1"
+    assert result["candidate_count"] == 1
+    assert result["candidates"][0]["authority"] is False
+
+
+def test_local_file_path_extracts_without_leaking_path(tmp_path) -> None:
+    source = tmp_path / "slate.png"
+    source.write_bytes(_PNG_BYTES)
+    rows = [{"episode": 2, "scene": "8", "shot": "A1", "take": "1", "status": "OK", "confidence": 0.9}]
+    fake = _FakeResponse({"choices": [{"message": {"content": json.dumps(rows)}}]})
+    with mock.patch("urllib.request.urlopen", return_value=fake):
+        result = extract_paper_slate_photo_candidates({"file_path": str(source)}, config=_openai_config())
+
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert str(source) not in serialized
+    assert result["candidate_count"] == 1
+    assert result["candidates"][0]["authority"] is False
