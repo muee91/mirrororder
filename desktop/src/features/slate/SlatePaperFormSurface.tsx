@@ -365,7 +365,7 @@ export function SlatePaperFormSurface({formRows,formDocuments,onReview,ledger,ti
           const sourceTime=video&&video.readyState>=1&&Number.isFinite(video.currentTime)&&video.currentTime>=0?video.currentTime:undefined;
           video?.pause();
           onOpenProduction({groupId:current.rowId,clipId:syncSource.clip_id,mediaId:syncSource.media_id,sourceTime});
-        }}>在生产场记中标记</button>}
+        }}>在场记表中标记</button>}
         <details><summary>技术信息</summary><small>片段 ID：{syncSource.clip_id}<br/>素材 ID：{syncSource.media_id}</small></details>
         {sheetFirst?.angle&&<SyncAngleAnnotationPanel key={JSON.stringify([current.rowId,syncSource.clip_id,syncSource.media_id,syncSource.camera,current.digest,syncSource.connection])}
           target={{group_id:current.rowId,clip_id:syncSource.clip_id,media_id:syncSource.media_id,camera:syncSource.camera}} run={sheetFirst.angle}/>}

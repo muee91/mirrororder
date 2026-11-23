@@ -1459,15 +1459,15 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   return (<div className="slate-workbench-content" data-view-switch={ledgerSurface || undefined} ref={slateRef}>
     {ledger && <div hidden={!intervalSurface}>
       {ledgerSurface && <nav className="slate-interval-view-switch" aria-label="场记工作视图">
-        <button type="button" aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>生产场记</button>
-        <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>来源场记</button>
+        <button type="button" className={!intervalSurface ? "is-active" : undefined} aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>场记表</button>
+        <button type="button" className={intervalSurface ? "is-active" : undefined} aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>原始片段</button>
       </nav>}
       <SlateIntervalBoardSurface key={JSON.stringify([baseUrl,projectId])} {...ledger} baseUrl={baseUrl} projectName={projectName} productionRows={productionRows} onOpenProduction={openProductionSource} catalog={(review?.episodes ?? []).flatMap((entry)=>entry.scenes.map((scene)=>({episode:entry.episode,scene_id:scene.scene_id,label:prettySceneId(scene.scene_id)})))}/>
     </div>}
     {intervalSurface && !ledger && <section aria-label="电子场记板">
       {ledgerSurface && <nav className="slate-interval-view-switch" aria-label="场记工作视图">
-        <button type="button" aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>生产场记</button>
-        <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>来源场记</button>
+        <button type="button" className={!intervalSurface ? "is-active" : undefined} aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>场记表</button>
+        <button type="button" className={intervalSurface ? "is-active" : undefined} aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>原始片段</button>
       </nav>}
       <SlateOriginalFormSheet page={{title:projectName?.trim()||"",day:"",date:"",printedPage:""}} rows={[]} />
       {nativeIntervalLedger.error ? <><p role="alert">{nativeIntervalLedger.error}</p><button type="button" onClick={()=>void nativeIntervalLedger.refresh().catch(()=>{})}>重读列表</button></> : <p role="status">正在读取电子场记板…</p>}
@@ -1476,17 +1476,26 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       <header className="golden-slate-subbar">
         <div className="golden-slate-subbar-left">
           {ledgerSurface && <nav className="slate-interval-view-switch" aria-label="场记工作视图">
-            <button type="button" aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>生产场记</button>
-            <button type="button" aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>来源场记</button>
+            <button type="button" className={!intervalSurface ? "is-active" : undefined} aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>场记表</button>
+            <button type="button" className={intervalSurface ? "is-active" : undefined} aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>原始片段</button>
           </nav>}
           <span className="golden-slate-count" aria-label="场记行数">{displayedDrafts.length} 条</span>
-          <button
-            type="button"
-            className={`secondary golden-slate-order-toggle ${orderMode === "shooting" ? "is-active" : ""}`}
-            aria-pressed={orderMode === "shooting"}
-            title={orderMode === "shooting" ? "当前按拍摄顺序排列，点击切换到剧本顺序" : "当前按剧本顺序排列，点击切换到拍摄顺序"}
-            onClick={() => { setEditLayout(null); setOrderMode((mode) => mode === "shooting" ? "script" : "shooting"); }}
-          >{orderMode === "shooting" ? "拍摄顺序" : "剧本顺序"}</button>
+          <div className="golden-slate-order-switch" role="group" aria-label="场记排序">
+            <button
+              type="button"
+              className={orderMode === "shooting" ? "is-active" : undefined}
+              aria-pressed={orderMode === "shooting"}
+              title="按现场拍摄时间顺序排列"
+              onClick={() => { setEditLayout(null); setOrderMode("shooting"); }}
+            >按拍摄</button>
+            <button
+              type="button"
+              className={orderMode === "script" ? "is-active" : undefined}
+              aria-pressed={orderMode === "script"}
+              title="按剧本场次顺序排列"
+              onClick={() => { setEditLayout(null); setOrderMode("script"); }}
+            >按剧本</button>
+          </div>
           <details className="golden-slate-menu golden-slate-menu-left" onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
           }} onKeyDown={(event) => {
@@ -1515,7 +1524,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
               event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
             }
           }}>
-            <summary>视图与工具</summary>
+            <summary>工具</summary>
             <div className="golden-slate-menu-popover" role="group" aria-label="视图与工具">
               <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setInspectorOpen((value) => !value); }} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>检视</button>
               <button type="button" className={quickLookOpen ? "is-active" : ""} aria-pressed={quickLookOpen} disabled={!playbackUrl} title="大窗快速预览当前选中行素材" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); toggleQuickLook(); }}>快速预览</button>

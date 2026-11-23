@@ -49,7 +49,7 @@ beforeEach(async () => {
   selection.mockClear();
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await render();
-  await click('生产场记');
+  await click('场记表');
 });
 afterEach(async () => {
   await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals();
@@ -108,7 +108,7 @@ it('pauses and dismisses Quick Look when the workbench or production slate is hi
   expect(container.querySelector('.golden-slate-workbench .mo-media-thumb video')).toBeNull();
   expect(container.querySelector('video[controls]')?.getAttribute('preload')).toBe('none');
   await render(); await click('快速预览'); pause.mockClear();
-  await click('来源场记');
+  await click('原始片段');
   expect(pause).toHaveBeenCalled();
   expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
