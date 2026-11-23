@@ -87,6 +87,12 @@ function slateStatusLabel(status?: string): string {
   } as Record<string, string>)[status || ""] ?? "未标";
 }
 
+export function scriptBlockBadge(block: ReviewScriptBlock): string {
+  return block.speaker || (
+    block.type === "action" ? "动作" : block.type === "narration" ? "旁白" : "对白"
+  );
+}
+
 function timecode(seconds: number): string {
   const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
   const hours = Math.floor(total / 3600);
@@ -129,6 +135,17 @@ function takeSearchText(
   ].filter(Boolean).join(" ").toLocaleLowerCase("zh-CN");
 }
 
+function reviewTakeLabel(
+  take: ReviewTakeGroup,
+  hasDuplicateTakeIndex: boolean,
+  takeSequenceByGroupId: Map<string, number>,
+): string {
+  if (!hasDuplicateTakeIndex) return takeDisplayLabel(take);
+  const sequence = takeSequenceByGroupId.get(take.group_id) ?? 1;
+  const clipStem = take.angles[0]?.name?.replace(/\.[^.]+$/, "").trim();
+  return clipStem ? `#${sequence} · ${clipStem}` : `#${sequence}`;
+}
+
 export function ReviewWorkspace({
   baseUrl,
   project,
@@ -158,6 +175,7 @@ export function ReviewWorkspace({
     initialClipId,
   );
   const [copyState, setCopyState] = useState("");
+  const [masterCopyState, setMasterCopyState] = useState("");
   const appliedFocusKey = useRef("");
   const copyTimer = useRef<number | undefined>(undefined);
 
@@ -326,8 +344,22 @@ export function ReviewWorkspace({
   const selectedAttention = selectedTake
     ? reviewTakeAttention(selectedTake)
     : null;
+  const activeAngle = selectedTake?.angles.find((item) => item.clip_id === selectedClipId) ?? selectedTake?.angles[0] ?? null;
+  const masterTimecode = timecode(activeAngle?.timeline_start ?? selectedTake?.start ?? 0);
   const decidedCount = counts.best + counts.keep + counts.reject;
   const hasScript = Boolean(model?.episodes.length);
+  const { hasDuplicateTakeIndex, takeSequenceByGroupId } = useMemo(() => {
+    const countsByIndex = new Map<number, number>();
+    const sequenceByGroupId = new Map<string, number>();
+    for (const [index, take] of (model?.take_groups ?? []).entries()) {
+      sequenceByGroupId.set(take.group_id, index + 1);
+      if (take.take_index > 0) countsByIndex.set(take.take_index, (countsByIndex.get(take.take_index) ?? 0) + 1);
+    }
+    return {
+      hasDuplicateTakeIndex: [...countsByIndex.values()].some((count) => count >= 2),
+      takeSequenceByGroupId: sequenceByGroupId,
+    };
+  }, [model]);
 
   useEffect(() => {
     if (!model) return;
@@ -418,6 +450,19 @@ export function ReviewWorkspace({
       setCopyState("已复制");
       if (copyTimer.current) window.clearTimeout(copyTimer.current);
       copyTimer.current = window.setTimeout(() => setCopyState(""), 1600);
+    } catch {
+      setCopyState("复制失败");
+    }
+  }
+
+  async function copyMasterTimecode(): Promise<void> {
+    if (!selectedTake) return;
+    const value = masterTimecode;
+    try {
+      await navigator.clipboard.writeText(value);
+      setMasterCopyState("已复制时码");
+      if (copyTimer.current) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setMasterCopyState(""), 1600);
     } catch {
       setCopyState("复制失败");
     }
@@ -645,7 +690,7 @@ export function ReviewWorkspace({
                                 onClick={() => chooseScriptBlock(block)}
                               >
                                 <span className="review-script-block-copy">
-                                  <strong>{block.speaker || "对白"}</strong>
+                                  <strong>{scriptBlockBadge(block)}</strong>
                                   <span>
                                     {block.text || block.raw_text ||
                                       "（空白剧本段）"}
@@ -689,8 +734,8 @@ export function ReviewWorkspace({
                     >
                       <header className="review-take-card-heading">
                         <div>
-                          <strong>{takeDisplayLabel(take)}</strong>
-                          <span>{slateCoordinates(record)}</span>
+                          <strong>{reviewTakeLabel(take, hasDuplicateTakeIndex, takeSequenceByGroupId)}</strong>
+                          <span>{slateCoordinates(record)} · 母版 {timecode(take.angles[0]?.timeline_start ?? take.start)}</span>
                         </div>
                         <div className="review-take-badges">
                           <span
@@ -816,6 +861,13 @@ export function ReviewWorkspace({
                   </button>
                   <button
                     type="button"
+                    className="secondary review-master-timecode"
+                    onClick={() => void copyMasterTimecode()}
+                  >
+                    {masterCopyState || `母版 ${masterTimecode}`}
+                  </button>
+                  <button
+                    type="button"
                     className="secondary"
                     onClick={() =>
                       onOpenMaterial?.(selectedTake.group_id, selectedClipId)}
@@ -914,7 +966,7 @@ export function ReviewWorkspace({
                         <section
                           className="take-attention-summary"
                           aria-label={`${
-                            takeDisplayLabel(selectedTake)
+                            reviewTakeLabel(selectedTake, hasDuplicateTakeIndex, takeSequenceByGroupId)
                           } 需关注`}
                         >
                           <div className="take-attention-heading">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cameraFilterKey, cameraPresentation, effectiveCamera } from "./cameraPresentation";
+import { cameraFilterKey, cameraPresentation, effectiveCamera, isAudioMediaFile } from "./cameraPresentation";
 
 describe("cameraPresentation", () => {
   it("gives A/B/C/AUX stable first-class labels, tones and order", () => {
@@ -25,5 +25,11 @@ describe("cameraPresentation", () => {
     expect(effectiveCamera("C", "A").label).toBe("C机");
     expect(effectiveCamera("", "B").label).toBe("B机");
     expect(cameraFilterKey("", "?")).toBe("__unknown__");
+  });
+
+  it("recognizes sync audio extensions without treating them as cameras", () => {
+    expect(isAudioMediaFile("TX03_MIC010.WAV")).toBe(true);
+    expect(isAudioMediaFile("music.mp3")).toBe(true);
+    expect(isAudioMediaFile("A001C001.MOV")).toBe(false);
   });
 });

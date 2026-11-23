@@ -65,3 +65,40 @@ it("changes the active status filter and hides empty secondary filter pills", as
     vi.unstubAllGlobals();
   }
 });
+
+it("classifies an unindexed wav as sync audio without a relink warning", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const item = {
+    media_id: "wav-1",
+    display_name: "TX03_MIC010.wav",
+    folder_label: "录音",
+    inferred_camera: "?",
+    indexed: false,
+    state: "unknown",
+    label: {},
+  };
+  vi.spyOn(MediaRoleClient.prototype, "inventory").mockResolvedValue({
+    contract: "media-inventory.v1", project_id: "audio", role_revision: 1, inventory_updated_at: "", scan_required: false,
+    summary: { files: 1, indexed: 0, unindexed: 1, labeled: 0, auxiliary: 0 }, items: [item], semantics: {},
+  });
+  vi.spyOn(MediaRoleClient.prototype, "roles").mockResolvedValue({ version: 1, contract: "media-roles.v1", revision: 1, updated_at: "", media: {} });
+  vi.spyOn(HostConnection.prototype, "reviewModel").mockRejectedValue(new Error("Review unavailable"));
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  document.body.append(container);
+  try {
+    await act(async () => root.render(<MediaLibraryWorkbench baseUrl="http://synthetic.test" projectId="audio" onOpenMediaBinding={() => undefined} />));
+    expect(container.textContent).toContain("录音");
+    expect(container.textContent).toContain("同期录音");
+    expect(container.textContent).toContain("同期音");
+    expect(container.textContent).not.toContain("缺失 · 重连");
+    expect(container.querySelector('[aria-label="按状态筛选：待补机位"]')).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>(".media-library-row")?.click());
+    expect(container.textContent).toContain("同期录音素材（用于多机位声波同步）");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});

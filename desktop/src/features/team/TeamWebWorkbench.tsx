@@ -82,13 +82,13 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
 
   async function start(): Promise<void> {
     setBusy(true);
-    setMessage(status?.running && !status.healthy ? "正在重新开启团队审阅…" : "正在开启团队审阅…");
+    setMessage(status?.running && !status.healthy ? "正在重新开启局域网共享…" : "正在开启局域网共享…");
     try {
       const result = await gateway.start({ workspacePaths, port: Number(port), access, security, pairingCode });
       setPairingCode(result.pairing_code);
       const next = await gateway.status();
       setStatus(next);
-      setMessage(next.healthy ? "团队审阅已开启，可以复制链接给团队成员。" : "服务已启动，但还不能正常访问；请查看高级连接设置。 ");
+      setMessage(next.healthy ? "局域网共享已开启，可以复制链接给团队成员。" : "服务已启动，但还不能正常访问；请查看高级连接设置。 ");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -144,8 +144,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
       <header className="team-web-heading">
         <div>
           <p className="eyebrow">团队协作</p>
-          <h2>共享审阅</h2>
-          <p>团队成员只看片并提交个人意见；最终首选、保留或废弃仍由本机审阅决定。</p>
+          <h2>局域网共享</h2>
         </div>
         <div className="team-web-state">
           <span className={healthy ? "is-running" : "is-stopped"}>{healthy ? "可分享" : processRunning ? "需要处理" : "未开启"}</span>
@@ -153,31 +152,20 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
         </div>
       </header>
 
-      <div className="team-review-primary-grid">
-        <section className="team-web-panel team-share-panel">
-          <p className="eyebrow">当前项目</p>
-          <h3>{healthy ? "团队审阅已就绪" : "开启团队审阅"}</h3>
-          <p className="production-note">{message}</p>
-          {shareUrl ? <code className="team-share-url">{shareUrl}</code> : null}
-          {healthy && security === "pairing" ? <div className="team-pairing-card"><span>首次配对码</span><strong>{status?.pairing_code || pairingCode || "—"}</strong></div> : null}
-          <div className="team-web-actions">
-            {!healthy ? <button type="button" disabled={busy || !isTauri() || workspacePaths.length === 0} onClick={() => void start()}>{processRunning ? "重新开启" : "开启团队审阅"}</button> : null}
-            {healthy ? <button type="button" disabled={!shareUrl} onClick={() => void copyLink()}>复制链接</button> : null}
-            {healthy ? <button type="button" className="secondary" disabled={!shareUrl || !isTauri()} onClick={() => void openTeamWeb()}>浏览器打开</button> : null}
-            {processRunning ? <button type="button" className="secondary" disabled={busy} onClick={() => void stop()}>关闭</button> : null}
-          </div>
-        </section>
-
-        <section className="team-web-panel team-review-boundary-card">
-          <p className="eyebrow">权限边界</p>
-          <h3>团队能做什么</h3>
-          <ul>
-            <li>查看当前共享工作区中的项目与素材卡。</li>
-            <li>提交自己的首选、保留或废弃意见。</li>
-            <li>不能改剧本归集、场记、最终剪辑决定或交付文件。</li>
-          </ul>
-        </section>
-      </div>
+      <section className="team-web-panel team-share-panel">
+        <p className="eyebrow">当前项目</p>
+        <h3>{healthy ? "团队审阅已就绪" : "开启局域网共享"}</h3>
+        <p className="production-note">{message}</p>
+        {shareUrl ? <code className="team-share-url">{shareUrl}</code> : null}
+        {healthy && security === "pairing" ? <div className="team-pairing-card"><span>配对码</span><strong>{status?.pairing_code || pairingCode || "—"}</strong></div> : null}
+        <div className="team-web-actions">
+          {!healthy ? <button type="button" disabled={busy || !isTauri() || workspacePaths.length === 0} onClick={() => void start()}>{processRunning ? "重新开启局域网共享" : "开启局域网共享"}</button> : null}
+          {healthy ? <button type="button" disabled={!shareUrl} onClick={() => void copyLink()}>复制局域网链接</button> : null}
+          {healthy ? <button type="button" className="secondary" disabled={!shareUrl || !isTauri()} onClick={() => void openTeamWeb()}>浏览器打开</button> : null}
+          {processRunning ? <button type="button" className="secondary" disabled={busy} onClick={() => void stop()}>关闭</button> : null}
+        </div>
+        <p className="team-permission-summary">仅支持浏览器看片与提交个人意见，不影响场记、剧本归集与同步母版</p>
+      </section>
 
       <details className="team-advanced-settings">
         <summary>高级连接设置</summary>

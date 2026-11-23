@@ -37,7 +37,17 @@ export function projectPresentation(
 ): ProjectPresentation {
   const takes = review?.takeCount ?? numberStat(project, "groups", "takes");
   const clips = numberStat(project, "clips", "media");
-  const attention = Math.max(attentionCount(project), review?.attentionCount ?? 0);
+  const missingMedia = numberStat(project, "missing_media");
+  const explicit = numberStat(project, "explicit");
+  const matchedGroups = numberStat(project, "matched_groups");
+  const missingTranscripts = numberStat(project, "missing_transcripts");
+  const multicamGroups = numberStat(project, "multicam_groups");
+  const syncedBeforeMatching = takes > 0
+    && missingMedia === 0
+    && explicit === 0
+    && matchedGroups === 0
+    && missingTranscripts >= takes;
+  const attention = syncedBeforeMatching ? 0 : Math.max(attentionCount(project), review?.attentionCount ?? 0);
   const kind = project.input_kind === "fcpxml" ? "FCPXML" : "素材目录";
 
   if (project.error) {
@@ -86,6 +96,18 @@ export function projectPresentation(
       statusLabel: "待整理",
       statusTone: "idle",
       sidebarSubtitle: clips > 0 ? `${clips} 素材 · 待整理` : "待整理",
+    };
+  }
+
+  if (syncedBeforeMatching) {
+    return {
+      kind,
+      takes,
+      clips,
+      attention: 0,
+      statusLabel: "已同步",
+      statusTone: "ready",
+      sidebarSubtitle: multicamGroups > 0 ? `${multicamGroups} 多机位 · 待匹配剧本` : `${takes} Take · 待匹配剧本`,
     };
   }
 

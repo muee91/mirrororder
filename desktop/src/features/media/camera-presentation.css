@@ -63,6 +63,22 @@
   --camera-rail: #64748b;
 }
 
+.mirrororder-redesign-shell [data-camera-tone="audio"],
+.mo-media-card [data-camera-tone="audio"],
+.mo-media-card[data-camera-tone="audio"],
+.media-library-workbench [data-camera-tone="audio"] {
+  --camera-ink: #0f7490;
+  --camera-fill: color-mix(in srgb, #58bfd1 15%, var(--mo-surface-pane, #fff));
+  --camera-border: color-mix(in srgb, #58bfd1 48%, var(--mo-border-default, #dbe3ea));
+  --camera-rail: #58bfd1;
+}
+.script-alignment-pane [data-camera-tone="audio"] {
+  --camera-ink: #0f7490;
+  --camera-fill: color-mix(in srgb, #58bfd1 15%, var(--mo-surface-pane, #fff));
+  --camera-border: color-mix(in srgb, #58bfd1 48%, var(--mo-border-default, #dbe3ea));
+  --camera-rail: #58bfd1;
+}
+
 .mirrororder-redesign-shell [data-camera-tone="custom"],
 .mo-media-card [data-camera-tone="custom"],
 .mo-media-card[data-camera-tone="custom"],
@@ -119,6 +135,7 @@ html[data-mirrororder-theme="dark"] [data-camera-tone="a"] { --camera-ink: #6ee7
 html[data-mirrororder-theme="dark"] [data-camera-tone="b"] { --camera-ink: #f2b479; }
 html[data-mirrororder-theme="dark"] [data-camera-tone="c"] { --camera-ink: #c1b3f8; }
 html[data-mirrororder-theme="dark"] [data-camera-tone="aux"] { --camera-ink: #b8c4d4; }
+html[data-mirrororder-theme="dark"] [data-camera-tone="audio"] { --camera-ink: #8ce0ec; }
 
 html[data-mirrororder-theme="dark"] .mo-media-camera-badge[data-camera-tone] {
   border-color: color-mix(in srgb, var(--camera-rail) 32%, transparent);

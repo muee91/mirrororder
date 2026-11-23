@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewModelPayload } from "../../api/host";
+import { DesktopClient } from "../../api/desktop";
 import { ProductionClient, type SlateBoard } from "../../api/production";
 import { ScriptWorkspace } from "./ScriptWorkspace";
 
@@ -213,6 +214,24 @@ describe("Script Slate linkage", () => {
     expect(host.textContent).toContain("场 1-1 · 镜 3 · 次 2");
     expect(host.textContent).toContain("待确认景别");
     expect(host.textContent).toContain("B.mp4");
+  });
+
+  it("offers an explicit background transcribe and match action", async () => {
+    const pendingModel = model();
+    for (const take of pendingModel.take_groups) {
+      take.effective_mapping.script_segment_ids = [];
+      take.candidates = [];
+    }
+    snapshotModel = pendingModel;
+    const prepare = vi.spyOn(DesktopClient.prototype, "prepareProject").mockResolvedValue({ task_id: "task-1", status: "queued" });
+    await act(async () => root.render(
+      <ScriptWorkspace baseUrl="http://synthetic.test" project={project} />,
+    ));
+    const action = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "自动转写并匹配剧本");
+    expect(action).toBeTruthy();
+    await act(async () => action?.click());
+    expect(prepare).toHaveBeenCalledWith("project-1");
+    expect(host.textContent).toContain("后台转写与匹配任务已提交");
   });
 
 });

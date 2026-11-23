@@ -30,6 +30,11 @@
   gap: 6px;
 }
 
+.review-master-timecode {
+  font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
 .review-finder-controls { flex: 1 1 auto; flex-wrap: wrap; }
 .review-search-wrap { position: relative; flex: 1 1 260px; min-width: 190px; }
 .review-search-input { width: 100%; min-height: 32px; border: 1px solid var(--mo-border-default); border-radius: 8px; padding: 0 34px 0 11px; color: var(--mo-text-primary); background: var(--mo-surface-control); font: inherit; font-size: 12px; }

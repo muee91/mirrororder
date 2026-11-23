@@ -41,6 +41,14 @@ describe("project presentation model", () => {
     expect(result.sidebarSubtitle).toBe("12 Take");
   });
 
+  it("shows synced before transcription and script matching", () => {
+    const result = projectPresentation(project({ groups: 12, clips: 36, multicam_groups: 10, missing_media: 0, explicit: 0, matched_groups: 0, missing_transcripts: 12 }));
+    expect(result.statusTone).toBe("ready");
+    expect(result.statusLabel).toBe("已同步");
+    expect(result.attention).toBe(0);
+    expect(result.sidebarSubtitle).toBe("10 多机位 · 待匹配剧本");
+  });
+
   it("surfaces attention consistently", () => {
     const result = projectPresentation(project({ groups: 8, clips: 24, missing_media: 2, script_gap_blocks: 1 }));
     expect(result.statusTone).toBe("attention");

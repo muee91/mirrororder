@@ -14,7 +14,7 @@ import { MediaHealthIndicator } from "../../components/StatusIndicators";
 import { closeDetailsMenu, handleDetailsMenuBlur, handleDetailsMenuToggle } from "../../components/detailsMenuDismiss";
 import { StudioIcon } from "../../components/StudioIcons";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
-import { cameraFilterKey, effectiveCamera, type CameraTone } from "./cameraPresentation";
+import { cameraFilterKey, effectiveCamera, isAudioMediaFile, type CameraPresentation, type CameraTone } from "./cameraPresentation";
 import { mediaHealthState } from "./mediaHealthState";
 import { useNearViewportGate, useVideoDecodeSlot } from "./nearViewport";
 import { canPreviewReviewPlayback } from "./mediaPlaybackProjection";
@@ -126,6 +126,32 @@ function roleFor(item: MediaInventoryItem, store: MediaRoleStore | null): MediaR
   return store?.media[item.media_id] ?? item.label ?? {};
 }
 
+function isUnclassifiedAudio(item: MediaInventoryItem, role: MediaRole): boolean {
+  return isAudioMediaFile(item.display_name)
+    && !role.camera_override?.trim()
+    && effectiveCamera("", item.inferred_camera).tone === "unknown";
+}
+
+function mediaCameraPresentation(item: MediaInventoryItem, role: MediaRole): CameraPresentation {
+  if (isUnclassifiedAudio(item, role)) {
+    return { key: "__audio__", label: "录音", tone: "audio", sortOrder: 45 };
+  }
+  return effectiveCamera(role.camera_override, item.inferred_camera);
+}
+
+function mediaCameraKey(item: MediaInventoryItem, role: MediaRole): string {
+  return mediaCameraPresentation(item, role).key || cameraFilterKey(role.camera_override, item.inferred_camera);
+}
+
+function mediaRoleLabel(item: MediaInventoryItem, role: MediaRole): string {
+  if (isUnclassifiedAudio(item, role) && (!role.source_role || role.source_role === "sync_camera")) return "同期录音";
+  return ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位";
+}
+
+function mediaCameraSourceLabel(item: MediaInventoryItem, role: MediaRole): string {
+  return isUnclassifiedAudio(item, role) ? "同期音" : role.camera_override?.trim() ? "人工" : "识别";
+}
+
 function isAuxiliary(role: MediaRole): boolean {
   return Boolean((role.source_role && role.source_role !== "sync_camera") || role.sync_policy === "exclude");
 }
@@ -164,10 +190,10 @@ export function mediaInventoryReport(items: MediaInventoryItem[], store: MediaRo
   const lines = [`素材清单：${items.length} 条`];
   for (const item of items) {
     const role = roleFor(item, store);
-    const camera = effectiveCamera(role.camera_override, item.inferred_camera).label;
+    const camera = mediaCameraPresentation(item, role).label;
     const scene = role.scene_id?.trim() ? `场 ${role.scene_id.trim()}` : "未分场";
     const status = item.indexed ? "已入索引" : "待恢复";
-    lines.push(`${item.display_name} · ${camera} · ${scene} · ${ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位"} · ${status}`);
+    lines.push(`${item.display_name} · ${camera} · ${scene} · ${mediaRoleLabel(item, role)} · ${status}`);
   }
   return lines.join("\n");
 }
@@ -183,6 +209,7 @@ export function sceneCameraReadiness(
   const groups = new Map<string, { media: number; cameras: Set<string> }>();
   for (const item of items) {
     const role = roleFor(item, store);
+    if (isUnclassifiedAudio(item, role)) continue;
     if (role.source_role && role.source_role !== "sync_camera") continue;
     if (role.sync_policy === "exclude") continue;
     const sceneId = role.scene_id?.trim();
@@ -306,13 +333,15 @@ const MediaLibraryRow = memo(function MediaLibraryRow({
   );
   const role = roleFor(item, roles);
   const auxiliary = isAuxiliary(role);
-  const camera = effectiveCamera(role.camera_override, item.inferred_camera);
+  const camera = mediaCameraPresentation(item, role);
   const manualCamera = Boolean(role.camera_override?.trim());
   const healthState = mediaHealthState({ indexed: item.indexed, state: item.state, playable: Boolean(playback) });
-  const roleLabel = ROLE_LABELS[role.source_role || "sync_camera"] || role.role_label || role.source_role || "同步机位";
+  const roleLabel = mediaRoleLabel(item, role);
+  const cameraSourceLabel = mediaCameraSourceLabel(item, role);
   const rowLabel = [
     item.display_name,
     `机位 ${camera.label}${manualCamera ? "（人工）" : "（识别）"}`,
+    cameraSourceLabel === "同期音" ? "同期音" : "",
     roleLabel,
     role.scene_id ? `场 ${role.scene_id}` : "未分场",
     takeLabel,
@@ -357,10 +386,14 @@ const MediaLibraryRow = memo(function MediaLibraryRow({
           />
         ) : <span className="media-library-thumb-fallback">{camera.label}</span>}
       </span>
-      <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{manualCamera ? "人工" : "识别"}</small></span>
+      <span className="media-library-camera-block" data-camera-tone={camera.tone}><strong>{camera.label}</strong><small>{cameraSourceLabel}</small></span>
       <span className="media-library-name"><strong>{item.display_name}</strong><small>{[item.folder_label || "素材", resolutionLabel(item.width, item.height), durationLabel(item.duration_seconds)].filter(Boolean).join(" · ")}</small></span>
       <span className="media-library-role"><strong>{roleLabel}</strong><small>{[role.scene_id ? `场 ${role.scene_id}` : "", takeLabel].filter(Boolean).join(" · ") || (auxiliary ? "不参与主机位同步" : "")}</small></span>
-      <span className="media-library-row-state"><MediaHealthIndicator state={healthState} /></span>
+      <span className="media-library-row-state">
+        {isAudioMediaFile(item.display_name) && !item.indexed && item.state !== "missing"
+          ? <span className="media-audio-sync-badge">同期音</span>
+          : <MediaHealthIndicator state={healthState} />}
+      </span>
     </button>
   );
 });
@@ -511,8 +544,8 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     const grouped = new Map<string, CameraFilterItem>();
     for (const item of inventory?.items ?? []) {
       const role = roleFor(item, roles);
-      const presentation = effectiveCamera(role.camera_override, item.inferred_camera);
-      const key = cameraFilterKey(role.camera_override, item.inferred_camera);
+      const presentation = mediaCameraPresentation(item, role);
+      const key = mediaCameraKey(item, role);
       const current = grouped.get(key);
       if (current) current.count += 1;
       else grouped.set(key, { key, label: presentation.label, tone: presentation.tone, sortOrder: presentation.sortOrder, count: 1 });
@@ -536,11 +569,12 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     const needle = query.trim().toLocaleLowerCase("zh-CN");
     return (inventory?.items ?? []).filter((item) => {
       const role = roleFor(item, roles);
-      if (cameraFilter !== "all" && cameraFilterKey(role.camera_override, item.inferred_camera) !== cameraFilter) return false;
+      const audio = isAudioMediaFile(item.display_name);
+      if (cameraFilter !== "all" && mediaCameraKey(item, role) !== cameraFilter) return false;
       if (sceneFilter !== "all" && role.scene_id?.trim() !== sceneFilter) return false;
       if (filter === "auxiliary" && !isAuxiliary(role)) return false;
-      if (filter === "needsCamera" && (isAuxiliary(role) || effectiveCamera(role.camera_override, item.inferred_camera).label.trim() !== "?")) return false;
-      if (filter === "unindexed" && item.indexed) return false;
+      if (filter === "needsCamera" && (audio || isAuxiliary(role) || effectiveCamera(role.camera_override, item.inferred_camera).label.trim() !== "?")) return false;
+      if (filter === "unindexed" && (item.indexed || (audio && item.state !== "missing"))) return false;
       if (filter === "labeled" && Object.keys(role).length === 0) return false;
       if (!needle) return true;
       return [item.display_name, item.folder_label, item.inferred_camera, role.camera_override, role.source_role, role.role_label, role.scene_id, role.note]
@@ -555,14 +589,15 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     const counts = { all: 0, auxiliary: 0, needsCamera: 0, unindexed: 0, labeled: 0 };
     for (const item of inventory?.items ?? []) {
       const role = roleFor(item, roles);
-      if (cameraFilter !== "all" && cameraFilterKey(role.camera_override, item.inferred_camera) !== cameraFilter) continue;
+      const audio = isAudioMediaFile(item.display_name);
+      if (cameraFilter !== "all" && mediaCameraKey(item, role) !== cameraFilter) continue;
       if (sceneFilter !== "all" && role.scene_id?.trim() !== sceneFilter) continue;
       if (needle && ![item.display_name, item.folder_label, item.inferred_camera, role.camera_override, role.source_role, role.role_label, role.scene_id, role.note]
         .join(" ").toLocaleLowerCase("zh-CN").includes(needle)) continue;
       counts.all += 1;
       if (isAuxiliary(role)) counts.auxiliary += 1;
-      if (!isAuxiliary(role) && effectiveCamera(role.camera_override, item.inferred_camera).label.trim() === "?") counts.needsCamera += 1;
-      if (!item.indexed) counts.unindexed += 1;
+      if (!audio && !isAuxiliary(role) && effectiveCamera(role.camera_override, item.inferred_camera).label.trim() === "?") counts.needsCamera += 1;
+      if (item.state === "missing" || (!item.indexed && !audio)) counts.unindexed += 1;
       if (Object.keys(role).length > 0) counts.labeled += 1;
     }
     return counts;
@@ -611,7 +646,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
   const selectedPlayback = selectedItem
     ? playbackForItem(host, projectId, selectedItem, playbackByMedia[selectedItem.media_id])
     : undefined;
-  const selectedCamera = selectedItem ? effectiveCamera(draft.camera_override, selectedItem.inferred_camera) : null;
+  const selectedCamera = selectedItem ? mediaCameraPresentation(selectedItem, draft) : null;
   const selectedHasOverride = Boolean(draft.camera_override?.trim());
   const selectedPlaybackFailed = Boolean(selectedItem && playbackFailedMediaId === selectedItem.media_id);
   useEffect(() => {
@@ -814,7 +849,9 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
     patch({ source_role: value, sync_policy: value === "sync_camera" ? "auto" : "exclude" });
   }
 
-  const unindexedCount = inventory?.summary.unindexed ?? 0;
+  const unindexedCount = inventory?.items.length
+    ? inventory.items.filter((item) => item.state === "missing" || (!item.indexed && !isAudioMediaFile(item.display_name))).length
+    : inventory?.summary.unindexed ?? 0;
 
   return (
     <section className="media-library-workbench" aria-busy={busy}>
@@ -932,8 +969,10 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
               <section className="media-library-monitor">
                 <header>
                   <span className="media-library-monitor-camera" data-camera-tone={selectedCamera.tone}>{selectedCamera.label}</span>
-                  <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{[resolutionLabel(selectedItem.width, selectedItem.height), durationLabel(selectedItem.duration_seconds), selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"].filter(Boolean).join(" · ")}</small></span>
-                  <MediaHealthIndicator state={mediaHealthState({ indexed: selectedItem.indexed, state: selectedItem.state, playable: Boolean(selectedPlayback), playbackFailed: selectedPlaybackFailed })} />
+                  <span className="media-library-monitor-title"><strong>{selectedItem.display_name}</strong><small>{[resolutionLabel(selectedItem.width, selectedItem.height), durationLabel(selectedItem.duration_seconds), isUnclassifiedAudio(selectedItem, draft) ? "同期音" : selectedHasOverride ? `人工机位 · 自动识别 ${effectiveCamera("", selectedItem.inferred_camera).label}` : "自动识别机位"].filter(Boolean).join(" · ")}</small></span>
+                  {isAudioMediaFile(selectedItem.display_name) && !selectedItem.indexed && selectedItem.state !== "missing"
+                    ? <span className="media-audio-sync-badge">同期音</span>
+                    : <MediaHealthIndicator state={mediaHealthState({ indexed: selectedItem.indexed, state: selectedItem.state, playable: Boolean(selectedPlayback), playbackFailed: selectedPlaybackFailed })} />}
                 </header>
                 <div className="media-library-player">
                   {selectedPlayback && !selectedPlaybackFailed ? (
@@ -955,6 +994,8 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
                     <div className="media-library-player-state is-error" aria-live="polite"><strong>这条原片当前无法在 App 内播放</strong><span>{playbackFailureDetail?.detail ?? "正在确认失败原因；可先确认素材盘在线后重新加载。"}</span><button type="button" className="secondary" aria-label="重新加载当前素材播放" onClick={() => { setPlaybackFailedMediaId(""); setPlaybackRetry((value) => value + 1); }}>重新加载</button></div>
                   ) : selectedItem.state === "missing" ? (
                     <div className="media-library-player-state" aria-live="polite"><strong>本机当前找不到这条素材</strong><span>设备绑定曾经确认过它，但文件已移动或素材盘暂时离线。重新连接素材后再加载。</span>{onOpenMediaBinding ? <button type="button" className="secondary" aria-label="打开素材恢复" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
+                  ) : isAudioMediaFile(selectedItem.display_name) && !selectedItem.indexed ? (
+                    <div className="media-library-player-state" aria-live="polite"><strong>同期录音素材（用于多机位声波同步）</strong><span>这条录音会参与同步准备，完成本机确认后即可查看播放状态。</span>{onOpenMediaBinding ? <button type="button" className="secondary" aria-label="打开素材恢复" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : selectedItem.state === "unknown" ? (
                     <div className="media-library-player-state" aria-live="polite"><strong>这条素材尚未在本机确认</strong><span>它有项目索引，但当前设备没有可验证的绑定。先扫描并确认素材位置，再开始播放。</span>{onOpenMediaBinding ? <button type="button" className="secondary" aria-label="打开素材恢复" onClick={onOpenMediaBinding}>打开素材恢复</button> : null}</div>
                   ) : !selectedItem.indexed ? (

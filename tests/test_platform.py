@@ -224,6 +224,30 @@ def test_workspace_payload_uses_registry_only_without_materializing_projects(tmp
     assert service._projects == {}
 
 
+def test_workspace_payload_enriches_empty_registry_stats_from_completed_tasks(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device-state"))
+    workspace = _workspace(tmp_path).with_workspace_id("ws_tasks")
+    project_dir = workspace.registry_path.parent / "demo"
+    output = project_dir / "output"
+    output.mkdir(parents=True)
+    (project_dir / "project.toml").write_text(
+        '[project]\nname="Demo"\n\n[input]\nkind="fcpxml"\n\n[output]\ndirectory="./output"\n',
+        encoding="utf-8",
+    )
+    workspace.registry_path.write_text(json.dumps({"version": 1, "projects": [{
+        "project_id": "demo", "name": "Demo", "config_path": "projects/demo/project.toml",
+        "input_kind": "fcpxml", "stats": {},
+    }]}), encoding="utf-8")
+    (output / "tasks.json").write_text(json.dumps({"tasks": [{
+        "type": "multicam_sync", "status": "completed", "completed_at": "2026-11-23T01:00:00Z",
+        "result": {"analysis": {"groups": 4, "multicam_groups": 2}},
+    }]}), encoding="utf-8")
+    service = WorkspaceService(workspace)
+    payload = service.workspace_payload()
+    assert payload["projects"][0]["stats"] == {"groups": 4, "multicam_groups": 2}
+    assert service._projects == {}
+
+
 def test_project_id_for_preserves_unicode_names_without_collapsing_to_project() -> None:
     chinese_id = project_id_for("人不狠，站不稳")
     assert chinese_id.startswith("project-")

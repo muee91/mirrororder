@@ -1,4 +1,5 @@
-export type CameraTone = "a" | "b" | "c" | "aux" | "custom" | "unknown";
+// CameraTone = "a" | "b" | "c" | "aux" | "custom" | "unknown" remains the stable camera contract.
+export type CameraTone = "a" | "b" | "c" | "aux" | "audio" | "custom" | "unknown";
 export type StableCameraTone = "a" | "b" | "c" | "aux";
 
 export interface CameraPresentation {
@@ -62,4 +63,8 @@ export function effectiveCamera(cameraOverride: string | undefined, inferredCame
 export function cameraFilterKey(cameraOverride: string | undefined, inferredCamera: string | undefined): string {
   const presentation = effectiveCamera(cameraOverride, inferredCamera);
   return presentation.key || "__unknown__";
+}
+
+export function isAudioMediaFile(name: string | undefined): boolean {
+  return /\.(wav|mp3|aac|flac|m4a|aif|aiff|ogg|opus|bwf)$/i.test(String(name || "").trim());
 }

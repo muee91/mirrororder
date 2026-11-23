@@ -112,6 +112,32 @@ class TaskManager(_impl.TaskManager):
             )
         return analysis["index"]["stats"]
 
+    def _persist_project_summary(self, project_id: str, config, task_type: str, result: dict[str, Any]) -> None:
+        if not self.workspace_id or task_type not in {"multicam_sync", "prepare_project", "incremental_analyze"}:
+            return
+        stats = result.get("analysis") if isinstance(result.get("analysis"), dict) else result.get("stats")
+        if not isinstance(stats, dict) and task_type == "incremental_analyze":
+            stats = result
+        if isinstance(stats, dict) and isinstance(stats.get("stats"), dict):
+            stats = stats["stats"]
+        if not isinstance(stats, dict) or not stats:
+            return
+        try:
+            from .audit_engine import _analysis_revision
+            from .workspace_db import WorkspaceDatabase
+
+            WorkspaceDatabase(self.workspace_id).sync_project_summary(
+                project_id,
+                name=config.name,
+                input_kind=config.input_kind,
+                config_path=str(config.config_path),
+                analysis_revision=_analysis_revision(config.output_dir),
+                stats=dict(stats),
+            )
+        except Exception:
+            # The device-local summary accelerates discovery and is never task authority.
+            return
+
     @contextmanager
     def _resource(
         self,
@@ -496,6 +522,7 @@ class TaskManager(_impl.TaskManager):
                 cache_previous_sync_timeline(config, project_id, [{
                     **task, "status": "completed", "stage": "completed", "message": "任务完成",
                 }])
+            self._persist_project_summary(project_id, config, task_type, result)
             self._update(config, task_id, status="completed", stage="completed", result=result, message="任务完成")
         except ResourceCancelled as error:
             message = str(error).strip() or "任务已取消"

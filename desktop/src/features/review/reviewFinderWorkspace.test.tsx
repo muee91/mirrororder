@@ -2,12 +2,12 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
+import type { ReviewModelPayload, ReviewScriptBlock, ReviewTakeGroup } from "../../api/host";
 import {
   readShowRoughCutPreference,
   saveShowRoughCutPreference,
 } from "../../app/desktopPreferences";
-import { ReviewWorkspace } from "./ReviewWorkspace";
+import { ReviewWorkspace, scriptBlockBadge } from "./ReviewWorkspace";
 
 const reviewMock = vi.hoisted(() => ({
   model: null as ReviewModelPayload | null,
@@ -216,6 +216,30 @@ describe("Review Finder workspace", () => {
     container.remove();
     localStorage.clear();
     vi.restoreAllMocks();
+  });
+
+  it("labels action blocks and copies the master timeline timecode", async () => {
+    expect(scriptBlockBadge({ type: "action", speaker: "", text: "△走向门", raw_text: "△走向门" } as ReviewScriptBlock)).toBe("动作");
+    await act(async () =>
+      (container.querySelector<HTMLButtonElement>(".review-master-timecode"))!.click()
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("00:00:00");
+    expect(container.textContent).toContain("已复制时码");
+  });
+
+  it("uses sequential card numbers when take indexes repeat across scenes", async () => {
+    const duplicateModel = model();
+    duplicateModel.take_groups[1].take_index = 1;
+    reviewMock.model = duplicateModel;
+    await act(async () => root.render(
+      <ReviewWorkspace
+        baseUrl="http://host.test"
+        project={{ project_id: "p1", name: "测试", input_kind: "media-directory" }}
+      />,
+    ));
+    expect(container.textContent).toContain("#1 · A001C001");
+    expect(container.textContent).toContain("#2 · B002C003");
+    expect(container.textContent).not.toContain("Take #1 · B002C003");
   });
 
   it("renders the three columns and filters Takes from the script outline", async () => {

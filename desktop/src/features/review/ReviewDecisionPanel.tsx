@@ -132,7 +132,7 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
       setLoadState("ready");
       setMessage(afterConflict
         ? "已读取最新团队状态；请根据最新意见重新确认，原操作未重试。"
-        : `Editorial r${next.revision}`);
+        : "已同步");
       if (needsQueueRefresh.current) {
         needsQueueRefresh.current = false;
         try {
@@ -184,8 +184,8 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
       if (active.current && version === requestVersion.current) {
         setPayload(response.editorial);
         setMessage(state === "unreviewed"
-          ? `当前 Take 最终决定已清除 · r${response.editorial.revision}`
-          : `当前 Take 最终：${STATE_LABELS[state]} · r${response.editorial.revision}`);
+          ? "当前 Take 最终决定已清除 · 已保存"
+          : `当前 Take 最终：${STATE_LABELS[state]} · 已保存`);
       }
       try {
         // Refresh counts after a completed write even if the user moved to the
@@ -249,7 +249,7 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
         <p className="review-assignment-feedback-note">另有 {assignmentFeedback} 个剧本段级团队反馈。审阅页不展开剧本段级裁决；需要结合位置上下文时回到“剧本”处理。</p>
       ) : null}
 
-      <p className="evidence-authority-note">这里只写 Take 级 Final Editorial Decision；不会修改剧本 placement、场记事实或 Timeline。</p>
+      <p className="evidence-authority-note">仅记录本条审阅结论，不影响场记、剧本归集或同步母版。</p>
     </section>
   );
 }

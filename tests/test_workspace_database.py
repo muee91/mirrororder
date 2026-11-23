@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from script_organizer.semantic_store import SemanticStore
-from script_organizer.workspace_db import WorkspaceDatabase, workspace_database_path
+from script_organizer.workspace_db import WorkspaceDatabase, read_cached_project_summaries, workspace_database_path
 
 
 def _index() -> dict:
@@ -49,6 +49,16 @@ def test_read_only_database_does_not_create_or_initialize_storage(tmp_path: Path
     assert not missing.exists()
     assert not missing.parent.exists()
     assert SemanticStore(database, read_only=True).summary("demo")["documents"] == 0
+
+
+def test_read_cached_project_summaries_uses_existing_database_only(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("MIRRORORDER_DEVICE_STATE_DIR", str(tmp_path / "device"))
+    assert read_cached_project_summaries("missing") == {}
+    database = WorkspaceDatabase("ws_cached")
+    database.sync_project_summary("project-a", analysis_revision="rev-1", stats={"groups": 3})
+    before = database.path.stat().st_mtime_ns
+    assert read_cached_project_summaries("ws_cached") == {"project-a": {"analysis_revision": "rev-1", "stats": {"groups": 3}}}
+    assert database.path.stat().st_mtime_ns == before
 
 
 def test_read_only_semantic_store_does_not_write_existing_database(tmp_path: Path) -> None:

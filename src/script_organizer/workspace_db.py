@@ -54,6 +54,34 @@ def workspace_database_path(workspace_id: str) -> Path:
     return device_state_dir() / "workspaces" / _safe_workspace_key(workspace_id) / "workspace.sqlite3"
 
 
+def read_cached_project_summaries(workspace_id: str) -> dict[str, dict[str, Any]]:
+    """Read lightweight project summaries without creating or mutating storage."""
+    if not str(workspace_id or "").strip():
+        return {}
+    try:
+        path = workspace_database_path(workspace_id)
+        if not path.is_file():
+            return {}
+        database = WorkspaceDatabase(workspace_id, path, read_only=True)
+        with database.connection() as connection:
+            rows = connection.execute(
+                "SELECT project_id, analysis_revision, stats_json FROM projects"
+            ).fetchall()
+        summaries: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            try:
+                stats = json.loads(str(row[2] or "{}"))
+            except (TypeError, ValueError):
+                stats = {}
+            summaries[str(row[0])] = {
+                "analysis_revision": str(row[1] or ""),
+                "stats": stats if isinstance(stats, dict) else {},
+            }
+        return summaries
+    except (OSError, sqlite3.Error, ValueError):
+        return {}
+
+
 class WorkspaceDatabase:
     """Device-local SQLite index for one MirrorOrder workspace.
 

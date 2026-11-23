@@ -180,7 +180,7 @@ export function TakeInspector({
       {angle ? (
         <div className="selected-angle-meta">
           <strong>{angle.name}</strong>
-          <span>{angle.camera || "—"} · {angle.duration.toFixed(1)}s · {angle.shot_type && angle.shot_type !== "unknown" ? angle.shot_type : "景别尚无 clip-level 投影"}</span>
+          <span>{angle.camera || "—"} · {angle.duration.toFixed(1)}s{angle.shot_type && angle.shot_type !== "unknown" ? ` · ${angle.shot_type}` : ""}</span>
         </div>
       ) : null}
 
@@ -197,7 +197,7 @@ export function TakeInspector({
 
       <div className="dialogue-panel">
         <p className="eyebrow">对白</p>
-        <p>{take.transcript.text || "当前没有可靠对白投影。"}</p>
+        <p>{take.transcript.text || "暂无识别对白"}</p>
       </div>
 
       <details className="take-inspector-evidence">

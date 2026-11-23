@@ -35,7 +35,7 @@ from .review_store import ReviewConflictError, ReviewStore
 from .tasks import TaskManager
 from .transcript import TranscriptStore, slice_transcript
 from .workspace import WorkspaceConfig, WorkspaceRegistry
-from .workspace_db import WorkspaceDatabase
+from .workspace_db import WorkspaceDatabase, read_cached_project_summaries
 
 
 class MirrorOrderHTTPServer(ThreadingHTTPServer):
@@ -592,10 +592,75 @@ class WorkspaceService:
             "local_media": dict(entry.get("local_media", {})) if isinstance(entry.get("local_media"), dict) else {},
         }
 
+    def _cached_task_summary(self, entry: dict[str, Any]) -> dict[str, Any]:
+        project_id = str(entry.get("project_id", "") or "")
+        config_value = str(entry.get("config_path", "") or "")
+        if not project_id or not config_value:
+            return {}
+        config_path = Path(config_value).expanduser()
+        if not config_path.is_absolute():
+            config_path = self.workspace.config_path.parent / config_path
+        try:
+            config = ProjectConfig.from_file(config_path)
+            tasks_path = config.output_dir / "tasks.json"
+            if not tasks_path.is_file() or tasks_path.stat().st_size >= 512 * 1024:
+                return {}
+            raw = _read_json(tasks_path, {})
+            tasks = raw.get("tasks", []) if isinstance(raw, dict) else []
+            candidates = [
+                task for task in tasks
+                if isinstance(task, dict)
+                and task.get("status") == "completed"
+                and task.get("type") in {"multicam_sync", "prepare_project", "incremental_analyze", "analyze"}
+            ]
+            candidates.sort(key=lambda task: str(task.get("completed_at", "") or task.get("created_at", "")), reverse=True)
+            for task in candidates:
+                result = task.get("result", {})
+                if not isinstance(result, dict):
+                    continue
+                stats = result.get("analysis")
+                if not isinstance(stats, dict):
+                    stats = result.get("stats")
+                if not isinstance(stats, dict) and task.get("type") == "incremental_analyze":
+                    stats = result
+                if isinstance(stats, dict) and isinstance(stats.get("stats"), dict):
+                    stats = stats["stats"]
+                if isinstance(stats, dict) and stats:
+                    return {"analysis_revision": "", "stats": dict(stats)}
+        except (OSError, ValueError, TypeError):
+            return {}
+        return {}
+
+    def _enriched_project_summary(self, entry: dict[str, Any], cached_db: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        project_id = str(entry.get("project_id", "") or "")
+        summary = self._lightweight_project_summary(entry)
+        if summary["stats"]:
+            return summary
+        with self._projects_lock:
+            project = self._projects.get(project_id)
+        if project is not None:
+            stats = project.index.get("stats", {}) if isinstance(project.index, dict) else {}
+            if isinstance(stats, dict) and stats:
+                summary["stats"] = dict(stats)
+                summary["analysis_revision"] = project.analysis_revision
+                return summary
+        cached = cached_db.get(project_id, {})
+        if isinstance(cached.get("stats"), dict) and cached["stats"]:
+            summary["stats"] = dict(cached["stats"])
+            summary["analysis_revision"] = str(cached.get("analysis_revision", "") or "")
+            return summary
+        task_summary = self._cached_task_summary(entry)
+        if task_summary.get("stats"):
+            summary["stats"] = dict(task_summary["stats"])
+            summary["analysis_revision"] = str(task_summary.get("analysis_revision", "") or "")
+        return summary
+
     def workspace_payload(self) -> dict[str, Any]:
         # Keep workspace discovery bounded by the small registry. A project
         # is materialized only after the user opens its project route.
-        projects = [self._lightweight_project_summary(entry) for entry in self.registry.list()]
+        entries = self.registry.list()
+        cached_db = read_cached_project_summaries(self.workspace.workspace_id) if any(not isinstance(entry.get("stats"), dict) or not entry.get("stats") for entry in entries) else {}
+        projects = [self._enriched_project_summary(entry, cached_db) for entry in entries]
         return {
             "workspace_id": self.workspace.workspace_id,
             "workspace": self.workspace.name,

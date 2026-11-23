@@ -215,6 +215,9 @@ export function ScriptWorkspace({
   const [attachState, setAttachState] = useState<"idle" | "saving" | "submitted" | "error">("idle");
   const [attachMessage, setAttachMessage] = useState("");
   const attaching = useRef(false);
+  const [autoMatchState, setAutoMatchState] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
+  const [autoMatchMessage, setAutoMatchMessage] = useState("");
+  const [autoMatchDismissed, setAutoMatchDismissed] = useState(false);
   const [writeMessage, setWriteMessage] = useState("");
   const [roughText, setRoughText] = useState("");
   const [roughPreview, setRoughPreview] = useState<RoughPlacementPayload | null>(null);
@@ -378,6 +381,14 @@ export function ScriptWorkspace({
   const selectedScene = useMemo(() => selectedEpisode?.scenes.find((scene) => scene.script_blocks.some((block) => block.segment_id === selectedScriptSegmentId)) ?? null, [selectedEpisode, selectedScriptSegmentId]);
   const selectedSceneKey = selectedScene ? normalizeSceneKey(selectedScene.heading || selectedScene.scene_id) : "";
   const unmappedTakes = useMemo(() => model?.take_groups.filter((take) => take.effective_mapping.script_segment_ids.length === 0) ?? [], [model]);
+  const autoMatchSummary = useMemo(() => {
+    const takes = model?.take_groups ?? [];
+    return {
+      totalMappedCount: takes.filter((take) => take.effective_mapping.script_segment_ids.length > 0).length,
+      totalCandidateCount: takes.filter((take) => take.candidates.length > 0).length,
+    };
+  }, [model]);
+  const needsAutoMatch = Boolean(model?.episodes.length && model.take_groups.length && autoMatchSummary.totalMappedCount === 0 && autoMatchSummary.totalCandidateCount === 0);
   const scenePoolCount = useMemo(() => {
     if (!selectedSceneKey || !selectedEpisode) return 0;
     return unmappedTakes.filter((take) => {
@@ -420,6 +431,32 @@ export function ScriptWorkspace({
     setSelectedScriptSegmentId(block.segment_id);
     setDrawerView("segment");
     setDrawerOpen(true);
+  }
+
+  async function runAutoMatch(): Promise<void> {
+    if (autoMatchState === "submitting") return;
+    setAutoMatchState("submitting");
+    setAutoMatchMessage("正在提交后台转写与匹配任务…");
+    try {
+      await new DesktopClient(baseUrl).prepareProject(project.project_id);
+      setAutoMatchState("submitted");
+      setAutoMatchMessage("后台转写与匹配任务已提交，可在顶栏「任务」查看进度，完成后刷新本页");
+    } catch (error) {
+      setAutoMatchState("error");
+      setAutoMatchMessage(reviewModelErrorMessage(error));
+    }
+  }
+
+  async function refreshAutoMatch(): Promise<void> {
+    try {
+      await refresh();
+      setAutoMatchState("idle");
+      setAutoMatchMessage("");
+      setAutoMatchDismissed(false);
+    } catch (error) {
+      setAutoMatchState("error");
+      setAutoMatchMessage(reviewModelErrorMessage(error));
+    }
   }
 
   function beginDrag(event: DragEvent<HTMLElement>, groupId: string): void {
@@ -623,9 +660,31 @@ export function ScriptWorkspace({
     }
   }
 
+  const { hasDuplicateTakeIndex, takeSequenceByGroupId } = useMemo(() => {
+    const seen = new Set<number>();
+    let duplicate = false;
+    const sequence = new Map<string, number>();
+    for (const [index, take] of (model?.take_groups ?? []).entries()) {
+      sequence.set(take.group_id, index + 1);
+      if (take.take_index > 0) {
+        if (seen.has(take.take_index)) duplicate = true;
+        else seen.add(take.take_index);
+      }
+    }
+    return { hasDuplicateTakeIndex: duplicate, takeSequenceByGroupId: sequence };
+  }, [model]);
+
+  function poolTakeLabel(take: ReviewTakeGroup): string {
+    if (!hasDuplicateTakeIndex) return takeDisplayLabel(take);
+    const seq = takeSequenceByGroupId.get(take.group_id) ?? 1;
+    const clipStem = take.angles[0]?.name?.replace(/\.[^.]+$/, "").trim();
+    return clipStem ? `#${seq} · ${clipStem}` : `#${seq}`;
+  }
+
   function renderPoolCard(take: ReviewTakeGroup): ReactNode {
     const record = slateRecordForTake(slateBoard, take);
     const placeableSelected = Boolean(selectedBlock && isPlaceableScriptBlock(selectedBlock));
+    const displayLabel = poolTakeLabel(take);
     return (
       <article
         className="script-pool-card"
@@ -633,13 +692,13 @@ export function ScriptWorkspace({
         draggable
         onDragStart={(event) => beginDrag(event, take.group_id)}
         onDragEnd={() => setDraggingGroupId(null)}
-        aria-label={`${takeDisplayLabel(take)} · 待归集`}
+        aria-label={`${displayLabel} · 待归集`}
       >
         <header className="script-pool-card-heading">
-          <div><strong>{takeDisplayLabel(take)}</strong><span>{take.duration.toFixed(1)}s</span></div>
+          <div><strong>{displayLabel}</strong><span>{take.duration.toFixed(1)}s</span></div>
           {record ? <ScriptSlateLinkage record={record} groupId={take.group_id} clipId={take.angles[0]?.clip_id} scriptSegmentId={selectedScriptSegmentId} onOpenSlate={onOpenSlate} /> : null}
         </header>
-        <div className="script-pool-camera-list" aria-label={`${takeDisplayLabel(take)} 机位素材`}>
+        <div className="script-pool-camera-list" aria-label={`${displayLabel} 机位素材`}>
           {take.angles.map((angle) => {
             const camera = cameraPresentation(angle.camera);
             return (
@@ -712,6 +771,16 @@ export function ScriptWorkspace({
           aria-label="搜索剧本"
         />
         <div className="workspace-toolbar-actions">
+          {model.episodes.length > 0 && model.take_groups.length > 0 ? (
+            <button
+              type="button"
+              className={needsAutoMatch ? "script-auto-match-primary" : "secondary"}
+              disabled={autoMatchState === "submitting"}
+              onClick={() => void runAutoMatch()}
+            >
+              {autoMatchState === "submitting" ? "提交中…" : "自动匹配"}
+            </button>
+          ) : null}
           <button type="button" className="secondary" disabled={!selectedBlock} title="为当前剧本段挑选对应实拍素材" onClick={() => selectedBlock && openBlockContext(selectedBlock)}>匹配素材</button>
           <button type="button" className="secondary" title="按场次范围一次性归集多条素材" onClick={() => { setDrawerView("batch"); setRoughPreview(null); setDrawerOpen(true); }}>批量归集</button>
         </div>
@@ -769,6 +838,22 @@ export function ScriptWorkspace({
           </div>
         ) : null}
       </div>
+
+      {needsAutoMatch && !autoMatchDismissed ? (
+        <div className="script-auto-match-banner" role="status">
+          <span>尚未完成对白转写与剧本自动匹配 · 共 {model.take_groups.length} 条实拍素材待关联（不影响已交付同步母版）</span>
+          <button type="button" onClick={() => void runAutoMatch()} disabled={autoMatchState === "submitting"}>
+            {autoMatchState === "submitting" ? "提交中…" : "自动转写并匹配剧本"}
+          </button>
+          <button type="button" className="secondary script-auto-match-dismiss" onClick={() => setAutoMatchDismissed(true)}>稍后</button>
+        </div>
+      ) : null}
+      {autoMatchMessage ? (
+        <div className={`script-auto-match-status is-${autoMatchState}`} role={autoMatchState === "error" ? "alert" : "status"}>
+          <span>{autoMatchMessage}</span>
+          {autoMatchState === "submitted" ? <button type="button" className="secondary" onClick={() => void refreshAutoMatch()}>刷新结果</button> : null}
+        </div>
+      ) : null}
 
       <div className="script-coverage-summary" aria-label="当前集剧本归集摘要">
         <span><strong>{episodeStats.blocks}</strong>剧本段</span>
