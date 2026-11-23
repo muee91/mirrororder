@@ -535,6 +535,7 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [showAuxColumn, setShowAuxColumn] = useState(false);
   const [hideNgRows, setHideNgRows] = useState(false);
   const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
+  const [reviewPoolsOpen, setReviewPoolsOpen] = useState(false);
   const [quickLookOpen, setQuickLookOpen] = useState(false);
   const quickLookFocusRef = useRef<HTMLElement | null>(null);
   const quickLookCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -1480,22 +1481,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             <button type="button" className={intervalSurface ? "is-active" : undefined} aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>原始片段</button>
           </nav>}
           <span className="golden-slate-count" aria-label="场记行数">{displayedDrafts.length} 条</span>
-          <div className="golden-slate-order-switch" role="group" aria-label="场记排序">
-            <button
-              type="button"
-              className={orderMode === "shooting" ? "is-active" : undefined}
-              aria-pressed={orderMode === "shooting"}
-              title="按现场拍摄时间顺序排列"
-              onClick={() => { setEditLayout(null); setOrderMode("shooting"); }}
-            >按拍摄</button>
-            <button
-              type="button"
-              className={orderMode === "script" ? "is-active" : undefined}
-              aria-pressed={orderMode === "script"}
-              title="按剧本场次顺序排列"
-              onClick={() => { setEditLayout(null); setOrderMode("script"); }}
-            >按剧本</button>
-          </div>
           <details className="golden-slate-menu golden-slate-menu-left" onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
           }} onKeyDown={(event) => {
@@ -1527,6 +1512,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             <summary>工具</summary>
             <div className="golden-slate-menu-popover" role="group" aria-label="视图与工具">
               <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setInspectorOpen((value) => !value); }} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>检视</button>
+              <button type="button" className={orderMode === "script" ? "is-active" : ""} aria-pressed={orderMode === "script"} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setEditLayout(null); setOrderMode((value) => value === "script" ? "shooting" : "script"); }}>按场号归类</button>
+              <button type="button" className={reviewPoolsOpen ? "is-active" : ""} aria-pressed={reviewPoolsOpen} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setReviewPoolsOpen((value) => !value); }}>Review 归集辅助</button>
               <button type="button" className={quickLookOpen ? "is-active" : ""} aria-pressed={quickLookOpen} disabled={!playbackUrl} title="大窗快速预览当前选中行素材" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); toggleQuickLook(); }}>快速预览</button>
               {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setHideNgRows((value) => !value); }}>隐藏 NG ({ngCount})</button> : null}
               {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setShowAuxColumn((value) => !value); }} title="显示或隐藏空的 AUX 列">显示其他机位 (AUX)</button> : null}
@@ -1700,7 +1687,12 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           </aside>
       </div>
 
-      <details className="golden-slate-review-tools"><summary>Review 归集辅助 · 待归集 / 已归集 / 已排除 / 孤立素材 / 场景目标</summary><SlateWorkbench baseUrl={baseUrl} projectId={projectId} /></details>
+      {reviewPoolsOpen ? (
+        <section className="golden-slate-review-tools-panel" aria-label="Review 归集辅助">
+          <header><strong>Review 归集辅助</strong><button type="button" className="secondary" onClick={() => setReviewPoolsOpen(false)}>关闭</button></header>
+          <SlateWorkbench baseUrl={baseUrl} projectId={projectId} />
+        </section>
+      ) : null}
     </section></div>
   </div>);
 }

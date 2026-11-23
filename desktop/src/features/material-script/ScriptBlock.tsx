@@ -119,12 +119,14 @@ export function ScriptBlock({
       </div>
       <p>{block.raw_text || block.text || "—"}</p>
       {draggingGroupId && canPlace ? <span className="drop-hint">放下：精确归集到此剧本段</span> : null}
-      {block.issues.length > 0 ? (
+      {canPlace && block.issues.length > 0 && (projectionMode !== "script" || block.issues.some((issue) => issue.severity === "error")) ? (
         <div className="issue-row">
           {block.issues.map((issue) => (
-            <span className={`issue-chip issue-${issue.severity}`} key={`${block.segment_id}-${issue.code}`}>
-              {issue.label}
-            </span>
+            projectionMode === "script" && issue.severity !== "error" ? null : (
+              <span className={`issue-chip issue-${issue.severity}`} key={`${block.segment_id}-${issue.code}`}>
+                {issue.label}
+              </span>
+            )
           ))}
         </div>
       ) : null}

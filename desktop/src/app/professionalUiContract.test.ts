@@ -59,7 +59,7 @@ describe("MirrorOrder professional UI contracts", () => {
     const slate = read("../features/slate/golden-slate.css");
     expect(media).toContain(".mo-media-card.is-compact { width: 180px; height: 88px; }");
     expect(media).toContain(".mo-media-card.is-inspector { width: min(300px, 100%); height: 124px; }");
-    expect(slate).toContain(".golden-slate-table .col-media { width: 188px; }");
+    expect(slate).toContain(".golden-slate-table .col-media { width: 176px; }");
   });
 
   it("locks Take card identity, state, action and camera regions to explicit grids", () => {

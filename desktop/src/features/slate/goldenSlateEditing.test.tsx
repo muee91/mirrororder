@@ -71,14 +71,14 @@ it('steps visible rows, marks misrecorded NG, and hides and restores NG rows', a
 });
 
 it('retains the same focused DOM input while an unplaced row crosses buckets, then commits grouping on Enter',async()=>{
-  await clickButton('按剧本');
+  await clickButton('按场号归类');
   const input=scene('b'), originalRow=row('b');await focus(input);
   for(const value of ['1','12','123']){await type(input,value);expect(document.activeElement).toBe(input);expect(row('b')).toBe(originalRow);expect(input.closest('.is-unplaced')).not.toBeNull();}
   expect(upsert).not.toHaveBeenCalled();await enter(input);
   expect(scene('b').value).toBe('123');expect(row('b').closest('.is-placed')).not.toBeNull();expect(row('c').closest('.is-unplaced')).not.toBeNull();
 });
 it('keeps order and focus while clearing a placed row, supports another row and preserves selected inspector state',async()=>{
-  await clickButton('按剧本');
+  await clickButton('按场号归类');
   await act(async()=>row('a').click());const input=scene('a');await focus(input);await type(input,'');
   expect(document.activeElement).toBe(input);expect(row('a').closest('.is-placed')).not.toBeNull();
   await act(async()=>input.blur());expect(row('a').closest('.is-unplaced')).not.toBeNull();expect(row('a').getAttribute('aria-current')).toBe('true');
@@ -96,7 +96,7 @@ it('retains draft and visible error when the existing save fails',async()=>{
   expect(scene('b').value).toBe('12');expect(row('b').classList.contains('is-dirty')).toBe(true);expect(host.textContent).toContain('revision conflict');
 });
 it('keeps the row pinned when focus moves to another field in the same row', async () => {
-  await clickButton('按剧本');
+  await clickButton('按场号归类');
   const input = scene('b');
   await focus(input);
   await type(input, '42');
@@ -216,7 +216,7 @@ it('defaults to shooting order, numbers rows in visible order, and inherits the 
 });
 it('uses continuous visible numbering and inheritance across the placed/unplaced split in script order', async () => {
   await mixedOrder();
-  await clickButton('按剧本');
+  await clickButton('按场号归类');
   expect(visibleIds()).toEqual(['c', 'a', 'b']);
   expect(numbers()).toEqual(['001', '002', '003']);
   await act(async () => row('b').click());
@@ -242,7 +242,7 @@ it.each([
     d: { ...record('d', '30'), episode: 2, script_scene_id: 'SC_2_30', note: '原备注', usable_range: { start: 2, end: 4 } },
   };
   await act(async () => root.render(<GoldenSlateWorkbench key={mode} baseUrl="http://synthetic.test" projectId="synthetic"/>));
-  if (mode === '剧本归位') await clickButton('按剧本');
+  if (mode === '剧本归位') await clickButton('按场号归类');
   expect(visibleIds()).toEqual(visible);
   expect(numbers()).toEqual(['001', '002', '003', '004']);
   await act(async () => row('d').click());

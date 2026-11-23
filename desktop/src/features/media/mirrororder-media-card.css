@@ -99,7 +99,7 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
 .mo-media-topline {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) 26px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 4px;
 }
@@ -117,7 +117,7 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
 }
 .mo-media-card.is-inspector .mo-media-name { font-size: 11px; line-height: 1.25; }
 .mo-media-count-slot {
-  min-width: 26px;
+  min-width: 0;
   color: var(--mo-warning, #d8b45f);
   font-family: var(--mo-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
@@ -125,6 +125,7 @@ button.mo-media-select { cursor: pointer; font-weight: inherit; }
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+.mo-media-count-slot:empty { display: none; }
 .mo-media-shot {
   overflow: hidden;
   color: var(--mo-text-secondary, #b9a4d8);

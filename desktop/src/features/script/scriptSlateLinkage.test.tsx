@@ -59,6 +59,29 @@ const board: SlateBoard = {
       actor: "场记",
       updated_at: "",
     },
+    "slate-2": {
+      record_id: "slate-2",
+      source_group_id: "take-2",
+      script_scene_id: "scene-1",
+      episode: 1,
+      scene: "1-1",
+      shot: "3",
+      take_number: 2,
+      status: "usable",
+      note: "待确认景别",
+      preferred_clip_id: "clip-2",
+      attachments: [{
+        clip_id: "clip-2",
+        media_id: "media-2",
+        camera: "B",
+        display_name: "B.mp4",
+        shot_type: "medium",
+        source_role: "sync_camera",
+        note: "",
+      }],
+      actor: "场记",
+      updated_at: "",
+    },
   },
 };
 
@@ -68,7 +91,7 @@ function model(): ReviewModelPayload {
     project: { project_id: "project-1", name: "测试项目", input_kind: "workspace", stats: {}, local_media: {}, issues: [] },
     revisions: { analysis: "", automation_analysis: "", automation_updated_at: "", review: 1 },
     capabilities: {},
-    summary: { automation: {}, script_gaps: 0, take_groups: 1, episodes: 1 },
+    summary: { automation: {}, script_gaps: 0, take_groups: 2, episodes: 1 },
     episodes: [{ episode: 1, scenes: [{
       scene_id: "scene-1",
       heading: "1-1",
@@ -101,6 +124,33 @@ function model(): ReviewModelPayload {
       automatic_state: { episode_ids: [1], script_segment_ids: ["segment-1"] },
       editorial_state: {},
       effective_mapping: { episode_ids: [1], script_segment_ids: ["segment-1"] },
+      issues: [],
+    }, {
+      group_id: "take-2",
+      parent_group_id: "",
+      kind: "take",
+      take_index: 2,
+      split_reason: "",
+      start: 2,
+      end: 4,
+      duration: 2,
+      cameras: ["B"],
+      angles: [{
+        clip_id: "clip-2",
+        media_id: "media-2",
+        camera: "B",
+        name: "B.mp4",
+        source_start: 0,
+        duration: 2,
+        playback: { state: "verified", available: true, url: "http://synthetic.test/clip-2", source_start: 0 },
+      }],
+      transcript: { text: "待归集对白", source: "test" },
+      people: { faces: [], speakers: [] },
+      candidates: [],
+      context: { episode_ids: [1], script_segment_ids: [] },
+      automatic_state: { episode_ids: [], script_segment_ids: [] },
+      editorial_state: {},
+      effective_mapping: { episode_ids: [], script_segment_ids: [] },
       issues: [],
     }],
     script_gaps: [],
@@ -151,4 +201,18 @@ describe("Script Slate linkage", () => {
     await act(async () => open?.click());
     expect(onOpenSlate).toHaveBeenCalledWith("take-1", "clip-1", "segment-1");
   });
+
+  it("keeps Script side-by-side and exposes an unmapped Slate-linked pool", async () => {
+    expect(host.querySelector(".script-split-workbench")).not.toBeNull();
+    expect(host.querySelector(".script-alignment-pane")).not.toBeNull();
+    expect(host.querySelector(".workspace-context-backdrop")).toBeNull();
+    const pool = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("待归集"));
+    expect(pool).toBeTruthy();
+    await act(async () => pool?.click());
+    expect(host.querySelector(".script-pool-card")).not.toBeNull();
+    expect(host.textContent).toContain("场 1-1 · 镜 3 · 次 2");
+    expect(host.textContent).toContain("待确认景别");
+    expect(host.textContent).toContain("B.mp4");
+  });
+
 });

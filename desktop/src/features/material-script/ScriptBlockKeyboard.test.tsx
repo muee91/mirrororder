@@ -98,4 +98,49 @@ describe("ScriptBlock keyboard target ownership", () => {
     expect(container.textContent).toContain("无需归集");
     expect(onOpenContext).not.toHaveBeenCalled();
   });
+
+  it("keeps routine issue chips out of structural rows and正文 while retaining errors", () => {
+    const structural = { ...block, type: "character", speaker: "人物", issues: [{ code: "missing", label: "缺少素材", severity: "warning" as const }] };
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <ScriptBlock
+          block={structural}
+          mappedTakeIds={[]}
+          candidateTakeIds={[]}
+          selected={false}
+          projectionMode="script"
+          draggingGroupId={null}
+          placementGroupId={null}
+          onSelect={() => undefined}
+          onOpenContext={() => undefined}
+          onShowTake={() => undefined}
+          onDropPlacement={() => undefined}
+          onClickPlacement={() => undefined}
+        />,
+      );
+    });
+    expect(container.querySelector(".issue-chip")).toBeNull();
+
+    act(() => {
+      root.render(
+        <ScriptBlock
+          block={{ ...block, issues: [{ code: "missing", label: "缺少素材", severity: "warning" as const }, { code: "broken", label: "素材损坏", severity: "error" as const }] }}
+          mappedTakeIds={[]}
+          candidateTakeIds={[]}
+          selected={false}
+          projectionMode="script"
+          draggingGroupId={null}
+          placementGroupId={null}
+          onSelect={() => undefined}
+          onOpenContext={() => undefined}
+          onShowTake={() => undefined}
+          onDropPlacement={() => undefined}
+          onClickPlacement={() => undefined}
+        />,
+      );
+    });
+    expect(container.querySelectorAll(".issue-chip")).toHaveLength(1);
+    expect(container.textContent).toContain("素材损坏");
+  });
 });

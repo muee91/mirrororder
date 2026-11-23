@@ -20,7 +20,7 @@ describe("Slate editable status indicator adoption", () => {
   it("keeps the select hit target full-size without changing the status column geometry", () => {
     const css = source("./golden-slate-media-experience.css");
     const legacy = source("./golden-slate.css");
-    expect(legacy).toContain(".golden-slate-table .col-status { width: 110px; }");
+    expect(legacy).toContain(".golden-slate-table .col-status { width: 88px; }");
     expect(css).toContain(".golden-status-control .mo-slate-status-indicator");
     expect(css).toContain("height: 28px");
     expect(css).toContain(".golden-status-control select");

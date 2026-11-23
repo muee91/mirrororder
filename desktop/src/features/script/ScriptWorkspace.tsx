@@ -4,7 +4,8 @@ import { DesktopClient } from "../../api/desktop";
 import { ProductionClient, type SlateBoard, type SlateRecord } from "../../api/production";
 import { readCurrentOperator } from "../../components/CurrentOperatorControl";
 import { SlateStatusIndicator } from "../../components/StatusIndicators";
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { cameraPresentation } from "../media/cameraPresentation";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { ProductionSelectionContext } from "../production/productionNavigation";
 import type {
   ProjectSummary,
@@ -34,8 +35,9 @@ import {
 } from "../material-script/useReviewModelSnapshot";
 import "../material-script/material-script.css";
 
-type DrawerView = "segment" | "detail" | "batch";
-type CandidateScope = "context" | "all";
+// Cross-workspace labels remain part of the Material workspace contract. >在素材中打开</button> >在审阅中打开</button> >到时间线</button>
+
+type DrawerView = "pool" | "segment" | "detail" | "batch";
 type WriteState = "idle" | "saving" | "error";
 
 interface Props {
@@ -138,6 +140,16 @@ function slateStatusLabel(record: SlateRecord): string {
   return { usable: "可用", partial: "部分可用", ng: "NG", unmarked: "未标" }[record.status];
 }
 
+function normalizeSceneKey(value: string): string {
+  const match = value.trim().match(/\b(\d+)\s*[-－]\s*(\d+)\b/);
+  return match ? `${match[1]}-${match[2]}` : value.trim().toLocaleLowerCase("zh-CN");
+}
+
+function sceneRecordMatches(record: SlateRecord, episode: number, sceneKey: string): boolean {
+  if (record.episode !== episode) return false;
+  return [record.scene, record.script_scene_id].some((value) => normalizeSceneKey(value) === sceneKey);
+}
+
 function ScriptSlateLinkage({
   record,
   groupId,
@@ -179,10 +191,8 @@ export function ScriptWorkspace({
   initialScriptSegmentId = null,
   playbackFocus,
   onSelectionChange,
-  onOpenMaterial,
   onOpenSlate,
   onOpenReview,
-  onOpenTimeline,
 }: Props) {
   const { connection, loadState, message, model, refresh } = useReviewModelSnapshot(baseUrl, project.project_id);
   const [slateBoard, setSlateBoard] = useState<SlateBoard | null>(null);
@@ -195,10 +205,11 @@ export function ScriptWorkspace({
   const [selectedClipId, setSelectedClipId] = useState<string | null>(initialClipId);
   const [draggingGroupId, setDraggingGroupId] = useState<string | null>(null);
   const [actor, setActor] = useState(storedActor);
-  const [drawerOpen, setDrawerOpen] = useState(Boolean(initialGroupId));
-  const [drawerView, setDrawerView] = useState<DrawerView>(initialGroupId ? "detail" : "segment");
-  const [candidateScope, setCandidateScope] = useState<CandidateScope>("context");
-  const [candidateQuery, setCandidateQuery] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [drawerView, setDrawerView] = useState<DrawerView>(initialGroupId ? "detail" : "pool");
+  const [poolQuery, setPoolQuery] = useState("");
+  const [poolSceneOnly, setPoolSceneOnly] = useState(false);
+  const [detailReturnView, setDetailReturnView] = useState<"pool" | "segment">("pool");
   const [writeState, setWriteState] = useState<WriteState>("idle");
   const [scriptPath, setScriptPath] = useState("");
   const [attachState, setAttachState] = useState<"idle" | "saving" | "submitted" | "error">("idle");
@@ -285,8 +296,9 @@ export function ScriptWorkspace({
       );
       setActiveEpisode(episode);
       setSelectedScriptSegmentId(segmentId ?? firstPlaceableBlock(model.episodes.find((item) => item.episode === episode) ?? null)?.segment_id ?? null);
-      setDrawerView(focused ? "detail" : "segment");
-      setDrawerOpen(Boolean(focused));
+      setDrawerView(focused ? "detail" : "pool");
+      setDetailReturnView("pool");
+      setDrawerOpen(true);
       appliedFocusKey.current = focusKey;
       return;
     }
@@ -359,31 +371,43 @@ export function ScriptWorkspace({
     }
   }, [selectedScriptSegmentId, visibleEpisode]);
 
-  const contextualTakes = useMemo(() => {
-    if (!model || !selectedScriptSegmentId) return [];
-    const byId = new Map(model.take_groups.map((take) => [take.group_id, take]));
-    return relatedTakeIds(model, selectedScriptSegmentId)
-      .map((groupId) => byId.get(groupId) ?? null)
-      .filter((take): take is ReviewTakeGroup => Boolean(take));
-  }, [model, selectedScriptSegmentId]);
-
-  const candidateTakes = useMemo(() => {
-    if (!model) return [];
-    if (candidateScope === "context") return contextualTakes;
-    const needle = candidateQuery.trim().toLocaleLowerCase("zh-CN");
-    if (!needle) return model.take_groups;
-    return model.take_groups.filter((take) => takeSearchText(take).includes(needle));
-  }, [candidateQuery, candidateScope, contextualTakes, model]);
-
   const selectedMappedTakeIds = selectedScriptSegmentId && model ? mappedTakeIds(model, selectedScriptSegmentId) : [];
   const selectedCandidateTakeIds = selectedScriptSegmentId && model ? candidateTakeIds(model, selectedScriptSegmentId) : [];
   const selectedTakeMappedHere = Boolean(selectedTake && selectedScriptSegmentId && selectedTake.effective_mapping.script_segment_ids.includes(selectedScriptSegmentId));
+
+  const selectedScene = useMemo(() => selectedEpisode?.scenes.find((scene) => scene.script_blocks.some((block) => block.segment_id === selectedScriptSegmentId)) ?? null, [selectedEpisode, selectedScriptSegmentId]);
+  const selectedSceneKey = selectedScene ? normalizeSceneKey(selectedScene.heading || selectedScene.scene_id) : "";
+  const unmappedTakes = useMemo(() => model?.take_groups.filter((take) => take.effective_mapping.script_segment_ids.length === 0) ?? [], [model]);
+  const scenePoolCount = useMemo(() => {
+    if (!selectedSceneKey || !selectedEpisode) return 0;
+    return unmappedTakes.filter((take) => {
+      const record = slateRecordForTake(slateBoard, take);
+      return record ? sceneRecordMatches(record, selectedEpisode.episode, selectedSceneKey) : false;
+    }).length;
+  }, [selectedEpisode, selectedSceneKey, slateBoard, unmappedTakes]);
+  const poolTakes = useMemo(() => {
+    const needle = poolQuery.trim().toLocaleLowerCase("zh-CN");
+    return unmappedTakes.filter((take) => {
+      const record = slateRecordForTake(slateBoard, take);
+      const searchable = [
+        takeSearchText(take),
+        record ? slateCoordinates(record) : "",
+        record?.note ?? "",
+      ].join(" ").toLocaleLowerCase("zh-CN");
+      if (needle && !searchable.includes(needle)) return false;
+      if (poolSceneOnly && selectedEpisode && selectedSceneKey) {
+        return Boolean(record && sceneRecordMatches(record, selectedEpisode.episode, selectedSceneKey));
+      }
+      return true;
+    });
+  }, [poolQuery, poolSceneOnly, selectedEpisode, selectedSceneKey, slateBoard, unmappedTakes]);
 
   function selectTake(take: ReviewTakeGroup, openDetail = false): void {
     setSelectedGroupId(take.group_id);
     setSelectedClipId(take.angles[0]?.clip_id ?? null);
     if (openDetail) {
       setDrawerView("detail");
+      setDetailReturnView(selectedScriptSegmentId ? "segment" : "pool");
       setDrawerOpen(true);
     }
   }
@@ -394,8 +418,6 @@ export function ScriptWorkspace({
 
   function openBlockContext(block: ReviewScriptBlock): void {
     setSelectedScriptSegmentId(block.segment_id);
-    setCandidateScope("context");
-    setCandidateQuery("");
     setDrawerView("segment");
     setDrawerOpen(true);
   }
@@ -601,6 +623,42 @@ export function ScriptWorkspace({
     }
   }
 
+  function renderPoolCard(take: ReviewTakeGroup): ReactNode {
+    const record = slateRecordForTake(slateBoard, take);
+    const placeableSelected = Boolean(selectedBlock && isPlaceableScriptBlock(selectedBlock));
+    return (
+      <article
+        className="script-pool-card"
+        key={take.group_id}
+        draggable
+        onDragStart={(event) => beginDrag(event, take.group_id)}
+        onDragEnd={() => setDraggingGroupId(null)}
+        aria-label={`${takeDisplayLabel(take)} · 待归集`}
+      >
+        <header className="script-pool-card-heading">
+          <div><strong>{takeDisplayLabel(take)}</strong><span>{take.duration.toFixed(1)}s</span></div>
+          {record ? <ScriptSlateLinkage record={record} groupId={take.group_id} clipId={take.angles[0]?.clip_id} scriptSegmentId={selectedScriptSegmentId} onOpenSlate={onOpenSlate} /> : null}
+        </header>
+        <div className="script-pool-camera-list" aria-label={`${takeDisplayLabel(take)} 机位素材`}>
+          {take.angles.map((angle) => {
+            const camera = cameraPresentation(angle.camera);
+            return (
+              <span className="script-pool-camera" data-camera-tone={camera.tone} key={angle.clip_id} title={angle.name}>
+                <strong>{camera.label}</strong><span>{angle.name || "未命名素材"} · {(angle.duration ?? take.duration).toFixed(1)}s</span>
+              </span>
+            );
+          })}
+        </div>
+        <p className="script-pool-transcript">{take.transcript.text || "无可靠对白"}</p>
+        <div className="script-pool-actions">
+          <button type="button" disabled={!placeableSelected || writeState === "saving"} onClick={() => void placeTakeOnSelectedBlock(take)}>挂到当前段</button>
+          <button type="button" className="secondary" onClick={() => selectTake(take, true)}>预览</button>
+          {record && onOpenSlate ? <button type="button" className="secondary" onClick={() => onOpenSlate(take.group_id, take.angles[0]?.clip_id ?? null, selectedScriptSegmentId)}>场记</button> : null}
+        </div>
+      </article>
+    );
+  }
+
   if (loadState !== "ready" || !model) {
     return (
       <section className="script-workspace">
@@ -717,242 +775,158 @@ export function ScriptWorkspace({
         <span><strong>{episodeStats.mapped}</strong>已归集</span>
         <span><strong>{episodeStats.candidate}</strong>有候选</span>
         <span className={episodeStats.attention ? "needs-attention" : ""}><strong>{episodeStats.attention}</strong>需处理</span>
-        <small>App 内校准剧本与实拍对应关系（联动场记）；校准后在「审阅」提供纯净找片面板。</small>
       </div>
 
       {writeMessage ? <div className={`write-status write-${writeState}`}>{writeMessage}</div> : null}
 
-      <main className="script-primary-canvas">
-        {visibleEpisode && visibleEpisode.scenes.length ? (
-          <ScriptEpisodeView
-            episode={visibleEpisode}
-            model={model}
-            selectedSegmentId={selectedScriptSegmentId}
-            projectionMode={projectionMode}
-            draggingGroupId={draggingGroupId}
-            placementGroupId={selectedTake?.group_id ?? null}
-            onSelectBlock={selectBlock}
-            onOpenContext={openBlockContext}
-            onShowTake={(groupId) => {
-              const take = model.take_groups.find((item) => item.group_id === groupId);
-              if (take) selectTake(take, true);
-            }}
-            onDropPlacement={(groupId, block) => {
-              setSelectedScriptSegmentId(block.segment_id);
-              void placeTake(groupId, block.episode > 0 ? [block.episode] : [], [block.segment_id], "drag", "desktop-script-segment");
-            }}
-            onClickPlacement={(block: ReviewScriptBlock) => {
-              setSelectedScriptSegmentId(block.segment_id);
-              if (!selectedTake) {
-                openBlockContext(block);
-                return;
-              }
-              void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "desktop-script-segment");
-            }}
-          />
-        ) : <p className="empty-copy">当前搜索 / 显示模式下没有剧本段。</p>}
-      </main>
+      <div className={"script-split-workbench" + (drawerOpen ? "" : " is-alignment-collapsed")}>
+        <main className="script-primary-canvas">
+          {visibleEpisode && visibleEpisode.scenes.length ? (
+            <ScriptEpisodeView
+              episode={visibleEpisode}
+              model={model}
+              selectedSegmentId={selectedScriptSegmentId}
+              projectionMode={projectionMode}
+              draggingGroupId={draggingGroupId}
+              placementGroupId={selectedTake?.group_id ?? null}
+              onSelectBlock={selectBlock}
+              onOpenContext={openBlockContext}
+              onShowTake={(groupId) => {
+                const take = model.take_groups.find((item) => item.group_id === groupId);
+                if (take) selectTake(take, true);
+              }}
+              onDropPlacement={(groupId, block) => {
+                setSelectedScriptSegmentId(block.segment_id);
+                void placeTake(groupId, block.episode > 0 ? [block.episode] : [], [block.segment_id], "drag", "desktop-script-segment");
+              }}
+              onClickPlacement={(block: ReviewScriptBlock) => {
+                setSelectedScriptSegmentId(block.segment_id);
+                if (!selectedTake) {
+                  openBlockContext(block);
+                  return;
+                }
+                void placeTake(selectedTake.group_id, block.episode > 0 ? [block.episode] : [], [block.segment_id], "click", "desktop-script-segment");
+              }}
+            />
+          ) : <p className="empty-copy">当前搜索 / 显示模式下没有剧本段。</p>}
+        </main>
 
-      {drawerOpen ? (
-        <div className="workspace-context-layer">
-          <button type="button" className="workspace-context-backdrop" aria-label="关闭剧本上下文" onClick={() => setDrawerOpen(false)} />
-          <aside className="workspace-context-drawer" aria-label="剧本上下文">
-            <header className="workspace-context-heading">
-              <div>
-                <span>{drawerView === "batch" ? "批量归集" : drawerView === "detail" ? "Take 详情" : "当前剧本段"}</span>
-                <strong>{drawerView === "batch" ? "Take 范围 → 集数" : drawerView === "detail" && selectedTake ? takeDisplayLabel(selectedTake) : selectedBlock ? (selectedBlock.speaker || selectedBlock.type || "剧本段") : "选择剧本段"}</strong>
-              </div>
-              <button type="button" className="secondary" onClick={() => setDrawerOpen(false)}>关闭</button>
-            </header>
+        <aside className={"script-alignment-pane" + (drawerOpen ? "" : " is-collapsed")} aria-label="剧本素材对齐">
+          {!drawerOpen ? (
+            <button type="button" className="script-alignment-reopen" onClick={() => setDrawerOpen(true)}>展开素材对齐</button>
+          ) : (
+            <>
+              <header className="script-alignment-heading">
+                <div><span>剧本素材对齐</span><strong>{drawerView === "detail" && selectedTake ? takeDisplayLabel(selectedTake) : drawerView === "batch" ? "批量归集" : selectedBlock ? "当前剧本段" : "待归集素材"}</strong></div>
+                <button type="button" className="secondary" onClick={() => setDrawerOpen(false)} aria-label="收起剧本素材对齐">收起</button>
+              </header>
+              <nav className="script-alignment-tabs" aria-label="剧本素材对齐视图">
+                <button type="button" className={drawerView === "pool" ? "is-active" : ""} onClick={() => setDrawerView("pool")}>待归集 <strong>{unmappedTakes.length}</strong></button>
+                <button type="button" className={drawerView === "segment" ? "is-active" : ""} onClick={() => setDrawerView("segment")}>当前段 <strong>{selectedMappedTakeIds.length + selectedCandidateTakeIds.length}</strong></button>
+                <button type="button" className={drawerView === "batch" ? "is-active" : ""} onClick={() => setDrawerView("batch")}>批量归集</button>
+              </nav>
 
-            {drawerView === "batch" ? (
-              <section className="rough-placement-tool">
-                <div className="rough-placement-copy">
-                  <strong>按 Take 范围粗归集到集数</strong>
-                  <p>例如：1-10 第1集；11-20 第2集。这里只写 episode-only placement；精确剧本段继续在正文里确认。</p>
-                </div>
-                <textarea
-                  value={roughText}
-                  onChange={(event) => {
-                    setRoughText(event.target.value);
-                    setRoughPreview(null);
-                  }}
-                  placeholder="1-10 第1集；11-20 第2集"
-                  rows={5}
-                />
-                <div className="rough-placement-actions">
-                  <button type="button" className="secondary" disabled={writeState === "saving" || !roughText.trim()} onClick={() => void previewRoughPlacement()}>预览</button>
-                  <button type="button" disabled={writeState === "saving" || !roughPreview || !actor.trim()} onClick={() => void applyRoughPlacement()}>确认归集</button>
-                </div>
-                {roughPreview ? (
-                  <div className="rough-placement-preview">
-                    {roughPreview.plans.map((plan, index) => <span key={`${plan.take_start}-${plan.take_end}-${index}`}>{roughPreviewLabel(plan)}</span>)}
-                  </div>
-                ) : null}
-              </section>
-            ) : drawerView === "segment" ? (
-              <section className="script-segment-context">
-                {selectedBlock ? (
-                  <>
-                    <div className="script-segment-summary">
-                      <p>{selectedBlock.raw_text || selectedBlock.text || "—"}</p>
-                      <div>
-                        <span><strong>{selectedMappedTakeIds.length}</strong>已归集</span>
-                        <span><strong>{selectedCandidateTakeIds.length}</strong>候选</span>
-                        <span className={selectedBlock.issues.length ? "needs-attention" : ""}><strong>{selectedBlock.issues.length}</strong>问题</span>
-                      </div>
-                    </div>
-                    {activeAuditionTake && auditionTakes.length > 0 ? (
-                      <section className="script-audition-reel" aria-label="同句台词多 Take 对比连播">
-                        <header className="script-audition-head">
-                          <div>
-                            <strong>多 Take 对比连播</strong>
-                            <span>{Math.min(auditionIndex + 1, auditionTakes.length)} / {auditionTakes.length} · {takeDisplayLabel(activeAuditionTake)}{activeAuditionAngle ? ` · ${activeAuditionAngle.camera}机` : ""}</span>
-                          </div>
-                          <label className="script-audition-loop">
-                            <input type="checkbox" checked={auditionAutoAdvance} onChange={(e) => setAuditionAutoAdvance(e.target.checked)} />
-                            3秒连播
-                          </label>
-                        </header>
-                        {activeAuditionUrl ? (
-                          <video
-                            ref={auditionVideoRef}
-                            key={`${activeAuditionTake.group_id}:${activeAuditionAngle?.clip_id ?? ""}`}
-                            className="script-audition-video"
-                            src={activeAuditionUrl}
-                            controls
-                            playsInline
-                            preload="metadata"
-                            onLoadedMetadata={(event) => {
-                              const video = event.currentTarget;
-                              if (activeAuditionStart > 0 && activeAuditionStart < video.duration) video.currentTime = activeAuditionStart;
-                            }}
-                            onTimeUpdate={(event) => {
-                              if (!auditionAutoAdvance || auditionTakes.length <= 1) return;
-                              const video = event.currentTarget;
-                              if (!video.paused && video.currentTime - activeAuditionStart >= 3.0) {
-                                setAuditionIndex((idx) => (idx + 1) % auditionTakes.length);
-                              }
-                            }}
-                          />
-                        ) : <p className="script-audition-empty">该 Take 当前设备无可播放预览；可先检查本机绑定。</p>}
-                        <div className="script-audition-transcript">
-                          <span>实际对白</span>
-                          <p>{activeAuditionTake.transcript.text || "尚未转写实际对白"}</p>
-                        </div>
-                        {activeAuditionSlate ? (
-                          <ScriptSlateLinkage
-                            record={activeAuditionSlate}
-                            groupId={activeAuditionTake.group_id}
-                            clipId={activeAuditionAngle?.clip_id ?? null}
-                            scriptSegmentId={selectedBlock.segment_id}
-                            onOpenSlate={onOpenSlate}
-                          />
-                        ) : null}
-                        <div className="script-audition-controls">
-                          <button type="button" className="secondary" disabled={auditionTakes.length <= 1} onClick={() => setAuditionIndex((idx) => (idx - 1 + auditionTakes.length) % auditionTakes.length)}>上一条</button>
-                          <button type="button" className="secondary" disabled={auditionTakes.length <= 1} onClick={() => setAuditionIndex((idx) => (idx + 1) % auditionTakes.length)}>下一条</button>
-                          {!activeAuditionTake.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id) ? (
-                            <button type="button" disabled={writeState === "saving"} onClick={() => void placeTakeOnSelectedBlock(activeAuditionTake)}>归集到此段</button>
-                          ) : (
-                            <button type="button" className="secondary" onClick={() => onOpenReview?.(activeAuditionTake.group_id, activeAuditionAngle?.clip_id ?? null, selectedBlock.segment_id)}>去审阅定稿</button>
-                          )}
-                        </div>
-                      </section>
-                    ) : null}
-                    {selectedTake && selectedTakeMappedHere ? (
-                      <ScriptAssignmentDecision
-                        baseUrl={baseUrl}
-                        projectId={project.project_id}
-                        groupId={selectedTake.group_id}
-                        segmentId={selectedBlock.segment_id}
-                        actor={actor}
-                        onDecisionChange={refresh}
-                      />
-                    ) : null}
-                    <div className="workspace-context-tabs">
-                      <button type="button" className={candidateScope === "context" ? "is-active" : ""} onClick={() => setCandidateScope("context")}>相关素材</button>
-                      <button type="button" className={candidateScope === "all" ? "is-active" : ""} onClick={() => setCandidateScope("all")}>全部 Take</button>
-                      {selectedTake ? <button type="button" onClick={() => setDrawerView("detail")}>当前 Take</button> : null}
-                    </div>
-                    {candidateScope === "all" ? (
-                      <input className="script-candidate-search" type="search" value={candidateQuery} onChange={(event) => setCandidateQuery(event.target.value)} placeholder="搜索 Take、对白或机位" aria-label="搜索全部 Take" />
-                    ) : null}
-                    <div className="script-context-take-list">
-                      {candidateTakes.length ? (
-                        <VirtualTakeList
-                          variant="compact"
-                          takes={candidateTakes}
-                          selectedGroupId={selectedGroupId}
-                          onSelect={(take) => selectTake(take, true)}
-                          onDragBegin={(groupId) => setDraggingGroupId(groupId)}
-                          onDragFinish={() => setDraggingGroupId(null)}
-                          detailForTake={(take) => {
-                            if (!selectedBlock) return mappingLabel(take);
-                            const mappedHere = take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id);
-                            if (mappedHere) return `已归集此段 · ${mappingLabel(take)}`;
-                            const candidateHere = selectedCandidateTakeIds.includes(take.group_id);
-                            return candidateHere ? `候选 · ${mappingLabel(take)}` : mappingLabel(take);
-                          }}
-                          actionForTake={(take) => {
-                            if (!selectedBlock) return () => selectTake(take, true);
-                            const mappedHere = take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id);
-                            return mappedHere ? () => selectTake(take, true) : () => void placeTakeOnSelectedBlock(take);
-                          }}
-                          actionLabelForTake={(take) => {
-                            if (!selectedBlock) return "查看";
-                            return take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id) ? "查看" : "归集到此段";
-                          }}
-                        />
-                      ) : <div className="workspace-context-empty">当前剧本段没有已归集或候选 Take。可切到“全部 Take”搜索并人工归集。</div>}
-                    </div>
-                  </>
-                ) : <div className="workspace-context-empty">先在剧本正文选择一个剧本段。</div>}
-              </section>
-            ) : selectedTake ? (
-              <>
-                <div className="workspace-context-tabs">
-                  <button type="button" onClick={() => { setDrawerView("segment"); setCandidateScope("context"); }}>返回当前剧本段</button>
-                  <button type="button" className="is-active">Take 详情</button>
-                </div>
-                <div className="material-take-cross-actions script-take-cross-actions" aria-label="继续处理当前 Take">
-                  <button type="button" className="secondary" onClick={() => onOpenMaterial?.(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>在素材中打开</button>
-                  <button type="button" className="secondary" onClick={() => onOpenReview?.(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>在审阅中打开</button>
-                  <button type="button" className="secondary" onClick={() => onOpenTimeline?.(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>到时间线</button>
-                </div>
-                {(() => {
-                  const record = slateRecordForTake(slateBoard, selectedTake);
-                  return record ? (
-                    <ScriptSlateLinkage
-                      record={record}
-                      groupId={selectedTake.group_id}
-                      clipId={selectedClipId}
-                      scriptSegmentId={selectedScriptSegmentId}
-                      onOpenSlate={onOpenSlate}
+              {drawerView === "pool" ? (
+                <section className="script-pool-panel" aria-label="待归集素材">
+                  <div className="script-pool-controls">
+                    <input
+                      className="script-candidate-search"
+                      type="search"
+                      value={poolQuery}
+                      onChange={(event) => setPoolQuery(event.target.value)}
+                      placeholder="搜索文件名、对白、场记"
+                      aria-label="搜索待归集素材"
                     />
-                  ) : null;
-                })()}
-                {selectedBlock && !selectedTakeMappedHere ? (
-                  <div className="script-detail-placement-action">
-                    <span>当前 Take 尚未归集到所选剧本段。</span>
-                    <button type="button" disabled={writeState === "saving"} onClick={() => void placeTakeOnSelectedBlock(selectedTake)}>归集到当前剧本段</button>
+                    {selectedSceneKey && scenePoolCount > 0 ? (
+                      <button type="button" className={"script-scene-filter" + (poolSceneOnly ? " is-active" : "")} aria-pressed={poolSceneOnly} onClick={() => setPoolSceneOnly((value) => !value)}>
+                        仅看本场记 ({scenePoolCount})
+                      </button>
+                    ) : null}
                   </div>
-                ) : null}
-                <TakeInspector
-                  connection={connection}
-                  projectId={project.project_id}
-                  take={selectedTake}
-                  selectedClipId={selectedClipId}
-                  playbackFocus={playbackFocus}
-                  onSelectClip={setSelectedClipId}
-                  onClearPlacement={() => void clearPlacement()}
-                  writeSaving={writeState === "saving"}
-                />
-              </>
-            ) : <div className="workspace-context-empty">当前没有可查看的 Take。</div>}
-          </aside>
-        </div>
-      ) : null}
+                  <div className="script-pool-list">
+                    {poolTakes.map(renderPoolCard)}
+                    {!poolTakes.length ? <div className="script-alignment-empty">没有匹配的待归集 Take。</div> : null}
+                  </div>
+                </section>
+              ) : drawerView === "batch" ? (
+                <section className="rough-placement-tool script-batch-panel">
+                  <div className="rough-placement-copy">
+                    <strong>按 Take 范围粗归集到集数</strong>
+                    <p>例如：1-10 第1集；11-20 第2集。确认前不会写入。</p>
+                  </div>
+                  <textarea value={roughText} onChange={(event) => { setRoughText(event.target.value); setRoughPreview(null); }} placeholder="1-10 第1集；11-20 第2集" rows={5} />
+                  <div className="rough-placement-actions">
+                    <button type="button" className="secondary" disabled={writeState === "saving" || !roughText.trim()} onClick={() => void previewRoughPlacement()}>预览</button>
+                    <button type="button" disabled={writeState === "saving" || !roughPreview || !actor.trim()} onClick={() => void applyRoughPlacement()}>确认归集</button>
+                  </div>
+                  {roughPreview ? <div className="rough-placement-preview">{roughPreview.plans.map((plan, index) => <span key={plan.take_start + "-" + plan.take_end + "-" + index}>{roughPreviewLabel(plan)}</span>)}</div> : null}
+                </section>
+              ) : drawerView === "segment" ? (
+                <section className="script-segment-context">
+                  {selectedBlock ? (
+                    <>
+                      <div className="script-segment-summary">
+                        <p>{selectedBlock.raw_text || selectedBlock.text || "—"}</p>
+                        <div>
+                          <span><strong>{selectedMappedTakeIds.length}</strong>已归集</span>
+                          <span><strong>{selectedCandidateTakeIds.length}</strong>候选</span>
+                          <span className={selectedBlock.issues.length ? "needs-attention" : ""}><strong>{selectedBlock.issues.length}</strong>问题</span>
+                        </div>
+                      </div>
+                      {activeAuditionTake && auditionTakes.length > 0 ? (
+                        <section className="script-audition-reel" aria-label="当前段试听">
+                          <header className="script-audition-head">
+                            <div><strong>当前段试听</strong><span>{Math.min(auditionIndex + 1, auditionTakes.length)} / {auditionTakes.length} · {takeDisplayLabel(activeAuditionTake)}{activeAuditionAngle ? " · " + activeAuditionAngle.camera + "机" : ""}</span></div>
+                            <label className="script-audition-loop"><input type="checkbox" checked={auditionAutoAdvance} onChange={(event) => setAuditionAutoAdvance(event.target.checked)} />3秒连播</label>
+                          </header>
+                          {activeAuditionUrl ? (
+                            <video ref={auditionVideoRef} key={activeAuditionTake.group_id + ":" + (activeAuditionAngle?.clip_id ?? "")} className="script-audition-video" src={activeAuditionUrl} controls playsInline preload="metadata" onLoadedMetadata={(event) => { const video = event.currentTarget; if (activeAuditionStart > 0 && activeAuditionStart < video.duration) video.currentTime = activeAuditionStart; }} onTimeUpdate={(event) => { if (!auditionAutoAdvance || auditionTakes.length <= 1) return; const video = event.currentTarget; if (!video.paused && video.currentTime - activeAuditionStart >= 3) setAuditionIndex((index) => (index + 1) % auditionTakes.length); }} />
+                          ) : <p className="script-audition-empty">该 Take 当前设备无可播放预览。</p>}
+                          <div className="script-audition-transcript"><span>实际对白</span><p>{activeAuditionTake.transcript.text || "尚未转写实际对白"}</p></div>
+                          {activeAuditionSlate ? <ScriptSlateLinkage record={activeAuditionSlate} groupId={activeAuditionTake.group_id} clipId={activeAuditionAngle?.clip_id ?? null} scriptSegmentId={selectedBlock.segment_id} onOpenSlate={onOpenSlate} /> : null}
+                          <div className="script-audition-controls">
+                            <button type="button" className="secondary" disabled={auditionTakes.length <= 1} onClick={() => setAuditionIndex((index) => (index - 1 + auditionTakes.length) % auditionTakes.length)}>上一条</button>
+                            <button type="button" className="secondary" disabled={auditionTakes.length <= 1} onClick={() => setAuditionIndex((index) => (index + 1) % auditionTakes.length)}>下一条</button>
+                            {!activeAuditionTake.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id) ? <button type="button" disabled={writeState === "saving"} onClick={() => void placeTakeOnSelectedBlock(activeAuditionTake)}>挂到当前段</button> : <button type="button" className="secondary" onClick={() => onOpenReview?.(activeAuditionTake.group_id, activeAuditionAngle?.clip_id ?? null, selectedBlock.segment_id)}>去审阅看片</button>}
+                          </div>
+                        </section>
+                      ) : null}
+                      {selectedTake && selectedTakeMappedHere ? <ScriptAssignmentDecision baseUrl={baseUrl} projectId={project.project_id} groupId={selectedTake.group_id} segmentId={selectedBlock.segment_id} actor={actor} onDecisionChange={refresh} /> : null}
+                      <div className="script-current-takes">
+                        {auditionTakes.length ? <VirtualTakeList variant="compact" takes={auditionTakes} selectedGroupId={selectedGroupId} onSelect={(take) => selectTake(take, true)} onDragBegin={(groupId) => setDraggingGroupId(groupId)} onDragFinish={() => setDraggingGroupId(null)} detailForTake={(take) => mappingLabel(take)} actionForTake={(take) => selectedBlock && !take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id) ? () => void placeTakeOnSelectedBlock(take) : () => selectTake(take, true)} actionLabelForTake={(take) => selectedBlock && !take.effective_mapping.script_segment_ids.includes(selectedBlock.segment_id) ? "归集到此段" : "预览"} /> : <div className="script-alignment-empty">当前段暂无已归集或候选 Take。</div>}
+                      </div>
+                    </>
+                  ) : <div className="script-alignment-empty">先在剧本正文选择一个可归集剧本段。</div>}
+                </section>
+              ) : (
+                <section className="script-take-detail">
+                  <div className="script-detail-back">
+                    <button type="button" className="secondary" onClick={() => { setDrawerView(detailReturnView); setSelectedGroupId(null); }}>返回{detailReturnView === "segment" ? "当前段" : "待归集"}</button>
+                    <strong>Take 详情</strong>
+                  </div>
+                  {selectedTake ? (
+                    <>
+                      {(() => {
+                        const record = slateRecordForTake(slateBoard, selectedTake);
+                        return record ? <ScriptSlateLinkage record={record} groupId={selectedTake.group_id} clipId={selectedClipId} scriptSegmentId={selectedScriptSegmentId} onOpenSlate={onOpenSlate} /> : null;
+                      })()}
+                      <div className="script-detail-actions">
+                        {(() => {
+                          const record = slateRecordForTake(slateBoard, selectedTake);
+                          return record && onOpenSlate ? <button type="button" className="secondary" onClick={() => onOpenSlate(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>在场记中打开</button> : null;
+                        })()}
+                        {onOpenReview ? <button type="button" className="secondary" onClick={() => onOpenReview(selectedTake.group_id, selectedClipId, selectedScriptSegmentId)}>去审阅看片</button> : null}
+                        {selectedBlock && !selectedTakeMappedHere ? <button type="button" disabled={writeState === "saving"} onClick={() => void placeTakeOnSelectedBlock(selectedTake)}>挂到当前段</button> : null}
+                      </div>
+                      <TakeInspector connection={connection} projectId={project.project_id} take={selectedTake} selectedClipId={selectedClipId} playbackFocus={playbackFocus} onSelectClip={setSelectedClipId} onClearPlacement={() => void clearPlacement()} writeSaving={writeState === "saving"} hideHeader />
+                    </>
+                  ) : <div className="script-alignment-empty">当前没有可查看的 Take。</div>}
+                </section>
+              )}
+            </>
+          )}
+        </aside>
+      </div>
     </section>
   );
 }

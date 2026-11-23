@@ -56,6 +56,15 @@
         ],
         "createdAt": "2026-11-22T21:36:21.544Z",
         "reason": "user requested a camera identity rail for Phase 2 media rows"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "desktop/src/features/script/script-workspace.css"
+        ],
+        "createdAt": "2026-11-23T18:03:00.000Z",
+        "reason": "script alignment cards use a 3px camera identity rail for A/B/C/AUX"
       }
     ]
   }
