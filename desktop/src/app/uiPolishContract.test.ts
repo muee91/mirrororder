@@ -83,7 +83,7 @@ describe("Desktop UI polish contract", () => {
     const slateTheme = read("../desktop-theme-slate.css");
 
     expect(slate).toContain(">右侧详情栏</button>");
-    expect(slate).toContain(">刷新场记</button>");
+    expect(slate).toContain(">刷新</button>");
     expect(slate).toContain("aria-pressed={inspectorOpen}");
     expect(slate).not.toContain("<CurrentOperatorControl");
     expect(slate).not.toContain("团队审阅");

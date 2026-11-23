@@ -118,7 +118,7 @@ async function mixedOrder() {
 const visibleIds = () => [...host.querySelectorAll<HTMLTableRowElement>('.slate-row')].map(r => r.dataset.recordId);
 const numbers = () => [...host.querySelectorAll('.slate-row .col-index strong')].map(n => n.textContent);
 it('bypasses the shared review cache when the editor explicitly refreshes the slate', async () => {
-  await clickButton('刷新场记');
+  await clickButton('刷新');
   expect(HostConnection.prototype.reviewModel).toHaveBeenLastCalledWith('synthetic', { force: true });
 });
 

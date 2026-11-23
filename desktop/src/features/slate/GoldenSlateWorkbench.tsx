@@ -543,6 +543,16 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [hideNgRows, setHideNgRows] = useState(false);
   const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
   const [paperIntakeOpen, setPaperIntakeOpen] = useState(false);
+  const [photoGuideDismissed, setPhotoGuideDismissed] = useState(() => {
+    try { return globalThis.localStorage?.getItem(`mirrororder.slate.photoGuideDismissed:${projectId}`) === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { setPhotoGuideDismissed(globalThis.localStorage?.getItem(`mirrororder.slate.photoGuideDismissed:${projectId}`) === "1"); } catch { setPhotoGuideDismissed(false); }
+  }, [projectId]);
+  function dismissPhotoGuide(): void {
+    setPhotoGuideDismissed(true);
+    try { globalThis.localStorage?.setItem(`mirrororder.slate.photoGuideDismissed:${projectId}`, "1"); } catch { /* local convenience */ }
+  }
   const [quickLookOpen, setQuickLookOpen] = useState(false);
   const quickLookFocusRef = useRef<HTMLElement | null>(null);
   const quickLookCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -1523,15 +1533,22 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
               <button ref={takePickerTriggerRef} type="button" onClick={(event) => { closeGoldenSlateMenu(event.currentTarget); setTakePickerOpen((value) => !value); }}>从 Take 加入</button>
             </div>
           </details>
+          <button
+            type="button"
+            className={`golden-slate-photo-import${paperIntakeOpen ? " is-active" : ""}`}
+            aria-haspopup="dialog"
+            aria-expanded={paperIntakeOpen}
+            title="上传手写场记照片（AI 提取）或导入纸面场记"
+            onClick={() => setPaperIntakeOpen(true)}
+          >照片导入</button>
         </div>
         <div className="golden-slate-actions golden-slate-subbar-right" role="group" aria-label="场记辅助操作">
           <div className="golden-slate-inline-tools" role="group" aria-label="视图与工具">
-            <button type="button" className={orderMode === "script" ? "is-active" : ""} aria-pressed={orderMode === "script"} title="按集 / 场号 / 镜号归类并检查漏填" onClick={() => { setEditLayout(null); setOrderMode((value) => value === "script" ? "shooting" : "script"); }}>按场号归类</button>
-            {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-active" : ""} aria-pressed={hideNgRows} onClick={() => setHideNgRows((value) => !value)}>隐藏 NG ({ngCount})</button> : null}
+            <button type="button" className={orderMode === "script" ? "is-filter-active" : ""} aria-pressed={orderMode === "script"} title="按集 / 场号 / 镜号归类并检查漏填" onClick={() => { setEditLayout(null); setOrderMode((value) => value === "script" ? "shooting" : "script"); }}>按场号归类</button>
+            {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-filter-active" : ""} aria-pressed={hideNgRows} onClick={() => setHideNgRows((value) => !value)}>隐藏 NG ({ngCount})</button> : null}
             {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={() => setShowAuxColumn((value) => !value)} title="显示或隐藏空的 AUX 列">AUX 列</button> : null}
-            <button type="button" className={paperIntakeOpen ? "is-active" : ""} aria-haspopup="dialog" aria-expanded={paperIntakeOpen} title="上传手写场记照片或导入纸面场记" onClick={() => setPaperIntakeOpen(true)}>纸面场记</button>
             <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>右侧详情栏</button>
-            <button type="button" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="重新读取最新场记">刷新场记</button>
+            <button type="button" className="golden-slate-refresh-btn" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="重新读取最新场记">刷新</button>
           </div>
           <SlatePaperIntake key={`${baseUrl}:${projectId}`} baseUrl={baseUrl} projectId={projectId} open={paperIntakeOpen} onOpenChange={setPaperIntakeOpen} hideTrigger onSelect={setPaperSource} onApplyDraftCandidates={applyPaperDraftCandidates} />
           <span className="golden-slate-message" aria-live="polite">{message}</span>
@@ -1564,14 +1581,26 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       ) : null}
 
       <div className="golden-slate-body">
-        <div className="golden-slate-table-shell">
+        <div className={`golden-slate-table-shell${drafts.length > 0 && placedDrafts.length === 0 && !photoGuideDismissed ? " has-photo-guide" : ""}`}>
           {dropActive ? <div className="golden-slate-drop-overlay">松开以加入当前场记</div> : null}
+          {drafts.length > 0 && placedDrafts.length === 0 && !photoGuideDismissed ? (
+            <div className="golden-slate-photo-guide" role="region" aria-label="照片场记导入引导">
+              <div className="golden-slate-photo-guide-copy">
+                <strong>有片场手写场记照片？</strong>
+                <span>直接上传让 AI 批量提取集·场·镜·次与备注，核对后一键填入草稿，不用逐行手敲。</span>
+              </div>
+              <div className="golden-slate-photo-guide-actions">
+                <button type="button" className="golden-slate-photo-guide-cta" onClick={() => setPaperIntakeOpen(true)}>上传场记照片…</button>
+                <button type="button" className="secondary" onClick={dismissPhotoGuide}>先手动录</button>
+              </div>
+            </div>
+          ) : null}
           {orderMode === "shooting" && displayedDrafts.length ? (
             section("真实拍摄顺序 · 全场记", displayedDrafts, "placed", false)
           ) : placedDrafts.length && unplacedDrafts.length ? (
-            <div className="golden-slate-split-sections">{section("已按剧本归位", placedDrafts, "placed")}{section("待标记 · 保持 XML 顺序", unplacedDrafts, "unplaced")}</div>
-          ) : placedDrafts.length ? section("已按剧本归位", placedDrafts, "placed") : unplacedDrafts.length ? section("待标记 · 保持 XML 顺序", unplacedDrafts, "unplaced") : (
-            <div className="golden-slate-empty"><strong>从 Take 加入第一条多机位场记</strong><span>A / B / C 会落在同一行；场号、镜号、次号只记录一次。</span><div><button type="button" onClick={() => setTakePickerOpen(true)}>从 Take 加入</button><button type="button" className="secondary" onClick={() => addBlank()}>新建空白场记</button></div></div>
+            <div className="golden-slate-split-sections">{section("已填场号 · 按场次排列", placedDrafts, "placed")}{section("未填场号 · 按拍摄顺序", unplacedDrafts, "unplaced")}</div>
+          ) : placedDrafts.length ? section("已填场号 · 按场次排列", placedDrafts, "placed") : unplacedDrafts.length ? section("未填场号 · 按拍摄顺序", unplacedDrafts, "unplaced") : (
+            <div className="golden-slate-empty"><strong>从 Take 或场记照片开始</strong><span>A / B / C 机位落在同一行；有纸质场记照片可直接上传让 AI 提取草稿。</span><div><button type="button" onClick={() => setPaperIntakeOpen(true)}>上传场记照片…</button><button type="button" className="secondary" onClick={() => setTakePickerOpen(true)}>从 Take 加入</button><button type="button" className="secondary" onClick={() => addBlank()}>新建空白场记</button></div></div>
           )}
         </div>
 
