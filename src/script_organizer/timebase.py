@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import json
+import math
 import xml.etree.ElementTree as ET
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, BinaryIO
 from xml.parsers import expat
+
+_STANDARD_RATES: tuple[tuple[int, int], ...] = (
+    (24000, 1001),
+    (24, 1),
+    (25, 1),
+    (30000, 1001),
+    (30, 1),
+    (48, 1),
+    (50, 1),
+    (60000, 1001),
+    (60, 1),
+)
 
 
 def first_frame_at_or_after(seconds: float, numerator: int, denominator: int) -> int:
@@ -110,11 +124,76 @@ def fcpxml_project_timebase(path: str | Path) -> dict[str, Any]:
     return {"status": "unknown", "source": "fcpxml_sequence", "reason": "project_sequence_missing"}
 
 
+def _snap_standard_rate(fps: float) -> tuple[int, int] | None:
+    if not math.isfinite(fps) or fps <= 0:
+        return None
+    for num, den in _STANDARD_RATES:
+        if abs(fps - (num / den)) <= 0.015:
+            return num, den
+    rounded = round(fps)
+    if 1 <= rounded <= 240 and abs(fps - rounded) <= 0.015:
+        return rounded, 1
+    return None
+
+
+def _material_index_timebase(index_path: Path) -> dict[str, Any] | None:
+    """Infer an authoritative timebase when all probed video clips agree on one rate."""
+    try:
+        payload = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    clips = payload.get("clips") if isinstance(payload, dict) else None
+    if not isinstance(clips, list) or not clips:
+        return None
+    rates: set[tuple[int, int]] = set()
+    for clip in clips:
+        if not isinstance(clip, dict):
+            continue
+        raw_fps = clip.get("fps")
+        if raw_fps is None or isinstance(raw_fps, bool):
+            continue
+        try:
+            fps = float(raw_fps)
+        except (TypeError, ValueError):
+            continue
+        if fps <= 0:
+            continue
+        snapped = _snap_standard_rate(fps)
+        if snapped is None:
+            return None
+        rates.add(snapped)
+        if len(rates) > 1:
+            return None
+    if len(rates) != 1:
+        return None
+    num, den = next(iter(rates))
+    return {
+        "status": "confirmed",
+        "source": "material_index_probe",
+        "frame_duration": f"{den}/{num}s",
+        "numerator": num,
+        "denominator": den,
+    }
+
+
 def project_timebase(config: Any) -> dict[str, Any]:
     """Resolve a project editing timebase, failing closed when it is not proven."""
     source = getattr(config, "fcpxml", None)
     if source:
         return fcpxml_project_timebase(source)
+    output_dir = getattr(config, "output_dir", None)
+    if output_dir:
+        out = Path(output_dir)
+        synced = out / "sync" / "synchronized.fcpxml"
+        if synced.is_file():
+            resolved = fcpxml_project_timebase(synced)
+            if resolved.get("status") == "confirmed":
+                return {**resolved, "source": "sync_master_fcpxml"}
+        index_path = out / "material_index.json"
+        if index_path.is_file():
+            inferred = _material_index_timebase(index_path)
+            if inferred is not None:
+                return inferred
     return {
         "status": "unknown",
         "source": "explicit_required",

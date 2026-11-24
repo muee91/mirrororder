@@ -176,6 +176,20 @@ def infer_camera_label(value, patterns=None):
     configured = configured_camera_label(text, patterns)
     if configured:
         return configured
+    raw_stem = os.path.splitext(os.path.basename(text))[0]
+    if re.fullmatch(r"(?:主机|主摄|主镜头|主机位)", raw_stem):
+        return "A"
+    if re.fullmatch(r"(?:副机|副摄|副镜头|副机位)", raw_stem):
+        return "B"
+    numeric_cam = re.fullmatch(
+        r"(?:(?:CAMERA|CAM)[_\-\s]*(\d+)|(\d+)号?机|机位[_\-\s]*(\d+))",
+        raw_stem,
+        re.IGNORECASE,
+    )
+    if numeric_cam:
+        idx = int(next(group for group in numeric_cam.groups() if group is not None))
+        if 1 <= idx <= 26:
+            return _CONVENTIONAL_CAMERAS[idx - 1]
     upper = text.upper()
     stem = os.path.splitext(os.path.basename(upper))[0]
     for camera in _CONVENTIONAL_CAMERAS:

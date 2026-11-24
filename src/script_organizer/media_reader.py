@@ -172,12 +172,26 @@ def _camera_token(value: str) -> str:
 
     We intentionally do not treat arbitrary occurrences of letters as
     camera metadata. Accepted industry-style tokens include A, A机, A1, A001,
-    CAM_A, CAMERA-B and equivalent forms through Z. A trailing device suffix
+    CAM_A, CAMERA-B and equivalent forms through Z, plus common Chinese/numeric
+    crew labels (主机/副机, 1号机/机位1/CAM1 -> A..Z). A trailing device suffix
     such as DJI_0001_D is not evidence of a D camera.
     """
     text = str(value or "").strip()
     if not text:
         return ""
+    if re.fullmatch(r"(?:主机|主摄|主镜头|主机位)", text):
+        return "A"
+    if re.fullmatch(r"(?:副机|副摄|副镜头|副机位)", text):
+        return "B"
+    numeric_cam = re.fullmatch(
+        r"(?:(?:CAMERA|CAM)[_\-\s]*(\d+)|(\d+)号?机|机位[_\-\s]*(\d+))",
+        text,
+        re.IGNORECASE,
+    )
+    if numeric_cam:
+        idx = int(next(group for group in numeric_cam.groups() if group is not None))
+        if 1 <= idx <= 26:
+            return _CONVENTIONAL_CAMERAS[idx - 1]
     upper = text.upper()
     for camera in _CONVENTIONAL_CAMERAS:
         patterns = (

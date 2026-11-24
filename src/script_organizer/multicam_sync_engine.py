@@ -805,6 +805,29 @@ def run_multicam_sync(
             audio_diagnostics = [{"code": "recording_authority_changed", "message": "测量期间录音摆位已变化，保留最新确认，自动结果未写入。"}]
     if alignment is not None:
         report["recording_alignment"] = alignment
+        from .nle_delivery.sync_audio_delivery import embed_aligned_recordings_in_deliveries
+
+        embedded = embed_aligned_recordings_in_deliveries(
+            fcpxml=fcpxml,
+            capcut_fcpxml=Path(capcut) if capcut else None,
+            premiere_xml=Path(premiere) if premiere else None,
+            alignment=alignment,
+            local_paths=recording_local_paths,
+            inventory=recording_inventory,
+            roots=roots,
+        )
+        report["audio_delivery_embedded"] = embedded
+        if embedded.get("fcpxml"):
+            emit(f"已将 {embedded['placement_count']} 段对齐原 WAV 写入同步交付工程并重新校验")
+            run_stage("validate_fcpxml.py", [str(fcpxml), str(fcpxml.parent)])
+            analysis_path, analysis_reference_mode = _refresh_analysis_reference(
+                report_dir / "synchronized.fcpxml",
+                fcpxml,
+            )
+            report["analysis_fcpxml"] = str(analysis_path)
+            report["analysis_reference_mode"] = analysis_reference_mode
+        if embedded.get("capcut_fcpxml") and capcut:
+            run_stage("validate_fcpxml.py", [capcut, str(Path(capcut).parent)])
     report["diagnostics"] = audio_diagnostics
     for diagnostic in audio_diagnostics:
         emit(diagnostic["message"])

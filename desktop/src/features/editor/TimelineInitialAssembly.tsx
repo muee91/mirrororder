@@ -34,7 +34,7 @@ export function TimelineInitialAssembly(props: InitialAssemblyProps) {
         </div>
         {!frameRate ? (
           <div className="proposal-warnings">
-            <span>还没有可靠的镜头帧率：播放一次原片或重新扫描素材即可自动识别；也可以在上方手动填写。确认时间基后才能建立剪辑。</span>
+            <span>正在等待同步母版或素材扫描提供帧率；也可以在上方手动指定时间基后建立剪辑。</span>
           </div>
         ) : null}
         {replaceProposalArmed ? <div className="proposal-warnings"><span>⚠️ 再次确认会替换当前剪辑并清空撤销/重做历史。</span></div> : null}

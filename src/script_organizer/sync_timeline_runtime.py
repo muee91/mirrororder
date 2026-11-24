@@ -992,15 +992,21 @@ def build_sync_delivery_artifacts(project: Any, tasks: Iterable[object]) -> dict
     offset_revision = int(timeline.get("offset_revision", 0) or 0)
     recording_inventory = _as_dict(report.get("recording_inventory"))
     recording_alignment = _as_dict(report.get("recording_alignment"))
+    audio_embedded = _as_dict(report.get("audio_delivery_embedded"))
     recording_alignment_current = (
         bool(recording_inventory)
         and recording_alignment.get("status") == "confirmed"
         and _text(recording_alignment.get("sync_task_id")) == sync_task_id
     )
+    auto_audio_already_embedded = (
+        recording_alignment_current
+        and recording_alignment.get("confirmation_source") == "automatic_waveform.v1"
+        and bool(audio_embedded.get("fcpxml"))
+    )
     stale_reasons: list[str] = []
     if offset_revision > 0:
         stale_reasons.append(f"manual_offset_r{offset_revision}")
-    if recording_alignment_current:
+    if recording_alignment_current and not auto_audio_already_embedded:
         stale_reasons.append("recording_alignment_after_sync_export")
     standard_delivery_stale = bool(stale_reasons)
     export_dirs = {Path(root).resolve() / "交付" for root in roots}
@@ -1035,10 +1041,15 @@ def build_sync_delivery_artifacts(project: Any, tasks: Iterable[object]) -> dict
     files = [resolve_artifact(project, task, ready)]
     for target, label, key, filename, format_name in kinds:
         local_path, unavailable_reason = safe_file(key, filename)
+        audio_note = ""
+        if audio_embedded.get(key):
+            audio_note = " · 多机位 + 已对齐原 WAV"
+        elif report.get("recording_inventory"):
+            audio_note = " · 视频/机内参考声，未写入独立录音"
         files.append({
             "target": target,
             "label": label,
-            "format": format_name + (" · 视频/机内参考声，未写入独立录音" if report.get("recording_inventory") else ""),
+            "format": format_name + audio_note,
             "filename": filename,
             "available": bool(local_path),
             "stale": standard_delivery_stale,
