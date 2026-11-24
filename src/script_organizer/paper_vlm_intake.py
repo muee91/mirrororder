@@ -14,12 +14,14 @@ import re
 import shutil
 import subprocess
 import tempfile
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
-from .model_connections import gemini_interactions_request, resolve_openai_endpoint
+from .multimodal_client import (
+    MultimodalConfig,
+    call_multimodal,
+    parse_json_value,
+)
 from .vision_provider import VisionProviderConfig
 
 
@@ -217,30 +219,7 @@ def normalize_candidate_rows(raw_rows: object, page_label: str = "1") -> list[di
 
 def _rows_from_model_text(text: object) -> list:
     """Best-effort extraction of a row list from free-form model text."""
-    value = str(text or "").strip()
-    if not value:
-        return []
-    if value.startswith("```"):
-        value = value.strip("`")
-        if value.lower().startswith("json"):
-            value = value[4:]
-        value = value.strip()
-
-    parsed: object = None
-    try:
-        parsed = json.loads(value)
-    except (ValueError, TypeError):
-        for opener, closer in (("[", "]"), ("{", "}")):
-            left = value.find(opener)
-            right = value.rfind(closer)
-            if left < 0 or right <= left:
-                continue
-            try:
-                parsed = json.loads(value[left : right + 1])
-                break
-            except (ValueError, TypeError):
-                continue
-
+    parsed = parse_json_value(text)
     if isinstance(parsed, list):
         return parsed
     if isinstance(parsed, dict):
@@ -249,28 +228,6 @@ def _rows_from_model_text(text: object) -> list:
             if isinstance(nested, list):
                 return nested
     return []
-
-
-def _openai_base_url(config: VisionProviderConfig) -> str:
-    base = str(config.base_url or "").strip().rstrip("/")
-    if base:
-        return base
-    if config.is_local:
-        # Never trigger a GB-scale model download from an interactive request path.
-        try:
-            from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
-
-            runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(config.model))
-            if not runtime.model_downloaded():
-                raise ValueError("本地视觉模型尚未下载，请先在设置中准备本地视觉模型，或切换为 Gemini / OpenAI")
-            base = str(runtime.ensure_server() or "").strip().rstrip("/")
-        except ValueError:
-            raise
-        except Exception:
-            base = ""
-    if not base:
-        raise ValueError("本地视觉模型服务未就绪，请先在设置中启用并启动本地视觉模型")
-    return base
 
 
 def _decode_file_base64(value: object) -> bytes:
@@ -438,74 +395,27 @@ def _render_pdf_pages(
     return pages
 
 
-def _openai_text_or_images(
+def _model_text(
     active: VisionProviderConfig,
     *,
     context: str,
     images: list[tuple[bytes, str]] | None,
     system_instruction: str,
-) -> str | None:
-    if active.provider == "gemini":
-        parts: list[dict[str, Any]] = [{"type": "text", "text": context}]
-        for image_bytes, mime_type in images or []:
-            parts.append({
-                "type": "image",
-                "data": base64.b64encode(image_bytes).decode("ascii"),
-                "mime_type": mime_type,
-            })
-        return gemini_interactions_request(
+):
+    """唯一的模型请求入口；返回结构化结果供上层生成脱敏提示。"""
+    return call_multimodal(
+        MultimodalConfig(
+            provider=active.provider,
             base_url=active.base_url,
             api_key=active.api_key,
             model=active.model,
-            system_instruction=system_instruction,
-            input_payload=parts,
             timeout_seconds=active.timeout_seconds,
-        )
-
-    url = resolve_openai_endpoint(_openai_base_url(active), "/chat/completions")
-    if images:
-        content: str | list[dict[str, Any]] = [{"type": "text", "text": context}]
-        content.extend(
-            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"}}
-            for data, mime in images
-        )
-    else:
-        content = context
-    request_payload: dict[str, Any] = {
-        "model": active.model,
-        "temperature": 0,
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": content},
-        ],
-    }
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if active.api_key:
-        headers["Authorization"] = "Bearer " + active.api_key
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
-        method="POST",
-        headers=headers,
+        ),
+        system=system_instruction,
+        context=context,
+        images=images,
+        temperature=0.0,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=active.timeout_seconds) as response:
-            raw = json.loads(response.read().decode("utf-8"))
-        text = raw["choices"][0]["message"]["content"]
-    except (
-        OSError,
-        urllib.error.URLError,
-        urllib.error.HTTPError,
-        UnicodeDecodeError,
-        ValueError,
-        KeyError,
-        IndexError,
-        TypeError,
-    ):
-        return None
-    if isinstance(text, list):
-        text = "".join(str(item.get("text", "")) for item in text if isinstance(item, dict))
-    return str(text)
 
 
 def extract_paper_slate_photo_candidates(
@@ -550,7 +460,6 @@ def extract_paper_slate_photo_candidates(
         page = f"{page_start}-{page_start + page_limit - 1}"
     else:
         page = "1"
-    model_text: str | None
     if source_is_declared_pdf and not source_bytes.startswith(b"%PDF-"):
         raise ValueError("PDF 文件头无效")
     if source_bytes.startswith(b"%PDF-"):
@@ -564,7 +473,7 @@ def extract_paper_slate_photo_candidates(
                 f"请从以下 PDF 场记文字提取严格 JSON 场记行。当前页面标签：{page}\n"
                 f"{selectable_text}"
             )
-            model_text = _openai_text_or_images(
+            result = _model_text(
                 active,
                 context=context,
                 images=None,
@@ -576,7 +485,7 @@ def extract_paper_slate_photo_candidates(
                 f"请从扫描版或手写 PDF 场记页面提取严格 JSON 场记行。当前页面标签：{page}。"
                 "按页面顺序读取，无法确认的字段留空或使用 unmarked。"
             )
-            model_text = _openai_text_or_images(
+            result = _model_text(
                 active,
                 context=context,
                 images=[(page_bytes, "image/png") for page_bytes in rendered],
@@ -585,17 +494,20 @@ def extract_paper_slate_photo_candidates(
     else:
         image_bytes, mime_type = _validate_decoded_image(source_bytes)
         context = json.dumps({"page": page, "task": "transcribe_handwritten_paper_slate"}, ensure_ascii=False)
-        model_text = _openai_text_or_images(
+        result = _model_text(
             active,
             context=context,
             images=[(image_bytes, mime_type)],
             system_instruction=_SYSTEM_INSTRUCTION,
         )
 
-    candidates = normalize_candidate_rows(_rows_from_model_text(model_text), page)
+    if result.error_code == "local_model_not_downloaded":
+        raise ValueError(result.error_detail)
+    candidates = normalize_candidate_rows(_rows_from_model_text(result.text), page)
     warning = ""
-    if model_text is None:
-        warning = "多模态模型请求失败或超时，请检查 API Key、网络或本地视觉服务后重试。"
+    if not result.ok:
+        detail = result.error_detail or "未知错误"
+        warning = f"多模态模型请求失败（{detail}），请检查 API Key、网络或本地视觉服务后重试。"
     elif not candidates:
         warning = "模型未识别出可解析的场记行，请检查照片清晰度或改用人工转录。"
     return {

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import math
-import urllib.error
-import urllib.request
+import mimetypes
 from pathlib import Path
 from typing import Any
 
+from .multimodal_client import MultimodalConfig, call_multimodal, parse_json_object
 from .take_semantic_provider import TakeSemanticProvider
 from .vision_provider import VisionProviderConfig
 
@@ -80,13 +80,6 @@ class TakeAuditProvider(TakeSemanticProvider):
         ][:6]
         if not usable_frames:
             return None
-        base_url = self._base_url()
-        if not base_url:
-            return None
-        url = base_url.rstrip("/")
-        if not url.endswith("/v1"):
-            url += "/v1"
-        url += "/chat/completions"
 
         system = (
             "你是短剧后期素材的审计员和算法红队评委。目标是找出当前算法判断可能错在哪里，并为后续粗剪提供结构化素材信息。"
@@ -104,72 +97,35 @@ class TakeAuditProvider(TakeSemanticProvider):
             '"continuity_risk":"low|medium|high|unknown"}}。'
             "景别按每个clip_id分别判断；证据不足时用unknown。"
         )
-        content: list[dict[str, Any]] = [
-            {"type": "text", "text": json.dumps(_remote_context(context), ensure_ascii=False)}
-        ]
+        pictures: list[tuple[bytes, str, str]] = []
         for index, item in enumerate(usable_frames, start=1):
             path = Path(str(item.get("path", "")))
-            content.append(
-                {
-                    "type": "text",
-                    "text": (
-                        f"frame {index}: clip_id={item.get('clip_id','')} "
-                        f"camera={item.get('camera','')} source_time={item.get('source_time',0)}"
-                    ),
-                }
+            mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+            caption = (
+                f"frame {index}: clip_id={item.get('clip_id', '')} "
+                f"camera={item.get('camera', '')} source_time={item.get('source_time', 0)}"
             )
-            content.append({"type": "image_url", "image_url": {"url": self._image_url(path)}})
+            pictures.append((path.read_bytes(), mime, caption))
 
-        payload = {
-            "model": self.config.model,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": content},
-            ],
-        }
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self.config.api_key:
-            headers["Authorization"] = "Bearer " + self.config.api_key
-        request = urllib.request.Request(
-            url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            method="POST",
-            headers=headers,
+        result = call_multimodal(
+            MultimodalConfig(
+                provider=self.config.provider,
+                base_url=self.config.base_url,
+                api_key=self.config.api_key,
+                model=self.config.model,
+                timeout_seconds=self.config.timeout_seconds,
+            ),
+            system=system,
+            context=_remote_context(context),
+            images=pictures,
+            temperature=0.0,
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-            text = raw["choices"][0]["message"]["content"]
-        except (
-            OSError,
-            urllib.error.URLError,
-            urllib.error.HTTPError,
-            UnicodeDecodeError,
-            ValueError,
-            KeyError,
-            IndexError,
-            TypeError,
-        ):
+        if not result.ok:
             return None
-        if isinstance(text, list):
-            text = "".join(str(item.get("text", "")) for item in text if isinstance(item, dict))
-        text = str(text or "").strip()
-        if text.startswith("```"):
-            text = text.strip("`").removeprefix("json").strip()
-        try:
-            result = json.loads(text)
-        except ValueError:
-            left, right = text.find("{"), text.rfind("}")
-            if left < 0 or right <= left:
-                return None
-            try:
-                result = json.loads(text[left : right + 1])
-            except ValueError:
-                return None
-        if not isinstance(result, dict):
+        parsed = parse_json_object(result.text)
+        if parsed is None:
             return None
-        return self._sanitize(result, usable_frames)
+        return self._sanitize(parsed, usable_frames)
 
     def _sanitize(self, result: dict[str, Any], frames: list[dict[str, Any]]) -> dict[str, Any]:
         verdict = str(result.get("verdict", "") or "")

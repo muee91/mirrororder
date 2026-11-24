@@ -6,19 +6,20 @@ base64 帧和采样时间，结果绝不携带 API Key 或本机绝对文件路�
 """
 from __future__ import annotations
 
-import base64
 import json
 import math
 import re
 import shutil
 import subprocess
 import tempfile
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
-from .model_connections import gemini_interactions_request, resolve_openai_endpoint
+from .multimodal_client import (
+    MultimodalConfig,
+    call_multimodal,
+    parse_json_object,
+)
 from .vision_provider import VisionProviderConfig
 
 
@@ -102,31 +103,6 @@ def _as_time_seconds(value: object) -> float | None:
     return number
 
 
-def _parse_model_json(text: object) -> dict[str, Any] | None:
-    """Best-effort extraction of a single JSON object from free-form model text."""
-    value = str(text or "").strip()
-    if not value:
-        return None
-    if value.startswith("```"):
-        value = value.strip("`")
-        if value.lower().startswith("json"):
-            value = value[4:]
-        value = value.strip()
-
-    parsed: object = None
-    try:
-        parsed = json.loads(value)
-    except (ValueError, TypeError):
-        left, right = value.find("{"), value.rfind("}")
-        if left < 0 or right <= left:
-            return None
-        try:
-            parsed = json.loads(value[left : right + 1])
-        except (ValueError, TypeError):
-            return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 def _clean_frames(frames: object) -> list[tuple[float, bytes]]:
     cleaned: list[tuple[float, bytes]] = []
     if not isinstance(frames, (list, tuple)):
@@ -145,23 +121,6 @@ def _clean_frames(frames: object) -> list[tuple[float, bytes]]:
             continue
         cleaned.append((max(0.0, seconds), bytes(data)))
     return cleaned
-
-
-def _openai_base_url(config: VisionProviderConfig) -> str:
-    base = str(config.base_url or "").strip().rstrip("/")
-    if base:
-        return base
-    if config.is_local:
-        # 请求路径绝不静默触发 GB 级模型下载：必须先确认模型已在设备上准备。
-        from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
-
-        runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(config.model))
-        if not runtime.model_downloaded():
-            raise ValueError("本地视觉模型尚未下载，请先在设置中准备本地视觉模型，或切换为 Gemini / OpenAI")
-        base = str(runtime.ensure_server() or "").strip().rstrip("/")
-    if not base:
-        raise ValueError("本地视觉模型服务未就绪，请先在设置中启用并启动本地视觉模型")
-    return base
 
 
 def extract_clapperboard_frames(
@@ -248,75 +207,26 @@ def extract_clapperboard_proposal(
             },
             ensure_ascii=False,
         )
-        model_text: str | None = None
-        if active.provider == "gemini":
-            parts: list[dict[str, Any]] = [{"type": "text", "text": context}]
-            for _, data in inspected:
-                parts.append(
-                    {
-                        "type": "image",
-                        "data": base64.b64encode(data).decode("ascii"),
-                        "mime_type": "image/jpeg",
-                    }
-                )
-            model_text = gemini_interactions_request(
+        model_result = call_multimodal(
+            MultimodalConfig(
+                provider=active.provider,
                 base_url=active.base_url,
                 api_key=active.api_key,
                 model=active.model,
-                system_instruction=_SYSTEM_INSTRUCTION,
-                input_payload=parts,
                 timeout_seconds=active.timeout_seconds,
-            )
+            ),
+            system=_SYSTEM_INSTRUCTION,
+            context=context,
+            images=[(data, "image/jpeg") for _, data in inspected],
+            temperature=0.0,
+        )
+        if model_result.error_code == "local_model_not_downloaded":
+            raise ValueError(model_result.error_detail)
+        if not model_result.ok:
+            detail = model_result.error_detail or "未知错误"
+            warning = f"多模态模型请求失败（{detail}），请检查 API Key、网络或本地视觉服务后重试。"
         else:
-            url = resolve_openai_endpoint(_openai_base_url(active), "/chat/completions")
-            content: list[dict[str, Any]] = [{"type": "text", "text": context}]
-            for _, data in inspected:
-                content.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")},
-                    }
-                )
-            request_payload: dict[str, Any] = {
-                "model": active.model,
-                "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": _SYSTEM_INSTRUCTION},
-                    {"role": "user", "content": content},
-                ],
-            }
-            headers = {"Content-Type": "application/json", "Accept": "application/json"}
-            if active.api_key:
-                headers["Authorization"] = "Bearer " + active.api_key
-            request = urllib.request.Request(
-                url,
-                data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
-                method="POST",
-                headers=headers,
-            )
-            try:
-                with urllib.request.urlopen(request, timeout=active.timeout_seconds) as response:
-                    raw = json.loads(response.read().decode("utf-8"))
-                text = raw["choices"][0]["message"]["content"]
-            except (
-                OSError,
-                urllib.error.URLError,
-                urllib.error.HTTPError,
-                UnicodeDecodeError,
-                ValueError,
-                KeyError,
-                IndexError,
-                TypeError,
-            ):
-                text = None
-            if isinstance(text, list):
-                text = "".join(str(item.get("text", "")) for item in text if isinstance(item, dict))
-            model_text = None if text is None else str(text)
-
-        if model_text is None:
-            warning = "多模态模型请求失败或超时，请检查 API Key、网络或本地视觉服务后重试。"
-        else:
-            parsed = _parse_model_json(model_text) or {}
+            parsed = parse_json_object(model_result.text) or {}
             if not parsed:
                 warning = "模型未返回可解析的打板识别提案，请人工核对。"
 

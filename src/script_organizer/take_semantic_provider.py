@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import base64
-import json
 import mimetypes
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
-from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
+from .multimodal_client import MultimodalConfig, call_multimodal, parse_json_object
 from .vision_provider import VisionProviderConfig
 
 
@@ -19,43 +15,38 @@ class TakeSemanticProvider:
     sampled JPEG frames plus already-known project context. The result is
     descriptive metadata only; it cannot mutate review or mapping state. Speech
     remains a separate ASR evidence source instead of being invented by vision.
+    Protocol routing (Gemini Interactions / OpenAI-compatible / local
+    llama-server) is owned by the shared multimodal client.
     """
 
     def __init__(self, config: VisionProviderConfig | None = None):
         self.config = config or VisionProviderConfig.from_env()
-        self._local_runtime: LocalVisionRuntime | None = None
 
     @property
     def enabled(self) -> bool:
         return self.config.enabled
 
-    def _base_url(self) -> str:
-        if not self.config.enabled:
-            return ""
-        if not self.config.is_local:
-            return self.config.base_url
-        if self._local_runtime is None:
-            self._local_runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(self.config.model))
-        return self._local_runtime.ensure_server()
-
-    def _request_model(self) -> str:
-        return self.config.model
-
     @staticmethod
-    def _image_url(path: Path) -> str:
-        mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
-        return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
+    def _values(result: dict[str, Any], key: str, limit: int = 12) -> list[str]:
+        raw = result.get(key, [])
+        if not isinstance(raw, list):
+            return []
+        return [str(value).strip()[:120] for value in raw if str(value).strip()][:limit]
 
     def describe(self, context: dict[str, Any], frames: list[Path]) -> dict[str, Any] | None:
         if not self.enabled or not frames:
             return None
-        base_url = self._base_url()
-        if not base_url:
+        pictures: list[tuple[bytes, str]] = []
+        for frame in frames[:5]:
+            if not frame:
+                continue
+            path = Path(frame)
+            if not path.is_file():
+                continue
+            mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+            pictures.append((path.read_bytes(), mime))
+        if not pictures:
             return None
-        url = base_url.rstrip("/")
-        if not url.endswith("/v1"):
-            url += "/v1"
-        url += "/chat/completions"
         system = (
             "你是短剧素材的镜头语义索引器。只描述抽样画面中实际可见的内容和输入中已经明确给出的上下文，"
             "不猜真实演员姓名、人物关系、动机或未出现的剧情，不判断最终Best/Keep/Reject，也不发明剧本位置。"
@@ -67,70 +58,39 @@ class TakeSemanticProvider:
             '"tags":["不超过8个简短中文标签"],"summary":"简短中文总结"}。'
             "证据不足的字段返回空字符串或空数组。"
         )
-        content: list[dict[str, Any]] = [{"type": "text", "text": json.dumps(context, ensure_ascii=False)}]
-        for frame in frames[:5]:
-            if frame.is_file():
-                content.append({"type": "image_url", "image_url": {"url": self._image_url(frame)}})
-        payload = {
-            "model": self._request_model(),
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": content},
-            ],
-        }
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self.config.api_key:
-            headers["Authorization"] = "Bearer " + self.config.api_key
-        request = urllib.request.Request(
-            url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            method="POST",
-            headers=headers,
+        result = call_multimodal(
+            MultimodalConfig(
+                provider=self.config.provider,
+                base_url=self.config.base_url,
+                api_key=self.config.api_key,
+                model=self.config.model,
+                timeout_seconds=self.config.timeout_seconds,
+            ),
+            system=system,
+            context=context,
+            images=pictures,
+            temperature=0.0,
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-            text = raw["choices"][0]["message"]["content"]
-        except (OSError, urllib.error.URLError, urllib.error.HTTPError, UnicodeDecodeError, ValueError, KeyError, IndexError, TypeError):
+        if not result.ok:
             return None
-        if isinstance(text, list):
-            text = "".join(str(item.get("text", "")) for item in text if isinstance(item, dict))
-        text = str(text or "").strip()
-        if text.startswith("```"):
-            text = text.strip("`").removeprefix("json").strip()
-        try:
-            result = json.loads(text)
-        except ValueError:
-            left, right = text.find("{"), text.rfind("}")
-            if left < 0 or right <= left:
-                return None
-            try:
-                result = json.loads(text[left : right + 1])
-            except ValueError:
-                return None
-        if not isinstance(result, dict):
+        parsed = parse_json_object(result.text)
+        if parsed is None:
             return None
-
-        def values(key: str, limit: int = 12) -> list[str]:
-            raw_value = result.get(key, [])
-            if not isinstance(raw_value, list):
-                return []
-            return [str(value).strip()[:120] for value in raw_value if str(value).strip()][:limit]
-
-        model = self._request_model()
         return {
-            "description": str(result.get("description", "") or "")[:1600],
-            "location": str(result.get("location", "") or "")[:160],
-            "shot_type": str(result.get("shot_type", "") or "")[:120],
-            "visible_people": values("visible_people"),
-            "actions": values("actions"),
-            "props": values("props"),
-            "emotion": values("emotion"),
-            "continuity_clues": values("continuity_clues"),
-            "extracted_text": str(result.get("extracted_text", "") or "")[:1200],
-            "tags": values("tags", limit=8),
-            "summary": str(result.get("summary", "") or "")[:1000],
+            "description": str(parsed.get("description", "") or "")[:1600],
+            "location": str(parsed.get("location", "") or "")[:160],
+            "shot_type": str(parsed.get("shot_type", "") or "")[:120],
+            "visible_people": self._values(parsed, "visible_people"),
+            "actions": self._values(parsed, "actions"),
+            "props": self._values(parsed, "props"),
+            "emotion": self._values(parsed, "emotion"),
+            "continuity_clues": self._values(parsed, "continuity_clues"),
+            "extracted_text": str(parsed.get("extracted_text", "") or "")[:1200],
+            "tags": self._values(parsed, "tags", limit=8),
+            "summary": str(parsed.get("summary", "") or "")[:1000],
             "provider": self.config.provider,
-            "model": model,
+            "model": self.config.model,
         }
+
+
+__all__ = ["TakeSemanticProvider"]

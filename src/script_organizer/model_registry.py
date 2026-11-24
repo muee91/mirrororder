@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-import json
 import os
-import re
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
-from http.client import HTTPException
 from typing import Any
 
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
-from .model_connections import (
-    _extract_gemini_interaction_text,
-    load_model_connections,
-    resolve_openai_endpoint,
-)
+from .model_connections import load_model_connections
 from .model_provider import ModelProviderConfig
+from .multimodal_client import (
+    MultimodalConfig,
+    call_multimodal,
+    parse_json_object,
+    strip_markdown_fence,
+)
 from .semantic_encoder import SemanticEmbeddingConfig
 from .vision_provider import VisionProviderConfig
 
@@ -230,8 +227,9 @@ class AssistantLanguageModel:
     def _base_url(self) -> str:
         if not self.enabled:
             return ""
-        if not self.config.is_local:
-            return self.config.base_url.rstrip("/")
+        explicit = self.config.base_url.strip().rstrip("/")
+        if not self.config.is_local or explicit:
+            return explicit
         if self._local_runtime is None:
             self._local_runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(self.config.model))
         # 本地模型未下载时不能借问答路径静默触发 GB 级下载：
@@ -239,34 +237,7 @@ class AssistantLanguageModel:
         if not self._local_runtime.model_downloaded():
             self.last_status = {"mode": "local_not_downloaded", "reason": "local_model_not_downloaded"}
             return ""
-        return self._local_runtime.ensure_server().rstrip("/")
-
-    @staticmethod
-    def _decode_content(raw: object) -> str:
-        if isinstance(raw, list):
-            return "".join(
-                str(item.get("text", ""))
-                for item in raw
-                if isinstance(item, dict)
-            )
-        return str(raw or "")
-
-    @staticmethod
-    def _parse_json(text: str) -> dict[str, Any] | None:
-        value = text.strip()
-        if value.startswith("```"):
-            value = value.strip("`").removeprefix("json").strip()
-        try:
-            payload = json.loads(value)
-        except ValueError:
-            left, right = value.find("{"), value.rfind("}")
-            if left < 0 or right <= left:
-                return None
-            try:
-                payload = json.loads(value[left : right + 1])
-            except ValueError:
-                return None
-        return payload if isinstance(payload, dict) else None
+        return str(self._local_runtime.ensure_server() or "").strip().rstrip("/")
 
     def _request_content(
         self,
@@ -279,69 +250,41 @@ class AssistantLanguageModel:
             self.last_status = {"mode": "unconfigured", "reason": "not_configured"}
             return None
         self.last_status = {"mode": "error", "reason": "local_server_unavailable"}
+        # 本地运行时仍由本模块持有：保留现有测试对
+        # script_organizer.model_registry.LocalVisionRuntime 的 monkeypatch 语义。
         try:
             base = self._base_url()
-            if not base:
-                return None
-            request = self._request(base, system, context, temperature)
-            with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-            if self.config.provider == "gemini":
-                content = _extract_gemini_interaction_text(raw)
-            else:
-                content = self._decode_content(raw["choices"][0]["message"]["content"])
-        except urllib.error.HTTPError as error:
-            reason = f"http_{error.code}" if type(error.code) is int and 100 <= error.code <= 599 else "network_error"
-        except TimeoutError:
-            reason = "timeout"
-        except urllib.error.URLError as error:
-            reason = "timeout" if isinstance(error.reason, TimeoutError) else "network_error"
-        except (OSError, HTTPException):
-            reason = "network_error"
-        except (ValueError, TypeError):
-            reason = "invalid_json"
-        except (KeyError, IndexError):
-            reason = "empty_response"
-        else:
-            if content.strip():
-                return content
-            reason = "empty_response"
-        self.last_status = {"mode": "error", "reason": reason}
-        return None
-
-    def _request(
-        self, base: str, system: str, context: dict[str, Any], temperature: float
-    ) -> urllib.request.Request:
-        prompt = json.dumps(context, ensure_ascii=False)
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        api_key = self.config.api_key
-        if self.config.provider == "gemini":
-            # Keep the Interactions payload while allowing transport errors to reach
-            # the assistant status code. The shared Gemini client returns None on errors.
-            if base.endswith("/interactions"):
-                url = base
-            else:
-                version = "" if base.endswith(("/v1", "/v1beta")) else "/v1beta"
-                url = base + version + "/interactions"
-            payload: dict[str, Any] = {
-                "model": self.config.model.removeprefix("models/"), "input": prompt, "store": False,
-            }
-            if system:
-                payload["system_instruction"] = system
-            if api_key:
-                headers["x-goog-api-key"] = api_key
-        else:
-            url = resolve_openai_endpoint(base, "/chat/completions")
-            payload = {
-                "model": self.config.model,
-                "temperature": max(0.0, min(1.0, float(temperature))),
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-            }
-            if api_key:
-                headers["Authorization"] = "Bearer " + api_key
-        return urllib.request.Request(
-            url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), method="POST", headers=headers,
+        except Exception:
+            self.last_status = {"mode": "error", "reason": "local_server_unavailable"}
+            return None
+        if not base:
+            return None
+        # 本地地址已由上面的 _base_url() 解析（并保留 monkeypatch 语义），
+        # 因此这里按 OpenAI-compatible 端点交给客户端，避免二次解析本地运行时。
+        route_provider = "gemini" if self.config.provider == "gemini" else "openai-compatible"
+        result = call_multimodal(
+            MultimodalConfig(
+                provider=route_provider,
+                base_url=base,
+                api_key=self.config.api_key,
+                model=self.config.model,
+                timeout_seconds=self.config.timeout_seconds,
+            ),
+            system=system,
+            context=context,
+            temperature=temperature,
         )
+        if result.ok and result.text.strip():
+            self.last_status = {"mode": "llm", "reason": ""}
+            return result.text
+        code = result.error_code
+        if code == "local_model_not_downloaded":
+            self.last_status = {"mode": "local_not_downloaded", "reason": "local_model_not_downloaded"}
+        elif code in {"local_server_unavailable", "unconfigured"}:
+            self.last_status = {"mode": "error", "reason": "local_server_unavailable"}
+        else:
+            self.last_status = {"mode": "error", "reason": code or "network_error"}
+        return None
 
     def complete_json(
         self, *, system: str, context: dict[str, Any], temperature: float = 0.0
@@ -349,7 +292,7 @@ class AssistantLanguageModel:
         content = self._request_content(system=system, context=context, temperature=temperature)
         if content is None:
             return None
-        payload = self._parse_json(content)
+        payload = parse_json_object(content)
         self.last_status = (
             {"mode": "llm", "reason": ""} if payload is not None
             else {"mode": "error", "reason": "invalid_json"}
@@ -362,14 +305,11 @@ class AssistantLanguageModel:
         content = self._request_content(system=system, context=context, temperature=temperature)
         if content is None:
             return None
-        text = content.strip()
-        fence = re.fullmatch(r"(`{3,}|~{3,})[^\n]*\n(.*?)\1", text, re.DOTALL)
-        if fence:
-            text = fence[2].strip()
+        text = strip_markdown_fence(content)
         if text.casefold().startswith(("<!doctype", "<html", "traceback")):
             self.last_status = {"mode": "error", "reason": "invalid_response"}
             return None
-        payload = self._parse_json(text)
+        payload = parse_json_object(text)
         if payload is not None:
             answer = str(payload.get("answer") or "").strip()
         elif text.startswith(("{", "[")):

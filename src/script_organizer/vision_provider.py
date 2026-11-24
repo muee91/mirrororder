@@ -1,29 +1,22 @@
 from __future__ import annotations
 
-import base64
-import json
 import math
 import mimetypes
 import os
 import subprocess
 import tempfile
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .device_runtime_settings import load_runtime_settings
-from .model_connections import (
-    gemini_interactions_request,
-    load_model_connections,
-    resolve_openai_endpoint,
-)
+from .model_connections import load_model_connections
 from .local_vision_runtime import (
     DEFAULT_LOCAL_VISION_MODEL,
     LocalVisionRuntime,
     LocalVisionRuntimeConfig,
 )
+from .multimodal_client import MultimodalConfig, call_multimodal, parse_json_object
 
 
 _LOCAL_PROVIDERS = {"local", "llama", "llama.cpp", "llama-server"}
@@ -132,25 +125,6 @@ class VisionProvider:
 
     def __init__(self, config: VisionProviderConfig | None = None):
         self.config = config or VisionProviderConfig.from_env()
-        self._local_runtime: LocalVisionRuntime | None = None
-
-    def _base_url(self) -> str:
-        if not self.config.enabled:
-            return ""
-        if not self.config.is_local:
-            return self.config.base_url
-        if self._local_runtime is None:
-            self._local_runtime = LocalVisionRuntime(LocalVisionRuntimeConfig.from_env(self.config.model))
-        return self._local_runtime.ensure_server()
-
-    def _request_model(self) -> str:
-        return self.config.model
-
-    @staticmethod
-    def _encode_image(path: Path) -> str:
-        mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        return f"data:{mime};base64,{encoded}"
 
     def extract_frames(
         self,
@@ -193,8 +167,16 @@ class VisionProvider:
     def rescue(self, context: dict[str, Any], frames: list[Path]) -> dict[str, Any] | None:
         if not self.config.enabled or not frames:
             return None
-        base_url = self._base_url()
-        if not base_url:
+        pictures: list[tuple[bytes, str]] = []
+        for frame in frames:
+            if not frame:
+                continue
+            path = Path(frame)
+            if not path.is_file():
+                continue
+            mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+            pictures.append((path.read_bytes(), mime))
+        if not pictures:
             return None
         system = (
             "你是短剧素材的视觉二审器。根据抽帧判断人物、场景和动作，但只能从输入给出的 candidate_id 中选择。"
@@ -202,85 +184,33 @@ class VisionProvider:
             '{"candidate_id":"...","confidence":0.0,"visual_summary":"...","reason":"..."}。'
             "证据不足时 candidate_id 为空且 confidence 低于0.5。"
         )
-        if self.config.provider == "gemini":
-            parts: list[dict[str, Any]] = [
-                {"type": "text", "text": json.dumps(context, ensure_ascii=False)},
-            ]
-            for frame in frames:
-                mime = mimetypes.guess_type(frame.name)[0] or "image/jpeg"
-                parts.append(
-                    {
-                        "type": "image",
-                        "data": base64.b64encode(frame.read_bytes()).decode("ascii"),
-                        "mime_type": mime,
-                    }
-                )
-            text = gemini_interactions_request(
-                base_url=base_url,
+        result = call_multimodal(
+            MultimodalConfig(
+                provider=self.config.provider,
+                base_url=self.config.base_url,
                 api_key=self.config.api_key,
-                model=self._request_model(),
-                system_instruction=system,
-                input_payload=parts,
+                model=self.config.model,
                 timeout_seconds=self.config.timeout_seconds,
-            )
-            if not text:
-                return None
-        else:
-            url = resolve_openai_endpoint(base_url, "/chat/completions")
-            content: list[dict[str, Any]] = [
-                {"type": "text", "text": json.dumps(context, ensure_ascii=False)},
-            ]
-            for frame in frames:
-                content.append({"type": "image_url", "image_url": {"url": self._encode_image(frame)}})
-            payload = {
-                "model": self._request_model(),
-                "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": content},
-                ],
-            }
-            headers = {"Content-Type": "application/json", "Accept": "application/json"}
-            if self.config.api_key:
-                headers["Authorization"] = "Bearer " + self.config.api_key
-            request = urllib.request.Request(
-                url,
-                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                method="POST",
-                headers=headers,
-            )
-            try:
-                with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
-                    raw = json.loads(response.read().decode("utf-8"))
-                text = raw["choices"][0]["message"]["content"]
-            except (OSError, urllib.error.URLError, urllib.error.HTTPError, UnicodeDecodeError, ValueError, KeyError, IndexError, TypeError):
-                return None
-        if isinstance(text, list):
-            text = "".join(str(item.get("text", "")) for item in text if isinstance(item, dict))
-        text = str(text or "").strip()
-        if text.startswith("```"):
-            text = text.strip("`").removeprefix("json").strip()
-        try:
-            result = json.loads(text)
-        except ValueError:
-            left, right = text.find("{"), text.rfind("}")
-            if left < 0 or right <= left:
-                return None
-            try:
-                result = json.loads(text[left : right + 1])
-            except ValueError:
-                return None
-        if not isinstance(result, dict):
+            ),
+            system=system,
+            context=context,
+            images=pictures,
+            temperature=0.0,
+        )
+        if not result.ok:
+            return None
+        parsed = parse_json_object(result.text)
+        if parsed is None:
             return None
         try:
-            confidence = float(result.get("confidence", 0) or 0)
+            confidence = float(parsed.get("confidence", 0) or 0)
         except (TypeError, ValueError):
             confidence = 0.0
         if not math.isfinite(confidence):
             confidence = 0.0
         return {
-            "candidate_id": str(result.get("candidate_id", "") or "")[:160],
+            "candidate_id": str(parsed.get("candidate_id", "") or "")[:160],
             "confidence": max(0.0, min(1.0, confidence)),
-            "visual_summary": str(result.get("visual_summary", "") or "")[:1000],
-            "reason": str(result.get("reason", "") or "")[:1000],
+            "visual_summary": str(parsed.get("visual_summary", "") or "")[:1000],
+            "reason": str(parsed.get("reason", "") or "")[:1000],
         }
