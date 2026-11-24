@@ -3,7 +3,6 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { PlatformClient } from "../../api/platform";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { rememberSyncSubmissionIssue } from "../../app/resumeState";
-import { rememberPendingSlateFile } from "../../app/pendingSlateFile";
 import {
   DesktopClient,
   type ProjectCreatePayload,
@@ -65,6 +64,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
       name: name.trim(),
       input_kind: inputKind,
       script: scriptPath.trim() || undefined,
+      slate: slatePath.trim() || undefined,
       fcpxml: inputKind === "fcpxml" ? fcpxmlPath.trim() : undefined,
       media_roots: inputKind === "media-directory" ? rootsFromText(mediaRoots) : undefined,
       timeline_mode: "sequential",
@@ -229,10 +229,12 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
         const created = await client.createProject(values);
         savedId = created.project_id;
         setCreatedId(savedId);
-        if (slatePath.trim()) rememberPendingSlateFile(savedId, slatePath.trim());
 
         if (prepareAfterCreate) {
           try {
+            // Sync first, always. Script transcription/matching is queued by
+            // the backend as a separate task so a long ASR run never keeps
+            // the sync master locked in "running".
             if (inputKind === "media-directory") {
               await client.multicamSync(savedId);
               rememberSyncSubmissionIssue(workspaceId, savedId, "");
@@ -331,7 +333,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
 
               <label className="lifecycle-checkbox">
                 <input type="checkbox" checked={prepareAfterCreate} onChange={(event) => setPrepareAfterCreate(event.target.checked)} />
-                <span><strong>{inputKind === "media-directory" ? "创建后自动同步" : "创建后自动整理"}</strong><small>{inputKind === "media-directory" ? "先交付同步工程。转写、场记与剧本关联不会阻塞剪辑师开工。" : "后台整理素材、转写并匹配剧本；进度在状态中心查看。"}</small></span>
+                <span><strong>{inputKind === "media-directory" ? "创建后自动同步" : "创建后自动整理"}</strong><small>{inputKind === "media-directory" ? "先交付同步工程。若带剧本，后台随后转写并匹配；场记识别在后台逐页进行，均不阻塞剪辑师开工。" : "后台整理素材、转写并匹配剧本；进度在状态中心查看。"}</small></span>
               </label>
 
               {preflight && (!preflight.ready || preflight.warnings.length > 0) ? (

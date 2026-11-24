@@ -38,6 +38,7 @@ class ProjectPackageManifest:
 
 _PORTABLE_PATH_FIELDS: tuple[tuple[str, str], ...] = (
     ("input", "script"),
+    ("input", "slate"),
     ("input", "fcpxml"),
     ("output", "directory"),
     ("asr", "transcript_dir"),

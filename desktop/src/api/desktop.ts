@@ -1,4 +1,5 @@
 import { HostConnectionError, type ProjectSummary } from "./host";
+import type { PaperVlmCandidate } from "./paperIntake";
 import { fetchWithTimeout } from "./requestWithTimeout";
 
 export interface DesktopCommandStatus { name: string; available: boolean; path: string }
@@ -172,7 +173,7 @@ export interface ClapperboardOcrProposal {
   warning: string;
 }
 export interface ProjectCreatePayload {
-  name: string; project_id?: string; input_kind: "fcpxml" | "media-directory"; script?: string;
+  name: string; project_id?: string; input_kind: "fcpxml" | "media-directory"; script?: string; slate?: string;
   fcpxml?: string; media_roots?: string[]; timeline_mode?: "sequential" | "timestamp" | string; camera_patterns?: Record<string, string>;
 }
 export interface ProjectPreflight { ready: boolean; errors: string[]; warnings: string[]; detected?: Record<string, unknown>; project_id?: string; [key: string]: unknown }
@@ -188,6 +189,27 @@ export interface ProjectTaskStatus {
   completed_at?: string | null;
 }
 export interface ProjectDeleteResult { project_id: string; deleted: boolean; config_path: string }
+
+/** Read model for the project's durable slate recognition, never an authority write. */
+export interface SlateCandidateState {
+  contract: string;
+  project_id: string;
+  slate_attached: boolean;
+  slate_name: string;
+  status: "none" | "queued" | "running" | "completed" | "failed" | "cancelled" | string;
+  revision: number;
+  pages_total: number;
+  pages_done: number;
+  candidates: PaperVlmCandidate[];
+  warning: string;
+  error: string;
+  provider: string;
+  model: string;
+  started_at: string;
+  completed_at: string;
+  updated_at: string;
+  task_id: string;
+}
 
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -301,5 +323,23 @@ export class DesktopClient {
   }
   prepareProject(projectId: string): Promise<ProjectTask> {
     return requestJson(this.baseUrl, `${projectPath(projectId)}/tasks`, { method: "POST", body: JSON.stringify({ type: "prepare_project", targets: {}, actor: "desktop-v2", idempotency_key: `desktop-v2:prepare:${projectId}` }) });
+  }
+  /** Lightweight read: the backend never starts inference on this GET. */
+  slateCandidates(projectId: string): Promise<SlateCandidateState> {
+    return requestJson(this.baseUrl, `${projectPath(projectId)}/slate-candidates`);
+  }
+  /** Submit the durable, cancellable project-level slate recognition task. */
+  submitSlateOcr(projectId: string): Promise<ProjectTask> {
+    const value = projectId.trim();
+    if (!value) throw new HostConnectionError("识别场记需要 project_id");
+    return requestJson(this.baseUrl, `${projectPath(value)}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({
+        type: "slate_ocr",
+        targets: {},
+        actor: "desktop-v2",
+        idempotency_key: `desktop-v2:slate-ocr:${value}:${Date.now()}`,
+      }),
+    });
   }
 }

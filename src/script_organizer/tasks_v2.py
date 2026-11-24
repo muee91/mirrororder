@@ -39,6 +39,7 @@ TASK_TYPES = {
     "scene_interval_prepare",
     "multicam_sync",
     "incremental_analyze",
+    "slate_ocr",
     "auto_resolve",
     "transcribe",
     "evidence_extract",

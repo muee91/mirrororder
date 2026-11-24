@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi, type MockInstance } from 'vitest';
 import { HostConnection, type HostSnapshot, type ReviewModelPayload } from '../api/host';
+import { DesktopClient, type SlateCandidateState } from '../api/desktop';
 import { PlatformClient } from '../api/platform';
 import { ProductionClient, type SlateBoard, type SlateRecord } from '../api/production';
 import { App } from './App';
@@ -78,9 +79,21 @@ beforeEach(async () => {
   connect = vi.spyOn(HostConnection.prototype, 'connect');
   vi.spyOn(HostConnection.prototype, 'reviewModel').mockResolvedValue({ episodes: [], take_groups: [] } as unknown as ReviewModelPayload);
   vi.spyOn(ProductionClient.prototype, 'scriptSupervisor').mockImplementation(async () => board);
+  vi.spyOn(DesktopClient.prototype, 'slateCandidates').mockResolvedValue({
+    contract: 'slate_candidates.v1', project_id: 'p1', slate_attached: false, slate_name: '',
+    status: 'none', revision: 0, pages_total: 0, pages_done: 0, candidates: [],
+    warning: '', error: '', provider: '', model: '', started_at: '', completed_at: '', updated_at: '', task_id: '',
+  } as SlateCandidateState);
   vi.spyOn(PlatformClient.prototype, 'info').mockResolvedValue({ os: 'macos' } as Awaited<ReturnType<PlatformClient['info']>>);
   pick.mockResolvedValue('synthetic-new/projects/p1');
-  write.mockReset().mockImplementation(async (_input, init) => {
+  write.mockReset().mockImplementation(async (input, init) => {
+    if (String(input).endsWith('/slate-candidates')) {
+      return new Response(JSON.stringify({
+        contract: 'slate_candidates.v1', project_id: 'p1', slate_attached: false, slate_name: '',
+        status: 'none', revision: 0, pages_total: 0, pages_done: 0, candidates: [],
+        warning: '', error: '', provider: '', model: '', started_at: '', completed_at: '', updated_at: '', task_id: '',
+      }));
+    }
     const { record_id, record: patch } = JSON.parse(String(init?.body));
     board = { ...board, revision: board.revision + 1, records: { ...board.records, [record_id]: { ...board.records[record_id], ...patch } } };
     return returnedBoard(board);
@@ -88,6 +101,9 @@ beforeEach(async () => {
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(<App/>));
   expect(canvas()?.getAttribute('aria-label')).toContain('Original project');
+  // Slate recognition state is a lightweight read on page open; assertions
+  // below concern mutations after the workspace switch, not the initial reads.
+  write.mockClear();
 });
 afterEach(async () => {
   await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals();

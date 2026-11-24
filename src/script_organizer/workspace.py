@@ -78,10 +78,16 @@ def project_id_for(value: str) -> str:
 
 
 _SCRIPT_SUFFIXES = {".docx", ".txt", ".md", ".markdown"}
+_SLATE_SUFFIXES = {".pdf", ".jpg", ".jpeg", ".png", ".webp"}
 
 
 def _script_source(payload: dict[str, Any]) -> Path | None:
     value = str(payload.get("script") or "").strip()
+    return Path(value).expanduser().resolve() if value else None
+
+
+def _slate_source(payload: dict[str, Any]) -> Path | None:
+    value = str(payload.get("slate") or "").strip()
     return Path(value).expanduser().resolve() if value else None
 
 
@@ -313,6 +319,7 @@ class WorkspaceRegistry:
         if input_kind not in {"fcpxml", "media-directory"}:
             raise ValueError("不支持的项目类型")
         script = _script_source(payload)
+        slate = _slate_source(payload)
         fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser().resolve() if payload.get("fcpxml") else None
         raw_media_roots = payload.get("media_roots", [])
         if not isinstance(raw_media_roots, list):
@@ -326,6 +333,8 @@ class WorkspaceRegistry:
             media_roots = [Path(str(payload.get("media_root"))).expanduser().resolve()]
         if script is not None and (not script.is_file() or script.suffix.lower() not in _SCRIPT_SUFFIXES):
             raise ValueError("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
+        if slate is not None and (not slate.is_file() or slate.suffix.lower() not in _SLATE_SUFFIXES):
+            raise ValueError("场记必须是可读取的 PDF、JPEG、PNG 或 WEBP 文件")
         if input_kind == "fcpxml" and (
             fcpxml is None
             or not fcpxml.is_file()
@@ -349,6 +358,10 @@ class WorkspaceRegistry:
             if script is not None:
                 script_copy = inputs_dir / f"script{script.suffix.lower()}"
                 shutil.copy2(script, script_copy)
+            slate_copy = None
+            if slate is not None:
+                slate_copy = inputs_dir / f"slate{slate.suffix.lower()}"
+                shutil.copy2(slate, slate_copy)
             fcpxml_copy = None
             if fcpxml:
                 fcpxml_copy = inputs_dir / "source.fcpxml"
@@ -372,6 +385,8 @@ class WorkspaceRegistry:
         ]
         if script_copy:
             lines.append(f'script = "./inputs/{script_copy.name}"')
+        if slate_copy:
+            lines.append(f'slate = "./inputs/{slate_copy.name}"')
         if fcpxml_copy:
             lines.append('fcpxml = "./inputs/source.fcpxml"')
         lines.extend([
@@ -463,6 +478,7 @@ class WorkspaceRegistry:
         project_id = project_id_for(str(payload.get("project_id") or name))
         input_kind = str(payload.get("input_kind", "fcpxml"))
         script = _script_source(payload)
+        slate = _slate_source(payload)
         fcpxml = Path(str(payload.get("fcpxml", ""))).expanduser() if payload.get("fcpxml") else None
         raw_media_roots = payload.get("media_roots", [])
         if not isinstance(raw_media_roots, list):
@@ -478,6 +494,8 @@ class WorkspaceRegistry:
             errors.append("FCPXML 项目需要选择剧本")
         elif script is not None and (not script.is_file() or script.suffix.lower() not in _SCRIPT_SUFFIXES or not os.access(script, os.R_OK)):
             errors.append("剧本必须是可读取的 DOCX、TXT 或 Markdown 文件")
+        if slate is not None and (not slate.is_file() or slate.suffix.lower() not in _SLATE_SUFFIXES or not os.access(slate, os.R_OK)):
+            errors.append("场记必须是可读取的 PDF、JPEG、PNG 或 WEBP 文件")
         if input_kind == "fcpxml":
             if fcpxml is None or not fcpxml.is_file() or fcpxml.suffix.lower() not in {".fcpxml", ".fcpxmld"}:
                 errors.append("FCPXML 项目需要可读取的 FCPXML 文件")

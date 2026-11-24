@@ -417,22 +417,27 @@ def test_new_project_copies_inputs_and_keeps_project_config_portable(tmp_path):
     workspace = _workspace(tmp_path)
     registry = WorkspaceRegistry(workspace)
     media, fcpxml, script = _project_files(tmp_path)
+    slate = tmp_path / "paper-slate.pdf"
+    slate.write_bytes(b"%PDF-synthetic")
     created = registry.create({
         "name": "Portable FCP",
         "project_id": "portable-fcp",
         "input_kind": "fcpxml",
         "fcpxml": str(fcpxml),
         "script": str(script),
+        "slate": str(slate),
     })
     project_dir = workspace.registry_path.parent / "portable-fcp"
     config_text = (project_dir / "project.toml").read_text(encoding="utf-8")
     assert 'script = "./inputs/' in config_text
+    assert 'slate = "./inputs/slate.pdf"' in config_text
     assert 'fcpxml = "./inputs/source.fcpxml"' in config_text
     assert 'directory = "./output"' in config_text
     assert 'transcript_dir = "./cache/transcripts"' in config_text
     assert str(fcpxml) not in config_text and str(script) not in config_text
     assert (project_dir / "inputs/source.fcpxml").read_bytes() == fcpxml.read_bytes()
     assert (project_dir / "inputs/script.md").read_bytes() == script.read_bytes()
+    assert (project_dir / "inputs/slate.pdf").read_bytes() == slate.read_bytes()
     assert created["config_path"] == "projects/portable-fcp/project.toml"
 
 

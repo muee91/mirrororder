@@ -1065,6 +1065,13 @@ def make_handler(service: WorkspaceService, web_root: Path):
             elif rest == ["tasks"]:
                 self._local_only()
                 self._send_json({"tasks": service.tasks.list(project_id)})
+            elif rest == ["slate-candidates"]:
+                # Lightweight read model only: recognition runs in a durable
+                # task, so opening this route never starts model inference.
+                self._local_only()
+                from .slate_ocr_runtime import read_slate_candidates
+
+                self._send_json(read_slate_candidates(project.config, project_id))
             elif rest == ["proposals"]:
                 review_revision = int(project.review.load().get("revision", 0) or 0)
                 rows = []

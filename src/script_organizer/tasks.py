@@ -8,6 +8,7 @@ COMPAT_TASK_TYPES = {
     "prepare_project",
     "multicam_sync",
     "incremental_analyze",
+    "slate_ocr",
     "auto_resolve",
     "transcribe",
     "evidence_extract",
@@ -112,6 +113,53 @@ class TaskManager(_impl.TaskManager):
                 project_id=project_id,
             )
         return analysis["index"]["stats"]
+
+    def _queue_post_sync_analysis(self, project_id: str, config, task: dict[str, Any]) -> None:
+        """Queue script/ASR work outside the sync gate.
+
+        A direct multicam sync must unlock review and NLE delivery as soon as
+        the master is written.  Transcription and script matching are long
+        running, so they run as their own durable task instead of holding the
+        sync task in ``running`` state.  ``incremental_analyze`` is not a sync
+        gate task, so it cannot block delivery.
+        """
+        if not getattr(config, "is_media_directory", False):
+            return
+        script = getattr(config, "script", None)
+        if script is None or not Path(script).is_file():
+            return
+        try:
+            self.submit(
+                project_id,
+                "incremental_analyze",
+                {},
+                idempotency_key=f"post-sync:incremental:{project_id}:{task.get('task_id', '')}",
+                actor="system",
+            )
+        except Exception:
+            # The sync master is already delivered; a failed follow-up queue
+            # must never turn a successful sync into a failed task.
+            return
+
+    def _queue_slate_ocr(self, project_id: str, config) -> None:
+        """Auto-queue recognition when a paper slate is part of the project.
+
+        The task reads ``config.slate`` itself, so no device path is stored in
+        task targets. Human confirmation still gates every draft write.
+        """
+        slate = getattr(config, "slate", None)
+        if slate is None or not Path(slate).is_file():
+            return
+        try:
+            self.submit(
+                project_id,
+                "slate_ocr",
+                {},
+                idempotency_key=f"slate-ocr:auto:{project_id}:{Path(slate).name}",
+                actor="system",
+            )
+        except Exception:
+            return
 
     def _persist_project_summary(self, project_id: str, config, task_type: str, result: dict[str, Any]) -> None:
         if not self.workspace_id or task_type not in {"multicam_sync", "prepare_project", "incremental_analyze"}:
@@ -434,6 +482,7 @@ class TaskManager(_impl.TaskManager):
                 if result.get("cancelled"):
                     self._update(config, task_id, status="cancelled", stage="cancelled", result=result, message="任务已取消")
                     return
+                self._queue_slate_ocr(project_id, config)
             elif task_type == "scene_interval_prepare":
                 with self._resource(config, task, "cpu", "source_descriptor", "选定原片区间"):
                     result = self._prepare_scene_interval(project_id, config, task)
@@ -458,6 +507,8 @@ class TaskManager(_impl.TaskManager):
                     )
                 if result.get("status") == "completed":
                     result["analysis"] = self._post_sync_analysis(project_id, config, task)
+                    self._queue_post_sync_analysis(project_id, config, task)
+                    self._queue_slate_ocr(project_id, config)
             elif task_type == "incremental_analyze":
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
                 with self._resource(config, task, self._asr_resource(config), "analysis", "MLX/ASR"):
@@ -477,6 +528,22 @@ class TaskManager(_impl.TaskManager):
                 selected_groups = sorted(affected) or None
                 result["perception"] = self._perception_best_effort(config, task, mode="tier0", group_ids=selected_groups)
                 result["identity"] = self._identity_after_analysis(config, task, group_ids=selected_groups)
+            elif task_type == "slate_ocr":
+                from .slate_ocr_runtime import run_slate_ocr
+
+                self._update(config, task_id, stage="slate_ocr", message="正在逐页识别项目场记…")
+                result = run_slate_ocr(
+                    config,
+                    project_id=project_id,
+                    task_id=task_id,
+                    progress=lambda done, total: self._update(
+                        config,
+                        task_id,
+                        progress={"done": done, "total": total},
+                        message=f"场记识别 {done}/{total} 页",
+                    ),
+                    cancelled=lambda: self._cancel_requested(config, task_id),
+                )
             elif task_type == "auto_resolve":
                 with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
                     automation = _impl.resolve_project(config)

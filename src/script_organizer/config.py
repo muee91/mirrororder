@@ -48,6 +48,7 @@ class ProjectConfig:
     script: Path | None
     output_dir: Path
     transcript_dir: Path
+    slate: Path | None = None
     input_kind: str = "fcpxml"
     media_root: Path | None = None
     media_roots: tuple[Path, ...] = ()
@@ -117,6 +118,7 @@ class ProjectConfig:
             fcpxml=fcpxml,
             script=_path(inputs.get("script"), base, base / "script.docx")
             if inputs.get("script") or not project.get("format") or input_kind == "fcpxml" else None,
+            slate=_path(inputs.get("slate"), base, base / "slate.pdf") if inputs.get("slate") else None,
             output_dir=_path(output.get("directory"), base, base / "output"),
             transcript_dir=_path(asr.get("transcript_dir"), base, base / "cache" / "transcripts"),
             input_kind=input_kind,

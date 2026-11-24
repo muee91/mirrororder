@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SlateCandidateState } from '../../api/desktop';
 import { PaperSourceMatch } from './PaperSourceMatch';
 import {
   PaperIntakeClient,
@@ -21,8 +22,10 @@ interface Props {
   hideTrigger?: boolean;
   onSelect?: (source: { row: PaperRow; revision: number } | null) => void;
   onApplyDraftCandidates?: (candidates: PaperVlmCandidate[]) => void;
-  initialFilePath?: string | null;
-  onConsumedInitialFile?: () => void;
+  /** Persisted proposals from the project-level durable recognition task. */
+  recognition?: SlateCandidateState | null;
+  recognitionBusy?: boolean;
+  onStartRecognition?: () => void;
 }
 
 const STATUS_LABELS: Record<PaperVlmCandidate['status'], string> = {
@@ -41,8 +44,9 @@ export function SlatePaperIntake({
   hideTrigger = false,
   onSelect,
   onApplyDraftCandidates,
-  initialFilePath,
-  onConsumedInitialFile,
+  recognition,
+  recognitionBusy = false,
+  onStartRecognition,
 }: Props) {
   const client = useMemo(() => new PaperIntakeClient(baseUrl), [baseUrl]);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
@@ -64,7 +68,7 @@ export function SlatePaperIntake({
   const lock = useRef(false);
   const generation = useRef(0);
   const openLoadRef = useRef(false);
-  const autoRunPathRef = useRef('');
+  const projectCandidatesLoaded = useRef('');
 
   useEffect(() => {
     if (focusSource) sourceRef.current?.focus();
@@ -129,7 +133,8 @@ export function SlatePaperIntake({
 
   function renderExtractedCandidates(result: Awaited<ReturnType<PaperIntakeClient['extractPhotoCandidates']>>): void {
     if (result.candidates.length > 0) {
-      setCandidates(result.candidates.map((candidate) => ({ ...candidate, checked: true, authority: false as const })));
+      const nextCandidates = result.candidates.map((candidate) => ({ ...candidate, checked: true, authority: false as const }));
+      setCandidates(nextCandidates);
       const draftRows = result.candidates.map((item) => ({
         page: item.page,
         row: String(item.row),
@@ -180,34 +185,30 @@ export function SlatePaperIntake({
     }
   }
 
-  async function extractFilePath(filePath: string): Promise<void> {
-    if (lock.current || !filePath.trim()) return;
-    lock.current = true;
-    setBusy(true);
-    setError('');
-    setNotice('正在调用多模态视觉模型提取场记候选…');
-    try {
-      const result = await client.extractFileCandidates(filePath.trim(), '1');
-      if (!mounted.current) return;
-      renderExtractedCandidates(result);
-    } catch (e) {
-      if (mounted.current) setError(String(e instanceof Error ? e.message : e));
-    } finally {
-      lock.current = false;
-      if (mounted.current) setBusy(false);
-    }
-  }
-
+  // Durable recognition proposals become review rows only. They never
+  // auto-fill drafts, and a human manually uploaded file is never re-skipped.
   useEffect(() => {
-    const path = initialFilePath?.trim() || '';
-    if (!path) {
-      autoRunPathRef.current = '';
-      return;
-    }
-    if (!open || autoRunPathRef.current === path || lock.current) return;
-    autoRunPathRef.current = path;
-    void extractFilePath(path);
-  }, [open, initialFilePath, busy]);
+    if (!recognition || recognition.status !== 'completed' || !recognition.candidates.length) return;
+    const key = `${projectId}:${recognition.revision}`;
+    if (projectCandidatesLoaded.current === key || candidates.length) return;
+    projectCandidatesLoaded.current = key;
+    const rows = recognition.candidates.map((candidate) => ({ ...candidate, checked: true }));
+    setCandidates(rows);
+    const draftRows = recognition.candidates.map((item) => ({
+      page: item.page,
+      row: String(item.row),
+      ...(item.episode !== null ? { episode: item.episode } : {}),
+      scene: item.scene,
+      shot: item.shot,
+      take: item.take,
+      status: item.status,
+      note: item.note,
+    }));
+    setFormat('json');
+    setContent(JSON.stringify(draftRows, null, 2));
+    setEditing(true);
+    setNotice('项目场记已在后台逐页识别完成，共 ' + recognition.candidates.length + ' 条候选，请核对后填入未保存草稿。');
+  }, [recognition, projectId, candidates.length, model]);
 
   async function ingest() {
     if (lock.current || !model) return;
@@ -253,7 +254,6 @@ export function SlatePaperIntake({
     const checkedCandidates = candidates.filter((candidate) => candidate.checked).map(({ checked: _checked, ...candidate }) => ({ ...candidate, authority: false as const }));
     if (!checkedCandidates.length || !onApplyDraftCandidates) return;
     onApplyDraftCandidates(checkedCandidates);
-    onConsumedInitialFile?.();
     setCandidates([]);
     setNotice('');
     close();
@@ -287,6 +287,23 @@ export function SlatePaperIntake({
             <input ref={photoInputRef} type="file" accept=".pdf,application/pdf,image/jpeg,image/png,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void extractPhoto(file); }} />
             <button type="button" className="paper-photo-upload" disabled={busy} onClick={() => photoInputRef.current?.click()}>选择场记 PDF / 照片（AI 提取）</button>
           </section>
+
+          {recognition?.slate_attached ? (
+            <section className="paper-recognition-status" aria-label="项目场记后台识别">
+              <strong>项目附带场记：{recognition.slate_name || '场记文件'}</strong>
+              {recognition.status === 'queued' || recognition.status === 'running' ? (
+                <p role="status">后台逐页识别中 {recognition.pages_done}/{recognition.pages_total || '?'}；可以关闭本窗口，完成后会提示核对。</p>
+              ) : recognition.status === 'completed' ? (
+                <p role="status">识别完成，共 {recognition.candidates.length} 条候选，请在下方核对后填入草稿。</p>
+              ) : recognition.status === 'failed' ? (
+                <p role="alert">识别失败：{recognition.error || '请检查视觉模型设置后重试'}</p>
+              ) : null}
+              {recognition.warning ? <p role="status">{recognition.warning}</p> : null}
+              {(recognition.status === 'none' || recognition.status === 'failed' || recognition.status === 'cancelled') && onStartRecognition ? (
+                <button type="button" disabled={recognitionBusy || busy} onClick={onStartRecognition}>{recognitionBusy ? '提交中…' : '开始后台识别'}</button>
+              ) : null}
+            </section>
+          ) : null}
 
           {candidates.length > 0 ? (
             <section className="paper-candidates-review" aria-label="照片场记候选核对">

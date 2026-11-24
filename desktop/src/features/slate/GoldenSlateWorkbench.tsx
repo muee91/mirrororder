@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefCallback } from "react";
-import { DesktopClient } from "../../api/desktop";
+import { DesktopClient, type SlateCandidateState } from "../../api/desktop";
 import { HostConnection, HostConnectionError, type ReviewAngle, type ReviewModelPayload, type ReviewTakeGroup, errorMessage } from "../../api/host";
 import { ProductionClient, type AssistantSelection, type SlateAttachment, type SlateBoard, type SlateEntry, type SlateParseResult, type SlateRecord } from "../../api/production";
 import { SlateMediaClient, type SlateResolvedMediaItem } from "../../api/slateMedia";
@@ -25,7 +25,6 @@ import type { PendingSlateDrafts, SlateDraft as Draft, SlateDraftSession } from 
 import { originalPlaybackUrl } from "./SlateOriginalPlayback";
 import type { ProductionSelectionContext, ProductionWorkspace } from "../production/productionNavigation";
 import { readCurrentOperator, requestCurrentOperator } from "../../components/CurrentOperatorControl";
-import { basenameLabel, clearPendingSlateFile, readPendingSlateFile } from "../../app/pendingSlateFile";
 import { closeDetailsMenu, handleDetailsMenuBlur, handleDetailsMenuToggle } from "../../components/detailsMenuDismiss";
 import "../media/camera-presentation.css";
 import "./golden-slate.css";
@@ -236,6 +235,76 @@ function parseTakeNumber(value: string): number | null {
   if (!match) return null;
   const parsed = Number(match[1]);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeSceneLabel(value: string): string {
+  return value.trim().replace(/^SC[_-]?/i, "").replace(/[_\s]+/g, "-").toLowerCase();
+}
+
+function sceneLabelMatches(candidate: PaperVlmCandidate, mapped: SceneLink): boolean {
+  const left = normalizeSceneLabel(candidate.scene);
+  if (!left) return false;
+  const pretty = normalizeSceneLabel(prettySceneId(mapped.sceneId));
+  if (left === pretty || left === normalizeSceneLabel(mapped.sceneId)) return true;
+  // A bare paper scene ("12", "12B") may only attach to "1-12" when the
+  // episode is known to agree. Trailing digits alone must never join 1-1 to 2-1.
+  if (/^\d+[a-z]?$/.test(left) && candidate.episode !== null && candidate.episode === mapped.episode) {
+    return (pretty.split("-").pop() ?? "") === left;
+  }
+  return false;
+}
+
+function noteClueScore(candidate: PaperVlmCandidate, take: ReviewTakeGroup): number {
+  const note = candidate.note.trim().toLowerCase();
+  if (note.length < 2) return 0;
+  const haystack = [take.transcript?.text, ...take.angles.map((angle) => angle.name)]
+    .filter((value): value is string => Boolean(value))
+    .join(" ").toLowerCase();
+  if (!haystack) return 0;
+  const tokens = note.match(/[\u4e00-\u9fff]{2,}|[a-z0-9]{3,}/g) ?? [];
+  return tokens.some((token) => haystack.includes(token)) ? 1 : 0;
+}
+
+function candidateTakeScore(candidate: PaperVlmCandidate, take: ReviewTakeGroup, review: ReviewModelPayload): number {
+  const mapped = mappedScene(review, take);
+  // Without a script-matched scene there is no safe automatic pairing.
+  if (!mapped) return -1;
+  let score = 0;
+  if (candidate.episode !== null) {
+    if (mapped.episode !== candidate.episode && !takeMatchesEpisode(take, candidate.episode)) return -1;
+    score += 3;
+  }
+  if (candidate.scene.trim()) {
+    if (!sceneLabelMatches(candidate, mapped)) return -1;
+    score += 3;
+  }
+  const ordinal = parseTakeNumber(candidate.take);
+  if (ordinal !== null) {
+    // take_index is a long-recording subgroup number, NOT the paper take
+    // number. Pair by occurrence order inside the matched scene instead.
+    const sceneTakes = review.take_groups.filter((item) => mappedScene(review, item)?.sceneId === mapped.sceneId);
+    const position = sceneTakes.indexOf(take);
+    if (position >= 0) {
+      if (position + 1 === ordinal) score += 2;
+      else if (sceneTakes.length > 1) score -= 2;
+    }
+  }
+  return score + noteClueScore(candidate, take);
+}
+
+function matchPaperCandidateToTake(
+  candidate: PaperVlmCandidate,
+  review: ReviewModelPayload | null,
+  used: ReadonlySet<string> = new Set(),
+): ReviewTakeGroup | null {
+  if (!review) return null;
+  const ranked = review.take_groups
+    .filter((take) => !used.has(take.group_id))
+    .map((take) => ({ take, score: candidateTakeScore(candidate, take, review) }))
+    .filter((item) => item.score >= 3)
+    .sort((left, right) => right.score - left.score);
+  if (!ranked.length || (ranked[1] && ranked[1].score === ranked[0].score)) return null;
+  return ranked[0].take;
 }
 
 function buildDrafts(board: SlateBoard, review: ReviewModelPayload): Draft[] {
@@ -545,12 +614,72 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [hideNgRows, setHideNgRows] = useState(false);
   const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
   const [paperIntakeOpen, setPaperIntakeOpen] = useState(false);
-  const [pendingSlatePath, setPendingSlatePath] = useState(() => readPendingSlateFile(projectId));
-  const [autoExtractPath, setAutoExtractPath] = useState("");
+  // The attached slate is owned by project.config.slate. Recognition is a
+  // durable task; this page only reads its persisted proposals and polls.
+  const [slateState, setSlateState] = useState<SlateCandidateState | null>(null);
+  const [slateBusy, setSlateBusy] = useState(false);
+  const slateBusyRef = useRef(false);
+  const slateAutoStarted = useRef("");
+  const slateReviewShown = useRef("");
   useEffect(() => {
-    setPendingSlatePath(readPendingSlateFile(projectId));
-    setAutoExtractPath("");
+    setSlateState(null);
+    slateAutoStarted.current = "";
+    slateReviewShown.current = "";
   }, [projectId]);
+
+  const loadSlateState = useCallback(async (): Promise<SlateCandidateState | null> => {
+    try {
+      const state = await desktopClient.slateCandidates(projectId);
+      if (canUseSlate()) setSlateState(state);
+      return state;
+    } catch {
+      return null;
+    }
+  }, [desktopClient, projectId, canUseSlate]);
+
+  const startSlateRecognition = useCallback(async () => {
+    if (slateBusyRef.current) return;
+    slateBusyRef.current = true;
+    if (canUseSlate()) setSlateBusy(true);
+    try {
+      await desktopClient.submitSlateOcr(projectId);
+      await loadSlateState();
+      if (canUseSlate()) setMessage("场记识别已在后台开始；完成后会提示核对。");
+    } catch (error) {
+      if (canUseSlate()) setMessage(`场记识别提交失败：${errorMessage(error)}`);
+    } finally {
+      slateBusyRef.current = false;
+      if (canUseSlate()) setSlateBusy(false);
+    }
+  }, [desktopClient, projectId, loadSlateState, canUseSlate]);
+
+  useEffect(() => {
+    if (active === false) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const tick = async () => {
+      let state = await loadSlateState();
+      if (cancelled || !state) return;
+      if (state.slate_attached && state.status === "none" && slateAutoStarted.current !== projectId) {
+        slateAutoStarted.current = projectId;
+        await startSlateRecognition();
+        state = await loadSlateState();
+        if (cancelled || !state) return;
+      }
+      if (state.status === "queued" || state.status === "running") {
+        timer = window.setTimeout(() => { void tick(); }, 2000);
+      } else if (state.status === "completed" && state.candidates.length) {
+        const key = `${projectId}:${state.revision}`;
+        if (slateReviewShown.current !== key) {
+          slateReviewShown.current = key;
+          setPaperIntakeOpen(true);
+          setMessage(`场记识别完成，共 ${state.candidates.length} 条候选；请核对后填入草稿。`);
+        }
+      }
+    };
+    void tick();
+    return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [active, projectId, loadSlateState, startSlateRecognition]);
   const [quickLookOpen, setQuickLookOpen] = useState(false);
   const quickLookFocusRef = useRef<HTMLElement | null>(null);
   const quickLookCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -972,23 +1101,128 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   }
 
   function applyPaperDraftCandidates(candidates: PaperVlmCandidate[]): void {
-    const created = candidates.map((candidate) => blankDraft({
-      episode: candidate.episode,
-      scene: candidate.scene,
-      shot: candidate.shot,
-      take_number: parseTakeNumber(candidate.take),
-      status: candidate.status,
-      note: candidate.note,
-    }));
-    if (!created.length) {
+    if (!candidates.length) {
       setPaperIntakeOpen(false);
       return;
     }
-    setDrafts((current) => [...current, ...created]);
-    setSelectedRecordId(created[0].record_id);
-    setSelectedClipId("");
-    setMessage("已填入 " + created.length + " 条未保存草稿；请核对后点击右上角「保存」。");
+    let firstRecordId = "";
+    let firstClipId = "";
+    let matchedCount = 0;
+    let manualCount = 0;
+    setDrafts((current) => {
+      const next = [...current];
+      const usedGroups = new Set<string>();
+      // A take already owned by a saved human record must never be
+      // overwritten by an AI proposal.
+      for (const row of next) {
+        if (row.source_group_id && !row.derived) usedGroups.add(row.source_group_id);
+      }
+      for (const candidate of candidates) {
+        const matchedTake = matchPaperCandidateToTake(candidate, review, usedGroups);
+        const take = matchedTake && !usedGroups.has(matchedTake.group_id) ? matchedTake : null;
+        const existing = take
+          ? next.find((row) => row.source_group_id === take.group_id && row.derived)
+          : undefined;
+        const mapped = take && review ? mappedScene(review, take) : null;
+        const link = take ? "场记识别·已关联 Take" : "场记识别·待指定 Take";
+        const patch: Partial<Draft> = {
+          episode: candidate.episode,
+          scene: candidate.scene,
+          shot: candidate.shot,
+          take_number: parseTakeNumber(candidate.take),
+          status: candidate.status,
+          note: candidate.note,
+          ...(mapped ? { script_scene_id: mapped.sceneId } : {}),
+          derivedSource: link,
+        };
+        const row: Draft = existing && take
+          ? {
+              ...existing,
+              ...patch,
+              attachments: mergeTakeAttachments(existing, take),
+              dirty: true,
+              derived: false,
+            }
+          : blankDraft({
+              ...patch,
+              ...(take ? {
+                source_group_id: take.group_id,
+                attachments: take.angles.map(attachmentFromAngle),
+                xmlOrder: review?.take_groups.findIndex((item) => item.group_id === take.group_id) ?? Number.MAX_SAFE_INTEGER,
+              } : {}),
+            });
+        if (existing && take) {
+          const index = next.findIndex((item) => item.record_id === existing.record_id);
+          if (index >= 0) next[index] = row;
+        } else {
+          next.push(row);
+        }
+        if (take) {
+          usedGroups.add(take.group_id);
+          matchedCount += 1;
+        } else {
+          manualCount += 1;
+        }
+        if (!firstRecordId) {
+          firstRecordId = row.record_id;
+          firstClipId = row.attachments[0] ? attachmentKey(row.attachments[0]) : "";
+        }
+      }
+      return next;
+    });
+    setSelectedRecordId(firstRecordId);
+    setSelectedClipId(firstClipId);
+    const linked = matchedCount ? `，已关联 ${matchedCount} 条同步 Take` : "";
+    const manual = manualCount ? `，${manualCount} 条待人工指定 Take` : "";
+    setMessage(`已填入 ${candidates.length} 条未保存草稿${linked}${manual}；请核对后点击右上角「保存」。`);
     setPaperIntakeOpen(false);
+  }
+
+  /** Re-run take alignment after sync/script matching has finished. */
+  function realignPaperDrafts(): void {
+    if (!review) {
+      setMessage("同步数据或剧本映射尚未就绪，无法自动对齐；请稍后刷新再试。");
+      return;
+    }
+    let aligned = 0;
+    setDrafts((current) => {
+      const next = current.map((row) => ({ ...row }));
+      const usedGroups = new Set<string>();
+      for (const row of next) {
+        if (row.source_group_id && !row.derived) usedGroups.add(row.source_group_id);
+      }
+      for (const row of next) {
+        if (!row.derivedSource.startsWith("场记识别") || row.source_group_id) continue;
+        const candidate: PaperVlmCandidate = {
+          page: "1",
+          row: 1,
+          episode: row.episode,
+          scene: row.scene,
+          shot: row.shot,
+          take: row.take_number ? `T${row.take_number}` : "",
+          status: row.status,
+          note: row.note,
+          confidence: 1,
+          authority: false,
+        };
+        const take = matchPaperCandidateToTake(candidate, review, usedGroups);
+        if (!take) continue;
+        const mapped = mappedScene(review, take);
+        row.source_group_id = take.group_id;
+        row.script_scene_id = mapped?.sceneId || row.script_scene_id;
+        row.attachments = mergeTakeAttachments(row, take);
+        row.xmlOrder = review.take_groups.findIndex((item) => item.group_id === take.group_id) ?? Number.MAX_SAFE_INTEGER;
+        row.derivedSource = "场记识别·已关联 Take";
+        row.dirty = true;
+        row.derived = false;
+        usedGroups.add(take.group_id);
+        aligned += 1;
+      }
+      return next;
+    });
+    setMessage(aligned
+      ? `已按当前同步与剧本映射关联 ${aligned} 条场记；请核对后保存。`
+      : "没有新的场记可自动关联；请确认同步与剧本匹配已完成，或手动指定 Take。");
   }
 
   function nextSameScene(): void {
@@ -1557,7 +1791,11 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-filter-active" : ""} aria-pressed={hideNgRows} onClick={() => setHideNgRows((value) => !value)}>隐藏 NG ({ngCount})</button> : null}
             {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={() => setShowAuxColumn((value) => !value)} title="显示或隐藏空的 AUX 列">AUX 列</button> : null}
             <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>右侧详情栏</button>
-            <button type="button" className="golden-slate-refresh-btn" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="重新读取最新场记">刷新</button>
+            {slateState?.slate_attached ? (
+            <button type="button" className="secondary" disabled={busy || slateBusy || slateState.status === "running" || slateState.status === "queued"} onClick={() => void startSlateRecognition()} title="重新逐页识别项目附带的手写/扫描场记">重新识别场记</button>
+          ) : null}
+          <button type="button" className="secondary" disabled={!review} onClick={realignPaperDrafts} title="同步与剧本匹配完成后，按场次和拍摄顺序重新关联场记候选">重新对齐 Take</button>
+          <button type="button" className="golden-slate-refresh-btn" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="重新读取最新场记">刷新</button>
           </div>
           <SlatePaperIntake
             key={`${baseUrl}:${projectId}`}
@@ -1568,12 +1806,9 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             hideTrigger
             onSelect={setPaperSource}
             onApplyDraftCandidates={applyPaperDraftCandidates}
-            initialFilePath={autoExtractPath}
-            onConsumedInitialFile={() => {
-              clearPendingSlateFile(projectId);
-              setPendingSlatePath("");
-              setAutoExtractPath("");
-            }}
+            recognition={slateState}
+            recognitionBusy={slateBusy}
+            onStartRecognition={() => { void startSlateRecognition(); }}
           />
           <span className="golden-slate-message" aria-live="polite">{message}</span>
           <span
@@ -1608,14 +1843,25 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       ) : null}
 
       <div className="golden-slate-body">
-        <div className={`golden-slate-table-shell${pendingSlatePath ? " has-pending-file" : ""}`}>
+        <div className={`golden-slate-table-shell${slateState?.slate_attached ? " has-pending-file" : ""}`}>
           {dropActive ? <div className="golden-slate-drop-overlay">松开以加入当前场记</div> : null}
-          {pendingSlatePath ? (
-            <div className="golden-slate-pending-file" role="region" aria-label="待识别场记文件">
-              <span>新建项目时已附带场记：{basenameLabel(pendingSlatePath)}</span>
+          {slateState?.slate_attached ? (
+            <div className="golden-slate-pending-file" role="region" aria-label="项目场记识别状态">
+              <span>
+                项目场记：{slateState.slate_name || "场记文件"}
+                {slateState.status === "running" || slateState.status === "queued"
+                  ? ` · 后台逐页识别 ${slateState.pages_done}/${slateState.pages_total || "?"}`
+                  : slateState.status === "completed"
+                    ? ` · 已识别 ${slateState.candidates.length} 条候选，等待人工核对`
+                    : slateState.status === "failed"
+                      ? ` · 识别失败：${slateState.error || "请检查视觉模型设置"}`
+                      : ""}
+              </span>
               <div>
-                <button type="button" onClick={() => { setAutoExtractPath(pendingSlatePath); setPaperIntakeOpen(true); }}>AI 识别并核对</button>
-                <button type="button" className="secondary" onClick={() => { clearPendingSlateFile(projectId); setPendingSlatePath(""); setAutoExtractPath(""); }}>忽略</button>
+                <button type="button" onClick={() => setPaperIntakeOpen(true)}>核对候选</button>
+                {(slateState.status === "none" || slateState.status === "failed" || slateState.status === "cancelled") ? (
+                  <button type="button" className="secondary" disabled={slateBusy} onClick={() => { void startSlateRecognition(); }}>开始识别</button>
+                ) : null}
               </div>
             </div>
           ) : null}

@@ -307,3 +307,30 @@ def test_local_file_path_extracts_without_leaking_path(tmp_path) -> None:
     assert str(source) not in serialized
     assert result["candidate_count"] == 1
     assert result["candidates"][0]["authority"] is False
+
+
+def test_pdf_page_range_is_not_truncated_to_six_pages() -> None:
+    from script_organizer.paper_vlm_intake import MAX_PDF_PAGES, _page_range
+
+    assert _page_range(1, None, 20) == (1, 20)
+    assert _page_range(7, 1, 20) == (7, 7)
+    assert _page_range(7, 3, 20) == (7, 9)
+    assert _page_range(1, None, 2) == (1, 2)
+    assert _page_range(1, None, None)[1] <= MAX_PDF_PAGES
+
+
+def test_scanned_pdf_extract_forwards_requested_page_range(tmp_path) -> None:
+    rows = [{"episode": 7, "scene": "9", "shot": "A", "take": "1", "status": "OK"}]
+    fake = _FakeResponse({"choices": [{"message": {"content": json.dumps(rows)}}]})
+    pdf_base64 = base64.b64encode(b"%PDF-1.4 synthetic").decode("ascii")
+    with mock.patch("script_organizer.paper_vlm_intake._extract_pdf_text", return_value=("", 0)), \
+         mock.patch("script_organizer.paper_vlm_intake.pdf_page_count", return_value=12), \
+         mock.patch("script_organizer.paper_vlm_intake._render_pdf_pages", return_value=[_PNG_BYTES]) as render, \
+         mock.patch("urllib.request.urlopen", return_value=fake):
+        result = extract_paper_slate_photo_candidates(
+            {"file_base64": f"data:application/pdf;base64,{pdf_base64}", "pdf_page_start": 7, "pdf_page_limit": 1},
+            config=_openai_config(),
+        )
+    render.assert_called_once_with(mock.ANY, page_start=7, page_limit=1)
+    assert result["page"] == "7"
+    assert result["candidates"][0]["page"] == "7"

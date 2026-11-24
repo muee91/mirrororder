@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {act} from 'react';import {createRoot} from 'react-dom/client';import {beforeEach,afterEach,it,expect,vi} from 'vitest';
-import {SlatePaperIntake} from './SlatePaperIntake';import {PaperIntakeClient,validatePaperInput,type PaperModel} from '../../api/paperIntake';
+import {SlatePaperIntake} from './SlatePaperIntake';import {PaperIntakeClient,validatePaperInput,type PaperModel} from '../../api/paperIntake';import type {SlateCandidateState} from '../../api/desktop';
 let el:HTMLDivElement,root:ReturnType<typeof createRoot>;const request=vi.spyOn(PaperIntakeClient.prototype,'request');const extractPhotoCandidates=vi.spyOn(PaperIntakeClient.prototype,'extractPhotoCandidates');
 const view:PaperModel={contract:'mirrororder.paper_intake.v1',project_id:'p',revision:3,documents:[{document_id:'d',row_count:1,original_document_verified:false}],rows:[{paper_row_id:'r',document_id:'d',page:'1',row:'2',raw_row:{scene:'003'},raw_cells:[{cell:'/scene',raw:'003'}],normalized_fields:{scene:'003'},review_reasons:[],candidate_ready:true,confirmed:false}],summary:{total_rows:1,candidate_ready:1,review_required:1,confirmed:0}};
 beforeEach(()=>{vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);request.mockReset().mockResolvedValue(view);extractPhotoCandidates.mockReset();el=document.createElement('div');document.body.append(el);root=createRoot(el)});afterEach(async()=>{await act(async()=>root.unmount());el.remove();vi.unstubAllGlobals()});
@@ -47,4 +47,20 @@ it('passes an edited photo candidate to draft intake without a backend write',as
   const scene=el.querySelector<HTMLInputElement>('input[aria-label="第 1 条候选场号"]')!;Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value')!.set!.call(scene,'12B');await act(async()=>scene.dispatchEvent(new Event('input',{bubbles:true})));
   await act(async()=>button('填入场记草稿 (1)').click());
   expect(onApplyDraftCandidates).toHaveBeenCalledOnce();expect(onApplyDraftCandidates).toHaveBeenCalledWith([expect.objectContaining({scene:'12B',authority:false})]);expect(request).toHaveBeenCalledTimes(1);expect(el.querySelector('.paper-intake-body')).toBeNull();
+});
+
+it('loads durable recognition candidates for review without auto-filling drafts',async()=>{
+  const recognition:SlateCandidateState={contract:'slate_candidates.v1',project_id:'p',slate_attached:true,slate_name:'slate.pdf',status:'completed',revision:2,pages_total:1,pages_done:1,candidates:[{page:'1',row:3,episode:2,scene:'12',shot:'3A',take:'T2',status:'usable',note:'门口',confidence:.91,authority:false}],warning:'',error:'',provider:'synthetic',model:'vision',started_at:'',completed_at:'',updated_at:'',task_id:'task_1'};
+  const onApplyDraftCandidates=vi.fn();const onStartRecognition=vi.fn();
+  await act(async()=>root.render(<SlatePaperIntake baseUrl="http://synthetic.test" projectId="p" open recognition={recognition} onApplyDraftCandidates={onApplyDraftCandidates} onStartRecognition={onStartRecognition}/>));
+  await act(async()=>{await Promise.resolve();await Promise.resolve()});
+  expect(el.textContent).toContain('slate.pdf');
+  expect(el.textContent).toContain('识别完成，共 1 条候选');
+  expect(el.querySelector('.paper-candidates-review')).not.toBeNull();
+  expect(onApplyDraftCandidates).not.toHaveBeenCalled();
+  expect(extractPhotoCandidates).not.toHaveBeenCalled();
+  expect(onStartRecognition).not.toHaveBeenCalled();
+  await act(async()=>button('填入场记草稿 (1)').click());
+  expect(onApplyDraftCandidates).toHaveBeenCalledOnce();
+  expect(onApplyDraftCandidates).toHaveBeenCalledWith([expect.objectContaining({scene:'12',take:'T2',authority:false})]);
 });

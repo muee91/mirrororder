@@ -20,10 +20,4 @@ export class PaperIntakeClient {
  if(!response.ok){let msg=`手写场记识别失败 (${response.status})`;try{const err=await response.json() as {error?:string};if(err.error)msg=err.error}catch{/* ignore */}throw new Error(msg)}
  return await response.json() as PaperVlmExtractResult;
  }
- async extractFileCandidates(filePath:string,pageLabel='1'):Promise<PaperVlmExtractResult>{
- const url=`${this.baseUrl.replace(/\/+$/,'')}/api/v1/assistant/paper-slate-ocr`;
- const response=await fetchWithTimeout(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file_path:filePath,page_label:pageLabel})},60000);
- if(!response.ok){let msg=`场记文件识别失败 (${response.status})`;try{const err=await response.json() as {error?:string};if(err.error)msg=err.error}catch{/* ignore */}throw new Error(msg)}
- return await response.json() as PaperVlmExtractResult;
- }
 }

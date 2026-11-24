@@ -29,6 +29,11 @@ MAX_BASE64_CHARS = (MAX_IMAGE_BYTES * 4) // 3 + 16
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_FILE_BASE64_CHARS = (MAX_PDF_BYTES * 4) // 3 + 64
 MAX_CANDIDATE_ROWS = 200
+# A single intake run stays bounded, but a real multi-page paper slate is no
+# longer silently cut off after six pages.  Durable callers walk the range in
+# batches and persist each page's proposals.
+MAX_PDF_PAGES = 60
+MAX_PDF_TEXT_PAGES = 60
 
 _IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 _STATUS_VALUES = {"usable", "partial", "ng", "unmarked"}
@@ -321,18 +326,74 @@ def _validate_decoded_image(data: bytes) -> tuple[bytes, str]:
     return data, mime_type
 
 
-def _extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
+def pdf_page_count(pdf_bytes: bytes) -> int:
+    """Page count for a PDF slate, or 0 when no parser is available."""
+    try:
+        from pypdf import PdfReader
+
+        count = len(PdfReader(io.BytesIO(pdf_bytes)).pages)
+        if count > 0:
+            return count
+    except Exception:
+        pass
+    # Scanned PDFs sometimes fail pypdf's parser while pdftoppm still renders.
+    pdfinfo = shutil.which("pdfinfo") or next(
+        (candidate for candidate in ("/opt/homebrew/bin/pdfinfo", "/usr/local/bin/pdfinfo") if Path(candidate).is_file()),
+        "",
+    )
+    if not pdfinfo:
+        return 0
+    try:
+        with tempfile.TemporaryDirectory(prefix="mirrororder-slate-pdfinfo-") as directory:
+            source = Path(directory) / "source.pdf"
+            source.write_bytes(pdf_bytes)
+            output = subprocess.run(
+                [pdfinfo, str(source)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            ).stdout
+        match = re.search(r"^Pages:\s*(\d+)", output, re.MULTILINE)
+        return max(0, int(match.group(1))) if match else 0
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return 0
+
+
+def _page_range(
+    page_start: int,
+    page_limit: int | None,
+    total: int | None,
+) -> tuple[int, int]:
+    start = max(1, int(page_start or 1))
+    if page_limit is not None and page_limit > 0:
+        end = start + min(int(page_limit), MAX_PDF_PAGES) - 1
+    elif total is not None and total > 0:
+        end = min(start + MAX_PDF_PAGES - 1, total)
+    else:
+        end = start + MAX_PDF_PAGES - 1
+    return start, end
+
+
+def _extract_pdf_text(
+    pdf_bytes: bytes,
+    *,
+    page_start: int = 1,
+    page_limit: int | None = None,
+) -> tuple[str, int]:
     try:
         from pypdf import PdfReader
 
         reader = PdfReader(io.BytesIO(pdf_bytes))
     except Exception:
         return "", 0
+    total = len(reader.pages)
+    start, end = _page_range(page_start, page_limit, total)
     pages: list[str] = []
     text_length = 0
-    for index, page in enumerate(reader.pages[:12], start=1):
+    for index in range(start, min(end, total) + 1):
         try:
-            text = str(page.extract_text() or "").strip()
+            text = str(reader.pages[index - 1].extract_text() or "").strip()
         except Exception:
             text = ""
         if text:
@@ -348,23 +409,30 @@ def _pdftoppm_path() -> str:
     )
 
 
-def _render_pdf_pages(pdf_bytes: bytes) -> list[bytes]:
+def _render_pdf_pages(
+    pdf_bytes: bytes,
+    *,
+    page_start: int = 1,
+    page_limit: int | None = None,
+) -> list[bytes]:
     pdftoppm = _pdftoppm_path()
     if not pdftoppm:
         raise ValueError("扫描版 PDF 需要本机安装 pdftoppm，或请将场记页导出为图片后上传")
+    total = pdf_page_count(pdf_bytes)
+    start, end = _page_range(page_start, page_limit, total)
     with tempfile.TemporaryDirectory(prefix="mirrororder-slate-pdf-") as directory:
         source = Path(directory) / "source.pdf"
         prefix = Path(directory) / "page"
         source.write_bytes(pdf_bytes)
         try:
             subprocess.run(
-                [pdftoppm, "-png", "-r", "150", "-f", "1", "-l", "6", str(source), str(prefix)],
+                [pdftoppm, "-png", "-r", "150", "-f", str(start), "-l", str(end), str(source), str(prefix)],
                 check=True,
-                timeout=30,
+                timeout=60,
             )
         except (OSError, subprocess.SubprocessError) as error:
             raise ValueError("扫描版 PDF 渲染失败，请检查 PDF 文件") from error
-        pages = [path.read_bytes() for path in sorted(Path(directory).glob("page-*.png"))[:6]]
+        pages = [path.read_bytes() for path in sorted(Path(directory).glob("page-*.png"))[:MAX_PDF_PAGES]]
     if not pages:
         raise ValueError("扫描版 PDF 未生成可识别的页面")
     return pages
@@ -470,14 +538,27 @@ def extract_paper_slate_photo_candidates(
         and Path(file_path).suffix.lower() == ".pdf"
     )
     source_bytes = _decode_file_base64(encoded_value) if isinstance(encoded_value, str) and encoded_value.strip() else _read_local_file(file_path)
-    page = _as_text(payload.get("page_label", payload.get("page", "1")), 60) or "1"
+    page_start = max(1, int(payload.get("pdf_page_start", 1) or 1))
+    raw_limit = payload.get("pdf_page_limit")
+    page_limit = int(raw_limit) if raw_limit is not None and int(raw_limit) > 0 else None
+    declared_page = _as_text(payload.get("page_label", payload.get("page", "")), 60)
+    if declared_page:
+        page = declared_page
+    elif page_limit == 1:
+        page = str(page_start)
+    elif page_limit is not None:
+        page = f"{page_start}-{page_start + page_limit - 1}"
+    else:
+        page = "1"
     model_text: str | None
     if source_is_declared_pdf and not source_bytes.startswith(b"%PDF-"):
         raise ValueError("PDF 文件头无效")
     if source_bytes.startswith(b"%PDF-"):
         if len(source_bytes) > MAX_PDF_BYTES:
             raise ValueError("PDF 超过 20MB 大小上限")
-        selectable_text, selectable_text_length = _extract_pdf_text(source_bytes)
+        selectable_text, selectable_text_length = _extract_pdf_text(
+            source_bytes, page_start=page_start, page_limit=page_limit,
+        )
         if selectable_text_length >= 20:
             context = (
                 f"请从以下 PDF 场记文字提取严格 JSON 场记行。当前页面标签：{page}\n"
@@ -490,7 +571,7 @@ def extract_paper_slate_photo_candidates(
                 system_instruction=_PDF_SYSTEM_INSTRUCTION,
             )
         else:
-            rendered = _render_pdf_pages(source_bytes)
+            rendered = _render_pdf_pages(source_bytes, page_start=page_start, page_limit=page_limit)
             context = (
                 f"请从扫描版或手写 PDF 场记页面提取严格 JSON 场记行。当前页面标签：{page}。"
                 "按页面顺序读取，无法确认的字段留空或使用 unmarked。"
@@ -535,5 +616,6 @@ __all__ = [
     "MAX_PDF_BYTES",
     "extract_paper_slate_photo_candidates",
     "normalize_candidate_rows",
+    "pdf_page_count",
     "validate_image_payload",
 ]
