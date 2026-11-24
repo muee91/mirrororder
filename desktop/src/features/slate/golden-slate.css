@@ -112,15 +112,9 @@ html[data-mirrororder-theme] .golden-slate-subbar .golden-slate-inline-tools > b
 .golden-slate-inline-tools > button:focus-visible,
 .golden-slate-photo-import:focus-visible { outline: 1px solid var(--mo-accent, #5796df); outline-offset: 1px; }
 .golden-slate-save { flex-shrink: 0; white-space: nowrap; }
-.golden-slate-browse { flex: 0 1 auto; min-width: 0; overflow: hidden; }
-.golden-slate-browse button,
-.golden-slate-subbar-right > button:not(.golden-slate-save-button),
-.golden-slate-subbar-right > .slate-paper-intake > button { flex: 0 0 auto; min-height: 26px; border: 1px solid transparent; border-radius: 6px; padding: 3px 9px; color: var(--mo-text-secondary, #82909b); background: transparent; font-size: var(--mo-font-sm, 12px); white-space: nowrap; }
-.golden-slate-browse button:hover:not(:disabled),
-.golden-slate-subbar-right > button:not(.golden-slate-save-button):hover:not(:disabled),
-.golden-slate-subbar-right > .slate-paper-intake > button:hover:not(:disabled),
-.golden-slate-browse button.is-active { color: var(--mo-text-primary, #d9e2e8); background: var(--mo-surface-hover, #1d252c); }
-.golden-slate-subbar-right > .slate-paper-intake { flex: 0 0 auto; padding: 0; border: 0; }
+.golden-slate-workbench > .slate-paper-intake { padding: 0; border: 0; }
+.golden-slate-subbar-right > button:not(.golden-slate-save-button) { flex: 0 0 auto; min-height: 26px; border: 1px solid transparent; border-radius: 6px; padding: 3px 9px; color: var(--mo-text-secondary, #82909b); background: transparent; font-size: var(--mo-font-sm, 12px); white-space: nowrap; }
+.golden-slate-subbar-right > button:not(.golden-slate-save-button):hover:not(:disabled) { color: var(--mo-text-primary, #d9e2e8); background: var(--mo-surface-hover, #1d252c); }
 .golden-slate-save-state { min-width: 48px; margin-inline-start: 4px; padding-inline-start: 10px; border-left: 1px solid var(--mo-border-subtle, #252d35); color: #687580; font-size: 11px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .golden-slate-save-state { color: #687580; }
 html[data-mirrororder-theme="dark"] .golden-slate-save-state { color: #7f8d98; }

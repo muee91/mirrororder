@@ -154,9 +154,9 @@ def test_production_tools_are_contextual_and_selection_survives_workspace_naviga
     assert "onOpenReview" in script
     assert "onOpenTimeline" in script
 
-    assert ">在素材中打开</button>" in review
-    assert ">在剧本中打开</button>" in review
-    assert ">到时间线</button>" in review
+    assert "定位素材" in review
+    assert "校准剧本" in review
+    assert "到时间线" in review
     assert "setGroupPlacement" not in review
 
     assert "deliveryRequestNonce" in timeline

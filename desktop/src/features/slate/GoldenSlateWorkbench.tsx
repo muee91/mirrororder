@@ -610,7 +610,6 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
   const [busy, setBusy] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false);
-  const [showAuxColumn, setShowAuxColumn] = useState(false);
   const [hideNgRows, setHideNgRows] = useState(false);
   const [orderMode, setOrderMode] = useState<SlateOrder>("shooting");
   const [paperIntakeOpen, setPaperIntakeOpen] = useState(false);
@@ -668,18 +667,35 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       }
       if (state.status === "queued" || state.status === "running") {
         timer = window.setTimeout(() => { void tick(); }, 2000);
-      } else if (state.status === "completed" && state.candidates.length) {
-        const key = `${projectId}:${state.revision}`;
-        if (slateReviewShown.current !== key) {
-          slateReviewShown.current = key;
-          setPaperIntakeOpen(true);
-          setMessage(`场记识别完成，共 ${state.candidates.length} 条候选；请核对后填入草稿。`);
-        }
       }
     };
     void tick();
     return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
   }, [active, projectId, loadSlateState, startSlateRecognition]);
+  const applyPaperDraftsRef = useRef<(candidates: PaperVlmCandidate[]) => void>(() => {});
+  const realignPaperDraftsRef = useRef<() => void>(() => {});
+  const autoAlignedReviewKey = useRef("");
+  useEffect(() => {
+    autoAlignedReviewKey.current = "";
+  }, [projectId]);
+  useEffect(() => {
+    if (active === false || !board) return;
+    if (!slateState || slateState.status !== "completed" || !slateState.candidates.length) return;
+    const key = `${projectId}:${slateState.revision}`;
+    if (slateReviewShown.current === key) return;
+    const storageKey = `mirrororder.slate.autoApplied:${projectId}`;
+    try {
+      if (globalThis.localStorage?.getItem(storageKey) === String(slateState.revision)) {
+        slateReviewShown.current = key;
+        return;
+      }
+      globalThis.localStorage?.setItem(storageKey, String(slateState.revision));
+    } catch {
+      // Device-local storage is best effort.
+    }
+    slateReviewShown.current = key;
+    applyPaperDraftsRef.current(slateState.candidates);
+  }, [active, board, projectId, slateState]);
   const [quickLookOpen, setQuickLookOpen] = useState(false);
   const quickLookFocusRef = useRef<HTMLElement | null>(null);
   const quickLookCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -877,8 +893,19 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
         if (attachment.source_role === "sync_camera" && /^[A-Z]$/.test(camera)) cameras.add(camera);
       }
     }
-    return [...cameras].sort().concat(hasAuxMedia || showAuxColumn ? ["AUX"] : []);
-  }, [drafts, hasAuxMedia, review, showAuxColumn]);
+    return [...cameras].sort().concat(hasAuxMedia ? ["AUX"] : []);
+  }, [drafts, hasAuxMedia, review]);
+  const hasUnlinkedPaperDrafts = useMemo(
+    () => drafts.some((row) => row.derivedSource.startsWith("场记识别") && !row.source_group_id),
+    [drafts],
+  );
+  useEffect(() => {
+    if (active === false || !review || !hasUnlinkedPaperDrafts) return;
+    const key = `${projectId}:${review.revisions?.review ?? 0}:${review.take_groups.length}`;
+    if (autoAlignedReviewKey.current === key) return;
+    autoAlignedReviewKey.current = key;
+    realignPaperDraftsRef.current();
+  }, [active, projectId, review, hasUnlinkedPaperDrafts]);
   const selected = drafts.find((row) => row.record_id === selectedRecordId) ?? null;
   const selectedTake = selected?.source_group_id ? review?.take_groups.find((take) => take.group_id === selected.source_group_id) ?? null : null;
   const inspectorLinkage = selected && (
@@ -1224,6 +1251,8 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
       ? `已按当前同步与剧本映射关联 ${aligned} 条场记；请核对后保存。`
       : "没有新的场记可自动关联；请确认同步与剧本匹配已完成，或手动指定 Take。");
   }
+  applyPaperDraftsRef.current = applyPaperDraftCandidates;
+  realignPaperDraftsRef.current = realignPaperDrafts;
 
   function nextSameScene(): void {
     addBlank({
@@ -1737,19 +1766,23 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
 
   const inspectorAttachments = selected?.attachments ?? [];
 
-  return (<div className="slate-workbench-content" data-view-switch={ledgerSurface || undefined} ref={slateRef}>
-    {ledger && <div hidden={!intervalSurface}>
-      {ledgerSurface && <nav className="slate-interval-view-switch" aria-label="场记工作视图">
-        <button type="button" className={!intervalSurface ? "is-active" : undefined} aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>场记表</button>
-        <button type="button" className={intervalSurface ? "is-active" : undefined} aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>原始片段</button>
-      </nav>}
+  return (<div className="slate-workbench-content" data-interval-surface={intervalSurface || undefined} ref={slateRef}>
+    {intervalSurface ? (
+      <header className="golden-slate-subbar">
+        <div className="golden-slate-subbar-left">
+          {ledgerSurface ? (
+            <nav className="slate-interval-view-switch" aria-label="场记工作视图">
+              <button type="button" aria-pressed={false} onClick={() => setSlateSurface("takes")}>场记表</button>
+              <button type="button" className="is-active" aria-pressed={true} onClick={() => setSlateSurface("intervals")}>原始片段</button>
+            </nav>
+          ) : null}
+        </div>
+      </header>
+    ) : null}
+    {ledger && <div hidden={!intervalSurface} className="slate-interval-surface-pane">
       <SlateIntervalBoardSurface key={JSON.stringify([baseUrl,projectId])} {...ledger} baseUrl={baseUrl} projectName={projectName} productionRows={productionRows} onOpenProduction={openProductionSource} catalog={(review?.episodes ?? []).flatMap((entry)=>entry.scenes.map((scene)=>({episode:entry.episode,scene_id:scene.scene_id,label:prettySceneId(scene.scene_id)})))}/>
     </div>}
-    {intervalSurface && !ledger && <section aria-label="电子场记板">
-      {ledgerSurface && <nav className="slate-interval-view-switch" aria-label="场记工作视图">
-        <button type="button" className={!intervalSurface ? "is-active" : undefined} aria-pressed={!intervalSurface} onClick={()=>setSlateSurface("takes")}>场记表</button>
-        <button type="button" className={intervalSurface ? "is-active" : undefined} aria-pressed={intervalSurface} onClick={()=>setSlateSurface("intervals")}>原始片段</button>
-      </nav>}
+    {intervalSurface && !ledger && <section aria-label="电子场记板" className="slate-interval-surface-pane">
       <SlateOriginalFormSheet page={{title:projectName?.trim()||"",day:"",date:"",printedPage:""}} rows={[]} />
       {nativeIntervalLedger.error ? <><p role="alert">{nativeIntervalLedger.error}</p><button type="button" onClick={()=>void nativeIntervalLedger.refresh().catch(()=>{})}>重读列表</button></> : <p role="status">正在读取电子场记板…</p>}
     </section>}
@@ -1789,28 +1822,13 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
           <div className="golden-slate-inline-tools" role="group" aria-label="视图与工具">
             <button type="button" className={orderMode === "script" ? "is-filter-active" : ""} aria-pressed={orderMode === "script"} title="按集 / 场号 / 镜号归类并检查漏填" onClick={() => { setEditLayout(null); setOrderMode((value) => value === "script" ? "shooting" : "script"); }}>按场号归类</button>
             {(ngCount > 0 || hideNgRows) ? <button type="button" className={hideNgRows ? "is-filter-active" : ""} aria-pressed={hideNgRows} onClick={() => setHideNgRows((value) => !value)}>隐藏 NG ({ngCount})</button> : null}
-            {!hasAuxMedia ? <button type="button" className={showAuxColumn ? "is-active" : ""} aria-pressed={showAuxColumn} onClick={() => setShowAuxColumn((value) => !value)} title="显示或隐藏空的 AUX 列">AUX 列</button> : null}
+            {hasUnlinkedPaperDrafts && review ? (
+              <button type="button" onClick={realignPaperDrafts} title="按场次和拍摄顺序把未关联的场记草稿对齐到同步 Take">对齐 Take</button>
+            ) : null}
             <button type="button" className={inspectorOpen ? "is-active" : ""} onClick={() => setInspectorOpen((value) => !value)} aria-label={inspectorOpen ? "隐藏检视" : "显示检视"} aria-pressed={inspectorOpen} title={inspectorOpen ? "收起右侧详情栏" : "展开右侧详情栏"}>右侧详情栏</button>
-            {slateState?.slate_attached ? (
-            <button type="button" className="secondary" disabled={busy || slateBusy || slateState.status === "running" || slateState.status === "queued"} onClick={() => void startSlateRecognition()} title="重新逐页识别项目附带的手写/扫描场记">重新识别场记</button>
-          ) : null}
-          <button type="button" className="secondary" disabled={!review} onClick={realignPaperDrafts} title="同步与剧本匹配完成后，按场次和拍摄顺序重新关联场记候选">重新对齐 Take</button>
-          <button type="button" className="golden-slate-refresh-btn" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="重新读取最新场记">刷新</button>
+            <button type="button" className="golden-slate-refresh-btn" disabled={busy} onClick={() => void reload(selectedRecordId)} aria-label="刷新场记" title="重新读取最新场记">刷新</button>
           </div>
-          <SlatePaperIntake
-            key={`${baseUrl}:${projectId}`}
-            baseUrl={baseUrl}
-            projectId={projectId}
-            open={paperIntakeOpen}
-            onOpenChange={setPaperIntakeOpen}
-            hideTrigger
-            onSelect={setPaperSource}
-            onApplyDraftCandidates={applyPaperDraftCandidates}
-            recognition={slateState}
-            recognitionBusy={slateBusy}
-            onStartRecognition={() => { void startSlateRecognition(); }}
-          />
-          <span className="golden-slate-message" aria-live="polite">{message}</span>
+          {message ? <span className="golden-slate-message" aria-live="polite">{message}</span> : null}
           <span
             className="golden-slate-save-state"
             data-state={busy ? "saving" : loadError ? "error" : dirtyCount ? "dirty" : board ? "saved" : "idle"}
@@ -1852,15 +1870,17 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
                 {slateState.status === "running" || slateState.status === "queued"
                   ? ` · 后台逐页识别 ${slateState.pages_done}/${slateState.pages_total || "?"}`
                   : slateState.status === "completed"
-                    ? ` · 已识别 ${slateState.candidates.length} 条候选，等待人工核对`
+                    ? ` · 已自动识别 ${slateState.candidates.length} 条并填入主表草稿`
                     : slateState.status === "failed"
                       ? ` · 识别失败：${slateState.error || "请检查视觉模型设置"}`
                       : ""}
               </span>
               <div>
-                <button type="button" onClick={() => setPaperIntakeOpen(true)}>核对候选</button>
-                {(slateState.status === "none" || slateState.status === "failed" || slateState.status === "cancelled") ? (
-                  <button type="button" className="secondary" disabled={slateBusy} onClick={() => { void startSlateRecognition(); }}>开始识别</button>
+                <button type="button" onClick={() => setPaperIntakeOpen(true)}>{slateState.status === "completed" ? "查看候选明细" : "核对候选"}</button>
+                {(slateState.status === "none" || slateState.status === "failed" || slateState.status === "cancelled" || slateState.status === "completed") ? (
+                  <button type="button" className="secondary" disabled={busy || slateBusy} onClick={() => { void startSlateRecognition(); }}>
+                    {slateState.status === "completed" ? "重新识别" : "开始识别"}
+                  </button>
                 ) : null}
               </div>
             </div>
@@ -2007,6 +2027,20 @@ export function GoldenSlateWorkbench({ baseUrl, projectId, projectName, draftSes
             ) : <div className="golden-inspector-empty">选择一行或一张机位卡。</div>}
           </aside>
       </div>
+
+      <SlatePaperIntake
+        key={`${baseUrl}:${projectId}`}
+        baseUrl={baseUrl}
+        projectId={projectId}
+        open={paperIntakeOpen}
+        onOpenChange={setPaperIntakeOpen}
+        hideTrigger
+        onSelect={setPaperSource}
+        onApplyDraftCandidates={applyPaperDraftCandidates}
+        recognition={slateState}
+        recognitionBusy={slateBusy}
+        onStartRecognition={() => { void startSlateRecognition(); }}
+      />
 
     </section></div>
   </div>);
