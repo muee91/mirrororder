@@ -26,7 +26,8 @@ describe("golden slate media experience", () => {
   it("recovers from a playback error without forcing a project refresh", () => {
     const workbench = source("./GoldenSlateWorkbench.tsx");
     expect(workbench).toContain("const [playbackRetry, setPlaybackRetry] = useState(0)");
-    expect(workbench).toContain('key={`${selectedPlaybackKey}-${playbackRetry}-${playbackStart}`}');
+    expect(workbench).toContain('const playbackKey = `${selectedPlaybackKey}-${playbackRetry}-${playbackStart}`');
+    expect(workbench).toContain('key={playbackKey}');
     expect(workbench).toContain("golden-player-error");
     expect(workbench).toContain("重新加载");
     expect(workbench).toContain('setPlaybackFailedClipId("")');
@@ -35,9 +36,11 @@ describe("golden slate media experience", () => {
 
   it("clears stale playback failure when the user changes angle", () => {
     const workbench = source("./GoldenSlateWorkbench.tsx");
+    const sources = source("./SlateInspectorSources.tsx");
     expect(workbench).toContain("function selectClip(clipId: string)");
     expect(workbench).toContain("setSelectedClipId(clipId)");
     expect(workbench).toContain('setPlaybackFailedClipId("")');
-    expect(workbench).toContain("onSelect={() => selectClip(key)}");
+    expect(workbench).toContain("onSelect={selectClip}");
+    expect(sources).toContain("onClick={() => onSelect(key)}");
   });
 });

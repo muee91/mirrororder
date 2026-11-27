@@ -1,7 +1,8 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PlaybackState, ReviewAngle } from "../../api/host";
 import type { SlateAttachment } from "../../api/production";
 import { canPreviewReviewPlayback } from "./mediaPlaybackProjection";
+import { reviewAspectStyle } from "./useReviewAspect";
 import { cameraPresentation } from "./cameraPresentation";
 import { observeNearViewport, useVideoDecodeSlot } from "./nearViewport";
 import { StudioIcon } from "../../components/StudioIcons";
@@ -63,6 +64,10 @@ interface Props {
   selected?: boolean;
   preferred?: boolean;
   compact?: boolean;
+  frameOnly?: boolean;
+  frameAspect?: number;
+  frameDescriptionId?: string;
+  onFrameAspect?: (ratio: number) => void;
   showPreview?: boolean;
   onSelect?: (id: string) => void;
   onPrefer?: (id: string) => void;
@@ -121,14 +126,20 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
   selected = false,
   preferred = false,
   compact = false,
+  frameOnly = false,
+  frameAspect,
+  frameDescriptionId,
+  onFrameAspect,
   showPreview = false,
   onSelect,
   onPrefer,
 }: Props) {
-  const cardRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
+  const setCard = useCallback((element: HTMLElement | null) => { cardRef.current = element; }, []);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const posterRef = useRef<HTMLCanvasElement>(null);
   const [compactPreviewActive, setCompactPreviewActive] = useState(!compact);
-  const [previewReady, setPreviewReady] = useState(false);
+  const [previewState, setPreviewState] = useState<"loading" | "ready" | "failed">("loading");
   const camera = useMemo(() => cameraPresentation(model.camera), [model.camera]);
 
   // Compact cards only instantiate a decoder surface close to the viewport.
@@ -144,7 +155,7 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
       return;
     }
     return observeCompactPreview(element, setCompactPreviewActive);
-  }, [compact]);
+  }, [compact, frameOnly]);
 
   const unavailable = model.availabilityState === "missing" || model.available === false;
   const unknown = model.availabilityState === "unknown";
@@ -154,24 +165,52 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
   const label = useMemo(() => [camera.label, model.name, compact && (!model.shotType || model.shotType === "unknown") ? "" : shotLabel(model.shotType)].filter(Boolean).join(" · "), [camera.label, compact, model.name, model.shotType]);
 
   useLayoutEffect(() => {
-    setPreviewReady(false);
+    setPreviewState("loading");
     const video = videoRef.current;
     if (!video || !previewEnabled) return;
     const start = Number(model.sourceStart ?? 0);
     const target = Number.isFinite(start) && start >= 0 ? start : 0;
+    const measure = () => {
+      if (video.videoWidth && video.videoHeight) onFrameAspect?.(video.videoWidth / video.videoHeight);
+    };
+    const paintFrame = () => {
+      const poster = posterRef.current;
+      if (!poster || video.readyState < 2 || !video.videoWidth || !video.videoHeight || video.seeking) return;
+      const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+      poster.width = Math.max(1, Math.round(video.videoWidth * scale));
+      poster.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const context = poster.getContext("2d");
+      if (context) {
+        try {
+          context.drawImage(video, 0, 0, poster.width, poster.height);
+          poster.dataset.painted = "true";
+        } catch {
+          // The decoder can release its current frame before drawing completes.
+          delete poster.dataset.painted;
+        }
+      }
+    };
+    if (posterRef.current) delete posterRef.current.dataset.painted;
     const markReady = () => {
-      setPreviewReady(true);
+      if (posterRef.current && (video.seeking || video.readyState < 2)) return;
+      measure();
+      paintFrame();
+      setPreviewState("ready");
       markDecodeSettled();
     };
     const seek = () => {
+      measure();
       if (target <= 0) {
-        if (video.readyState >= 2) {
+        // At zero a paused decoder can report HAVE_CURRENT_DATA while its first
+        // frame is still transparent. Only the poster needs a decoded sample.
+        if (video.readyState >= 2 && (!posterRef.current || video.currentTime > 0)) {
           markReady();
           return;
         }
-        // WKWebView can stop at metadata until a seek requests the first frame.
         const probeTime = Number.isFinite(video.duration) && video.duration > 0.12 ? 0.04 : 0.001;
-        try { video.currentTime = probeTime; } catch { /* metadata may not be seekable yet */ }
+        if (!video.seeking) {
+          try { video.currentTime = probeTime; } catch { /* metadata may not be seekable yet */ }
+        }
         return;
       }
       if (!video.seeking && Math.abs(video.currentTime - target) <= 0.04 && video.readyState >= 2) {
@@ -180,35 +219,54 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
       }
       try { video.currentTime = target; } catch { /* metadata may not be seekable yet */ }
     };
-    const loadedData = () => { if (target <= 0) markReady(); };
+    const loadedData = () => {
+      if (target > 0) return;
+      if (posterRef.current) seek();
+      else markReady();
+    };
+    video.addEventListener("resize", measure);
     video.addEventListener("loadedmetadata", seek);
     video.addEventListener("loadeddata", loadedData);
     video.addEventListener("seeked", markReady);
     if (video.readyState >= 1) seek();
     return () => {
+      video.removeEventListener("resize", measure);
       video.removeEventListener("loadedmetadata", seek);
       video.removeEventListener("loadeddata", loadedData);
       video.removeEventListener("seeked", markReady);
     };
-  }, [model.playbackUrl, model.sourceStart, previewEnabled, markDecodeSettled]);
+  }, [model.playbackUrl, model.sourceStart, previewEnabled, markDecodeSettled, onFrameAspect]);
 
-  const supportText = unavailable ? "设备缺失" : unknown ? "状态未知" : (!compact ? sourceRoleLabel(model.sourceRole) : "");
-
-  const content = (
-    <>
-      <div className="mo-media-thumb" aria-hidden="true">
+  const frameState = unavailable ? "missing" : unknown || !model.playbackUrl ? "unknown" : previewEnabled ? previewState : "waiting";
+  const frameLabels = { missing: "文件缺失", unknown: "原片待核对", failed: "无法载入预览", loading: "正在读取预览", waiting: "等待预览", ready: "" };
+  const frame = (
+    <span className="mo-media-thumb" style={reviewAspectStyle(frameAspect)}
+      data-preview-state={frameState}
+      data-frame-shape={frameAspect === undefined ? undefined : frameAspect < 1 ? "portrait" : frameAspect > 1 ? "landscape" : "square"}
+      ref={frameOnly ? setCard : undefined} aria-hidden={frameDescriptionId ? undefined : true}>
+        {frameOnly && <span id={frameDescriptionId} className="mo-media-preview-message">{frameLabels[frameState]}</span>}
         {previewEnabled ? (
           <>
-            <span className="mo-media-preview-fallback"><StudioIcon name="film" size={18} /></span>
-            <video ref={videoRef} className={previewReady ? "is-ready" : ""} src={model.playbackUrl} preload="metadata" muted playsInline tabIndex={-1} onError={markDecodeSettled} />
+            {!frameOnly && <span className="mo-media-preview-fallback"><StudioIcon name="film" size={18} /></span>}
+            <video ref={videoRef} className={previewState === "ready" ? "is-ready" : ""} src={model.playbackUrl}
+              preload="metadata" muted playsInline tabIndex={-1} aria-hidden="true"
+              onError={() => { setPreviewState("failed"); markDecodeSettled(); }} />
+            {frameOnly && onFrameAspect && <canvas className="mo-review-poster" aria-hidden="true" ref={posterRef} />}
           </>
-        ) : (
+        ) : !frameOnly && (
           <span className={unavailable ? "is-missing" : unknown ? "is-unknown" : "mo-media-preview-fallback"}>
             {unavailable ? "缺失" : unknown ? "待检" : <StudioIcon name="film" size={18} />}
           </span>
         )}
         <span className="mo-media-camera-badge" data-camera-tone={camera.tone}>{camera.label}</span>
-      </div>
+    </span>
+  );
+  if (frameOnly) return frame;
+
+  const supportText = unavailable ? "设备缺失" : unknown ? "状态未知" : (!compact ? sourceRoleLabel(model.sourceRole) : "");
+  const content = (
+    <>
+      {frame}
       <div className="mo-media-copy">
         <div className="mo-media-topline">
           <span className="mo-media-name" title={model.name}>{compact ? formatCompactMediaName(model.name) : model.name}</span>
@@ -227,7 +285,7 @@ export const MirrorOrderMediaCard = memo(function MirrorOrderMediaCard({
 
   return (
     <div
-      ref={cardRef}
+      ref={setCard}
       className={`mo-media-card ${compact ? "is-compact" : "is-inspector"} ${selected ? "is-selected" : ""} ${unavailable ? "is-missing" : unknown ? "is-unknown" : ""}`}
       data-camera-tone={camera.tone}
       aria-label={label}

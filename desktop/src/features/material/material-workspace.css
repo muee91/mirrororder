@@ -89,6 +89,8 @@
   align-items: center;
 }
 
+.material-take-toolbar .workspace-count { flex: none; inline-size: 15ch; text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 .material-take-search {
   flex: 1 1 260px;
   min-width: 180px;

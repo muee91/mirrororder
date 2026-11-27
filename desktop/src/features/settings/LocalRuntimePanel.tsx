@@ -153,7 +153,6 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
     <div className="production-panel status-card local-runtime-card">
       <div className="parse-heading">
         <div>
-          <p className="eyebrow">本机智能</p>
           <h3>本地 AI 与身份识别</h3>
         </div>
         <button
@@ -167,8 +166,10 @@ export function LocalRuntimePanel({ baseUrl }: Props) {
           <span>刷新</span>
         </button>
       </div>
-      <p className="production-note">本地多模态模型负责画面理解；当小镜没有更高优先级的语言模型连接时，也会自动沿用它进行本地对话与推理。</p>
-      <p className="production-note">启用一次后，镜序会自动准备当前设备的运行时，并在 Host 下次启动时恢复；切换项目不需要重新激活。</p>
+      <details className="runtime-help"><summary>本地模型如何运行</summary>
+        <p className="production-note">本地多模态模型负责画面理解。当小镜没有更高优先级的语言模型连接时，也会自动沿用它进行本地对话与推理。</p>
+        <p className="production-note">启用一次后，本机会自动准备并恢复模型，切换项目不需要重新激活。</p>
+      </details>
       <p className="production-note">{message}</p>
       {runtime ? (
         <>

@@ -561,11 +561,11 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
     <section className="status-center-workbench">
       <header className="production-heading status-center-heading">
         <div className="status-center-heading-copy">
-          <div><p className="eyebrow">后台工作</p><h2>任务状态</h2></div>
+          <h2>任务状态</h2>
           <span className="production-state">{message}</span>
         </div>
         <div className="assistant-heading-actions">
-          <button type="button" className="secondary" disabled={!dismissibleCount} onClick={clearSettledRecords}>删除已结束</button>
+          <button type="button" className="secondary" disabled={!dismissibleCount} title="清理已结束的显示记录，底层任务审计仍保留" onClick={clearSettledRecords}>删除已结束</button>
           <button type="button" className="secondary" disabled={busy} onClick={() => void reload(false)}>刷新</button>
         </div>
       </header>
@@ -575,8 +575,6 @@ export function StatusCenterWorkbench({ baseUrl, projects, onOpenProject, onOpen
         <span className={totals.attention ? "needs-attention" : ""}><strong>{totals.attention}</strong>需要处理</span>
         <button type="button" className={showHistory ? "is-active" : ""} aria-pressed={showHistory} onClick={() => setShowHistory((value) => !value)}><strong>{totals.history}</strong>{showHistory ? "隐藏历史记录" : "显示历史记录"}</button>
       </div>
-
-      <p className="status-center-note">展示运行中与待处理的后台任务；已结束的历史记录可按需清理（底层任务审计仍保留）。</p>
 
       <div className="status-center-sections">
         {activeTasks.length ? (

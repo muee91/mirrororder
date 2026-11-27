@@ -2,6 +2,7 @@ import type { DragEvent, KeyboardEvent } from "react";
 import type { ReviewScriptBlock } from "../../api/host";
 import { isPlaceableScriptBlock } from "../script/scriptSemantics";
 import { DRAG_TAKE_MIME } from "./TakeCard";
+import { actionCoverageLabel } from "./actionDialogue";
 import "./script-block.css";
 
 export type ScriptProjectionMode = "script" | "coverage" | "issues";
@@ -18,6 +19,8 @@ interface ScriptBlockProps {
   block: ReviewScriptBlock;
   mappedTakeIds: string[];
   candidateTakeIds: string[];
+  adjacentTakeIds?: ReadonlyMap<string, readonly ReviewScriptBlock[]>;
+  confirmedActionCount?: number;
   selected: boolean;
   projectionMode: ScriptProjectionMode;
   draggingGroupId: string | null;
@@ -46,6 +49,8 @@ export function ScriptBlock({
   block,
   mappedTakeIds,
   candidateTakeIds,
+  adjacentTakeIds,
+  confirmedActionCount,
   selected,
   projectionMode,
   draggingGroupId,
@@ -57,8 +62,10 @@ export function ScriptBlock({
   onClickPlacement,
 }: ScriptBlockProps) {
   const canPlace = isPlaceableScriptBlock(block);
-  const relatedTakeIds = [...mappedTakeIds, ...candidateTakeIds.filter((id) => !mappedTakeIds.includes(id))];
-  const showCoverage = canPlace && (projectionMode !== "script" || selected || relatedTakeIds.length > 0);
+  const relatedTakeIds = new Set([...mappedTakeIds, ...candidateTakeIds, ...(adjacentTakeIds?.keys() ?? [])]);
+  const actionStatus = block.type === "action" && confirmedActionCount !== undefined && relatedTakeIds.size > 0
+    ? actionCoverageLabel(confirmedActionCount, adjacentTakeIds?.size ?? 0, relatedTakeIds.size) : null;
+  const showCoverage = canPlace && (projectionMode !== "script" || selected || relatedTakeIds.size > 0);
 
   function selectFromKeyboard(event: KeyboardEvent<HTMLElement>): void {
     if (event.target !== event.currentTarget) return;
@@ -97,8 +104,10 @@ export function ScriptBlock({
         <div className="script-block-actions">
           {showCoverage ? (
             <div className="script-block-coverage" aria-label="当前剧本段素材状态">
-              {mappedTakeIds.length ? <span className="is-mapped">已归集 {mappedTakeIds.length}</span> : <span className="is-unmapped">未归集</span>}
-              {candidateTakeIds.length ? <span className="has-candidate">候选 {candidateTakeIds.length}</span> : null}
+              {actionStatus
+                ? <span className={confirmedActionCount ? "is-mapped" : "has-candidate"}>{actionStatus}</span>
+                : <>{mappedTakeIds.length ? <span className="is-mapped">已归集 {mappedTakeIds.length}</span> : <span className="is-unmapped">未归集</span>}
+                  {candidateTakeIds.length ? <span className="has-candidate">候选 {candidateTakeIds.length}</span> : null}</>}
             </div>
           ) : null}
           {!canPlace && block.type !== "scene_heading" ? <span className="script-block-structural-status">无需归集</span> : null}
@@ -109,7 +118,7 @@ export function ScriptBlock({
           ) : null}
           {canPlace ? (
             <button type="button" onClick={() => onOpenContext(block)}>
-              {relatedTakeIds.length ? `素材 ${relatedTakeIds.length}` : "找素材"}
+              {relatedTakeIds.size ? `素材 ${relatedTakeIds.size}` : "找素材"}
             </button>
           ) : null}
           {mappedTakeIds.length > 0 ? (

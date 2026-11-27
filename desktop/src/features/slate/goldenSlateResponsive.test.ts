@@ -6,10 +6,11 @@ function source(relative: string): string {
 }
 
 describe("Golden Slate responsive inspector", () => {
-  it("collapses the inspector below the table on narrow screens", () => {
+  it("keeps the table width and docks the inspector over its right edge on narrow screens", () => {
     const styles = source("./golden-slate.css");
-    expect(styles).toContain("@media (max-width: 900px)");
-    expect(styles).toContain("grid-template-columns: minmax(0, 1fr)");
-    expect(styles).toContain("border-left: 0");
+    const narrow = styles.slice(styles.indexOf("@media (max-width: 1160px)"));
+    expect(narrow).toContain(".golden-slate-table-shell { isolation: isolate; }");
+    expect(narrow).toContain(".golden-slate-body { grid-template-columns: minmax(0, 1fr) 36px; }");
+    expect(narrow).toMatch(/\.golden-slate-inspector \{[^}]*position: absolute;[^}]*inset-inline-end: 0;/);
   });
 });

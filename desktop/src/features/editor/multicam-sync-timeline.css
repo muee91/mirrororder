@@ -20,8 +20,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 24px;
-  padding-block-end: 24px;
-  border-bottom: 1px solid var(--mo-border-default);
+  padding-block-end: var(--mo-space-1);
 }
 
 .sync-task-state {
@@ -53,7 +52,7 @@
 .sync-task-heading h1 {
   margin: 8px 0 6px;
   color: var(--mo-text-primary);
-  font-size: 28px;
+  font-size: var(--mo-type-page);
   font-weight: 680;
   line-height: 1.25;
 }
@@ -79,16 +78,16 @@
 .sync-task-body {
   display: grid;
   grid-template-columns: minmax(215px, .72fr) minmax(0, 1.5fr);
-  gap: clamp(24px, 4vw, 56px);
+  gap: var(--mo-space-3);
   margin-block: 24px 0;
 }
 
 .sync-task-content h2 { margin: 0 0 12px; color: var(--mo-text-primary); font-size: 15px; font-weight: 650; }
 
-.sync-task-sources {
+.sync-task-sources, .sync-task-stages {
   align-self: start;
-  padding: 16px 18px;
-  border: 1px solid var(--mo-border-subtle);
+  padding: var(--mo-space-3);
+  box-shadow: var(--mo-shadow-panel);
   border-radius: var(--mo-radius-pane);
   background: var(--mo-surface-pane);
 }
@@ -98,8 +97,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  padding-block: 9px;
-  border-bottom: 1px solid var(--mo-border-subtle);
+  padding-block: var(--mo-space-1);
 }
 .sync-task-sources dt { color: var(--mo-text-secondary); }
 .sync-task-sources dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -127,9 +125,11 @@
 .sync-task-stages li[data-state="current"] .sync-task-step-status { color: var(--mo-text-primary); font-weight: 640; }
 
 .multicam-sync-live {
-  margin-block-start: 24px;
-  padding-block-start: 16px;
-  border-top: 1px solid var(--mo-border-default);
+  margin-block-start: var(--mo-space-3);
+  padding: var(--mo-space-3);
+  border-radius: var(--mo-radius-pane);
+  background: var(--mo-surface-pane);
+  box-shadow: var(--mo-shadow-panel);
 }
 .multicam-sync-live > header,
 .multicam-sync-progress > div {
@@ -929,7 +929,7 @@ html[data-mirrororder-theme] .sync-more-menu-popover > button:hover {
   flex-wrap: wrap;
   gap: 6px;
 }
-.sync-offset-actions > button:first-child:not(:disabled) {
+.sync-offset-actions > button:not(.secondary):not(:disabled) {
   background: var(--mo-action-fill);
   border-color: var(--mo-action-fill);
   color: var(--mo-action-text);

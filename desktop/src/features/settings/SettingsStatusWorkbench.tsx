@@ -171,7 +171,7 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
   return (
     <section className="phase3-workbench settings-status-workbench">
       <header className="production-heading settings-heading">
-        <div><p className="eyebrow">镜序设置</p><h2>设备设置</h2></div>
+        <h2>设备设置</h2>
         <div className="assistant-heading-actions">
           {error ? <span className="production-state is-error" role="alert">{error}</span> : null}
           <button
@@ -187,25 +187,23 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
         </div>
       </header>
 
-      <p className="production-note settings-intro">模型路由适用范围：当前设备 · 与项目无关。后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
-
       <div className="settings-preference-stack">
         <section className="settings-preference-section" aria-labelledby="settings-general-title">
           <header className="settings-section-heading">
-            <div><p className="eyebrow">通用</p><h3 id="settings-general-title">外观与本机</h3></div>
+            <h3 id="settings-general-title">通用设置</h3>
             <span>仅当前设备</span>
           </header>
           <div className="settings-preference-surface settings-general-card">
             <DesktopAppearanceControl />
             <div className="settings-preference-row">
-              <div className="settings-preference-copy"><strong>本机操作者</strong><span>写入场记、审阅结论与机位修改时的署名</span></div>
+              <div className="settings-preference-copy"><strong>本机操作者</strong><span>用于场记、审阅结论和机位修改的署名</span></div>
               <CurrentOperatorControl />
             </div>
             <label className="settings-optional-toggle">
               <input type="checkbox" checked={showRoughCut} onChange={(event) => setShowRoughCut(event.target.checked)} />
               <span className="settings-optional-toggle-copy">
                 <strong>显示内置粗剪顺片</strong>
-                <small>默认隐藏；开启后在审阅页顶栏显示「粗剪组接」入口。</small>
+                <small>在审阅顶栏显示「粗剪组接」。</small>
               </span>
             </label>
           </div>
@@ -213,8 +211,8 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
         <section className="settings-preference-section" aria-labelledby="settings-assistant-title">
           <header className="settings-section-heading">
-            <div><p className="eyebrow">小镜</p><h3 id="settings-assistant-title">AI 能力</h3></div>
-            <span>显示实际路由 · 高级设置可覆盖</span>
+            <h3 id="settings-assistant-title">小镜 AI 能力</h3>
+            <span>当前设备 · 与项目无关</span>
           </header>
           <AssistantModelsPanel baseUrl={baseUrl} />
         </section>
@@ -225,8 +223,8 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
         <details className="settings-preference-section settings-collapsible-section" aria-labelledby="settings-team-title">
           <summary className="settings-section-heading settings-collapsible-summary">
-            <div><p className="eyebrow">团队审阅</p><h3 id="settings-team-title">网页协作审阅</h3></div>
-            <span>局域网浏览器看片与访问权限 · 按需展开</span>
+            <h3 id="settings-team-title">团队审阅</h3>
+            <span>网页外观与访问权限</span>
           </summary>
           <div className="settings-team-grid">
             <div className="production-panel status-card frontend-settings-card">
@@ -255,12 +253,12 @@ export function SettingsStatusWorkbench({ baseUrl, projectId }: Props) {
 
         <details className="settings-advanced-diagnostics">
           <summary>
-            <div><strong>高级诊断</strong><span>运行环境、本机路径与平台诊断 · 按需展开</span></div>
+            <div><strong>高级诊断</strong><span>运行环境与本机路径</span></div>
           </summary>
           <p className="production-note settings-diagnostics-runtime">{status ? `${status.environment.platform} · Python ${status.environment.python.version}` : "尚未读取"}</p>
+          <p className="production-note">后台任务、下载进度与失败恢复统一在“状态中心”查看。</p>
           <button type="button" className="secondary" onClick={() => void copyDiagnostics()}>复制运行诊断</button>
           {diagnosticMessage && <p className="settings-diagnostic-result" role="status">{diagnosticMessage}</p>}
-          <p className="production-note settings-diagnostics-note">这里用于排查安装和设备环境问题；任务进度与失败恢复仍以状态中心为准。</p>
           <div className="settings-diagnostics-grid">
             <div className="production-panel status-card">
               <p className="eyebrow">工作区 / Python</p><h3>{status?.workspace.name || "工作区"}</h3>

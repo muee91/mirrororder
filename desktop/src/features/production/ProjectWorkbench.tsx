@@ -24,7 +24,7 @@ import { ProjectModuleNavigation, canOpenProductionModule } from "./ProjectModul
 import { MaterialWorkspace, type MaterialView } from "../material/MaterialWorkspace";
 import type { SlateDraftSession } from "../slate/slateDraftSession";
 import "../media/media.css";
-import { ReviewWorkspace } from "../review/ReviewWorkspace";
+import { ReviewWorkspace, type ReviewSession } from "../review/ReviewWorkspace";
 import { useShowRoughCutPreference } from "../../app/desktopPreferences";
 import { ScriptWorkspace } from "../script/ScriptWorkspace";
 import "../script/script-workspace.css";
@@ -208,6 +208,7 @@ export function ProjectWorkbench({
   const [selection, setSelection] = useState<ProductionSelectionContext>(() => ({ projectId: project.project_id }));
   const [navigationIntent, setNavigationIntent] = useState<ProductionNavigationIntent | null>(null);
   const [deliveryRequestNonce, setDeliveryRequestNonce] = useState(0);
+  const [inspectionStart, setInspectionStart] = useState<"audio">();
   const [returnPage, setReturnPage] = useState<ProductionPage | null>(null);
   const [evidence, setEvidence] = useState<{ selection: ProductionSelectionContext; snippet?: string } | null>(null);
   const [slateFocus, setSlateFocus] = useState<ProductionSelectionContext | null>(null);
@@ -216,10 +217,9 @@ export function ProjectWorkbench({
   const [commandError, setCommandError] = useState("");
   const [submissionIssue, setSubmissionIssue] = useState(() => readSyncSubmissionIssue(workspaceId, project.project_id));
   const commanding = useRef(false);
-  const defaultSyncLanding = useRef(project.input_kind === "media-directory" && !hasRememberedProjectPage(project.project_id));
-  const explicitSyncTaskNavigation = useRef(false);
   const assistantToggle = useRef<HTMLButtonElement>(null);
   const assistantDraft = useMemo(() => ({ text: "", includeSelection: false }), [baseUrl, project.project_id]);
+  const reviewSession = useMemo<ReviewSession>(() => ({}), [baseUrl, project.project_id]);
   const navigationNonce = useRef(0);
   const handledPageRequest = useRef<number | undefined>(undefined);
   const handledXiaoJingAction = useRef<number | undefined>(undefined);
@@ -255,6 +255,10 @@ export function ProjectWorkbench({
       return { ...previous, ...next };
     });
   }, [project.project_id]);
+
+  const selectReviewTake = useCallback((groupId: string | null, clipId: string | null) => {
+    updateSelection({ groupId, clipId, scriptSegmentId: currentSelection.scriptSegmentId });
+  }, [currentSelection.scriptSegmentId, updateSelection]);
 
   const selectSlateRecord = useCallback((value: ProductionSelectionContext) => {
     setSelection((previous) => ({ ...value,
@@ -295,8 +299,7 @@ export function ProjectWorkbench({
     };
   }
 
-  function navigate(next: ProductionPage): void {
-    if (next === "sync-task" && defaultSyncLanding.current) explicitSyncTaskNavigation.current = true;
+  function navigate(next: ProductionPage, initialInspector?: "audio"): void {
     if (next.startsWith("sync-") && project.input_kind !== "media-directory") {
       setPage("slate");
       return;
@@ -308,12 +311,18 @@ export function ProjectWorkbench({
       return;
     }
     if (next === "media-binding" && visiblePage !== "media-binding") setReturnPage(visiblePage);
+    if (next === "sync-inspect") setInspectionStart(initialInspector);
     setPage(safeProductionPage(next));
   }
 
   function switchArea(next: ProductionArea, target?: ProductionPage): void {
     if (syncBlocked && next !== "timeline" && next !== "material") return;
-    if (next !== area) setNavigationIntent(nextIntent(next));
+    if (next !== area && (next !== "review" || !reviewSession.snapshot?.monitor)) {
+      const position = visiblePage === "watch" ? reviewSession.currentLocation?.() : undefined;
+      const context = position ? { ...currentSelection, ...position } : currentSelection;
+      if (position) setSelection(context);
+      setNavigationIntent(nextIntent(next, context));
+    }
     navigate(target ?? (syncBlocked && next === "material" ? "media-library" : AREAS[next].defaultPage));
   }
 
@@ -407,18 +416,15 @@ export function ProjectWorkbench({
 
   useEffect(() => {
     rememberProjectPage(project.project_id, page);
-    onPageChange?.(page);
-  }, [onPageChange, page, project.project_id]);
+  }, [page, project.project_id]);
+
+  useEffect(() => {
+    if (active) onPageChange?.(visiblePage);
+  }, [active, onPageChange, visiblePage]);
 
   useEffect(() => {
     onSyncStatusChange?.(project.project_id, master.ready, syncTimeline.phase);
   }, [master.ready, onSyncStatusChange, project.project_id, syncTimeline.phase]);
-
-  useEffect(() => {
-    if (project.input_kind !== "media-directory" || !defaultSyncLanding.current || explicitSyncTaskNavigation.current) return;
-    if (master.ready && page === "sync-task") setPage("sync-inspect");
-  }, [master.ready, page, project.input_kind]);
-
 
   useEffect(() => {
     if (visiblePage === "slate") setSlateVisited(true);
@@ -536,15 +542,12 @@ export function ProjectWorkbench({
           {projectNavigation ?? <strong>{project.name || project.project_id}</strong>}
           {visiblePage.startsWith("sync-") ? (
             <div className="workbench-subbar sync-workbench-subbar" aria-label="同步工作区" data-tauri-drag-region="no-drag">
-              {visiblePage === "sync-inspect" ? <span className="professional-project-context-subtitle" aria-live="polite">多机位同步</span> : null}
+              {visiblePage === "sync-inspect" ? <span className="professional-project-context-subtitle" aria-live="polite">同步核对</span> : null}
               {visiblePage === "sync-delivery" ? <>
-                <button type="button" className="workbench-subbar-link" onClick={() => navigate("sync-inspect")}>← 返回同步画面</button>
+                <button type="button" className="workbench-subbar-link" onClick={() => navigate("sync-inspect")}>同步核对</button>
                 <span className="professional-project-context-subtitle" aria-live="polite">导出到剪辑软件</span>
               </> : null}
-              {visiblePage === "sync-task" ? master.ready ? <>
-                <button type="button" className="workbench-subbar-link" onClick={() => navigate("sync-inspect")}>← 返回同步画面</button>
-                <span className="professional-project-context-subtitle" aria-live="polite">同步进度与重跑</span>
-              </> : <span className="professional-project-context-subtitle" aria-live="polite">多机位同步</span> : null}
+              {visiblePage === "sync-task" ? <span className="professional-project-context-subtitle" aria-live="polite">同步任务</span> : null}
             </div>
           ) : ["media-library", "takes", "identity", "media-binding"].includes(visiblePage) ? (
             <nav className="workbench-subbar material-workbench-subbar" aria-label="素材工作区" data-tauri-drag-region="no-drag">
@@ -564,7 +567,7 @@ export function ProjectWorkbench({
           ) : (
             <span className="professional-project-context-subtitle" aria-live="polite">{pageLabel(visiblePage)}</span>
           )}
-          {returnPage && returnPage !== visiblePage && visiblePage !== "media-binding" && !syncBlocked && <button type="button" className="secondary"
+          {returnPage && returnPage !== visiblePage && visiblePage !== "media-binding" && !(returnPage === "media-library" && ["takes", "identity"].includes(visiblePage)) && !syncBlocked && <button type="button" className="secondary"
             data-tauri-drag-region="no-drag"
             onClick={() => { navigate(returnPage); setReturnPage(null); }}>返回{pageLabel(returnPage)}</button>}
         </div>
@@ -616,13 +619,16 @@ export function ProjectWorkbench({
             <SyncTaskWorkspace syncTimeline={syncTimeline} baseUrl={baseUrl} command={command}
               submissionError={commandError || submissionIssue}
               onMulticamSync={() => void changeSyncTask("start")}
+              onRestart={runMulticamSync}
               onRebaseOffsets={() => void rebaseSyncOffsets()}
               onCancel={() => void changeSyncTask("cancel")}
               onRepair={() => navigate("media-binding")} onOpenStatus={onOpenStatus}
+              onOpenDelivery={() => navigate("sync-delivery")}
               onInspect={master.ready ? () => navigate("sync-inspect") : undefined} />
           ) : null}
           {active && visiblePage === "sync-inspect" && master.ready ? (
             <SyncInspectionWorkbench syncTimeline={master} baseUrl={syncTimeline.ready ? baseUrl : undefined} onInspectSelection={inspectSelection}
+              initialInspector={inspectionStart}
               onMulticamSync={runMulticamSync} showDelivery={false}
               onTimelineUpdated={() => void refreshSyncTimeline()}
               onOpenDelivery={() => navigate("sync-delivery")}
@@ -630,7 +636,8 @@ export function ProjectWorkbench({
           ) : null}
           {active && visiblePage === "sync-delivery" && master.ready ? (
             <SyncDeliveryWorkspace baseUrl={baseUrl} syncTimeline={master} canGenerate={syncTimeline.ready && !readError} onRepair={() => navigate("media-binding")}
-              onInspect={() => navigate("sync-inspect")} onSyncTask={() => navigate("sync-task")} onOpenAssembly={() => navigate("timeline")} />
+              onInspect={syncTimeline.ready && master.recordings ? () => navigate("sync-inspect", "audio") : undefined}
+              onSyncTask={() => navigate("sync-task")} onOpenAssembly={() => navigate("timeline")} />
           ) : null}
 
           {((active && area === "material") || slateVisited) ? (
@@ -711,15 +718,31 @@ export function ProjectWorkbench({
 
           {active && visiblePage === "watch" ? (
             <ReviewWorkspace
+              key={project.project_id}
               baseUrl={baseUrl}
               project={project}
+              syncTimeline={master}
+              session={reviewSession}
               initialGroupId={currentSelection.groupId ?? null}
               initialClipId={currentSelection.clipId ?? null}
               playbackFocus={currentSelection}
-              onSelectionChange={(groupId, clipId) => updateSelection({ groupId, clipId, scriptSegmentId: currentSelection.scriptSegmentId })}
-              onOpenMaterial={(groupId, clipId) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId)}
-              onOpenScript={(groupId, clipId) => focusTake(groupId, "script", clipId, currentSelection.scriptSegmentId)}
-              onOpenTimeline={(groupId, clipId) => focusTake(groupId, "timeline", clipId, currentSelection.scriptSegmentId)}
+              focusIntent={currentIntent?.workspace === "review" ? currentIntent : null}
+              onSelectionChange={selectReviewTake}
+              onOpenSlate={(groupId, clipId, recordId) => {
+                const previous = reviewSession.currentLocation?.();
+                const sameClip = previous?.groupId === groupId && (!clipId || previous.clipId === clipId);
+                const location = normalizedContext(project.project_id, { ...(sameClip ? previous : undefined), groupId,
+                  clipId: clipId ?? (sameClip ? previous?.clipId : undefined), recordId });
+                setSelection(location);
+                setSlateFocus(location);
+                setReturnPage("watch");
+                navigate("slate");
+              }}
+              onOpenMaterial={(groupId, clipId, location) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId, location)}
+              onOpenScript={(groupId, clipId, location) => focusTake(groupId, "script", clipId, location?.scriptSegmentId, location)}
+              onOpenTimeline={(groupId, clipId, location) => focusTake(groupId, "timeline", clipId, currentSelection.scriptSegmentId, location)}
+              onOpenRepair={() => navigate("media-binding")}
+              onOpenEvidence={openEvidence}
               showRoughCut={showRoughCut}
             />
           ) : null}
@@ -767,6 +790,12 @@ export function ProjectWorkbench({
       {active && evidence && <EvidencePreview baseUrl={baseUrl} selection={evidence.selection} snippet={evidence.snippet}
         onClose={() => setEvidence(null)}
         onRepair={() => { setEvidence(null); navigate("media-binding"); }}
+        onOpenTake={evidence.selection.groupId && !syncBlocked ? () => {
+          const location = evidence.selection;
+          if (!location.groupId) return;
+          focusTake(location.groupId, "review", location.clipId, location.scriptSegmentId, location);
+          setEvidence(null);
+        } : undefined}
         onOpenObject={evidence.selection.recordId && !syncBlocked ? () => {
           setSelection(evidence.selection);
           setSlateFocus(evidence.selection);

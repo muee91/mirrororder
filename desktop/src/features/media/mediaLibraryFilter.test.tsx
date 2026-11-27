@@ -6,7 +6,7 @@ import { HostConnection } from "../../api/host";
 import { MediaRoleClient } from "../../api/mediaRoles";
 import { MediaLibraryWorkbench } from "./MediaLibraryWorkbench";
 
-it("changes the active status filter and hides empty secondary filter pills", async () => {
+it("keeps every status filter in order and disables empty secondary filters", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const item = {
     media_id: "aux-1",
@@ -48,8 +48,12 @@ it("changes the active status filter and hides empty secondary filter pills", as
     expect(filters().map((button) => button.getAttribute("aria-label"))).toEqual([
       "按状态筛选：全部",
       "按状态筛选：辅助素材",
+      "按状态筛选：待补机位",
+      "按状态筛选：待恢复",
       "按状态筛选：已标记",
     ]);
+    expect(filters().filter(button => button.disabled).map(button => button.getAttribute("aria-label")))
+      .toEqual(["按状态筛选：待补机位", "按状态筛选：待恢复"]);
     const row = container.querySelector<HTMLButtonElement>(".media-library-row")!;
     expect(row.dataset.cameraTone).toBe("unknown");
     await act(async () => row.click());
@@ -92,7 +96,7 @@ it("classifies an unindexed wav as sync audio without a relink warning", async (
     expect(container.textContent).toContain("同期录音");
     expect(container.textContent).toContain("同期音");
     expect(container.textContent).not.toContain("缺失 · 重连");
-    expect(container.querySelector('[aria-label="按状态筛选：待补机位"]')).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="按状态筛选：待补机位"]')?.disabled).toBe(true);
     await act(async () => container.querySelector<HTMLButtonElement>(".media-library-row")?.click());
     expect(container.textContent).toContain("同期录音素材（用于多机位声波同步）");
   } finally {

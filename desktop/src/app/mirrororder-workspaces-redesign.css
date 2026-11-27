@@ -44,58 +44,9 @@
   max-width: 520px;
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.mirrororder-redesign-shell .media-library-summary {
-  min-height: 48px;
-  padding: 8px 14px;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 7px;
-  border-bottom: 1px solid var(--mo-border);
-  background: var(--mo-surface-soft);
-}
-
-.mirrororder-redesign-shell .media-library-summary > span {
-  min-width: 0;
-  min-height: 32px;
-  padding: 5px 9px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid var(--mo-border);
-  border-radius: 7px;
-  background: var(--mo-surface);
-  color: var(--mo-text-3);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.mirrororder-redesign-shell .media-library-summary > span strong {
-  color: var(--mo-text);
-  font-size: 12px;
-}
-
-.mirrororder-redesign-shell .media-library-summary > span.needs-attention {
-  border-color: color-mix(in srgb, var(--mo-warning) 35%, var(--mo-border));
-  background: var(--mo-warning-soft);
-  color: var(--mo-warning);
-}
-
-/* 需要重新扫描时，汇总条降为“上次清单”事实，不再当作当前状态呈现。 */
-.mirrororder-redesign-shell .media-library-summary.is-stale {
-  opacity: 0.75;
-}
-
-.mirrororder-redesign-shell .media-library-summary.is-stale .media-library-stale-tag {
-  grid-column: 1 / -1;
-  justify-content: center;
-  border-color: color-mix(in srgb, var(--mo-warning) 35%, var(--mo-border));
-  background: var(--mo-warning-soft);
-  color: var(--mo-warning);
 }
 
 .mirrororder-redesign-shell .media-library-toolbar {
@@ -116,30 +67,6 @@
   border-radius: 7px;
   background: var(--mo-surface-soft);
   color: var(--mo-text);
-}
-
-.mirrororder-redesign-shell .media-library-filters {
-  padding: 2px;
-  display: flex;
-  gap: 1px;
-  border-radius: 8px;
-  background: var(--mo-surface-muted);
-}
-
-.mirrororder-redesign-shell .media-library-filters button {
-  min-height: 27px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--mo-text-2);
-  font-size: 10px;
-}
-
-.mirrororder-redesign-shell .media-library-filters button.is-active {
-  background: var(--mo-surface);
-  color: var(--mo-accent);
-  box-shadow: 0 1px 2px rgba(24, 38, 53, .08);
 }
 
 .mirrororder-redesign-shell .media-library-layout {
@@ -280,7 +207,7 @@
   border-radius: 7px;
   background: transparent;
   color: var(--mo-text-2);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
 }
 
 .mirrororder-redesign-shell .identity-filter button.is-active {
@@ -375,8 +302,8 @@
 .mirrororder-redesign-shell .settings-status-workbench > .settings-heading h2 {
   margin: 2px 0 0;
   color: var(--mo-text-primary);
-  font-size: 24px;
-  font-weight: 680;
+  font-size: var(--mo-type-page);
+  font-weight: 670;
   letter-spacing: -0.025em;
 }
 
@@ -390,29 +317,29 @@
 
 .mirrororder-redesign-shell .settings-preference-stack {
   display: grid;
-  gap: 18px;
+  gap: var(--mo-space-3);
 }
 
 .mirrororder-redesign-shell .settings-preference-section,
 .mirrororder-redesign-shell .settings-advanced-diagnostics {
   overflow: hidden;
   border: 1px solid var(--mo-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--mo-radius-pane);
   background: var(--mo-surface-pane);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--mo-shadow-panel);
 }
 
 .mirrororder-redesign-shell .settings-section-heading {
   min-height: 54px;
-  padding: 13px 18px;
+  padding: var(--mo-space-2) var(--mo-space-3);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--mo-border-subtle);
-  background: var(--mo-surface-raised);
+  border-bottom: 0;
+  background: var(--mo-surface-pane);
 }
 
-.mirrororder-redesign-shell .settings-section-heading h3 { margin: 2px 0 0; color: var(--mo-text-primary); font-size: 14.5px; }
+.mirrororder-redesign-shell .settings-section-heading h3 { margin: 0; color: var(--mo-text-primary); font-size: var(--mo-font-xl); }
 .mirrororder-redesign-shell .settings-section-heading > span { color: var(--mo-text-muted); font-size: 12px; }
 .mirrororder-redesign-shell .settings-preference-surface,
 .mirrororder-redesign-shell .settings-preference-section > .local-runtime-panel,
@@ -445,7 +372,7 @@
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary::-webkit-details-marker { display: none; }
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary > div { display: grid; gap: 2px; }
 .mirrororder-redesign-shell .settings-advanced-diagnostics > summary span,
-.mirrororder-redesign-shell .settings-advanced-diagnostics > summary small { color: var(--mo-text-3); font-size: 10px; }
+.mirrororder-redesign-shell .settings-advanced-diagnostics > summary small { color: var(--mo-text-3); font-size: var(--mo-font-xs); }
 .mirrororder-redesign-shell .settings-diagnostics-note { padding: 0 14px; }
 .mirrororder-redesign-shell .settings-diagnostics-grid { padding: 12px; gap: 10px; }
 
@@ -456,7 +383,6 @@
 }
 
 @media (max-width: 900px) {
-  .mirrororder-redesign-shell .media-library-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .mirrororder-redesign-shell .media-library-layout,
   .mirrororder-redesign-shell .identity-grid { grid-template-columns: 1fr; }
   .mirrororder-redesign-shell .media-role-inspector,
@@ -496,7 +422,7 @@
   gap: 5px;
   white-space: nowrap;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
 }
 
 .mirrororder-redesign-shell .identity-toolbar .identity-filter button small {
@@ -509,14 +435,14 @@
   border-radius: 999px;
   background: color-mix(in srgb, currentColor 8%, transparent);
   color: inherit;
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
 }
 
 .mirrororder-redesign-shell .identity-toolbar-status {
   min-width: 0;
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -578,7 +504,7 @@
 .mirrororder-redesign-shell .identity-person-copy small {
   grid-column: 1 / -1;
   color: var(--mo-text-3);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
 }
 .mirrororder-redesign-shell .identity-person-state {
   width: fit-content;
@@ -586,7 +512,7 @@
   border-radius: 999px;
   background: var(--mo-surface-muted);
   color: var(--mo-text-2);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   font-weight: 700;
 }
 
@@ -611,7 +537,7 @@
 
 .mirrororder-redesign-shell .identity-suggestion > div > span {
   color: var(--mo-accent);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   font-weight: 700;
 }
 
@@ -626,7 +552,7 @@
 .mirrororder-redesign-shell .identity-suggestion > div > small {
   grid-column: 1 / -1;
   color: var(--mo-text-2);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
 }
 
 .mirrororder-redesign-shell .identity-suggestion > button {
@@ -637,7 +563,7 @@
   border-radius: 7px;
   background: var(--mo-accent);
   color: #fff;
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   font-weight: 700;
 }
 
@@ -661,7 +587,7 @@
 
 .mirrororder-redesign-shell .identity-section-heading span {
   color: var(--mo-text-3);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   text-align: right;
 }
 
@@ -712,7 +638,7 @@
 
 .mirrororder-redesign-shell .occurrence-order {
   color: var(--mo-text-3);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -724,13 +650,13 @@
   align-items: baseline;
 }
 
-.mirrororder-redesign-shell .occurrence-copy strong { color: var(--mo-text); font-size: 10px; }
-.mirrororder-redesign-shell .occurrence-copy > span { color: var(--mo-text-3); font-size: 10px; }
+.mirrororder-redesign-shell .occurrence-copy strong { color: var(--mo-text); font-size: var(--mo-font-xs); }
+.mirrororder-redesign-shell .occurrence-copy > span { color: var(--mo-text-3); font-size: var(--mo-font-xs); }
 .mirrororder-redesign-shell .occurrence-copy small {
   grid-column: 1 / -1;
   overflow: hidden;
   color: var(--mo-text-2);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -748,7 +674,7 @@
 .mirrororder-redesign-shell .identity-technical > summary {
   padding: 10px 0 0;
   color: var(--mo-text-3);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   cursor: default;
 }
 
@@ -771,7 +697,7 @@
 .mirrororder-redesign-shell .identity-technical dt,
 .mirrororder-redesign-shell .identity-technical dd {
   margin: 0;
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
 }
 
 .mirrororder-redesign-shell .identity-technical dt { color: var(--mo-text-3); }
@@ -797,13 +723,13 @@
 
 .mirrororder-redesign-shell .identity-confirm-bar strong {
   color: var(--mo-text);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
 }
 
 .mirrororder-redesign-shell .identity-confirm-bar small {
   overflow: hidden;
   color: var(--mo-text-3);
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -817,7 +743,7 @@
   border-radius: 8px;
   background: var(--mo-accent);
   color: #fff;
-  font-size: 10px;
+  font-size: var(--mo-font-xs);
   font-weight: 700;
 }
 

@@ -272,6 +272,11 @@ export class DesktopClient {
       body: JSON.stringify({ scan_root, max_files: maxFiles }),
     });
   }
+  sourceTimecode(projectId: string, clipId: string): Promise<ReviewSourceTiming> {
+    return requestJson(this.baseUrl, `${projectPath(projectId)}/clips/${encodeURIComponent(clipId)}/source-timecode`, {
+      method: "POST", body: JSON.stringify({}),
+    });
+  }
   detectClapperboard(projectId: string, clipId: string): Promise<ClapperboardOcrProposal> {
     const value = clipId.trim();
     if (!value) throw new HostConnectionError("打板识别需要 clip_id");
@@ -342,4 +347,12 @@ export class DesktopClient {
       }),
     });
   }
+}
+
+export interface ReviewSourceTiming {
+  clip_id: string;
+  media_id: string;
+  filename: string;
+  start_timecode: string;
+  frame_rate: { numerator: number; denominator: number } | null;
 }

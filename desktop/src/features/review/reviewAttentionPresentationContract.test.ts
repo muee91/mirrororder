@@ -50,6 +50,7 @@ describe("review attention and decision presentation contract", () => {
     expect(snapshot).toContain("connection.refreshReviewModel(projectId)");
     expect(snapshot).toContain("const loadToken = useRef(0)");
     expect(snapshot).toContain("if (token !== loadToken.current) return");
-    expect(review).toContain("await refresh().catch(() => {");
+    expect(review).toContain("await refresh();");
+    expect(review).not.toContain("await refresh().catch(");
   });
 });

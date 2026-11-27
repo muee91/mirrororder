@@ -56,6 +56,32 @@ export interface SlateRecord {
   updated_at: string;
 }
 
+export interface SlatePaperFieldReading {
+  state: "suggested";
+  value: string;
+}
+
+export interface SlatePaperSuggestion {
+  state: "paper_suggestion";
+  fields: Partial<Record<"scene" | "shot" | "take", SlatePaperFieldReading>>;
+  source: {
+    pdf_sha256: string;
+    pdf_page: number;
+    row_index: number;
+    paper_row_id: string;
+    row_digest: string;
+  };
+  human_confirmed: false;
+  source_interval_verified: false;
+}
+
+export interface SlatePaperSuggestions {
+  contract: "mirrororder.paper_field_suggestions.v1";
+  editorial_authority: false;
+  paper_revision: number;
+  groups: Record<string, SlatePaperSuggestion>;
+}
+
 export interface SlateBoard {
   version: number;
   contract: "script_supervisor.v2" | string;
@@ -64,6 +90,7 @@ export interface SlateBoard {
   records: Record<string, SlateRecord>;
   entries: Record<string, SlateEntry>;
   semantics: Record<string, boolean>;
+  paper_suggestions?: SlatePaperSuggestions | null;
 }
 
 export interface SlateParseResult {

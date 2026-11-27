@@ -40,7 +40,7 @@ const EDITORIAL_GROUP: ProductionModuleGroup = {
   id: "editorial",
   title: "剪辑辅助",
   modules: [
-    { page: "watch", label: "看片审阅", description: "人工选择与判断", requiresSync: true },
+    { page: "watch", label: "看片审阅", description: "剧本对照、多机位看片与选片", requiresSync: true },
     { page: "timeline", label: "选片组接", description: "生成外部 NLE 起点", requiresSync: true },
   ],
 };
@@ -93,10 +93,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
     const target = item.id === "sync" && syncReady ? "sync-inspect" : item.target;
     const available = canOpenProductionModule(target, inputKind, syncReady);
     const accessibleLabel = {
-      // Keep the sync workbench name stable while its first page changes from
-      // the task view to verification. The parenthesized state still tells
-      // assistive technology which page will open before the first read.
-      sync: syncReady ? "同步核对" : "同步核对（当前为同步任务）",
+      sync: syncReady ? "同步核对" : "同步任务",
       slate: "交互场记",
       script: "剧本关联",
       material: "素材库",
@@ -107,7 +104,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
       slate: "按拍摄顺序看片、记场镜备注与标误录",
       script: "按剧本与台词检索实拍素材",
       material: "查看源文件、机位归属与换盘重连",
-      review: "进阶：看片选片、粗剪顺片与团队协作",
+      review: "按剧本看片、比较机位与选片",
     }[item.id];
     return (
       <button
@@ -132,7 +129,7 @@ export function ProjectModuleNavigation({ inputKind, selected, syncReady, syncPh
 
   return (
     <div className="project-module-navigation" role="list">
-      {PRIMARY_MODULES.map((item) => (
+      {PRIMARY_MODULES.filter((item) => item.id !== "sync" || inputKind === "media-directory").map((item) => (
         <div className="project-module-group" role="listitem" key={item.id}>
           {renderPrimaryButton(item)}
         </div>

@@ -16,9 +16,9 @@ vi.mock('./useNativeSlateIntervalLedger', () => ({ useNativeSlateIntervalLedger:
 let container: HTMLDivElement, root: ReturnType<typeof createRoot>;
 let pause: ReturnType<typeof vi.spyOn>, play: ReturnType<typeof vi.spyOn>;
 const selection = vi.fn();
-const attachments = ['A', 'B', 'C'].map(camera => ({
-  clip_id: `clip-${camera}`, media_id: `media-${camera}`, camera,
-  display_name: `${camera}.mp4`, shot_type: 'unknown', source_role: 'sync_camera', note: '',
+const attachments = ['A', 'B', 'C', 'C-restart'].map(name => ({
+  clip_id: `clip-${name}`, media_id: `media-${name}`, camera: name[0],
+  display_name: `${name}.mp4`, shot_type: 'unknown', source_role: 'sync_camera', note: `${name}机备注`,
 }));
 const board = { version: 2, contract: 'script_supervisor.v2', revision: 1, updated_at: '', entries: {}, semantics: {}, records: {
   r1: { record_id: 'r1', source_group_id: 'g1', script_scene_id: '', episode: 1, scene: '2', shot: '1', take_number: 1,
@@ -60,6 +60,7 @@ it('expands the same player without autoplay, reseeking, or changing the selecte
   await metadata(video);
   expect(video.currentTime).toBe(3.25);
   video.currentTime = 17.375; video.volume = 0.4; video.muted = true; video.playbackRate = 1.5;
+  await click('素材');
   const trigger = button('快速预览'); trigger.focus();
   await click('快速预览');
   expect(container.querySelectorAll('video[controls]')).toHaveLength(1);
@@ -78,6 +79,7 @@ it('expands the same player without autoplay, reseeking, or changing the selecte
   expect(selection).toHaveBeenLastCalledWith(expect.objectContaining({ recordId: 'r1', clipId: 'clip-B', sourceRange: { basis: 'source', start: 17.375 } }));
 });
 it('sizes the player from portrait metadata and preserves that geometry when expanded', async () => {
+  await click('素材');
   const video = container.querySelector<HTMLVideoElement>('.golden-slate-player video')!;
   await metadata(video, 1080, 1920);
   const frame = video.closest<HTMLElement>('.golden-slate-player')!;
@@ -87,19 +89,26 @@ it('sizes the player from portrait metadata and preserves that geometry when exp
   expect(frame.style.getPropertyValue('--slate-video-aspect')).toBe('0.5625');
 });
 it('opens the same player when the inspector is collapsed, then pauses when it becomes hidden again', async () => {
+  await click('素材');
   const video = container.querySelector<HTMLVideoElement>('.golden-slate-player video')!;
   await metadata(video); video.currentTime = 22.125;
-  await click('右侧详情栏');
+  Object.defineProperty(video, 'paused', { configurable: true, value: false });
+  const toggle = container.querySelector<HTMLButtonElement>('.golden-inspector-toggle')!;
+  await act(async () => toggle.click());
   expect(pause).toHaveBeenCalled();
-  await click('快速预览');
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => container.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })));
   expect(container.querySelector('[role="dialog"] video')).toBe(video);
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
   expect(video.currentTime).toBe(22.125);
   pause.mockClear();
   await click('关闭 (Esc)');
   expect(pause).toHaveBeenCalled();
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
 });
 it('pauses and dismisses Quick Look when the workbench or production slate is hidden', async () => {
+  await click('素材');
   await click('快速预览'); pause.mockClear();
   expect(container.querySelector('.golden-slate-table .mo-media-thumb video')).not.toBeNull();
   await render(false);
@@ -108,7 +117,58 @@ it('pauses and dismisses Quick Look when the workbench or production slate is hi
   expect(container.querySelector('.golden-slate-workbench .mo-media-thumb video')).toBeNull();
   expect(container.querySelector('video[controls]')?.getAttribute('preload')).toBe('none');
   await render(); await click('快速预览'); pause.mockClear();
+  Object.defineProperty(container.querySelector("video[controls]")!, 'paused', { configurable: true, value: false });
   await click('原始片段');
   expect(pause).toHaveBeenCalled();
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it('keeps Take actions separate from the selected clip and remembers a selection made while collapsed', async () => {
+  const toggle = container.querySelector<HTMLButtonElement>('.golden-inspector-toggle')!;
+  const content = container.querySelector<HTMLElement>('.golden-inspector-content')!;
+  const takePane = content.querySelector<HTMLElement>('.golden-inspector-take')!;
+  const mediaPane = content.querySelector<HTMLElement>('.golden-inspector-media')!;
+  expect(takePane.hidden).toBe(false);
+  expect(mediaPane.hidden).toBe(true);
+  expect(content.querySelector('.golden-inspector-overview h3')?.textContent).toBe('场记 001');
+  expect(content.querySelector('video[controls]')?.getAttribute('preload')).toBe('none');
+  const takeSources = takePane.querySelector('[aria-label="机位素材"]')!;
+  expect(takeSources.querySelectorAll('button')).toHaveLength(4);
+  expect(takePane.querySelector('textarea')?.compareDocumentPosition(takeSources)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+  await act(async () => takeSources.querySelector<HTMLButtonElement>('button[aria-label^="选择 B机"]')!.click());
+  expect(takePane.hidden).toBe(true);
+  expect(content.querySelector('.golden-inspector-clip-head h3')?.textContent).toBe('B.mp4');
+  expect(mediaPane.querySelector('[aria-label="同机位素材"]')).toBeNull();
+
+  await act(async () => toggle.click());
+  const cameraCard = container.querySelector<HTMLButtonElement>('.slate-row button[aria-label^="选择 C机"]')!;
+  await act(async () => cameraCard.click());
+  expect(content.hidden).toBe(true);
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => toggle.click());
+  expect(takePane.hidden).toBe(true);
+  expect(mediaPane.hidden).toBe(false);
+
+  const alternates = mediaPane.querySelector('[aria-label="同机位素材"]')!;
+  expect(alternates.querySelectorAll('button')).toHaveLength(2);
+  expect(alternates.querySelector('button[aria-label^="选择 B机"]')).toBeNull();
+  const secondC = alternates.querySelector<HTMLButtonElement>('button[aria-label="选择 C机 2 · C-restart.mp4"]')!;
+  await act(async () => secondC.click());
+  expect(content.querySelector('.golden-inspector-clip-head h3')?.textContent).toBe('C-restart.mp4');
+  expect(mediaPane.querySelectorAll('input')).toHaveLength(2);
+  expect(mediaPane.querySelector('.golden-angle-remove')?.closest('details')?.open).toBe(false);
+  expect(mediaPane.querySelector<HTMLInputElement>('.golden-angle-note input')?.value).toBe('C-restart机备注');
+  const video = content.querySelector<HTMLVideoElement>('video[controls]')!;
+  expect(video.src).toBe('http://synthetic.test/clip-C-restart');
+
+  await act(async () => container.querySelector<HTMLElement>('.slate-row .col-index')!.click());
+  expect(takePane.hidden).toBe(false);
+  expect(mediaPane.hidden).toBe(true);
+  await click('素材');
+  expect(content.querySelector('video[controls]')).toBe(video);
+  expect(secondC.getAttribute('aria-pressed')).toBe('true');
+  await act(async () => mediaPane.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(content.hidden).toBe(true);
+  expect(document.activeElement).toBe(toggle);
 });

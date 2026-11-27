@@ -4,9 +4,7 @@
   height: 100%;
   min-height: 0;
   color: var(--mo-text-primary);
-  background:
-    radial-gradient(760px circle at 50% -10%, rgba(74, 144, 242, 0.14), transparent 68%),
-    var(--mo-frame-obsidian, #050608);
+  background: var(--mo-surface-app);
 }
 
 .startup-masthead {
@@ -14,8 +12,7 @@
   align-items: center;
   padding-inline: clamp(20px, 3vw, 44px);
   border-bottom: 1px solid var(--mo-border-subtle);
-  background: rgba(5, 6, 8, 0.65);
-  backdrop-filter: blur(12px);
+  background: var(--mo-surface-pane);
 }
 
 html[data-macos-overlay="true"] .startup-masthead { padding-inline-start: 78px; }
@@ -35,26 +32,12 @@ html[data-macos-overlay="true"] .startup-masthead { padding-inline-start: 78px; 
 }
 
 .startup-home {
-  width: min(100%, 920px);
+  width: min(100%, 740px);
   min-width: 0;
   border: 1px solid var(--mo-border-default);
-  border-radius: 16px;
-  background: rgba(18, 21, 28, 0.88);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 32px 84px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-radius: var(--mo-radius-pane);
+  background: var(--mo-surface-pane);
   overflow: hidden;
-}
-
-html[data-mirrororder-theme="light"] .startup-shell {
-  background:
-    radial-gradient(760px circle at 50% -10%, rgba(37, 99, 235, 0.08), transparent 68%),
-    #edf0f5;
-}
-html[data-mirrororder-theme="light"] .startup-home {
-  background: rgba(255, 255, 255, 0.94);
-}
-html[data-mirrororder-theme="light"] .startup-masthead {
-  background: rgba(255, 255, 255, 0.78);
 }
 
 .startup-primary {

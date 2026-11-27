@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   SyncTimelineClient,
   syncDeliveryFileLabel,
+  syncRecordingStatusLabel,
   type MulticamSyncTimeline,
   type SyncDeliveryArtifacts,
   type SyncEnrichedDeliveryManifest,
@@ -27,7 +28,7 @@ const TARGET_HELP: Record<string, string> = {
   jianying: "国内剪映专业版 FCPXML 兼容路径，Windows/macOS 均需验收",
 };
 
-export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRepair, onOpenAssembly, canGenerate = true }: Props) {
+export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onInspect, onSyncTask, onRepair, onOpenAssembly, canGenerate = true }: Props) {
   const [manifest, setManifest] = useState<SyncDeliveryArtifacts | null>(null);
   const [error, setError] = useState("");
   const [selectedTarget, setSelectedTarget] = useState("davinci");
@@ -129,6 +130,7 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
   const item = manifest?.artifacts.find(artifact => artifact.target === selectedTarget) ?? manifest?.artifacts[0];
   const running = item?.task?.status === "queued" || item?.task?.status === "running";
   const syncVersion = manifest?.sync_version || syncTimeline.task?.task_id;
+  const recordingStatus = syncRecordingStatusLabel(syncTimeline);
   const { timebase } = syncTimeline;
   const frameRate = timebase?.status === "confirmed" && timebase.numerator && timebase.denominator
     ? timebase.denominator === 1 ? `${timebase.numerator} fps` : `${timebase.numerator}/${timebase.denominator} fps`
@@ -137,7 +139,12 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
   return (
     <section className="sync-delivery-workspace" aria-label="同步工程交付">
       <div className="sync-delivery-content">
-        <p className="sync-delivery-intro">选择你要导入的剪辑软件，获取同步好的多机位工程文件；可直接进软件开始精剪。</p>
+        <header className="sync-delivery-heading">
+          <div>
+            <h1>导出同步工程</h1>
+            <p>选择剪辑软件。导入工程后，检查机位切换和音轨。</p>
+          </div>
+        </header>
 
         <dl className="sync-delivery-summary">
           <div><dt>母版版本</dt><dd>{syncVersion ? <code title={syncVersion}>{syncVersion.slice(0, 12)}</code> : "待确认"}</dd></div>
@@ -146,6 +153,10 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
           <div><dt>时间基</dt><dd>{frameRate}</dd></div>
         </dl>
 
+        {["unconfirmed", "partial"].includes(recordingStatus.state) && <div className="sync-delivery-recordings">
+          <span>独立录音 · {recordingStatus.label}</span>
+          {onInspect && <button type="button" className="secondary" onClick={onInspect}>去核对录音</button>}
+        </div>}
         {error && <div className="sync-delivery-error" role="alert"><span>{error}</span>
           <button type="button" className="secondary" onClick={() => setLastRequest(value => value + 1)}>重新读取</button>
         </div>}
@@ -159,7 +170,7 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
                   <button type="button" className="sync-delivery-target" aria-pressed={item.target === artifact.target}
                     onClick={() => setSelectedTarget(artifact.target)}>
                     <strong>{artifact.label}</strong>
-                    <span className="sync-delivery-file-state" data-ready={artifact.available || undefined}>
+                    <span className="sync-delivery-file-state" data-ready={artifact.available && !artifact.stale && !active || undefined} data-stale={artifact.stale || undefined}>
                       {active ? "正在生成" : syncDeliveryFileLabel(artifact)}
                     </span>
                   </button>
@@ -171,7 +182,7 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
           <section className="sync-delivery-detail" aria-label={`${item.label} 工程详情`}>
             <header>
               <div><h3>{item.label}</h3><p>{item.format}</p></div>
-              <span className="sync-delivery-file-state" role="status" data-ready={item.available || undefined}>
+              <span className="sync-delivery-file-state" role="status" data-ready={item.available && !item.stale && !running || undefined} data-stale={item.stale || undefined}>
                 {running ? item.task?.message || "正在生成" : syncDeliveryFileLabel(item)}
               </span>
             </header>
@@ -192,7 +203,7 @@ export function SyncDeliveryWorkspace({ baseUrl, syncTimeline, onSyncTask, onRep
             <div className="sync-delivery-actions">
               {item.available ? <button type="button"
                 disabled={!isTauri() || Boolean(busyTarget)}
-                aria-label={`显示 ${item.label} 工程文件`}
+                aria-label={`显示 ${item.label} ${item.stale ? "旧版文件" : "工程文件"}`}
                 onClick={() => void revealArtifact(item.local_path, item.target)}>
                 {busyTarget === item.target ? "打开中…" : item.stale ? "显示旧版文件" : "显示工程文件"}
               </button> : item.target === "davinci" && <button type="button"

@@ -8,13 +8,14 @@ function source(relative: string): string {
 describe("Swift Demo fidelity guards", () => {
   it("keeps unconfirmed automatic proposals out of placed Slate rows", () => {
     const slate = source("./GoldenSlateWorkbench.tsx");
-    expect(slate).toContain("function automaticMappingConfirmed");
-    expect(slate).toContain('take.automatic_state.status === "auto_confirmed"');
-    expect(slate).toContain('take.automatic_state.status === "ai_confirmed"');
-    expect(slate).toContain("automaticMappingConfirmed(take) ? take.automatic_state.script_segment_ids ?? [] : []");
+    const fields = source("./slateTakeFields.ts");
+    expect(fields).toContain("function automaticMappingConfirmed");
+    expect(fields).toContain('take.automatic_state.status === "auto_confirmed"');
+    expect(fields).toContain('take.automatic_state.status === "ai_confirmed"');
+    expect(fields).toContain("automaticMappingConfirmed(take) ? take.automatic_state.script_segment_ids ?? [] : []");
     expect(slate).toContain("const confirmedAutomaticEpisode = automaticMappingConfirmed(take)");
     expect(slate).toContain("automaticMappingConfirmed(take) && take.automatic_state.episode_ids?.includes(episode)");
-    expect(slate).not.toContain("const ids = effectiveIds.length ? effectiveIds : take.automatic_state.script_segment_ids");
+    expect(fields).not.toContain("const ids = effectiveIds.length ? effectiveIds : take.automatic_state.script_segment_ids");
   });
 
   it("uses the same script-segment scene resolver for derived and manually added Takes", () => {
@@ -112,12 +113,10 @@ describe("Swift Demo fidelity guards", () => {
     expect(shell).toMatch(/html, body, #root \{[^}]*min-width: 0;/);
     expect(shell).not.toContain("min-width: 1040px");
     expect(shell).toContain("grid-template-columns: 216px minmax(0, 1fr)");
-    expect(slateCss).toContain("@media (max-width: 1208px)");
-    expect(slateCss).toContain("grid-template-columns: minmax(620px,1fr) 285px");
+    expect(slateCss).toContain("@media (max-width: 1160px)");
+    expect(slateCss).toContain("grid-template-columns: minmax(0, 1fr) clamp(300px, 28%, 352px)");
     expect(experience).not.toContain(".project-workbench-main.owns-chrome .golden-slate-workbench.has-inspector .golden-slate-body");
-    const fullInspectorThreshold = 216 + 680 + 312;
-    expect(fullInspectorThreshold).toBe(1208);
     const minimumStageWidth = 1180 - 216;
-    expect(620 + 285).toBeLessThanOrEqual(minimumStageWidth);
+    expect(minimumStageWidth - 352).toBeGreaterThanOrEqual(600);
   });
 });

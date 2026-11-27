@@ -25,6 +25,7 @@ export function useReviewModelSnapshot(baseUrl: string, projectId: string) {
   // newer manual refresh must not let an older response overwrite the current
   // workspace snapshot.
   const loadToken = useRef(0);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const refresh = useCallback(async (): Promise<ReviewModelPayload> => {
     const token = ++loadToken.current;
@@ -41,7 +42,7 @@ export function useReviewModelSnapshot(baseUrl: string, projectId: string) {
     const token = ++loadToken.current;
     setLoadState("loading");
     setMessage("正在读取制作状态…");
-    void connection.reviewModel(projectId).then((next) => {
+    void connection.reviewModel(projectId, loadAttempt ? { force: true } : undefined).then((next) => {
       if (token !== loadToken.current) return;
       setModel(next);
       setLoadState("ready");
@@ -56,7 +57,7 @@ export function useReviewModelSnapshot(baseUrl: string, projectId: string) {
       // Host. The request itself is shared/cached, but its state update is not.
       loadToken.current += 1;
     };
-  }, [connection, projectId]);
+  }, [connection, projectId, loadAttempt]);
 
   return {
     connection,
@@ -64,5 +65,6 @@ export function useReviewModelSnapshot(baseUrl: string, projectId: string) {
     message,
     model,
     refresh,
+    retryLoad: () => setLoadAttempt(attempt => attempt + 1),
   };
 }

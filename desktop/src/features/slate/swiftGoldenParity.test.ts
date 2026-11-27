@@ -59,10 +59,10 @@ describe("Swift golden product fidelity", () => {
       "空白",
       "已填场号 · 按场次排列",
       "未填场号 · 按拍摄顺序",
-      "I 设入点",
-      "O 设出点",
+      "I 设 Take 入点",
+      "O 设 Take 出点",
       "第 {selected.episode} 集候选",
-      "− 移除",
+      "移出本条场记",
     ]) expect(slate).toContain(label);
     expect(takeCard).toContain("takeCameraSlots");
     expect(takeCard).toContain("STABLE_CAMERA_SLOTS.map");
@@ -74,7 +74,7 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("slateMedia.resolveDrop");
     expect(slate).toContain("已把 T${take.take_index} 填入当前场记");
     expect(slate).toContain("row.record_id === selected.record_id || row.source_group_id !== take.group_id");
-    expect(slate).toContain("take_number: take.take_index || null");
+    expect(slate).toContain("take_number: row.take_number ?? existing?.take_number ?? null");
     expect(slate).not.toContain("onToggleAssistant");
     expect(slate).not.toContain("<CurrentOperatorControl");
     expect(slate).not.toContain("团队审阅");
@@ -89,15 +89,17 @@ describe("Swift golden product fidelity", () => {
     expect(slate).not.toContain("track.clips =");
     expect(css).toContain("height: 36px");
     expect(css).toContain("@media (max-width: 1320px)");
-    expect(css).toContain("@media (max-width: 1208px)");
-    expect(css).toContain("grid-template-columns: minmax(620px,1fr) 285px");
+    expect(css).toContain("@media (max-width: 1160px)");
+    expect(css).toContain("grid-template-columns: minmax(0, 1fr) 36px");
     expect(css).toContain("grid-template-rows: minmax(150px,1fr) minmax(180px,1.15fr)");
   });
 
   it("maps script segments to real scenes before deciding placed versus pending", () => {
     const slate = source("./GoldenSlateWorkbench.tsx");
-    expect(slate).toContain("function mappedScene");
-    expect(slate).toContain("scene.script_blocks.some((block) => wanted.has(block.segment_id))");
+    const fields = source("./slateTakeFields.ts");
+    expect(fields).toContain("function mappedScene");
+    expect(fields).toContain("scene.script_blocks.some((block) => wanted.has(block.segment_id))");
+    expect(slate).toContain("...deriveSlateTakeFields(review, take, paperSuggestions, paperSceneContext)");
     expect(slate).toContain("script_scene_id: mapped?.sceneId ?? \"\"");
     expect(slate).toContain("const mapped = review ? mappedScene(review, take) : null");
     expect(slate).toContain("const episode = review ? derivedEpisode(take, mapped)");
@@ -116,7 +118,8 @@ describe("Swift golden product fidelity", () => {
     expect(slate).toContain("draft.scene.trim() || draft.script_scene_id.trim()");
     expect(slate).toContain('script_scene_id: selected?.script_scene_id ?? ""');
     expect(row).toContain("placeholder={row.mappedScenePlaceholder}");
-    expect(slate).toContain("selected.scene || selected.script_scene_id || \"—\"");
+    expect(slate).toContain('<dt>场号</dt><dd>{selected.scene || "—"}</dd>');
+    expect(slate).toContain('剧本场景 · {selected.script_scene_id}');
   });
 
   it("uses the frozen Swift media-card geometry while limiting live thumbnail pressure", () => {
@@ -131,7 +134,7 @@ describe("Swift golden product fidelity", () => {
     expect(card).toContain("IntersectionObserver");
     expect(card).toContain('rootMargin: "48px 96px"');
     expect(card).toContain("compact && compactPreviewActive");
-    expect(card).toContain("previewReady");
+    expect(card).toContain('className={previewState === "ready" ? "is-ready" : ""}');
     expect(card).toContain('video.addEventListener("seeked", markReady)');
     expect(card).toContain("sourceStart");
     expect(card).toContain("设备缺失");
@@ -187,7 +190,7 @@ describe("Swift golden product fidelity", () => {
     expect(app).toContain('<aside className="global-sidebar"');
     expect(redesign).toContain(".workspace-home-grid");
     expect(redesign).not.toContain(".project-home-list");
-    expect(source("../projects/project-home.css")).toContain(".project-home-columns");
+    expect(source("../projects/project-home.css")).toContain(".project-home-card");
   });
 
   it("keeps explicit file-drop identity path-free and human-save gated", () => {

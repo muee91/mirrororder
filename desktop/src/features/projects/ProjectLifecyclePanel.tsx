@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { PlatformClient } from "../../api/platform";
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { rememberSyncSubmissionIssue } from "../../app/resumeState";
 import {
   DesktopClient,
@@ -23,10 +23,22 @@ interface Props {
 const IMPORT_POLL_MS = 750;
 const IMPORT_POLL_LIMIT = 120;
 
-function sourceMessage(inputKind: "fcpxml" | "media-directory"): string {
-  return inputKind === "fcpxml"
-    ? "选择 FCPXML 文件，并按需指定剧本。"
-    : "选择原始视频和同期录音所在的目录。";
+function FileField({ label, value, placeholder, required, onChange, onChoose }: {
+  label: string;
+  value: string;
+  placeholder: string;
+  required?: boolean;
+  onChange: (path: string) => void;
+  onChoose: () => void;
+}) {
+  const id = useId();
+  return <div className="lifecycle-field">
+    <label htmlFor={id}>{label}</label>
+    <div className="lifecycle-path-row">
+      <input id={id} value={value} required={required} onChange={(event) => onChange(event.target.value)} spellCheck={false} placeholder={placeholder} />
+      {isTauri() && <button type="button" className="secondary" aria-label={`选择${label}文件`} onClick={onChoose}>选择文件…</button>}
+    </div>
+  </div>;
 }
 
 function rootsFromText(value: string): string[] {
@@ -50,12 +62,14 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
   const [mediaRoots, setMediaRoots] = useState("");
   const [prepareAfterCreate, setPrepareAfterCreate] = useState(true);
   const [preflight, setPreflight] = useState<ProjectPreflight | null>(null);
-  const [message, setMessage] = useState(() => sourceMessage("media-directory"));
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [createdId, setCreatedId] = useState("");
   const [acceptedWarnings, setAcceptedWarnings] = useState("");
   const inFlight = useRef(false);
   const trigger = useRef<HTMLButtonElement>(null);
+  const rootsId = useId();
+  const feedbackId = useId();
   const [importBusy, setImportBusy] = useState(false);
   const [importState, setImportState] = useState<"idle" | "submitted" | "done" | "attention">("idle");
 
@@ -82,7 +96,13 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
     setInputKind("media-directory");
     setPrepareAfterCreate(true);
     setPreflight(null);
-    setMessage(sourceMessage("media-directory"));
+    setMessage("");
+  }
+
+  function clearFeedback(): void {
+    setMessage("");
+    setPreflight(null);
+    setAcceptedWarnings("");
   }
 
   async function chooseFile(kind: "script" | "fcpxml" | "slate"): Promise<void> {
@@ -105,7 +125,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
       if (kind === "script") setScriptPath(selected);
       else if (kind === "fcpxml") setFcpxmlPath(selected);
       else setSlatePath(selected);
-      setPreflight(null);
+      clearFeedback();
     } catch (error) {
       setMessage(`文件选择失败：${errorMessage(error)}`);
     }
@@ -121,7 +141,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
       const values = Array.isArray(selected) ? selected : typeof selected === "string" ? [selected] : [];
       if (!values.length) return;
       setMediaRoots([...new Set([...rootsFromText(mediaRoots), ...values])].join("\n"));
-      setPreflight(null);
+      clearFeedback();
     } catch (error) {
       setMessage(`目录选择失败：${errorMessage(error)}`);
     }
@@ -182,6 +202,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
 
   function close(): void {
     if (inFlight.current) return;
+    if (createdId) reset();
     setOpen(false);
     trigger.current?.focus();
   }
@@ -194,7 +215,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
     }
     if (event.key !== "Tab") return;
     const controls = [...event.currentTarget.querySelectorAll<HTMLElement>(
-      "button:not(:disabled), input:not(:disabled), textarea:not(:disabled)",
+      "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary",
     )].filter((control) => control.getClientRects().length > 0);
     const edge = event.shiftKey ? controls[0] : controls.at(-1);
     if (document.activeElement === edge) {
@@ -216,13 +237,13 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
         setPreflight(checked);
         if (!checked.ready) {
           setAcceptedWarnings("");
-          setMessage("请处理来源检查中列出的问题。");
+          setMessage("");
           return;
         }
         const warningKey = JSON.stringify([values, checked.warnings]);
         if (checked.warnings.length && warningKey !== acceptedWarnings) {
           setAcceptedWarnings(warningKey);
-          setMessage("请检查来源提醒，再确认创建。");
+          setMessage("");
           return;
         }
         setMessage("正在创建项目…");
@@ -248,6 +269,7 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
           }
         }
       }
+      setMessage("正在打开已保存的项目…");
       await onWorkspaceChanged(savedId);
       reset();
       setOpen(false);
@@ -261,8 +283,16 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
     }
   }
 
-  const sourceReady = inputKind === "fcpxml" ? Boolean(fcpxmlPath.trim()) : rootsFromText(mediaRoots).length > 0;
-  const canCreate = Boolean(createdId || (name.trim() && sourceReady && (inputKind === "media-directory" || scriptPath.trim())));
+  const raw = inputKind === "media-directory";
+  const missing = [
+    !name.trim() && "项目名称",
+    (raw ? !rootsFromText(mediaRoots).length : !fcpxmlPath.trim()) && (raw ? "素材目录" : "FCPXML 文件"),
+    !raw && !scriptPath.trim() && "剧本",
+  ].filter(Boolean);
+  const canCreate = Boolean(createdId) || missing.length === 0;
+  const feedback = message || (!canCreate ? `还需填写${missing.join("、")}` : "");
+  const scriptField = <FileField label={raw ? "剧本" : "剧本（必填）"} value={scriptPath} placeholder="选择剧本文件"
+    required={!raw} onChange={setScriptPath} onChoose={() => void chooseFile("script")} />;
   const importLabel = importBusy
     ? "正在导入…"
     : importState === "done"
@@ -275,67 +305,56 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
 
   return (
     <>
-      {onOpenExistingFolder ? (
-        <button type="button" className="secondary project-home-open-folder-button" disabled={importBusy || busy || !isTauri()} onClick={onOpenExistingFolder}>打开已有工程…</button>
-      ) : null}
-      <button type="button" className="secondary project-home-open-package-button" disabled={importBusy || busy || !isTauri()} onClick={() => void importProject()}>{importLabel}</button>
       <button ref={trigger} type="button" className="project-new-button project-home-new-button" disabled={importBusy} onClick={() => setOpen(true)}>新建项目</button>
+      {onOpenExistingFolder && isTauri() ? (
+        <button type="button" className="secondary project-home-open-folder-button" disabled={importBusy || busy} onClick={onOpenExistingFolder}>打开已有项目库…</button>
+      ) : null}
+      {isTauri() && <button type="button" className="secondary project-home-open-package-button" disabled={importBusy || busy} title="导入 .mirrorproj 工程包" onClick={() => void importProject()}>{importLabel}</button>}
 
       {open ? (
         <div className="project-lifecycle-overlay" role="presentation" onMouseDown={close}>
-          <section className="project-lifecycle-dialog" role="dialog" aria-modal="true" aria-label="新建项目" onKeyDown={dialogKeys} onMouseDown={(event) => event.stopPropagation()}>
+          <form className="project-lifecycle-dialog" role="dialog" aria-modal="true" aria-label="新建项目" onKeyDown={dialogKeys}
+            onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); if (canCreate) void create(); }}>
             <header className="project-lifecycle-header">
-              <div>
-                <h2>新建项目</h2>
-              </div>
+              <h2>新建项目</h2>
               <button type="button" className="dialog-close" disabled={busy} onClick={close}>关闭</button>
             </header>
 
             <div className="project-lifecycle-body">
-              <div className="lifecycle-kind" aria-label="项目来源">
-                <button type="button" aria-pressed={inputKind === "media-directory"} className={inputKind === "media-directory" ? "is-active" : ""} onClick={() => { setInputKind("media-directory"); setPreflight(null); setMessage(sourceMessage("media-directory")); }}>原始素材</button>
-                <button type="button" aria-pressed={inputKind === "fcpxml"} className={inputKind === "fcpxml" ? "is-active" : ""} onClick={() => { setInputKind("fcpxml"); setPreflight(null); setMessage(sourceMessage("fcpxml")); }}>已有 FCPXML</button>
-              </div>
-
-              <label><span>项目名称</span><input autoFocus value={name} onChange={(event) => { setName(event.target.value); setPreflight(null); }} placeholder="输入项目名称" /></label>
-
-              {inputKind === "fcpxml" ? (
-                <label>
-                  <span>FCPXML</span>
+              <fieldset className="lifecycle-fields" disabled={busy || Boolean(createdId)} onChange={clearFeedback}>
+                <div className="lifecycle-kind" role="group" aria-label="项目来源">
+                  <button type="button" aria-pressed={raw} onClick={() => { setInputKind("media-directory"); clearFeedback(); }}>原始素材</button>
+                  <button type="button" aria-pressed={!raw} onClick={() => { setInputKind("fcpxml"); clearFeedback(); }}>已有 FCPXML</button>
+                </div>
+                <label className="lifecycle-field"><span>项目名称</span><input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="输入项目名称" /></label>
+                {raw ? <div className="lifecycle-field">
+                  <label htmlFor={rootsId}>原始视频与同期录音目录</label>
                   <div className="lifecycle-path-row">
-                    <input value={fcpxmlPath} onChange={(event) => { setFcpxmlPath(event.target.value); setPreflight(null); }} spellCheck={false} placeholder="选择 FCPXML 文件" />
-                    <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("fcpxml")}>选择…</button>
+                    <textarea id={rootsId} required rows={2} value={mediaRoots} onChange={(event) => setMediaRoots(event.target.value)} spellCheck={false} placeholder="每行一个素材目录" />
+                    {isTauri() && <button type="button" className="secondary" onClick={() => void chooseMediaRoots()}>选择目录…</button>}
                   </div>
+                </div> : <>
+                  <FileField label="FCPXML" value={fcpxmlPath} required placeholder="选择 FCPXML 文件"
+                    onChange={setFcpxmlPath} onChoose={() => void chooseFile("fcpxml")} />
+                  {scriptField}
+                </>}
+                <details className="lifecycle-optional" key={inputKind}>
+                  <summary>{raw ? "剧本与现场场记" : "现场场记"}（选填）{(slatePath || (raw && scriptPath)) && <small>已填写</small>}</summary>
+                  <div>
+                    {raw && scriptField}
+                    <FileField label="现场场记" value={slatePath} placeholder="PDF 或片场照片" onChange={setSlatePath} onChoose={() => void chooseFile("slate")} />
+                  </div>
+                </details>
+
+                <label className="lifecycle-checkbox">
+                  <input type="checkbox" checked={prepareAfterCreate} onChange={(event) => setPrepareAfterCreate(event.target.checked)} />
+                  <span>{raw ? "创建后自动同步" : "创建后自动整理"}
+                    {!raw && <small>后台整理素材、转写并匹配剧本，进度可在状态中心查看。</small>}
+                  </span>
                 </label>
-              ) : (
-                <label>
-                  <span>原始视频与同期录音目录</span>
-                  <textarea rows={3} value={mediaRoots} onChange={(event) => { setMediaRoots(event.target.value); setPreflight(null); }} spellCheck={false} placeholder="每行一个素材目录" />
-                  <button type="button" className="secondary choose-roots" disabled={!isTauri()} onClick={() => void chooseMediaRoots()}>选择目录…</button>
-                </label>
-              )}
-
-              <label>
-                <span>{inputKind === "media-directory" ? "剧本（可稍后导入）" : "剧本"}</span>
-                <div className="lifecycle-path-row">
-                  <input value={scriptPath} onChange={(event) => { setScriptPath(event.target.value); setPreflight(null); }} spellCheck={false} placeholder="选择剧本文件" />
-                  <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("script")}>选择…</button>
-                </div>
-              </label>
-
-              <label>
-                <span>现场场记（PDF / 照片，可稍后导入）</span>
-                <div className="lifecycle-path-row">
-                  <input value={slatePath} onChange={(event) => setSlatePath(event.target.value)} spellCheck={false} placeholder="可选：选择片场场记 PDF 或照片，建好后进场记页一键识别" />
-                  <button type="button" className="secondary" disabled={!isTauri()} onClick={() => void chooseFile("slate")}>选择…</button>
-                </div>
-              </label>
-
-              <label className="lifecycle-checkbox">
-                <input type="checkbox" checked={prepareAfterCreate} onChange={(event) => setPrepareAfterCreate(event.target.checked)} />
-                <span><strong>{inputKind === "media-directory" ? "创建后自动同步" : "创建后自动整理"}</strong><small>{inputKind === "media-directory" ? "先交付同步工程。若带剧本，后台随后转写并匹配；场记识别在后台逐页进行，均不阻塞剪辑师开工。" : "后台整理素材、转写并匹配剧本；进度在状态中心查看。"}</small></span>
-              </label>
-
+              </fieldset>
+            </div>
+            <footer className="lifecycle-footer">
               {preflight && (!preflight.ready || preflight.warnings.length > 0) ? (
                 <div className={`lifecycle-preflight${preflight.ready ? "" : " is-error"}`} role={preflight.ready ? "status" : "alert"}>
                   <strong>{preflight.ready ? "来源提醒" : "还不能创建"}</strong>
@@ -344,13 +363,13 @@ export function ProjectLifecyclePanel({ baseUrl, workspaceId = baseUrl, onOpenEx
                 </div>
               ) : null}
 
-              <p className="project-lifecycle-message" aria-live="polite">{message}</p>
               <div className="lifecycle-actions">
+                <p id={feedbackId} className="project-lifecycle-message" aria-live="polite">{feedback}</p>
                 <button type="button" className="secondary" disabled={busy} onClick={close}>取消</button>
-                <button type="button" disabled={busy || !canCreate} onClick={() => void create()}>{createdId ? "重新打开项目" : prepareAfterCreate ? (inputKind === "media-directory" ? "创建并同步" : "创建并整理") : "创建项目"}</button>
+                <button type="submit" disabled={busy || !canCreate} aria-describedby={feedbackId}>{busy ? "正在处理…" : createdId ? "重新打开项目" : acceptedWarnings ? "确认并创建" : prepareAfterCreate ? (raw ? "创建并同步" : "创建并整理") : "创建项目"}</button>
               </div>
-            </div>
-          </section>
+            </footer>
+          </form>
         </div>
       ) : null}
     </>

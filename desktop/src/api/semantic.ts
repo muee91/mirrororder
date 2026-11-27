@@ -35,6 +35,13 @@ export interface SemanticSearchPayload {
   semantics: Record<string, boolean>;
 }
 
+interface SearchOptions {
+  limit?: number;
+  sources?: string[];
+  groupIds?: string[];
+  signal?: AbortSignal;
+}
+
 export class SemanticSearchClient {
   readonly baseUrl: string;
 
@@ -43,7 +50,7 @@ export class SemanticSearchClient {
     if (!/^https?:\/\//i.test(this.baseUrl)) throw new HostConnectionError("项目搜索 Host 地址无效");
   }
 
-  async search(projectId: string, query: string, options?: { limit?: number; sources?: string[] }): Promise<SemanticSearchPayload> {
+  async search(projectId: string, query: string, options?: SearchOptions): Promise<SemanticSearchPayload> {
     const project = projectId.trim();
     const text = query.trim();
     if (!project) throw new HostConnectionError("项目搜索需要 project_id");
@@ -52,6 +59,7 @@ export class SemanticSearchClient {
     if (options?.sources?.length) params.set("sources", options.sources.join(","));
     const response = await fetchWithTimeout(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/semantic-search?${params.toString()}`, {
       method: "GET",
+      signal: options?.signal,
       headers: { Accept: "application/json" },
     });
     if (!response.ok) {
@@ -68,18 +76,33 @@ export class SemanticSearchClient {
   }
 
   /** 显式计算面：POST 允许查询向量编码（本地模型或已配置的远程模型）。 */
-  async searchCompute(projectId: string, query: string, options?: { limit?: number; sources?: string[] }): Promise<SemanticSearchPayload> {
+  searchCompute(projectId: string, query: string, options?: SearchOptions): Promise<SemanticSearchPayload> {
+    return this.compute(projectId, query, "", options);
+  }
+
+  async searchLocal(projectId: string, query: string, options?: SearchOptions): Promise<SemanticSearchPayload> {
+    try {
+      return await this.compute(projectId, query, "/local", options);
+    } catch (error) {
+      if (!(error instanceof HostConnectionError) || (error.status !== 404 && error.status !== 405)) throw error;
+      return this.search(projectId, query, options);
+    }
+  }
+
+  private async compute(projectId: string, query: string, suffix: "" | "/local", options?: SearchOptions): Promise<SemanticSearchPayload> {
     const project = projectId.trim();
     const text = query.trim();
     if (!project) throw new HostConnectionError("项目搜索需要 project_id");
     if (!text) throw new HostConnectionError("输入要搜索的画面、对白或场记内容");
-    const response = await fetchWithTimeout(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/semantic-search`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/v1/projects/${encodeURIComponent(project)}/semantic-search${suffix}`, {
       method: "POST",
+      signal: options?.signal,
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({
         q: text,
         limit: Math.max(1, Math.min(60, options?.limit ?? 16)),
         ...(options?.sources?.length ? { sources: options.sources } : {}),
+        ...(options?.groupIds ? { group_ids: options.groupIds } : {}),
       }),
     });
     if (!response.ok) {

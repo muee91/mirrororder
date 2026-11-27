@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { errorMessage } from "../../api/host";
 import { SemanticSearchClient, type SemanticSearchPayload, type SemanticSearchResult } from "../../api/semantic";
 import { canOpenEvidence } from "../production/evidenceLocation";
@@ -20,7 +20,7 @@ const SOURCE_LABELS: Record<string, string> = {
   slate: "场记",
   file: "文件名",
 };
-
+const SEARCH_HINT = "输入原片文件名，或搜索已整理的对白、场记和画面。";
 
 export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpenEvidence }: Props) {
   const client = useMemo(() => new SemanticSearchClient(baseUrl), [baseUrl]);
@@ -32,10 +32,11 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
   const [payload, setPayload] = useState<SemanticSearchPayload | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [copiedId, setCopiedId] = useState("");
-  const [message, setMessage] = useState("搜索已经生成的画面、对白和人工场记证据。");
+  const [message, setMessage] = useState(SEARCH_HINT);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const inFlight = useRef(false);
+  const pending = useRef<AbortController | null>(null);
+  const submittedQuery = useRef("");
 
   const results = payload?.results ?? [];
   const activeResult = results[Math.min(selectedIndex, Math.max(0, results.length - 1))] ?? null;
@@ -58,48 +59,69 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
     if (active && open) inputRef.current?.focus();
   }, [active, open]);
 
-  useEffect(() => {
+  function clearResults(): void {
+    pending.current?.abort();
+    pending.current = null;
+    submittedQuery.current = "";
     setPayload(null);
-    setMessage("搜索已经生成的画面、对白和人工场记证据。");
-  }, [projectId]);
+    setBusy(false);
+    setFailed(false);
+    setCopiedId("");
+    setMessage(SEARCH_HINT);
+  }
+
+  useEffect(() => {
+    clearResults();
+    return () => pending.current?.abort();
+  }, [client, projectId]);
 
   function show(): void {
     setOpen(true);
     inputRef.current?.focus();
   }
 
-  async function search(event?: FormEvent, semantic = false): Promise<void> {
-    event?.preventDefault();
-    if (!query.trim() || inFlight.current) return;
-    inFlight.current = true;
+  async function search(semantic = false, filter = source): Promise<void> {
+    const text = query.trim();
+    if (!text) return;
+    pending.current?.abort();
+    const request = new AbortController();
+    pending.current = request;
+    submittedQuery.current = text;
     setBusy(true);
     setFailed(false);
     setPayload(null);
-    setMessage("正在检索当前项目证据…");
+    setMessage("正在查找项目素材…");
     try {
       const options = {
         limit: 20,
-        sources: source === "all" ? undefined : [source],
+        sources: filter === "all" ? undefined : [filter],
+        signal: request.signal,
       };
-      const next = await (semantic ? client.searchCompute(projectId, query, options) : client.search(projectId, query, options));
+      const next = await (semantic ? client.searchCompute(projectId, text, options) : client.search(projectId, text, options));
+      if (request.signal.aborted) return;
       setPayload(next);
       setSelectedIndex(0);
       setCopiedId("");
       setMessage(
         next.results.length
-          ? `找到 ${next.results.length} 条相关制作证据${next.mode === "vector" || next.mode === "hybrid" ? "（向量语义）" : "（关键词）"}`
-          : next.summary.documents === 0 ? "还没有可检索的画面或对白索引。" : "没有找到匹配证据。",
+          ? `找到 ${next.results.length} 条结果${next.mode === "vector" || next.mode === "hybrid" ? "（语义搜索）" : "（关键词）"}`
+          : filter !== "all" ? `在${SOURCE_LABELS[filter]}中没有找到结果，可切换到「全部」。`
+            : next.summary.documents === 0 ? "没有匹配结果。画面和对白尚未建立索引，也可以输入原片文件名。" : "没有找到匹配结果，试试更短的关键词。",
       );
     } catch (error) {
+      if (request.signal.aborted) return;
       setFailed(true);
       setMessage(`搜索失败。 ${errorMessage(error)}`);
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      if (!request.signal.aborted) {
+        pending.current = null;
+        setBusy(false);
+      }
     }
   }
 
   function close(): void {
+    if (pending.current) clearResults();
     setOpen(false);
     triggerRef.current?.focus();
   }
@@ -123,17 +145,19 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
       close();
       return;
     }
-    if (results.length > 0 && event.key === "ArrowDown") {
+    const target = event.target as HTMLElement;
+    if ((target === inputRef.current || target.closest(".semantic-search-result"))
+      && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      const rows = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(".semantic-search-result:not(:disabled)")];
+      if (!rows.length) return;
+      const current = rows.findIndex(row => row === target);
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const index = current < 0 ? (step > 0 ? 0 : rows.length - 1) : (current + step + rows.length) % rows.length;
       event.preventDefault();
-      setSelectedIndex((current) => (current + 1) % results.length);
+      rows[index].focus();
       return;
     }
-    if (results.length > 0 && event.key === "ArrowUp") {
-      event.preventDefault();
-      setSelectedIndex((current) => (current - 1 + results.length) % results.length);
-      return;
-    }
-    if (event.key === "Enter" && activeResult && canOpenEvidence(activeResult) && event.target !== inputRef.current) {
+    if (event.key === "Enter" && target === inputRef.current && activeResult && canOpenEvidence(activeResult)) {
       event.preventDefault();
       close();
       onOpenEvidence(activeResult);
@@ -158,22 +182,26 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
       </button>
       {active && open ? (
         <div className="semantic-search-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-          <section className="semantic-search-palette" role="dialog" aria-modal="true" aria-label="搜索项目证据" onKeyDown={dialogKeys}>
-            <form className="semantic-search-form" onSubmit={(event) => void search(event)}>
+          <section className="semantic-search-palette" role="dialog" aria-modal="true" aria-label="搜索项目素材" onKeyDown={dialogKeys}>
+            <form className="semantic-search-form" onSubmit={(event) => { event.preventDefault(); if (!busy) void search(); }}>
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => { setQuery(event.target.value); clearResults(); }}
                 aria-label="搜索画面、对白或场记"
                 placeholder="文件名、实际对白、场记或画面"
                 autoComplete="off"
               />
               <button type="submit" disabled={busy || !query.trim()}>{busy ? "搜索中" : "搜索"}</button>
-              <button type="button" className="secondary" disabled={busy || !query.trim()} onClick={() => void search(undefined, true)}>语义搜索</button>
+              <button type="button" className="secondary" disabled={busy || !query.trim()} onClick={() => void search(true)}>语义搜索</button>
             </form>
             <div className="semantic-search-filters">
               {(["all", "visual", "speech", "slate"] as SourceFilter[]).map((value) => (
-                <button type="button" className={source === value ? "is-active" : ""} aria-pressed={source === value} key={value} onClick={() => setSource(value)}>{value === "all" ? "全部" : SOURCE_LABELS[value]}</button>
+                <button type="button" className={source === value ? "is-active" : ""} aria-pressed={source === value} key={value} onClick={() => {
+                  if (value === source) return;
+                  setSource(value);
+                  if (submittedQuery.current) void search(false, value);
+                }}>{value === "all" ? "全部" : SOURCE_LABELS[value]}</button>
               ))}
             </div>
             <p className="semantic-search-message" role={failed ? "alert" : "status"}>{message}</p>
@@ -214,7 +242,7 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
                   <p className="semantic-preview-snippet">{activeResult.snippet || "没有可显示的片段文本。"}</p>
                   <div className="semantic-preview-actions">
                     <button type="button" disabled={!canOpenEvidence(activeResult)} onClick={() => { close(); onOpenEvidence(activeResult); }}>
-                      打开证据定位
+                      定位到素材
                     </button>
                     <button type="button" className="secondary" onClick={() => copyEvidence(activeResult)}>
                       {copiedId === activeResult.document_id ? "已复制摘录" : "复制摘录与时间"}
@@ -224,7 +252,7 @@ export function SemanticSearchPalette({ baseUrl, projectId, active = true, onOpe
               ) : null}
             </div>
             <footer className="semantic-search-footer">
-              <span>↑↓ 切换结果 · Enter 定位证据 · Esc 关闭</span>
+              <span>{results.length ? "↑↓ 选择结果 · Enter 定位素材" : "Enter 搜索"} · Esc 关闭</span>
               <button type="button" className="secondary" onClick={close}>关闭</button>
             </footer>
           </section>

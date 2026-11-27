@@ -105,7 +105,7 @@ describe("Desktop settings information architecture", () => {
     const runtime = read("./LocalRuntimePanel.tsx");
 
     expect(settings).toContain("AI 能力");
-    expect(settings).toContain("显示实际路由 · 高级设置可覆盖");
+    expect(panel.indexOf("<span>高级模型设置</span>")).toBeGreaterThan(panel.indexOf("小镜当前运行方式"));
     expect(models).toContain("EffectiveModelRouting");
     expect(panel).toContain("小镜当前运行方式");
     expect(panel).toContain("payload.routing");

@@ -4,8 +4,9 @@ import "./current-operator.css";
 
 const OPERATOR_KEYS = [
   "mirrororder.productionActor",
-  // Compatibility with the previous Media Library key while surfaces migrate.
+  // Older workspaces saved the reviewer's name under either of these keys.
   "mirrororder.desktop-v2.review-actor",
+  "mirrororder.desktop.review-actor",
 ] as const;
 
 export const DEFAULT_LOCAL_OPERATOR = "本机剪辑师";

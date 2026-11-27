@@ -473,13 +473,17 @@
 
 .app-project-switcher {
   position: relative;
+  flex: 0 0 clamp(104px, 11vw, 168px);
+  inline-size: clamp(104px, 11vw, 168px);
   min-width: 0;
 }
 .app-project-switcher > summary {
   display: flex;
   align-items: center;
   gap: 7px;
-  max-width: 30vw;
+  justify-content: space-between;
+  inline-size: 100%;
+  box-sizing: border-box;
   min-height: 28px;
   padding-inline: 8px;
   overflow: hidden;
@@ -586,14 +590,14 @@
   display: block;
   overflow: hidden;
   color: var(--mo-text-secondary, #a6b1ba);
-  font-size: 9.5px;
+  font-size: var(--mo-font-xs);
   line-height: 12px;
   white-space: nowrap;
 }
 
 .mirrororder-redesign-shell .project-library-redesign .project-library-brand-copy strong {
   display: inline;
-  font-size: 9.5px;
+  font-size: var(--mo-font-xs);
   font-weight: 600;
 }
 .mirrororder-redesign-shell .project-library-redesign .project-library-brand-copy span { display: none; }
@@ -632,7 +636,7 @@
   gap: 2px;
   border-radius: 4px;
   text-align: center;
-  font-size: 9.5px;
+  font-size: var(--mo-font-xs);
   line-height: 12px;
 }
 .mirrororder-redesign-shell .project-primary-nav button::before,

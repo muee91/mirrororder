@@ -3,7 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewModelPayload } from "../../api/host";
-import { DesktopClient } from "../../api/desktop";
+import { writeCurrentOperator } from "../../components/CurrentOperatorControl";
+import { ProjectTaskClient } from "../../api/tasks";
 import { ProductionClient, type SlateBoard } from "../../api/production";
 import { ScriptWorkspace } from "./ScriptWorkspace";
 
@@ -15,10 +16,11 @@ vi.mock("../material-script/ScriptEpisodeView", () => ({
 vi.mock("../material-script/TakeInspector", () => ({ TakeInspector: () => null }));
 vi.mock("./ScriptAssignmentDecision", () => ({ ScriptAssignmentDecision: () => null }));
 
+const setGroupPlacement = vi.fn();
 let snapshotModel: ReviewModelPayload;
 vi.mock("../material-script/useReviewModelSnapshot", () => ({
   useReviewModelSnapshot: () => ({
-    connection: {},
+    connection: { setGroupPlacement },
     loadState: "ready",
     message: "1 Take · 1 集",
     model: snapshotModel,
@@ -165,6 +167,7 @@ describe("Script Slate linkage", () => {
   const onOpenSlate = vi.fn();
 
   beforeEach(async () => {
+    setGroupPlacement.mockReset();
     snapshotModel = model();
     vi.spyOn(ProductionClient.prototype, "scriptSupervisor").mockResolvedValue(board);
     onOpenSlate.mockReset();
@@ -187,6 +190,7 @@ describe("Script Slate linkage", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     host.remove();
+    localStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -216,6 +220,58 @@ describe("Script Slate linkage", () => {
     expect(host.textContent).toContain("B.mp4");
   });
 
+  it.each(["human", "automatic"])("opens the requested line and B camera, then adds the line while preserving only human placements (%s)", async (source) => {
+    const fixture = model();
+    const take = fixture.take_groups[0];
+    take.angles.push({ ...take.angles[0], camera: "B", clip_id: "clip-b", media_id: "media-b", name: "B.mp4" });
+    take.effective_mapping = { source, inherited: true, mapping_status: "confirmed", script_segment_ids: ["segment-1"], episode_ids: [1] };
+    fixture.episodes.push({ episode: 2, scenes: [{ scene_id: "scene-2", heading: "2-1", take_group_ids: [], script_blocks: [
+      { ...fixture.episodes[0].scenes[0].script_blocks[0], segment_id: "target", episode: 2, scene_id: "scene-2", text: "回来吧" },
+    ] }] });
+    snapshotModel = fixture;
+    await act(async () => {
+      writeCurrentOperator("审片人");
+      root.render(<ScriptWorkspace key="handoff" baseUrl="http://synthetic.test" project={project}
+        initialGroupId={take.group_id} initialClipId="clip-b" initialScriptSegmentId="target" />);
+    });
+    expect(setGroupPlacement).not.toHaveBeenCalled();
+    const attach = [...host.querySelectorAll("button")].find((node) => node.textContent === "挂到当前段");
+    expect(attach).toBeTruthy();
+    await act(async () => attach!.click());
+    expect(setGroupPlacement).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      groupId: take.group_id, actor: "审片人", sourceClipId: "clip-b", expectedRevision: 1,
+      scriptSegmentIds: source === "human" ? ["segment-1", "target"] : ["target"],
+      episodeIds: source === "human" ? [1, 2] : [2],
+    }));
+  });
+
+  it.each(["human", "automatic"])("confirms only the chosen action and dialogue while retaining earlier human placements (%s)", async (source) => {
+    const fixture = model();
+    const scene = fixture.episodes[0].scenes[0];
+    const first = scene.script_blocks[0];
+    scene.script_blocks.push({ ...first, type: "action", segment_id: "pass", order: 2, speaker: "", text: "递过杯子", raw_text: "递过杯子" },
+      { ...first, segment_id: "second-line", order: 3, text: "喝口水", raw_text: "喝口水" },
+      { ...first, segment_id: "elsewhere", order: 4, text: "早点睡", raw_text: "早点睡" });
+    const take = fixture.take_groups[0];
+    take.effective_mapping = { source, inherited: false, episode_ids: [1], script_segment_ids: ["segment-1","second-line","elsewhere"], mapping_status: "confirmed" };
+    snapshotModel = fixture;
+    await act(async () => {
+      writeCurrentOperator("剪辑");
+      root.render(<ScriptWorkspace key="action" baseUrl="http://synthetic.test" project={project}
+        initialGroupId={take.group_id} initialClipId="clip-1" initialScriptSegmentId="pass" />);
+    });
+    const panel = host.querySelector('[aria-label="动作与台词同拍"]')!;
+    expect(panel.textContent).toContain("递过杯子");
+    const select = panel.querySelector("select")!;
+    await act(async () => { select.value = "second-line"; select.dispatchEvent(new Event("change", { bubbles:true })); });
+    expect(setGroupPlacement).not.toHaveBeenCalled();
+    await act(async () => panel.querySelector("button")!.click());
+    expect(setGroupPlacement).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      groupId: take.group_id, sourceClipId: "clip-1", expectedRevision: 1, actor: "剪辑",
+      scriptSegmentIds: source === "human" ? ["segment-1","second-line","elsewhere","pass"] : ["second-line","pass"],
+    }));
+  });
+
   it("offers an explicit background transcribe and match action", async () => {
     const pendingModel = model();
     for (const take of pendingModel.take_groups) {
@@ -223,14 +279,19 @@ describe("Script Slate linkage", () => {
       take.candidates = [];
     }
     snapshotModel = pendingModel;
-    const prepare = vi.spyOn(DesktopClient.prototype, "prepareProject").mockResolvedValue({ task_id: "task-1", status: "queued" });
+    const submit = vi.spyOn(ProjectTaskClient.prototype, "submit").mockResolvedValue({
+      task_id: "task-1", status: "queued", type: "incremental_analyze", stage: "queued",
+    });
     await act(async () => root.render(
       <ScriptWorkspace baseUrl="http://synthetic.test" project={project} />,
     ));
     const action = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "自动转写并匹配剧本");
     expect(action).toBeTruthy();
     await act(async () => action?.click());
-    expect(prepare).toHaveBeenCalledWith("project-1");
+    expect(submit).toHaveBeenCalledWith("project-1", {
+      type: "incremental_analyze", targets: { visual_cross_check: true }, actor: "desktop-v2",
+      idempotencyKey: expect.stringMatching(/^script-match:project-1:/),
+    });
     expect(host.textContent).toContain("后台转写与匹配任务已提交");
   });
 

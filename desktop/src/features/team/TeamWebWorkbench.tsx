@@ -143,7 +143,6 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
     <section className="team-web-workbench team-review-workbench">
       <header className="team-web-heading">
         <div>
-          <p className="eyebrow">团队协作</p>
           <h2>局域网共享</h2>
         </div>
         <div className="team-web-state">
@@ -172,7 +171,7 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
         <div className="team-web-grid">
           <section className="team-web-panel">
             <div className="team-web-panel-heading">
-              <div><p className="eyebrow">共享范围</p><h3>工作区</h3></div>
+              <h3>共享工作区</h3>
               <button type="button" className="secondary" disabled={processRunning || !isTauri()} onClick={() => void addWorkspaces()}>添加工作区</button>
             </div>
             <div className="team-workspace-list">
@@ -186,7 +185,6 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
           </section>
 
           <section className="team-web-panel">
-            <p className="eyebrow">连接</p>
             <h3>网络与安全</h3>
             <div className="team-web-options">
               <label><span>端口</span><input value={port} disabled={processRunning} inputMode="numeric" onChange={(event) => setPort(event.target.value)} /></label>
@@ -197,7 +195,6 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
           </section>
 
           <section className="team-web-panel">
-            <p className="eyebrow">诊断</p>
             <h3>服务状态</h3>
             <dl className="team-web-facts">
               <div><dt>进程</dt><dd>{processRunning ? `运行中 · pid ${status?.pid ?? "-"}` : "未运行"}</dd></div>

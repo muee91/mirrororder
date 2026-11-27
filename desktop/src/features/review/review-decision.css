@@ -1,29 +1,41 @@
-.editorial-decision-section {
-  margin-top: 2px;
-  border-top: 1px solid var(--mo-border-subtle, #26303a);
-  padding-top: 12px;
+.review-decision-panel {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  grid-template-areas: "feedback feedback" "heading decisions";
+  flex: 1 1 265px;
+  align-items: center;
+  column-gap: var(--mo-space-1);
+  row-gap: 0;
+  min-width: 0;
 }
 
 .review-decision-panel .take-evidence-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
+  grid-area: heading;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  margin: 0;
 }
 
 .review-decision-panel .take-evidence-heading strong {
-  color: var(--mo-text-primary, #cbd4dd);
-  font-size: var(--mo-font-sm, 11px);
+  color: var(--mo-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.review-decision-panel .take-evidence-heading > span {
-  color: var(--mo-text-muted, #74818d);
-  font-size: var(--mo-font-xs, 10px);
-  text-align: right;
+.review-decision-support { grid-area: feedback; min-width: 0; max-height: min(18vh, 120px); overflow: auto; }
+.review-decision-support:not(:empty) { padding-bottom: var(--mo-space-1); }
+.review-decision-support:empty { display: none; }
+.review-decision-feedback {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--mo-space-1);
+  color: var(--mo-text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
-.team-opinion-summary { display: grid; gap: 6px; margin-bottom: 9px; }
+.review-queue-refresh { display: flex; flex-basis: 100%; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 5px; color: var(--mo-text-primary); font-size: 12px; }
+.review-decision-panel .opinion-details[open] { flex-basis: 100%; max-height: min(20vh, 140px); overflow: auto; }
+
 .opinion-counts { display: flex; gap: 5px; flex-wrap: wrap; }
 .opinion-counts span {
   border: 1px solid var(--mo-border-default, #2d3741);
@@ -34,24 +46,27 @@
   font-size: var(--mo-font-xs, 10px);
 }
 
-.opinion-details { color: var(--mo-text-muted, #788591); font-size: var(--mo-font-xs, 10px); }
+.opinion-details { color: var(--mo-text-secondary); font-size: 12px; }
+.review-decision-panel .opinion-details { margin: 0; }
 .opinion-details summary { cursor: pointer; }
 .opinion-details > div { display: grid; gap: 3px; margin-top: 6px; border-left: 1px solid var(--mo-border-default, #2b353f); padding-left: 8px; }
 .opinion-details p { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; color: var(--mo-text-secondary, #8894a0); }
 .opinion-details strong { color: var(--mo-text-primary, #b7c1ca); font-weight: 550; }
 
-.editorial-decision-actions { display: flex; gap: 5px; flex-wrap: wrap; }
-/* 未选中态就要让"可点"一眼可见：accent 描边 + accent 文字，选中后才升级为语义色底。 */
-.editorial-decision-actions button { border-color: color-mix(in srgb, var(--mo-accent, #566d80) 46%, var(--mo-border-default, #303a44)); color: var(--mo-accent-strong, #bfd3e2); background: var(--mo-surface-control, #151c22); }
+.editorial-decision-actions { grid-area: decisions; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; width: min(100%, 296px); }
+@media (max-width: 680px) {
+  .review-decision-panel { grid-template-columns: minmax(0, 1fr); grid-template-areas: "feedback" "heading" "decisions"; }
+}
+:where(.review-decision-panel) .editorial-decision-actions button { position: relative; display: inline-flex; justify-content: center; align-items: center; gap: 4px; min-height: 34px; min-width: 0; border-color: var(--mo-border-default); padding: 0 10px; color: var(--mo-text-primary); background: var(--mo-surface-control); }
+.editorial-decision-actions .review-decision-mark { flex: none; }
+.editorial-decision-actions button:not(.is-selected) .review-decision-mark { position: absolute; }
+:where(.review-decision-panel) .editorial-decision-actions button:not(:disabled):hover { background: var(--mo-surface-hover); }
 .editorial-decision-actions button.is-selected { border-color: var(--mo-border-strong, #788896); color: var(--mo-text-primary, #f3f6f8); background: var(--mo-surface-selected, #28323b); }
 .editorial-decision-actions button.is-selected.state-best { border-color: color-mix(in srgb, var(--mo-success, #557564) 70%, var(--mo-border-default)); color: var(--mo-success, #bce0ca); background: color-mix(in srgb, var(--mo-success, #557564) 12%, var(--mo-surface-raised)); }
 .editorial-decision-actions button.is-selected.state-keep { border-color: color-mix(in srgb, var(--mo-accent, #566d80) 70%, var(--mo-border-default)); color: var(--mo-accent, #bfd3e2); background: color-mix(in srgb, var(--mo-accent, #566d80) 12%, var(--mo-surface-raised)); }
 .editorial-decision-actions button.is-selected.state-reject { border-color: color-mix(in srgb, var(--mo-danger, #7a5454) 70%, var(--mo-border-default)); color: var(--mo-danger, #e3b8b8); background: color-mix(in srgb, var(--mo-danger, #7a5454) 12%, var(--mo-surface-raised)); }
 
-.editorial-current-decision,
-.review-assignment-feedback-note,
-.review-decision-panel .evidence-muted,
-.review-decision-panel .evidence-authority-note {
+.editorial-current-decision, .review-assignment-feedback-note {
   margin: 8px 0 0;
   color: var(--mo-text-muted, #7c8995);
   font-size: var(--mo-font-xs, 10px);
@@ -60,7 +75,6 @@
 
 .editorial-current-decision strong { color: var(--mo-text-primary, #cbd4dd); }
 .review-assignment-feedback-note { border-left: 2px solid var(--mo-border-strong, #4c5965); padding-left: 8px; }
-.review-decision-panel .evidence-label { color: var(--mo-text-muted, #71808d); font-size: var(--mo-font-xs, 10px); }
 
 .review-decision-panel input:focus-visible,
 .review-decision-panel button:focus-visible,

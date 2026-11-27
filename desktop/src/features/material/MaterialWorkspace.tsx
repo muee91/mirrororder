@@ -122,6 +122,7 @@ export function MaterialWorkspace({
             projectId={project.project_id}
             onOpenMediaBinding={() => onViewChange("repair")}
             onOpenTakes={canOpenTakes ? () => onViewChange("takes") : undefined}
+            onOpenPeople={canOpenTakes ? () => onViewChange("people") : undefined}
           />
         ) : null}
 

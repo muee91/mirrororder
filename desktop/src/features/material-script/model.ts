@@ -1,5 +1,6 @@
 import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
 import { reviewTakeAttention } from "../review/reviewAttention";
+import { indexActionDialogue } from "./actionDialogue";
 
 export type TakeStatusFilter = "all" | "attention" | "candidate" | "pending" | "placed" | "rejected";
 export type ProductionStatusFilter = "slate_missing" | "slate_partial" | "slate_ng" | "slate_usable";
@@ -97,7 +98,7 @@ function candidateSegmentIds(take: ReviewTakeGroup): string[] {
   return [...values];
 }
 
-export interface ScriptTakeProjection {
+export interface ScriptTakeProjection extends ReturnType<typeof indexActionDialogue> {
   mappedTakeIds: Map<string, string[]>;
   candidateTakeIds: Map<string, string[]>;
   relatedTakeIds: Map<string, string[]>;
@@ -116,7 +117,7 @@ export interface ScriptTakeProjection {
  * model / take_groups / effective_mapping / candidates；对象身份变化即重建，
  * 由此保证不会出现 stale derived state。
  */
-export function buildScriptTakeProjection(model: ReviewModelPayload): ScriptTakeProjection {
+export function buildScriptTakeProjection(model: Pick<ReviewModelPayload, "episodes" | "take_groups">): ScriptTakeProjection {
   const mapped = new Map<string, Array<{ index: number; groupId: string }>>();
   const candidates = new Map<string, Array<{ index: number; groupId: string }>>();
   const contextOnly = new Map<string, Array<{ index: number; groupId: string }>>();
@@ -167,12 +168,16 @@ export function buildScriptTakeProjection(model: ReviewModelPayload): ScriptTake
       ...(contextTakeIds.get(segmentId) ?? []),
     ]);
   }
-  return { mappedTakeIds, candidateTakeIds, relatedTakeIds };
+  const adjacent = indexActionDialogue(model.episodes ?? [], model.take_groups);
+  for (const [actionId, takes] of adjacent.dialogueByActionTake) {
+    relatedTakeIds.set(actionId, [...new Set([...(relatedTakeIds.get(actionId) ?? []), ...takes.keys()])]);
+  }
+  return { mappedTakeIds, candidateTakeIds, relatedTakeIds, ...adjacent };
 }
 
 const scriptTakeProjectionCache = new WeakMap<ReviewModelPayload, ScriptTakeProjection>();
 
-function projectionOf(model: ReviewModelPayload): ScriptTakeProjection {
+export function projectionOf(model: ReviewModelPayload): ScriptTakeProjection {
   let projection = scriptTakeProjectionCache.get(model);
   if (!projection) {
     projection = buildScriptTakeProjection(model);

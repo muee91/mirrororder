@@ -24,6 +24,7 @@ export type StudioIconName =
   | "media-library"
   | "media-binding"
   | "watch"
+  | "inspector"
   | "timeline"
   | "takes"
   | "pin"
@@ -149,6 +150,10 @@ const ICON_PATHS: Record<StudioIconName, readonly string[]> = {
   watch: [
     "M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z",
     "M12 14.8a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6z",
+  ],
+  inspector: [
+    "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+    "M14 4v16m3-11h1m-1 3h1",
   ],
   timeline: [
     "M3 7h8",

@@ -22,13 +22,12 @@ export function TimelineWorkbenchView(props: TimelineWorkbenchProps) {
     <section className="timeline-workbench editorial-workbench">
       <header className="production-heading timeline-heading">
         <div>
-          <p className="eyebrow">{showSync ? "同步母版" : "编辑组接"}</p>
           <h2>{showSync ? (syncBlocked ? "多机位同步" : "同步核对与工程交付") : "选片组接"}</h2>
           <p className="production-note">{showSync
             ? syncBlocked
               ? "先同步视频和同期声；任务阶段、已知进度与失败原因都在这里。检查素材不受阻。"
               : "优先核对原始机位和同步工程，交给剪辑师后再进行场记、剧本和镜头分析。"
-            : "人工组接只是外部 NLE 的剪辑起点；分帧精剪在导出后的软件中完成。"}</p>
+            : "排列选中的片段，导出后可在剪辑软件中继续精剪。"}</p>
         </div>
         <div className="timeline-heading-actions">
           {showEditorial ? <span className="production-state">{message}</span> : null}

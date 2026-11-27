@@ -66,7 +66,7 @@ export function useMulticamSyncGate(baseUrl: string, projectId: string, inputKin
     scope, timeline: initialTimeline(projectId, inputKind), snapshot: null, readError: "",
   }));
   const requestId = useRef(0);
-  const lastFetchedAtRef = useRef(0);
+  const reading = useRef(false);
   const stateRef = useRef(state);
 
   const publishState = useCallback((next: SyncState) => {
@@ -77,12 +77,12 @@ export function useMulticamSyncGate(baseUrl: string, projectId: string, inputKin
   const refreshSyncTimeline = useCallback(async (force = false) => {
     if (inputKind !== "media-directory") return;
     const request = ++requestId.current;
+    reading.current = true;
     try {
       const timeline = await new SyncTimelineClient(baseUrl).read(projectId);
       if (timeline.project_id !== projectId) throw new Error("同步状态属于另一个项目");
       if (request !== requestId.current) return;
       const readAt = Date.now();
-      lastFetchedAtRef.current = readAt;
       const current = stateRef.current;
       if (!force && current.scope === scope && !current.readError
           && sameTimeline(current.timeline, timeline)) return;
@@ -98,11 +98,12 @@ export function useMulticamSyncGate(baseUrl: string, projectId: string, inputKin
       const current = stateRef.current;
       const readError = errorMessage(error);
       if (current.scope === scope && current.readError !== readError) publishState({ ...current, readError });
+    } finally {
+      if (request === requestId.current) reading.current = false;
     }
   }, [baseUrl, inputKind, projectId, publishState, scope]);
 
   useEffect(() => {
-    lastFetchedAtRef.current = 0;
     if (stateRef.current.scope !== scope) {
       publishState({ scope, timeline: initialTimeline(projectId, inputKind), snapshot: null, readError: "" });
     }
@@ -129,7 +130,9 @@ export function useMulticamSyncGate(baseUrl: string, projectId: string, inputKin
 
   useEffect(() => {
     if (!poll) return;
-    const timer = globalThis.setInterval(() => void refreshSyncTimeline(), POLL_MS);
+    const timer = globalThis.setInterval(() => {
+      if (!reading.current) void refreshSyncTimeline();
+    }, POLL_MS);
     return () => globalThis.clearInterval(timer);
   }, [poll, refreshSyncTimeline]);
 

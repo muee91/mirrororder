@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { HostConnectionError, errorMessage } from "../../api/host";
 import { readCurrentOperator, requestCurrentOperator } from "../../components/CurrentOperatorControl";
 import {
@@ -16,24 +16,6 @@ const STATE_LABELS: Record<string, string> = {
   reject: "废弃",
   unreviewed: "未决定",
 };
-
-function storedActor(): string {
-  try {
-    return globalThis.localStorage?.getItem("mirrororder.desktop-v2.review-actor")?.trim()
-      || globalThis.localStorage?.getItem("mirrororder.desktop.review-actor")?.trim()
-      || readCurrentOperator();
-  } catch {
-    return readCurrentOperator();
-  }
-}
-
-function saveActor(actor: string): void {
-  try {
-    globalThis.localStorage?.setItem("mirrororder.desktop-v2.review-actor", actor.trim());
-  } catch {
-    // Device-local convenience only.
-  }
-}
 
 function groupKey(groupId: string): string {
   return `group|${groupId}`;
@@ -75,32 +57,67 @@ interface Props {
   baseUrl: string;
   projectId: string;
   groupId: string;
-  onDecisionChange?: () => void | Promise<void>;
+  onDecisionChange?: (groupId: string) => void | Promise<void>;
+}
+
+interface QueueIssue {
+  groupId: string;
+  saved: boolean;
+  message: string;
+  retrying: boolean;
 }
 
 export function ReviewDecisionPanel(props: Props) {
   const current = useRef<Props | null>(props);
+  const queueRequest = useRef(0);
+  const [queueIssue, setQueueIssue] = useState<QueueIssue | null>(null);
   useLayoutEffect(() => {
     current.current = props;
     return () => { current.current = null; };
   }, [props]);
 
-  async function refreshCurrentProject(): Promise<void> {
+  useLayoutEffect(() => {
+    setQueueIssue(null);
+    return () => { queueRequest.current += 1; };
+  }, [props.baseUrl, props.projectId]);
+
+  async function refreshQueue(groupId: string, saved: boolean): Promise<void> {
     const latest = current.current;
-    if (latest?.baseUrl !== props.baseUrl || latest.projectId !== props.projectId) return;
-    await latest.onDecisionChange?.();
+    if (latest?.baseUrl !== props.baseUrl || latest.projectId !== props.projectId || !latest.onDecisionChange) return;
+    const request = ++queueRequest.current;
+    setQueueIssue(issue => issue ? { ...issue, retrying: true } : null);
+    try {
+      await latest.onDecisionChange(groupId);
+      if (request === queueRequest.current) setQueueIssue(null);
+    } catch (error) {
+      if (request === queueRequest.current) {
+        setQueueIssue({ groupId, saved, message: errorMessage(error), retrying: false });
+      }
+    }
   }
+
+  const queueTarget = queueIssue?.groupId === props.groupId ? "本条 Take" : "另一条 Take";
+  const queueNotice = queueIssue && <div className="review-queue-refresh">
+    <span role="alert">{queueIssue.saved ? `${queueTarget} 的选片决定已保存` : `已读取${queueTarget} 的最新决定`}，审阅队列未更新。{queueIssue.message}</span>
+    <button type="button" className="secondary" disabled={queueIssue.retrying}
+      onClick={() => void refreshQueue(queueIssue.groupId, queueIssue.saved)}>
+      {queueIssue.retrying ? "刷新中…" : "刷新队列"}
+    </button>
+  </div>;
 
   // A new target must never render or write with the previous target's snapshot,
   // even during the render before its loading effect runs.
-  return <ReviewDecisionSession key={JSON.stringify([props.baseUrl, props.projectId, props.groupId])} {...props} onDecisionChange={refreshCurrentProject} />;
+  return <ReviewDecisionSession key={JSON.stringify([props.baseUrl, props.projectId, props.groupId])}
+    {...props} refreshQueue={refreshQueue} queueNotice={queueNotice} />;
 }
 
-function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }: Props) {
+function ReviewDecisionSession({ baseUrl, projectId, groupId, refreshQueue, queueNotice }: Props & {
+  refreshQueue: (groupId: string, saved: boolean) => Promise<void>;
+  queueNotice: ReactNode;
+}) {
   const client = useMemo(() => new EditorialClient(baseUrl), [baseUrl]);
   const [payload, setPayload] = useState<EditorialStorePayload | null>(null);
-  const [actor, setActor] = useState(storedActor);
-  const [message, setMessage] = useState("正在读取团队意见与最终决定…");
+  const [message, setMessage] = useState("读取中…");
   const [busy, setBusy] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const active = useRef(true);
@@ -108,43 +125,27 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
   const writeInFlight = useRef(false);
   const needsQueueRefresh = useRef(false);
 
-  // 顶栏设置操作者后这里要跟上：否则决定按钮保持禁用，
-  // 用户只能靠刷新页面才能让"已设置操作者"生效。
-  useEffect(() => {
-    const sync = () => setActor(storedActor());
-    globalThis.addEventListener("mirrororder:operator-change", sync);
-    globalThis.addEventListener("storage", sync);
-    return () => {
-      globalThis.removeEventListener("mirrororder:operator-change", sync);
-      globalThis.removeEventListener("storage", sync);
-    };
-  }, []);
-
   async function reload(afterConflict = false): Promise<void> {
     const version = ++requestVersion.current;
     setPayload(null);
     setLoadState("loading");
-    setMessage(afterConflict ? "团队状态已变化，正在读取最新意见与决定…" : "正在读取团队意见与最终决定…");
+    setMessage("读取中…");
     try {
       const next = await client.status(projectId);
       if (!active.current || version !== requestVersion.current) return;
       setPayload(next);
       setLoadState("ready");
       setMessage(afterConflict
-        ? "已读取最新团队状态；请根据最新意见重新确认，原操作未重试。"
-        : "已同步");
+        ? "团队状态已更新，原操作未重试。"
+        : "");
       if (needsQueueRefresh.current) {
         needsQueueRefresh.current = false;
-        try {
-          await onDecisionChange?.();
-        } catch {
-          // The authoritative read succeeded even if the queue refresh failed.
-        }
+        void refreshQueue(groupId, false);
       }
     } catch (error) {
       if (!active.current || version !== requestVersion.current) return;
       setLoadState("error");
-      setMessage(`${afterConflict ? "团队状态已变化，但最新状态读取失败" : "团队意见与最终决定读取失败"}：${errorMessage(error)}。重新读取后才能作决定。`);
+      setMessage(`${afterConflict ? "最新状态读取失败" : "读取选片状态失败"}：${errorMessage(error)}`);
     }
   }
 
@@ -164,16 +165,16 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
 
   async function decide(state: EditorialState): Promise<void> {
     if (!payload || loadState !== "ready" || writeInFlight.current) return;
+    const actor = readCurrentOperator();
     if (!actor.trim()) {
       requestCurrentOperator();
-      setMessage("最终决定需要操作者昵称。");
+      setMessage("请先设置操作者昵称");
       return;
     }
     writeInFlight.current = true;
     const version = ++requestVersion.current;
     setBusy(true);
-    saveActor(actor);
-    setMessage(state === "unreviewed" ? "正在清除当前 Take 最终决定…" : `正在写入当前 Take 最终 ${STATE_LABELS[state]}…`);
+    setMessage("保存中…");
     try {
       const response = await client.decision(projectId, {
         targetKind: "group",
@@ -184,17 +185,9 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
       });
       if (active.current && version === requestVersion.current) {
         setPayload(response.editorial);
-        setMessage(state === "unreviewed"
-          ? "当前 Take 最终决定已清除 · 已保存"
-          : `当前 Take 最终：${STATE_LABELS[state]} · 已保存`);
+        setMessage("已保存");
       }
-      try {
-        // Refresh counts after a completed write even if the user moved to the
-        // next Take. The outer boundary only permits the originating project.
-        await onDecisionChange?.();
-      } catch {
-        // Decision already succeeded. Parent refresh failure must not rewrite that outcome.
-      }
+      void refreshQueue(groupId, true);
     } catch (error) {
       if (!active.current || version !== requestVersion.current) return;
       needsQueueRefresh.current = true;
@@ -205,7 +198,7 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
         // instead of allowing a blind replay or presenting stale authority.
         setPayload(null);
         setLoadState("error");
-        setMessage(`无法确认本次决定是否保存：${errorMessage(error)}。请重新读取状态后再决定。`);
+        setMessage(`无法确认本次决定是否保存：${errorMessage(error)}`);
       }
     } finally {
       writeInFlight.current = false;
@@ -215,42 +208,37 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, onDecisionChange }
 
   return (
     <section className="editorial-decision-section review-decision-panel" aria-label="当前 Take 最终决定">
-      <div className="take-evidence-heading">
-        <div><p className="eyebrow">审阅 · 最终决定</p><strong>Take 最终决定</strong></div>
-        <span role={loadState === "error" ? "alert" : "status"}>{message}</span>
-      </div>
-
-      {loadState === "error" ? <button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>重新读取状态</button> : null}
-
-      <div className="team-opinion-summary">
-        <span className="evidence-label">团队个人意见</span>
-        {!payload ? <p className="evidence-muted">{loadState === "loading" ? "正在读取当前 Take 的团队状态…" : "尚未读取到可信的团队状态。"}</p> : opinions.length ? (
-          <div className="opinion-counts">
-            {Object.entries(counts).filter(([, count]) => count > 0).map(([state, count]) => <span key={state}>{STATE_LABELS[state] || state} {count}</span>)}
-          </div>
-        ) : <p className="evidence-muted">当前 Take 还没有组级团队个人意见。</p>}
-        {opinions.length ? (
-          <details className="opinion-details">
-            <summary>查看 {opinions.length} 条个人意见</summary>
-            <div>{opinions.map((opinion, index) => <p key={`${opinion.reviewer_id || opinion.actor}-${index}`}><strong>{opinion.actor || "审核人"}</strong><span>{STATE_LABELS[opinion.state] || opinion.state}</span></p>)}</div>
-          </details>
-        ) : null}
-      </div>
-
+      <div className="take-evidence-heading"><strong>选片决定</strong></div>
       <div className="editorial-decision-actions">
-        {(["best", "keep", "reject"] as EditorialState[]).map((state) => (
-          <button type="button" className={decision?.state === state ? `is-selected state-${state}` : ""} disabled={busy || !payload} onClick={() => void decide(state)} key={state}>{STATE_LABELS[state]}</button>
-        ))}
+        {(["best", "keep", "reject"] as EditorialState[]).map((state) => {
+          const selected = decision?.state === state;
+          return <button type="button" className={selected ? `is-selected state-${state}` : ""} aria-pressed={selected}
+            disabled={busy || !payload} onClick={() => void decide(state)} key={state}>
+            <svg className="review-decision-mark" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" visibility={selected ? "visible" : "hidden"}>
+              <path d="m3 8 3 3 7-7" />
+            </svg>{STATE_LABELS[state]}
+          </button>;
+        })}
         {decision ? <button type="button" className="secondary" disabled={busy || !payload} onClick={() => void decide("unreviewed")}>清除</button> : null}
       </div>
+      <div className="review-decision-support">
+        {message && <div className="review-decision-feedback">
+          <span role={loadState === "error" ? "alert" : "status"}>{message}</span>
+          {loadState === "error" && <button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>重新读取状态</button>}
+        </div>}
+        {queueNotice}
 
-      {payload ? decision ? <p className="editorial-current-decision">当前最终 <strong>{STATE_LABELS[decision.state] || decision.state}</strong> · {decision.actor || "未知决定人"}{decision.updated_at ? ` · ${decision.updated_at}` : ""}</p> : <p className="evidence-muted">当前 Take 尚未形成最终决定。</p> : null}
-
-      {assignmentFeedback ? (
-        <p className="review-assignment-feedback-note">另有 {assignmentFeedback} 个剧本段级团队反馈。审阅页不展开剧本段级裁决；需要结合位置上下文时回到“剧本”处理。</p>
-      ) : null}
-
-      <p className="evidence-authority-note">仅记录本条审阅结论，不影响场记、剧本归集或同步母版。</p>
+        {(opinions.length > 0 || assignmentFeedback > 0 || decision) && <details className="opinion-details">
+          <summary>{opinions.length + assignmentFeedback ? "团队意见" : "决定记录"}</summary>
+          {opinions.length > 0 && <div className="opinion-counts">
+            {Object.entries(counts).map(([state, count]) => <span key={state}>{STATE_LABELS[state] || state} {count}</span>)}
+          </div>}
+          {opinions.length > 0 && <div>{opinions.map((opinion, index) => <p key={`${opinion.reviewer_id || opinion.actor}-${index}`}><strong>{opinion.actor || "审核人"}</strong><span>{STATE_LABELS[opinion.state] || opinion.state}</span></p>)}</div>}
+          {assignmentFeedback > 0 && <p className="review-assignment-feedback-note">{assignmentFeedback} 个剧本段有意见</p>}
+          {decision && <p className="editorial-current-decision">{decision.actor || "未知决定人"}{decision.updated_at ? ` · ${decision.updated_at}` : ""}</p>}
+        </details>}
+      </div>
     </section>
   );
 }

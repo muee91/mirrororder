@@ -17,7 +17,7 @@ describe("production navigation context", () => {
     expect(navigation).toContain("scriptSegmentId?: string");
     expect(navigation).toContain("timelineClipId?: string");
     expect(workbench).toContain("const [selection, setSelection] = useState<ProductionSelectionContext>");
-    expect(workbench).toContain("setNavigationIntent(nextIntent(next));");
+    expect(workbench).toContain("setNavigationIntent(nextIntent(next, context));");
     expect(workbench).not.toContain("ReviewReturnContext");
     expect(workbench).not.toContain("reviewReturn");
   });
@@ -33,7 +33,9 @@ describe("production navigation context", () => {
     expect(workbench).toContain("initialScriptSegmentId={currentSelection.scriptSegmentId ?? null}");
     expect(material).toContain("onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId)");
     expect(script).toContain("onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId, selectedScriptSegmentId)");
-    expect(review).toContain("onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId)");
+    expect(review).toContain("onSelectionChange?.(selectedTake.group_id, selectedClipId)");
+    expect(review).toContain("setFragmentFocus(focusIntent.sourceRange ? focusIntent : undefined)");
+    expect(review).toContain("onOpenMaterial(selectedTake.group_id, selectedClipId, currentLocation())");
     expect(timeline).toContain("onSelectionChange?.(groupId, clipId, timelineClipId)");
     expect(script).toContain(">在素材中打开</button>");
     expect(script).toContain(">在审阅中打开</button>");

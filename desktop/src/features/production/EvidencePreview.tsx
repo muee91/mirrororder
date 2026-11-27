@@ -9,10 +9,11 @@ interface Props {
   snippet?: string;
   onClose: () => void;
   onOpenObject?: () => void;
+  onOpenTake?: () => void;
   onRepair: () => void;
 }
 
-export function EvidencePreview({ baseUrl, selection, snippet, onClose, onOpenObject, onRepair }: Props) {
+export function EvidencePreview({ baseUrl, selection, snippet, onClose, onOpenObject, onOpenTake, onRepair }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [source, setSource] = useState<ResolvedEvidenceSource | null>(null);
@@ -66,7 +67,8 @@ export function EvidencePreview({ baseUrl, selection, snippet, onClose, onOpenOb
         if (!video) return;
         if (!playEvidenceSource(video, source)) setError("证据时间超出了当前原片时长。");
       }}>重播命中片段</button>}
-      {onOpenObject && <button type="button" onClick={onOpenObject}>{selection.recordId ? "打开场记" : "打开素材"}</button>}
+      {onOpenTake && <button type="button" onClick={onOpenTake}>查看 Take</button>}
+      {onOpenObject && <button type="button" className={onOpenTake ? "secondary" : undefined} onClick={onOpenObject}>{selection.recordId ? "打开场记" : "打开素材"}</button>}
       {error && <>
         <button type="button" className="secondary" onClick={() => setRetry(value => value + 1)}>重试播放</button>
         <button type="button" className="secondary" onClick={onRepair}>检查本机素材</button>

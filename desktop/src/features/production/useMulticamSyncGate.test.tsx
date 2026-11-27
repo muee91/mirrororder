@@ -92,6 +92,16 @@ describe("useMulticamSyncGate", () => {
     expect(read).toHaveBeenCalledTimes(6);
   });
 
+  it("shows a completed sync when the Host takes longer than the polling interval", async () => {
+    const read = vi.spyOn(SyncTimelineClient.prototype, "read").mockImplementation(
+      id => new Promise(resolve => setTimeout(() => resolve(master(id)), 4_000)),
+    );
+    await act(async () => root.render(<Probe projectId="one" />));
+    await act(async () => vi.advanceTimersByTimeAsync(4_001));
+    expect(gate.syncTimeline.ready).toBe(true);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
   it("publishes a newly resolved clip route even when the completed task and counts are unchanged", async () => {
     const timeline = master("one");
     const clip = { clip_id: "A1", camera: "A", day: "1", name: "clip", timeline_start: 0, duration: 1, timecode: "", clip_number: "1" };

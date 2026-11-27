@@ -27,6 +27,7 @@ interface Props {
   projectId: string;
   onOpenMediaBinding?: () => void;
   onOpenTakes?: () => void;
+  onOpenPeople?: () => void;
 }
 
 type Filter = "all" | "auxiliary" | "unindexed" | "labeled" | "needsCamera";
@@ -398,7 +399,7 @@ const MediaLibraryRow = memo(function MediaLibraryRow({
   );
 });
 
-export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }: Props) {
+export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding, onOpenTakes, onOpenPeople }: Props) {
   const client = useMemo(() => new MediaRoleClient(baseUrl), [baseUrl]);
   const host = useMemo(() => new HostConnection(baseUrl), [baseUrl]);
   const [inventory, setInventory] = useState<MediaInventory | null>(null);
@@ -861,25 +862,23 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
 
   return (
     <section className="media-library-workbench" aria-busy={busy}>
-      {inventory?.scan_required ? (
-        <div
-          className="media-library-summary is-stale"
-          role="status"
-          aria-label="上次素材清单统计（当前需要重新扫描）"
-        >
-          <span className="media-library-stale-tag">上次清单 · 当前需要重新扫描，以下数字不是当前状态</span>
-        </div>
-      ) : null}
-
       <div className="media-library-toolbar">
-        <input ref={searchInputRef} type="search" value={query} onChange={(event) => setViewState((current) => ({ ...current, query: event.target.value }))} placeholder="搜索文件、机位、场景或备注（按 / 聚焦）" aria-keyshortcuts="/" />
-        <div className="media-library-filters" aria-label="素材状态筛选">
-          {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => value === "all" || statusFilterCounts[value] > 0 || filter === value ? (
-            <button type="button" className={filter === value ? "is-active" : ""} aria-label={`按状态筛选：${filterLabel}`} aria-pressed={filter === value} key={value} onClick={() => setViewState((current) => ({ ...current, filter: value }))}>{filterLabel}<small>{statusFilterCounts[value]}</small></button>
-          ) : null)}
-          {hasActiveFilters ? <button type="button" className="secondary media-library-reset-filters" aria-label="清除所有素材筛选" onClick={resetMediaFilters}>清除筛选</button> : null}
+        <input ref={searchInputRef} type="search" value={query} onChange={(event) => setViewState((current) => ({ ...current, query: event.target.value }))} aria-label="搜索素材" placeholder="搜索文件名、机位、场景或备注" title="按 / 搜索素材" aria-keyshortcuts="/" />
+        <div className="media-library-filter-controls">
+          <div className="media-library-filters mo-segmented" role="group" aria-label="素材状态筛选">
+            {([["all", "全部"], ["auxiliary", "辅助素材"], ["needsCamera", "待补机位"], ["unindexed", "待恢复"], ["labeled", "已标记"]] as Array<[Filter, string]>).map(([value, filterLabel]) => (
+              <button type="button" className={filter === value ? "is-active" : ""} aria-label={`按状态筛选：${filterLabel}`}
+                title={`${filterLabel} · ${statusFilterCounts[value]} 条`} aria-pressed={filter === value} key={value}
+                disabled={value !== "all" && filter !== value && !statusFilterCounts[value]}
+                onClick={() => setViewState((current) => ({ ...current, filter: value }))}>
+                {filterLabel}<small>{statusFilterCounts[value]}</small>
+              </button>
+            ))}
+          </div>
+          <button type="button" className="secondary mo-toolbar-button media-library-reset-filters" aria-label="清除所有素材筛选"
+            title="清除所有素材筛选" disabled={!hasActiveFilters} onClick={resetMediaFilters}><StudioIcon name="close" size={14} /></button>
         </div>
-        <div className="media-library-view-toggle" aria-label="素材显示密度" aria-keyshortcuts="Meta+Shift+G Control+Shift+G">
+        <div className="media-library-view-toggle mo-segmented" role="group" aria-label="素材显示密度" aria-keyshortcuts="Meta+Shift+G Control+Shift+G">
           <button type="button" className={viewMode === "list" ? "is-active" : ""} aria-label="切换到列表视图" aria-pressed={viewMode === "list"} onClick={() => setViewState((current) => ({ ...current, viewMode: "list" }))}>列表</button>
           <button type="button" className={viewMode === "grid" ? "is-active" : ""} aria-label="切换到缩略图视图" aria-pressed={viewMode === "grid"} onClick={() => setViewState((current) => ({ ...current, viewMode: "grid" }))}>缩略图</button>
         </div>
@@ -887,19 +886,21 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
           {onOpenMediaBinding ? (
             <button
               type="button"
-              className={`media-library-relink${unindexedCount > 0 ? " is-warning" : ""}`}
+              className={`media-library-relink mo-toolbar-button${unindexedCount > 0 ? " is-warning" : ""}`}
               onClick={onOpenMediaBinding}
-              title="换盘或重连本机素材目录"
+              title={unindexedCount ? `${unindexedCount} 条素材缺失，换盘或重连本机素材目录` : "换盘或重连本机素材目录"}
             >
               {unindexedCount > 0 ? `${unindexedCount} 缺失 · 重连` : "换盘重连"}
             </button>
           ) : null}
-          <button type="button" className="secondary media-library-refresh" aria-label="刷新素材清单" aria-keyshortcuts="Meta+Shift+R Control+Shift+R" disabled={busy} onClick={() => void reload()} title="刷新素材清单">
+          <button type="button" className="secondary mo-toolbar-button media-library-refresh" aria-label="刷新素材清单" aria-keyshortcuts="Meta+Shift+R Control+Shift+R" disabled={busy} onClick={() => void reload()} title="刷新素材清单">
             <StudioIcon name="refresh" size={13} />
           </button>
           <details className="media-library-more-menu" onToggle={handleDetailsMenuToggle} onBlur={handleDetailsMenuBlur}>
             <summary>更多</summary>
             <div className="media-library-more-popover">
+              {onOpenTakes && <button type="button" onClick={event => { closeDetailsMenu(event.currentTarget); onOpenTakes(); }}>查看 Take 镜次</button>}
+              {onOpenPeople && <button type="button" onClick={event => { closeDetailsMenu(event.currentTarget); onOpenPeople(); }}>演员与角色</button>}
               <button type="button" className="secondary media-library-select-visible" aria-label={allVisibleSelected ? "取消全选当前结果" : "全选当前结果"} aria-pressed={allVisibleSelected} onClick={(event) => { closeDetailsMenu(event.currentTarget); toggleVisibleSelection(); }}>{allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}</button>
               <button type="button" className="secondary media-library-invert-selection" aria-label="反选当前筛选结果" disabled={!visibleIds.length} onClick={(event) => { closeDetailsMenu(event.currentTarget); invertVisibleSelection(); }}>反选当前结果</button>
               <button type="button" className="secondary media-library-copy-inventory" aria-label="复制当前筛选素材清单" aria-keyshortcuts="Meta+Shift+C Control+Shift+C" disabled={!visible.length} onClick={(event) => { closeDetailsMenu(event.currentTarget); void copyVisibleInventory(); }}>复制当前清单</button>
@@ -907,7 +908,10 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
             </div>
           </details>
         </div>
-        <span className="production-state" aria-live="polite">{message}</span>
+        <div className="media-library-feedback" title={message}>
+          {inventory?.scan_required && <strong className="media-library-stale-tag">上次清单 · 待重新扫描</strong>}
+          <span className="production-state" aria-live="polite">{message}</span>
+        </div>
       </div>
 
       {selectedIds.size > 0 || Boolean(bulkResult) ? (
@@ -947,7 +951,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
         <span className="media-library-camera-strip-label">机位</span>
         <button type="button" className={cameraFilter === "all" ? "is-active" : ""} aria-label="按机位筛选：全部机位" aria-pressed={cameraFilter === "all"} onClick={() => setViewState((current) => ({ ...current, cameraFilter: "all" }))}><strong>全部</strong><small>{inventory?.summary.files ?? 0}</small></button>
         {cameraFilters.map((camera) => (
-          <button type="button" key={camera.key} className={cameraFilter === camera.key ? "is-active" : ""} aria-label={`按机位筛选：${camera.label}`} aria-pressed={cameraFilter === camera.key} data-camera-tone={camera.tone} onClick={() => setViewState((current) => ({ ...current, cameraFilter: camera.key }))}>
+          <button type="button" key={camera.key} className={cameraFilter === camera.key ? "is-active" : ""} title={`${camera.label} · ${camera.count} 条`} aria-label={`按机位筛选：${camera.label}`} aria-pressed={cameraFilter === camera.key} data-camera-tone={camera.tone} onClick={() => setViewState((current) => ({ ...current, cameraFilter: camera.key }))}>
             <strong>{camera.label}</strong><small>{camera.count}</small>
           </button>
         ))}
@@ -1013,7 +1017,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
               </section>
 
               <section className="media-role-camera-editor">
-                <div className="media-role-section-heading"><div><p className="eyebrow">机位</p><h3>当前 {selectedCamera.label}</h3></div><span>{selectedHasOverride ? "人工覆盖" : "自动识别"}</span></div>
+                <div className="media-role-section-heading"><h3>当前 {selectedCamera.label}</h3><span>{selectedHasOverride ? "人工覆盖" : "自动识别"}</span></div>
                 <div className="media-role-camera-quick">
                   {["A", "B", "C"].map((camera) => {
                     const presentation = effectiveCamera(camera, "");
@@ -1027,7 +1031,7 @@ export function MediaLibraryWorkbench({ baseUrl, projectId, onOpenMediaBinding }
               <details className="media-role-advanced-fields">
                 <summary>更多属性（用途 · 同步策略 · 备注）</summary>
                 <section className="media-role-fields">
-                  <div className="media-role-section-heading"><div><p className="eyebrow">用途</p><h3>素材角色与同步</h3></div><span>独立于机位</span></div>
+                  <div className="media-role-section-heading"><h3>素材角色与同步</h3><span>独立于机位</span></div>
                   <label className="production-field"><span>素材角色</span><select value={draft.source_role || "sync_camera"} onChange={(event) => changeSourceRole(event.target.value)}><option value="sync_camera">同步机位</option><option value="aerial">航拍</option><option value="broll">空镜 / B-roll</option><option value="gopro">GoPro</option><option value="insert">细节 / Insert</option><option value="custom">自定义</option></select></label>
                   <label className="production-field"><span>同步策略</span><select value={draft.sync_policy || "auto"} onChange={(event) => patch({ sync_policy: event.target.value })}><option value="auto">参与同步</option><option value="exclude">不参与同步</option></select></label>
                   <label className="production-field"><span>场景归属</span><input value={draft.scene_id || ""} onChange={(event) => patch({ scene_id: event.target.value })} placeholder="例如 12-3" /></label>

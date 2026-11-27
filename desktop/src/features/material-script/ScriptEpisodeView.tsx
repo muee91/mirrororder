@@ -1,5 +1,5 @@
 import type { ReviewEpisode, ReviewModelPayload, ReviewScriptBlock } from "../../api/host";
-import { candidateTakeIds, mappedTakeIds } from "./model";
+import { candidateTakeIds, mappedTakeIds, projectionOf } from "./model";
 import { ScriptBlock, type ScriptProjectionMode } from "./ScriptBlock";
 import { isPlaceableScriptBlock } from "../script/scriptSemantics";
 
@@ -30,6 +30,7 @@ export function ScriptEpisodeView({
   onDropPlacement: (groupId: string, block: ReviewScriptBlock) => void;
   onClickPlacement: (block: ReviewScriptBlock) => void;
 }) {
+  const projection = projectionOf(model);
   return (
     <div className="script-episode">
       {episode.scenes.map((scene) => {
@@ -51,6 +52,8 @@ export function ScriptEpisodeView({
                   block={block}
                   mappedTakeIds={mappedTakeIds(model, block.segment_id)}
                   candidateTakeIds={candidateTakeIds(model, block.segment_id)}
+                  adjacentTakeIds={projection.dialogueByActionTake.get(block.segment_id)}
+                  confirmedActionCount={projection.confirmedActionTakeIds.get(block.segment_id)?.length ?? 0}
                   selected={selectedSegmentId === block.segment_id}
                   projectionMode={projectionMode}
                   draggingGroupId={draggingGroupId}

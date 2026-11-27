@@ -429,7 +429,7 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
   return (
     <div className="production-panel model-connections-card assistant-routing-card">
       <div className="assistant-routing-heading">
-        <div><p className="eyebrow">自动调度</p><h3>小镜当前运行方式</h3></div>
+        <h3>小镜当前运行方式</h3>
         {payload ? <span className={`assistant-routing-mode mode-${payload.routing.mode}`}>{modeLabel(payload.routing.mode)}</span> : null}
       </div>
 
@@ -448,15 +448,8 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
               );
             })}
           </div>
-          <section className="assistant-quick-connect" aria-labelledby="assistant-quick-connect-title">
-            <div className="assistant-quick-connect-heading">
-              <div>
-                <p className="eyebrow">统一接入</p>
-                <h4 id="assistant-quick-connect-title">一键接入主力多模态模型</h4>
-                <p>填写一套连接，同时用于小镜对话与场记 PDF/照片识图（向量检索默认走本机零成本关键词召回）</p>
-              </div>
-              <span className="assistant-quick-connect-badge">对话 + 识图</span>
-            </div>
+          <details className="assistant-quick-connect">
+            <summary className="assistant-quick-connect-heading">连接对话与识图模型</summary>
             <div className="assistant-quick-presets" role="group" aria-label="统一多模态模型预设">
               {PROVIDER_PRESETS.map((preset) => (
                 <button
@@ -486,7 +479,7 @@ export function AssistantModelsPanel({ baseUrl }: Props) {
                 <button type="button" className="assistant-quick-connect-primary" disabled={busy || quickTesting || !payload || !quickConnect.base_url.trim() || !quickConnect.model.trim()} onClick={() => void applyQuickSetup()}>应用到对话与识图</button>
               </div>
             </div>
-          </section>
+          </details>
           <p className="production-note assistant-routing-privacy">{privacySummary(payload.routing)}</p>
           {payload.routing.vision.enabled && !payload.routing.vision.local ? <p className="production-note assistant-routing-privacy">外部画面理解只发送抽样帧到所选服务，不上传原始视频文件。</p> : null}
           {payload.restore_error ? <p className="production-warning">上次设备模型自动恢复未完成：{payload.restore_error}</p> : null}

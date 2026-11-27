@@ -250,7 +250,6 @@ function XiaoJingDesk({
           <div className="xj-ready">
             <div className="xj-prism" aria-hidden="true"><StudioIcon name="sparkle" size={28} /></div>
             <h2>《{projectName}》</h2>
-            <p>全局制作管家已就绪</p>
             <div className="xj-shortcuts">
               {windowState?.global_shortcut_registered && <><kbd>{globalShortcut}</kbd> 全局随时呼出 <span>·</span> </>}
               <kbd>{shortcut}</kbd> 镜序内呼出

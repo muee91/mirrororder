@@ -34,7 +34,7 @@ function workspace(): WorkspacePayload {
   };
 }
 
-describe("Project Home card density", () => {
+describe("Project library cards", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("replaces duplicate empty status and fake zero stats while preserving real counts", async () => {
@@ -49,11 +49,13 @@ describe("Project Home card density", () => {
       const media = cards[1];
       const ready = cards[2];
       expect(empty.querySelector(".project-home-state")?.textContent).toContain("待整理");
-      expect(empty.querySelector(".project-home-project-copy small")?.textContent).toBe("点击打开工程");
+      expect(empty.querySelector(".project-home-project-copy small")).toBeNull();
       expect(empty.textContent).not.toContain("0 Take");
       expect(empty.textContent).not.toContain("0 素材");
-      expect(media.querySelector(".project-home-project-copy small")?.textContent).toBe("点击查看同步与素材");
-      expect(media.querySelector(".project-home-stats-hint")?.textContent).toBe("打开后查看进度与素材");
+      expect(empty.querySelector(".project-home-source")?.textContent).toBe("FCPXML");
+      expect(media.querySelector(".project-home-source")?.textContent).toBe("素材目录");
+      expect(media.querySelector(".project-home-stats")?.textContent).toBe("");
+      expect(empty.querySelector(".project-home-open")?.textContent).toContain("待整理");
       expect(ready.textContent).toContain("2 Take");
       expect(ready.textContent).toContain("7 素材");
     } finally {

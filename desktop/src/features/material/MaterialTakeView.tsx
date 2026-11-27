@@ -288,9 +288,9 @@ export function MaterialTakeView({
           placeholder="搜索 Take、场镜次、机位、对白或备注"
           aria-label="搜索 Take"
         />
-        <div className="material-take-filters" aria-label="Take 状态筛选">
+        <div className="material-take-filters mo-segmented" role="group" aria-label="Take 状态筛选">
           {FILTERS.map((item) => (
-            <button type="button" className={filter === item.value ? "is-active" : ""} key={item.value} onClick={() => setFilter(item.value)}>
+            <button type="button" className={filter === item.value ? "is-active" : ""} key={item.value} aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>
               {item.label} <span>{counts[item.value]}</span>
             </button>
           ))}

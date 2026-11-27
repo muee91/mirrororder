@@ -30,16 +30,16 @@
  * shared 10px floor. Compact Take rows own their typography in take-card.css. */
 .golden-slate-section > header small,
 .golden-slate-table td.col-index small,
-.golden-inspector-head span,
-.golden-inspector-head em,
-.golden-episode-candidates > header,
-.golden-inspector-media > header,
+.golden-episode-candidates > header {
+  font-size: var(--mo-font-xs, 10px);
+}
+
+.golden-inspector-slate-fields dt,
 .golden-angle-fields label,
 .golden-io-row label,
-.golden-inspector-field,
-.golden-inspector-link > span,
-.golden-inspector-link small {
-  font-size: var(--mo-font-xs, 10px);
+.golden-inspector-field {
+  color: var(--mo-text-secondary);
+  font-size: var(--mo-font-sm, 12px);
 }
 
 /* Editable Slate status keeps the direct-select interaction while delegating

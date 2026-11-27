@@ -219,7 +219,7 @@ export function App() {
   const platform = useMemo(() => new PlatformClient(), []);
   const teamGateway = useMemo(() => new TeamGatewayClient(), []);
   const { activities: projectActivities, refreshActivities } = useProjectActivities(
-    snapshot?.baseUrl ?? baseUrl,
+    snapshot?.baseUrl ?? defaultHostBaseUrl,
     snapshot?.projects ?? EMPTY_PROJECTS,
   );
 
@@ -553,8 +553,7 @@ export function App() {
   function selectProject(project: ProjectSummary): void {
     setSelectedProject(project);
     setPageRequest(null);
-    setActiveProjectPage(null);
-    setProjectSyncStatus(null);
+    if (project.project_id !== selectedProject?.project_id) setActiveProjectPage(null);
     setExternalXiaoJingAction(null);
     setSurface("production");
     if (resumeEnabledForSession) rememberProject(project.project_id);
@@ -573,8 +572,7 @@ export function App() {
   function openTeamProject(project: ProjectSummary): void {
     setSelectedProject(project);
     setPageRequest(null);
-    setActiveProjectPage(null);
-    setProjectSyncStatus(null);
+    if (project.project_id !== selectedProject?.project_id) setActiveProjectPage(null);
     setExternalXiaoJingAction(null);
     setSurface("team");
     if (resumeEnabledForSession) rememberProject(project.project_id);
@@ -859,7 +857,7 @@ export function App() {
         event.currentTarget.querySelector("summary")?.focus();
       }
     }}>
-      <summary aria-label={`切换项目 · ${selectedProject.name || selectedProject.project_id}`}>
+      <summary title={selectedProject.name || selectedProject.project_id} aria-label={`切换项目 · ${selectedProject.name || selectedProject.project_id}`}>
         <span>{selectedProject.name || selectedProject.project_id}</span>
       </summary>
       <div className="app-project-switcher-list">

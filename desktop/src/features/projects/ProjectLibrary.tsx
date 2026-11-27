@@ -86,7 +86,8 @@ export function ProjectLibrary({
   const switchProjects = workspace.projects.filter((project) => project.project_id !== selectedProjectId).slice(0, 3);
   const projectStatuses = switchProjects.map((project) => {
     const activity = activities[project.project_id];
-    return projectPresentation(project, activity);
+    const presentation = projectPresentation(project, activity);
+    return `${project.name || project.project_id} · ${presentation.statusLabel}`;
   });
   const runningCount = Object.values(activities).filter((activity) => activity.state === "active").length;
   const failedCount = workspace.projects.filter((project) => {
@@ -201,7 +202,7 @@ export function ProjectLibrary({
           </details>
         </div>
       ) : null}
-      <span className="sr-only">{workspacePath || workspace.workspace} 最近使用 {projectStatuses.map((presentation) => presentation.sidebarSubtitle).join("、")}</span>
+      <span className="sr-only">{workspacePath || workspace.workspace} 最近使用 {projectStatuses.join("、")}</span>
       {onSwitchWorkspace ? <button type="button" className="sr-only" onClick={onSwitchWorkspace}>切换工作区</button> : null}
     </div>
   );

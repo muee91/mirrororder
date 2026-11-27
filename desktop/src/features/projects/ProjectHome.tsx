@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSummary, WorkspacePayload } from "../../api/host";
 import { errorMessage } from "../../api/host";
 import { projectTransferAvailable, saveProjectCopy } from "../../app/projectTransferActions";
+import { StudioIcon } from "../../components/StudioIcons";
 import { ProjectLifecyclePanel } from "./ProjectLifecyclePanel";
 import type { ProjectActivitySummary } from "./projectActivity";
 import { projectFlowLabel, projectPresentation } from "./projectPresentation";
@@ -61,6 +62,7 @@ export function ProjectHome({
   onWorkspaceChanged,
 }: Props) {
   const [query, setQuery] = useState("");
+  const searchInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<HomeMenuState | null>(null);
   const [actionMessage, setActionMessage] = useState("");
   const [transferBusy, setTransferBusy] = useState(false);
@@ -115,6 +117,11 @@ export function ProjectHome({
     }
   }
 
+  const hasProjects = workspace.projects.length > 0;
+  const recentLibraries = recentWorkspaces.filter((item) => item !== workspacePath).slice(0, 3);
+  const lifecycle = <ProjectLifecyclePanel baseUrl={baseUrl} workspaceId={workspace.workspace_id}
+    onOpenExistingFolder={onSwitchWorkspace} onWorkspaceChanged={onWorkspaceChanged} onStatusMessage={setActionMessage} />;
+
   return (
     <section className="project-home-canvas">
       <header className="project-home-heading">
@@ -136,21 +143,18 @@ export function ProjectHome({
             {actionMessage ? <span className="project-home-status-msg" role="status">{actionMessage}</span> : null}
           </div>
         </div>
-        <div className="project-home-actions">
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目…" aria-label="搜索项目" />
-          <ProjectLifecyclePanel baseUrl={baseUrl} workspaceId={workspace.workspace_id} onOpenExistingFolder={onSwitchWorkspace} onWorkspaceChanged={onWorkspaceChanged} onStatusMessage={setActionMessage} />
-        </div>
+        {hasProjects && <div className="project-home-actions">
+          <input ref={searchInput} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目…" aria-label="搜索项目" />
+          {lifecycle}
+        </div>}
       </header>
 
       {visible.length ? (
-        <div className="project-home-list project-home-grid" aria-label="项目列表">
+        <div className="project-home-list" aria-label="项目列表">
           {visible.map((project) => {
             const activity = activities[project.project_id];
             const presentation = projectPresentation(project, activity);
-            const sidebarSubtitle = presentation.sidebarSubtitle === presentation.statusLabel
-              ? project.input_kind === "media-directory" ? "点击查看同步与素材" : "点击打开工程"
-              : presentation.sidebarSubtitle;
-            const hasProjectStats = presentation.takes > 0 || presentation.clips > 0 || presentation.attention > 0;
+            const detail = activity?.state === "active" ? activity.message : project.error;
             return (
               <article
                 className={`project-home-card status-${presentation.statusTone}`}
@@ -170,29 +174,22 @@ export function ProjectHome({
                     }
                   }}
                 >
-                  <div className="project-card-cover" aria-hidden="true">
-                    <span className="project-card-spectrum" />
-                    <span className="project-card-kind-pill">{presentation.kind}</span>
+                  <span className="project-home-source">{presentation.kind}</span>
+                  <span className="project-home-project-copy">
+                    <strong>{project.name || project.project_id}</strong>
+                    {detail && <small title={detail}>{detail}</small>}
+                  </span>
+                  <span className="project-home-footer">
                     <span className={`project-home-state status-${presentation.statusTone}`}>
                       {activity?.state === "active" ? <span className="project-activity-spinner" aria-hidden="true" /> : <span className="project-home-state-dot" aria-hidden="true" />}
                       <span>{presentation.statusLabel}</span>
                     </span>
-                  </div>
-                  <div className="project-card-body">
-                    <span className="project-home-project-copy">
-                      <strong>{project.name || project.project_id}</strong>
-                      <small title={project.project_id}>{activity?.state === "active" && activity.message ? `${sidebarSubtitle} · ${activity.message}` : sidebarSubtitle}</small>
+                    <span className="project-home-stats">
+                      {presentation.takes > 0 && <span><strong>{presentation.takes}</strong> Take</span>}
+                      {presentation.clips > 0 && <span><strong>{presentation.clips}</strong> 素材</span>}
+                      {presentation.attention > 0 && presentation.statusTone !== "attention" && <span>{presentation.attention} 需关注</span>}
                     </span>
-                    {hasProjectStats ? (
-                      <span className="project-home-stats">
-                        <span><strong>{presentation.takes}</strong> Take</span>
-                        <span><strong>{presentation.clips}</strong> 素材</span>
-                        {presentation.attention ? <span className="needs-attention"><strong>{presentation.attention}</strong> 需关注</span> : null}
-                      </span>
-                    ) : (
-                      <span className="project-home-stats-hint">打开后查看进度与素材</span>
-                    )}
-                  </div>
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -210,48 +207,28 @@ export function ProjectHome({
             );
           })}
         </div>
-      ) : workspace.projects.length ? (
+      ) : hasProjects ? (
         <div className="project-home-empty">
           <strong>没有匹配项目</strong>
-          <span>调整搜索关键词。</span>
+          <button type="button" className="secondary" onClick={() => { setQuery(""); searchInput.current?.focus(); }}>清除搜索</button>
         </div>
       ) : (
-        <div className="project-home-onboarding">
-          <div className="project-home-empty-hero">
-            <strong>当前项目库还没有短剧项目</strong>
-            <span>你可以新建一部短剧、导入便携工程包（.mirrorproj），或切换到硬盘上已有的项目库文件夹。</span>
+        <section className="project-home-onboarding" aria-labelledby="project-start-heading">
+          <StudioIcon name="film" size={32} />
+          <div className="project-home-start">
+            <h2 id="project-start-heading">从第一部短剧开始</h2>
+            <p>选择摄影机原片和同期 WAV 所在的文件夹，就能建项并开始同步。剧本和场记可以稍后添加。</p>
+            <div className="project-home-actions">{lifecycle}</div>
+            {onOpenWorkspacePath && recentLibraries.length > 0 && <div className="project-onboarding-recent">
+              <span>最近项目库</span>
+              {recentLibraries.map((item) => (
+                <button key={item} type="button" className="secondary" title={item} onClick={() => onOpenWorkspacePath(item)}>
+                  {item.replace(/[\\/]workspace\.toml$/i, "").split(/[\\/]/).filter(Boolean).pop() || item}
+                </button>
+              ))}
+            </div>}
           </div>
-          <div className="project-onboarding-grid">
-            <article className="project-onboarding-card is-highlighted">
-              <span className="project-onboarding-step">01 · 打开已有项目库</span>
-              <h3>选择已有项目库文件夹</h3>
-              <p>如果已有项目库或短剧工程目录在硬盘其他位置，直接选中那个项目库文件夹即可打开。</p>
-              {onSwitchWorkspace ? (
-                <button type="button" onClick={onSwitchWorkspace}>选择已有项目库…</button>
-              ) : null}
-              {onOpenWorkspacePath && recentWorkspaces.filter((item) => item !== workspacePath).length > 0 ? (
-                <div className="project-onboarding-recent">
-                  <span>最近打开过：</span>
-                  {recentWorkspaces.filter((item) => item !== workspacePath).slice(0, 3).map((item) => (
-                    <button key={item} type="button" className="secondary" title={item} onClick={() => onOpenWorkspacePath(item)}>
-                      {item.split(/[\\/]/).filter(Boolean).pop() || item}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </article>
-            <article className="project-onboarding-card">
-              <span className="project-onboarding-step">02 · 从素材开新剧</span>
-              <h3>新建多机位短剧工程</h3>
-              <p>点击右上角 <strong>「新建项目」</strong>，选择原始视频与同期 WAV 录音目录（或导入 FCPXML），即可开始多机位同步、场记与 NLE 交付。</p>
-            </article>
-            <article className="project-onboarding-card">
-              <span className="project-onboarding-step">03 · 跨电脑交接</span>
-              <h3>导入 .mirrorproj 工程包</h3>
-              <p>如果是另一台剪辑机导出的便携工程包，点击右上角 <strong>「导入工程包…」</strong> 还原，再在「本机素材」中重连硬盘原片。</p>
-            </article>
-          </div>
-        </div>
+        </section>
       )}
 
       {menu ? (

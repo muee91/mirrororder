@@ -20,3 +20,10 @@ export function isPlaceableScriptBlock(block: Pick<ReviewScriptBlock, "type" | "
   const speaker = String(block.speaker ?? "").trim().replace(/\s+/g, "");
   return !NON_PLACEABLE_SCRIPT_BLOCK_TYPES.has(type) && !NON_PLACEABLE_SCRIPT_SPEAKERS.has(speaker);
 }
+
+export function scriptLineText(block: ReviewScriptBlock): string {
+  const raw = block.raw_text.trim();
+  const text = block.text.trim();
+  if (raw && raw !== text) return raw;
+  return block.speaker && text && !text.startsWith(block.speaker) ? `${block.speaker}：${text}` : text;
+}

@@ -137,7 +137,7 @@ export function ScriptAssignmentDecision({
   return (
     <section className="editorial-decision-section script-assignment-decision" aria-label="当前剧本段最终决定">
       <div className="take-evidence-heading">
-        <div><p className="eyebrow">剧本段 · 最终决定</p><strong>当前 Take 在此剧本段的决定</strong></div>
+        <strong>当前 Take 在此剧本段的决定</strong>
         <span role={loadState === "error" ? "alert" : "status"}>{message}</span>
       </div>
       {loadState === "error" ? <button type="button" className="secondary" disabled={busy} onClick={() => void reload()}>重新读取状态</button> : null}
@@ -151,7 +151,6 @@ export function ScriptAssignmentDecision({
         ? <p className="editorial-current-decision">当前剧本段最终 <strong>{STATE_LABELS[decision.state] || decision.state}</strong> · {decision.actor || "未知决定人"}{decision.updated_at ? ` · ${decision.updated_at}` : ""}</p>
         : <p className="evidence-muted">当前 Take 尚未形成剧本段最终决定。</p>
         : null}
-      <p className="evidence-authority-note">这里只写 assignment 级 Final Editorial Decision，不修改剧本归集、场记事实或 Timeline。</p>
     </section>
   );
 }

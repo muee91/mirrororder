@@ -90,6 +90,24 @@ it('opens the existing production row from an unclassified source scene without 
   expect(sourceRow.textContent).toContain('保条 ★');
   expect(add).not.toHaveBeenCalled(); expect(stage).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
 });
+
+it('fills scene and episode from corroborated footage while the shot and take cells are empty', async () => {
+  const read = vi.mocked(HostConnection.prototype.reviewModel);
+  const fixture = await read.mock.results[0].value as ReviewModelPayload;
+  fixture.episodes = [{ episode: 19, scenes: [{ scene_id: '19-1', heading: '', script_blocks: [], take_group_ids: [] }] }];
+  fixture.take_groups[0].take_index = 1;
+  fixture.take_groups[0].automatic_state = {
+    status: 'needs_review', evidence: { scene_cross_check: { verdict: 'agrees', episode: 19, scene_id: '19-1' } },
+  };
+  read.mockResolvedValue(fixture);
+  await click('场记表');
+  await click('刷新场记');
+
+  const inputs = [...container.querySelectorAll<HTMLInputElement>('.slate-row input')].slice(0, 4);
+  expect(inputs.map(input => input.value)).toEqual(['19', '19-1', '', '']);
+  expect(upsert).not.toHaveBeenCalled();
+});
+
 it('carries the exact B source and playback time into existing slate interval preparation', async () => {
   await click('第 1 行 B机');
   const original = container.querySelector<HTMLVideoElement>('.slate-form-detail video')!;

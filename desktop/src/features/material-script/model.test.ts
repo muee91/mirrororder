@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ReviewModelPayload, ReviewTakeGroup } from "../../api/host";
+import type { ReviewCandidate, ReviewModelPayload, ReviewScriptBlock, ReviewTakeGroup } from "../../api/host";
+import { matchesScriptSpeech, scriptSpeechClauses, spokenScriptText } from "./scriptSpeech";
 import {
   buildScriptTakeProjection,
   candidateTakeIds,
@@ -41,6 +42,44 @@ function take(overrides: Partial<ReviewTakeGroup> = {}): ReviewTakeGroup {
 }
 
 describe("material-script model", () => {
+  it("finds same-scene action takes from neighbouring dialogue without counting a hint as confirmed coverage", () => {
+    const block = (segment_id: string, type: string, text = segment_id): ReviewScriptBlock => ({
+      segment_id, type, text, episode: 1, scene_id: "room", order: 1, speaker: "", raw_text: text, issues: [],
+    });
+    const rows = [block("before", "dialogue"), block("note", "parenthetical"), block("lift", "action"),
+      block("turn", "action"), block("after", "dialogue"), block("cut", "transition"), block("alone", "action")];
+    const placement = (group_id: string, source: string, ids: string[]) => take({ group_id,
+      effective_mapping: { source, script_segment_ids: ids, episode_ids: [1], mapping_status: "confirmed" } });
+    const speech = { script_segment_id: "before", script_segment_ids: ["before","after"], confidence: "possible_dialogue",
+      method: "dialogue_window", transcript_text: "before" } as ReviewCandidate;
+    const groups = [placement("both-lines", "human", ["before","after"]), placement("insert", "human", ["lift"]),
+      take({ group_id: "speech-window", candidates: [speech] }),
+      take({ group_id: "context", candidates: [{ ...speech, confidence: "context_only" }] }),
+      take({ group_id: "excluded", candidates: [speech], editorial_state: { excluded: true } })];
+    const model = { take_groups: groups, episodes: [{ episode: 1, scenes: [
+      { scene_id: "room", script_blocks: rows }, { scene_id: "next", script_blocks: [block("next-action", "action")] },
+    ] }] } as ReviewModelPayload;
+    const projection = buildScriptTakeProjection(model);
+    expect(projection.relatedTakeIds.get("lift")).toEqual(["insert", "both-lines", "speech-window"]);
+    expect(projection.mappedTakeIds.get("lift")).toEqual(["insert"]);
+    expect(projection.confirmedActionTakeIds.get("lift")).toEqual(["insert"]);
+    expect(projection.candidateTakeIds.has("lift")).toBe(false);
+    expect(projection.dialogueByActionTake.get("turn")?.get("both-lines")?.map(row => row.segment_id)).toEqual(["before","after"]);
+    expect(projection.dialogueByActionTake.get("lift")?.get("speech-window")?.map(row => row.segment_id)).toEqual(["before"]);
+    expect(projection.dialogueByActionTake.has("alone")).toBe(false);
+    expect(projection.dialogueByActionTake.has("next-action")).toBe(false);
+  });
+
+  it("locates spoken words without requiring inline actions to be audible", () => {
+    const line = { type: "dialogue", speaker: "江遥", text: "（递过杯子）喝口水。江遥：坐下。" } as ReviewScriptBlock;
+    expect(spokenScriptText(line.text)).toBe("喝口水。江遥：坐下。");
+    const clauses = scriptSpeechClauses(line);
+    expect(matchesScriptSpeech("你先喝口水", clauses)).toBe(true);
+    expect(matchesScriptSpeech("坐下", clauses)).toBe(true);
+    expect(matchesScriptSpeech("咱们坐下来", clauses)).toBe(false);
+    expect(matchesScriptSpeech("递过杯子", clauses)).toBe(false);
+  });
+
   it("keeps editorial rejection separate from mapping state", () => {
     expect(
       takeStatus(

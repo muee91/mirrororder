@@ -9,6 +9,8 @@ interface Props {
   baseUrl?: string;
   onMulticamSync?: () => void;
   onInspect?: () => void;
+  onOpenDelivery?: () => void;
+  onRestart?: () => void;
   onRebaseOffsets?: () => void;
   onCancel?: () => void;
   onRepair?: () => void;
@@ -19,7 +21,7 @@ interface Props {
 
 const SYNC_STEPS = [
   ["确认原始目录", "确认摄影机原片和同期录音可读"],
-  ["计算多机位同步", "建立各机位与同期录音的摆位"],
+  ["计算多机位同步", "将各机位原片放到同一条时间线上"],
   ["建立媒体索引", "关联原片，供核对与重连使用"],
   ["核对与交付", "对照音画，再打开目标工程"],
 ] as const;
@@ -64,7 +66,7 @@ function mediaTypeCounts(sources: MediaBindingSummary | null): { video: number; 
   return { video, audio };
 }
 
-export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onInspect, onRebaseOffsets, onCancel, onRepair, onOpenStatus, command, submissionError }: Props) {
+export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onInspect, onOpenDelivery, onRestart, onRebaseOffsets, onCancel, onRepair, onOpenStatus, command, submissionError }: Props) {
   const [sources, setSources] = useState<MediaBindingSummary | null>(null);
   const [sourcesUnreadable, setSourcesUnreadable] = useState(false);
   useEffect(() => {
@@ -89,7 +91,8 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
   const done = typeof rawDone === "number" && Number.isFinite(rawDone) && rawDone >= 0 ? rawDone : null;
   const total = typeof rawTotal === "number" && Number.isFinite(rawTotal) && rawTotal >= 5 ? rawTotal : null;
   const hasCheckpoints = running && task?.stage === "sync" && done !== null && total !== null && done <= total;
-  const stepIndex = complete ? 3 : task?.stage === "analysis" ? 2 : task?.stage && task.stage !== "queued" ? 1 : 0;
+  const stepIndex = complete ? 3 : loading || unreadable ? -1
+    : task?.stage === "analysis" ? 2 : task?.stage === "sync" ? 1 : problem ? -1 : 0;
   const sourceRoots = sourcesUnreadable ? "暂不可读" : sources ? `${sources.roots.length} 个` : "读取中";
   const inaccessible = !sourcesUnreadable ? sources?.unavailable_roots?.length ?? 0 : 0;
   const lastActivity = task?.updated_at || task?.completed_at;
@@ -103,10 +106,10 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
   const footage = syncTimeline.ready ? `${syncTimeline.clip_count.toLocaleString()} 个片段` : "同步后统计";
   const cameras = syncTimeline.cameras.length ? syncTimeline.cameras.join(" / ") : "待识别";
   const recordingStatus = syncRecordingStatusLabel(syncTimeline);
-  const sourceMediaCounts = mediaTypeCounts(sources);
-  const preflightVideo = sourceMediaCounts ? `${sourceMediaCounts.video.toLocaleString()} 个文件` : sources ? "尚未扫描" : "读取中";
-  const preflightAudio = sourceMediaCounts ? `${sourceMediaCounts.audio.toLocaleString()} 个文件` : sources ? "尚未扫描" : "读取中";
-  const preflightCamera = sources ? "同步时识别" : "读取中";
+  const sourceMediaCounts = sourcesUnreadable ? null : mediaTypeCounts(sources);
+  const inventoryState = sourcesUnreadable ? "暂不可读" : sources ? "尚未扫描" : "读取中";
+  const preflightVideo = sourceMediaCounts ? `${sourceMediaCounts.video.toLocaleString()} 个文件` : inventoryState;
+  const preflightAudio = sourceMediaCounts ? `${sourceMediaCounts.audio.toLocaleString()} 个文件` : inventoryState;
 
   return (
     <section className="multicam-sync-gate" aria-label="多机位同步任务">
@@ -115,7 +118,7 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
           <div>
             <span className="sync-task-state" data-phase={submissionError && !running && !complete ? "failed" : phase} role="status">{phaseLabel}</span>
             <h1>{complete ? "同步母版已就绪" : "同步原始素材"}</h1>
-            <p>{complete ? "核对机位与同期录音，确认后生成目标剪辑软件工程。" : "将摄影机原片和同期录音整理到同一条同步母版。"}</p>
+            <p>{complete ? "可核对机位与同期录音，或直接导出工程。" : "将摄影机原片和同期录音整理到同一条同步母版。"}</p>
           </div>
           <div className="sync-task-actions">
             <button type="button"
@@ -123,12 +126,13 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
               onClick={complete ? onInspect : onMulticamSync}>
               {primaryLabel}
             </button>
+            {complete && onOpenDelivery && <button type="button" className="secondary" onClick={onOpenDelivery}>导出到剪辑软件…</button>}
             {running && task && onCancel && <button type="button" className="secondary" disabled={Boolean(command) || task.cancel_requested}
               onClick={onCancel}>{task.cancel_requested || command === "cancel" ? "正在取消…" : "取消同步"}</button>}
             {syncTimeline.stale_offset_revision ? <button type="button" className="secondary" disabled={Boolean(command)} onClick={onRebaseOffsets}>
               应用上一版偏移 r{syncTimeline.stale_offset_revision}
             </button> : null}
-            {task && onOpenStatus && <button type="button" className="secondary" onClick={onOpenStatus}>任务详情</button>}
+            {(task || problem || submissionError || unreadable) && onOpenStatus && <button type="button" className="secondary" onClick={onOpenStatus}>任务详情</button>}
             {!complete && onInspect && <button type="button" className="secondary" onClick={onInspect}>查看上次有效母版</button>}
           </div>
         </header>
@@ -139,7 +143,7 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
             <dl>
               <div><dt>原始目录</dt><dd>{sourceRoots}</dd></div>
               <div><dt>视频</dt><dd>{syncTimeline.ready ? footage : preflightVideo}</dd></div>
-              <div><dt>机位</dt><dd>{syncTimeline.ready ? cameras : preflightCamera}</dd></div>
+              <div><dt>机位</dt><dd>{syncTimeline.ready ? cameras : "同步时识别"}</dd></div>
               <div><dt>同期录音</dt><dd data-state={syncTimeline.ready ? recordingStatus.state : undefined}>{syncTimeline.ready ? recordingStatus.label : preflightAudio}</dd></div>
             </dl>
             {inaccessible > 0 && <p className="sync-task-warning" role="status">{inaccessible} 个原始目录不可访问</p>}
@@ -152,7 +156,7 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
               {SYNC_STEPS.map(([label, hint], index) => {
                 const current = index === stepIndex;
                 const done = index < stepIndex && !unreadable;
-                const stageStatus = done ? "已完成" : current ? complete ? "下一步" : phaseLabel : "待执行";
+                const stageStatus = stepIndex < 0 ? "待确认" : done ? "已完成" : current ? complete ? "下一步" : phaseLabel : "待执行";
                 return <li key={label} data-state={done ? "done" : current ? "current" : "upcoming"} aria-current={current ? "step" : undefined}>
                   <div className="sync-task-step"><strong>{label}</strong><small>{hint}</small></div>
                   <span className="sync-task-step-status">{stageStatus}</span>
@@ -175,6 +179,7 @@ export function SyncTaskWorkspace({ syncTimeline, baseUrl, onMulticamSync, onIns
           {unreadable && <p className="multicam-sync-error" role="alert">{syncTimeline.message}</p>}
           {task?.started_at && <small>开始时间 {activityLabel(task.started_at)}</small>}
         </section>
+        {complete && onRestart && <button type="button" className="secondary" disabled={Boolean(command)} onClick={onRestart}>重新计算同步…</button>}
       </div>
     </section>
   );

@@ -41,7 +41,7 @@ describe("ReviewDecisionPanel authority recovery", () => {
   let root: Root;
   let status: MockInstance<EditorialClient["status"]>;
   let decision: MockInstance<EditorialClient["decision"]>;
-  let onDecisionChange: Mock<() => Promise<void>>;
+  let onDecisionChange: Mock<(groupId: string) => Promise<void>>;
 
   beforeEach(() => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -51,7 +51,7 @@ describe("ReviewDecisionPanel authority recovery", () => {
     root = createRoot(container);
     status = vi.spyOn(EditorialClient.prototype, "status");
     decision = vi.spyOn(EditorialClient.prototype, "decision");
-    onDecisionChange = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    onDecisionChange = vi.fn<(groupId: string) => Promise<void>>().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -76,6 +76,26 @@ describe("ReviewDecisionPanel authority recovery", () => {
   async function click(label: string) {
     await act(async () => button(label).click());
   }
+
+  it("uses the current operator at submission even when a previous reviewer is still cached", async () => {
+    status.mockResolvedValueOnce(snapshot(8));
+    decision.mockResolvedValueOnce(writeResponse(snapshot(9, "g1", "best")));
+    await render();
+    localStorage.setItem("mirrororder.productionActor", "当前剪辑师");
+    await click("首选");
+    expect(decision).toHaveBeenCalledWith("p1", expect.objectContaining({ actor: "当前剪辑师", expectedRevision: 8 }));
+    expect(onDecisionChange).toHaveBeenCalledWith("g1");
+  });
+
+  it("uses the earliest saved reviewer identity when there is no newer operator", async () => {
+    localStorage.clear();
+    localStorage.setItem("mirrororder.desktop.review-actor", "旧版剪辑师");
+    status.mockResolvedValueOnce(snapshot(1));
+    decision.mockResolvedValueOnce(writeResponse(snapshot(2, "g1", "keep")));
+    await render();
+    await click("保留");
+    expect(decision).toHaveBeenCalledWith("p1", expect.objectContaining({ actor: "旧版剪辑师" }));
+  });
 
   it("shows a recoverable read failure without claiming there is no decision", async () => {
     status.mockRejectedValueOnce(new Error("连接中断")).mockResolvedValueOnce(snapshot(3, "g1", "keep"));
@@ -140,6 +160,7 @@ describe("ReviewDecisionPanel authority recovery", () => {
     expect(container.textContent).not.toContain("当前 Take 最终：首选");
     expect(status).toHaveBeenCalledTimes(2);
     expect(onDecisionChange).toHaveBeenCalledTimes(outcome === "success" ? 1 : 0);
+    if (outcome === "success") expect(onDecisionChange).toHaveBeenCalledWith("g1");
     expect(button("首选").disabled).toBe(false);
   });
 
@@ -229,15 +250,71 @@ describe("ReviewDecisionPanel authority recovery", () => {
     expect(onDecisionChange).toHaveBeenCalledTimes(1);
   });
 
-  it("does not turn a successful decision into a failure when the parent refresh rejects", async () => {
+  it("retries only the queue read after a confirmed decision and keeps the selected state visible", async () => {
     status.mockResolvedValueOnce(snapshot(1));
     decision.mockResolvedValueOnce(writeResponse(snapshot(2, "g1", "keep")));
-    onDecisionChange.mockRejectedValueOnce(new Error("queue unavailable"));
+    onDecisionChange.mockRejectedValueOnce(new Error("列表暂不可读"))
+      .mockRejectedValueOnce(new Error("连接中断"));
     await render();
     await click("保留");
-    expect(container.textContent).toContain("当前 Take 最终：保留");
-    expect(button("保留").className).toContain("is-selected");
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("已保存");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("本条 Take 的选片决定已保存，审阅队列未更新");
+    expect(button("保留").getAttribute("aria-pressed")).toBe("true");
+    expect(button("保留").querySelector("svg")?.getAttribute("visibility")).toBe("visible");
+    expect(button("废弃").querySelector("svg")?.getAttribute("visibility")).toBe("hidden");
     expect(button("首选").disabled).toBe(false);
+    await click("刷新队列");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("连接中断");
+    await click("刷新队列");
+    expect(decision).toHaveBeenCalledTimes(1);
+    expect(status).toHaveBeenCalledTimes(1);
+    expect(onDecisionChange.mock.calls).toEqual([["g1"], ["g1"], ["g1"]]);
     expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("allows another confirmed decision while a queue read is slow and ignores the superseded read", async () => {
+    const firstQueue = deferred<void>();
+    status.mockResolvedValueOnce(snapshot(1));
+    decision.mockResolvedValueOnce(writeResponse(snapshot(2, "g1", "best")))
+      .mockResolvedValueOnce(writeResponse(snapshot(3)));
+    onDecisionChange.mockReturnValueOnce(firstQueue.promise);
+    await render();
+    await click("首选");
+    expect(button("清除").disabled).toBe(false);
+    await click("清除");
+    expect(decision).toHaveBeenLastCalledWith("p1", expect.objectContaining({ state: "unreviewed", expectedRevision: 2 }));
+    await act(async () => firstQueue.reject(new Error("旧队列读取失败")));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(button("首选").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("can recover a previous Take's queue refresh without changing the current Take's decision", async () => {
+    const oldWrite = deferred<EditorialWriteResponse>();
+    status.mockResolvedValueOnce(snapshot(1)).mockResolvedValueOnce(snapshot(2, "g2", "reject"));
+    decision.mockReturnValueOnce(oldWrite.promise);
+    onDecisionChange.mockRejectedValueOnce(new Error("列表暂不可读"));
+    await render();
+    await click("首选");
+    await render({ groupId: "g2" });
+    await act(async () => oldWrite.resolve(writeResponse(snapshot(3, "g1", "best"))));
+    expect(button("废弃").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("另一条 Take 的选片决定已保存，审阅队列未更新");
+    await click("刷新队列");
+    expect(onDecisionChange.mock.calls).toEqual([["g1"], ["g1"]]);
+    expect(decision).toHaveBeenCalledTimes(1);
+    expect(button("废弃").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("discards a late queue read failure after a project switch", async () => {
+    const oldRead = deferred<void>();
+    status.mockResolvedValueOnce(snapshot(1)).mockResolvedValueOnce(snapshot(9, "g1", "keep"));
+    decision.mockResolvedValueOnce(writeResponse(snapshot(2, "g1", "best")));
+    onDecisionChange.mockReturnValueOnce(oldRead.promise);
+    await render();
+    await click("首选");
+    await render({ projectId: "p2" });
+    await act(async () => oldRead.reject(new Error("旧项目的列表暂不可读")));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(button("保留").getAttribute("aria-pressed")).toBe("true");
   });
 });

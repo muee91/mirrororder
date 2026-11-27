@@ -71,7 +71,7 @@
 .selected-take-drag { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--mo-border-strong, #34404b); border-radius: 4px; padding: 6px 9px; color: var(--mo-text-secondary, #aab5c0); background: var(--mo-surface-raised, #151b21); cursor: grab; }
 .selected-take-drag span { color: var(--mo-text-muted, #6f7b87); }
 .script-episode { display: grid; gap: 14px; }
-.script-scene { border: 1px solid var(--mo-border-subtle); border-radius: 12px; padding: 18px 20px; background: var(--mo-surface-pane); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 6px 20px rgba(0, 0, 0, 0.2); }
+.script-scene { border: 0; border-radius: var(--mo-radius-pane); padding: var(--mo-space-3); background: var(--mo-surface-pane); box-shadow: var(--mo-shadow-panel); }
 .script-scene > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--mo-border-subtle); }
 .script-scene h3 { margin: 2px 0 0; font-size: 15px; font-weight: 660; letter-spacing: -0.01em; }
 .script-block-list { display: grid; gap: 4px; margin-top: 12px; }

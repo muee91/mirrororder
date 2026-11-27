@@ -46,7 +46,7 @@ describe("independent production module routing", () => {
     const nav = [...root.querySelectorAll<HTMLButtonElement>("button.project-module-link")];
     expect(nav).toHaveLength(5);
     expect([...nav].map((button) => button.textContent?.trim())).toEqual(["素材", "同步", "场记", "剧本", "审阅"]);
-    expect([...nav].map((button) => button.getAttribute("aria-label"))).toEqual(["素材库", "同步核对（当前为同步任务）", "交互场记", "剧本关联", "看片审阅"]);
+    expect([...nav].map((button) => button.getAttribute("aria-label"))).toEqual(["素材库", "同步任务", "交互场记", "剧本关联", "看片审阅"]);
     expect(root.querySelector(".project-module-overflow")).toBeNull();
     expect(root.querySelector('[aria-current="page"]')?.textContent).toContain("同步");
     expect(root.querySelector('[aria-current="page"] .project-module-running')).toBeTruthy();
@@ -55,6 +55,14 @@ describe("independent production module routing", () => {
     expect(nav.find((button) => button.textContent?.includes("场记"))?.disabled).toBe(true);
     expect(nav.find((button) => button.textContent?.includes("剧本"))?.disabled).toBe(true);
     expect(nav.find((button) => button.textContent?.includes("审阅"))?.disabled).toBe(true);
+  });
+
+  it("omits the raw-media sync rail entry for an FCPXML project", () => {
+    const root = document.createElement("div");
+    root.innerHTML = renderToStaticMarkup(createElement(ProjectModuleNavigation, {
+      inputKind: "fcpxml", selected: "slate", syncReady: true, syncPhase: "not-required", onNavigate: () => {},
+    }));
+    expect([...root.querySelectorAll("button")].map(button => button.textContent)).toEqual(["素材", "场记", "剧本", "审阅"]);
   });
 
   it("keeps the sync verification entry name when the master is ready", () => {
