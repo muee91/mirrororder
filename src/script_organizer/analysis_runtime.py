@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
-from .asr_runtime import ASRRuntime, script_asr_prompt
+from .asr_runtime import ASRRuntime
 from .config import ProjectConfig
 from .fcpxml_reader import build_multicam_groups, read_fcpxml
 from .material_index import (
@@ -122,6 +122,7 @@ def _prefill_transcripts(
     progress: Callable[[int, int, str], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
     *,
+    group_ids: set[str] | None = None,
     workspace_id: str | None = None,
     project_id: str | None = None,
     previous_index: dict[str, Any] | None = None,
@@ -140,8 +141,9 @@ def _prefill_transcripts(
         strict_device_context=strict_device_context,
     )
     groups = build_multicam_groups(clips, source_config.minimum_overlap_seconds, source_config.split_bridge_ratio)
+    if group_ids is not None:
+        groups = [group for group in groups if group.group_id in group_ids]
     store = TranscriptStore(source_config.transcript_dir)
-    prompt = script_asr_prompt(source_config.script)
     priority = {camera: index for index, camera in enumerate(source_config.asr_camera_priority)}
     clip_by_id = {clip.clip_id: clip for clip in clips}
     errors: list[str] = []
@@ -171,7 +173,7 @@ def _prefill_transcripts(
                     total_groups,
                     f"正在转写第 {group_index}/{total_groups} 个逻辑 Take",
                 )
-            runtime.transcribe(clip_by_id[preferred.clip_id], store, prompt)
+            runtime.transcribe(clip_by_id[preferred.clip_id], store, "")
             count += 1
         except ResourceCancelled:
             raise
@@ -194,6 +196,7 @@ def _escalate_ambiguous(
     progress: Callable[[int, int, str], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
     *,
+    group_ids: set[str] | None = None,
     workspace_id: str | None = None,
     project_id: str | None = None,
     previous_index: dict[str, Any] | None = None,
@@ -220,10 +223,11 @@ def _escalate_ambiguous(
     group_by_id = {group.group_id: group for group in groups}
     clip_by_id = {clip.clip_id: clip for clip in clips}
     store = TranscriptStore(source_config.transcript_dir)
-    prompt = script_asr_prompt(source_config.script)
     priority = {camera: index for index, camera in enumerate(source_config.asr_camera_priority)}
     reviewed = _reviewed_group_ids(source_config)
     rows = result.get("matches", {}).get("groups", {}) if isinstance(result.get("matches"), dict) else {}
+    if isinstance(rows, dict) and group_ids is not None:
+        rows = {group_id: row for group_id, row in rows.items() if group_id in group_ids}
     changed = 0
     attempted_groups = 0
     errors: list[str] = []
@@ -260,7 +264,7 @@ def _escalate_ambiguous(
             if cancelled and cancelled():
                 raise ResourceCancelled("分析任务已取消")
             try:
-                runtime.transcribe(clip_by_id[member.clip_id], store, prompt)
+                runtime.transcribe(clip_by_id[member.clip_id], store, "")
                 changed += 1
             except ResourceCancelled:
                 raise
@@ -366,6 +370,7 @@ def analyze(
     config.ensure_output()
     analysis_config = effective_analysis_config(config)
     runtime = ASRRuntime.from_config(config)
+    runtime.cancelled = cancelled
     def report(phase: str, done: int, total: int, message: str) -> None:
         if progress:
             progress(phase, done, total, message)
@@ -377,12 +382,13 @@ def analyze(
     # clear FCPXML paths rather than falling back to locators from shared XML.
     context_partial = bool(workspace_id) != bool(project_id)
     strict_media = strict_device_context or context_partial or bool(workspace_id and project_id)
-    _prefill, errors = _prefill_transcripts(
+    prefill, errors = _prefill_transcripts(
         config,
         analysis_config,
         runtime,
         lambda done, total, message: report("asr", done, total, message),
         cancelled,
+        group_ids=affected_group_ids,
         workspace_id=workspace_id,
         project_id=project_id,
         previous_index=previous_index,
@@ -409,6 +415,7 @@ def analyze(
         result,
         lambda done, total, message: report("rescue", done, total, message),
         cancelled,
+        group_ids=affected_group_ids,
         workspace_id=workspace_id,
         project_id=project_id,
         previous_index=previous_index,
@@ -423,7 +430,7 @@ def analyze(
         # cheap while keeping the matching algorithm deterministic.
         result = _analyze_core(
             analysis_config,
-            None,
+            affected_group_ids,
             lambda done, total, message: report("matching", done, total, message),
             cancelled=cancelled,
             workspace_id=workspace_id,
@@ -432,7 +439,7 @@ def analyze(
             strict_device_context=strict_media,
         )
     _maybe_write_shot_evidence(config, result, cancelled=cancelled)
-    return _restore_source_identity(
+    result = _restore_source_identity(
         config,
         analysis_config,
         result,
@@ -440,3 +447,6 @@ def analyze(
         errors,
         redact_media=bool(workspace_id or project_id),
     )
+    if runtime.enabled and not prefill["transcribed"] and errors and not result["index"]["stats"]["cached_transcript_clips"]:
+        raise RuntimeError(f"未生成语音转写：{errors[0]}")
+    return result

@@ -12,8 +12,9 @@ from urllib.parse import parse_qs
 from .agent_tools import CachedProjectEvidence, _read
 from .assistant_store import _basename
 from .editorial_store import EditorialStore
+from .device_runtime_settings import load_runtime_settings
 from .review_store import ReviewStore
-from .semantic_encoder import SemanticEmbeddingConfig
+from .semantic_encoder import SemanticEmbeddingConfig, SemanticEncoder
 from .semantic_index import ProjectSemanticIndexer, SEMANTIC_SOURCES
 from .semantic_search import SemanticSearcher, safe_search_payload
 from .transcript import slice_transcript
@@ -133,10 +134,11 @@ def _workspace_for_service(service: Any) -> Any:
     return current.workspace
 
 
-def _searcher(service: Any, project_id: str, *, read_only: bool = False) -> SemanticSearcher:
+def _searcher(service: Any, project_id: str, *, read_only: bool = False, device_only: bool = False) -> SemanticSearcher:
     project = service.project(project_id)
     workspace = _workspace_for_service(service)
-    return SemanticSearcher(workspace.workspace_id, project_id, project.config, read_only=read_only)
+    encoder = SemanticEncoder(device_only=True) if device_only else None
+    return SemanticSearcher(workspace.workspace_id, project_id, project.config, read_only=read_only, encoder=encoder)
 
 
 def _deterministic_answer(retrieval: dict[str, Any], *, steward: dict[str, Any] | None = None) -> str:
@@ -905,6 +907,15 @@ def install_semantic_runtime() -> None:
             # Derived semantic refresh must never fail the source production task.
             # Read paths remain side-effect free; the next background refresh can retry.
             return
+        if task_type in {"prepare_project", "incremental_analyze", "transcribe"} and load_runtime_settings().get("local_vision_enabled"):
+            try:
+                manager.submit(
+                    project_id, "evidence_extract", targets={"local_visual": True, "group_ids": group_ids},
+                    idempotency_key=f"local-visual:{task_id}", actor="system",
+                )
+            except Exception:
+                # Local visual evidence can be built later without invalidating the analysis.
+                pass
 
     def make_handler_with_semantic(service: Any, web_root):
         BaseHandler = original_make_handler(service, web_root)
@@ -925,13 +936,12 @@ def install_semantic_runtime() -> None:
             def _app_post(self, parsed):
                 parts = web_server._parts(parsed.path)
                 if (
-                    len(parts) == 5
+                    len(parts) in (5, 6)
                     and parts[:3] == ["api", "v1", "projects"]
                     and parts[4] == "semantic-search"
+                    and parts[5:] in ([], ["local"])
                 ):
-                    # 显式计算面：用户在搜索面板按下"搜索"是主动动作，这里
-                    # 允许对查询做一次有界的 embedding 编码（本地模型毫秒
-                    # 级；远程模型由配置决定）。GET 读路径仍然永不推理。
+                    # 自动查询走专用本机入口，旧 Host 不会把它当作远程查询。
                     self._local_only()
                     project_id = parts[3]
                     body = web_server._body(self)
@@ -944,10 +954,13 @@ def install_semantic_runtime() -> None:
                         limit = 16
                     raw_sources = body.get("sources")
                     sources = [str(value) for value in raw_sources if str(value)] if isinstance(raw_sources, list) else None
-                    payload = _searcher(service, project_id).search(
+                    raw_groups = body.get("group_ids")
+                    group_ids = [value for value in raw_groups if isinstance(value, str) and value] if isinstance(raw_groups, list) else None
+                    payload = _searcher(service, project_id, read_only=True, device_only=len(parts) == 6).search(
                         text,
                         limit=limit,
                         sources=sources,
+                        group_ids=group_ids,
                         refresh=False,
                     )
                     self._send_json(payload)

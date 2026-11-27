@@ -1,4 +1,4 @@
-"""内置本地句向量编码器（BERT 系 ONNX，输出 sentence_embedding）。
+"""设备本地 BERT ONNX 句向量编码。
 
 模型目录解析顺序（第一个同时含 model.onnx 与 tokenizer.json 的目录生效）：
 1. ``MIRRORORDER_EMBEDDING_MODEL_DIR`` 环境变量；
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import os
+from functools import lru_cache
 from pathlib import Path
 
 _MODEL_FILE = "model.onnx"
@@ -47,6 +48,24 @@ def local_embedding_available() -> bool:
     return local_embedding_model_dir() is not None
 
 
+@lru_cache(maxsize=2)
+def _embedding_resources(directory: Path, revision: str):
+    import onnxruntime
+    from tokenizers import Tokenizer
+
+    tokenizer = Tokenizer.from_file(str(directory / _TOKENIZER_FILE))
+    tokenizer.enable_truncation(max_length=512)
+    tokenizer.no_padding()
+    options = onnxruntime.SessionOptions()
+    options.intra_op_num_threads = 2
+    session = onnxruntime.InferenceSession(str(directory / _MODEL_FILE), sess_options=options, providers=["CPUExecutionProvider"])
+    output_names = {output.name for output in session.get_outputs()}
+    output = "sentence_embedding" if "sentence_embedding" in output_names else "last_hidden_state"
+    if output not in output_names:
+        raise ValueError("本地向量模型缺少句向量或 BERT 隐状态输出")
+    return session, tokenizer, output
+
+
 class LocalEmbeddingEncoder:
     """与 SemanticEncoder 同接口的本地编码器；懒加载 ONNX 会话与分词器。"""
 
@@ -68,8 +87,9 @@ class LocalEmbeddingEncoder:
     def __init__(self, directory: Path):
         self.directory = Path(directory)
         self.last_error = ""
-        self._session = None
-        self._tokenizer = None
+        signatures = [(info.st_size, info.st_mtime_ns) for info in
+                      ((self.directory / name).stat() for name in (_MODEL_FILE, _TOKENIZER_FILE))]
+        self.revision = "-".join(f"{size:x}.{modified:x}" for size, modified in signatures)
         self.config = self._ConfigView(self.directory.name)
 
     @property
@@ -78,28 +98,14 @@ class LocalEmbeddingEncoder:
 
     @property
     def identity(self) -> str:
-        return f"local-onnx:{self.directory.name}"
-
-    def _resources(self):
-        if self._session is None or self._tokenizer is None:
-            import onnxruntime
-            from tokenizers import Tokenizer
-
-            self._tokenizer = Tokenizer.from_file(str(self.directory / _TOKENIZER_FILE))
-            self._tokenizer.enable_truncation(max_length=512)
-            self._tokenizer.no_padding()
-            self._session = onnxruntime.InferenceSession(
-                str(self.directory / _MODEL_FILE),
-                providers=["CPUExecutionProvider"],
-            )
-        return self._session, self._tokenizer
+        return f"local-onnx:{self.directory.name}:{self.revision}"
 
     @staticmethod
     def _normalize(vector) -> list[float]:
         values = [float(value) for value in vector]
         magnitude = math.sqrt(sum(value * value for value in values))
         if not math.isfinite(magnitude) or magnitude <= 1e-12:
-            return values
+            raise ValueError("本地向量模型返回无效向量")
         return [value / magnitude for value in values]
 
     def encode(self, texts) -> list[list[float]] | None:
@@ -107,8 +113,8 @@ class LocalEmbeddingEncoder:
         if not clean:
             return []
         try:
-            session, tokenizer = self._resources()
-            output_name = session.get_outputs()[0].name
+            session, tokenizer, output_name = _embedding_resources(self.directory, self.revision)
+            inputs = {item.name for item in session.get_inputs()}
             vectors: list[list[float]] = []
             for text in clean:
                 encoding = tokenizer.encode(text)
@@ -120,8 +126,9 @@ class LocalEmbeddingEncoder:
                     "attention_mask": [mask],
                     "token_type_ids": [types],
                 }
-                output = session.run([output_name], feed)[0][0]
-                vectors.append(self._normalize(output))
+                output = session.run([output_name], {name: value for name, value in feed.items() if name in inputs})[0]
+                vector = output[0, 0] if output_name == "last_hidden_state" else output[0]
+                vectors.append(self._normalize(vector))
             self.last_error = ""
             return vectors
         except Exception as error:

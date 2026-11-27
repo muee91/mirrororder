@@ -180,12 +180,27 @@ class ProjectSemanticIndexer:
             if not text:
                 continue
             members = [row for row in _as_list(group.get("members")) if isinstance(row, dict)]
+            sample = _as_dict(data.get("source_frame"))
+            chosen = next((row for row in members if row.get("clip_id") and row.get("clip_id") == sample.get("clip_id")), None)
             metadata = {
                 "evidence": "visual",
                 "cameras": [str(value) for value in _as_list(group.get("cameras")) if str(value)][:12],
                 "duration": float(group.get("duration", 0) or 0),
                 "member_count": len(members),
             }
+            start = 0.0
+            end = float(group.get("duration", 0) or 0)
+            if chosen is not None and isinstance(sample.get("source_time"), (int, float)):
+                source_time = float(sample["source_time"])
+                lo = float(chosen.get("source_start", 0) or 0)
+                hi = float(chosen.get("source_end") or lo + float(chosen.get("duration", 0) or 0))
+                if lo <= source_time < hi:
+                    start = end = source_time
+                    metadata.update({"time_basis": "source", "precision": "sampled_frame", "camera": str(chosen.get("camera", ""))})
+            anchor = chosen or (members[0] if members else {})
+            name = Path(str(anchor.get("name", "") or "")).name
+            if name:
+                metadata["file_name"] = name
             provider = _clean_text(data.get("provider"), 120)
             if provider:
                 if provider in {"renamerx", "renamerx-local", "renamerx-local-ai"}:
@@ -199,11 +214,11 @@ class ProjectSemanticIndexer:
                 {
                     "document_id": _document_id(self.project_id, "visual", group_id),
                     "group_id": group_id,
-                    "clip_id": str(members[0].get("clip_id", "") or "") if members else "",
-                    "media_id": str(members[0].get("media_id", "") or "") if members else "",
+                    "clip_id": str(anchor.get("clip_id", "") or ""),
+                    "media_id": str(anchor.get("media_id", "") or ""),
                     "source": "visual",
-                    "start": 0.0,
-                    "end": float(group.get("duration", 0) or 0),
+                    "start": start,
+                    "end": end,
                     "text": text,
                     "metadata": metadata,
                     "content_fingerprint": _fingerprint(text, metadata),
@@ -223,6 +238,7 @@ class ProjectSemanticIndexer:
         transcript_store = TranscriptStore(self.config.transcript_dir)
         documents: list[dict[str, Any]] = []
         camera_rank = {"B": 0, "C": 1, "A": 2}
+        bindings = self.media_store.project_snapshot(self.workspace_id, self.project_id) if isinstance(self.media_store, DeviceMediaStore) else None
         for group_id, group in groups.items():
             members = [row for row in _as_list(group.get("members")) if isinstance(row, dict)]
             members.sort(
@@ -236,7 +252,8 @@ class ProjectSemanticIndexer:
             seen_segments: list[tuple[str, float, float]] = []
             seen_fallback: set[str] = set()
             for member in members:
-                media_path = self.media_store.resolve(self.workspace_id, self.project_id, member)
+                media_path = (self.media_store.resolve_from_snapshot(bindings, member) if bindings is not None
+                              else self.media_store.resolve(self.workspace_id, self.project_id, member))
                 if not media_path:
                     continue
                 clip = _clip_for_member(member, media_path)

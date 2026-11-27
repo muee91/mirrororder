@@ -76,6 +76,7 @@ class SemanticSearcher:
         *,
         limit: int = 16,
         sources: Sequence[str] | None = None,
+        group_ids: Sequence[str] | None = None,
         refresh: bool = True,
         allow_query_embedding: bool = True,
         selection: dict[str, Any] | None = None,
@@ -92,7 +93,7 @@ class SemanticSearcher:
         if not text:
             raise ValueError("语义搜索内容不能为空")
         limit = max(1, min(60, int(limit)))
-        selected_sources = {str(value) for value in (sources or []) if str(value)}
+        selected_sources = sorted({str(value) for value in (sources or []) if str(value)})
         refresh_report: dict[str, Any] = {}
         if refresh:
             refresh_report = self._refresh()
@@ -104,27 +105,29 @@ class SemanticSearcher:
             # Older documents can identify the occurrence without a physical media_id.
             keys = ("group_id", "clip_id") if selection.get("clip_id") else ("group_id", "media_id")
             selectors = {key: selection[key] for key in keys if selection.get(key)}
-            selection_rows = self.store.documents(self.project_id, selection=selectors, sources=sorted(selected_sources), limit=limit * 6)
+            selection_rows = self.store.documents(self.project_id, selection=selectors, sources=selected_sources, group_ids=group_ids, limit=limit * 6)
             if selection.get("clip_id") or selection.get("media_id"):
                 # Take-wide descriptions are indexed under their first member for navigation.
                 selection_rows = [row for row in selection_rows if not (
                     row["source"] == "visual" and row.get("group_id") and row["metadata"].get("member_count") != 1
                 )]
-        keyword_rows = [] if selection else self.store.keyword_search(self.project_id, text, limit=max(80, limit * 6))
-        if selected_sources:
-            keyword_rows = [row for row in keyword_rows if row.get("source") in selected_sources]
+        keyword_rows = [] if selection else self.store.keyword_search(
+            self.project_id, text, limit=max(80, limit * 6), sources=selected_sources, group_ids=group_ids,
+        )
         keyword_rank = {row["document_id"]: rank for rank, row in enumerate(keyword_rows, start=1)}
 
         query_vector: list[float] | None = None
         vector_rows: list[tuple[dict[str, Any], float]] = []
         if not selection and allow_query_embedding and self.encoder.enabled:
-            query_vector = self.encoder.encode_one(text)
+            documents = self.store.documents(
+                self.project_id,
+                sources=selected_sources,
+                group_ids=group_ids,
+                embedding_model=self.encoder.identity,
+            )
+            if documents:
+                query_vector = self.encoder.encode_one(text)
             if query_vector:
-                documents = self.store.documents(
-                    self.project_id,
-                    sources=sorted(selected_sources) if selected_sources else None,
-                    embedding_model=self.encoder.identity,
-                )
                 for document in documents:
                     vector = document.get("embedding", [])
                     score = _dot(query_vector, vector if isinstance(vector, list) else [])
@@ -182,7 +185,7 @@ class SemanticSearcher:
                 }
             )
 
-        mode = "selection" if selection else "hybrid" if query_vector and keyword_rows else "vector" if query_vector else "keyword"
+        mode = "selection" if selection else "hybrid" if vector_rows and keyword_rows else "vector" if vector_rows else "keyword"
         summary = self.store.summary(self.project_id)
         return {
             "contract": SEMANTIC_SEARCH_CONTRACT,
@@ -195,7 +198,7 @@ class SemanticSearcher:
                 "vectors": int(summary.get("vectors", 0) or 0),
                 "sources": summary.get("sources", {}),
                 "fts": bool(summary.get("fts", False)),
-                "vector_available": bool(query_vector),
+                "vector_available": bool(vector_rows),
             },
             "encoder": self.encoder.public(),
             "refresh": refresh_report,

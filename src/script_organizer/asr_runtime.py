@@ -4,14 +4,16 @@ import os
 import platform
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import model_connections
 from .cloud_asr_provider import CloudASRConfig, CloudASRProvider
 from .config import ProjectConfig
 from .device_runtime_settings import application_support_root
 from .models import Clip, Transcript, TranscriptSegment
+from .resource_scheduler import ResourceCancelled
 from .script_parser import parse_script
+from .speech_worker import cached_small_model, transcribe_local
 from .transcript import TranscriptStore, transcript_fingerprint
 
 
@@ -124,6 +126,7 @@ class ASRRuntime:
     _faster_model: Any = None
     _cloud_config: CloudASRConfig | None = None
     _local_model: str = "small"
+    cancelled: Callable[[], bool] | None = None
 
     @classmethod
     def from_config(cls, config: ProjectConfig) -> "ASRRuntime":
@@ -209,6 +212,8 @@ class ASRRuntime:
             try:
                 transcript = self._transcribe_mlx(clip, store, initial_prompt)
                 return self._with_degrade_marker(transcript)
+            except ResourceCancelled:
+                raise
             except Exception:
                 if not self.fallback_allowed:
                     raise
@@ -256,11 +261,19 @@ class ASRRuntime:
 
     def _transcribe_mlx(self, clip: Clip, store: TranscriptStore, initial_prompt: str) -> Transcript:
         _configure_model_cache()
-        import mlx_whisper  # type: ignore
+        small = self.model == _MLX_MODEL_ALIASES["small"]
+        try:
+            import mlx_whisper  # type: ignore
+        except ImportError:
+            if not small or os.environ.get("MIRRORORDER_PACKAGED_RUNTIME") != "1":
+                raise
+            segments = transcribe_local(clip.media_path, self.language, self.cancelled or (lambda: False))
+            return self._write_result(clip, store, [segment["text"] for segment in segments], segments)
 
+        cached_model = cached_small_model(application_support_root()) if small else None
         result = mlx_whisper.transcribe(
             clip.media_path,
-            path_or_hf_repo=self.model,
+            path_or_hf_repo=str(cached_model) if cached_model else self.model,
             language=self.language or None,
             word_timestamps=True,
             verbose=None,

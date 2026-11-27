@@ -2,7 +2,8 @@
 import re
 
 _RX={'scene':r'[1-9][0-9]*[-－][1-9][0-9]*','shot':r'0*[1-9][0-9]*','take':r'0*[1-9][0-9]*'}
-_FLAGS={'scene':r'场号|场次|连拍','shot':r'镜号|镜次','take':r'拍摄次数|次数|重拍|take'}
+# A note about a source spanning multiple Takes does not make the written count unreadable.
+_FLAGS={'scene':r'场号|场次|连拍','shot':r'镜号|镜次','take':r'拍摄次数|次数|重拍|条次|(?<!多个)take'}
 
 def literal_fields(row):
     out={}

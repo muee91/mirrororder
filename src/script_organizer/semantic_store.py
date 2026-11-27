@@ -194,6 +194,7 @@ class SemanticStore:
         requested_groups = {str(value) for value in (group_ids or []) if str(value)}
         now = _now()
         with self.database.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             if requested_groups:
                 placeholders = ",".join("?" for _ in requested_groups)
                 rows = connection.execute(
@@ -295,19 +296,14 @@ class SemanticStore:
         project_id: str,
         *,
         sources: Sequence[str] | None = None,
+        group_ids: Sequence[str] | None = None,
         embedding_model: str | None = None,
         selection: dict[str, str] | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         if not self.available:
             return []
-        clauses = ["project_id=?"]
-        parameters: list[Any] = [project_id]
-        selected_sources = [str(value) for value in (sources or []) if str(value)]
-        if selected_sources:
-            placeholders = ",".join("?" for _ in selected_sources)
-            clauses.append(f"source IN ({placeholders})")
-            parameters.extend(selected_sources)
+        clauses, parameters = self._search_scope(project_id, sources, group_ids)
         if embedding_model is not None:
             clauses.append("embedding_model=?")
             parameters.append(embedding_model)
@@ -324,6 +320,20 @@ class SemanticStore:
         return [self._row(row) for row in rows]
 
     @staticmethod
+    def _search_scope(
+        project_id: str, sources: Sequence[str] | None, group_ids: Sequence[str] | None, *, qualifier: str = "",
+    ) -> tuple[list[str], list[Any]]:
+        clauses = [f"{qualifier}project_id=?"]
+        parameters: list[Any] = [project_id]
+        if sources:
+            clauses.append(f"{qualifier}source IN (SELECT value FROM json_each(?))")
+            parameters.append(_json(list(sources)))
+        if group_ids is not None:
+            clauses.append(f"{qualifier}group_id IN (SELECT value FROM json_each(?))")
+            parameters.append(_json(list(group_ids)))
+        return clauses, parameters
+
+    @staticmethod
     def _fts_query(text: str) -> str:
         # Quote user text so FTS operators in natural-language questions are not
         # interpreted as query syntax. Trigram FTS still performs substring-like
@@ -331,7 +341,11 @@ class SemanticStore:
         value = str(text or "").strip().replace('"', ' ')
         return f'"{value}"' if value else ""
 
-    def keyword_search(self, project_id: str, query: str, *, limit: int = 80) -> list[dict[str, Any]]:
+    def keyword_search(
+        self, project_id: str, query: str, *, limit: int = 80,
+        sources: Sequence[str] | None = None,
+        group_ids: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
         needle = str(query or "").strip()
         if not needle or not self.available:
             return []
@@ -339,6 +353,8 @@ class SemanticStore:
         document_ids: list[str] = []
         seen: set[str] = set()
         fts_query = self._fts_query(needle)
+        clauses, parameters = self._search_scope(project_id, sources, group_ids, qualifier="doc.")
+        scope = " AND ".join(clauses)
         with self.database.connection() as connection:
             for table, enabled in (
                 ("semantic_documents_trigram", self._fts_trigram),
@@ -348,8 +364,10 @@ class SemanticStore:
                     continue
                 try:
                     rows = connection.execute(
-                        f"SELECT document_id FROM {table} WHERE project_id=? AND {table} MATCH ? ORDER BY bm25({table}) LIMIT ?",
-                        (project_id, fts_query, limit),
+                        f"SELECT {table}.document_id FROM {table} "
+                        f"JOIN semantic_documents doc ON doc.project_id={table}.project_id AND doc.document_id={table}.document_id "
+                        f"WHERE {table}.project_id=? AND {table} MATCH ? AND {scope} ORDER BY bm25({table}) LIMIT ?",
+                        [project_id, fts_query, *parameters, limit],
                     ).fetchall()
                 except sqlite3.OperationalError:
                     continue
@@ -366,8 +384,8 @@ class SemanticStore:
             if len(document_ids) < limit:
                 like = f"%{needle}%"
                 rows = connection.execute(
-                    "SELECT document_id FROM semantic_documents WHERE project_id=? AND text LIKE ? ORDER BY updated_at DESC LIMIT ?",
-                    (project_id, like, limit),
+                    f"SELECT document_id FROM semantic_documents doc WHERE {scope} AND text LIKE ? ORDER BY updated_at DESC LIMIT ?",
+                    [*parameters, like, limit],
                 ).fetchall()
                 for row in rows:
                     document_id = str(row[0])

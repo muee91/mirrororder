@@ -154,9 +154,8 @@ def test_production_tools_are_contextual_and_selection_survives_workspace_naviga
     assert "onOpenReview" in script
     assert "onOpenTimeline" in script
 
-    assert "定位素材" in review
-    assert "校准剧本" in review
-    assert "到时间线" in review
+    for action, label in (("onOpenMaterial", "打开素材"), ("onOpenScript", "打开剧本"), ("onOpenTimeline", "到时间线")):
+        assert f'{action}(selectedTake.group_id, selectedClipId, currentLocation())}}>{label}</button>' in review
     assert "setGroupPlacement" not in review
 
     assert "deliveryRequestNonce" in timeline

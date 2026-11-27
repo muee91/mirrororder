@@ -24,7 +24,7 @@ except ImportError:  # pragma: no cover
     msvcrt = None
 
 from .analysis_runtime import analyze, generated_sync_fcpxml
-from .asr_runtime import ASRRuntime, script_asr_prompt
+from .asr_runtime import ASRRuntime
 from .auto_resolver import resolve_project
 from .config import ProjectConfig
 from .media_identity import DeviceMediaStore
@@ -512,13 +512,13 @@ class TaskManager:
         runtime = ASRRuntime.from_config(config)
         if not runtime.enabled:
             raise ValueError("当前项目 ASR backend=cache，不能主动转写")
+        runtime.cancelled = lambda: self._cancel_requested(config, task["task_id"])
         store = TranscriptStore(config.transcript_dir)
-        prompt = script_asr_prompt(config.script)
         completed = []
         for clip in selected:
             if self._cancel_requested(config, task["task_id"]):
                 return {"transcribed": completed, "cancelled": True, "asr": runtime.public()}
-            transcript = runtime.transcribe(clip, store, prompt)
+            transcript = runtime.transcribe(clip, store, "")
             completed.append({"clip_id": clip.clip_id, "media_id": clip.media_id, "has_text": bool(transcript.text.strip())})
             self._update(
                 config,

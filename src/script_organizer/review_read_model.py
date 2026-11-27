@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from math import isfinite
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 
 from .automation_store import AutomationStore, COMPLETED_STATUSES
 from .identity_library import IdentityLibrary
@@ -14,6 +15,32 @@ from .workspace_db import WorkspaceDatabase, workspace_database_path
 
 CONTRACT_VERSION = "review.v1"
 _INSTALLED = False
+
+
+def clip_speech_evidence(project: Any, clip_id: str) -> dict[str, Any]:
+    """Expose only cached, identifiable source-time evidence for one occurrence."""
+    from .models import Clip
+    from .transcript import TranscriptStore
+
+    project.reload_if_changed()
+    row = project.clips[clip_id]
+    clip = Clip(
+        clip_id=clip_id, media_id=str(row.get("media_id") or ""), name=str(row.get("name") or ""),
+        media_path=str(row.get("media_path") or ""), camera=str(row.get("camera") or ""),
+        timeline_start=0, timeline_end=0, duration=0, exists=False,
+    )
+    cached = TranscriptStore(project.config.transcript_dir, create=False).load(clip, require_identity=True)
+    available = cached is not None and not cached.error
+    segments = [
+        item.to_dict() for item in cached.segments
+        if isfinite(item.start) and isfinite(item.end) and 0 <= item.start < item.end
+    ] if available else []
+    return {
+        "contract": "mirrororder.speech_evidence.v1", "status": "available" if available else "missing",
+        "clip_id": clip_id, "media_id": clip.media_id, "backend": cached.backend if available else None,
+        "coordinate_space": "source-relative-seconds", "segments": segments,
+        "outcome": ("transcribed" if segments or cached.text.strip() else "no-speech") if available else "not-transcribed",
+    }
 
 
 def _as_dict(value: object) -> dict[str, Any]:
@@ -175,6 +202,16 @@ def _safe_automation(value: object) -> dict[str, Any]:
         ):
             if key in evidence:
                 safe_evidence[key] = evidence[key]
+        cross_check = _as_dict(evidence.get("scene_cross_check"))
+        if cross_check.get("verdict") in {"agrees", "conflicts", "inconclusive", "no_frames", "no_dialogue"}:
+            safe_evidence["scene_cross_check"] = {
+                "verdict": cross_check["verdict"],
+                "scene_id": str(cross_check.get("scene_id", "") or "")[:160],
+                "episode": _int(cross_check.get("episode"), 0),
+                "camera": str(cross_check.get("camera", "") or "")[:40],
+                "script_quote": str(cross_check.get("script_quote", "") or "")[:400],
+                "visual_summary": str(cross_check.get("visual_summary", "") or "")[:1000],
+            }
         if safe_evidence:
             result["evidence"] = safe_evidence
     return result
@@ -717,6 +754,11 @@ def install_review_read_model_runtime() -> None:
         class Handler(BaseHandler):
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
+                if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "speech-evidence":
+                    self._local_only()
+                    clip_id = parse_qs(parsed.query).get("clip_id", [""])[0]
+                    self._send_json(clip_speech_evidence(service.project(parts[3]), clip_id))
+                    return
                 if (
                     len(parts) == 5
                     and parts[:3] == ["api", "v1", "projects"]

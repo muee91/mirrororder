@@ -122,6 +122,7 @@ class PerceptionIndexer:
         self.media_store = media_store or DeviceMediaStore()
         self.semantic_provider = semantic_provider or TakeSemanticProvider()
         self.frame_extractor = frame_extractor or _default_extract_frames
+        self._match_groups: dict[str, Any] = {}
         self.frame_root = self.database.path.parent / "frames" / project_id
         self.sampling_profile_id, self.sampling_profile = sampling_profile(
             load_project_intelligence_settings(workspace_id, project_id).get("perception_sampling_profile")
@@ -247,8 +248,7 @@ class PerceptionIndexer:
         if mode == "tier0":
             return int(self.sampling_profile["tier0_frames"])
         if self.sampling_profile_id == "adaptive":
-            context = self._semantic_context(group)
-            candidates = context.get("existing_candidates", [])
+            candidates = self._match_groups.get(str(group.get("group_id", "")), {}).get("candidates", [])
             uncertain = not candidates or any(
                 str(candidate.get("confidence", "")) != "exact_dialogue"
                 for candidate in candidates[:1]
@@ -281,8 +281,7 @@ class PerceptionIndexer:
         return result
 
     def _semantic_context(self, group: dict[str, Any]) -> dict[str, Any]:
-        matches = self._matches().get("groups", {})
-        row = matches.get(str(group.get("group_id", "")), {}) if isinstance(matches, dict) else {}
+        row = self._match_groups.get(str(group.get("group_id", "")), {})
         candidates = []
         for candidate in row.get("candidates", [])[:5] if isinstance(row, dict) else []:
             if not isinstance(candidate, dict):
@@ -340,6 +339,9 @@ class PerceptionIndexer:
         index = self._index()
         if not index:
             return {"status": "deferred", "reason": "项目尚未生成 material_index.json"}
+        if mode == "semantic":
+            matches = self._matches().get("groups", {})
+            self._match_groups = {key: row for key, row in matches.items() if isinstance(row, dict)} if isinstance(matches, dict) else {}
         structure = self._sync_structure(index)
         groups = self._groups(index)
         pending = self._pending_groups(groups, mode=mode, group_ids=group_ids)
@@ -405,7 +407,11 @@ class PerceptionIndexer:
                                 self.database.set_semantic(self.project_id, group_id, {}, "failed")
                                 failed += 1
                             else:
-                                self.database.set_semantic(self.project_id, group_id, result, "ready")
+                                frame = frames[len(frames) // 2]
+                                self.database.set_semantic(self.project_id, group_id, {
+                                    **result,
+                                    "source_frame": {"clip_id": frame.get("clip_id"), "source_time": frame.get("source_time")},
+                                }, "ready")
                                 self._mark_indexed(mode, group)
                                 processed += 1
                 if progress:

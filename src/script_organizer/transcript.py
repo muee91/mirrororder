@@ -106,9 +106,11 @@ class TranscriptStore:
         candidates.append(self.directory / f"{clip.name}.json")
         return list(dict.fromkeys(candidates))
 
-    def load(self, clip: Clip) -> Transcript | None:
+    def load(self, clip: Clip, *, require_identity: bool = False) -> Transcript | None:
         fingerprint = transcript_fingerprint(clip)
         for path in self.paths_for(clip):
+            if require_identity and path.resolve().parent != self.directory.resolve():
+                continue
             if not path.exists():
                 continue
             try:
@@ -118,6 +120,15 @@ class TranscriptStore:
                 continue
             if not isinstance(raw, dict):
                 continue
+            if require_identity:
+                stored_media = str(raw.get("media_id") or "")
+                if stored_media and clip.media_id and stored_media != clip.media_id:
+                    continue
+                same_media = bool(clip.media_id and stored_media == clip.media_id)
+                keyed_cache = path.stem == clip.media_id or bool(clip.media_path and path.stem == media_fingerprint(clip.media_path))
+                same_occurrence = bool(clip.clip_id and raw.get("clip_id") == clip.clip_id)
+                if not (same_media or keyed_cache or same_occurrence):
+                    continue
             text = str(raw.get("text", "") or "")
             segments = _segments(raw.get("segments", []))
             if not text:

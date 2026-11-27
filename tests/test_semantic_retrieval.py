@@ -5,6 +5,7 @@ from pathlib import Path
 
 from script_organizer.config import ProjectConfig
 from script_organizer.script_supervisor_store import ScriptSupervisorStore
+from script_organizer.semantic_encoder import SemanticEmbeddingConfig, SemanticEncoder
 from script_organizer.semantic_index import ProjectSemanticIndexer, _model_label
 from script_organizer.semantic_search import SemanticSearcher, safe_search_payload
 from script_organizer.semantic_store import SemanticStore
@@ -130,6 +131,32 @@ def test_keyword_retrieval_works_when_embedding_is_disabled(tmp_path: Path) -> N
     assert payload["results"][0]["group_id"] == "G1"
 
 
+def test_search_filters_sources_and_takes_before_keyword_and_vector_ranking(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    store = SemanticStore(database)
+    speech = [_doc(f"speech-{i}", "speech", "门口有人推门", [1.0, 0.0], "conversation") for i in range(90)]
+    store.replace_documents("demo", "speech", speech)
+    store.replace_documents("demo", "visual", [
+        _doc(f"visual-{i}", "visual", "门口有人推门", [1.0, 0.0], "different-scene") for i in range(90)
+    ] + [_doc("visual-in-scope", "visual", "门口有人推门", [0.0, 1.0], "current-scene")])
+    searcher = SemanticSearcher("semantic-test", "demo", object(), database=database, encoder=FakeEncoder())
+    result = searcher.search("门口有人推门", refresh=False, limit=1, sources=["visual"], group_ids=["current-scene"])
+    assert result["mode"] == "hybrid"
+    assert [row["document_id"] for row in result["results"]] == ["visual-in-scope"]
+    assert not searcher.search("门口有人推门", refresh=False, group_ids=[])["results"]
+
+
+def test_automatic_search_ignores_a_configured_network_encoder(monkeypatch) -> None:
+    from script_organizer import local_embedding
+
+    monkeypatch.setattr(local_embedding, "local_embedding_model_dir", lambda: None)
+    remote = SemanticEmbeddingConfig(provider="openai-compatible", base_url="https://encoder.invalid", model="production-model")
+    assert SemanticEncoder(remote).enabled
+    local = SemanticEncoder(remote, device_only=True)
+    assert not local.enabled
+    assert local.encode_one("本机审阅查询") is None
+
+
 def test_same_encoder_space_enables_vector_recall_without_literal_keyword(tmp_path: Path) -> None:
     database = _database(tmp_path)
     store = SemanticStore(database)
@@ -240,6 +267,7 @@ def _project(tmp_path: Path) -> tuple[ProjectConfig, WorkspaceDatabase]:
             "extracted_text": "",
             "tags": ["门口", "反应"],
             "summary": "人物在门口回头。",
+            "source_frame": {"clip_id": "CB", "source_time": 3.5},
         },
         "ready",
     )
@@ -288,6 +316,9 @@ def test_indexer_keeps_visual_and_human_slate_provenance_path_safe(tmp_path: Pat
     visual = next(row for row in documents if row["source"] == "visual")
     slate = next(row for row in documents if row["source"] == "slate")
     assert "推门" in visual["text"]
+    assert (visual["clip_id"], visual["media_id"], visual["start"]) == ("CB", "MB", 3.5)
+    assert visual["metadata"]["time_basis"] == "source"
+    assert visual["metadata"]["precision"] == "sampled_frame"
     assert "后面笑场" in slate["text"]
     assert slate["metadata"]["evidence"] == "script_supervisor"
     serialized = json.dumps(documents, ensure_ascii=False)

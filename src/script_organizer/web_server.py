@@ -1601,9 +1601,20 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
     return Handler
 
 
+def workspace_web_root(workspace: WorkspaceConfig) -> Path:
+    directory = workspace.web_dir
+    # A custom web directory belongs to the workspace. New Desktop libraries
+    # use ./web and can serve the shipped client without copying it into projects.
+    if directory == (workspace.config_path.parent / "web").resolve() and not (directory / "index.html").is_file():
+        bundled = Path(__file__).resolve().parents[2] / "web"
+        if (bundled / "index.html").is_file():
+            return bundled
+    return directory
+
+
 def serve(workspace: WorkspaceConfig, host: str = "127.0.0.1", port: int = 8765) -> None:
     service = WorkspaceService(workspace)
-    server = MirrorOrderHTTPServer((host, port), make_handler(service, workspace.web_dir))
+    server = MirrorOrderHTTPServer((host, port), make_handler(service, workspace_web_root(workspace)))
     print(f"Video Material Platform: http://{host}:{port}/")
     if host in {"0.0.0.0", "::"}:
         addresses = set()
@@ -1637,7 +1648,7 @@ def serve_gateway(
         require_pairing=require_pairing,
         pairing_code=pairing_code,
     )
-    web_root = workspaces[0].web_dir
+    web_root = workspace_web_root(workspaces[0])
     server = MirrorOrderHTTPServer((host, port), make_gateway_handler(gateway, web_root))
     print(f"MirrorOrder Workspace Gateway: http://{host}:{port}/")
     if require_pairing:

@@ -20,10 +20,13 @@ from contextlib import contextmanager
 import inspect
 import json
 import os
+from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 import selectors
 import subprocess
 import sys
+from time import monotonic
 from typing import Any, Iterator
 
 from .analysis_runtime import analyze as _default_analyze
@@ -34,6 +37,7 @@ from .identity_index import IdentityIndexer
 from .media_identity import DeviceMediaStore
 from .perception_index import PerceptionIndexer
 from .resource_scheduler import GLOBAL_RESOURCE_SCHEDULER, ResourceCancelled
+from .take_semantic_provider import TakeSemanticProvider
 
 # Public compatibility symbol. Older tests/tools monkeypatch this name.
 analyze = _default_analyze
@@ -141,6 +145,64 @@ class TaskManager(_impl.TaskManager):
             # must never turn a successful sync into a failed task.
             return
 
+    def _analysis_progress(self, config, task_id: str):
+        previous_phase = ""
+        previous_time = 0.0
+
+        def report(phase: str, done: int, total: int, message: str) -> None:
+            nonlocal previous_phase, previous_time
+            now = monotonic()
+            if phase == previous_phase and now - previous_time < 1 and done < total:
+                return
+            previous_phase, previous_time = phase, now
+            self._update(config, task_id, stage={"asr": "asr", "rescue": "asr"}.get(phase, "analysis"),
+                         progress={"done": done, "total": total}, message=message)
+
+        return report
+
+    @staticmethod
+    def _scene_check_candidates(config, affected: set[str]) -> set[str]:
+        matches = _impl._read_json(config.output_dir / "matches.json", {})
+        eligible = []
+        for group_id, row in matches.get("groups", {}).items():
+            if affected and group_id not in affected:
+                continue
+            candidates = row.get("candidates", [])
+            if not candidates:
+                continue
+            top = candidates[0]
+            score = float(top.get("dialogue_score", 0))
+            if score >= 0.55 and top.get("confidence") != "context_only":
+                eligible.append((top.get("confidence") == "exact_dialogue", -score, group_id))
+        return {group_id for _exact, _score, group_id in sorted(eligible)[:24]}
+
+    def _check_script_scenes(self, config, task: dict[str, Any], groups: set[str]) -> dict[str, Any]:
+        from .model_provider import ModelProvider, ModelProviderConfig
+        from .vision_provider import VisionProvider, VisionProviderConfig
+
+        if not self.workspace_id:
+            raise ValueError("音画核对需要当前工作区的 Take")
+        settings = load_runtime_settings()
+        vision = VisionProvider(VisionProviderConfig(
+            provider="local", model=settings["local_vision_model"], frame_count=2,
+            timeout_seconds=45, min_confidence=0.82,
+        ))
+        task_id = task["task_id"]
+        with self._resource(config, task, "vision", "resolve", "音画核对"):
+            automation = _impl.resolve_project(
+                config, provider=ModelProvider(ModelProviderConfig()), vision_provider=vision,
+                workspace_id=self.workspace_id, project_id=task["project_id"],
+                visual_group_ids=groups, cancelled=lambda: self._cancel_requested(config, task_id),
+                progress=lambda done, total: self._update(
+                    config, task_id, progress={"done": done, "total": total}, message=f"音画核对 {done}/{total}",
+                ),
+            )
+        verdicts = Counter(
+            automation["groups"][group_id].get("evidence", {}).get("scene_cross_check", {}).get("verdict", "skipped")
+            for group_id in groups
+        )
+        return {"automation": automation["summary"], "scene_cross_check": dict(verdicts)}
+
     def _queue_slate_ocr(self, project_id: str, config) -> None:
         """Auto-queue recognition when a paper slate is part of the project.
 
@@ -221,6 +283,8 @@ class TaskManager(_impl.TaskManager):
         *,
         mode: str,
         group_ids: list[str] | None = None,
+        semantic_provider: TakeSemanticProvider | None = None,
+        publish_visual_checkpoints: bool = False,
     ) -> dict[str, Any]:
         if not self.workspace_id:
             return {"status": "deferred", "reason": "任务缺少 workspace_id"}
@@ -233,17 +297,46 @@ class TaskManager(_impl.TaskManager):
         stage = "semantic_index" if mode == "semantic" else "perception_index"
         try:
             with self._resource(config, task, resource, stage, label):
-                indexer = PerceptionIndexer(self.workspace_id, project_id, config)
+                indexer = PerceptionIndexer(self.workspace_id, project_id, config, semantic_provider=semantic_provider)
                 last_reported = {"done": -1}
+                search_indexer = None
+                if publish_visual_checkpoints:
+                    from .semantic_encoder import SemanticEncoder
+                    from .semantic_index import ProjectSemanticIndexer
+
+                    try:
+                        encoder = SemanticEncoder()
+                        if not encoder.config.enabled:
+                            search_indexer = ProjectSemanticIndexer(self.workspace_id, project_id, config, encoder=encoder)
+                    except Exception:
+                        # Recognition stays usable even when the search index is unavailable.
+                        pass
+                pending_visual: list[str] = []
+                next_publish = monotonic()
 
                 def report(done: int, total: int, group_id: str) -> None:
+                    nonlocal next_publish
+                    if search_indexer is not None:
+                        pending_visual.append(group_id)
+                        if len(pending_visual) >= 16 or done == total or monotonic() >= next_publish:
+                            try:
+                                with GLOBAL_RESOURCE_SCHEDULER.slot("embedding", project_id, task_id,
+                                        cancelled=lambda: self._cancel_requested(config, task_id)):
+                                    search_indexer.refresh(group_ids=pending_visual, sources=["visual"])
+                            except ResourceCancelled:
+                                return
+                            except Exception:
+                                # The final semantic refresh can rebuild the derived rows.
+                                pass
+                            pending_visual.clear()
+                            next_publish = monotonic() + 90
                     if done == total or done - last_reported["done"] >= 10:
                         last_reported["done"] = done
                         self._update(
                             config,
                             task_id,
                             progress={"perception_done": done, "perception_total": total},
-                            message=f"感知索引 {done}/{total} · {group_id}",
+                            message=f"{label} {done}/{total}",
                         )
 
                 result = indexer.run(
@@ -260,6 +353,21 @@ class TaskManager(_impl.TaskManager):
         except Exception as error:
             self._update(config, task_id, message=f"感知索引已延后，不影响主分析：{error}")
             return {"status": "deferred", "error": str(error)}
+
+    def _index_local_visual_evidence(self, config, task: dict[str, Any]) -> dict[str, Any]:
+        from .vision_provider import VisionProviderConfig
+
+        targets = task.get("targets", {})
+        group_ids = self._affected_group_ids(config, {"group_ids": targets.get("group_ids", [])})
+        settings = load_runtime_settings()
+        provider = TakeSemanticProvider(VisionProviderConfig(provider="local", model=settings["local_vision_model"]))
+        result = self._perception_best_effort(config, task, mode="semantic", group_ids=group_ids or None,
+                                             semantic_provider=provider, publish_visual_checkpoints=True)
+        if result.get("status") != "completed":
+            raise ValueError(str(result.get("error") or result.get("reason") or "画面识别未完成"))
+        if result.get("total") and not result.get("processed"):
+            raise ValueError("本地模型未生成可检索的画面描述，请检查素材和本地 AI 状态")
+        return {"perception": result}
 
     def _identity_best_effort(
         self,
@@ -511,17 +619,25 @@ class TaskManager(_impl.TaskManager):
                     self._queue_slate_ocr(project_id, config)
             elif task_type == "incremental_analyze":
                 affected = set(str(value) for value in task.get("affected_group_ids", []) if value)
-                with self._resource(config, task, self._asr_resource(config), "analysis", "MLX/ASR"):
+                cross_check = task.get("targets", {}).get("visual_cross_check") is True
+                analysis_config = config
+                if cross_check and config.asr_backend.strip().lower() in {"cloud", "gemini", "openai"}:
+                    analysis_config = replace(config, asr_backend="auto")
+                with self._resource(config, task, self._asr_resource(analysis_config), "analysis", "MLX/ASR"):
                     result = _run_analysis(
-                        config,
+                        analysis_config,
                         affected or None,
+                        progress=self._analysis_progress(config, task_id),
                         cancelled=lambda: self._cancel_requested(config, task_id),
                         workspace_id=self.workspace_id,
                         project_id=project_id,
                     )["index"]["stats"]
                 result["affected_group_ids"] = sorted(affected)
-                with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
-                    result["automation"] = _impl.resolve_project(config)["summary"]
+                if cross_check:
+                    result.update(self._check_script_scenes(config, task, self._scene_check_candidates(config, affected)))
+                else:
+                    with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
+                        result["automation"] = _impl.resolve_project(config)["summary"]
                 local_media = self._refresh_media_bindings(config, project_id)
                 if local_media:
                     result["local_media"] = local_media
@@ -545,9 +661,16 @@ class TaskManager(_impl.TaskManager):
                     cancelled=lambda: self._cancel_requested(config, task_id),
                 )
             elif task_type == "auto_resolve":
-                with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
-                    automation = _impl.resolve_project(config)
-                result = {"automation": automation["summary"], "model": automation.get("model", {})}
+                if task.get("targets", {}).get("visual_cross_check") is True:
+                    group_ids = task["targets"].get("group_ids")
+                    if not isinstance(group_ids, list) or not 1 <= len(group_ids) <= 24 or not all(group_ids):
+                        raise ValueError("音画核对每次需要指定 1–24 个 Take")
+                    groups = set(self._affected_group_ids(config, {"group_ids": group_ids}))
+                    result = self._check_script_scenes(config, task, groups)
+                else:
+                    with self._resource(config, task, "vision", "resolve", "视觉/模型救援"):
+                        automation = _impl.resolve_project(config)
+                    result = {"automation": automation["summary"], "model": automation.get("model", {})}
             elif task_type == "transcribe":
                 result = self._transcribe(config, task)
                 if result.get("cancelled"):
@@ -592,6 +715,8 @@ class TaskManager(_impl.TaskManager):
                             progress={"done": done, "total": total},
                         ),
                     )
+            elif task_type == "evidence_extract" and task.get("targets", {}).get("local_visual") is True:
+                result = self._index_local_visual_evidence(config, task)
             else:
                 self._update(config, task_id, stage="evidence")
                 result = self._extract_evidence(config, task)

@@ -300,3 +300,29 @@ def test_review_projection_consumes_device_media_state_without_member_path_flags
     model = build_review_read_model(project, automation={})
     assert model["take_groups"][0]["angles"][0]["playback"]["state"] == "missing"
     assert any(issue["code"] == "missing_media" for issue in model["take_groups"][0]["issues"])
+
+
+def test_clip_speech_evidence_keeps_source_time_and_validates_cached_identity(tmp_path):
+    from script_organizer.review_read_model import clip_speech_evidence
+
+    directory = tmp_path / "transcripts"
+    project = SimpleNamespace(
+        config=SimpleNamespace(transcript_dir=directory), reload_if_changed=lambda: None,
+        clips={"C_B": {"media_id": "M_B", "name": "same.mov", "source_start": 80, "camera": "B"}},
+    )
+    assert clip_speech_evidence(project, "C_B")["status"] == "missing"
+    assert not directory.exists()
+    directory.mkdir()
+    def save(name, data):
+        (directory / name).write_text(json.dumps(data), encoding="utf-8")
+
+    payload = {"clip_id": "C_A", "media_id": "M_A", "segments": [{"start": 82, "end": 83, "text": "A机说法"}]}
+    save("same.mov.json", payload)
+    assert clip_speech_evidence(project, "C_B")["status"] == "missing"
+    save("M_B.json", {**payload, "clip_id": "C_earlier", "media_id": "M_B"})
+    result = clip_speech_evidence(project, "C_B")
+    assert (result["clip_id"], result["media_id"], result["coordinate_space"]) == ("C_B", "M_B", "source-relative-seconds")
+    assert result["segments"] == payload["segments"]
+    assert result["outcome"] == "transcribed"
+    save("M_B.json", {"media_id": "M_B", "segments": [], "backend": "test"})
+    assert clip_speech_evidence(project, "C_B")["outcome"] == "no-speech"

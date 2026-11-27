@@ -41,6 +41,16 @@ def _inside_file(path: Path, root: Path) -> bool:
         return False
 
 
+def cached_small_model(data_root: Path) -> Path | None:
+    cache = data_root / "models" / "huggingface" / "hub" / "models--mlx-community--whisper-small-mlx"
+    model = cache / "snapshots" / MODEL_REVISION
+    if model.resolve().is_relative_to(data_root.resolve()) and all(
+        _inside_file(model / name, cache) for name in ("config.json", "weights.npz")
+    ):
+        return model
+    return None
+
+
 def _discover(data_root: Path, resources: Path) -> tuple[Worker | None, str]:
     if platform.system() != "Darwin" or platform.machine() not in {"arm64", "aarch64"}:
         return None, "unsupported_platform"
@@ -50,9 +60,8 @@ def _discover(data_root: Path, resources: Path) -> tuple[Worker | None, str]:
     package_init = ("mlx_whisper/__init__.py", "mlx-0.32.1.dist-info/METADATA", "mlx_metal-0.32.1.dist-info/METADATA", "mlx_whisper-0.4.3.dist-info/METADATA")
     if not _inside_file(python, runtime) or not runtime.resolve().is_relative_to(data_root.resolve()) or not os.access(python, os.X_OK) or not all(_inside_file(packages / name, runtime) for name in package_init) or not _inside_file(runtime / "python/lib/python3.11/site-packages/numpy/__init__.py", runtime):
         return None, "optional_runtime_missing_or_incomplete"
-    cache = data_root / "models" / "huggingface" / "hub" / "models--mlx-community--whisper-small-mlx"
-    model = cache / "snapshots" / MODEL_REVISION
-    if not all(_inside_file(model / name, cache) for name in ("config.json", "weights.npz")) or not model.resolve().is_relative_to(data_root.resolve()):
+    model = cached_small_model(data_root)
+    if model is None:
         return None, "local_model_missing_or_incomplete"
     ffmpeg = resources / "mirrororder-tools" / "bin" / "ffmpeg"
     if not _inside_file(ffmpeg, resources) or not os.access(ffmpeg, os.X_OK):
@@ -66,6 +75,8 @@ def _resolve() -> tuple[Worker | None, str]:
 
 def speech_runtime_status() -> dict[str, object]:
     worker, reason = _resolve()
+    if worker is not None and not Path(__file__).with_name("speech_worker_entry.py").is_file():
+        worker, reason = None, "worker_entry_missing"
     return {"profile": PROFILE, "available": worker is not None, "status": reason,
             "model": "whisper-small", "max_clip_seconds": MAX_SECONDS}
 

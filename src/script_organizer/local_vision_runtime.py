@@ -232,6 +232,8 @@ class LocalVisionRuntime:
                 "-hf", self.config.model,
                 "--host", "127.0.0.1",
                 "--port", str(port),
+                "--ctx-size", "16384",
+                "--parallel", "1",
             ]
             cls._log_handle = self.log_path.open("ab", buffering=0)
             try:

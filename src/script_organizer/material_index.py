@@ -778,13 +778,6 @@ def analyze(
         targeted_rescue = group.group_id in rescue_group_ids
         if targeted_rescue:
             cache_targeted_rescued += 1
-        if affected_group_ids is not None and group.group_id not in affected_group_ids:
-            if not same_previous_sources or not _stored_group_matches(group, previous_groups.get(group.group_id)):
-                raise ValueError("输入、剧本或Take结构变化后不能只重算部分Take")
-            auto = _candidates_from_payload(previous_row.get("local_candidates"), group.group_id)
-            if auto is None:
-                raise ValueError("缺少未受影响Take的缓存，不能执行局部分析")
-            cache_reused += 1
         if not targeted_rescue and isinstance(previous_row, dict) and previous_row.get("analysis_key") == analysis_key:
             cached = _candidates_from_payload(previous_row.get("local_candidates"), group.group_id)
             if auto is None and cached is not None:

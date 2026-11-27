@@ -9,9 +9,11 @@ from script_organizer.auto_resolver import resolve_project
 from script_organizer.analysis_runtime import analyze as analyze_project
 from script_organizer.automation_runtime import _replace_project_script
 from script_organizer.config import ProjectConfig
+from script_organizer import media_identity
 from script_organizer.model_provider import ModelProvider, ModelProviderConfig
 from script_organizer.multicam_sync_engine import MulticamSyncUnavailable, _check_prerequisites
 from script_organizer.review_store import ReviewStore
+from script_organizer.vision_provider import VisionProvider, VisionProviderConfig
 
 
 def config_for(tmp_path: Path) -> ProjectConfig:
@@ -59,6 +61,51 @@ def write_analysis(config: ProjectConfig) -> None:
     (config.output_dir / "material_index.json").write_text(json.dumps({"groups": groups, "clips": []}), encoding="utf-8")
     (config.output_dir / "script.json").write_text(json.dumps({"segments": segments}), encoding="utf-8")
     (config.output_dir / "matches.json").write_text(json.dumps(matches), encoding="utf-8")
+
+
+def test_visual_check_uses_bound_frames_and_only_script_action(tmp_path, monkeypatch):
+    config = config_for(tmp_path)
+    write_analysis(config)
+    media = tmp_path / "source.mp4"
+    media.write_bytes(b"synthetic media")
+    media_id = media_identity.media_id_for_path(media)
+    index_path = config.output_dir / "material_index.json"
+    index = json.loads(index_path.read_text())
+    index["groups"][1]["members"] = [{"camera": "B", "media_path": "", "media_id": media_id}]
+    index_path.write_text(json.dumps(index))
+    monkeypatch.setattr(media_identity.DeviceMediaStore, "project_snapshot", lambda *_: {"bindings": {media_id: str(media)}})
+
+    action = "把一只黄色信封塞进抽屉"
+    script_path = config.output_dir / "script.json"
+    script = json.loads(script_path.read_text())
+    script["segments"].append({"segment_id": "A1", "episode": 1, "scene_id": "1-1", "order": 3,
+                               "type": "action", "text": action})
+    script_path.write_text(json.dumps(script))
+    vision = VisionProvider(VisionProviderConfig(provider="local", model="fixture"))
+
+    def extract_frames(path, _start, _end):
+        assert path == str(media)
+        frame_dir = tmp_path / "extracted"
+        frame_dir.mkdir()
+        frame = frame_dir / "side.jpg"
+        frame.write_bytes(b"synthetic frame")
+        return [frame]
+
+    def rescue(context, frames):
+        assert frames[0].is_file()
+        assert context["candidates"] == [{"candidate_id": "scene-0", "script_text": action}]
+        return {"candidate_id": "scene-0", "confidence": 0.97, "script_quote": action,
+                "visual_summary": "手里拿着黄色信封，打开抽屉"}
+
+    monkeypatch.setattr(vision, "extract_frames", extract_frames)
+    monkeypatch.setattr(vision, "rescue", rescue)
+    result = resolve_project(config, ModelProvider(ModelProviderConfig()), vision,
+                             workspace_id="ws_fixture", project_id="p", visual_group_ids={"G2"})
+    assert result["groups"]["G2"]["status"] == "needs_review"
+    evidence = result["groups"]["G2"]["evidence"]["scene_cross_check"]
+    assert (evidence["verdict"], evidence["episode"], evidence["scene_id"], evidence["camera"]) == ("agrees", 1, "1-1", "B")
+    assert not (config.output_dir / "review.json").exists()
+    assert not (config.output_dir / "script_supervisor.json").exists()
 
 
 def test_high_confidence_auto_confirms_mapping_without_editorial_keep(tmp_path: Path) -> None:

@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+from collections import OrderedDict
+import copy
+import json
 from pathlib import Path
-from threading import Thread
+from threading import Lock, Thread
 from typing import Any
 
 from .script_supervisor_parser import parse_supervisor_text
 from .script_supervisor_store import SUPERVISOR_CONTRACT, ScriptSupervisorConflictError, ScriptSupervisorStore
 
 _INSTALLED = False
+_PAPER_SUGGESTION_CACHE_LOCK = Lock()
+_PAPER_SUGGESTION_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any] | None] = OrderedDict()
+_PAPER_SUGGESTION_CACHE_MAX = 64
+
+
+def _file_signature(path: Path) -> tuple[int, int] | None:
+    try:
+        info = path.stat()
+    except OSError:
+        return None
+    return (info.st_mtime_ns, info.st_size)
 
 
 def _as_dict(value: object) -> dict[str, Any]:
@@ -94,16 +108,106 @@ def _safe_record(value: object) -> dict[str, Any]:
     }
 
 
-def _safe_board(payload: dict[str, Any]) -> dict[str, Any]:
+def _safe_paper_suggestions(value: object) -> dict[str, Any] | None:
+    raw = _as_dict(value)
+    if raw.get('contract') != 'mirrororder.paper_field_suggestions.v1' or raw.get('editorial_authority') is not False:
+        return None
+    groups: dict[str, dict[str, Any]] = {}
+    for group_id, item in _as_dict(raw.get('groups')).items():
+        if len(groups) >= 1200 or not isinstance(group_id, str) or not isinstance(item, dict):
+            continue
+        fields: dict[str, dict[str, str]] = {}
+        for field in ('scene', 'shot', 'take'):
+            reading = item.get('fields', {}).get(field) if isinstance(item.get('fields'), dict) else None
+            if isinstance(reading, dict) and reading.get('state') == 'suggested' and isinstance(reading.get('value'), str):
+                fields[field] = {'state': 'suggested', 'value': reading['value'][:80]}
+        source = item.get('source') if isinstance(item.get('source'), dict) else {}
+        if not fields or not isinstance(source.get('paper_row_id'), str) or not isinstance(source.get('row_digest'), str):
+            continue
+        groups[group_id] = {
+            'state': 'paper_suggestion',
+            'fields': fields,
+            'source': {
+                'pdf_sha256': str(source.get('pdf_sha256', '') or '')[:64],
+                'pdf_page': source.get('pdf_page'),
+                'row_index': source.get('row_index'),
+                'paper_row_id': source['paper_row_id'][:160],
+                'row_digest': source['row_digest'][:64],
+            },
+            'human_confirmed': False,
+            'source_interval_verified': False,
+        }
+    return {
+        'contract': 'mirrororder.paper_field_suggestions.v1',
+        'editorial_authority': False,
+        'paper_revision': int(raw.get('paper_revision', 0) or 0),
+        'groups': groups,
+    }
+
+
+def _paper_suggestions(service: Any, project_id: str, project: Any) -> dict[str, Any] | None:
+    try:
+        from .paper_intake_store import PaperIntakeStore
+        from .slate_field_suggestions import read_algorithmic_suggestions
+
+        output = Path(project.config.output_dir)
+        suggestions_sig = _file_signature(output / 'paper_field_suggestions.v1.json')
+        if suggestions_sig is None:
+            return None
+        report_path = output / 'sync' / 'sync_report.json'
+        report_sig = _file_signature(report_path)
+        if report_sig is None:
+            return None
+        cache_key = (
+            str(output.resolve()),
+            str(project_id),
+            str(getattr(project, 'analysis_revision', '') or ''),
+            suggestions_sig,
+            _file_signature(output / 'paper_intake.json'),
+            report_sig,
+            _file_signature(output / 'material_index.json'),
+        )
+        with _PAPER_SUGGESTION_CACHE_LOCK:
+            if cache_key in _PAPER_SUGGESTION_CACHE:
+                _PAPER_SUGGESTION_CACHE.move_to_end(cache_key)
+                cached = _PAPER_SUGGESTION_CACHE[cache_key]
+                return copy.deepcopy(cached) if cached is not None else None
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+        index = project.index if isinstance(project.index, dict) else {}
+        groups = index.get('groups', []) if isinstance(index.get('groups'), list) else []
+        proposal = read_algorithmic_suggestions(
+            output,
+            project_id,
+            PaperIntakeStore(output, project_id),
+            index,
+            report,
+            groups,
+        )
+        safe = _safe_paper_suggestions(proposal)
+        with _PAPER_SUGGESTION_CACHE_LOCK:
+            _PAPER_SUGGESTION_CACHE[cache_key] = copy.deepcopy(safe) if safe is not None else None
+            _PAPER_SUGGESTION_CACHE.move_to_end(cache_key)
+            while len(_PAPER_SUGGESTION_CACHE) > _PAPER_SUGGESTION_CACHE_MAX:
+                _PAPER_SUGGESTION_CACHE.popitem(last=False)
+        return safe
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, json.JSONDecodeError):
+        return None
+
+
+def _safe_board(payload: dict[str, Any], paper_suggestions: object = None) -> dict[str, Any]:
     entries = payload.get("entries", {}) if isinstance(payload.get("entries"), dict) else {}
     records = payload.get("records", {}) if isinstance(payload.get("records"), dict) else {}
-    return {
+    result = {
         "version": int(payload.get("version", 2) or 2), "contract": str(payload.get("contract", SUPERVISOR_CONTRACT) or SUPERVISOR_CONTRACT),
         "revision": int(payload.get("revision", 0) or 0), "updated_at": str(payload.get("updated_at", "") or ""),
         "records": {str(record_id): _safe_record(row) for record_id, row in records.items() if isinstance(row, dict)},
         "entries": {str(group_id): _safe_entry(row) for group_id, row in entries.items() if isinstance(row, dict)},
         "semantics": {"record_is_primary_identity": True, "record_may_exist_without_take": True, "attachments_use_clip_or_media_identity": True, "human_scene_text_is_not_script_scene_id": True, "device_paths_exposed": False, "editorial_authority": False},
     }
+    safe_paper = _safe_paper_suggestions(paper_suggestions)
+    if safe_paper is not None:
+        result['paper_suggestions'] = safe_paper
+    return result
 
 
 def _refresh_assistant(service: Any, project_id: str) -> None:
@@ -154,7 +258,7 @@ def install_script_supervisor_runtime() -> None:
             def _app_get(self, parsed):
                 parts = web_server._parts(parsed.path)
                 if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "script-supervisor":
-                    self._local_only(); project = service.project(parts[3]); self._send_json(_safe_board(ScriptSupervisorStore(project.config.output_dir).load())); return
+                    self._local_only(); project = service.project(parts[3]); self._send_json(_safe_board(ScriptSupervisorStore(project.config.output_dir).load(), _paper_suggestions(service, parts[3], project))); return
                 if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "script-supervisor-paper":
                     from .paper_intake_store import PaperIntakeStore
                     self._local_only(); project = service.project(parts[3])
@@ -181,7 +285,7 @@ def install_script_supervisor_runtime() -> None:
                             raise web_server.ApiError(web_server.HTTPStatus.CONFLICT, str(error)) from error
                         except ValueError as error:
                             raise web_server.ApiError(web_server.HTTPStatus.BAD_REQUEST, str(error)) from error
-                        self._send_json(_safe_board(saved)); _refresh_assistant(service, project_id)
+                        self._send_json(_safe_board(saved, _paper_suggestions(service, project_id, project))); _refresh_assistant(service, project_id)
                         # 场记是语义索引的 slate 证据源；写入后刷新对应 Take 的
                         # 索引，否则语义搜索永远看不到最新的人工事实。刷新失败
                         # 不影响场记写入本身（Status Center 可观察/重试）。
@@ -229,7 +333,7 @@ def install_script_supervisor_runtime() -> None:
                 parts = web_server._parts(parsed.path)
                 if len(parts) == 6 and parts[:4] == ["api", "agent", "v1", "projects"] and parts[5] == "script-supervisor":
                     project_id = parts[4]; agent = self._agent("read", project_id); project = service.project(project_id); service.tokens.audit(agent, "read:script-supervisor", project_id)
-                    self._send_json(_safe_board(ScriptSupervisorStore(project.config.output_dir).load())); return
+                    self._send_json(_safe_board(ScriptSupervisorStore(project.config.output_dir).load(), _paper_suggestions(service, project_id, project))); return
                 return super()._agent_get(parsed)
         return Handler
 

@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
+from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .automation_store import AutomationStore
 from .config import ProjectConfig
+from .media_identity import DeviceMediaStore
 from .model_provider import ModelProvider
+from .resource_scheduler import ResourceCancelled
 from .review_store import ReviewStore
 from .vision_provider import VisionProvider
 from .script_semantics import is_placeable_script_segment
@@ -170,7 +174,7 @@ def _vision_rows(row: dict[str, Any], segment_by_id: dict[str, dict[str, Any]]) 
     return result
 
 
-def _preferred_visual_member(group: dict[str, Any]) -> dict[str, Any] | None:
+def _preferred_visual_member(group: dict[str, Any], media_snapshot=None, exclude_camera: str = "") -> dict[str, Any] | None:
     priority = {"B": 0, "C": 1, "A": 2}
     members = [item for item in group.get("members", []) if isinstance(item, dict)]
     members.sort(key=lambda item: (
@@ -178,7 +182,16 @@ def _preferred_visual_member(group: dict[str, Any]) -> dict[str, Any] | None:
         -float(item.get("duration", 0) or 0),
         str(item.get("media_path", "")),
     ))
-    return next((item for item in members if Path(str(item.get("media_path", ""))).is_file()), None)
+    for member in members:
+        if exclude_camera and str(member.get("camera", "")) == exclude_camera:
+            continue
+        if media_snapshot is None:
+            media_path = str(member.get("media_path", ""))
+        else:
+            media_path = DeviceMediaStore.resolve_from_snapshot(media_snapshot, member)
+        if media_path and Path(media_path).is_file():
+            return {**member, "media_path": media_path}
+    return None
 
 
 def _try_visual_rescue(
@@ -189,11 +202,12 @@ def _try_visual_rescue(
     previous: tuple[int, int] | None,
     following: tuple[int, int] | None,
     editorial_state: str,
+    media_snapshot=None,
 ) -> dict[str, Any] | None:
     if not vision.config.enabled or (previous is None and following is None):
         return None
     rows = _vision_rows(row, segment_by_id)
-    member = _preferred_visual_member(group)
+    member = _preferred_visual_member(group, media_snapshot)
     if not rows or member is None:
         return None
     start = float(member.get("source_start", 0) or 0)
@@ -238,11 +252,107 @@ def _try_visual_rescue(
     }
 
 
+def _scene_key(segment: dict[str, Any]) -> tuple[int, str]:
+    return _segment_position(segment)[0], str(segment.get("scene_id", "") or "")
+
+
+def _scene_cross_check(vision, group, row, segment_by_id, scene_rows, media_snapshot, cancelled=None):
+    by_scene = {}
+    for index, candidate in enumerate(row.get("candidates", [])):
+        if not isinstance(candidate, dict) or candidate.get("confidence") not in {"exact_dialogue", "possible_dialogue"}:
+            continue
+        if not candidate.get("transcript_text") or float(candidate.get("dialogue_score", 0) or 0) < 0.55:
+            continue
+        matched = [segment_by_id[value] for value in _candidate_ids(candidate) if value in segment_by_id]
+        scenes = {_scene_key(segment) for segment in matched}
+        if len(scenes) != 1:
+            continue
+        episode, scene_id = next(iter(scenes))
+        if not episode or not scene_id or (episode, scene_id) in by_scene:
+            continue
+        first = min(_segment_position(segment)[1] for segment in matched)
+        last = max(_segment_position(segment)[1] for segment in matched)
+        surroundings = scene_rows[episode, scene_id]
+        actions = sorted(
+            (segment for segment in surroundings if segment.get("type") == "action"),
+            key=lambda segment: max(first - _segment_position(segment)[1], _segment_position(segment)[1] - last, 0),
+        )[:12]
+        descriptions = [segment for segment in surroundings if segment.get("type") == "scene_heading"]
+        descriptions.extend(sorted(actions, key=_segment_position))
+        text = "\n".join(str(segment.get("text", "") or "") for segment in descriptions if segment.get("text"))[:1800]
+        if text:
+            by_scene[episode, scene_id] = {"candidate_id": f"scene-{index}", "script_text": text,
+                                          "dialogue_score": float(candidate["dialogue_score"])}
+        if len(by_scene) == 5:
+            break
+    if not by_scene:
+        return {"verdict": "no_dialogue"}
+    member = _preferred_visual_member(group, media_snapshot)
+    if member is None:
+        return {"verdict": "no_frames"}
+    evidence = _compare_scene_frames(vision, member, by_scene)
+    if evidence["verdict"] in {"agrees", "conflicts"}:
+        return evidence
+    if cancelled and cancelled():
+        raise ResourceCancelled("音画核对已取消")
+    alternate = _preferred_visual_member(group, media_snapshot, str(member.get("camera", "")))
+    if alternate and alternate.get("clip_id") != member.get("clip_id"):
+        retry = _compare_scene_frames(vision, alternate, by_scene)
+        if retry["verdict"] != "no_frames":
+            return retry
+    return evidence
+
+
+def _compare_scene_frames(vision, member, by_scene):
+    start = float(member.get("source_start", 0) or 0)
+    end = member.get("source_end")
+    end = float(end) if end is not None else start + float(member.get("duration", 0) or 0)
+    frames = vision.extract_frames(member["media_path"], start, end)
+    if not frames:
+        return {"verdict": "no_frames"}
+    try:
+        result = vision.rescue({"purpose": "scene_cross_check", "candidates": [
+            {"candidate_id": candidate["candidate_id"], "script_text": candidate["script_text"]}
+            for candidate in by_scene.values()
+        ]}, frames)
+    finally:
+        shutil.rmtree(frames[0].parent, ignore_errors=True)
+    evidence = {"verdict": "inconclusive", "camera": str(member.get("camera", "") or "")}
+    if not result or result.get("confidence", 0) < vision.config.min_confidence:
+        return evidence
+    quote = str(result.get("script_quote", "") or "").strip()
+    normalized_quote = re.sub(r"\W+", "", quote)
+    summary = str(result.get("visual_summary", "") or "").strip()
+    if len(normalized_quote) < 6 or not summary:
+        return evidence
+    for (episode, scene_id), candidate in by_scene.items():
+        if candidate["candidate_id"] != result.get("candidate_id"):
+            continue
+        if normalized_quote not in re.sub(r"\W+", "", candidate["script_text"]):
+            return evidence
+        if any(normalized_quote in re.sub(r"\W+", "", other["script_text"])
+               for other in by_scene.values() if other is not candidate):
+            return evidence
+        top_scene, top = next(iter(by_scene.items()))
+        disagrees = (episode, scene_id) != top_scene and top["dialogue_score"] - candidate["dialogue_score"] > 0.12
+        return {**evidence, "verdict": "conflicts" if disagrees else "agrees", "episode": episode,
+                "scene_id": scene_id, "dialogue_score": candidate["dialogue_score"], "script_quote": quote,
+                "visual_summary": summary, "model_confidence": result["confidence"], "model": vision.config.model}
+    return evidence
+
+
 def resolve_project(
     config: ProjectConfig,
     provider: ModelProvider | None = None,
     vision_provider: VisionProvider | None = None,
+    *,
+    workspace_id: str = "",
+    project_id: str = "",
+    visual_group_ids: set[str] | None = None,
+    progress: Callable[[int, int], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
+    analysis_revision = _analysis_revision(config.output_dir)
     index = _read_json(config.output_dir / "material_index.json", {})
     script = _read_json(config.output_dir / "script.json", {})
     matches = _read_json(config.output_dir / "matches.json", {})
@@ -254,6 +364,7 @@ def resolve_project(
     review = ReviewStore(config.output_dir / "review.json").load()
     provider = provider or ModelProvider()
     vision_provider = vision_provider or VisionProvider()
+    media_snapshot = DeviceMediaStore(create=False).project_snapshot(workspace_id, project_id) if workspace_id and project_id else None
     group_rows = matches.get("groups", {}) if isinstance(matches.get("groups", {}), dict) else {}
     decisions: dict[str, Any] = {}
     ordered_groups = sorted(groups, key=lambda item: (float(item.get("start", 0) or 0), str(item.get("group_id", ""))))
@@ -307,7 +418,9 @@ def resolve_project(
         editorial = _editorial_state(review, group)
 
         if not usable:
-            vision = _try_visual_rescue(vision_provider, group, row, segment_by_id, previous, following, editorial)
+            vision = None if visual_group_ids is not None else _try_visual_rescue(
+                vision_provider, group, row, segment_by_id, previous, following, editorial, media_snapshot,
+            )
             if vision is not None:
                 decisions[group_id] = vision
                 ids = vision.get("script_segment_ids", [])
@@ -389,7 +502,43 @@ def resolve_project(
             "editorial_state": editorial,
         }
 
+    store = AutomationStore(config.output_dir)
+    prior = store.load()
+    previous_decisions = prior["groups"]
+    if visual_group_ids is not None and prior["analysis_revision"] == analysis_revision:
+        for group_id, decision in previous_decisions.items():
+            if group_id in decisions and decisions[group_id]["status"] != "human_override" and isinstance(decision, dict):
+                decisions[group_id] = decision
+    scene_rows = defaultdict(list)
+    for segment in segments:
+        scene_rows[_scene_key(segment)].append(segment)
+    selected_ids = {group_id for group_id in (visual_group_ids or ())
+                    if group_id in decisions and decisions[group_id]["status"] != "human_override"}
+    done = 0
+    for group in ordered_groups:
+        if cancelled and cancelled():
+            raise ResourceCancelled("音画核对已取消")
+        group_id = str(group["group_id"])
+        decision = decisions[group_id]
+        if decision["status"] == "human_override":
+            continue
+        row = group_rows.get(group_id, {})
+        analysis_key = row.get("analysis_key")
+        previous = previous_decisions.get(group_id, {}).get("evidence", {}).get("scene_cross_check", {})
+        evidence = previous if analysis_key and previous.get("analysis_key") == analysis_key else None
+        if group_id in selected_ids and vision_provider.config.enabled:
+            evidence = _scene_cross_check(vision_provider, group, row, segment_by_id, scene_rows, media_snapshot, cancelled)
+            evidence["analysis_key"] = analysis_key
+            done += 1
+            if progress:
+                progress(done, len(selected_ids))
+        if evidence and evidence.get("verdict") in {"agrees", "conflicts", "inconclusive", "no_frames", "no_dialogue"}:
+            decision.setdefault("evidence", {})["scene_cross_check"] = evidence
     model_public = provider.config.public()
     model_public["vision_enabled"] = vision_provider.config.enabled
     model_public["vision_model"] = vision_provider.config.model
-    return AutomationStore(config.output_dir).save(_analysis_revision(config.output_dir), decisions, model_public)
+    if cancelled and cancelled():
+        raise ResourceCancelled("音画核对已取消")
+    if analysis_revision != _analysis_revision(config.output_dir):
+        raise ValueError("音画核对期间剧本分析已更新，请重试")
+    return store.save(analysis_revision, decisions, model_public)

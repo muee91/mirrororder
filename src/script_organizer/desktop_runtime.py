@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 import os
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from .device_runtime_settings import application_support_root, load_runtime_settings, save_runtime_settings
@@ -11,9 +13,37 @@ from .clapperboard_ocr import extract_clapperboard_proposal
 from .local_vision_runtime import LocalVisionRuntime, LocalVisionRuntimeConfig
 from .media_batch_relink import preview_directory_relink
 from .media_identity import DeviceMediaStore
+from .media_reader import _probe
 from .runtime_diagnostics import environment_payload
 
 _INSTALLED = False
+_SOURCE_TIMECODE_CACHE_LOCK = Lock()
+_SOURCE_TIMECODE_CACHE: OrderedDict[tuple[str, int, int], Any] = OrderedDict()
+_SOURCE_TIMECODE_CACHE_MAX = 2048
+
+
+def _probe_source_timecode_cached(path: Path | None) -> Any:
+    if path is None:
+        return None
+    try:
+        resolved = path.resolve(strict=True)
+        stat_result = resolved.stat()
+    except OSError:
+        return None
+    if not resolved.is_file():
+        return None
+    key = (str(resolved), stat_result.st_mtime_ns, stat_result.st_size)
+    with _SOURCE_TIMECODE_CACHE_LOCK:
+        if key in _SOURCE_TIMECODE_CACHE:
+            _SOURCE_TIMECODE_CACHE.move_to_end(key)
+            return _SOURCE_TIMECODE_CACHE[key]
+    timing = _probe(resolved, timeout_seconds=2.0)
+    with _SOURCE_TIMECODE_CACHE_LOCK:
+        _SOURCE_TIMECODE_CACHE[key] = timing
+        _SOURCE_TIMECODE_CACHE.move_to_end(key)
+        while len(_SOURCE_TIMECODE_CACHE) > _SOURCE_TIMECODE_CACHE_MAX:
+            _SOURCE_TIMECODE_CACHE.popitem(last=False)
+    return timing
 
 
 def _current_service(service: Any) -> Any:
@@ -322,6 +352,30 @@ def install_desktop_runtime() -> None:
                             "audit": current.collaborators.audit(),
                         }
                     )
+                    return
+                if (
+                    len(parts) == 7
+                    and parts[:3] == ["api", "v1", "projects"]
+                    and parts[4] == "clips"
+                    and parts[6] == "source-timecode"
+                ):
+                    self._local_only()
+                    project = current.project(parts[3])
+                    project.reload_if_changed()
+                    clip = project.clips.get(parts[5])
+                    if not isinstance(clip, dict):
+                        raise web_server.ApiError(web_server.HTTPStatus.NOT_FOUND, "clip 不存在")
+                    media_path = project.resolve_media_path(clip)
+                    path = Path(media_path) if media_path else None
+                    timing = _probe_source_timecode_cached(path)
+                    rate = timing.frame_rate if timing is not None else None
+                    self._send_json({
+                        "clip_id": parts[5],
+                        "media_id": str(clip.get("media_id", "") or ""),
+                        "filename": path.name if path is not None else "",
+                        "start_timecode": timing.timecode if rate else "",
+                        "frame_rate": {"numerator": rate[0], "denominator": rate[1]} if rate else None,
+                    })
                     return
                 if (
                     len(parts) == 7

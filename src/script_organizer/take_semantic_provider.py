@@ -76,7 +76,7 @@ class TakeSemanticProvider:
         parsed = parse_json_object(result.text)
         if parsed is None:
             return None
-        return {
+        evidence = {
             "description": str(parsed.get("description", "") or "")[:1600],
             "location": str(parsed.get("location", "") or "")[:160],
             "shot_type": str(parsed.get("shot_type", "") or "")[:120],
@@ -88,9 +88,10 @@ class TakeSemanticProvider:
             "extracted_text": str(parsed.get("extracted_text", "") or "")[:1200],
             "tags": self._values(parsed, "tags", limit=8),
             "summary": str(parsed.get("summary", "") or "")[:1000],
-            "provider": self.config.provider,
-            "model": self.config.model,
         }
+        if not any(evidence.values()):
+            return None
+        return {**evidence, "provider": self.config.provider, "model": self.config.model}
 
 
 __all__ = ["TakeSemanticProvider"]

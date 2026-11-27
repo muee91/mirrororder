@@ -124,3 +124,21 @@ def test_episode_picker_stays_flat_and_directly_clickable() -> None:
     ):
         assert forbidden not in post_workbench
         assert forbidden not in material_css
+
+
+def test_new_libraries_can_open_team_review_without_copying_client_assets(tmp_path: Path) -> None:
+    from dataclasses import replace
+    from script_organizer.web_server import workspace_web_root
+    from script_organizer.workspace import WorkspaceConfig
+
+    manifest = tmp_path / "workspace.toml"
+    manifest.write_text('[workspace]\nname = "Short drama"\n', encoding="utf-8")
+    workspace = WorkspaceConfig.from_file(manifest)
+    assert workspace_web_root(workspace) == ROOT / "web"
+    assert not workspace.web_dir.exists()
+
+    fixed = tmp_path / "custom-ui"
+    assert workspace_web_root(replace(workspace, web_dir=fixed)) == fixed
+    workspace.web_dir.mkdir()
+    (workspace.web_dir / "index.html").write_text("<title>Team</title>", encoding="utf-8")
+    assert workspace_web_root(workspace) == workspace.web_dir

@@ -45,6 +45,7 @@ def test_probe_parses_frame_rate_timecode_and_rotation(monkeypatch, tmp_path: Pa
     assert result.status == "ok"
     assert result.duration == 12.5
     assert result.fps == 30000 / 1001
+    assert result.frame_rate == (30000, 1001)
     assert result.timecode == "01:02:03:04"
     assert result.rotation == 90
 

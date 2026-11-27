@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import mimetypes
 import os
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -20,6 +21,13 @@ from .multimodal_client import MultimodalConfig, call_multimodal, parse_json_obj
 
 
 _LOCAL_PROVIDERS = {"local", "llama", "llama.cpp", "llama-server"}
+_SCENE_CROSS_CHECK = (
+    "你正在独立核对实拍画面和剧本的场景说明。候选根据声音取得，但你只用这些帧判断。"
+    "选一个候选需要看到能区分场次的具体动作、物件或人物站位。普通室内或有人交谈不够。"
+    "script_quote 必须逐字摘自该候选的 script_text，visual_summary 写出照片里实际可见的对应细节。"
+    "如果同样适用于多个候选、看不清或缺少具体证据，candidate_id 和 script_quote 留空。"
+    '只输出 JSON {"candidate_id":"","confidence":0.0,"script_quote":"","visual_summary":"","reason":""}。'
+)
 
 
 @dataclass(frozen=True)
@@ -162,6 +170,8 @@ class VisionProvider:
                 continue
             if target.is_file() and target.stat().st_size > 0:
                 frames.append(target)
+        if not frames:
+            shutil.rmtree(output_dir, ignore_errors=True)
         return frames
 
     def rescue(self, context: dict[str, Any], frames: list[Path]) -> dict[str, Any] | None:
@@ -192,7 +202,7 @@ class VisionProvider:
                 model=self.config.model,
                 timeout_seconds=self.config.timeout_seconds,
             ),
-            system=system,
+            system=_SCENE_CROSS_CHECK if context.get("purpose") == "scene_cross_check" else system,
             context=context,
             images=pictures,
             temperature=0.0,
@@ -212,5 +222,6 @@ class VisionProvider:
             "candidate_id": str(parsed.get("candidate_id", "") or "")[:160],
             "confidence": max(0.0, min(1.0, confidence)),
             "visual_summary": str(parsed.get("visual_summary", "") or "")[:1000],
+            "script_quote": str(parsed.get("script_quote", "") or "")[:400],
             "reason": str(parsed.get("reason", "") or "")[:1000],
         }

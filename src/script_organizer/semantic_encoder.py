@@ -105,8 +105,8 @@ class SemanticEncoder:
     以 ``local-onnx:<目录名>`` 与远程模型严格区分，绝不混空间。
     """
 
-    def __init__(self, config: SemanticEmbeddingConfig | None = None):
-        self.config = config or SemanticEmbeddingConfig.from_env()
+    def __init__(self, config: SemanticEmbeddingConfig | None = None, *, device_only: bool = False):
+        self.config = SemanticEmbeddingConfig() if device_only else config or SemanticEmbeddingConfig.from_env()
         self.last_error = ""
         self._local = None
         if not self.config.enabled:

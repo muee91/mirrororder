@@ -37,6 +37,7 @@ class MediaProbe:
     rotation: int | None = None
     status: str = "ok"
     error: str = ""
+    frame_rate: tuple[int, int] | None = None
 
     def __iter__(self):
         yield self.duration
@@ -79,7 +80,7 @@ def _parse_rotation(stream: dict) -> int | None:
     return None
 
 
-def _probe(path: Path, cancelled: Callable[[], bool] | None = None) -> MediaProbe:
+def _probe(path: Path, cancelled: Callable[[], bool] | None = None, *, timeout_seconds: float = 12.0) -> MediaProbe:
     """Read media metadata without importing a media framework.
 
     ffprobe failures are explicit.  Returning a made-up one-second duration
@@ -102,7 +103,7 @@ def _probe(path: Path, cancelled: Callable[[], bool] | None = None) -> MediaProb
     process: subprocess.Popen[str] | None = None
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        deadline = time.monotonic() + 12.0
+        deadline = time.monotonic() + timeout_seconds
         while True:
             if cancelled and cancelled():
                 process.kill()
@@ -153,13 +154,22 @@ def _probe(path: Path, cancelled: Callable[[], bool] | None = None) -> MediaProb
             timecode = str(stream_tags.get("timecode", "") or "").strip()
         if not timecode and isinstance(format_tags, dict):
             timecode = str(format_tags.get("timecode", "") or "").strip()
-        fps = _parse_rate(stream.get("avg_frame_rate") or stream.get("r_frame_rate")) if stream else None
+        average_rate = stream.get("avg_frame_rate")
+        nominal_rate = stream.get("r_frame_rate")
+        fps = _parse_rate(average_rate or nominal_rate)
+        frame_rate = None
+        if _parse_rate(average_rate) and _parse_rate(nominal_rate):
+            average = Fraction(str(average_rate))
+            nominal = Fraction(str(nominal_rate))
+            if average == nominal:
+                frame_rate = (average.numerator, average.denominator)
         return MediaProbe(
             duration,
             creation_time,
             fps=fps,
             timecode=timecode,
             rotation=_parse_rotation(stream) if stream else None,
+            frame_rate=frame_rate,
         )
     except json.JSONDecodeError:
         return _failed_probe("ffprobe returned invalid JSON")
