@@ -3,15 +3,15 @@
    removes dashboard-like chrome and makes the review room responsive. */
 
 :root{
-  --bg:#f3f4f6;
-  --panel:#ffffff;
-  --panel-soft:#f7f7f8;
-  --ink:#18181b;
-  --muted:#71717a;
-  --line:#e4e4e7;
-  --line-strong:#d4d4d8;
-  --blue:#0a64c9;
-  --blue-soft:#edf5ff;
+  --bg:#f4f4f0;
+  --panel:#fdfdfa;
+  --panel-soft:#f4f5f1;
+  --ink:#20282b;
+  --muted:#60696c;
+  --line:#dcded9;
+  --line-strong:#c8cdc9;
+  --blue:#285d88;
+  --blue-soft:#e1ebf3;
   --green:#237a52;
   --green-soft:#edf8f2;
   --amber:#a85f08;
@@ -21,28 +21,28 @@
   --purple:#6750a4;
   --purple-soft:#f3f0fb;
   --shadow:none;
-  --chrome:rgba(248,248,249,.96);
-  --control:#ffffff;
+  --chrome:#fdfdfa;
+  --control:#fdfdfa;
   --control-ink:#3f3f46;
   --control-hover:#f2f4f7;
   --panel-head:#fafafa;
   --panel-head-line:#e7e7ea;
-  --candidate-bg:#ffffff;
-  --card:#ffffff;
-  --card-border:#e4e4e7;
+  --candidate-bg:#fdfdfa;
+  --card:#fdfdfa;
+  --card-border:#dcded9;
   --card-hover:#f4f7fb;
 }
 
 html[data-theme="dark"]{
-  --bg:#111214;
-  --panel:#191a1d;
-  --panel-soft:#202124;
-  --ink:#f4f4f5;
-  --muted:#a1a1aa;
-  --line:#2d2f33;
-  --line-strong:#3d4046;
-  --blue:#64a8ff;
-  --blue-soft:#17283c;
+  --bg:#1b1e20;
+  --panel:#232729;
+  --panel-soft:#2a2e30;
+  --ink:#f2f2ef;
+  --muted:#a1a9aa;
+  --line:#393e40;
+  --line-strong:#4c5253;
+  --blue:#8db5dc;
+  --blue-soft:#283b4c;
   --green:#55c894;
   --green-soft:#17362c;
   --amber:#e6a34a;
@@ -51,13 +51,13 @@ html[data-theme="dark"]{
   --red-soft:#3d2025;
   --purple:#b4a2ef;
   --purple-soft:#302b42;
-  --chrome:rgba(24,25,28,.97);
-  --control:#232529;
-  --control-ink:#e4e4e7;
-  --control-hover:#2d3035;
-  --panel-head:#1c1d20;
-  --panel-head-line:#2d2f33;
-  --candidate-bg:#191a1d;
+  --chrome:#232729;
+  --control:#2b2f32;
+  --control-ink:#e6e9e7;
+  --control-hover:#353a3d;
+  --panel-head:#272b2d;
+  --panel-head-line:#393e40;
+  --candidate-bg:#232729;
   --card:#1d1f22;
   --card-border:#34363b;
   --card-hover:#252a31;
@@ -65,15 +65,15 @@ html[data-theme="dark"]{
 
 @media (prefers-color-scheme:dark){
   html[data-theme="system"]{
-    --bg:#111214;
-    --panel:#191a1d;
-    --panel-soft:#202124;
-    --ink:#f4f4f5;
-    --muted:#a1a1aa;
-    --line:#2d2f33;
-    --line-strong:#3d4046;
-    --blue:#64a8ff;
-    --blue-soft:#17283c;
+    --bg:#1b1e20;
+    --panel:#232729;
+    --panel-soft:#2a2e30;
+    --ink:#f2f2ef;
+    --muted:#a1a9aa;
+    --line:#393e40;
+    --line-strong:#4c5253;
+    --blue:#8db5dc;
+    --blue-soft:#283b4c;
     --green:#55c894;
     --green-soft:#17362c;
     --amber:#e6a34a;
@@ -82,13 +82,13 @@ html[data-theme="dark"]{
     --red-soft:#3d2025;
     --purple:#b4a2ef;
     --purple-soft:#302b42;
-    --chrome:rgba(24,25,28,.97);
-    --control:#232529;
-    --control-ink:#e4e4e7;
-    --control-hover:#2d3035;
-    --panel-head:#1c1d20;
-    --panel-head-line:#2d2f33;
-    --candidate-bg:#191a1d;
+    --chrome:#232729;
+    --control:#2b2f32;
+    --control-ink:#e6e9e7;
+    --control-hover:#353a3d;
+    --panel-head:#272b2d;
+    --panel-head-line:#393e40;
+    --candidate-bg:#232729;
     --card:#1d1f22;
     --card-border:#34363b;
     --card-hover:#252a31;
@@ -105,14 +105,13 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   padding:0 16px;
   border-bottom:1px solid var(--line);
   background:var(--chrome);
-  backdrop-filter:saturate(1.2) blur(18px);
 }
 .brand{gap:10px}
 .brand-logo{width:28px;height:28px;border-radius:6px}
 .brand h1{font-size:16px;font-weight:650}
-.brand #project-name{margin-top:1px;font-size:10px}
+.brand #project-name{margin-top:1px;font-size:var(--mo-type-meta, 12px)}
 .top-actions{gap:8px}
-.project-switch{gap:5px;font-size:10px;font-weight:600}
+.project-switch{gap:5px;font-size:var(--mo-type-meta, 12px);font-weight:600}
 .project-switch select{
   max-width:190px;
   min-height:30px;
@@ -129,10 +128,10 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   border-radius:0;
   background:transparent;
   color:var(--muted);
-  font-size:10px;
+  font-size:var(--mo-type-meta, 12px);
   font-weight:600;
 }
-.connection-state{font-size:10px;font-weight:650}
+.connection-state{font-size:var(--mo-type-meta, 12px);font-weight:650}
 
 .app-shell{
   width:100%;
@@ -164,13 +163,13 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   border-color:var(--line);
   background:var(--control);
   color:var(--control-ink);
-  font-size:11px;
+  font-size:var(--mo-type-meta, 12px);
 }
 .episode-pick.active{font-weight:650}
 .utility-row{gap:12px;margin-top:6px}
 .search-wrap{width:min(540px,42vw)}
 #search{height:32px;border-radius:5px;background:var(--control);color:var(--ink)}
-.toolbar-summary{gap:8px;font-size:10px}
+.toolbar-summary{gap:8px;font-size:var(--mo-type-meta, 12px)}
 .text-button,.icon-button{
   min-height:28px;
   padding:0 8px;
@@ -184,7 +183,7 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   min-height:31px;
   padding:4px 10px;
   border-radius:5px;
-  font-size:11px;
+  font-size:var(--mo-type-meta, 12px);
 }
 
 .workspace{
@@ -209,7 +208,7 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   padding:8px 10px;
 }
 .panel-head strong{font-size:13px;font-weight:650}
-.subtle{font-size:10px}
+.subtle{font-size:var(--mo-type-meta, 12px)}
 .script-list{padding:6px}
 .script-scene-card,.script-line{border-radius:5px}
 .script-line{margin-bottom:3px;padding:7px 7px}
@@ -291,11 +290,11 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   border-radius:50%;
   background:var(--blue);
   color:#fff;
-  font-size:10px;
+  font-size:var(--mo-type-meta, 12px);
   font-weight:800;
 }
 .member-card:disabled{opacity:.72;border-style:dashed;background:var(--panel-soft);cursor:not-allowed}
-.member-card:disabled::before{content:"缺失";position:absolute;top:5px;right:6px;color:var(--red);font-size:9px;font-weight:700}
+.member-card:disabled::before{content:"缺失";position:absolute;top:5px;right:6px;color:var(--red);font-size:var(--mo-type-meta, 12px);font-weight:700}
 .member-file{display:block;max-width:138px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:650;line-height:1.25}
 .member-bottom{min-width:0;margin-top:auto}
 .camera-chip{border-radius:4px}
@@ -308,7 +307,20 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   border-radius:6px;
   background:#14161a;
 }
-#player{max-height:55vh;border-radius:5px;border-color:#2b2f36}
+#player {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 55vh;
+  aspect-ratio: auto;
+  align-self: center;
+  justify-self: center;
+  margin-inline: auto;
+  border-radius: 5px;
+  border-color: #2b2f36;
+}
+#player:not([src]) { display: none; }
 .player-member-button{border-radius:5px}
 
 .modal{border-radius:7px}
@@ -334,7 +346,6 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   .script-list{max-height:calc(100vh - 190px)}
   .candidate-list{max-height:calc(100vh - 190px)}
   .inspector{min-height:520px}
-  #player{width:min(100%,360px);align-self:center}
   .search-wrap{width:min(500px,48vw)}
 }
 
@@ -363,7 +374,6 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   .panel,.inspector{overflow:hidden}
   .script-list,.candidate-list{max-height:none;overflow:visible}
   .inspector{min-height:0}
-  #player{width:min(100%,340px);max-height:56vh;align-self:center}
   .take-row{grid-template-columns:48px minmax(140px,.52fr) minmax(0,1.48fr)}
   .modal{width:min(680px,calc(100vw - 20px))}
 }
@@ -374,8 +384,7 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   .brand{width:100%}
   .brand #project-name{max-width:58vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .status-pill{margin-left:auto}
-  .workspace-switch{display:none}
-  .project-switch{flex:1 1 100%}
+  .project-switch{flex:1 1 calc(50% - 8px);min-width:0}
   .top-actions #actor-button{margin-left:auto}
   .app-shell{padding:6px}
   .toolbar{padding:6px}
@@ -406,7 +415,6 @@ body{min-width:0;overflow:hidden;background:var(--bg)}
   .member-file{font-size:12px}
   .take-actions{margin-top:2px}
   .inspector{padding:9px}
-  #player{width:min(100%,300px)}
   .placement-episodes{grid-template-columns:repeat(4,1fr)}
   .range-fields,.form-grid{grid-template-columns:1fr}
   .modal form{padding:16px}

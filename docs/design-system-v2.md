@@ -21,6 +21,8 @@ MirrorOrder 是专业影视后期 Production 软件，不是 AI Dashboard、模�
 5. **人类 authority 清晰**：AI 只提供线索、候选和证据，不用视觉权重伪装成人工决定。
 6. **对象 renderer 单一 ownership**：固定 production object 的 anatomy 只能由 canonical component + component stylesheet 定义；Workbench、page、theme、redesign CSS 只能负责上下文布局或 semantic token，不得重新接管对象 geometry。
 
+工作台命令行使用 34px 控件、6px 圆角和 8px 组间距。下拉框保留原生选择和键盘操作，分段控件在切换时保持各选项宽度。项目名、结果计数和保存反馈使用独立的布局区域。审阅范围固定在结果卡首行，完整剧本段保留在大纲中。验收时在同一窗口切换长短剧本、查找范围、无结果筛选和看片模式，比较按钮的屏幕坐标与点击区域。
+
 ## 2. Non-negotiable rules
 
 以下规则属于硬约束：
@@ -42,9 +44,11 @@ MirrorOrder 是专业影视后期 Production 软件，不是 AI Dashboard、模�
 
 ### 2.1 Desktop visual direction
 
-Desktop 采用“剪辑室控制台”视觉方向：深色主题以墨黑/炭黑为基础，浅色主题使用暖纸色作为对应变体；琥珀色承担当前选择、焦点和主要动作，绿色、琥珀色和红色承担状态语义，并通过标签、图标、形状或位置补充区分。
+桌面使用石墨灰深色面与暖纸色浅色面。蓝色标识选中对象和键盘焦点，绿色、琥珀色与红色配合文字标识制作状态。剧本对白使用系统衬线字，机位、时码和文件名使用等宽数字或等宽字，操作标签使用系统无衬线字。
 
-视觉层级固定为 App Surface → Chrome → Primary Pane → Inspector。`design-system-v2.css` 统一定义深浅主题的分层表面、文字、边界、状态与主按钮 token。`app-chrome.css` 管理应用框架，项目顶栏由 `professional-project-workbench.css` 管理，项目库的表格与空状态由 `project-home.css` 管理。
+独立项目、场次和 Take 各自成卡。卡片采用 12px 圆角与浅阴影，小组内、卡片内和对象之间分别使用 8、16 和 24px 的间距。场记、轨道与播放控件在所属卡片内保留精确对齐。
+
+`design-system-v2.css` 定义主题与基础尺寸，`app-chrome.css` 和 `professional-project-workbench.css` 管理应用框架，`project-home.css` 管理项目卡和空状态。
 
 ## 3. Product shell and navigation
 
@@ -331,18 +335,9 @@ Slate Row 不是 Card。
 
 不得将人物候选、已确认人物和“未知人物”只靠颜色区分。
 
-### 7.6 Project Row
+### 7.6 Project Card
 
-Project 是导航/管理对象，默认用 List Row，不使用大 Dashboard Card。
-
-只显示：
-
-- project name；
-- lightweight production status；
-- attention count / unmapped / script gaps 等少量制作摘要；
-- current activity marker。
-
-Project Row 可以承接旧 Overview 的轻量数据，但不能扩张成 KPI Dashboard。低频操作进入 context menu。
+项目卡显示项目名称、来源与当前制作状态。有统计时显示 Take 与素材数量，有活动或错误时显示进展。打开项目和更多操作各有独立的键盘入口。侧栏切换项目使用紧凑行。
 
 ### 7.7 Task Row
 

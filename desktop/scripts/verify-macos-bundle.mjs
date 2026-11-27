@@ -89,6 +89,11 @@ if (generatedIconSha256 !== packagedIconSha256) {
 }
 
 const core = path.join(resources, "mirrororder-core");
+for (const file of ["index.html", "app.js", "design-system-v2.css", "review.css", "logo.svg"]) {
+  const asset = path.join(core, "web", file);
+  assertFile(asset, `team review ${file}`);
+  if (sha256(asset) !== sha256(path.join(repoRoot, "web", file))) fail(`outdated team review asset: ${file}`);
+}
 const pythonRoot = path.join(resources, "mirrororder-python");
 const tools = path.join(resources, "mirrororder-tools", "bin");
 const manifestPath = path.join(resources, "mirrororder-runtime", "mirrororder-runtime-manifest.json");

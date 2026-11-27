@@ -12,6 +12,7 @@
   }
 
   function coreReady() {
+    if (document.querySelector('#empty-library')?.hidden === false) return true;
     const status = statusText();
     if (!status || status === '读取项目' || status === '读取失败') return false;
     const scriptReady = Boolean(document.querySelector('#script-list')?.children.length);

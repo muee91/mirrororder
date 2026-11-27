@@ -1,22 +1,30 @@
 export async function verifyReviewQueueNavigation(page, { timeout = 10000 } = {}) {
-  // An empty queue intentionally has no .review-queue node. Detect both
-  // legitimate UI states before asserting the presence of playable Takes.
   await page.waitForFunction(
     () => Boolean(document.querySelector(".review-queue, .review-empty-state")),
     undefined,
     { timeout },
   );
-  const queued = await page.locator('.review-queue [data-ui-authority="take-compact"]').count();
+  const queued = await page.locator(".review-queue .review-take-card").count();
   if (queued < 1) throw new Error("审阅队列为空，无法看片");
+  const anglesByPosition = await page.evaluate(async () => {
+    const project = new URL(location.href).searchParams.get("project_id") || "project";
+    const response = await fetch(`/api/v1/projects/${encodeURIComponent(project)}/review-model`);
+    if (!response.ok) throw new Error("读取审阅验收数据失败");
+    return (await response.json()).take_groups.map(take => take.angles.map(({ clip_id, name }) => ({ clip_id, name })));
+  });
 
   async function selection(expectedPosition) {
     try {
-      await page.waitForFunction(expected => {
+      await page.waitForFunction(({ expected, angles }) => {
         const navigation = document.querySelector(".review-transport-actions > span")?.textContent?.match(/(\d+)\s*\/\s*(\d+)/);
-        const current = document.querySelector('.review-queue [data-take-state="current"] .mo-take-list-heading strong')?.textContent;
-        const viewer = document.querySelector(".review-viewer-pane .inspector-heading h3")?.textContent;
-        return navigation && (!expected || Number(navigation[1]) === expected) && current && current === viewer;
-      }, expectedPosition, { timeout });
+        if (!navigation) return false;
+        const position = Number(navigation[1]);
+        const current = document.querySelector(`.review-queue [data-queue-index="${position - 1}"]`);
+        const viewer = document.querySelector(".review-monitor-heading h3")?.textContent;
+        const clip = document.querySelector(".review-viewer-pane .take-player")?.dataset.clipId;
+        return (!expected || position === expected) && current?.getAttribute("aria-pressed") === "true"
+          && angles[position - 1]?.some(angle => angle.name === viewer && (!clip || angle.clip_id === clip));
+      }, { expected: expectedPosition, angles: anglesByPosition }, { timeout });
     } catch {
       throw new Error("当前 Take 未切换，或队列选择与 Viewer 不一致");
     }
@@ -30,15 +38,15 @@ export async function verifyReviewQueueNavigation(page, { timeout = 10000 } = {}
   // A single-Take project is valid; verify as many real transitions as its queue permits.
   const transitions = Math.min(2, initial.total - 1);
   if (initial.total > 1 && initial.position + transitions > initial.total) {
-    await page.locator(".review-queue .take-virtual-scroll").press("Home");
+    await page.locator(".review-queue .review-take-select").first().click({ timeout });
     positions[0] = (await selection(1)).position;
   }
   for (let index = 0; index < transitions; index += 1) {
-    await page.getByRole("button", { name: "下一个", exact: true }).click({ timeout });
+    await page.getByRole("button", { name: "下一条", exact: true }).click({ timeout });
     positions.push((await selection(positions.at(-1) + 1)).position);
   }
-  if (initial.total === 1 && !(await page.getByRole("button", { name: "下一个", exact: true }).isDisabled())) {
-    throw new Error("单 Take 队列的下一个按钮应禁用");
+  if (initial.total === 1 && !(await page.getByRole("button", { name: "下一条", exact: true }).isDisabled())) {
+    throw new Error("单 Take 队列的下一条按钮应禁用");
   }
   return { rendered_rows: queued, total: initial.total, positions };
 }

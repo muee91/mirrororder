@@ -45,12 +45,17 @@
     </div>
   </header>
 
+  <main id="empty-library" aria-labelledby="empty-library-title" hidden>
+    <h2 id="empty-library-title">还没有可审阅的项目</h2>
+    <p>在镜序桌面端为这个项目库导入素材后，就能在这里看片。</p>
+    <button id="refresh-library" class="text-button" type="button">刷新项目库</button>
+  </main>
   <main class="app-shell">
     <section class="toolbar" aria-label="审阅筛选">
       <div id="episode-picks" class="episode-picks" aria-label="直接选择集数"></div>
       <div class="utility-row">
         <div class="search-wrap">
-          <input id="search" type="search" placeholder="搜索素材、剧本或对白" autocomplete="off">
+          <input id="search" type="search" aria-label="搜索素材、剧本或对白" placeholder="搜索素材、剧本或对白" autocomplete="off">
           <div id="search-results" class="search-results" hidden></div>
         </div>
         <div class="toolbar-summary">
@@ -95,17 +100,16 @@
       <aside class="inspector">
         <div class="inspector-head">
           <div>
-            <span class="inspector-kicker">播放器</span>
             <strong id="player-file">选择一张机位卡片</strong>
           </div>
           <span id="player-camera" class="camera-chip neutral">—</span>
         </div>
-        <video id="player" controls playsinline preload="metadata"></video>
+        <video id="player" aria-label="素材监看" controls playsinline preload="metadata"></video>
         <div id="player-range" class="player-range">尚未加载素材</div>
         <div id="player-members" class="player-members"></div>
         <div class="inspector-section">
           <span class="inspector-label">当前 Take</span>
-          <p id="player-take">点击素材卡片后，这里会固定显示当前组信息。</p>
+          <p id="player-take">—</p>
         </div>
         <div class="inspector-section">
           <span class="inspector-label">对白线索</span>

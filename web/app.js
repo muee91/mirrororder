@@ -1146,10 +1146,20 @@ function latestReviewActor(review) {
 
 function renderProjectSelector() {
   const target = $('#project-select');
-  target.innerHTML = (state.workspace.projects || []).map((project) => (
+  const projects = state.workspace.projects || [];
+  const empty = projects.length === 0;
+  target.innerHTML = projects.map((project) => (
     `<option value="${esc(project.project_id)}">${esc(project.name || project.project_id)}</option>`
-  )).join('');
+  )).join('') || '<option value="">暂无项目</option>';
   target.value = state.projectId;
+  target.disabled = empty;
+  $('#empty-library').hidden = !empty;
+  $('.app-shell').hidden = empty;
+  document.body.classList.toggle('empty-library', empty);
+  if (empty) {
+    $('#analysis-status').textContent = '0 个项目';
+    $('#project-name').textContent = '团队审阅';
+  }
 }
 
 function renderWorkspaceSelector() {
@@ -1226,7 +1236,6 @@ async function loadWorkspace() {
   if (!state.workspaceId) throw new Error('网关没有可用工作区');
   state.workspace = await fetchJson(workspaceApi());
   const projects = state.workspace.projects || [];
-  if (!projects.length) throw new Error('工作区没有可用项目');
   const requestedProjectId = query.get('project_id') || '';
   const savedProjectId = (() => {
     try { return localStorage.getItem('script-organizer-project-id') || ''; } catch (_error) { return ''; }
@@ -1263,14 +1272,14 @@ async function switchWorkspace(workspaceId) {
   try { localStorage.setItem('script-organizer-workspace-id', workspaceId); } catch (_error) {}
   state.workspace = await fetchJson(workspaceApi());
   const projects = state.workspace.projects || [];
-  if (!projects.length) throw new Error('工作区没有可用项目');
   state.projectId = preferredProject(projects);
   resetProjectView();
   renderWorkspaceSelector();
   renderProjectSelector();
   updateLocation();
-  $('#analysis-status').textContent = '读取项目';
-  await switchProject(state.projectId);
+  if (state.projectId) {
+    await switchProject(state.projectId);
+  }
 }
 
 function parseCameraPatterns(value) {
@@ -1665,13 +1674,16 @@ async function boot() {
   await loadWorkspace();
   await syncActor();
   applyFrontendSettings(await fetchJson(workspaceApi('/settings')));
-  await switchProject(state.projectId);
+  if (state.projectId) await switchProject(state.projectId);
   setCollabStatus('协作已连接', true);
-  if (!state.actor) {
+  if (state.projectId && !state.actor) {
     $('#identity-dialog').showModal();
     requestAnimationFrame(() => $('#actor-input').focus());
   }
-  state.pollTimer = setInterval(pollState, state.frontendSettings.poll_interval_ms);
+  clearInterval(state.pollTimer);
+  state.pollTimer = setInterval(() => {
+    if (state.projectId) pollState();
+  }, state.frontendSettings.poll_interval_ms);
 }
 
 $('#search').addEventListener('input', (event) => {
@@ -1698,6 +1710,7 @@ $('#show-unknown').addEventListener('click', () => {
   renderContent({scriptTop: 0, candidateTop: 0});
 });
 $('#refresh').addEventListener('click', () => location.reload());
+$('#refresh-library').addEventListener('click', () => location.reload());
 $('#project-select').addEventListener('change', (event) => {
   rememberExplicitProjectSelection();
   switchProject(event.target.value).catch((error) => showToast(error.message));

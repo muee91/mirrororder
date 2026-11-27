@@ -68,7 +68,7 @@
   justify-self: end;
   gap: 4px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--mo-type-meta, 12px);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -119,7 +119,7 @@
   border-radius: var(--mo-radius-control);
   background: var(--control);
   color: var(--control-ink);
-  font-size: 10px;
+  font-size: var(--mo-type-meta, 12px);
   font-weight: 650;
 }
 .inspector .native-editorial-actions button[data-final-state="best"].selected {

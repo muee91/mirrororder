@@ -107,8 +107,42 @@ function copyDirectory(source, target) {
     force: true,
     dereference: false,
     preserveTimestamps: true,
-    filter: (candidate) => !isBundleJunkPath(candidate),
+    filter: (candidate) => {
+      if (isBundleJunkPath(candidate)) return false;
+      const normalized = candidate.split(path.sep).join("/");
+      return !normalized.endsWith("/INSTALL_RECEIPT.json") && !normalized.includes("/.brew/");
+    },
   });
+}
+
+function patchPortableMediaToolDependencies(root) {
+  if (process.platform !== "darwin") return;
+  const toolLib = path.join(root, "lib");
+  const machoFiles = [...walkDirectoryFiles(root)].filter((file) => {
+    const probe = spawnSync("file", ["-b", file], { encoding: "utf8" });
+    return probe.status === 0 && /Mach-O/.test(probe.stdout || "");
+  });
+  for (const binary of machoFiles) {
+    const listing = run("otool", ["-L", binary], `otool ${path.basename(binary)}`);
+    const changes = [];
+    for (const raw of listing.split(/\r?\n/).slice(1)) {
+      const dependency = raw.trim().split(" (compatibility")[0];
+      if (!dependency.startsWith("/") || dependency.startsWith("/System/Library/") || dependency.startsWith("/usr/lib/")) continue;
+      const name = path.basename(dependency);
+      const bundled = path.join(toolLib, name);
+      if (!fs.existsSync(bundled)) fail(`${path.basename(binary)} requires ${name} in the portable media tool directory`);
+      const relative = path.relative(path.dirname(binary), bundled).split(path.sep).join("/");
+      changes.push([dependency, `@loader_path/${relative}`]);
+    }
+    for (const [from, to] of changes) {
+      run("install_name_tool", ["-change", from, to, binary], `relocate ${path.basename(binary)}`);
+    }
+    if (binary.startsWith(`${toolLib}${path.sep}`)) {
+      const name = path.basename(binary);
+      run("install_name_tool", ["-id", `@loader_path/${name}`, binary], `set portable id ${name}`);
+    }
+    run("codesign", ["--force", "--sign", "-", "--timestamp=none", binary], `sign relocated ${path.basename(binary)}`);
+  }
 }
 
 if (process.platform !== "darwin" && process.env.MIRRORORDER_ALLOW_NON_MAC_RUNTIME_STAGE !== "1") {
@@ -204,10 +238,25 @@ for (const target of [coreTarget, pythonTarget, toolsTarget, manifestDir]) clean
 
 copyDirectory(organizerSource, path.join(coreTarget, "src", "script_organizer"));
 copyDirectory(multicamSource, path.join(coreTarget, "vendor", "multicam-audio-sync"));
+const webSource = path.join(repoRoot, "web");
+const webTarget = path.join(coreTarget, "web");
+fs.mkdirSync(webTarget, { recursive: true });
+for (const entry of fs.readdirSync(webSource, { withFileTypes: true })) {
+  if (entry.isFile() && /\.(?:html|css|js|svg)$/.test(entry.name)) {
+    fs.copyFileSync(path.join(webSource, entry.name), path.join(webTarget, entry.name));
+  }
+}
 fs.copyFileSync(pyprojectSource, path.join(coreTarget, "pyproject.toml"));
 fs.writeFileSync(path.join(coreTarget, "BUILD_REVISION"), sourceRevision() + "\n", "utf8");
 copyDirectory(portablePythonRoot, pythonTarget);
 copyDirectory(mediaToolsRoot, toolsTarget);
+const stagedMediaBin = path.join(toolsTarget, "bin");
+for (const name of fs.readdirSync(stagedMediaBin)) {
+  if (name !== "ffmpeg" && name !== "ffprobe") {
+    fs.rmSync(path.join(stagedMediaBin, name), { recursive: true, force: true });
+  }
+}
+patchPortableMediaToolDependencies(toolsTarget);
 // Upstream Homebrew dylibs ship read-only (444); the Tauri build script and
 // codesigning rewrite these files, so staged copies must be writable.
 for (const file of walkDirectoryFiles(toolsTarget)) fs.chmodSync(file, 0o644);
