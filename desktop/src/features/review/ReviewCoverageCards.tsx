@@ -11,7 +11,9 @@ import { mediaCardFromAngle } from "../media/MirrorOrderMediaCard";
 import { ReviewAngleFrame } from "./ReviewFragmentList";
 import { ReviewQueueRow } from "./ReviewQueueRow";
 import { ReviewAngleStatus, ReviewFootageStatus, ReviewSlateReference } from "./ReviewFootageStatus";
-import type { AngleSlateFact, ReviewSlateFacts, SlateReadState } from "./reviewFootageFacts";
+import { ReviewTeamFeedback, collectTakeTeamFeedback } from "./ReviewTeamFeedback";
+import { finalDecision, type AngleSlateFact, type ReviewSlateFacts, type SlateReadState } from "./reviewFootageFacts";
+import type { EditorialState } from "../../api/planning";
 import type { ScriptTakeProjection } from "../material-script/model";
 import { scriptLineText } from "../script/scriptSemantics";
 import "./review-coverage-cards.css";
@@ -42,6 +44,7 @@ export interface ReviewCoverageCardsProps {
   onCompare: (take: ReviewTakeGroup) => void;
   onOpenScript?: (take: ReviewTakeGroup, segmentId: string) => void;
   onChooseBlock: (block: ReviewScriptBlock) => void;
+  onQuickDecision?: (groupId: string, state: EditorialState) => void | Promise<void>;
   angleEvidence?: (take: ReviewTakeGroup, angle: ReviewAngle) => { text: string; sourceStart?: number } | undefined;
 }
 
@@ -133,7 +136,7 @@ function CoverageCamera({ angle, projectId, mediaUrl, aspectKey, aspects, suppli
 
 export function ReviewCoverageCards({
   takes, activeBlock, blocksById, projection, selectedGroupId, connection, projectId, slateFacts, slateReadState, onOpenSlate, takeLabel, onWatch, onCompare,
-  onChooseBlock, onOpenScript, angleEvidence,
+  onChooseBlock, onOpenScript, onQuickDecision, angleEvidence,
 }: ReviewCoverageCardsProps) {
   const list = useRef<HTMLDivElement>(null);
   const selectedCard = useRef<HTMLElement>(null);
@@ -261,6 +264,37 @@ export function ReviewCoverageCards({
                 {transcript ? <Passage text={transcript} /> : <p className="review-coverage-muted">暂无素材组对白摘录</p>}
               </section>
             </div>
+            <ReviewTeamFeedback
+              feedback={collectTakeTeamFeedback(take, blocksById)}
+              onSeekComment={(clipId, sourceTime) => onWatch(take, clipId, sourceTime)}
+            />
+            {onQuickDecision ? (() => {
+              const current = finalDecision(take).state;
+              return (
+                <div className="review-coverage-quick-decision" role="group" aria-label="选片决定">
+                  {([["best", "首选"], ["keep", "保留"], ["reject", "废弃"]] as const).map(([value, text]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`secondary mo-toolbar-button${current === value ? ` is-selected state-${value}` : ""}`}
+                      aria-pressed={current === value}
+                      onClick={() => void onQuickDecision(take.group_id, current === value ? "unreviewed" : value)}
+                    >
+                      {text}
+                    </button>
+                  ))}
+                  {current !== "unreviewed" ? (
+                    <button
+                      type="button"
+                      className="secondary mo-toolbar-button"
+                      onClick={() => void onQuickDecision(take.group_id, "unreviewed")}
+                    >
+                      清除
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })() : null}
           </div>
         </article>;
       }}

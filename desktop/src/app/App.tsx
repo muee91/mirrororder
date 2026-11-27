@@ -984,7 +984,7 @@ export function App() {
                 onOpenSettings={() => setSurface("settings")}
               />
             ) : surface === "team" ? (
-              <TeamWebWorkbench workspacePath={activeWorkspacePath} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
+              <TeamWebWorkbench workspacePath={activeWorkspacePath} baseUrl={snapshot.baseUrl} workspaceId={snapshot.workspace.workspace_id} projectId={selectedProject?.project_id ?? null} />
             ) : surface === "settings" ? (
               <SettingsStatusWorkbench baseUrl={snapshot.baseUrl} projectId={selectedProject?.project_id} />
             ) : !selectedProject ? (

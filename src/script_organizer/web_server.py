@@ -948,6 +948,13 @@ def make_handler(service: WorkspaceService, web_root: Path):
             except (BrokenPipeError, ConnectionResetError):
                 return
 
+        def _is_local_client(self) -> bool:
+            return _is_loopback_source(self.client_address[0])
+
+        def _require_host_local(self) -> None:
+            if not self._is_local_client():
+                raise ApiError(HTTPStatus.FORBIDDEN, "此操作只能在制作主机执行")
+
         def _local_only(self) -> None:
             if not _is_loopback_source(self.client_address[0]):
                 raise ApiError(HTTPStatus.FORBIDDEN, "此操作只能在本机执行")
@@ -980,6 +987,11 @@ def make_handler(service: WorkspaceService, web_root: Path):
                 raise ApiError(HTTPStatus.TOO_MANY_REQUESTS, str(error)) from error
             except AgentForbiddenError as error:
                 raise ApiError(HTTPStatus.FORBIDDEN, str(error)) from error
+
+        def _static(self, request_path: str, head_only: bool = False) -> None:
+            if request_path in {"", "/"} and (web_root / "team" / "index.html").is_file():
+                request_path = "/team/index.html"
+            super()._static(request_path, head_only=head_only)
 
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
@@ -1145,6 +1157,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
             project = service.project(project_id)
             payload = _body(self)
             if rest == ["review"]:
+                self._require_host_local()
                 self._require_review_access()
                 payload["actor"] = self._review_actor(payload.get("actor"))
                 if not payload.get("action"):
@@ -1172,6 +1185,7 @@ def make_handler(service: WorkspaceService, web_root: Path):
                 self._local_only()
                 self._send_json(service.tasks.cancel(project_id, rest[1]))
             elif rest == ["proposals", "apply"]:
+                self._require_host_local()
                 self._require_review_access()
                 actor = self._review_actor(payload.get("actor"))
                 proposal_ids = payload.get("proposal_ids", [])
@@ -1527,6 +1541,11 @@ def make_gateway_handler(gateway: WorkspaceGateway, web_root: Path):
             except PermissionError as error:
                 raise ApiError(HTTPStatus.FORBIDDEN, str(error)) from error
             raise ApiError(HTTPStatus.NOT_FOUND, "not found")
+
+        def _static(self, request_path: str, head_only: bool = False) -> None:
+            if request_path in {"", "/"} and (web_root / "team" / "index.html").is_file():
+                request_path = "/team/index.html"
+            super()._static(request_path, head_only=head_only)
 
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)

@@ -9,8 +9,8 @@ const retiredPanel = fileURLToPath(new URL("./TakeEvidencePanels.tsx", import.me
 describe("assignment editorial boundary contract", () => {
   it("keeps assignment-level decisions out of the Desktop Review workflow", () => {
     expect(existsSync(retiredPanel)).toBe(false);
-    expect(decisionSource).toContain('target?.kind === "assignment"');
-    expect(decisionSource).toContain("{assignmentFeedback} 个剧本段有意见");
+    expect(decisionSource).toContain("collectPayloadTeamFeedback");
+    expect(decisionSource).toContain("<ReviewTeamFeedback");
     expect(decisionSource).not.toContain('decide("assignment"');
     expect(decisionSource).not.toContain('targetKind: "assignment"');
     expect(decisionSource).toContain('targetKind: "group"');

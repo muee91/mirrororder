@@ -246,6 +246,10 @@ for (const entry of fs.readdirSync(webSource, { withFileTypes: true })) {
     fs.copyFileSync(path.join(webSource, entry.name), path.join(webTarget, entry.name));
   }
 }
+const webTeamSource = path.join(webSource, "team");
+if (fs.existsSync(webTeamSource) && fs.statSync(webTeamSource).isDirectory()) {
+  copyDirectory(webTeamSource, path.join(webTarget, "team"));
+}
 fs.copyFileSync(pyprojectSource, path.join(coreTarget, "pyproject.toml"));
 fs.writeFileSync(path.join(coreTarget, "BUILD_REVISION"), sourceRevision() + "\n", "utf8");
 copyDirectory(portablePythonRoot, pythonTarget);

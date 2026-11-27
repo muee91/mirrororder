@@ -246,3 +246,54 @@ def test_pairing_endpoint_passes_client_address_to_throttle(tmp_path):
         thread.join(timeout=2)
 
     assert calls == [("123456", "127.0.0.1")]
+
+
+def test_gateway_enforces_host_local_authority_and_viewer_readonly_for_lan_clients(tmp_path):
+    from script_organizer.runtime_stack import install_production_runtime
+
+    install_production_runtime()
+    gateway = SimpleNamespace(security=GatewaySecurity(pairing_code="123456"))
+    handler_cls = make_gateway_handler(gateway, tmp_path)
+
+    lan_handler = _handler_with_source(handler_cls, "192.168.1.40")
+    lan_handler.headers = {}
+    assert lan_handler._is_local_client() is False
+    with pytest.raises(ApiError) as error:
+        lan_handler._require_host_local()
+    assert error.value.status == HTTPStatus.FORBIDDEN
+
+    lan_handler._browser_user = lambda: {"nickname": "只读访客", "role": "viewer", "status": "active"}
+    with pytest.raises(ApiError) as viewer_err:
+        lan_handler._require_review_access()
+    assert viewer_err.value.status == HTTPStatus.FORBIDDEN
+
+    lan_handler._browser_user = lambda: {"nickname": "导演", "role": "reviewer", "status": "active"}
+    lan_handler._require_review_access()
+    assert lan_handler._review_actor("冒充别人") == "导演"
+
+
+def test_gateway_root_prefers_built_team_app_and_falls_back_to_legacy(tmp_path):
+    web_dir = tmp_path / "web_root"
+    web_dir.mkdir()
+    (web_dir / "index.html").write_text("legacy-index", encoding="utf-8")
+
+    gateway = SimpleNamespace(security=GatewaySecurity(require_pairing=False))
+    handler_cls = make_gateway_handler(gateway, web_dir)
+    captured: list[str] = []
+
+    def fake_send(request_path: str, head_only: bool = False):
+        captured.append(request_path)
+
+    # Without web/team/index.html, root serves legacy index.
+    handler = _handler_with_source(handler_cls, "127.0.0.1")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(handler_cls.__bases__[0], "_static", lambda self, p, head_only=False: fake_send(p, head_only))
+        handler._static("/")
+        assert captured[-1] == "/"
+
+        (web_dir / "team").mkdir()
+        (web_dir / "team" / "index.html").write_text("react-team-index", encoding="utf-8")
+        handler._static("/")
+        assert captured[-1] == "/team/index.html"
+        handler._static("/index.html")
+        assert captured[-1] == "/index.html"

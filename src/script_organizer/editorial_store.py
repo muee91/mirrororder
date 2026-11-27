@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import secrets
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -34,6 +36,7 @@ def empty_editorial() -> dict[str, Any]:
         "updated_at": "",
         "opinions": {},
         "decisions": {},
+        "comments": {},
     }
 
 
@@ -87,6 +90,45 @@ def _normalize_opinion_row(value: object) -> dict[str, Any]:
     return {"target": dict(target), "reviewers": reviewers}
 
 
+def _clean_text(value: object, max_len: int = 500) -> str:
+    return str(value or "").strip()[:max_len]
+
+
+def _clean_source_time(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(num) or num < 0:
+        return None
+    return round(num, 3)
+
+
+def _normalize_comment_row(value: object) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    comment_id = str(value.get("comment_id", "") or "").strip()[:80]
+    group_id = str(value.get("group_id", "") or "").strip()[:180]
+    actor = str(value.get("actor", "") or "").strip()[:80]
+    text = _clean_text(value.get("text"), 500)
+    if not comment_id or not group_id or not actor or not text:
+        return None
+    return {
+        "comment_id": comment_id,
+        "group_id": group_id,
+        "segment_id": str(value.get("segment_id", "") or "").strip()[:180],
+        "clip_id": str(value.get("clip_id", "") or "").strip()[:160],
+        "camera": str(value.get("camera", "") or "").strip()[:40],
+        "source_time": _clean_source_time(value.get("source_time")),
+        "text": text,
+        "actor": actor,
+        "reviewer_id": str(value.get("reviewer_id", "") or "").strip()[:120],
+        "created_at": str(value.get("created_at", "") or "")[:80],
+    }
+
+
 def normalize_editorial(raw: object) -> dict[str, Any]:
     result = empty_editorial()
     if not isinstance(raw, dict):
@@ -105,6 +147,16 @@ def normalize_editorial(raw: object) -> dict[str, Any]:
         }
     decisions = raw.get("decisions", {})
     result["decisions"] = decisions if isinstance(decisions, dict) else {}
+    comments = raw.get("comments", {})
+    if isinstance(comments, dict):
+        normalized_comments: dict[str, list[dict[str, Any]]] = {}
+        for key, rows in comments.items():
+            if not isinstance(rows, list):
+                continue
+            cleaned = [item for row in rows if (item := _normalize_comment_row(row)) is not None]
+            if cleaned:
+                normalized_comments[str(key)] = cleaned[:200]
+        result["comments"] = normalized_comments
     return result
 
 
@@ -184,6 +236,10 @@ class EditorialStore:
         actor = self._actor(action.get("actor"))
         reviewer_key, reviewer_id = self._reviewer(action, actor)
         state = _state(action.get("state"))
+        note = _clean_text(action.get("note"), 500)
+        clip_id = _clean_text(action.get("clip_id"), 160)
+        camera = _clean_text(action.get("camera"), 40)
+        source_time = _clean_source_time(action.get("source_time"))
         target = self._target_from_action(action)
         key = _target_key(target)
         with self._write_lock():
@@ -191,19 +247,90 @@ class EditorialStore:
             opinions = payload["opinions"]
             row = opinions.get(key, {}) if isinstance(opinions.get(key), dict) else {}
             reviewers = row.get("reviewers", {}) if isinstance(row.get("reviewers"), dict) else {}
-            if state == "unreviewed":
+            if state == "unreviewed" and not note:
                 reviewers.pop(reviewer_key, None)
             else:
                 reviewers[reviewer_key] = {
                     "state": state,
                     "actor": actor,
                     "reviewer_id": reviewer_id,
+                    "note": note,
+                    "clip_id": clip_id,
+                    "camera": camera,
+                    "source_time": source_time,
                     "updated_at": _now(),
                 }
             if reviewers:
                 opinions[key] = {"target": target, "reviewers": reviewers}
             else:
                 opinions.pop(key, None)
+            payload["revision"] = int(payload.get("revision", 0) or 0) + 1
+            payload["updated_at"] = _now()
+            return self._save_unlocked(payload)
+
+    def add_comment(self, action: dict[str, Any]) -> dict[str, Any]:
+        """Append a timestamped or general comment for a Take group."""
+
+        actor = self._actor(action.get("actor"))
+        _, reviewer_id = self._reviewer(action, actor)
+        group_id = _clean_text(action.get("group_id"), 180)
+        if not group_id:
+            raise ValueError("评论缺少 group_id")
+        text = _clean_text(action.get("text"), 500)
+        if not text:
+            raise ValueError("评论内容不能为空")
+        key = f"group|{group_id}"
+        comment = {
+            "comment_id": f"cmt_{secrets.token_urlsafe(9)}",
+            "group_id": group_id,
+            "segment_id": _clean_text(action.get("segment_id"), 180),
+            "clip_id": _clean_text(action.get("clip_id"), 160),
+            "camera": _clean_text(action.get("camera"), 40),
+            "source_time": _clean_source_time(action.get("source_time")),
+            "text": text,
+            "actor": actor,
+            "reviewer_id": reviewer_id,
+            "created_at": _now(),
+        }
+        with self._write_lock():
+            payload = self.load()
+            comments = payload.setdefault("comments", {})
+            rows = list(comments.get(key, [])) if isinstance(comments.get(key), list) else []
+            rows.append(comment)
+            comments[key] = rows[-200:]
+            payload["revision"] = int(payload.get("revision", 0) or 0) + 1
+            payload["updated_at"] = _now()
+            return self._save_unlocked(payload)
+
+    def delete_comment(self, action: dict[str, Any], *, allow_any: bool = False) -> dict[str, Any]:
+        """Delete one comment, enforcing ownership unless called from host-local."""
+
+        group_id = _clean_text(action.get("group_id"), 180)
+        comment_id = _clean_text(action.get("comment_id"), 80)
+        if not group_id or not comment_id:
+            raise ValueError("删除评论需要 group_id 与 comment_id")
+        actor = _clean_text(action.get("actor"), 80)
+        reviewer_id = _clean_text(action.get("reviewer_id"), 120)
+        key = f"group|{group_id}"
+        with self._write_lock():
+            payload = self.load()
+            comments = payload.setdefault("comments", {})
+            rows = list(comments.get(key, [])) if isinstance(comments.get(key), list) else []
+            target_row = next((row for row in rows if isinstance(row, dict) and row.get("comment_id") == comment_id), None)
+            if target_row is None:
+                raise ValueError("评论不存在或已被删除")
+            if not allow_any:
+                owner_id = str(target_row.get("reviewer_id", "") or "")
+                owner_actor = str(target_row.get("actor", "") or "")
+                matches_id = bool(reviewer_id and owner_id and reviewer_id == owner_id)
+                matches_actor = bool(actor and owner_actor and actor == owner_actor and not owner_id)
+                if not (matches_id or matches_actor):
+                    raise PermissionError("只能删除自己发表的评论")
+            next_rows = [row for row in rows if not (isinstance(row, dict) and row.get("comment_id") == comment_id)]
+            if next_rows:
+                comments[key] = next_rows
+            else:
+                comments.pop(key, None)
             payload["revision"] = int(payload.get("revision", 0) or 0) + 1
             payload["updated_at"] = _now()
             return self._save_unlocked(payload)
@@ -278,10 +405,13 @@ class EditorialStore:
         group_opinions.sort(key=key)
         assignment_opinions.sort(key=key)
         assignment_decisions.sort(key=key)
+        group_comments = list(payload.get("comments", {}).get(f"group|{group_id}", []))
+        group_comments.sort(key=lambda item: (str(item.get("created_at", "")), str(item.get("comment_id", ""))))
         return {
             "revision": int(payload.get("revision", 0) or 0),
             "opinions": {"group": group_opinions, "assignments": assignment_opinions},
             "decision": {"group": group_decision, "assignments": assignment_decisions},
+            "comments": group_comments,
         }
 
     def collaboration_index(self) -> dict[str, dict[str, Any]]:
@@ -323,6 +453,13 @@ class EditorialStore:
                 assignment_decisions.setdefault(group_id, []).append(row)
             else:
                 group_decisions[group_id] = row
+        group_comments: dict[str, list[dict[str, Any]]] = {}
+        for key_name, rows in payload.get("comments", {}).items():
+            if not isinstance(rows, list):
+                continue
+            gid = str(key_name).removeprefix("group|")
+            if gid:
+                group_comments[gid] = list(rows)
         key = lambda item: (
             str(item.get("target", {}).get("segment_id", "")),
             str(item.get("reviewer_id", "")),
@@ -330,16 +467,19 @@ class EditorialStore:
             str(item.get("updated_at", "")),
         )
         index: dict[str, dict[str, Any]] = {}
-        for group_id in set(group_opinions) | set(assignment_opinions) | set(group_decisions) | set(assignment_decisions):
+        for group_id in set(group_opinions) | set(assignment_opinions) | set(group_decisions) | set(assignment_decisions) | set(group_comments):
             group_rows = group_opinions.get(group_id, [])
             group_rows.sort(key=key)
             assignment_rows = assignment_opinions.get(group_id, [])
             assignment_rows.sort(key=key)
             decision_rows = assignment_decisions.get(group_id, [])
             decision_rows.sort(key=key)
+            comment_rows = group_comments.get(group_id, [])
+            comment_rows.sort(key=lambda item: (str(item.get("created_at", "")), str(item.get("comment_id", ""))))
             index[group_id] = {
                 "revision": revision,
                 "opinions": {"group": group_rows, "assignments": assignment_rows},
                 "decision": {"group": group_decisions.get(group_id), "assignments": decision_rows},
+                "comments": comment_rows,
             }
         return index

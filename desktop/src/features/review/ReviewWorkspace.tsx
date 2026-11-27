@@ -1,4 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { EditorialClient, type EditorialState } from "../../api/planning";
+import { readCurrentOperator, requestCurrentOperator } from "../../components/CurrentOperatorControl";
 import type {
   ProjectSummary,
   ReviewAngle,
@@ -34,7 +36,12 @@ import { ReviewAngleStatus, ReviewFootageStatus, ReviewSlateReference } from "./
 import { finalDecision, indexReviewSlates, matchesSlateStatus, slateLabels, type ReviewSlateFacts, type SlateReadState } from "./reviewFootageFacts";
 import { ReviewDecisionPanel } from "./ReviewDecisionPanel";
 import { indexReviewHits, isLocatedReviewHit, reviewExcerpt, reviewFragments, ReviewAngleFrame, ReviewEvidenceHit, sameReviewEvidence, type ReviewFragment } from "./ReviewFragmentList";
-import { reviewTakeAttention } from "./reviewAttention";
+import {
+  collaborationAttention,
+  reviewTakeAttention,
+  type CollaborationEditorialState,
+} from "./reviewAttention";
+import { collectTakeTeamFeedback } from "./ReviewTeamFeedback";
 import { browseEpisodeIds, isScriptSpeechHit, normalizedQuery } from "./reviewFinderEvidence";
 import { scriptSpeechClauses, spokenScriptText } from "../material-script/scriptSpeech";
 import { reviewLocationText, reviewMasterOffset } from "./reviewLocation";
@@ -50,6 +57,9 @@ type ReviewQueueFilter =
   | "all"
   | "unreviewed"
   | "attention"
+  | "team_opinions"
+  | "team_conflict"
+  | "team_pending"
   | `slate_${SlateStatus}`
   | "slate_missing"
   | "best"
@@ -468,11 +478,26 @@ export function ReviewWorkspace({
       if (filter === "attention" && !reviewTakeAttention(take).hasAttention) {
         return false;
       }
+      if (filter === "team_opinions") {
+        const fb = collectTakeTeamFeedback(take, scriptBlocksById);
+        if (!fb.opinions.length && !fb.comments.length) return false;
+      } else if (filter === "team_conflict") {
+        if (!collectTakeTeamFeedback(take, scriptBlocksById).hasConflict) return false;
+      } else if (filter === "team_pending") {
+        if (!collaborationAttention(take.editorial_state as CollaborationEditorialState).hasAttention) return false;
+      }
       if (filter === "slate_missing") {
         if (facts || slateReadState !== "ready") return false;
       } else if (filter.startsWith("slate_")) {
         if (!matchesSlateStatus(facts, filter.slice(6) as SlateStatus)) return false;
-      } else if (filter !== "all" && filter !== "attention" && finalDecision(take).state !== filter) return false;
+      } else if (
+        filter !== "all" &&
+        filter !== "attention" &&
+        filter !== "team_opinions" &&
+        filter !== "team_conflict" &&
+        filter !== "team_pending" &&
+        finalDecision(take).state !== filter
+      ) return false;
       if (
         episode !== null &&
         !episodesByTake.get(take.group_id)?.has(episode)
@@ -1112,6 +1137,11 @@ export function ReviewWorkspace({
               ? `阻断 ${attentionTiers.blocking} · 证据过期 ${attentionTiers.stale} · 待关注 ${attentionTiers.watch}` : undefined}>
               {label}
             </option>)}</optgroup>
+            <optgroup label="团队协作">
+              <option value="team_opinions">有团队意见</option>
+              <option value="team_conflict">团队有分歧</option>
+              <option value="team_pending">团队意见待裁决</option>
+            </optgroup>
           </select>
           <button type="button" className="secondary mo-toolbar-button review-hide-ng" aria-pressed={hideNg} title="仅隐藏整条被场记标为 NG 的 Take"
             onClick={() => { updateFinder({ hideNg: !hideNg, filter: !hideNg && filter === "slate_ng" ? "all" : filter }); resetScopeSelection(); }}>隐藏场记 NG</button>
@@ -1148,6 +1178,24 @@ export function ReviewWorkspace({
             selectedGroupId={selectedGroupId} connection={connection} projectId={project.project_id}
             takeLabel={(take) => reviewTakeLabel(take, needsSequentialTakeNumbers, takeSequenceByGroupId)}
             onWatch={watchCoverageAngle} onCompare={openMulticam} onOpenScript={onOpenScript ? openScriptForTake : undefined}
+            onQuickDecision={async (groupId, state: EditorialState) => {
+              const actor = readCurrentOperator();
+              if (!actor.trim()) {
+                requestCurrentOperator();
+                return;
+              }
+              const editorial = new EditorialClient(baseUrl);
+              const status = await editorial.status(project.project_id);
+              await editorial.decision(project.project_id, {
+                targetKind: "group",
+                groupId,
+                state,
+                actor,
+                expectedRevision: status.revision,
+              });
+              if (groupId === selectedGroupId) setMonitorGroupId(groupId);
+              await refresh();
+            }}
             onChooseBlock={chooseScriptBlock} angleEvidence={(take, angle) => {
               const hit = hitsByGroup.get(take.group_id)?.find((item) => item.angle?.clip_id === angle.clip_id && item.result.source === "speech"
                 && item.result.metadata.precision === "asr_segment" && isLocatedReviewHit(item.result));
@@ -1527,6 +1575,21 @@ export function ReviewWorkspace({
               baseUrl={baseUrl}
               projectId={project.project_id}
               groupId={selectedTake.group_id}
+              blocksById={scriptBlocksById}
+              onSeekComment={(clipId, sourceTime) => {
+                if (clipId && selectedTake.angles.some((a) => a.clip_id === clipId)) {
+                  setSelectedClipId(clipId);
+                }
+                if (sourceTime !== undefined) {
+                  setFragmentFocus({
+                    projectId: project.project_id,
+                    groupId: selectedTake.group_id,
+                    clipId: clipId || selectedClipId || undefined,
+                    sourceRange: { basis: "source", start: sourceTime },
+                  });
+                  setPreview({ nonce: ++playbackNonce.current, autoplay: false });
+                }
+              }}
               onDecisionChange={async (groupId) => {
                 if (groupId === selectedGroupId) setMonitorGroupId(groupId);
                 await refresh();

@@ -11,7 +11,9 @@ _INSTALLED = False
 def _counts(payload: dict[str, Any]) -> dict[str, int]:
     opinion_rows = payload.get("opinions", {}) if isinstance(payload.get("opinions", {}), dict) else {}
     decisions = payload.get("decisions", {}) if isinstance(payload.get("decisions", {}), dict) else {}
+    comment_rows = payload.get("comments", {}) if isinstance(payload.get("comments", {}), dict) else {}
     opinions = 0
+    comments = 0
     reviewers: set[str] = set()
     for row in opinion_rows.values():
         if not isinstance(row, dict):
@@ -21,10 +23,14 @@ def _counts(payload: dict[str, Any]) -> dict[str, int]:
         for reviewer_key, opinion in reviewer_rows.items():
             if isinstance(opinion, dict):
                 reviewers.add(str(opinion.get("reviewer_id", "") or reviewer_key))
+    for rows in comment_rows.values():
+        if isinstance(rows, list):
+            comments += len(rows)
     return {
         "opinions": opinions,
         "reviewers": len(reviewers),
         "decisions": len(decisions),
+        "comments": comments,
     }
 
 
@@ -69,6 +75,7 @@ def install_editorial_runtime() -> None:
                         "revision": int(editorial.get("revision", 0) or 0),
                         "opinions": {"group": [], "assignments": []},
                         "decision": {"group": None, "assignments": []},
+                        "comments": [],
                     }
                 collaboration = empty_collaboration
             state = take.get("editorial_state", {})
@@ -76,6 +83,7 @@ def install_editorial_runtime() -> None:
                 state = {}
             state["individual_opinions"] = collaboration["opinions"]
             state["editorial_decision"] = collaboration["decision"]
+            state["comments"] = collaboration.get("comments", [])
             state.pop("individual_opinion", None)
             take["editorial_state"] = state
         payload.setdefault("revisions", {})["editorial"] = int(editorial.get("revision", 0) or 0)
@@ -84,6 +92,7 @@ def install_editorial_runtime() -> None:
                 "individual_opinions": True,
                 "editorial_decision": True,
                 "editorial_decision_write_scope": "host_local",
+                "editorial_comments": True,
             }
         )
         payload.setdefault("summary", {})["collaboration"] = counts
@@ -93,6 +102,7 @@ def install_editorial_runtime() -> None:
             "updated_at": str(editorial.get("updated_at", "") or ""),
             "opinions": editorial.get("opinions", {}) if isinstance(editorial.get("opinions", {}), dict) else {},
             "decisions": editorial.get("decisions", {}) if isinstance(editorial.get("decisions", {}), dict) else {},
+            "comments": editorial.get("comments", {}) if isinstance(editorial.get("comments", {}), dict) else {},
         }
         payload["review_state"].pop("individual_opinions", None)
         payload["review_state"].pop("editorial_decisions", None)
@@ -127,8 +137,33 @@ def install_editorial_runtime() -> None:
                     project = service.project(parts[3])
                     store = _store_for_project(project)
                     if parts[4] == "opinions":
+                        self._require_review_access()
                         payload = web_server._body(self)
+                        payload["actor"] = self._review_actor(payload.get("actor"))
                         saved = store.apply_opinion(payload)
+                        self._send_json(
+                            {
+                                "editorial": saved,
+                                "group": store.for_group(str(payload.get("group_id", "") or "")),
+                            }
+                        )
+                        return
+                    if parts[4] == "comments":
+                        self._require_review_access()
+                        payload = web_server._body(self)
+                        action = str(payload.get("action", "add") or "add")
+                        if action == "delete":
+                            actor = self._review_actor(payload.get("actor"))
+                            try:
+                                saved = store.delete_comment(
+                                    {**payload, "actor": actor},
+                                    allow_any=self._is_local_client(),
+                                )
+                            except PermissionError as error:
+                                raise web_server.ApiError(web_server.HTTPStatus.FORBIDDEN, str(error)) from error
+                        else:
+                            payload["actor"] = self._review_actor(payload.get("actor"))
+                            saved = store.add_comment(payload)
                         self._send_json(
                             {
                                 "editorial": saved,
@@ -138,6 +173,7 @@ def install_editorial_runtime() -> None:
                         return
                     if parts[4] == "editorial-decision":
                         self._local_only()
+                        self._require_host_local()
                         payload = web_server._body(self)
                         try:
                             saved = store.apply_decision(payload)

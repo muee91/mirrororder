@@ -3,6 +3,8 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "../../api/host";
 import { PlatformClient } from "../../api/platform";
+import { CollaborationPanel } from "../settings/CollaborationPanel";
+import { qrSvgData } from "./qrSvg";
 import {
   TeamGatewayClient,
   teamWorkbenchUrl,
@@ -14,6 +16,7 @@ import "./team.css";
 
 interface Props {
   workspacePath: string;
+  baseUrl?: string;
   workspaceId?: string | null;
   projectId?: string | null;
 }
@@ -22,7 +25,7 @@ function uniquePaths(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Props) {
+export function TeamWebWorkbench({ workspacePath, baseUrl, workspaceId, projectId }: Props) {
   const gateway = useMemo(() => new TeamGatewayClient(), []);
   const platform = useMemo(() => new PlatformClient(), []);
   const [workspacePaths, setWorkspacePaths] = useState<string[]>(() => uniquePaths([workspacePath]));
@@ -112,6 +115,28 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
   const processRunning = Boolean(status?.running);
   const healthy = Boolean(status?.running && status.healthy);
   const shareUrl = healthy ? teamWorkbenchUrl(status!, workspaceId, projectId) : null;
+  const qr = useMemo(() => {
+    if (!shareUrl) return null;
+    try {
+      return qrSvgData(shareUrl);
+    } catch {
+      return null;
+    }
+  }, [shareUrl]);
+
+  async function copyInvite(): Promise<void> {
+    if (!shareUrl) return;
+    const code = status?.pairing_code || pairingCode;
+    const text = security === "pairing" && code
+      ? `镜序团队审阅链接：${shareUrl}\n配对码：${code}`
+      : `镜序团队审阅链接：${shareUrl}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage("邀请信息（含链接与配对码）已复制，可直接发到微信/飞书群。");
+    } catch (error) {
+      setMessage(`复制邀请信息失败：${errorMessage(error)}`);
+    }
+  }
 
   async function copyLink(): Promise<void> {
     if (!shareUrl) {
@@ -155,16 +180,39 @@ export function TeamWebWorkbench({ workspacePath, workspaceId, projectId }: Prop
         <p className="eyebrow">当前项目</p>
         <h3>{healthy ? "团队审阅已就绪" : "开启局域网共享"}</h3>
         <p className="production-note">{message}</p>
-        {shareUrl ? <code className="team-share-url">{shareUrl}</code> : null}
-        {healthy && security === "pairing" ? <div className="team-pairing-card"><span>配对码</span><strong>{status?.pairing_code || pairingCode || "—"}</strong></div> : null}
+        {shareUrl ? (
+          <div className="team-share-hero">
+            {qr ? (
+              <div className="team-qr-box" aria-label="手机/iPad 扫码进入团队审阅">
+                <svg viewBox={qr.viewBox} role="img" aria-label="局域网团队审阅二维码">
+                  <rect width="100%" height="100%" fill="#ffffff" />
+                  <path d={qr.path} fill="#111316" />
+                </svg>
+                <span>手机 / iPad 扫码即看</span>
+              </div>
+            ) : null}
+            <div className="team-share-details">
+              <code className="team-share-url">{shareUrl}</code>
+              {healthy && security === "pairing" ? (
+                <div className="team-pairing-card">
+                  <span>配对码</span>
+                  <strong>{status?.pairing_code || pairingCode || "—"}</strong>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         <div className="team-web-actions">
           {!healthy ? <button type="button" disabled={busy || !isTauri() || workspacePaths.length === 0} onClick={() => void start()}>{processRunning ? "重新开启局域网共享" : "开启局域网共享"}</button> : null}
-          {healthy ? <button type="button" disabled={!shareUrl} onClick={() => void copyLink()}>复制局域网链接</button> : null}
+          {healthy ? <button type="button" disabled={!shareUrl} onClick={() => void copyInvite()}>复制邀请信息</button> : null}
+          {healthy ? <button type="button" className="secondary" disabled={!shareUrl} onClick={() => void copyLink()}>复制链接</button> : null}
           {healthy ? <button type="button" className="secondary" disabled={!shareUrl || !isTauri()} onClick={() => void openTeamWeb()}>浏览器打开</button> : null}
           {processRunning ? <button type="button" className="secondary" disabled={busy} onClick={() => void stop()}>关闭</button> : null}
         </div>
         <p className="team-permission-summary">仅支持浏览器看片与提交个人意见，不影响场记、剧本归集与同步母版</p>
       </section>
+
+      {baseUrl ? <CollaborationPanel baseUrl={baseUrl} /> : null}
 
       <details className="team-advanced-settings">
         <summary>高级连接设置</summary>

@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { HostConnectionError, errorMessage } from "../../api/host";
+import { HostConnectionError, errorMessage, type ReviewScriptBlock } from "../../api/host";
 import { readCurrentOperator, requestCurrentOperator } from "../../components/CurrentOperatorControl";
 import {
   EditorialClient,
   type EditorialDecision,
-  type EditorialOpinion,
   type EditorialState,
   type EditorialStorePayload,
 } from "../../api/planning";
+import { ReviewTeamFeedback, collectPayloadTeamFeedback } from "./ReviewTeamFeedback";
 import "./review-decision.css";
 
 const STATE_LABELS: Record<string, string> = {
@@ -21,42 +21,17 @@ function groupKey(groupId: string): string {
   return `group|${groupId}`;
 }
 
-function groupOpinions(payload: EditorialStorePayload | null, groupId: string): EditorialOpinion[] {
-  if (!payload) return [];
-  const row = payload.opinions[groupKey(groupId)];
-  return row ? Object.values(row.reviewers ?? {}) : [];
-}
-
 function groupDecision(payload: EditorialStorePayload | null, groupId: string): EditorialDecision | null {
   return payload?.decisions[groupKey(groupId)] ?? null;
-}
-
-function opinionCounts(opinions: EditorialOpinion[]): Record<string, number> {
-  return opinions.reduce<Record<string, number>>((result, opinion) => {
-    const state = opinion.state || "unreviewed";
-    result[state] = (result[state] ?? 0) + 1;
-    return result;
-  }, {});
-}
-
-function assignmentFeedbackCount(payload: EditorialStorePayload | null, groupId: string): number {
-  if (!payload) return 0;
-  const segments = new Set<string>();
-  for (const bucket of Object.values(payload.opinions)) {
-    const target = bucket.target;
-    if (target?.kind === "assignment" && target.group_id === groupId && target.segment_id) segments.add(target.segment_id);
-  }
-  for (const decision of Object.values(payload.decisions)) {
-    const target = decision.target;
-    if (target?.kind === "assignment" && target.group_id === groupId && target.segment_id) segments.add(target.segment_id);
-  }
-  return segments.size;
 }
 
 interface Props {
   baseUrl: string;
   projectId: string;
   groupId: string;
+  blocksById?: ReadonlyMap<string, ReviewScriptBlock>;
+  onSeekComment?: (clipId: string | undefined, sourceTime: number | undefined) => void;
+  compact?: boolean;
   onDecisionChange?: (groupId: string) => void | Promise<void>;
 }
 
@@ -111,7 +86,7 @@ export function ReviewDecisionPanel(props: Props) {
     {...props} refreshQueue={refreshQueue} queueNotice={queueNotice} />;
 }
 
-function ReviewDecisionSession({ baseUrl, projectId, groupId, refreshQueue, queueNotice }: Props & {
+function ReviewDecisionSession({ baseUrl, projectId, groupId, blocksById, onSeekComment, compact, refreshQueue, queueNotice }: Props & {
   refreshQueue: (groupId: string, saved: boolean) => Promise<void>;
   queueNotice: ReactNode;
 }) {
@@ -158,10 +133,11 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, refreshQueue, queu
     };
   }, [client, projectId, groupId]);
 
-  const opinions = groupOpinions(payload, groupId);
+  const feedback = useMemo(
+    () => collectPayloadTeamFeedback(payload, groupId, blocksById),
+    [payload, groupId, blocksById],
+  );
   const decision = groupDecision(payload, groupId);
-  const counts = opinionCounts(opinions);
-  const assignmentFeedback = assignmentFeedbackCount(payload, groupId);
 
   async function decide(state: EditorialState): Promise<void> {
     if (!payload || loadState !== "ready" || writeInFlight.current) return;
@@ -207,7 +183,7 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, refreshQueue, queu
   }
 
   return (
-    <section className="editorial-decision-section review-decision-panel" aria-label="当前 Take 最终决定">
+    <section className={`editorial-decision-section review-decision-panel${compact ? " is-compact" : ""}`} aria-label="当前 Take 最终决定">
       <div className="take-evidence-heading"><strong>选片决定</strong></div>
       <div className="editorial-decision-actions">
         {(["best", "keep", "reject"] as EditorialState[]).map((state) => {
@@ -229,15 +205,13 @@ function ReviewDecisionSession({ baseUrl, projectId, groupId, refreshQueue, queu
         </div>}
         {queueNotice}
 
-        {(opinions.length > 0 || assignmentFeedback > 0 || decision) && <details className="opinion-details">
-          <summary>{opinions.length + assignmentFeedback ? "团队意见" : "决定记录"}</summary>
-          {opinions.length > 0 && <div className="opinion-counts">
-            {Object.entries(counts).map(([state, count]) => <span key={state}>{STATE_LABELS[state] || state} {count}</span>)}
-          </div>}
-          {opinions.length > 0 && <div>{opinions.map((opinion, index) => <p key={`${opinion.reviewer_id || opinion.actor}-${index}`}><strong>{opinion.actor || "审核人"}</strong><span>{STATE_LABELS[opinion.state] || opinion.state}</span></p>)}</div>}
-          {assignmentFeedback > 0 && <p className="review-assignment-feedback-note">{assignmentFeedback} 个剧本段有意见</p>}
-          {decision && <p className="editorial-current-decision">{decision.actor || "未知决定人"}{decision.updated_at ? ` · ${decision.updated_at}` : ""}</p>}
-        </details>}
+        <ReviewTeamFeedback feedback={feedback} onSeekComment={onSeekComment} />
+        {decision && (
+          <p className="editorial-current-decision">
+            {decision.actor || "未知决定人"}
+            {decision.updated_at ? ` · ${decision.updated_at}` : ""}
+          </p>
+        )}
       </div>
     </section>
   );

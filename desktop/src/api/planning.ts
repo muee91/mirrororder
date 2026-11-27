@@ -13,7 +13,24 @@ export interface EditorialOpinion {
   state: EditorialState | string;
   actor: string;
   reviewer_id?: string;
+  note?: string;
+  clip_id?: string;
+  camera?: string;
+  source_time?: number | null;
   updated_at: string;
+}
+
+export interface EditorialComment {
+  comment_id: string;
+  group_id: string;
+  segment_id?: string;
+  clip_id?: string;
+  camera?: string;
+  source_time?: number | null;
+  text: string;
+  actor: string;
+  reviewer_id?: string;
+  created_at: string;
 }
 
 export interface EditorialDecision {
@@ -34,6 +51,7 @@ export interface EditorialStorePayload {
   updated_at: string;
   opinions: Record<string, EditorialOpinionBucket>;
   decisions: Record<string, EditorialDecision>;
+  comments?: Record<string, EditorialComment[]>;
 }
 
 export interface EditorialGroupProjection {
@@ -46,6 +64,7 @@ export interface EditorialGroupProjection {
     group: EditorialDecision | null;
     assignments: EditorialDecision[];
   };
+  comments?: EditorialComment[];
 }
 
 export interface EditorialWriteResponse {
@@ -399,6 +418,50 @@ export class EditorialClient {
         state: write.state,
         actor: actor.slice(0, 80),
         expected_revision: write.expectedRevision,
+      }),
+    });
+  }
+
+  addComment(
+    projectId: string,
+    write: {
+      groupId: string;
+      segmentId?: string;
+      clipId?: string;
+      camera?: string;
+      sourceTime?: number | null;
+      text: string;
+      actor: string;
+    },
+  ): Promise<EditorialWriteResponse> {
+    invalidateReviewModelCache(this.baseUrl, projectId.trim());
+    return requestJson<EditorialWriteResponse>(this.baseUrl, `${projectPath(projectId)}/comments`, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "add",
+        group_id: write.groupId.trim(),
+        segment_id: write.segmentId?.trim() ?? "",
+        clip_id: write.clipId?.trim() ?? "",
+        camera: write.camera?.trim() ?? "",
+        source_time: write.sourceTime ?? null,
+        text: write.text.trim().slice(0, 500),
+        actor: write.actor.trim().slice(0, 80),
+      }),
+    });
+  }
+
+  deleteComment(
+    projectId: string,
+    write: { groupId: string; commentId: string; actor: string },
+  ): Promise<EditorialWriteResponse> {
+    invalidateReviewModelCache(this.baseUrl, projectId.trim());
+    return requestJson<EditorialWriteResponse>(this.baseUrl, `${projectPath(projectId)}/comments`, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "delete",
+        group_id: write.groupId.trim(),
+        comment_id: write.commentId.trim(),
+        actor: write.actor.trim().slice(0, 80),
       }),
     });
   }

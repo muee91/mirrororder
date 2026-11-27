@@ -162,3 +162,67 @@ def test_runtime_keeps_final_decision_host_local_and_review_v1_versioned() -> No
     assert runtime_stack.index("install_review_read_model_runtime()") < runtime_stack.index("install_editorial_runtime()")
     assert "state.editorialRevision = Number(revisions.editorial || 0);" in adapter
     assert "next.editorial_revision" in adapter
+
+
+def test_opinion_note_and_timestamped_comments_persist_and_enforce_ownership(tmp_path: Path) -> None:
+    store = EditorialStore(tmp_path)
+
+    # Opinion with note + clip/timecode metadata, even with state=unreviewed, is preserved.
+    store.apply_opinion(
+        {
+            "target_kind": "group",
+            "group_id": "G_9",
+            "state": "unreviewed",
+            "note": "0:28 情绪不错，建议再看B机",
+            "clip_id": "clip_b",
+            "camera": "B",
+            "source_time": 28.4567,
+            "actor": "导演",
+            "reviewer_id": "rev-director",
+        }
+    )
+    group = store.for_group("G_9")
+    assert len(group["opinions"]["group"]) == 1
+    op = group["opinions"]["group"][0]
+    assert op["note"] == "0:28 情绪不错，建议再看B机"
+    assert op["clip_id"] == "clip_b"
+    assert op["camera"] == "B"
+    assert op["source_time"] == 28.457
+
+    # Clearing both state and note removes the opinion.
+    store.apply_opinion(
+        {
+            "target_kind": "group",
+            "group_id": "G_9",
+            "state": "unreviewed",
+            "note": "",
+            "actor": "导演",
+            "reviewer_id": "rev-director",
+        }
+    )
+    assert store.for_group("G_9")["opinions"]["group"] == []
+
+    # Timestamped comments: add, list via for_group & collaboration_index, enforce delete ownership.
+    store.add_comment(
+        {
+            "group_id": "G_9",
+            "segment_id": "S_1",
+            "clip_id": "clip_b",
+            "camera": "B",
+            "source_time": 12.5,
+            "text": "B机这里虚焦了，切A机",
+            "actor": "导演",
+            "reviewer_id": "rev-director",
+        }
+    )
+    comments = store.for_group("G_9")["comments"]
+    assert len(comments) == 1
+    cid = comments[0]["comment_id"]
+    assert comments[0]["source_time"] == 12.5
+    assert store.collaboration_index()["G_9"]["comments"][0]["comment_id"] == cid
+
+    with pytest.raises(PermissionError, match="只能删除自己"):
+        store.delete_comment({"group_id": "G_9", "comment_id": cid, "actor": "制片", "reviewer_id": "rev-producer"})
+
+    store.delete_comment({"group_id": "G_9", "comment_id": cid, "actor": "导演", "reviewer_id": "rev-director"})
+    assert store.for_group("G_9")["comments"] == []

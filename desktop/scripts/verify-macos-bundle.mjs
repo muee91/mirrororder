@@ -94,6 +94,12 @@ for (const file of ["index.html", "app.js", "design-system-v2.css", "review.css"
   assertFile(asset, `team review ${file}`);
   if (sha256(asset) !== sha256(path.join(repoRoot, "web", file))) fail(`outdated team review asset: ${file}`);
 }
+const repoTeamIndex = path.join(repoRoot, "web", "team", "index.html");
+if (fs.existsSync(repoTeamIndex)) {
+  const packagedTeamIndex = path.join(core, "web", "team", "index.html");
+  assertFile(packagedTeamIndex, "team review team/index.html");
+  if (sha256(packagedTeamIndex) !== sha256(repoTeamIndex)) fail("outdated team review asset: team/index.html");
+}
 const pythonRoot = path.join(resources, "mirrororder-python");
 const tools = path.join(resources, "mirrororder-tools", "bin");
 const manifestPath = path.join(resources, "mirrororder-runtime", "mirrororder-runtime-manifest.json");
