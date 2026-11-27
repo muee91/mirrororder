@@ -38,6 +38,7 @@
   --mo-wav-track: #77c7ba;
   --mo-action-fill: #98bfe3;
   --mo-action-text: #152330;
+  --mo-text-on-accent: var(--mo-action-text);
   --mo-radius-control: 6px;
   --mo-space-1: 8px;
   --mo-space-2: 16px;
@@ -671,11 +672,13 @@ html[data-mirrororder-theme="light"] .semantic-result-main strong { color: var(-
 
 .script-command-bar,
 .material-take-toolbar { margin: 10px 14px 0; }
+.script-command-bar,
 .review-workspace-toolbar {
   margin: 0;
   border: 0;
   border-radius: 0;
-  padding: 8px 14px;
+  border-bottom: 1px solid var(--mo-border-subtle);
+  padding: 8px 16px;
   box-shadow: none;
 }
 .script-primary-canvas { max-width: 1240px; padding: 14px 18px 34px; }
@@ -780,9 +783,9 @@ html[data-mirrororder-theme] button.mo-toolbar-button {
 
 .script-episode-bar,
 .script-coverage-summary { border-color: var(--mo-border-subtle); }
-.script-episode-bar { margin: 10px 14px 0; border-radius: 6px; background: var(--mo-surface-pane); box-shadow: var(--mo-shadow-panel); padding-inline: 10px; }
+.script-episode-bar { margin: 0; border-radius: 0; border-bottom: 1px solid var(--mo-border-subtle); background: var(--mo-surface-pane); box-shadow: none; padding-inline: 16px; }
 .script-episode-bar:has(.episode-strip:empty) { display: none; }
-.script-coverage-summary { margin-inline: 14px; padding-inline: 10px; }
+.script-coverage-summary { margin: 0; padding-inline: 16px; border-bottom: 1px solid var(--mo-border-subtle); }
 
 /* Material, media and inspector hierarchy */
 .material-view-canvas { padding: 0 14px 22px; overflow: auto; }

@@ -3,15 +3,22 @@
  * stay here instead of the global theme layer (INVARIANTS: Production UI authority).
  */
 
-.script-block { border: 1px solid transparent; border-bottom-color: var(--mo-border-subtle); border-left-width: 2px; padding: 9px 11px; background: var(--mo-surface-pane); transition: border-color .12s ease, background .12s ease; }
+.script-block { border: 1px solid transparent; border-bottom-color: var(--mo-border-subtle); border-left-width: 2px; border-radius: 6px; padding: 9px 11px; background: var(--mo-surface-pane); transition: border-color .12s ease, background .12s ease; }
+.script-block:not(.is-selected):hover { background: var(--mo-surface-hover); }
 .script-block.is-selected { border-color: var(--mo-border-strong, #526171); border-left-color: var(--mo-accent, #8d9eae); background: var(--mo-surface-selected, #182535); }
 .script-block.is-drop-target { border-color: var(--mo-accent, #697b8b); border-style: dashed; background: var(--mo-accent-soft, #171e24); }
 .script-block p { margin: 5px 0 0; color: var(--mo-text-secondary, #bdc6cf); font-size: var(--mo-font-md, 12px); line-height: 1.65; }
 .script-block.block-dialogue p { color: var(--mo-text-primary); font-family: var(--mo-font-script); font-size: var(--mo-type-reading); }
-.script-block-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; color: var(--mo-text-muted, #7e8a97); font-size: var(--mo-font-xs, 10px); }
-.script-block-actions { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.script-block-actions button { border-color: color-mix(in srgb, var(--mo-accent, #6fa7e8) 40%, var(--mo-border-default, #303a44)); padding: 3px 7px; color: var(--mo-accent-strong, #cfe2f5); background: var(--mo-surface-control, #171d23); font-size: var(--mo-font-xs, 10px); }
-.script-block-actions .place-current { color: var(--mo-success, #c4dccd); }
+.script-block-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 28px; color: var(--mo-text-muted, #7e8a97); font-size: var(--mo-font-xs, 10px); }
+.script-block-meta > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.script-block-actions { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; min-width: 0; white-space: nowrap; }
+.script-block-coverage { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.script-block-coverage span { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border-radius: 999px; font-size: var(--mo-font-xs, 11px); font-weight: 560; line-height: 1; }
+.script-block-coverage .is-mapped { color: var(--mo-success); background: color-mix(in srgb, var(--mo-success) 13%, transparent); border: 1px solid color-mix(in srgb, var(--mo-success) 32%, transparent); }
+.script-block-coverage .has-candidate { color: var(--mo-accent-strong); background: color-mix(in srgb, var(--mo-accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--mo-accent) 34%, transparent); }
+.script-block-coverage .is-unmapped { color: var(--mo-text-muted); background: var(--mo-surface-raised); border: 1px solid var(--mo-border-subtle); }
+.script-block-actions button { min-height: 24px; border-color: color-mix(in srgb, var(--mo-accent, #6fa7e8) 40%, var(--mo-border-default, #303a44)); border-radius: 5px; padding: 2px 8px; color: var(--mo-accent-strong, #cfe2f5); background: var(--mo-surface-control, #171d23); font-size: var(--mo-font-xs, 10px); line-height: 1.2; }
+.script-block-actions .place-current { color: var(--mo-success, #c4dccd); border-color: color-mix(in srgb, var(--mo-success) 42%, var(--mo-border-default)); }
 .script-block-structural-status { color: var(--mo-text-muted, #7e8a97); font-size: var(--mo-font-xs, 10px); }
 .script-block-meta code { color: var(--mo-text-muted, #687583); }
 .drop-hint { display: inline-block; margin-top: 6px; border-left: 2px solid var(--mo-accent, #6fa7e8); padding: 3px 6px; color: var(--mo-text-secondary, #c7d1db); background: var(--mo-accent-soft, #25313b); font-size: var(--mo-font-xs, 10px); }

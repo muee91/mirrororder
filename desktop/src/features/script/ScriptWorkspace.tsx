@@ -7,7 +7,7 @@ import { readCurrentOperator, requestCurrentOperator } from "../../components/Cu
 import { SlateStatusIndicator } from "../../components/StatusIndicators";
 import { cameraPresentation } from "../media/cameraPresentation";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
-import type { ProductionSelectionContext } from "../production/productionNavigation";
+import type { ProductionNavigationIntent, ProductionSelectionContext } from "../production/productionNavigation";
 import type {
   ProjectSummary,
   ReviewEpisode,
@@ -50,6 +50,7 @@ interface Props {
   initialClipId?: string | null;
   initialScriptSegmentId?: string | null;
   playbackFocus?: ProductionSelectionContext;
+  focusIntent?: ProductionNavigationIntent | null;
   onSelectionChange?: (groupId: string | null, clipId: string | null, scriptSegmentId: string | null) => void;
   onOpenMaterial?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
   onOpenSlate?: (groupId: string, clipId?: string | null, scriptSegmentId?: string | null) => void;
@@ -176,6 +177,7 @@ export function ScriptWorkspace({
   initialClipId = null,
   initialScriptSegmentId = null,
   playbackFocus,
+  focusIntent = null,
   onSelectionChange,
   onOpenSlate,
   onOpenReview,
@@ -211,6 +213,10 @@ export function ScriptWorkspace({
   const [auditionAutoAdvance, setAuditionAutoAdvance] = useState(true);
   const auditionVideoRef = useRef<HTMLVideoElement | null>(null);
   const appliedFocusKey = useRef("");
+  const lastEmittedSelectionRef = useRef<string | null>(null);
+  const appliedIntentNonceRef = useRef<number | null>(null);
+  const pendingScrollSegmentRef = useRef<string | null>(null);
+  const splitWorkbenchRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -264,12 +270,24 @@ export function ScriptWorkspace({
 
   useEffect(() => {
     if (!model) return;
-    const focusKey = `${project.project_id}:${initialGroupId ?? ""}:${initialClipId ?? ""}:${initialScriptSegmentId ?? ""}`;
-    const shouldApplyFocus = Boolean(initialGroupId || initialScriptSegmentId) && appliedFocusKey.current !== focusKey;
-    const focused = initialGroupId && shouldApplyFocus
-      ? model.take_groups.find((take) => take.group_id === initialGroupId) ?? null
+    const focusGroupId = focusIntent?.groupId ?? initialGroupId;
+    const focusClipId = focusIntent?.clipId ?? initialClipId;
+    const focusSegmentId = focusIntent?.scriptSegmentId ?? initialScriptSegmentId;
+    const focusKey = `${project.project_id}:${focusGroupId ?? ""}:${focusClipId ?? ""}:${focusSegmentId ?? ""}`;
+    const hasNewIntent = Boolean(
+      focusIntent
+      && focusIntent.projectId === project.project_id
+      && focusIntent.nonce !== appliedIntentNonceRef.current,
+    );
+    const shouldApplyInitial = !focusIntent
+      && Boolean(focusGroupId || focusSegmentId)
+      && appliedFocusKey.current !== focusKey
+      && lastEmittedSelectionRef.current !== focusKey;
+    const shouldApplyFocus = hasNewIntent || shouldApplyInitial;
+    const focused = focusGroupId && shouldApplyFocus
+      ? model.take_groups.find((take) => take.group_id === focusGroupId) ?? null
       : null;
-    const requestedBlock = shouldApplyFocus ? findScriptBlock(model.episodes, initialScriptSegmentId) : null;
+    const requestedBlock = shouldApplyFocus ? findScriptBlock(model.episodes, focusSegmentId) : null;
 
     if (focused || requestedBlock) {
       const segmentId = requestedBlock?.segment_id ?? (focused ? preferredScriptSegmentId(focused) : null);
@@ -278,45 +296,63 @@ export function ScriptWorkspace({
         ?? (focused ? takeEpisodeIds(focused)[0] : null)
         ?? model.episodes[0]?.episode
         ?? null;
+      const resolvedSegmentId = segmentId ?? firstPlaceableBlock(model.episodes.find((item) => item.episode === episode) ?? null)?.segment_id ?? null;
       setSelectedGroupId(focused?.group_id ?? null);
       setSelectedClipId(
-        focused && initialClipId && focused.angles.some((angle) => angle.clip_id === initialClipId)
-          ? initialClipId
+        focused && focusClipId && focused.angles.some((angle) => angle.clip_id === focusClipId)
+          ? focusClipId
           : focused?.angles[0]?.clip_id ?? null,
       );
       setActiveEpisode(episode);
-      setSelectedScriptSegmentId(segmentId ?? firstPlaceableBlock(model.episodes.find((item) => item.episode === episode) ?? null)?.segment_id ?? null);
+      setSelectedScriptSegmentId(resolvedSegmentId);
       setDrawerView(focused ? "detail" : "pool");
       setDetailReturnView("pool");
       setDrawerOpen(true);
       appliedFocusKey.current = focusKey;
+      if (hasNewIntent && focusIntent) appliedIntentNonceRef.current = focusIntent.nonce;
+      pendingScrollSegmentRef.current = resolvedSegmentId;
       return;
     }
 
-    setActiveEpisode((current) => current ?? model.episodes[0]?.episode ?? null);
-    setSelectedScriptSegmentId((current) => current ?? firstPlaceableBlock(model.episodes[0] ?? null)?.segment_id ?? null);
+    if (hasNewIntent && focusIntent) appliedIntentNonceRef.current = focusIntent.nonce;
+    setActiveEpisode((current) => {
+      if (current !== null) return current;
+      const fallbackEpisode = model.episodes[0]?.episode ?? null;
+      setSelectedScriptSegmentId((seg) => seg ?? firstPlaceableBlock(model.episodes[0] ?? null)?.segment_id ?? null);
+      return fallbackEpisode;
+    });
     setSelectedGroupId((current) => current && model.take_groups.some((take) => take.group_id === current) ? current : null);
-  }, [initialClipId, initialGroupId, initialScriptSegmentId, model, project.project_id]);
+  }, [focusIntent, initialClipId, initialGroupId, initialScriptSegmentId, model, project.project_id]);
 
   useEffect(() => {
-    if (!selectedEpisode) return;
-    if (!episodeHasSegment(selectedEpisode, selectedScriptSegmentId)) {
-      setSelectedScriptSegmentId(firstPlaceableBlock(selectedEpisode)?.segment_id ?? null);
-    }
-  }, [selectedEpisode, selectedScriptSegmentId]);
-
-  useEffect(() => {
-    if (!selectedScriptSegmentId) return;
+    if (!selectedScriptSegmentId || pendingScrollSegmentRef.current !== selectedScriptSegmentId) return;
+    pendingScrollSegmentRef.current = null;
+    const targetId = scriptDomId(selectedScriptSegmentId);
     const frame = globalThis.requestAnimationFrame(() => {
-      document.getElementById(scriptDomId(selectedScriptSegmentId))?.scrollIntoView({ block: "center" });
+      const element = document.getElementById(targetId);
+      if (!element) return;
+      const canvas = splitWorkbenchRef.current?.querySelector<HTMLElement>(".script-primary-canvas") ?? null;
+      if (canvas) {
+        const canvasRect = canvas.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        if (canvasRect.height > 0 && (elementRect.top < canvasRect.top || elementRect.bottom > canvasRect.bottom)) {
+          const targetTop = elementRect.top - canvasRect.top + canvas.scrollTop - Math.max(24, (canvasRect.height - elementRect.height) / 3);
+          canvas.scrollTop = Math.max(0, targetTop);
+        }
+        return;
+      }
+      element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
     });
     return () => globalThis.cancelAnimationFrame(frame);
   }, [activeEpisode, selectedScriptSegmentId]);
 
   useEffect(() => {
     if (!model) return;
+    const emittedKey = `${project.project_id}:${selectedTake?.group_id ?? ""}:${selectedClipId ?? ""}:${selectedScriptSegmentId ?? ""}`;
+    if (lastEmittedSelectionRef.current === emittedKey) return;
+    lastEmittedSelectionRef.current = emittedKey;
     onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId, selectedScriptSegmentId);
-  }, [model, selectedTake?.group_id, selectedClipId, selectedScriptSegmentId]);
+  }, [model, project.project_id, selectedTake?.group_id, selectedClipId, selectedScriptSegmentId]);
 
   const visibleEpisode = useMemo(() => {
     if (!selectedEpisode || !model) return null;
@@ -354,12 +390,18 @@ export function ScriptWorkspace({
   }, [model, selectedEpisode]);
 
   useEffect(() => {
-    if (!visibleEpisode || !selectedScriptSegmentId) return;
-    const visible = episodeHasSegment(visibleEpisode, selectedScriptSegmentId);
-    if (!visible && visibleEpisode.scenes.length) {
-      setSelectedScriptSegmentId(firstPlaceableBlock(visibleEpisode)?.segment_id ?? null);
+    if (!selectedEpisode || !visibleEpisode) return;
+    const isFiltered = Boolean(query.trim()) || projectionMode === "issues";
+    if (isFiltered) {
+      if (selectedScriptSegmentId && episodeHasSegment(visibleEpisode, selectedScriptSegmentId)) return;
+      const next = firstPlaceableBlock(visibleEpisode)?.segment_id ?? null;
+      if (next !== selectedScriptSegmentId) setSelectedScriptSegmentId(next);
+      return;
     }
-  }, [selectedScriptSegmentId, visibleEpisode]);
+    if (selectedScriptSegmentId && episodeHasSegment(selectedEpisode, selectedScriptSegmentId)) return;
+    const next = firstPlaceableBlock(selectedEpisode)?.segment_id ?? null;
+    if (next !== selectedScriptSegmentId) setSelectedScriptSegmentId(next);
+  }, [projectionMode, query, selectedEpisode, selectedScriptSegmentId, visibleEpisode]);
 
   const selectedMappedTakeIds = selectedScriptSegmentId && model ? mappedTakeIds(model, selectedScriptSegmentId) : [];
   const selectedCandidateTakeIds = selectedScriptSegmentId && model ? candidateTakeIds(model, selectedScriptSegmentId) : [];
@@ -807,6 +849,8 @@ export function ScriptWorkspace({
               onClick={() => {
                 setActiveEpisode(episode.episode);
                 setSelectedScriptSegmentId(firstPlaceableBlock(episode)?.segment_id ?? null);
+                const canvas = splitWorkbenchRef.current?.querySelector<HTMLElement>(".script-primary-canvas");
+                if (canvas) canvas.scrollTop = 0;
               }}
               onDragOver={(event) => {
                 if (!draggingGroupId) return;
@@ -875,7 +919,7 @@ export function ScriptWorkspace({
 
       {writeMessage ? <div className={`write-status write-${writeState}`}>{writeMessage}</div> : null}
 
-      <div className={"script-split-workbench" + (drawerOpen ? "" : " is-alignment-collapsed")}>
+      <div className={"script-split-workbench" + (drawerOpen ? "" : " is-alignment-collapsed")} ref={splitWorkbenchRef}>
         <main className="script-primary-canvas">
           {visibleEpisode && visibleEpisode.scenes.length ? (
             <ScriptEpisodeView
@@ -999,7 +1043,7 @@ export function ScriptWorkspace({
               ) : (
                 <section className="script-take-detail">
                   <div className="script-detail-back">
-                    <button type="button" className="secondary" onClick={() => { setDrawerView(detailReturnView); setSelectedGroupId(null); }}>返回{detailReturnView === "segment" ? "当前段" : "待归集"}</button>
+                    <button type="button" className="secondary" onClick={() => { setDrawerView(detailReturnView); setSelectedGroupId(null); setSelectedClipId(null); }}>返回{detailReturnView === "segment" ? "当前段" : "待归集"}</button>
                     <strong>Take 详情</strong>
                   </div>
                   {selectedTake ? (

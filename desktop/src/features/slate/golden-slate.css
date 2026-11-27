@@ -113,9 +113,9 @@ html[data-mirrororder-theme] .golden-slate-subbar .golden-slate-save-button:disa
 .golden-slate-save-button.is-dirty:not(:disabled),
 html[data-mirrororder-theme] .golden-slate-subbar .golden-slate-save-button.is-dirty:not(:disabled) {
   border-color: transparent;
-  color: #ffffff;
-  background: var(--mo-action-fill, #2f7df6);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--mo-action-fill, #2f7df6) 35%, transparent);
+  color: var(--mo-action-text, #152330);
+  background: var(--mo-action-fill, #98bfe3);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--mo-action-fill, #98bfe3) 35%, transparent);
   font-weight: 600;
 }
 .golden-slate-save-button.is-dirty:hover:not(:disabled),

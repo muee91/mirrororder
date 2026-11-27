@@ -250,9 +250,28 @@ export function ProjectWorkbench({
 
   const updateSelection = useCallback((values: ProductionSelectionValues): void => {
     setSelection((previous) => {
-      const next = normalizedContext(project.project_id, values);
-      if (previous.projectId !== next.projectId || previous.clipId !== next.clipId || previous.groupId !== next.groupId) return next;
-      return { ...previous, ...next };
+      const next = normalizedContext(project.project_id, {
+        groupId: values.groupId,
+        clipId: values.clipId,
+        mediaId: values.mediaId !== undefined ? values.mediaId : previous.mediaId,
+        recordId: values.recordId !== undefined ? values.recordId : previous.recordId,
+        sourceRange: values.sourceRange !== undefined ? values.sourceRange : previous.sourceRange,
+        scriptSegmentId: values.scriptSegmentId !== undefined ? values.scriptSegmentId : previous.scriptSegmentId,
+        timelineClipId: values.timelineClipId !== undefined ? values.timelineClipId : previous.timelineClipId,
+      });
+      if (
+        previous.projectId === next.projectId
+        && previous.groupId === next.groupId
+        && previous.clipId === next.clipId
+        && previous.mediaId === next.mediaId
+        && previous.recordId === next.recordId
+        && previous.sourceRange === next.sourceRange
+        && previous.scriptSegmentId === next.scriptSegmentId
+        && previous.timelineClipId === next.timelineClipId
+      ) {
+        return previous;
+      }
+      return next;
     });
   }, [project.project_id]);
 
@@ -685,6 +704,7 @@ export function ProjectWorkbench({
               initialClipId={currentSelection.clipId ?? null}
               initialScriptSegmentId={currentSelection.scriptSegmentId ?? null}
               playbackFocus={currentSelection}
+              focusIntent={currentIntent?.workspace === "script" ? currentIntent : null}
               onSelectionChange={(groupId, clipId, scriptSegmentId) => updateSelection({ groupId, clipId, scriptSegmentId })}
               onOpenMaterial={(groupId, clipId) => focusTake(groupId, "material", clipId, currentSelection.scriptSegmentId)}
               onOpenSlate={(groupId, clipId, scriptSegmentId) => {

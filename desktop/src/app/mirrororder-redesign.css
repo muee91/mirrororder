@@ -171,7 +171,7 @@ textarea {
 .project-system-nav button.is-active .project-system-badge,
 .project-primary-nav button.is-active > small {
   background: var(--mo-accent);
-  color: #fff;
+  color: var(--mo-action-text, #152330);
 }
 
 .project-nav-icon {

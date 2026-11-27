@@ -166,8 +166,8 @@
   margin-top: 12px;
   border: 0;
   border-radius: 8px;
-  background: var(--mo-accent);
-  color: #fff;
+  background: var(--mo-action-fill, var(--mo-accent));
+  color: var(--mo-action-text, #152330);
   font-weight: 650;
 }
 
@@ -247,8 +247,8 @@
   padding: 0 13px;
   border: 0;
   border-radius: 8px;
-  background: var(--mo-accent);
-  color: #fff;
+  background: var(--mo-action-fill, var(--mo-accent));
+  color: var(--mo-action-text, #152330);
   font-weight: 650;
 }
 
@@ -561,8 +561,8 @@
   flex: 0 0 auto;
   border: 0;
   border-radius: 7px;
-  background: var(--mo-accent);
-  color: #fff;
+  background: var(--mo-action-fill, var(--mo-accent));
+  color: var(--mo-action-text, #152330);
   font-size: var(--mo-font-xs);
   font-weight: 700;
 }
@@ -741,8 +741,8 @@
   flex: 0 0 auto;
   border: 0;
   border-radius: 8px;
-  background: var(--mo-accent);
-  color: #fff;
+  background: var(--mo-action-fill, var(--mo-accent));
+  color: var(--mo-action-text, #152330);
   font-size: var(--mo-font-xs);
   font-weight: 700;
 }

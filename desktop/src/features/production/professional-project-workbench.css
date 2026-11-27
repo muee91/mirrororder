@@ -283,6 +283,15 @@
   background: var(--mo-surface-control, var(--mo-surface-soft));
 }
 
+.workbench-subbar > .professional-project-context-subtitle {
+  padding-inline-end: 8px;
+}
+
+.workbench-subbar > .professional-project-context-subtitle:first-child {
+  border-inline-start: 0;
+  padding-inline-start: 8px;
+}
+
 .workbench-subbar-link {
   display: inline-flex;
   align-items: center;

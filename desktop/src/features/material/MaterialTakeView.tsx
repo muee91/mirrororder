@@ -163,6 +163,7 @@ export function MaterialTakeView({
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(initialGroupId);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(initialClipId);
   const [drawerOpen, setDrawerOpen] = useState(Boolean(initialGroupId));
+  const lastEmittedSelectionRef = useState<{ key: string | null }>({ key: null })[0];
   const [playbackFailedClips, setPlaybackFailedClips] = useState<ReadonlySet<string>>(() => new Set());
   // 服务端声明“可用”只代表绑定证据存在；真实加载失败（404/解码失败）发生在本机，
   // 由 Take 详情上抛到这里聚合成独立计数，与“素材离线”（服务端口径）分开呈现。
@@ -236,6 +237,8 @@ export function MaterialTakeView({
 
   useEffect(() => {
     if (!model) return;
+    const incomingKey = `${project.project_id}:${initialGroupId ?? ""}:${initialClipId ?? ""}`;
+    if (lastEmittedSelectionRef.key === incomingKey) return;
     const focused = initialGroupId ? model.take_groups.find((take) => take.group_id === initialGroupId) ?? null : null;
     const first = focused ?? model.take_groups[0] ?? null;
     const requestedClip = first && initialClipId && first.angles.some((angle) => angle.clip_id === initialClipId)
@@ -244,7 +247,7 @@ export function MaterialTakeView({
     setSelectedGroupId(first?.group_id ?? null);
     setSelectedClipId(requestedClip);
     setDrawerOpen(Boolean(focused));
-  }, [initialClipId, initialGroupId, model]);
+  }, [initialClipId, initialGroupId, lastEmittedSelectionRef, model, project.project_id]);
 
   useEffect(() => {
     if (!model) return;
@@ -264,8 +267,11 @@ export function MaterialTakeView({
 
   useEffect(() => {
     if (!model) return;
+    const nextKey = `${project.project_id}:${selectedTake?.group_id ?? ""}:${selectedClipId ?? ""}`;
+    if (lastEmittedSelectionRef.key === nextKey) return;
+    lastEmittedSelectionRef.key = nextKey;
     onSelectionChange?.(selectedTake?.group_id ?? null, selectedClipId);
-  }, [model, selectedTake?.group_id, selectedClipId]);
+  }, [lastEmittedSelectionRef, model, project.project_id, selectedTake?.group_id, selectedClipId]);
 
   function selectTake(take: ReviewTakeGroup): void {
     setSelectedGroupId(take.group_id);
